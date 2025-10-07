@@ -2017,14 +2017,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1998 </span><span class="spaces">        </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
 <span class="lineno"> 1999 </span><span class="spaces">        </span><span class="istickedoff">return (Right (C.tSeq (C.tNum n) t2))</span>
 <span class="lineno"> 2000 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2001 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) _ [SC.TValue v1] [] -&gt;</span>
+<span class="lineno"> 2001 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [SC.TValue v1] [] -&gt;</span>
 <span class="lineno"> 2002 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span></span>
 <span class="lineno"> 2003 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (Right (C.tSeq C.tInf t1))</span></span>
 <span class="lineno"> 2004 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2005 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;) _ [] [] -&gt;</span>
+<span class="lineno"> 2005 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;) [] [] -&gt;</span>
 <span class="lineno"> 2006 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return (Left C.KNum)</span></span>
 <span class="lineno"> 2007 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2008 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType _ _ _ _ -&gt; Nothing</span>
+<span class="lineno"> 2008 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType {} -&gt; Nothing</span>
 <span class="lineno"> 2009 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2010 </span><span class="spaces">      </span><span class="istickedoff">SC.VUnitType -&gt; return (Right (C.tTuple []))</span>
 <span class="lineno"> 2011 </span><span class="spaces">      </span><span class="istickedoff">SC.VPairType v1 v2 -&gt; do</span>
@@ -2034,7 +2034,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2015 </span><span class="spaces">          </span><span class="istickedoff">Just ts -&gt; return (Right <span class="nottickedoff">(C.tTuple (t1 : ts))</span>)</span>
 <span class="lineno"> 2016 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; return (Right (C.tTuple [t1, t2]))</span>
 <span class="lineno"> 2017 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2018 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType _nm v1 (SC.VNondependentPi v2) -&gt;</span>
+<span class="lineno"> 2018 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType v1 (SC.VNondependentPi v2) -&gt;</span>
 <span class="lineno"> 2019 </span><span class="spaces">        </span><span class="istickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span>
 <span class="lineno"> 2020 </span><span class="spaces">           </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
 <span class="lineno"> 2021 </span><span class="spaces">           </span><span class="istickedoff">return (Right (C.tFun t1 t2))</span>
@@ -2044,648 +2044,647 @@ span.spaces    { background: white }
 <span class="lineno"> 2025 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; Nothing</span>
 <span class="lineno"> 2026 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2027 </span><span class="spaces">      </span><span class="istickedoff">-- TODO?</span>
-<span class="lineno"> 2028 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType _nm _v1 (SC.VDependentPi _) -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno"> 2028 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType _v1 (SC.VDependentPi _) -&gt; Nothing</span>
 <span class="lineno"> 2029 </span><span class="spaces">      </span><span class="istickedoff">SC.VStringType -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno"> 2030 </span><span class="spaces">      </span><span class="istickedoff">SC.VRecordType{} -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno"> 2031 </span><span class="spaces">      </span><span class="istickedoff">SC.VRecursorType{} -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno"> 2032 </span><span class="spaces">      </span><span class="istickedoff">SC.VTyTerm{} -&gt; <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno"> 2033 </span>
-<span class="lineno"> 2034 </span>--------------------------------------------------------------------------------
-<span class="lineno"> 2035 </span>-- exporting functions:
-<span class="lineno"> 2036 </span>
-<span class="lineno"> 2037 </span>-- | Convert from SAWCore's Value type to Cryptol's, guided by the
-<span class="lineno"> 2038 </span>-- Cryptol type schema.
-<span class="lineno"> 2039 </span>exportValueWithSchema :: C.Schema -&gt; SC.CValue -&gt; V.Eval V.Value
-<span class="lineno"> 2040 </span><span class="decl"><span class="istickedoff">exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType <span class="nottickedoff">mempty</span> ty) v</span>
-<span class="lineno"> 2041 </span><span class="spaces"></span><span class="istickedoff">exportValueWithSchema _ _ = <span class="nottickedoff">pure (V.VPoly mempty (error &quot;exportValueWithSchema&quot;))</span></span></span>
-<span class="lineno"> 2042 </span>-- TODO: proper support for polymorphic values
-<span class="lineno"> 2043 </span>
-<span class="lineno"> 2044 </span>exportValue :: TV.TValue -&gt; SC.CValue -&gt; V.Eval V.Value
-<span class="lineno"> 2045 </span><span class="decl"><span class="istickedoff">exportValue ty v = case ty of</span>
-<span class="lineno"> 2046 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2047 </span><span class="spaces">  </span><span class="istickedoff">TV.TVBit -&gt;</span>
-<span class="lineno"> 2048 </span><span class="spaces">    </span><span class="istickedoff">pure (V.VBit (SC.toBool v))</span>
-<span class="lineno"> 2049 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2050 </span><span class="spaces">  </span><span class="istickedoff">TV.TVInteger -&gt;</span>
-<span class="lineno"> 2051 </span><span class="spaces">    </span><span class="istickedoff">pure (V.VInteger (case v of SC.VInt x -&gt; x; _ -&gt; <span class="nottickedoff">error &quot;exportValue: expected integer&quot;</span>))</span>
-<span class="lineno"> 2052 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2053 </span><span class="spaces">  </span><span class="istickedoff">TV.TVIntMod _modulus -&gt;</span>
-<span class="lineno"> 2054 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure (V.VInteger (case v of SC.VIntMod _ x -&gt; x; _ -&gt; error &quot;exportValue: expected intmod&quot;))</span></span>
-<span class="lineno"> 2055 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2056 </span><span class="spaces">  </span><span class="istickedoff">TV.TVArray{} -&gt; <span class="nottickedoff">panic &quot;exportValue&quot; [&quot;Not yet implemented: array type: &quot; &lt;&gt; Text.pack (pretty (TV.tValTy ty))]</span></span>
-<span class="lineno"> 2057 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2058 </span><span class="spaces">  </span><span class="istickedoff">TV.TVRational -&gt; <span class="nottickedoff">panic &quot;exportValue&quot; [&quot;Not yet implemented: Rational&quot;]</span></span>
-<span class="lineno"> 2059 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2060 </span><span class="spaces">  </span><span class="istickedoff">TV.TVFloat _ _ -&gt; <span class="nottickedoff">panic &quot;exportValue&quot; [&quot;Not yet implemented: Float&quot;]</span></span>
-<span class="lineno"> 2061 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2062 </span><span class="spaces">  </span><span class="istickedoff">TV.TVSeq _ e -&gt;</span>
-<span class="lineno"> 2063 </span><span class="spaces">    </span><span class="istickedoff">case v of</span>
-<span class="lineno"> 2064 </span><span class="spaces">      </span><span class="istickedoff">SC.VWord w -&gt; V.word <span class="nottickedoff">V.Concrete</span> (toInteger (width w)) (unsigned w)</span>
-<span class="lineno"> 2065 </span><span class="spaces">      </span><span class="istickedoff">SC.VVector xs</span>
-<span class="lineno"> 2066 </span><span class="spaces">        </span><span class="istickedoff">| TV.isTBit e -&gt; V.VWord &lt;$&gt;</span>
-<span class="lineno"> 2067 </span><span class="spaces">            </span><span class="istickedoff">V.bitmapWordVal <span class="nottickedoff">V.Concrete</span> (toInteger (Vector.length xs))</span>
-<span class="lineno"> 2068 </span><span class="spaces">                 </span><span class="istickedoff">(V.finiteSeqMap <span class="nottickedoff">V.Concrete</span> . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)</span>
-<span class="lineno"> 2069 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>   -&gt; V.mkSeq <span class="nottickedoff">V.Concrete</span> (C.Nat (toInteger (Vector.length xs))) e $ V.finiteSeqMap <span class="nottickedoff">V.Concrete</span> $</span>
-<span class="lineno"> 2070 </span><span class="spaces">                            </span><span class="istickedoff">map (\x -&gt; exportValue e (SC.runIdentity (force x))) (Vector.toList xs)</span>
-<span class="lineno"> 2071 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error $ &quot;exportValue (on seq type &quot; ++ show ty ++ &quot;)&quot;</span></span>
-<span class="lineno"> 2072 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2073 </span><span class="spaces">  </span><span class="istickedoff">-- infinite streams</span>
-<span class="lineno"> 2074 </span><span class="spaces">  </span><span class="istickedoff">TV.TVStream e -&gt;</span>
-<span class="lineno"> 2075 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case v of</span></span>
-<span class="lineno"> 2076 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">SC.VExtra (SC.CStream trie) -&gt; pure $ V.VStream (V.indexSeqMap $ \i -&gt; exportValue e (IntTrie.apply trie i))</span></span>
-<span class="lineno"> 2077 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; error $ &quot;exportValue (on seq type &quot; ++ show ty ++ &quot;)&quot;</span></span>
-<span class="lineno"> 2078 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2079 </span><span class="spaces">  </span><span class="istickedoff">-- tuples</span>
-<span class="lineno"> 2080 </span><span class="spaces">  </span><span class="istickedoff">TV.TVTuple etys -&gt; <span class="nottickedoff">pure $ V.VTuple $ exportTupleValue etys v</span></span>
-<span class="lineno"> 2081 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2082 </span><span class="spaces">  </span><span class="istickedoff">-- records</span>
-<span class="lineno"> 2083 </span><span class="spaces">  </span><span class="istickedoff">TV.TVRec fields -&gt;</span>
-<span class="lineno"> 2084 </span><span class="spaces">      </span><span class="istickedoff">pure . V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v</span>
-<span class="lineno"> 2085 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2086 </span><span class="spaces">  </span><span class="istickedoff">-- functions</span>
-<span class="lineno"> 2087 </span><span class="spaces">  </span><span class="istickedoff">TV.TVFun _aty _bty -&gt;</span>
-<span class="lineno"> 2088 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure $ V.VFun mempty (error &quot;exportValue: TODO functions&quot;)</span></span>
-<span class="lineno"> 2089 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2090 </span><span class="spaces">  </span><span class="istickedoff">-- nominal types</span>
-<span class="lineno"> 2091 </span><span class="spaces">  </span><span class="istickedoff">TV.TVNominal _ _ fields -&gt;</span>
-<span class="lineno"> 2092 </span><span class="spaces">    </span><span class="istickedoff">case fields of</span>
-<span class="lineno"> 2093 </span><span class="spaces">      </span><span class="istickedoff">TV.TVStruct fs   -&gt; exportValue (TV.TVRec fs) v</span>
-<span class="lineno"> 2094 </span><span class="spaces">      </span><span class="istickedoff">TV.TVEnum {}     -&gt; <span class="nottickedoff">error (&quot;exportValue: TODO enum: &quot; ++ show v)</span></span>
-<span class="lineno"> 2095 </span><span class="spaces">      </span><span class="istickedoff">TV.TVAbstract {} -&gt; <span class="nottickedoff">error &quot;exportValue: TODO abstract types&quot;</span></span></span>
+<span class="lineno"> 2031 </span><span class="spaces">      </span><span class="istickedoff">SC.VTyTerm{} -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno"> 2032 </span>
+<span class="lineno"> 2033 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 2034 </span>-- exporting functions:
+<span class="lineno"> 2035 </span>
+<span class="lineno"> 2036 </span>-- | Convert from SAWCore's Value type to Cryptol's, guided by the
+<span class="lineno"> 2037 </span>-- Cryptol type schema.
+<span class="lineno"> 2038 </span>exportValueWithSchema :: C.Schema -&gt; SC.CValue -&gt; V.Eval V.Value
+<span class="lineno"> 2039 </span><span class="decl"><span class="istickedoff">exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType <span class="nottickedoff">mempty</span> ty) v</span>
+<span class="lineno"> 2040 </span><span class="spaces"></span><span class="istickedoff">exportValueWithSchema _ _ = <span class="nottickedoff">pure (V.VPoly mempty (error &quot;exportValueWithSchema&quot;))</span></span></span>
+<span class="lineno"> 2041 </span>-- TODO: proper support for polymorphic values
+<span class="lineno"> 2042 </span>
+<span class="lineno"> 2043 </span>exportValue :: TV.TValue -&gt; SC.CValue -&gt; V.Eval V.Value
+<span class="lineno"> 2044 </span><span class="decl"><span class="istickedoff">exportValue ty v = case ty of</span>
+<span class="lineno"> 2045 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2046 </span><span class="spaces">  </span><span class="istickedoff">TV.TVBit -&gt;</span>
+<span class="lineno"> 2047 </span><span class="spaces">    </span><span class="istickedoff">pure (V.VBit (SC.toBool v))</span>
+<span class="lineno"> 2048 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2049 </span><span class="spaces">  </span><span class="istickedoff">TV.TVInteger -&gt;</span>
+<span class="lineno"> 2050 </span><span class="spaces">    </span><span class="istickedoff">pure (V.VInteger (case v of SC.VInt x -&gt; x; _ -&gt; <span class="nottickedoff">error &quot;exportValue: expected integer&quot;</span>))</span>
+<span class="lineno"> 2051 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2052 </span><span class="spaces">  </span><span class="istickedoff">TV.TVIntMod _modulus -&gt;</span>
+<span class="lineno"> 2053 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure (V.VInteger (case v of SC.VIntMod _ x -&gt; x; _ -&gt; error &quot;exportValue: expected intmod&quot;))</span></span>
+<span class="lineno"> 2054 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2055 </span><span class="spaces">  </span><span class="istickedoff">TV.TVArray{} -&gt; <span class="nottickedoff">panic &quot;exportValue&quot; [&quot;Not yet implemented: array type: &quot; &lt;&gt; Text.pack (pretty (TV.tValTy ty))]</span></span>
+<span class="lineno"> 2056 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2057 </span><span class="spaces">  </span><span class="istickedoff">TV.TVRational -&gt; <span class="nottickedoff">panic &quot;exportValue&quot; [&quot;Not yet implemented: Rational&quot;]</span></span>
+<span class="lineno"> 2058 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2059 </span><span class="spaces">  </span><span class="istickedoff">TV.TVFloat _ _ -&gt; <span class="nottickedoff">panic &quot;exportValue&quot; [&quot;Not yet implemented: Float&quot;]</span></span>
+<span class="lineno"> 2060 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2061 </span><span class="spaces">  </span><span class="istickedoff">TV.TVSeq _ e -&gt;</span>
+<span class="lineno"> 2062 </span><span class="spaces">    </span><span class="istickedoff">case v of</span>
+<span class="lineno"> 2063 </span><span class="spaces">      </span><span class="istickedoff">SC.VWord w -&gt; V.word <span class="nottickedoff">V.Concrete</span> (toInteger (width w)) (unsigned w)</span>
+<span class="lineno"> 2064 </span><span class="spaces">      </span><span class="istickedoff">SC.VVector xs</span>
+<span class="lineno"> 2065 </span><span class="spaces">        </span><span class="istickedoff">| TV.isTBit e -&gt; V.VWord &lt;$&gt;</span>
+<span class="lineno"> 2066 </span><span class="spaces">            </span><span class="istickedoff">V.bitmapWordVal <span class="nottickedoff">V.Concrete</span> (toInteger (Vector.length xs))</span>
+<span class="lineno"> 2067 </span><span class="spaces">                 </span><span class="istickedoff">(V.finiteSeqMap <span class="nottickedoff">V.Concrete</span> . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)</span>
+<span class="lineno"> 2068 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>   -&gt; V.mkSeq <span class="nottickedoff">V.Concrete</span> (C.Nat (toInteger (Vector.length xs))) e $ V.finiteSeqMap <span class="nottickedoff">V.Concrete</span> $</span>
+<span class="lineno"> 2069 </span><span class="spaces">                            </span><span class="istickedoff">map (\x -&gt; exportValue e (SC.runIdentity (force x))) (Vector.toList xs)</span>
+<span class="lineno"> 2070 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error $ &quot;exportValue (on seq type &quot; ++ show ty ++ &quot;)&quot;</span></span>
+<span class="lineno"> 2071 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2072 </span><span class="spaces">  </span><span class="istickedoff">-- infinite streams</span>
+<span class="lineno"> 2073 </span><span class="spaces">  </span><span class="istickedoff">TV.TVStream e -&gt;</span>
+<span class="lineno"> 2074 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case v of</span></span>
+<span class="lineno"> 2075 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">SC.VExtra (SC.CStream trie) -&gt; pure $ V.VStream (V.indexSeqMap $ \i -&gt; exportValue e (IntTrie.apply trie i))</span></span>
+<span class="lineno"> 2076 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; error $ &quot;exportValue (on seq type &quot; ++ show ty ++ &quot;)&quot;</span></span>
+<span class="lineno"> 2077 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2078 </span><span class="spaces">  </span><span class="istickedoff">-- tuples</span>
+<span class="lineno"> 2079 </span><span class="spaces">  </span><span class="istickedoff">TV.TVTuple etys -&gt; <span class="nottickedoff">pure $ V.VTuple $ exportTupleValue etys v</span></span>
+<span class="lineno"> 2080 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2081 </span><span class="spaces">  </span><span class="istickedoff">-- records</span>
+<span class="lineno"> 2082 </span><span class="spaces">  </span><span class="istickedoff">TV.TVRec fields -&gt;</span>
+<span class="lineno"> 2083 </span><span class="spaces">      </span><span class="istickedoff">pure . V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v</span>
+<span class="lineno"> 2084 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2085 </span><span class="spaces">  </span><span class="istickedoff">-- functions</span>
+<span class="lineno"> 2086 </span><span class="spaces">  </span><span class="istickedoff">TV.TVFun _aty _bty -&gt;</span>
+<span class="lineno"> 2087 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure $ V.VFun mempty (error &quot;exportValue: TODO functions&quot;)</span></span>
+<span class="lineno"> 2088 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2089 </span><span class="spaces">  </span><span class="istickedoff">-- nominal types</span>
+<span class="lineno"> 2090 </span><span class="spaces">  </span><span class="istickedoff">TV.TVNominal _ _ fields -&gt;</span>
+<span class="lineno"> 2091 </span><span class="spaces">    </span><span class="istickedoff">case fields of</span>
+<span class="lineno"> 2092 </span><span class="spaces">      </span><span class="istickedoff">TV.TVStruct fs   -&gt; exportValue (TV.TVRec fs) v</span>
+<span class="lineno"> 2093 </span><span class="spaces">      </span><span class="istickedoff">TV.TVEnum {}     -&gt; <span class="nottickedoff">error (&quot;exportValue: TODO enum: &quot; ++ show v)</span></span>
+<span class="lineno"> 2094 </span><span class="spaces">      </span><span class="istickedoff">TV.TVAbstract {} -&gt; <span class="nottickedoff">error &quot;exportValue: TODO abstract types&quot;</span></span></span>
+<span class="lineno"> 2095 </span>
 <span class="lineno"> 2096 </span>
-<span class="lineno"> 2097 </span>
-<span class="lineno"> 2098 </span>exportTupleValue :: [TV.TValue] -&gt; SC.CValue -&gt; [V.Eval V.Value]
-<span class="lineno"> 2099 </span><span class="decl"><span class="nottickedoff">exportTupleValue tys v =</span>
-<span class="lineno"> 2100 </span><span class="spaces">  </span><span class="nottickedoff">case (tys, v) of</span>
-<span class="lineno"> 2101 </span><span class="spaces">    </span><span class="nottickedoff">([]    , SC.VUnit    ) -&gt; []</span>
-<span class="lineno"> 2102 </span><span class="spaces">    </span><span class="nottickedoff">([t]   , _           ) -&gt; [exportValue t v]</span>
-<span class="lineno"> 2103 </span><span class="spaces">    </span><span class="nottickedoff">(t : ts, SC.VPair x y) -&gt; (exportValue t (run x)) : exportTupleValue ts (run y)</span>
-<span class="lineno"> 2104 </span><span class="spaces">    </span><span class="nottickedoff">_                      -&gt; error $ &quot;exportValue: expected tuple&quot;</span>
-<span class="lineno"> 2105 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2106 </span><span class="spaces">    </span><span class="nottickedoff">run = SC.runIdentity . force</span></span>
-<span class="lineno"> 2107 </span>
-<span class="lineno"> 2108 </span>exportRecordValue :: [(C.Ident, TV.TValue)] -&gt; SC.CValue -&gt; [(C.Ident, V.Eval V.Value)]
-<span class="lineno"> 2109 </span><span class="decl"><span class="istickedoff">exportRecordValue fields v =</span>
-<span class="lineno"> 2110 </span><span class="spaces">  </span><span class="istickedoff">case (fields, <span class="nottickedoff">v</span>) of</span>
-<span class="lineno"> 2111 </span><span class="spaces">    </span><span class="istickedoff">([]         , SC.VUnit    ) -&gt; <span class="nottickedoff">[]</span></span>
-<span class="lineno"> 2112 </span><span class="spaces">    </span><span class="istickedoff">([(n, t)]   , _           ) -&gt; [(n, exportValue t v)]</span>
-<span class="lineno"> 2113 </span><span class="spaces">    </span><span class="istickedoff">((n, t) : ts, SC.VPair x y) -&gt; <span class="nottickedoff">(n, exportValue t (run x)) : exportRecordValue ts (run y)</span></span>
-<span class="lineno"> 2114 </span><span class="spaces">    </span><span class="istickedoff">(_, SC.VRecordValue (alistAllFields</span>
-<span class="lineno"> 2115 </span><span class="spaces">                         </span><span class="istickedoff">(map (C.identText . fst) fields) -&gt; Just ths)) -&gt;</span>
-<span class="lineno"> 2116 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">zipWith (\(n,t) x -&gt; (n, exportValue t (run x))) fields ths</span></span>
-<span class="lineno"> 2117 </span><span class="spaces">    </span><span class="istickedoff">_                              -&gt; <span class="nottickedoff">error $ &quot;exportValue: expected record&quot;</span></span>
-<span class="lineno"> 2118 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2119 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">run = SC.runIdentity . force</span></span></span>
-<span class="lineno"> 2120 </span>
-<span class="lineno"> 2121 </span>--------------------------------------------------------------------------------
-<span class="lineno"> 2122 </span>-- Supporting Nominal Types:
-<span class="lineno"> 2123 </span>
-<span class="lineno"> 2124 </span>-- | Generate functions, required by 'NominalType's, to be inserted into the
-<span class="lineno"> 2125 </span>--   term environment.
-<span class="lineno"> 2126 </span>--
-<span class="lineno"> 2127 </span>--   - For 'C.Struct', make identity functions that take the record which
-<span class="lineno"> 2128 </span>--     the newtype wraps.
-<span class="lineno"> 2129 </span>--
-<span class="lineno"> 2130 </span>--   - For 'C.Abstract', no functions need to be produced.
-<span class="lineno"> 2131 </span>--
-<span class="lineno"> 2132 </span>--   - 'C.Enum' will will create these definitions:
-<span class="lineno"> 2133 </span>--     - multiple constructor functions (added to Cryptol Env)
-<span class="lineno"> 2134 </span>--     - a number of 'internal' only SAWCore definitions:
-<span class="lineno"> 2135 </span>--       - case function for the type (not used directly by Cryptol code).
-<span class="lineno"> 2136 </span>--       - multiple definitions that define the Enum's representation
-<span class="lineno"> 2137 </span>--         type in SAWCore
-<span class="lineno"> 2138 </span>
-<span class="lineno"> 2139 </span>genCodeForNominalTypes ::
-<span class="lineno"> 2140 </span>  HasCallStack =&gt;
-<span class="lineno"> 2141 </span>  SharedContext -&gt; Map C.Name NominalType -&gt; Env -&gt; IO Env
-<span class="lineno"> 2142 </span><span class="decl"><span class="istickedoff">genCodeForNominalTypes sc nominalMap env0 =</span>
-<span class="lineno"> 2143 </span><span class="spaces">  </span><span class="istickedoff">foldM updateEnvForNominal env0 nominalMap</span>
-<span class="lineno"> 2144 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2145 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2146 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2147 </span><span class="spaces">    </span><span class="istickedoff">updateEnvForNominal :: Env -&gt; NominalType -&gt; IO Env</span>
-<span class="lineno"> 2148 </span><span class="spaces">    </span><span class="istickedoff">updateEnvForNominal env nt = do</span>
-<span class="lineno"> 2149 </span><span class="spaces">      </span><span class="istickedoff">let kinds = map C.tpKind (C.ntParams nt)</span>
-<span class="lineno"> 2150 </span><span class="spaces">      </span><span class="istickedoff">unless (all (`elem` [C.KType, C.KNum]) kinds) $</span>
-<span class="lineno"> 2151 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;genCodeForNominalTypes&quot; [</span></span>
-<span class="lineno"> 2152 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot;Type parameters for nominal types must each have kind * or #:&quot;,</span></span>
-<span class="lineno"> 2153 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show kinds)</span></span>
-<span class="lineno"> 2154 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2155 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2156 </span><span class="spaces">      </span><span class="istickedoff">constrs &lt;- newDefsForNominal env nt</span>
-<span class="lineno"> 2157 </span><span class="spaces">      </span><span class="istickedoff">let conTs = C.nominalTypeConTypes nt</span>
-<span class="lineno"> 2158 </span><span class="spaces">      </span><span class="istickedoff">return env { envE = foldr (uncurry Map.insert) (envE env) constrs</span>
-<span class="lineno"> 2159 </span><span class="spaces">                 </span><span class="istickedoff">, envC = foldr (uncurry Map.insert) (envC env) conTs</span>
-<span class="lineno"> 2160 </span><span class="spaces">                 </span><span class="istickedoff">}</span>
-<span class="lineno"> 2161 </span><span class="spaces">        </span><span class="istickedoff">-- NOTE: the Cryptol schemas for the Struct &amp; Enum constructors get added to</span>
-<span class="lineno"> 2162 </span><span class="spaces">        </span><span class="istickedoff">--       the Cryptol environment.</span>
-<span class="lineno"> 2163 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2164 </span><span class="spaces">    </span><span class="istickedoff">-- | Create functions/constructors for different 'NominalType's.</span>
-<span class="lineno"> 2165 </span><span class="spaces">    </span><span class="istickedoff">newDefsForNominal ::</span>
-<span class="lineno"> 2166 </span><span class="spaces">      </span><span class="istickedoff">HasCallStack =&gt; Env -&gt; NominalType -&gt; IO [(C.Name,Term)]</span>
-<span class="lineno"> 2167 </span><span class="spaces">    </span><span class="istickedoff">newDefsForNominal env nt =</span>
-<span class="lineno"> 2168 </span><span class="spaces">      </span><span class="istickedoff">case C.ntDef nt of</span>
-<span class="lineno"> 2169 </span><span class="spaces">        </span><span class="istickedoff">C.Abstract  -&gt; return []</span>
-<span class="lineno"> 2170 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2171 </span><span class="spaces">        </span><span class="istickedoff">C.Enum x    -&gt; genCodeForEnum sc env nt x</span>
-<span class="lineno"> 2172 </span><span class="spaces">                        </span><span class="istickedoff">-- returns constructors, everything else put directly into</span>
-<span class="lineno"> 2173 </span><span class="spaces">                        </span><span class="istickedoff">-- SAWCore environment.</span>
-<span class="lineno"> 2174 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2175 </span><span class="spaces">        </span><span class="istickedoff">C.Struct fs -&gt; do</span>
-<span class="lineno"> 2176 </span><span class="spaces">            </span><span class="istickedoff">let recTy      = C.TRec (C.ntFields fs)</span>
-<span class="lineno"> 2177 </span><span class="spaces">                </span><span class="istickedoff">conNm      = C.ntConName fs</span>
-<span class="lineno"> 2178 </span><span class="spaces">                </span><span class="istickedoff">paramName  = C.asLocal <span class="nottickedoff">C.NSValue</span> conNm</span>
-<span class="lineno"> 2179 </span><span class="spaces">                             </span><span class="istickedoff">-- NOTE: We use name of constructor as the</span>
-<span class="lineno"> 2180 </span><span class="spaces">                             </span><span class="istickedoff">-- name of the constructor argument! Thus we can</span>
-<span class="lineno"> 2181 </span><span class="spaces">                             </span><span class="istickedoff">-- avoid need for a new unique name.</span>
-<span class="lineno"> 2182 </span><span class="spaces">                             </span><span class="istickedoff">--</span>
-<span class="lineno"> 2183 </span><span class="spaces">                             </span><span class="istickedoff">-- FIXME: this doesn't seem foolproof!</span>
-<span class="lineno"> 2184 </span><span class="spaces">                </span><span class="istickedoff">fn         = C.EAbs paramName recTy (C.EVar paramName)</span>
-<span class="lineno"> 2185 </span><span class="spaces">                </span><span class="istickedoff">fnWithTAbs = foldr <span class="nottickedoff">C.ETAbs</span> fn (C.ntParams nt)</span>
-<span class="lineno"> 2186 </span><span class="spaces">            </span><span class="istickedoff">e &lt;- importExpr sc env fnWithTAbs</span>
-<span class="lineno"> 2187 </span><span class="spaces">            </span><span class="istickedoff">return [(conNm, e)]</span></span>
+<span class="lineno"> 2097 </span>exportTupleValue :: [TV.TValue] -&gt; SC.CValue -&gt; [V.Eval V.Value]
+<span class="lineno"> 2098 </span><span class="decl"><span class="nottickedoff">exportTupleValue tys v =</span>
+<span class="lineno"> 2099 </span><span class="spaces">  </span><span class="nottickedoff">case (tys, v) of</span>
+<span class="lineno"> 2100 </span><span class="spaces">    </span><span class="nottickedoff">([]    , SC.VUnit    ) -&gt; []</span>
+<span class="lineno"> 2101 </span><span class="spaces">    </span><span class="nottickedoff">([t]   , _           ) -&gt; [exportValue t v]</span>
+<span class="lineno"> 2102 </span><span class="spaces">    </span><span class="nottickedoff">(t : ts, SC.VPair x y) -&gt; (exportValue t (run x)) : exportTupleValue ts (run y)</span>
+<span class="lineno"> 2103 </span><span class="spaces">    </span><span class="nottickedoff">_                      -&gt; error $ &quot;exportValue: expected tuple&quot;</span>
+<span class="lineno"> 2104 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2105 </span><span class="spaces">    </span><span class="nottickedoff">run = SC.runIdentity . force</span></span>
+<span class="lineno"> 2106 </span>
+<span class="lineno"> 2107 </span>exportRecordValue :: [(C.Ident, TV.TValue)] -&gt; SC.CValue -&gt; [(C.Ident, V.Eval V.Value)]
+<span class="lineno"> 2108 </span><span class="decl"><span class="istickedoff">exportRecordValue fields v =</span>
+<span class="lineno"> 2109 </span><span class="spaces">  </span><span class="istickedoff">case (fields, <span class="nottickedoff">v</span>) of</span>
+<span class="lineno"> 2110 </span><span class="spaces">    </span><span class="istickedoff">([]         , SC.VUnit    ) -&gt; <span class="nottickedoff">[]</span></span>
+<span class="lineno"> 2111 </span><span class="spaces">    </span><span class="istickedoff">([(n, t)]   , _           ) -&gt; [(n, exportValue t v)]</span>
+<span class="lineno"> 2112 </span><span class="spaces">    </span><span class="istickedoff">((n, t) : ts, SC.VPair x y) -&gt; <span class="nottickedoff">(n, exportValue t (run x)) : exportRecordValue ts (run y)</span></span>
+<span class="lineno"> 2113 </span><span class="spaces">    </span><span class="istickedoff">(_, SC.VRecordValue (alistAllFields</span>
+<span class="lineno"> 2114 </span><span class="spaces">                         </span><span class="istickedoff">(map (C.identText . fst) fields) -&gt; Just ths)) -&gt;</span>
+<span class="lineno"> 2115 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">zipWith (\(n,t) x -&gt; (n, exportValue t (run x))) fields ths</span></span>
+<span class="lineno"> 2116 </span><span class="spaces">    </span><span class="istickedoff">_                              -&gt; <span class="nottickedoff">error $ &quot;exportValue: expected record&quot;</span></span>
+<span class="lineno"> 2117 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2118 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">run = SC.runIdentity . force</span></span></span>
+<span class="lineno"> 2119 </span>
+<span class="lineno"> 2120 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 2121 </span>-- Supporting Nominal Types:
+<span class="lineno"> 2122 </span>
+<span class="lineno"> 2123 </span>-- | Generate functions, required by 'NominalType's, to be inserted into the
+<span class="lineno"> 2124 </span>--   term environment.
+<span class="lineno"> 2125 </span>--
+<span class="lineno"> 2126 </span>--   - For 'C.Struct', make identity functions that take the record which
+<span class="lineno"> 2127 </span>--     the newtype wraps.
+<span class="lineno"> 2128 </span>--
+<span class="lineno"> 2129 </span>--   - For 'C.Abstract', no functions need to be produced.
+<span class="lineno"> 2130 </span>--
+<span class="lineno"> 2131 </span>--   - 'C.Enum' will will create these definitions:
+<span class="lineno"> 2132 </span>--     - multiple constructor functions (added to Cryptol Env)
+<span class="lineno"> 2133 </span>--     - a number of 'internal' only SAWCore definitions:
+<span class="lineno"> 2134 </span>--       - case function for the type (not used directly by Cryptol code).
+<span class="lineno"> 2135 </span>--       - multiple definitions that define the Enum's representation
+<span class="lineno"> 2136 </span>--         type in SAWCore
+<span class="lineno"> 2137 </span>
+<span class="lineno"> 2138 </span>genCodeForNominalTypes ::
+<span class="lineno"> 2139 </span>  HasCallStack =&gt;
+<span class="lineno"> 2140 </span>  SharedContext -&gt; Map C.Name NominalType -&gt; Env -&gt; IO Env
+<span class="lineno"> 2141 </span><span class="decl"><span class="istickedoff">genCodeForNominalTypes sc nominalMap env0 =</span>
+<span class="lineno"> 2142 </span><span class="spaces">  </span><span class="istickedoff">foldM updateEnvForNominal env0 nominalMap</span>
+<span class="lineno"> 2143 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2144 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2145 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2146 </span><span class="spaces">    </span><span class="istickedoff">updateEnvForNominal :: Env -&gt; NominalType -&gt; IO Env</span>
+<span class="lineno"> 2147 </span><span class="spaces">    </span><span class="istickedoff">updateEnvForNominal env nt = do</span>
+<span class="lineno"> 2148 </span><span class="spaces">      </span><span class="istickedoff">let kinds = map C.tpKind (C.ntParams nt)</span>
+<span class="lineno"> 2149 </span><span class="spaces">      </span><span class="istickedoff">unless (all (`elem` [C.KType, C.KNum]) kinds) $</span>
+<span class="lineno"> 2150 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;genCodeForNominalTypes&quot; [</span></span>
+<span class="lineno"> 2151 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot;Type parameters for nominal types must each have kind * or #:&quot;,</span></span>
+<span class="lineno"> 2152 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show kinds)</span></span>
+<span class="lineno"> 2153 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2154 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2155 </span><span class="spaces">      </span><span class="istickedoff">constrs &lt;- newDefsForNominal env nt</span>
+<span class="lineno"> 2156 </span><span class="spaces">      </span><span class="istickedoff">let conTs = C.nominalTypeConTypes nt</span>
+<span class="lineno"> 2157 </span><span class="spaces">      </span><span class="istickedoff">return env { envE = foldr (uncurry Map.insert) (envE env) constrs</span>
+<span class="lineno"> 2158 </span><span class="spaces">                 </span><span class="istickedoff">, envC = foldr (uncurry Map.insert) (envC env) conTs</span>
+<span class="lineno"> 2159 </span><span class="spaces">                 </span><span class="istickedoff">}</span>
+<span class="lineno"> 2160 </span><span class="spaces">        </span><span class="istickedoff">-- NOTE: the Cryptol schemas for the Struct &amp; Enum constructors get added to</span>
+<span class="lineno"> 2161 </span><span class="spaces">        </span><span class="istickedoff">--       the Cryptol environment.</span>
+<span class="lineno"> 2162 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2163 </span><span class="spaces">    </span><span class="istickedoff">-- | Create functions/constructors for different 'NominalType's.</span>
+<span class="lineno"> 2164 </span><span class="spaces">    </span><span class="istickedoff">newDefsForNominal ::</span>
+<span class="lineno"> 2165 </span><span class="spaces">      </span><span class="istickedoff">HasCallStack =&gt; Env -&gt; NominalType -&gt; IO [(C.Name,Term)]</span>
+<span class="lineno"> 2166 </span><span class="spaces">    </span><span class="istickedoff">newDefsForNominal env nt =</span>
+<span class="lineno"> 2167 </span><span class="spaces">      </span><span class="istickedoff">case C.ntDef nt of</span>
+<span class="lineno"> 2168 </span><span class="spaces">        </span><span class="istickedoff">C.Abstract  -&gt; return []</span>
+<span class="lineno"> 2169 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2170 </span><span class="spaces">        </span><span class="istickedoff">C.Enum x    -&gt; genCodeForEnum sc env nt x</span>
+<span class="lineno"> 2171 </span><span class="spaces">                        </span><span class="istickedoff">-- returns constructors, everything else put directly into</span>
+<span class="lineno"> 2172 </span><span class="spaces">                        </span><span class="istickedoff">-- SAWCore environment.</span>
+<span class="lineno"> 2173 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2174 </span><span class="spaces">        </span><span class="istickedoff">C.Struct fs -&gt; do</span>
+<span class="lineno"> 2175 </span><span class="spaces">            </span><span class="istickedoff">let recTy      = C.TRec (C.ntFields fs)</span>
+<span class="lineno"> 2176 </span><span class="spaces">                </span><span class="istickedoff">conNm      = C.ntConName fs</span>
+<span class="lineno"> 2177 </span><span class="spaces">                </span><span class="istickedoff">paramName  = C.asLocal <span class="nottickedoff">C.NSValue</span> conNm</span>
+<span class="lineno"> 2178 </span><span class="spaces">                             </span><span class="istickedoff">-- NOTE: We use name of constructor as the</span>
+<span class="lineno"> 2179 </span><span class="spaces">                             </span><span class="istickedoff">-- name of the constructor argument! Thus we can</span>
+<span class="lineno"> 2180 </span><span class="spaces">                             </span><span class="istickedoff">-- avoid need for a new unique name.</span>
+<span class="lineno"> 2181 </span><span class="spaces">                             </span><span class="istickedoff">--</span>
+<span class="lineno"> 2182 </span><span class="spaces">                             </span><span class="istickedoff">-- FIXME: this doesn't seem foolproof!</span>
+<span class="lineno"> 2183 </span><span class="spaces">                </span><span class="istickedoff">fn         = C.EAbs paramName recTy (C.EVar paramName)</span>
+<span class="lineno"> 2184 </span><span class="spaces">                </span><span class="istickedoff">fnWithTAbs = foldr <span class="nottickedoff">C.ETAbs</span> fn (C.ntParams nt)</span>
+<span class="lineno"> 2185 </span><span class="spaces">            </span><span class="istickedoff">e &lt;- importExpr sc env fnWithTAbs</span>
+<span class="lineno"> 2186 </span><span class="spaces">            </span><span class="istickedoff">return [(conNm, e)]</span></span>
+<span class="lineno"> 2187 </span>
 <span class="lineno"> 2188 </span>
-<span class="lineno"> 2189 </span>
-<span class="lineno"> 2190 </span>-- | genCodeForEnum ... - called when we see an &quot;enum&quot; definition in the Cryptol module.
-<span class="lineno"> 2191 </span>--    - This action does two things
-<span class="lineno"> 2192 </span>--       1. Returns the names &amp; definitions of the constructors of the enum.
-<span class="lineno"> 2193 </span>--          This fits with the code for other nominals, needed because
-<span class="lineno"> 2194 </span>--          the &quot;rest&quot; of Cryptol code to be translated needs to see the
-<span class="lineno"> 2195 </span>--          constructors in the Cryptol environments.
-<span class="lineno"> 2196 </span>--       2. It adds many other definitions to the SAWCore environment
-<span class="lineno"> 2197 </span>--          (in the sc :: SharedContext).  These definitions are only
-<span class="lineno"> 2198 </span>--          used by other generated SAWCore code, so we don't need to
-<span class="lineno"> 2199 </span>--          return this information back to the Cryptol environment(s).
-<span class="lineno"> 2200 </span>--
-<span class="lineno"> 2201 </span>--    - N.B. PLEASE refer to doc/developer/translating-enums.md for a
-<span class="lineno"> 2202 </span>--      description of this translation at a more abstract level.  The
-<span class="lineno"> 2203 </span>--      example there is what is used below to explain the below code
-<span class="lineno"> 2204 </span>--      by SAWCore examples.  The running example we use is
-<span class="lineno"> 2205 </span>--
-<span class="lineno"> 2206 </span>--      &gt; enum ETT ts = C1
-<span class="lineno"> 2207 </span>--      &gt;             | C2 Nat
-<span class="lineno"> 2208 </span>--      &gt;             | C3 Bool ts
-<span class="lineno"> 2209 </span>--
-<span class="lineno"> 2210 </span>--   FIXME: the uses of 'preludeName' should all be removed and new
-<span class="lineno"> 2211 </span>--     definitions should be added to the module name being processed.
-<span class="lineno"> 2212 </span>--     (At one point this was problematic, TODO: figure out and
-<span class="lineno"> 2213 </span>--     resolve.)
-<span class="lineno"> 2214 </span>--
-<span class="lineno"> 2215 </span>genCodeForEnum ::
-<span class="lineno"> 2216 </span>  HasCallStack =&gt;
-<span class="lineno"> 2217 </span>  SharedContext -&gt; Env -&gt; NominalType -&gt; [C.EnumCon] -&gt; IO [(C.Name,Term)]
-<span class="lineno"> 2218 </span><span class="decl"><span class="istickedoff">genCodeForEnum sc env nt ctors =</span>
-<span class="lineno"> 2219 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno"> 2220 </span><span class="spaces">  </span><span class="istickedoff">let ntName'  = ntName nt</span>
-<span class="lineno"> 2221 </span><span class="spaces">      </span><span class="istickedoff">numCtors = length ctors</span>
-<span class="lineno"> 2222 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2223 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
-<span class="lineno"> 2224 </span><span class="spaces">  </span><span class="istickedoff">-- Common code to handle type parameters of the nominal type:</span>
-<span class="lineno"> 2225 </span><span class="spaces">  </span><span class="istickedoff">--  - ExtCns are used to capture each of the type variables.</span>
-<span class="lineno"> 2226 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2227 </span><span class="spaces">  </span><span class="istickedoff">-- The type parameters (`ts` in the example above)</span>
-<span class="lineno"> 2228 </span><span class="spaces">  </span><span class="istickedoff">let tyParamsInfo  = C.ntParams nt</span>
-<span class="lineno"> 2229 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2230 </span><span class="spaces">  </span><span class="istickedoff">-- | the kinds of the type Params:</span>
-<span class="lineno"> 2231 </span><span class="spaces">  </span><span class="istickedoff">-- tyParamsKinds &lt;- forM tyParamsInfo $ \tpi -&gt;</span>
-<span class="lineno"> 2232 </span><span class="spaces">  </span><span class="istickedoff">--                   importKind sc (C.tpKind tpi)</span>
-<span class="lineno"> 2233 </span><span class="spaces">  </span><span class="istickedoff">-- | create variables for the type Params:</span>
-<span class="lineno"> 2234 </span><span class="spaces">  </span><span class="istickedoff">-- tyParamsVars  &lt;- mapM (scExtCns sc) tyParamsECs</span>
-<span class="lineno"> 2235 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2236 </span><span class="spaces">  </span><span class="istickedoff">(envWithTParams,tks) &lt;-</span>
-<span class="lineno"> 2237 </span><span class="spaces">    </span><span class="istickedoff">mapAccumLM</span>
-<span class="lineno"> 2238 </span><span class="spaces">      </span><span class="istickedoff">(\env' tpi -&gt; do</span>
-<span class="lineno"> 2239 </span><span class="spaces">                    </span><span class="istickedoff">(env'',ty,k) &lt;- bindTParam' sc tpi env'</span>
-<span class="lineno"> 2240 </span><span class="spaces">                    </span><span class="istickedoff">return (env'', (ty,k))</span>
-<span class="lineno"> 2241 </span><span class="spaces">      </span><span class="istickedoff">)</span>
-<span class="lineno"> 2242 </span><span class="spaces">      </span><span class="istickedoff">env</span>
-<span class="lineno"> 2243 </span><span class="spaces">      </span><span class="istickedoff">tyParamsInfo</span>
-<span class="lineno"> 2244 </span><span class="spaces">  </span><span class="istickedoff">let (tyParamsVars, tyParamsKinds) = unzip tks</span>
+<span class="lineno"> 2189 </span>-- | genCodeForEnum ... - called when we see an &quot;enum&quot; definition in the Cryptol module.
+<span class="lineno"> 2190 </span>--    - This action does two things
+<span class="lineno"> 2191 </span>--       1. Returns the names &amp; definitions of the constructors of the enum.
+<span class="lineno"> 2192 </span>--          This fits with the code for other nominals, needed because
+<span class="lineno"> 2193 </span>--          the &quot;rest&quot; of Cryptol code to be translated needs to see the
+<span class="lineno"> 2194 </span>--          constructors in the Cryptol environments.
+<span class="lineno"> 2195 </span>--       2. It adds many other definitions to the SAWCore environment
+<span class="lineno"> 2196 </span>--          (in the sc :: SharedContext).  These definitions are only
+<span class="lineno"> 2197 </span>--          used by other generated SAWCore code, so we don't need to
+<span class="lineno"> 2198 </span>--          return this information back to the Cryptol environment(s).
+<span class="lineno"> 2199 </span>--
+<span class="lineno"> 2200 </span>--    - N.B. PLEASE refer to doc/developer/translating-enums.md for a
+<span class="lineno"> 2201 </span>--      description of this translation at a more abstract level.  The
+<span class="lineno"> 2202 </span>--      example there is what is used below to explain the below code
+<span class="lineno"> 2203 </span>--      by SAWCore examples.  The running example we use is
+<span class="lineno"> 2204 </span>--
+<span class="lineno"> 2205 </span>--      &gt; enum ETT ts = C1
+<span class="lineno"> 2206 </span>--      &gt;             | C2 Nat
+<span class="lineno"> 2207 </span>--      &gt;             | C3 Bool ts
+<span class="lineno"> 2208 </span>--
+<span class="lineno"> 2209 </span>--   FIXME: the uses of 'preludeName' should all be removed and new
+<span class="lineno"> 2210 </span>--     definitions should be added to the module name being processed.
+<span class="lineno"> 2211 </span>--     (At one point this was problematic, TODO: figure out and
+<span class="lineno"> 2212 </span>--     resolve.)
+<span class="lineno"> 2213 </span>--
+<span class="lineno"> 2214 </span>genCodeForEnum ::
+<span class="lineno"> 2215 </span>  HasCallStack =&gt;
+<span class="lineno"> 2216 </span>  SharedContext -&gt; Env -&gt; NominalType -&gt; [C.EnumCon] -&gt; IO [(C.Name,Term)]
+<span class="lineno"> 2217 </span><span class="decl"><span class="istickedoff">genCodeForEnum sc env nt ctors =</span>
+<span class="lineno"> 2218 </span><span class="spaces">  </span><span class="istickedoff">do</span>
+<span class="lineno"> 2219 </span><span class="spaces">  </span><span class="istickedoff">let ntName'  = ntName nt</span>
+<span class="lineno"> 2220 </span><span class="spaces">      </span><span class="istickedoff">numCtors = length ctors</span>
+<span class="lineno"> 2221 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2222 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
+<span class="lineno"> 2223 </span><span class="spaces">  </span><span class="istickedoff">-- Common code to handle type parameters of the nominal type:</span>
+<span class="lineno"> 2224 </span><span class="spaces">  </span><span class="istickedoff">--  - ExtCns are used to capture each of the type variables.</span>
+<span class="lineno"> 2225 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2226 </span><span class="spaces">  </span><span class="istickedoff">-- The type parameters (`ts` in the example above)</span>
+<span class="lineno"> 2227 </span><span class="spaces">  </span><span class="istickedoff">let tyParamsInfo  = C.ntParams nt</span>
+<span class="lineno"> 2228 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2229 </span><span class="spaces">  </span><span class="istickedoff">-- | the kinds of the type Params:</span>
+<span class="lineno"> 2230 </span><span class="spaces">  </span><span class="istickedoff">-- tyParamsKinds &lt;- forM tyParamsInfo $ \tpi -&gt;</span>
+<span class="lineno"> 2231 </span><span class="spaces">  </span><span class="istickedoff">--                   importKind sc (C.tpKind tpi)</span>
+<span class="lineno"> 2232 </span><span class="spaces">  </span><span class="istickedoff">-- | create variables for the type Params:</span>
+<span class="lineno"> 2233 </span><span class="spaces">  </span><span class="istickedoff">-- tyParamsVars  &lt;- mapM (scExtCns sc) tyParamsECs</span>
+<span class="lineno"> 2234 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2235 </span><span class="spaces">  </span><span class="istickedoff">(envWithTParams,tks) &lt;-</span>
+<span class="lineno"> 2236 </span><span class="spaces">    </span><span class="istickedoff">mapAccumLM</span>
+<span class="lineno"> 2237 </span><span class="spaces">      </span><span class="istickedoff">(\env' tpi -&gt; do</span>
+<span class="lineno"> 2238 </span><span class="spaces">                    </span><span class="istickedoff">(env'',ty,k) &lt;- bindTParam' sc tpi env'</span>
+<span class="lineno"> 2239 </span><span class="spaces">                    </span><span class="istickedoff">return (env'', (ty,k))</span>
+<span class="lineno"> 2240 </span><span class="spaces">      </span><span class="istickedoff">)</span>
+<span class="lineno"> 2241 </span><span class="spaces">      </span><span class="istickedoff">env</span>
+<span class="lineno"> 2242 </span><span class="spaces">      </span><span class="istickedoff">tyParamsInfo</span>
+<span class="lineno"> 2243 </span><span class="spaces">  </span><span class="istickedoff">let (tyParamsVars, tyParamsKinds) = unzip tks</span>
+<span class="lineno"> 2244 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2245 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2246 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2247 </span><span class="spaces">  </span><span class="istickedoff">let</span>
-<span class="lineno"> 2248 </span><span class="spaces">      </span><span class="istickedoff">-- | @addTypeAbstractions t@ - create the SAWCore type</span>
-<span class="lineno"> 2249 </span><span class="spaces">      </span><span class="istickedoff">--   abstractions around @t@ (holding the type Param references)</span>
-<span class="lineno"> 2250 </span><span class="spaces">      </span><span class="istickedoff">addTypeAbstractions :: Term -&gt; IO Term</span>
-<span class="lineno"> 2251 </span><span class="spaces">      </span><span class="istickedoff">addTypeAbstractions t = scAbstractTerms sc tyParamsVars t</span>
-<span class="lineno"> 2252 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2253 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
-<span class="lineno"> 2254 </span><span class="spaces">  </span><span class="istickedoff">-- Common naming conventions:</span>
-<span class="lineno"> 2255 </span><span class="spaces">  </span><span class="istickedoff">let sumTy_ident = identOfEnumType ntName'</span>
-<span class="lineno"> 2256 </span><span class="spaces">      </span><span class="istickedoff">case_ident  = identOfEnumCase ntName'</span>
-<span class="lineno"> 2257 </span><span class="spaces">      </span><span class="istickedoff">tl_ident    = newIdent ntName' &quot;__LS&quot;</span>
-<span class="lineno"> 2258 </span><span class="spaces">                    </span><span class="istickedoff">-- name for the 'type list', type is ListSort (thus LS)</span>
-<span class="lineno"> 2259 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2260 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
-<span class="lineno"> 2261 </span><span class="spaces">  </span><span class="istickedoff">-- Definitions to access needed SAWCore Prelude types &amp; definitions:</span>
-<span class="lineno"> 2262 </span><span class="spaces">  </span><span class="istickedoff">sort0          &lt;- scSort sc (mkSort 0)</span>
-<span class="lineno"> 2263 </span><span class="spaces">  </span><span class="istickedoff">scListSort     &lt;- scGlobalApply sc &quot;Prelude.ListSort&quot; []</span>
-<span class="lineno"> 2264 </span><span class="spaces">  </span><span class="istickedoff">scLS_Nil       &lt;- scGlobalApply sc &quot;Prelude.LS_Nil&quot;  []</span>
-<span class="lineno"> 2265 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2266 </span><span class="spaces">  </span><span class="istickedoff">let scLS_Cons s ls   = scGlobalApply sc &quot;Prelude.LS_Cons&quot; [s,ls]</span>
-<span class="lineno"> 2267 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2268 </span><span class="spaces">      </span><span class="istickedoff">scEithersV ls    = scGlobalApply sc &quot;Prelude.EithersV&quot; [ls]</span>
-<span class="lineno"> 2269 </span><span class="spaces">      </span><span class="istickedoff">sc_eithersV b ls = scGlobalApply sc &quot;Prelude.eithersV&quot; [b,ls]</span>
-<span class="lineno"> 2270 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2271 </span><span class="spaces">     </span><span class="istickedoff">-- to create values of the Either type:</span>
-<span class="lineno"> 2272 </span><span class="spaces">      </span><span class="istickedoff">scLeft  a b x    = scGlobalApply sc &quot;Prelude.Left&quot;  [a,b,x]</span>
-<span class="lineno"> 2273 </span><span class="spaces">      </span><span class="istickedoff">scRight a b x    = scGlobalApply sc &quot;Prelude.Right&quot; [a,b,x]</span>
-<span class="lineno"> 2274 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2275 </span><span class="spaces">      </span><span class="istickedoff">scMakeListSort :: [Term] -&gt; IO Term</span>
-<span class="lineno"> 2276 </span><span class="spaces">      </span><span class="istickedoff">scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil</span>
-<span class="lineno"> 2277 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2278 </span><span class="spaces">      </span><span class="istickedoff">-- | scMakeFunsTo b tvs - create FunsTo list of type `FunsTo b`, given</span>
-<span class="lineno"> 2279 </span><span class="spaces">      </span><span class="istickedoff">--    the list of (type, val :: type-&gt;b) pairs</span>
-<span class="lineno"> 2280 </span><span class="spaces">      </span><span class="istickedoff">scMakeFunsTo :: Term -&gt; [(Term,Term)] -&gt; IO Term</span>
-<span class="lineno"> 2281 </span><span class="spaces">      </span><span class="istickedoff">scMakeFunsTo b tvs =</span>
-<span class="lineno"> 2282 </span><span class="spaces">        </span><span class="istickedoff">do</span>
-<span class="lineno"> 2283 </span><span class="spaces">        </span><span class="istickedoff">scFunsTo_Nil &lt;- scGlobalApply sc &quot;Prelude.FunsTo_Nil&quot;  [b]</span>
-<span class="lineno"> 2284 </span><span class="spaces">        </span><span class="istickedoff">let scFunsTo_Cons (t,v) r =</span>
-<span class="lineno"> 2285 </span><span class="spaces">              </span><span class="istickedoff">scGlobalApply sc &quot;Prelude.FunsTo_Cons&quot; [b,t,v,r]</span>
-<span class="lineno"> 2286 </span><span class="spaces">        </span><span class="istickedoff">Fold.foldrM scFunsTo_Cons scFunsTo_Nil tvs</span>
-<span class="lineno"> 2287 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2288 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
-<span class="lineno"> 2289 </span><span class="spaces">  </span><span class="istickedoff">-- Create TypeList(tl) for the Enum, add to SAWCore environment:</span>
-<span class="lineno"> 2290 </span><span class="spaces">  </span><span class="istickedoff">--  - elements of list are the elements of the Sum.</span>
-<span class="lineno"> 2291 </span><span class="spaces">  </span><span class="istickedoff">--  - the types maintain the same exact type vars (see tyParamsInfo)</span>
-<span class="lineno"> 2292 </span><span class="spaces">  </span><span class="istickedoff">-- Using the running example, we want to add the following to the</span>
-<span class="lineno"> 2293 </span><span class="spaces">  </span><span class="istickedoff">-- SAWCore environment:</span>
-<span class="lineno"> 2294 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2295 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ETT__LS : sort 0 -&gt; ListSort;</span>
-<span class="lineno"> 2296 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ETT__LS ts = LS_Cons     (scTupleType [])</span>
-<span class="lineno"> 2297 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;               (LS_Cons  (scTupleType [Nat])</span>
-<span class="lineno"> 2298 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;                (LS_Cons (scTupleType [Bool,ts])</span>
-<span class="lineno"> 2299 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;                  LS_Nil));</span>
-<span class="lineno"> 2300 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2301 </span><span class="spaces">  </span><span class="istickedoff">--  cheating a little in the above syntax.</span>
-<span class="lineno"> 2302 </span><span class="spaces">  </span><span class="istickedoff">--   - scTupleType is not SAWCore, it represents what's created with</span>
-<span class="lineno"> 2303 </span><span class="spaces">  </span><span class="istickedoff">--     `scTupleType' function</span>
-<span class="lineno"> 2304 </span><span class="spaces">  </span><span class="istickedoff">--   - using list syntax for the ListSort lists that are the arguments</span>
-<span class="lineno"> 2305 </span><span class="spaces">  </span><span class="istickedoff">--     to the above.</span>
-<span class="lineno"> 2306 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2307 </span><span class="spaces">  </span><span class="istickedoff">-- argTypes_eachCtor is the sum-of-products matrix for this enum type:</span>
-<span class="lineno"> 2308 </span><span class="spaces">  </span><span class="istickedoff">(argTypes_eachCtor :: [[Term]]) &lt;-</span>
-<span class="lineno"> 2309 </span><span class="spaces">    </span><span class="istickedoff">forM ctors $ \c-&gt;     -- for each constructor</span>
-<span class="lineno"> 2310 </span><span class="spaces">      </span><span class="istickedoff">forM (C.ecFields c) -- for each constructor field (type)</span>
-<span class="lineno"> 2311 </span><span class="spaces">         </span><span class="istickedoff">(importType sc envWithTParams)</span>
-<span class="lineno"> 2312 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2313 </span><span class="spaces">  </span><span class="istickedoff">-- map the list of types to the product type:</span>
-<span class="lineno"> 2314 </span><span class="spaces">  </span><span class="istickedoff">represType_eachCtor &lt;- forM argTypes_eachCtor $ \ts -&gt;</span>
-<span class="lineno"> 2315 </span><span class="spaces">                           </span><span class="istickedoff">scTupleType sc ts</span>
-<span class="lineno"> 2316 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2317 </span><span class="spaces">  </span><span class="istickedoff">tl_rhs   &lt;- addTypeAbstractions =&lt;&lt; scMakeListSort represType_eachCtor</span>
-<span class="lineno"> 2318 </span><span class="spaces">  </span><span class="istickedoff">tl_type  &lt;- scFunAll sc tyParamsKinds scListSort</span>
-<span class="lineno"> 2319 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc tl_ident tl_type tl_rhs</span>
-<span class="lineno"> 2320 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2321 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
-<span class="lineno"> 2322 </span><span class="spaces">  </span><span class="istickedoff">-- Create the definition for the SAWCore sum (to which we map the</span>
-<span class="lineno"> 2323 </span><span class="spaces">  </span><span class="istickedoff">-- enum type).  For the running example we would see this:</span>
-<span class="lineno"> 2324 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2325 </span><span class="spaces">  </span><span class="istickedoff">-- &gt; ETT : (ts : sort 0) -&gt; sort 0;</span>
-<span class="lineno"> 2326 </span><span class="spaces">  </span><span class="istickedoff">-- &gt; ETT ts = EithersV (ETT__LS ts);</span>
-<span class="lineno"> 2327 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2328 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2329 </span><span class="spaces">  </span><span class="istickedoff">-- the Typelist(tl) applied to the type parameters.</span>
-<span class="lineno"> 2330 </span><span class="spaces">  </span><span class="istickedoff">tl_applied &lt;- scGlobalApply sc tl_ident tyParamsVars</span>
-<span class="lineno"> 2331 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2332 </span><span class="spaces">  </span><span class="istickedoff">sumTy_type &lt;- scFunAll sc tyParamsKinds sort0</span>
-<span class="lineno"> 2333 </span><span class="spaces">  </span><span class="istickedoff">sumTy_rhs  &lt;- addTypeAbstractions =&lt;&lt; scEithersV tl_applied</span>
-<span class="lineno"> 2334 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2335 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc sumTy_ident sumTy_type sumTy_rhs</span>
-<span class="lineno"> 2336 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2337 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
-<span class="lineno"> 2338 </span><span class="spaces">  </span><span class="istickedoff">-- Create a `case` function specialized to the enum type.</span>
-<span class="lineno"> 2339 </span><span class="spaces">  </span><span class="istickedoff">-- For the running example, we will define this:</span>
-<span class="lineno"> 2340 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2341 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ETT_case  : (ts : sort 0)</span>
-<span class="lineno"> 2342 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; (b: sort 0)</span>
-<span class="lineno"> 2343 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; (arrowsType []        b)</span>
-<span class="lineno"> 2344 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; (arrowsType [Nat]     b)</span>
-<span class="lineno"> 2345 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; (arrowsType [Bool,ts] b)</span>
-<span class="lineno"> 2346 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; ETT ts</span>
-<span class="lineno"> 2347 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; b;</span>
-<span class="lineno"> 2348 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ETT_case ts b f1 f2 f3 =</span>
-<span class="lineno"> 2349 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   eithersV b</span>
-<span class="lineno"> 2350 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;     (FunsTo_Cons b (ETT__ArgType_C1 ts) (\(x: scTupleType []       ) -&gt; f1)</span>
-<span class="lineno"> 2351 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;     (FunsTo_Cons b (ETT__ArgType_C2 ts) (\(x: scTupleType [Nat]    ) -&gt; f2 x.1)</span>
-<span class="lineno"> 2352 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;     (FunsTo_Cons b (ETT__ArgType_C3 ts) (\(x: scTupleType [Bool,ts]) -&gt; f3 x.1 x.2)</span>
-<span class="lineno"> 2353 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;     (FunsTo_Nil b))));</span>
-<span class="lineno"> 2354 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2355 </span><span class="spaces">  </span><span class="istickedoff">-- Using the same syntax cheats we did above.</span>
-<span class="lineno"> 2356 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2357 </span><span class="spaces">  </span><span class="istickedoff">sumTy_applied &lt;- scGlobalApply sc sumTy_ident tyParamsVars</span>
-<span class="lineno"> 2358 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2359 </span><span class="spaces">  </span><span class="istickedoff">let mkAltFuncTypes b = mapM (\ts-&gt;scFunAll sc ts b) argTypes_eachCtor</span>
-<span class="lineno"> 2360 </span><span class="spaces">  </span><span class="istickedoff">case_type &lt;-</span>
-<span class="lineno"> 2361 </span><span class="spaces">      </span><span class="istickedoff">do</span>
-<span class="lineno"> 2362 </span><span class="spaces">      </span><span class="istickedoff">b &lt;- scFreshVariable sc &quot;b&quot; sort0</span>
-<span class="lineno"> 2363 </span><span class="spaces">           </span><span class="istickedoff">-- all uses are direct under the 'Pi'</span>
-<span class="lineno"> 2364 </span><span class="spaces">      </span><span class="istickedoff">altFuncTypes &lt;- mkAltFuncTypes b</span>
-<span class="lineno"> 2365 </span><span class="spaces">      </span><span class="istickedoff">scGeneralizeTerms sc tyParamsVars</span>
-<span class="lineno"> 2366 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scGeneralizeTerms sc [b] -- the scPi construct</span>
-<span class="lineno"> 2367 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scFunAll sc altFuncTypes</span>
-<span class="lineno"> 2368 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scFun sc sumTy_applied b</span>
-<span class="lineno"> 2369 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2370 </span><span class="spaces">  </span><span class="istickedoff">case_rhs &lt;-</span>
-<span class="lineno"> 2371 </span><span class="spaces">      </span><span class="istickedoff">do</span>
-<span class="lineno"> 2372 </span><span class="spaces">      </span><span class="istickedoff">-- Create needed vars for SAWCore expression</span>
-<span class="lineno"> 2373 </span><span class="spaces">      </span><span class="istickedoff">--  - generating something like:</span>
-<span class="lineno"> 2374 </span><span class="spaces">      </span><span class="istickedoff">--    \tyvars..-&gt; \(b: sort)-&gt;(\f1 f2 ... -&gt;</span>
-<span class="lineno"> 2375 </span><span class="spaces">      </span><span class="istickedoff">--       eithersV b (FunsToCons b ... (\x-&gt; f1 ...) ...)</span>
-<span class="lineno"> 2376 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2377 </span><span class="spaces">      </span><span class="istickedoff">b &lt;- scFreshVariable sc &quot;b&quot; sort0</span>
-<span class="lineno"> 2378 </span><span class="spaces">      </span><span class="istickedoff">let funcNames = map (\n-&gt; Text.pack (&quot;f&quot; ++ show n)) [1..numCtors]</span>
-<span class="lineno"> 2379 </span><span class="spaces">      </span><span class="istickedoff">funcTypes &lt;- mkAltFuncTypes b</span>
-<span class="lineno"> 2380 </span><span class="spaces">      </span><span class="istickedoff">funcVars  &lt;- zipWithM (scFreshVariable sc) funcNames funcTypes</span>
-<span class="lineno"> 2381 </span><span class="spaces">      </span><span class="istickedoff">funcDefs  &lt;- forM (zip3 funcVars represType_eachCtor ctors) $</span>
-<span class="lineno"> 2382 </span><span class="spaces">                     </span><span class="istickedoff">\(funcVar,ty,ctor) -&gt;</span>
-<span class="lineno"> 2383 </span><span class="spaces">                         </span><span class="istickedoff">do</span>
-<span class="lineno"> 2384 </span><span class="spaces">                         </span><span class="istickedoff">x &lt;- scFreshVariable sc &quot;x&quot; ty</span>
-<span class="lineno"> 2385 </span><span class="spaces">                         </span><span class="istickedoff">let n = length (C.ecFields ctor)</span>
-<span class="lineno"> 2386 </span><span class="spaces">                         </span><span class="istickedoff">scAbstractTerms sc [x]</span>
-<span class="lineno"> 2387 </span><span class="spaces">                           </span><span class="istickedoff">=&lt;&lt; scApplyAll sc funcVar</span>
-<span class="lineno"> 2388 </span><span class="spaces">                           </span><span class="istickedoff">=&lt;&lt; forM [1..n]</span>
-<span class="lineno"> 2389 </span><span class="spaces">                                 </span><span class="istickedoff">(\i-&gt; scTupleSelector sc x i n)</span>
-<span class="lineno"> 2390 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2391 </span><span class="spaces">      </span><span class="istickedoff">addTypeAbstractions</span>
-<span class="lineno"> 2392 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scAbstractTerms sc [b]</span>
-<span class="lineno"> 2393 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scAbstractTerms sc funcVars</span>
-<span class="lineno"> 2394 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; sc_eithersV b</span>
-<span class="lineno"> 2395 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scMakeFunsTo b (zip represType_eachCtor funcDefs)</span>
-<span class="lineno"> 2396 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2397 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc case_ident case_type case_rhs</span>
-<span class="lineno"> 2398 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2399 </span><span class="spaces">  </span><span class="istickedoff">assertSAWCoreTypeChecks sc <span class="nottickedoff">case_ident</span> case_rhs (Just <span class="nottickedoff">case_type</span>)</span>
-<span class="lineno"> 2400 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2401 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
-<span class="lineno"> 2402 </span><span class="spaces">  </span><span class="istickedoff">-- There's a bit of 'tedium' in creating the constructors, let's look at our</span>
-<span class="lineno"> 2403 </span><span class="spaces">  </span><span class="istickedoff">-- running example, the SAWCore constructors we want are these:</span>
-<span class="lineno"> 2404 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2405 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ```</span>
-<span class="lineno"> 2406 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C1 : (ts : sort 0) -&gt; listSortGet (ETT__LS ts) 0 -&gt; ETT ts;</span>
-<span class="lineno"> 2407 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C1 ts x =</span>
-<span class="lineno"> 2408 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   Left (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))</span>
-<span class="lineno"> 2409 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;        x;</span>
-<span class="lineno"> 2410 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;</span>
-<span class="lineno"> 2411 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C2 : (ts : sort 0) -&gt; listSortGet (ETT__LS ts) 1 -&gt; ETT ts;</span>
-<span class="lineno"> 2412 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C2 ts x =</span>
-<span class="lineno"> 2413 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   Right (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))</span>
-<span class="lineno"> 2414 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   (Left (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))</span>
-<span class="lineno"> 2415 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;    x);</span>
-<span class="lineno"> 2416 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;</span>
-<span class="lineno"> 2417 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C3 : (ts : sort 0) -&gt; listSortGet (ETT__LS ts) 2 -&gt; ETT ts;</span>
-<span class="lineno"> 2418 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C3 ts x =</span>
-<span class="lineno"> 2419 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;  Right   (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))</span>
-<span class="lineno"> 2420 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   (Right (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))</span>
-<span class="lineno"> 2421 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;    (Left (listSortGet (ETT__LS ts) 2) (EithersV (listSortDrop (ETT__LS ts) 3))</span>
-<span class="lineno"> 2422 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;    x));</span>
-<span class="lineno"> 2423 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ```</span>
-<span class="lineno"> 2424 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2425 </span><span class="spaces">  </span><span class="istickedoff">-- One can see that we try to encapsulate all the enum specific data in the</span>
-<span class="lineno"> 2426 </span><span class="spaces">  </span><span class="istickedoff">-- @ETT__LS ts@ structure.</span>
+<span class="lineno"> 2246 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno"> 2247 </span><span class="spaces">      </span><span class="istickedoff">-- | @addTypeAbstractions t@ - create the SAWCore type</span>
+<span class="lineno"> 2248 </span><span class="spaces">      </span><span class="istickedoff">--   abstractions around @t@ (holding the type Param references)</span>
+<span class="lineno"> 2249 </span><span class="spaces">      </span><span class="istickedoff">addTypeAbstractions :: Term -&gt; IO Term</span>
+<span class="lineno"> 2250 </span><span class="spaces">      </span><span class="istickedoff">addTypeAbstractions t = scAbstractTerms sc tyParamsVars t</span>
+<span class="lineno"> 2251 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2252 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
+<span class="lineno"> 2253 </span><span class="spaces">  </span><span class="istickedoff">-- Common naming conventions:</span>
+<span class="lineno"> 2254 </span><span class="spaces">  </span><span class="istickedoff">let sumTy_ident = identOfEnumType ntName'</span>
+<span class="lineno"> 2255 </span><span class="spaces">      </span><span class="istickedoff">case_ident  = identOfEnumCase ntName'</span>
+<span class="lineno"> 2256 </span><span class="spaces">      </span><span class="istickedoff">tl_ident    = newIdent ntName' &quot;__LS&quot;</span>
+<span class="lineno"> 2257 </span><span class="spaces">                    </span><span class="istickedoff">-- name for the 'type list', type is ListSort (thus LS)</span>
+<span class="lineno"> 2258 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2259 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
+<span class="lineno"> 2260 </span><span class="spaces">  </span><span class="istickedoff">-- Definitions to access needed SAWCore Prelude types &amp; definitions:</span>
+<span class="lineno"> 2261 </span><span class="spaces">  </span><span class="istickedoff">sort0          &lt;- scSort sc (mkSort 0)</span>
+<span class="lineno"> 2262 </span><span class="spaces">  </span><span class="istickedoff">scListSort     &lt;- scGlobalApply sc &quot;Prelude.ListSort&quot; []</span>
+<span class="lineno"> 2263 </span><span class="spaces">  </span><span class="istickedoff">scLS_Nil       &lt;- scGlobalApply sc &quot;Prelude.LS_Nil&quot;  []</span>
+<span class="lineno"> 2264 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2265 </span><span class="spaces">  </span><span class="istickedoff">let scLS_Cons s ls   = scGlobalApply sc &quot;Prelude.LS_Cons&quot; [s,ls]</span>
+<span class="lineno"> 2266 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2267 </span><span class="spaces">      </span><span class="istickedoff">scEithersV ls    = scGlobalApply sc &quot;Prelude.EithersV&quot; [ls]</span>
+<span class="lineno"> 2268 </span><span class="spaces">      </span><span class="istickedoff">sc_eithersV b ls = scGlobalApply sc &quot;Prelude.eithersV&quot; [b,ls]</span>
+<span class="lineno"> 2269 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2270 </span><span class="spaces">     </span><span class="istickedoff">-- to create values of the Either type:</span>
+<span class="lineno"> 2271 </span><span class="spaces">      </span><span class="istickedoff">scLeft  a b x    = scGlobalApply sc &quot;Prelude.Left&quot;  [a,b,x]</span>
+<span class="lineno"> 2272 </span><span class="spaces">      </span><span class="istickedoff">scRight a b x    = scGlobalApply sc &quot;Prelude.Right&quot; [a,b,x]</span>
+<span class="lineno"> 2273 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2274 </span><span class="spaces">      </span><span class="istickedoff">scMakeListSort :: [Term] -&gt; IO Term</span>
+<span class="lineno"> 2275 </span><span class="spaces">      </span><span class="istickedoff">scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil</span>
+<span class="lineno"> 2276 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2277 </span><span class="spaces">      </span><span class="istickedoff">-- | scMakeFunsTo b tvs - create FunsTo list of type `FunsTo b`, given</span>
+<span class="lineno"> 2278 </span><span class="spaces">      </span><span class="istickedoff">--    the list of (type, val :: type-&gt;b) pairs</span>
+<span class="lineno"> 2279 </span><span class="spaces">      </span><span class="istickedoff">scMakeFunsTo :: Term -&gt; [(Term,Term)] -&gt; IO Term</span>
+<span class="lineno"> 2280 </span><span class="spaces">      </span><span class="istickedoff">scMakeFunsTo b tvs =</span>
+<span class="lineno"> 2281 </span><span class="spaces">        </span><span class="istickedoff">do</span>
+<span class="lineno"> 2282 </span><span class="spaces">        </span><span class="istickedoff">scFunsTo_Nil &lt;- scGlobalApply sc &quot;Prelude.FunsTo_Nil&quot;  [b]</span>
+<span class="lineno"> 2283 </span><span class="spaces">        </span><span class="istickedoff">let scFunsTo_Cons (t,v) r =</span>
+<span class="lineno"> 2284 </span><span class="spaces">              </span><span class="istickedoff">scGlobalApply sc &quot;Prelude.FunsTo_Cons&quot; [b,t,v,r]</span>
+<span class="lineno"> 2285 </span><span class="spaces">        </span><span class="istickedoff">Fold.foldrM scFunsTo_Cons scFunsTo_Nil tvs</span>
+<span class="lineno"> 2286 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2287 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
+<span class="lineno"> 2288 </span><span class="spaces">  </span><span class="istickedoff">-- Create TypeList(tl) for the Enum, add to SAWCore environment:</span>
+<span class="lineno"> 2289 </span><span class="spaces">  </span><span class="istickedoff">--  - elements of list are the elements of the Sum.</span>
+<span class="lineno"> 2290 </span><span class="spaces">  </span><span class="istickedoff">--  - the types maintain the same exact type vars (see tyParamsInfo)</span>
+<span class="lineno"> 2291 </span><span class="spaces">  </span><span class="istickedoff">-- Using the running example, we want to add the following to the</span>
+<span class="lineno"> 2292 </span><span class="spaces">  </span><span class="istickedoff">-- SAWCore environment:</span>
+<span class="lineno"> 2293 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2294 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ETT__LS : sort 0 -&gt; ListSort;</span>
+<span class="lineno"> 2295 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ETT__LS ts = LS_Cons     (scTupleType [])</span>
+<span class="lineno"> 2296 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;               (LS_Cons  (scTupleType [Nat])</span>
+<span class="lineno"> 2297 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;                (LS_Cons (scTupleType [Bool,ts])</span>
+<span class="lineno"> 2298 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;                  LS_Nil));</span>
+<span class="lineno"> 2299 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2300 </span><span class="spaces">  </span><span class="istickedoff">--  cheating a little in the above syntax.</span>
+<span class="lineno"> 2301 </span><span class="spaces">  </span><span class="istickedoff">--   - scTupleType is not SAWCore, it represents what's created with</span>
+<span class="lineno"> 2302 </span><span class="spaces">  </span><span class="istickedoff">--     `scTupleType' function</span>
+<span class="lineno"> 2303 </span><span class="spaces">  </span><span class="istickedoff">--   - using list syntax for the ListSort lists that are the arguments</span>
+<span class="lineno"> 2304 </span><span class="spaces">  </span><span class="istickedoff">--     to the above.</span>
+<span class="lineno"> 2305 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2306 </span><span class="spaces">  </span><span class="istickedoff">-- argTypes_eachCtor is the sum-of-products matrix for this enum type:</span>
+<span class="lineno"> 2307 </span><span class="spaces">  </span><span class="istickedoff">(argTypes_eachCtor :: [[Term]]) &lt;-</span>
+<span class="lineno"> 2308 </span><span class="spaces">    </span><span class="istickedoff">forM ctors $ \c-&gt;     -- for each constructor</span>
+<span class="lineno"> 2309 </span><span class="spaces">      </span><span class="istickedoff">forM (C.ecFields c) -- for each constructor field (type)</span>
+<span class="lineno"> 2310 </span><span class="spaces">         </span><span class="istickedoff">(importType sc envWithTParams)</span>
+<span class="lineno"> 2311 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2312 </span><span class="spaces">  </span><span class="istickedoff">-- map the list of types to the product type:</span>
+<span class="lineno"> 2313 </span><span class="spaces">  </span><span class="istickedoff">represType_eachCtor &lt;- forM argTypes_eachCtor $ \ts -&gt;</span>
+<span class="lineno"> 2314 </span><span class="spaces">                           </span><span class="istickedoff">scTupleType sc ts</span>
+<span class="lineno"> 2315 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2316 </span><span class="spaces">  </span><span class="istickedoff">tl_rhs   &lt;- addTypeAbstractions =&lt;&lt; scMakeListSort represType_eachCtor</span>
+<span class="lineno"> 2317 </span><span class="spaces">  </span><span class="istickedoff">tl_type  &lt;- scFunAll sc tyParamsKinds scListSort</span>
+<span class="lineno"> 2318 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc tl_ident tl_type tl_rhs</span>
+<span class="lineno"> 2319 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2320 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
+<span class="lineno"> 2321 </span><span class="spaces">  </span><span class="istickedoff">-- Create the definition for the SAWCore sum (to which we map the</span>
+<span class="lineno"> 2322 </span><span class="spaces">  </span><span class="istickedoff">-- enum type).  For the running example we would see this:</span>
+<span class="lineno"> 2323 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2324 </span><span class="spaces">  </span><span class="istickedoff">-- &gt; ETT : (ts : sort 0) -&gt; sort 0;</span>
+<span class="lineno"> 2325 </span><span class="spaces">  </span><span class="istickedoff">-- &gt; ETT ts = EithersV (ETT__LS ts);</span>
+<span class="lineno"> 2326 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2327 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2328 </span><span class="spaces">  </span><span class="istickedoff">-- the Typelist(tl) applied to the type parameters.</span>
+<span class="lineno"> 2329 </span><span class="spaces">  </span><span class="istickedoff">tl_applied &lt;- scGlobalApply sc tl_ident tyParamsVars</span>
+<span class="lineno"> 2330 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2331 </span><span class="spaces">  </span><span class="istickedoff">sumTy_type &lt;- scFunAll sc tyParamsKinds sort0</span>
+<span class="lineno"> 2332 </span><span class="spaces">  </span><span class="istickedoff">sumTy_rhs  &lt;- addTypeAbstractions =&lt;&lt; scEithersV tl_applied</span>
+<span class="lineno"> 2333 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2334 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc sumTy_ident sumTy_type sumTy_rhs</span>
+<span class="lineno"> 2335 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2336 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
+<span class="lineno"> 2337 </span><span class="spaces">  </span><span class="istickedoff">-- Create a `case` function specialized to the enum type.</span>
+<span class="lineno"> 2338 </span><span class="spaces">  </span><span class="istickedoff">-- For the running example, we will define this:</span>
+<span class="lineno"> 2339 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2340 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ETT_case  : (ts : sort 0)</span>
+<span class="lineno"> 2341 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; (b: sort 0)</span>
+<span class="lineno"> 2342 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; (arrowsType []        b)</span>
+<span class="lineno"> 2343 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; (arrowsType [Nat]     b)</span>
+<span class="lineno"> 2344 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; (arrowsType [Bool,ts] b)</span>
+<span class="lineno"> 2345 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; ETT ts</span>
+<span class="lineno"> 2346 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;          -&gt; b;</span>
+<span class="lineno"> 2347 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ETT_case ts b f1 f2 f3 =</span>
+<span class="lineno"> 2348 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   eithersV b</span>
+<span class="lineno"> 2349 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;     (FunsTo_Cons b (ETT__ArgType_C1 ts) (\(x: scTupleType []       ) -&gt; f1)</span>
+<span class="lineno"> 2350 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;     (FunsTo_Cons b (ETT__ArgType_C2 ts) (\(x: scTupleType [Nat]    ) -&gt; f2 x.1)</span>
+<span class="lineno"> 2351 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;     (FunsTo_Cons b (ETT__ArgType_C3 ts) (\(x: scTupleType [Bool,ts]) -&gt; f3 x.1 x.2)</span>
+<span class="lineno"> 2352 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;     (FunsTo_Nil b))));</span>
+<span class="lineno"> 2353 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2354 </span><span class="spaces">  </span><span class="istickedoff">-- Using the same syntax cheats we did above.</span>
+<span class="lineno"> 2355 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2356 </span><span class="spaces">  </span><span class="istickedoff">sumTy_applied &lt;- scGlobalApply sc sumTy_ident tyParamsVars</span>
+<span class="lineno"> 2357 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2358 </span><span class="spaces">  </span><span class="istickedoff">let mkAltFuncTypes b = mapM (\ts-&gt;scFunAll sc ts b) argTypes_eachCtor</span>
+<span class="lineno"> 2359 </span><span class="spaces">  </span><span class="istickedoff">case_type &lt;-</span>
+<span class="lineno"> 2360 </span><span class="spaces">      </span><span class="istickedoff">do</span>
+<span class="lineno"> 2361 </span><span class="spaces">      </span><span class="istickedoff">b &lt;- scFreshVariable sc &quot;b&quot; sort0</span>
+<span class="lineno"> 2362 </span><span class="spaces">           </span><span class="istickedoff">-- all uses are direct under the 'Pi'</span>
+<span class="lineno"> 2363 </span><span class="spaces">      </span><span class="istickedoff">altFuncTypes &lt;- mkAltFuncTypes b</span>
+<span class="lineno"> 2364 </span><span class="spaces">      </span><span class="istickedoff">scGeneralizeTerms sc tyParamsVars</span>
+<span class="lineno"> 2365 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scGeneralizeTerms sc [b] -- the scPi construct</span>
+<span class="lineno"> 2366 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scFunAll sc altFuncTypes</span>
+<span class="lineno"> 2367 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scFun sc sumTy_applied b</span>
+<span class="lineno"> 2368 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2369 </span><span class="spaces">  </span><span class="istickedoff">case_rhs &lt;-</span>
+<span class="lineno"> 2370 </span><span class="spaces">      </span><span class="istickedoff">do</span>
+<span class="lineno"> 2371 </span><span class="spaces">      </span><span class="istickedoff">-- Create needed vars for SAWCore expression</span>
+<span class="lineno"> 2372 </span><span class="spaces">      </span><span class="istickedoff">--  - generating something like:</span>
+<span class="lineno"> 2373 </span><span class="spaces">      </span><span class="istickedoff">--    \tyvars..-&gt; \(b: sort)-&gt;(\f1 f2 ... -&gt;</span>
+<span class="lineno"> 2374 </span><span class="spaces">      </span><span class="istickedoff">--       eithersV b (FunsToCons b ... (\x-&gt; f1 ...) ...)</span>
+<span class="lineno"> 2375 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2376 </span><span class="spaces">      </span><span class="istickedoff">b &lt;- scFreshVariable sc &quot;b&quot; sort0</span>
+<span class="lineno"> 2377 </span><span class="spaces">      </span><span class="istickedoff">let funcNames = map (\n-&gt; Text.pack (&quot;f&quot; ++ show n)) [1..numCtors]</span>
+<span class="lineno"> 2378 </span><span class="spaces">      </span><span class="istickedoff">funcTypes &lt;- mkAltFuncTypes b</span>
+<span class="lineno"> 2379 </span><span class="spaces">      </span><span class="istickedoff">funcVars  &lt;- zipWithM (scFreshVariable sc) funcNames funcTypes</span>
+<span class="lineno"> 2380 </span><span class="spaces">      </span><span class="istickedoff">funcDefs  &lt;- forM (zip3 funcVars represType_eachCtor ctors) $</span>
+<span class="lineno"> 2381 </span><span class="spaces">                     </span><span class="istickedoff">\(funcVar,ty,ctor) -&gt;</span>
+<span class="lineno"> 2382 </span><span class="spaces">                         </span><span class="istickedoff">do</span>
+<span class="lineno"> 2383 </span><span class="spaces">                         </span><span class="istickedoff">x &lt;- scFreshVariable sc &quot;x&quot; ty</span>
+<span class="lineno"> 2384 </span><span class="spaces">                         </span><span class="istickedoff">let n = length (C.ecFields ctor)</span>
+<span class="lineno"> 2385 </span><span class="spaces">                         </span><span class="istickedoff">scAbstractTerms sc [x]</span>
+<span class="lineno"> 2386 </span><span class="spaces">                           </span><span class="istickedoff">=&lt;&lt; scApplyAll sc funcVar</span>
+<span class="lineno"> 2387 </span><span class="spaces">                           </span><span class="istickedoff">=&lt;&lt; forM [1..n]</span>
+<span class="lineno"> 2388 </span><span class="spaces">                                 </span><span class="istickedoff">(\i-&gt; scTupleSelector sc x i n)</span>
+<span class="lineno"> 2389 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2390 </span><span class="spaces">      </span><span class="istickedoff">addTypeAbstractions</span>
+<span class="lineno"> 2391 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scAbstractTerms sc [b]</span>
+<span class="lineno"> 2392 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scAbstractTerms sc funcVars</span>
+<span class="lineno"> 2393 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; sc_eithersV b</span>
+<span class="lineno"> 2394 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scMakeFunsTo b (zip represType_eachCtor funcDefs)</span>
+<span class="lineno"> 2395 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2396 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc case_ident case_type case_rhs</span>
+<span class="lineno"> 2397 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2398 </span><span class="spaces">  </span><span class="istickedoff">assertSAWCoreTypeChecks sc <span class="nottickedoff">case_ident</span> case_rhs (Just <span class="nottickedoff">case_type</span>)</span>
+<span class="lineno"> 2399 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2400 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
+<span class="lineno"> 2401 </span><span class="spaces">  </span><span class="istickedoff">-- There's a bit of 'tedium' in creating the constructors, let's look at our</span>
+<span class="lineno"> 2402 </span><span class="spaces">  </span><span class="istickedoff">-- running example, the SAWCore constructors we want are these:</span>
+<span class="lineno"> 2403 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2404 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ```</span>
+<span class="lineno"> 2405 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C1 : (ts : sort 0) -&gt; listSortGet (ETT__LS ts) 0 -&gt; ETT ts;</span>
+<span class="lineno"> 2406 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C1 ts x =</span>
+<span class="lineno"> 2407 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   Left (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))</span>
+<span class="lineno"> 2408 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;        x;</span>
+<span class="lineno"> 2409 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;</span>
+<span class="lineno"> 2410 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C2 : (ts : sort 0) -&gt; listSortGet (ETT__LS ts) 1 -&gt; ETT ts;</span>
+<span class="lineno"> 2411 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C2 ts x =</span>
+<span class="lineno"> 2412 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   Right (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))</span>
+<span class="lineno"> 2413 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   (Left (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))</span>
+<span class="lineno"> 2414 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;    x);</span>
+<span class="lineno"> 2415 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;</span>
+<span class="lineno"> 2416 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C3 : (ts : sort 0) -&gt; listSortGet (ETT__LS ts) 2 -&gt; ETT ts;</span>
+<span class="lineno"> 2417 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; C3 ts x =</span>
+<span class="lineno"> 2418 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;  Right   (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))</span>
+<span class="lineno"> 2419 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;   (Right (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))</span>
+<span class="lineno"> 2420 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;    (Left (listSortGet (ETT__LS ts) 2) (EithersV (listSortDrop (ETT__LS ts) 3))</span>
+<span class="lineno"> 2421 </span><span class="spaces">  </span><span class="istickedoff">--   &gt;    x));</span>
+<span class="lineno"> 2422 </span><span class="spaces">  </span><span class="istickedoff">--   &gt; ```</span>
+<span class="lineno"> 2423 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2424 </span><span class="spaces">  </span><span class="istickedoff">-- One can see that we try to encapsulate all the enum specific data in the</span>
+<span class="lineno"> 2425 </span><span class="spaces">  </span><span class="istickedoff">-- @ETT__LS ts@ structure.</span>
+<span class="lineno"> 2426 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2427 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2428 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2429 </span><span class="spaces"></span><span class="istickedoff">-------------------------------------------------------------</span>
-<span class="lineno"> 2430 </span><span class="spaces">  </span><span class="istickedoff">-- Define function for N-th injection into the whole Sum (nested Either's):</span>
-<span class="lineno"> 2431 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2432 </span><span class="spaces">  </span><span class="istickedoff">scNthInjection &lt;-</span>
-<span class="lineno"> 2433 </span><span class="spaces">      </span><span class="istickedoff">do</span>
-<span class="lineno"> 2434 </span><span class="spaces">      </span><span class="istickedoff">-- Create needed SAWCore types for the Left/Right constructors</span>
-<span class="lineno"> 2435 </span><span class="spaces">      </span><span class="istickedoff">-- (each Either in the nested Either's needs a pair of types):</span>
-<span class="lineno"> 2436 </span><span class="spaces">      </span><span class="istickedoff">tps &lt;- Vector.generateM numCtors $ \i-&gt;</span>
-<span class="lineno"> 2437 </span><span class="spaces">               </span><span class="istickedoff">do</span>
-<span class="lineno"> 2438 </span><span class="spaces">               </span><span class="istickedoff">typeLeft  &lt;- do</span>
-<span class="lineno"> 2439 </span><span class="spaces">                            </span><span class="istickedoff">n &lt;- scNat sc (fromIntegral i)</span>
-<span class="lineno"> 2440 </span><span class="spaces">                            </span><span class="istickedoff">scGlobalApply sc &quot;Prelude.listSortGet&quot;</span>
-<span class="lineno"> 2441 </span><span class="spaces">                              </span><span class="istickedoff">[tl_applied, n]</span>
-<span class="lineno"> 2442 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2443 </span><span class="spaces">               </span><span class="istickedoff">typeRight &lt;- do</span>
-<span class="lineno"> 2444 </span><span class="spaces">                            </span><span class="istickedoff">n &lt;- scNat sc (fromIntegral i + 1)</span>
-<span class="lineno"> 2445 </span><span class="spaces">                            </span><span class="istickedoff">tl_remainder &lt;-</span>
-<span class="lineno"> 2446 </span><span class="spaces">                              </span><span class="istickedoff">scGlobalApply sc &quot;Prelude.listSortDrop&quot;</span>
-<span class="lineno"> 2447 </span><span class="spaces">                                </span><span class="istickedoff">[tl_applied, n]</span>
-<span class="lineno"> 2448 </span><span class="spaces">                            </span><span class="istickedoff">scEithersV tl_remainder</span>
-<span class="lineno"> 2449 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2450 </span><span class="spaces">               </span><span class="istickedoff">return (typeLeft, typeRight)</span>
-<span class="lineno"> 2451 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2452 </span><span class="spaces">      </span><span class="istickedoff">let</span>
-<span class="lineno"> 2453 </span><span class="spaces">        </span><span class="istickedoff">scInjectRight :: Int -&gt; Term -&gt; IO Term</span>
-<span class="lineno"> 2454 </span><span class="spaces">        </span><span class="istickedoff">scInjectRight n x | n &lt; 0     = return x</span>
-<span class="lineno"> 2455 </span><span class="spaces">                          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = do</span>
-<span class="lineno"> 2456 </span><span class="spaces">                              </span><span class="istickedoff">y &lt;- scRight (fst (tps Vector.! n)) (snd (tps Vector.! n)) x</span>
-<span class="lineno"> 2457 </span><span class="spaces">                              </span><span class="istickedoff">scInjectRight (n-1) y</span>
-<span class="lineno"> 2458 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2459 </span><span class="spaces">        </span><span class="istickedoff">scNthInjection :: Int -&gt; Term -&gt; IO Term</span>
-<span class="lineno"> 2460 </span><span class="spaces">        </span><span class="istickedoff">scNthInjection n x = do</span>
-<span class="lineno"> 2461 </span><span class="spaces">                             </span><span class="istickedoff">y &lt;- scLeft (fst (tps Vector.! n)) (snd (tps Vector.! n)) x</span>
-<span class="lineno"> 2462 </span><span class="spaces">                             </span><span class="istickedoff">scInjectRight (n-1) y</span>
-<span class="lineno"> 2463 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2464 </span><span class="spaces">      </span><span class="istickedoff">return scNthInjection</span>
-<span class="lineno"> 2465 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2466 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
-<span class="lineno"> 2467 </span><span class="spaces">  </span><span class="istickedoff">-- Create the definition for each constructor:</span>
-<span class="lineno"> 2468 </span><span class="spaces">  </span><span class="istickedoff">defn_eachCtor &lt;-</span>
-<span class="lineno"> 2469 </span><span class="spaces">    </span><span class="istickedoff">forM (zip argTypes_eachCtor ctors) $</span>
-<span class="lineno"> 2470 </span><span class="spaces">        </span><span class="istickedoff">\(argTypes, ctor)-&gt;</span>
-<span class="lineno"> 2471 </span><span class="spaces">        </span><span class="istickedoff">do</span>
-<span class="lineno"> 2472 </span><span class="spaces">        </span><span class="istickedoff">let</span>
-<span class="lineno"> 2473 </span><span class="spaces">          </span><span class="istickedoff">ctorName   = C.ecName ctor</span>
-<span class="lineno"> 2474 </span><span class="spaces">          </span><span class="istickedoff">ctorNumber = C.ecNumber ctor</span>
-<span class="lineno"> 2475 </span><span class="spaces">          </span><span class="istickedoff">numArgs    = length argTypes</span>
-<span class="lineno"> 2476 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2477 </span><span class="spaces">        </span><span class="istickedoff">-- NOTE: we don't add the constructor arguments to the Env, as</span>
-<span class="lineno"> 2478 </span><span class="spaces">        </span><span class="istickedoff">-- the only references to these arguments are in the generated</span>
-<span class="lineno"> 2479 </span><span class="spaces">        </span><span class="istickedoff">-- SAWCore code.</span>
-<span class="lineno"> 2480 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2481 </span><span class="spaces">        </span><span class="istickedoff">-- create the vars (&amp; names) for constructor arguments:</span>
-<span class="lineno"> 2482 </span><span class="spaces">        </span><span class="istickedoff">let argNames = map (\x-&gt; Text.pack (&quot;x&quot; ++ show x)) [0..numArgs-1]</span>
-<span class="lineno"> 2483 </span><span class="spaces">        </span><span class="istickedoff">argVars &lt;- zipWithM (scFreshVariable sc) argNames argTypes</span>
-<span class="lineno"> 2484 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2485 </span><span class="spaces">        </span><span class="istickedoff">-- create the constructor:</span>
-<span class="lineno"> 2486 </span><span class="spaces">        </span><span class="istickedoff">ctorBody &lt;- addTypeAbstractions</span>
-<span class="lineno"> 2487 </span><span class="spaces">                      </span><span class="istickedoff">=&lt;&lt; scAbstractTerms sc argVars</span>
-<span class="lineno"> 2488 </span><span class="spaces">                      </span><span class="istickedoff">=&lt;&lt; scNthInjection ctorNumber</span>
-<span class="lineno"> 2489 </span><span class="spaces">                      </span><span class="istickedoff">=&lt;&lt; scTuple sc argVars</span>
-<span class="lineno"> 2490 </span><span class="spaces">        </span><span class="istickedoff">assertSAWCoreTypeChecks sc <span class="nottickedoff">(C.nameIdent ctorName)</span> ctorBody Nothing</span>
-<span class="lineno"> 2491 </span><span class="spaces">        </span><span class="istickedoff">return (ctorName, ctorBody)</span>
-<span class="lineno"> 2492 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2493 </span><span class="spaces">  </span><span class="istickedoff">return defn_eachCtor</span></span>
+<span class="lineno"> 2428 </span><span class="spaces"></span><span class="istickedoff">-------------------------------------------------------------</span>
+<span class="lineno"> 2429 </span><span class="spaces">  </span><span class="istickedoff">-- Define function for N-th injection into the whole Sum (nested Either's):</span>
+<span class="lineno"> 2430 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2431 </span><span class="spaces">  </span><span class="istickedoff">scNthInjection &lt;-</span>
+<span class="lineno"> 2432 </span><span class="spaces">      </span><span class="istickedoff">do</span>
+<span class="lineno"> 2433 </span><span class="spaces">      </span><span class="istickedoff">-- Create needed SAWCore types for the Left/Right constructors</span>
+<span class="lineno"> 2434 </span><span class="spaces">      </span><span class="istickedoff">-- (each Either in the nested Either's needs a pair of types):</span>
+<span class="lineno"> 2435 </span><span class="spaces">      </span><span class="istickedoff">tps &lt;- Vector.generateM numCtors $ \i-&gt;</span>
+<span class="lineno"> 2436 </span><span class="spaces">               </span><span class="istickedoff">do</span>
+<span class="lineno"> 2437 </span><span class="spaces">               </span><span class="istickedoff">typeLeft  &lt;- do</span>
+<span class="lineno"> 2438 </span><span class="spaces">                            </span><span class="istickedoff">n &lt;- scNat sc (fromIntegral i)</span>
+<span class="lineno"> 2439 </span><span class="spaces">                            </span><span class="istickedoff">scGlobalApply sc &quot;Prelude.listSortGet&quot;</span>
+<span class="lineno"> 2440 </span><span class="spaces">                              </span><span class="istickedoff">[tl_applied, n]</span>
+<span class="lineno"> 2441 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2442 </span><span class="spaces">               </span><span class="istickedoff">typeRight &lt;- do</span>
+<span class="lineno"> 2443 </span><span class="spaces">                            </span><span class="istickedoff">n &lt;- scNat sc (fromIntegral i + 1)</span>
+<span class="lineno"> 2444 </span><span class="spaces">                            </span><span class="istickedoff">tl_remainder &lt;-</span>
+<span class="lineno"> 2445 </span><span class="spaces">                              </span><span class="istickedoff">scGlobalApply sc &quot;Prelude.listSortDrop&quot;</span>
+<span class="lineno"> 2446 </span><span class="spaces">                                </span><span class="istickedoff">[tl_applied, n]</span>
+<span class="lineno"> 2447 </span><span class="spaces">                            </span><span class="istickedoff">scEithersV tl_remainder</span>
+<span class="lineno"> 2448 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2449 </span><span class="spaces">               </span><span class="istickedoff">return (typeLeft, typeRight)</span>
+<span class="lineno"> 2450 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2451 </span><span class="spaces">      </span><span class="istickedoff">let</span>
+<span class="lineno"> 2452 </span><span class="spaces">        </span><span class="istickedoff">scInjectRight :: Int -&gt; Term -&gt; IO Term</span>
+<span class="lineno"> 2453 </span><span class="spaces">        </span><span class="istickedoff">scInjectRight n x | n &lt; 0     = return x</span>
+<span class="lineno"> 2454 </span><span class="spaces">                          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = do</span>
+<span class="lineno"> 2455 </span><span class="spaces">                              </span><span class="istickedoff">y &lt;- scRight (fst (tps Vector.! n)) (snd (tps Vector.! n)) x</span>
+<span class="lineno"> 2456 </span><span class="spaces">                              </span><span class="istickedoff">scInjectRight (n-1) y</span>
+<span class="lineno"> 2457 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2458 </span><span class="spaces">        </span><span class="istickedoff">scNthInjection :: Int -&gt; Term -&gt; IO Term</span>
+<span class="lineno"> 2459 </span><span class="spaces">        </span><span class="istickedoff">scNthInjection n x = do</span>
+<span class="lineno"> 2460 </span><span class="spaces">                             </span><span class="istickedoff">y &lt;- scLeft (fst (tps Vector.! n)) (snd (tps Vector.! n)) x</span>
+<span class="lineno"> 2461 </span><span class="spaces">                             </span><span class="istickedoff">scInjectRight (n-1) y</span>
+<span class="lineno"> 2462 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2463 </span><span class="spaces">      </span><span class="istickedoff">return scNthInjection</span>
+<span class="lineno"> 2464 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2465 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
+<span class="lineno"> 2466 </span><span class="spaces">  </span><span class="istickedoff">-- Create the definition for each constructor:</span>
+<span class="lineno"> 2467 </span><span class="spaces">  </span><span class="istickedoff">defn_eachCtor &lt;-</span>
+<span class="lineno"> 2468 </span><span class="spaces">    </span><span class="istickedoff">forM (zip argTypes_eachCtor ctors) $</span>
+<span class="lineno"> 2469 </span><span class="spaces">        </span><span class="istickedoff">\(argTypes, ctor)-&gt;</span>
+<span class="lineno"> 2470 </span><span class="spaces">        </span><span class="istickedoff">do</span>
+<span class="lineno"> 2471 </span><span class="spaces">        </span><span class="istickedoff">let</span>
+<span class="lineno"> 2472 </span><span class="spaces">          </span><span class="istickedoff">ctorName   = C.ecName ctor</span>
+<span class="lineno"> 2473 </span><span class="spaces">          </span><span class="istickedoff">ctorNumber = C.ecNumber ctor</span>
+<span class="lineno"> 2474 </span><span class="spaces">          </span><span class="istickedoff">numArgs    = length argTypes</span>
+<span class="lineno"> 2475 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2476 </span><span class="spaces">        </span><span class="istickedoff">-- NOTE: we don't add the constructor arguments to the Env, as</span>
+<span class="lineno"> 2477 </span><span class="spaces">        </span><span class="istickedoff">-- the only references to these arguments are in the generated</span>
+<span class="lineno"> 2478 </span><span class="spaces">        </span><span class="istickedoff">-- SAWCore code.</span>
+<span class="lineno"> 2479 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2480 </span><span class="spaces">        </span><span class="istickedoff">-- create the vars (&amp; names) for constructor arguments:</span>
+<span class="lineno"> 2481 </span><span class="spaces">        </span><span class="istickedoff">let argNames = map (\x-&gt; Text.pack (&quot;x&quot; ++ show x)) [0..numArgs-1]</span>
+<span class="lineno"> 2482 </span><span class="spaces">        </span><span class="istickedoff">argVars &lt;- zipWithM (scFreshVariable sc) argNames argTypes</span>
+<span class="lineno"> 2483 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2484 </span><span class="spaces">        </span><span class="istickedoff">-- create the constructor:</span>
+<span class="lineno"> 2485 </span><span class="spaces">        </span><span class="istickedoff">ctorBody &lt;- addTypeAbstractions</span>
+<span class="lineno"> 2486 </span><span class="spaces">                      </span><span class="istickedoff">=&lt;&lt; scAbstractTerms sc argVars</span>
+<span class="lineno"> 2487 </span><span class="spaces">                      </span><span class="istickedoff">=&lt;&lt; scNthInjection ctorNumber</span>
+<span class="lineno"> 2488 </span><span class="spaces">                      </span><span class="istickedoff">=&lt;&lt; scTuple sc argVars</span>
+<span class="lineno"> 2489 </span><span class="spaces">        </span><span class="istickedoff">assertSAWCoreTypeChecks sc <span class="nottickedoff">(C.nameIdent ctorName)</span> ctorBody Nothing</span>
+<span class="lineno"> 2490 </span><span class="spaces">        </span><span class="istickedoff">return (ctorName, ctorBody)</span>
+<span class="lineno"> 2491 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2492 </span><span class="spaces">  </span><span class="istickedoff">return defn_eachCtor</span></span>
+<span class="lineno"> 2493 </span>
 <span class="lineno"> 2494 </span>
-<span class="lineno"> 2495 </span>
-<span class="lineno"> 2496 </span>-- | importCase - translates a Cryptol case expr to SAWCore: an application
-<span class="lineno"> 2497 </span>--   of the generated SAWCore &lt;NAME&gt;__case function to appropriate arguments.
-<span class="lineno"> 2498 </span>--
-<span class="lineno"> 2499 </span>--   - Note missing functionality: (FIXME)
-<span class="lineno"> 2500 </span>--     - not implemented yet: default case alternatives that bind the whole scrutinee,
-<span class="lineno"> 2501 </span>--       i.e.,
-<span class="lineno"> 2502 </span>--
-<span class="lineno"> 2503 </span>--       &gt;  case S of
-<span class="lineno"> 2504 </span>--       &gt;    C1 ... -&gt; E
-<span class="lineno"> 2505 </span>--       &gt;    y      -&gt; E[y]  -- y == S   &lt;- NOT IMPLEMENTED YET
-<span class="lineno"> 2506 </span>--
-<span class="lineno"> 2507 </span>importCase ::
-<span class="lineno"> 2508 </span>  HasCallStack =&gt;
-<span class="lineno"> 2509 </span>  SharedContext -&gt; Env -&gt;
-<span class="lineno"> 2510 </span>  C.Type -&gt; C.Expr -&gt; Map C.Ident C.CaseAlt -&gt; Maybe C.CaseAlt -&gt; IO Term
-<span class="lineno"> 2511 </span><span class="decl"><span class="istickedoff">importCase sc env b scrutinee altsMap mDfltAlt =</span>
-<span class="lineno"> 2512 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno"> 2513 </span><span class="spaces">  </span><span class="istickedoff">let scrutineeTy = fastTypeOf (envC env) scrutinee</span>
-<span class="lineno"> 2514 </span><span class="spaces">  </span><span class="istickedoff">(nm,ctors,tyParams,tyArgs) &lt;- case scrutineeTy of</span>
-<span class="lineno"> 2515 </span><span class="spaces">      </span><span class="istickedoff">(C.tIsNominal -&gt; Just (C.NominalType{C.ntDef=C.Enum ctors, ntName=nm, ntParams=tyParams},tyArgs))</span>
-<span class="lineno"> 2516 </span><span class="spaces">        </span><span class="istickedoff">-&gt;</span>
-<span class="lineno"> 2517 </span><span class="spaces">          </span><span class="istickedoff">return (nm,ctors,tyParams,tyArgs)</span>
-<span class="lineno"> 2518 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 2519 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
-<span class="lineno"> 2520 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;`case` expression scrutinee is not an Enum type&quot;,</span></span>
-<span class="lineno"> 2521 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">Text.pack (pretty scrutineeTy)</span></span>
-<span class="lineno"> 2522 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2523 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2524 </span><span class="spaces">  </span><span class="istickedoff">-- Create a sequential set of `C.CaseAlt`s that exactly match the</span>
-<span class="lineno"> 2525 </span><span class="spaces">  </span><span class="istickedoff">-- constructors:</span>
-<span class="lineno"> 2526 </span><span class="spaces">  </span><span class="istickedoff">--   - preconditions:</span>
-<span class="lineno"> 2527 </span><span class="spaces">  </span><span class="istickedoff">--      Assume `altsMap` is valid, thus not checking for extraneous</span>
-<span class="lineno"> 2528 </span><span class="spaces">  </span><span class="istickedoff">--      entries. (Call panic if a missing alternative is not covered</span>
-<span class="lineno"> 2529 </span><span class="spaces">  </span><span class="istickedoff">--      by presence of default in `mDfltAlt`.)</span>
-<span class="lineno"> 2530 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2531 </span><span class="spaces">  </span><span class="istickedoff">-- First, define what to do if alternative for constructor is missing:</span>
-<span class="lineno"> 2532 </span><span class="spaces">  </span><span class="istickedoff">let</span>
-<span class="lineno"> 2533 </span><span class="spaces">      </span><span class="istickedoff">-- | useDefaultAlt - when constructor (ctor) has no 'CaseAlt',</span>
-<span class="lineno"> 2534 </span><span class="spaces">      </span><span class="istickedoff">-- create a ctor specific alt-function from the mDfltAlt</span>
-<span class="lineno"> 2535 </span><span class="spaces">      </span><span class="istickedoff">-- &quot;default expr&quot;.</span>
-<span class="lineno"> 2536 </span><span class="spaces">      </span><span class="istickedoff">--   - For each constructor we may need to generate a default alternative,</span>
-<span class="lineno"> 2537 </span><span class="spaces">      </span><span class="istickedoff">--     (the code cannot be shared as the arity and types for each constructor</span>
-<span class="lineno"> 2538 </span><span class="spaces">      </span><span class="istickedoff">--     will be different).</span>
-<span class="lineno"> 2539 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2540 </span><span class="spaces">      </span><span class="istickedoff">useDefaultAlt :: HasCallStack =&gt; C.EnumCon -&gt; IO C.CaseAlt</span>
-<span class="lineno"> 2541 </span><span class="spaces">      </span><span class="istickedoff">useDefaultAlt ctor = case mDfltAlt of</span>
-<span class="lineno"> 2542 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2543 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
-<span class="lineno"> 2544 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;missing CaseAlt and no default CaseAlt: &quot; &lt;&gt; Text.pack (show nm)</span></span>
-<span class="lineno"> 2545 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2546 </span><span class="spaces">        </span><span class="istickedoff">Just (C.CaseAlt [(nm',_)] dfltE)</span>
-<span class="lineno"> 2547 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">nameIsUnusedPat nm'</span> -&gt;</span>
-<span class="lineno"> 2548 </span><span class="spaces">                </span><span class="istickedoff">do</span>
-<span class="lineno"> 2549 </span><span class="spaces">                </span><span class="istickedoff">-- NOTE nm' is unused Name</span>
-<span class="lineno"> 2550 </span><span class="spaces">                </span><span class="istickedoff">let sub  = C.listSubst (zip (map C.TVBound tyParams) tyArgs)</span>
-<span class="lineno"> 2551 </span><span class="spaces">                    </span><span class="istickedoff">vts  = map</span>
-<span class="lineno"> 2552 </span><span class="spaces">                             </span><span class="istickedoff">(\ty-&gt; (nm',plainSubst sub ty))</span>
-<span class="lineno"> 2553 </span><span class="spaces">                             </span><span class="istickedoff">(C.ecFields ctor)</span>
-<span class="lineno"> 2554 </span><span class="spaces">                  </span><span class="istickedoff">-- N.B.: to avoid extra name construction, we are</span>
-<span class="lineno"> 2555 </span><span class="spaces">                  </span><span class="istickedoff">--  using the same name (un-referenced!) nm' for</span>
-<span class="lineno"> 2556 </span><span class="spaces">                  </span><span class="istickedoff">--  each of the arguments of the CaseAlt function.</span>
-<span class="lineno"> 2557 </span><span class="spaces">                  </span><span class="istickedoff">--  This appears to work.  However, if the '_' name</span>
-<span class="lineno"> 2558 </span><span class="spaces">                  </span><span class="istickedoff">--  *was* actually referenced, it would not be what</span>
-<span class="lineno"> 2559 </span><span class="spaces">                  </span><span class="istickedoff">--  we would want However, typechecking would</span>
-<span class="lineno"> 2560 </span><span class="spaces">                  </span><span class="istickedoff">--  ascertain this.</span>
-<span class="lineno"> 2561 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2562 </span><span class="spaces">                </span><span class="istickedoff">return (C.CaseAlt vts dfltE)</span>
-<span class="lineno"> 2563 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2564 </span><span class="spaces">            </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
-<span class="lineno"> 2565 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
-<span class="lineno"> 2566 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;Unsupported style of case expression: &quot; &lt;&gt;</span></span>
-<span class="lineno"> 2567 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;default case alternative that binds scrutinee&quot;,</span></span>
-<span class="lineno"> 2568 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;pattern: &quot; &lt;&gt; Text.pack (pretty nm)</span></span>
-<span class="lineno"> 2569 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2570 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2571 </span><span class="spaces">          </span><span class="istickedoff">where</span>
-<span class="lineno"> 2572 </span><span class="spaces">          </span><span class="istickedoff">nameIsUnusedPat nm'' =</span>
-<span class="lineno"> 2573 </span><span class="spaces">            </span><span class="istickedoff">Text.take 3 (nameToLocalName nm'') == &quot;__p&quot;</span>
-<span class="lineno"> 2574 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2575 </span><span class="spaces">            </span><span class="istickedoff">-- Except for the prefix, the indication that this is an unused pattern</span>
-<span class="lineno"> 2576 </span><span class="spaces">            </span><span class="istickedoff">-- is long gone. This name is created using `getIdent` in</span>
-<span class="lineno"> 2577 </span><span class="spaces">            </span><span class="istickedoff">--   deps/cryptol/src/Cryptol/Parser/Name.hs</span>
-<span class="lineno"> 2578 </span><span class="spaces">            </span><span class="istickedoff">-- FIXME:</span>
-<span class="lineno"> 2579 </span><span class="spaces">            </span><span class="istickedoff">--  - Clearly this is undesirable coupling.</span>
-<span class="lineno"> 2580 </span><span class="spaces">            </span><span class="istickedoff">--  - Best (but non-local, pervasive) solution is to have a more</span>
-<span class="lineno"> 2581 </span><span class="spaces">            </span><span class="istickedoff">--    precise type for default CaseAlt, the type is currently</span>
-<span class="lineno"> 2582 </span><span class="spaces">            </span><span class="istickedoff">--    too general.</span>
-<span class="lineno"> 2583 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2584 </span><span class="spaces">        </span><span class="istickedoff">Just (C.CaseAlt nts _) -&gt;</span>
-<span class="lineno"> 2585 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
-<span class="lineno"> 2586 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Default CaseAlt breaks invariant: &quot; &lt;&gt;</span></span>
-<span class="lineno"> 2587 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt&quot;,</span></span>
-<span class="lineno"> 2588 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show $ PP.ppList $ map PP.pp (map fst nts))</span></span>
-<span class="lineno"> 2589 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2590 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2591 </span><span class="spaces">  </span><span class="istickedoff">-- now create one alternative ('CaseAlt') for each ctor:</span>
-<span class="lineno"> 2592 </span><span class="spaces">  </span><span class="istickedoff">alts &lt;- forM ctors $ \ctor-&gt;</span>
-<span class="lineno"> 2593 </span><span class="spaces">            </span><span class="istickedoff">case Map.lookup (C.nameIdent $ C.ecName ctor) altsMap of</span>
-<span class="lineno"> 2594 </span><span class="spaces">              </span><span class="istickedoff">Just a  -&gt; return a</span>
-<span class="lineno"> 2595 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; useDefaultAlt ctor</span>
-<span class="lineno"> 2596 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2597 </span><span class="spaces">  </span><span class="istickedoff">{- |</span>
-<span class="lineno"> 2598 </span><span class="spaces">  </span><span class="istickedoff">What we just did is, in terms of the running ETT example above, this:</span>
-<span class="lineno"> 2599 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2600 </span><span class="spaces">  </span><span class="istickedoff">Given this Cryptol</span>
-<span class="lineno"> 2601 </span><span class="spaces">    </span><span class="istickedoff">&gt; case scrutinee  of</span>
-<span class="lineno"> 2602 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C1     -&gt; RHS1</span>
-<span class="lineno"> 2603 </span><span class="spaces">    </span><span class="istickedoff">&gt;   _      -&gt; DFLT</span>
-<span class="lineno"> 2604 </span><span class="spaces">  </span><span class="istickedoff">we transform it into this Cryptol</span>
-<span class="lineno"> 2605 </span><span class="spaces">    </span><span class="istickedoff">&gt; case scrutinee  of</span>
-<span class="lineno"> 2606 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C1     -&gt; RHS1</span>
-<span class="lineno"> 2607 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C2 _   -&gt; DFLT</span>
-<span class="lineno"> 2608 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C3 _ _ -&gt; DFLT</span>
-<span class="lineno"> 2609 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2610 </span><span class="spaces">  </span><span class="istickedoff">And what we will do next is transform this last into this SAWCore:</span>
-<span class="lineno"> 2611 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2612 </span><span class="spaces">    </span><span class="istickedoff">&gt; ETT_case</span>
-<span class="lineno"> 2613 </span><span class="spaces">    </span><span class="istickedoff">&gt;   T1                          -- type application, the instantiation of 'a1'</span>
-<span class="lineno"> 2614 </span><span class="spaces">    </span><span class="istickedoff">&gt;   B                           -- type application, the result of the whole case</span>
-<span class="lineno"> 2615 </span><span class="spaces">    </span><span class="istickedoff">&gt;   RHS1                        -- deconstructor for C1</span>
-<span class="lineno"> 2616 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\(_: Nat)         -&gt; DFLT) -- deconstructor for C2</span>
-<span class="lineno"> 2617 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\(_: Bool) (_:T1) -&gt; DFLT) -- deconstructor for C3</span>
-<span class="lineno"> 2618 </span><span class="spaces">    </span><span class="istickedoff">&gt;                               --  - note the 'a1' has been instantiated to T1</span>
-<span class="lineno"> 2619 </span><span class="spaces">    </span><span class="istickedoff">&gt;   scrutinee</span>
-<span class="lineno"> 2620 </span><span class="spaces">  </span><span class="istickedoff">-}</span>
-<span class="lineno"> 2621 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2622 </span><span class="spaces">  </span><span class="istickedoff">-- translate each CaseAlt into a Cryptol function:</span>
-<span class="lineno"> 2623 </span><span class="spaces">  </span><span class="istickedoff">let funcs = map (\(C.CaseAlt xs body)-&gt;</span>
-<span class="lineno"> 2624 </span><span class="spaces">                      </span><span class="istickedoff">foldr (\(n,t) e-&gt; C.EAbs n t e) body xs)</span>
-<span class="lineno"> 2625 </span><span class="spaces">                  </span><span class="istickedoff">alts</span>
-<span class="lineno"> 2626 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2627 </span><span class="spaces">  </span><span class="istickedoff">-- the Cryptol to SAWCore translations:</span>
-<span class="lineno"> 2628 </span><span class="spaces">  </span><span class="istickedoff">tyArgs'    &lt;- mapM (importType sc env) tyArgs</span>
-<span class="lineno"> 2629 </span><span class="spaces">  </span><span class="istickedoff">b'         &lt;- importType sc env b        -- b is type of whole case expr</span>
-<span class="lineno"> 2630 </span><span class="spaces">  </span><span class="istickedoff">scrutinee' &lt;- importExpr <span class="nottickedoff">sc</span> env scrutinee</span>
-<span class="lineno"> 2631 </span><span class="spaces">  </span><span class="istickedoff">funcs'     &lt;- mapM (importExpr sc env) funcs</span>
-<span class="lineno"> 2632 </span><span class="spaces">  </span><span class="istickedoff">caseExpr   &lt;- scGlobalApply sc (identOfEnumCase nm) $</span>
-<span class="lineno"> 2633 </span><span class="spaces">                  </span><span class="istickedoff">tyArgs'             -- case is expecting the type arguments</span>
-<span class="lineno"> 2634 </span><span class="spaces">                                      </span><span class="istickedoff">--   that the enumtype is instantiated to</span>
-<span class="lineno"> 2635 </span><span class="spaces">                  </span><span class="istickedoff">++ [b']             -- the result type of case expression</span>
-<span class="lineno"> 2636 </span><span class="spaces">                  </span><span class="istickedoff">++ funcs'           -- the eliminator funcs, one for each constructor</span>
-<span class="lineno"> 2637 </span><span class="spaces">                  </span><span class="istickedoff">++ [scrutinee']     -- scrutinee of case, of enum type</span>
-<span class="lineno"> 2638 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2639 </span><span class="spaces">  </span><span class="istickedoff">return caseExpr</span></span>
+<span class="lineno"> 2495 </span>-- | importCase - translates a Cryptol case expr to SAWCore: an application
+<span class="lineno"> 2496 </span>--   of the generated SAWCore &lt;NAME&gt;__case function to appropriate arguments.
+<span class="lineno"> 2497 </span>--
+<span class="lineno"> 2498 </span>--   - Note missing functionality: (FIXME)
+<span class="lineno"> 2499 </span>--     - not implemented yet: default case alternatives that bind the whole scrutinee,
+<span class="lineno"> 2500 </span>--       i.e.,
+<span class="lineno"> 2501 </span>--
+<span class="lineno"> 2502 </span>--       &gt;  case S of
+<span class="lineno"> 2503 </span>--       &gt;    C1 ... -&gt; E
+<span class="lineno"> 2504 </span>--       &gt;    y      -&gt; E[y]  -- y == S   &lt;- NOT IMPLEMENTED YET
+<span class="lineno"> 2505 </span>--
+<span class="lineno"> 2506 </span>importCase ::
+<span class="lineno"> 2507 </span>  HasCallStack =&gt;
+<span class="lineno"> 2508 </span>  SharedContext -&gt; Env -&gt;
+<span class="lineno"> 2509 </span>  C.Type -&gt; C.Expr -&gt; Map C.Ident C.CaseAlt -&gt; Maybe C.CaseAlt -&gt; IO Term
+<span class="lineno"> 2510 </span><span class="decl"><span class="istickedoff">importCase sc env b scrutinee altsMap mDfltAlt =</span>
+<span class="lineno"> 2511 </span><span class="spaces">  </span><span class="istickedoff">do</span>
+<span class="lineno"> 2512 </span><span class="spaces">  </span><span class="istickedoff">let scrutineeTy = fastTypeOf (envC env) scrutinee</span>
+<span class="lineno"> 2513 </span><span class="spaces">  </span><span class="istickedoff">(nm,ctors,tyParams,tyArgs) &lt;- case scrutineeTy of</span>
+<span class="lineno"> 2514 </span><span class="spaces">      </span><span class="istickedoff">(C.tIsNominal -&gt; Just (C.NominalType{C.ntDef=C.Enum ctors, ntName=nm, ntParams=tyParams},tyArgs))</span>
+<span class="lineno"> 2515 </span><span class="spaces">        </span><span class="istickedoff">-&gt;</span>
+<span class="lineno"> 2516 </span><span class="spaces">          </span><span class="istickedoff">return (nm,ctors,tyParams,tyArgs)</span>
+<span class="lineno"> 2517 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 2518 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
+<span class="lineno"> 2519 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;`case` expression scrutinee is not an Enum type&quot;,</span></span>
+<span class="lineno"> 2520 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">Text.pack (pretty scrutineeTy)</span></span>
+<span class="lineno"> 2521 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2522 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2523 </span><span class="spaces">  </span><span class="istickedoff">-- Create a sequential set of `C.CaseAlt`s that exactly match the</span>
+<span class="lineno"> 2524 </span><span class="spaces">  </span><span class="istickedoff">-- constructors:</span>
+<span class="lineno"> 2525 </span><span class="spaces">  </span><span class="istickedoff">--   - preconditions:</span>
+<span class="lineno"> 2526 </span><span class="spaces">  </span><span class="istickedoff">--      Assume `altsMap` is valid, thus not checking for extraneous</span>
+<span class="lineno"> 2527 </span><span class="spaces">  </span><span class="istickedoff">--      entries. (Call panic if a missing alternative is not covered</span>
+<span class="lineno"> 2528 </span><span class="spaces">  </span><span class="istickedoff">--      by presence of default in `mDfltAlt`.)</span>
+<span class="lineno"> 2529 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2530 </span><span class="spaces">  </span><span class="istickedoff">-- First, define what to do if alternative for constructor is missing:</span>
+<span class="lineno"> 2531 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno"> 2532 </span><span class="spaces">      </span><span class="istickedoff">-- | useDefaultAlt - when constructor (ctor) has no 'CaseAlt',</span>
+<span class="lineno"> 2533 </span><span class="spaces">      </span><span class="istickedoff">-- create a ctor specific alt-function from the mDfltAlt</span>
+<span class="lineno"> 2534 </span><span class="spaces">      </span><span class="istickedoff">-- &quot;default expr&quot;.</span>
+<span class="lineno"> 2535 </span><span class="spaces">      </span><span class="istickedoff">--   - For each constructor we may need to generate a default alternative,</span>
+<span class="lineno"> 2536 </span><span class="spaces">      </span><span class="istickedoff">--     (the code cannot be shared as the arity and types for each constructor</span>
+<span class="lineno"> 2537 </span><span class="spaces">      </span><span class="istickedoff">--     will be different).</span>
+<span class="lineno"> 2538 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2539 </span><span class="spaces">      </span><span class="istickedoff">useDefaultAlt :: HasCallStack =&gt; C.EnumCon -&gt; IO C.CaseAlt</span>
+<span class="lineno"> 2540 </span><span class="spaces">      </span><span class="istickedoff">useDefaultAlt ctor = case mDfltAlt of</span>
+<span class="lineno"> 2541 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2542 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
+<span class="lineno"> 2543 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;missing CaseAlt and no default CaseAlt: &quot; &lt;&gt; Text.pack (show nm)</span></span>
+<span class="lineno"> 2544 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2545 </span><span class="spaces">        </span><span class="istickedoff">Just (C.CaseAlt [(nm',_)] dfltE)</span>
+<span class="lineno"> 2546 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">nameIsUnusedPat nm'</span> -&gt;</span>
+<span class="lineno"> 2547 </span><span class="spaces">                </span><span class="istickedoff">do</span>
+<span class="lineno"> 2548 </span><span class="spaces">                </span><span class="istickedoff">-- NOTE nm' is unused Name</span>
+<span class="lineno"> 2549 </span><span class="spaces">                </span><span class="istickedoff">let sub  = C.listSubst (zip (map C.TVBound tyParams) tyArgs)</span>
+<span class="lineno"> 2550 </span><span class="spaces">                    </span><span class="istickedoff">vts  = map</span>
+<span class="lineno"> 2551 </span><span class="spaces">                             </span><span class="istickedoff">(\ty-&gt; (nm',plainSubst sub ty))</span>
+<span class="lineno"> 2552 </span><span class="spaces">                             </span><span class="istickedoff">(C.ecFields ctor)</span>
+<span class="lineno"> 2553 </span><span class="spaces">                  </span><span class="istickedoff">-- N.B.: to avoid extra name construction, we are</span>
+<span class="lineno"> 2554 </span><span class="spaces">                  </span><span class="istickedoff">--  using the same name (un-referenced!) nm' for</span>
+<span class="lineno"> 2555 </span><span class="spaces">                  </span><span class="istickedoff">--  each of the arguments of the CaseAlt function.</span>
+<span class="lineno"> 2556 </span><span class="spaces">                  </span><span class="istickedoff">--  This appears to work.  However, if the '_' name</span>
+<span class="lineno"> 2557 </span><span class="spaces">                  </span><span class="istickedoff">--  *was* actually referenced, it would not be what</span>
+<span class="lineno"> 2558 </span><span class="spaces">                  </span><span class="istickedoff">--  we would want However, typechecking would</span>
+<span class="lineno"> 2559 </span><span class="spaces">                  </span><span class="istickedoff">--  ascertain this.</span>
+<span class="lineno"> 2560 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2561 </span><span class="spaces">                </span><span class="istickedoff">return (C.CaseAlt vts dfltE)</span>
+<span class="lineno"> 2562 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2563 </span><span class="spaces">            </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
+<span class="lineno"> 2564 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
+<span class="lineno"> 2565 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;Unsupported style of case expression: &quot; &lt;&gt;</span></span>
+<span class="lineno"> 2566 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;default case alternative that binds scrutinee&quot;,</span></span>
+<span class="lineno"> 2567 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;pattern: &quot; &lt;&gt; Text.pack (pretty nm)</span></span>
+<span class="lineno"> 2568 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2569 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2570 </span><span class="spaces">          </span><span class="istickedoff">where</span>
+<span class="lineno"> 2571 </span><span class="spaces">          </span><span class="istickedoff">nameIsUnusedPat nm'' =</span>
+<span class="lineno"> 2572 </span><span class="spaces">            </span><span class="istickedoff">Text.take 3 (nameToLocalName nm'') == &quot;__p&quot;</span>
+<span class="lineno"> 2573 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2574 </span><span class="spaces">            </span><span class="istickedoff">-- Except for the prefix, the indication that this is an unused pattern</span>
+<span class="lineno"> 2575 </span><span class="spaces">            </span><span class="istickedoff">-- is long gone. This name is created using `getIdent` in</span>
+<span class="lineno"> 2576 </span><span class="spaces">            </span><span class="istickedoff">--   deps/cryptol/src/Cryptol/Parser/Name.hs</span>
+<span class="lineno"> 2577 </span><span class="spaces">            </span><span class="istickedoff">-- FIXME:</span>
+<span class="lineno"> 2578 </span><span class="spaces">            </span><span class="istickedoff">--  - Clearly this is undesirable coupling.</span>
+<span class="lineno"> 2579 </span><span class="spaces">            </span><span class="istickedoff">--  - Best (but non-local, pervasive) solution is to have a more</span>
+<span class="lineno"> 2580 </span><span class="spaces">            </span><span class="istickedoff">--    precise type for default CaseAlt, the type is currently</span>
+<span class="lineno"> 2581 </span><span class="spaces">            </span><span class="istickedoff">--    too general.</span>
+<span class="lineno"> 2582 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2583 </span><span class="spaces">        </span><span class="istickedoff">Just (C.CaseAlt nts _) -&gt;</span>
+<span class="lineno"> 2584 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
+<span class="lineno"> 2585 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Default CaseAlt breaks invariant: &quot; &lt;&gt;</span></span>
+<span class="lineno"> 2586 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt&quot;,</span></span>
+<span class="lineno"> 2587 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show $ PP.ppList $ map PP.pp (map fst nts))</span></span>
+<span class="lineno"> 2588 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2589 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2590 </span><span class="spaces">  </span><span class="istickedoff">-- now create one alternative ('CaseAlt') for each ctor:</span>
+<span class="lineno"> 2591 </span><span class="spaces">  </span><span class="istickedoff">alts &lt;- forM ctors $ \ctor-&gt;</span>
+<span class="lineno"> 2592 </span><span class="spaces">            </span><span class="istickedoff">case Map.lookup (C.nameIdent $ C.ecName ctor) altsMap of</span>
+<span class="lineno"> 2593 </span><span class="spaces">              </span><span class="istickedoff">Just a  -&gt; return a</span>
+<span class="lineno"> 2594 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; useDefaultAlt ctor</span>
+<span class="lineno"> 2595 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2596 </span><span class="spaces">  </span><span class="istickedoff">{- |</span>
+<span class="lineno"> 2597 </span><span class="spaces">  </span><span class="istickedoff">What we just did is, in terms of the running ETT example above, this:</span>
+<span class="lineno"> 2598 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2599 </span><span class="spaces">  </span><span class="istickedoff">Given this Cryptol</span>
+<span class="lineno"> 2600 </span><span class="spaces">    </span><span class="istickedoff">&gt; case scrutinee  of</span>
+<span class="lineno"> 2601 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C1     -&gt; RHS1</span>
+<span class="lineno"> 2602 </span><span class="spaces">    </span><span class="istickedoff">&gt;   _      -&gt; DFLT</span>
+<span class="lineno"> 2603 </span><span class="spaces">  </span><span class="istickedoff">we transform it into this Cryptol</span>
+<span class="lineno"> 2604 </span><span class="spaces">    </span><span class="istickedoff">&gt; case scrutinee  of</span>
+<span class="lineno"> 2605 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C1     -&gt; RHS1</span>
+<span class="lineno"> 2606 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C2 _   -&gt; DFLT</span>
+<span class="lineno"> 2607 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C3 _ _ -&gt; DFLT</span>
+<span class="lineno"> 2608 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2609 </span><span class="spaces">  </span><span class="istickedoff">And what we will do next is transform this last into this SAWCore:</span>
+<span class="lineno"> 2610 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2611 </span><span class="spaces">    </span><span class="istickedoff">&gt; ETT_case</span>
+<span class="lineno"> 2612 </span><span class="spaces">    </span><span class="istickedoff">&gt;   T1                          -- type application, the instantiation of 'a1'</span>
+<span class="lineno"> 2613 </span><span class="spaces">    </span><span class="istickedoff">&gt;   B                           -- type application, the result of the whole case</span>
+<span class="lineno"> 2614 </span><span class="spaces">    </span><span class="istickedoff">&gt;   RHS1                        -- deconstructor for C1</span>
+<span class="lineno"> 2615 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\(_: Nat)         -&gt; DFLT) -- deconstructor for C2</span>
+<span class="lineno"> 2616 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\(_: Bool) (_:T1) -&gt; DFLT) -- deconstructor for C3</span>
+<span class="lineno"> 2617 </span><span class="spaces">    </span><span class="istickedoff">&gt;                               --  - note the 'a1' has been instantiated to T1</span>
+<span class="lineno"> 2618 </span><span class="spaces">    </span><span class="istickedoff">&gt;   scrutinee</span>
+<span class="lineno"> 2619 </span><span class="spaces">  </span><span class="istickedoff">-}</span>
+<span class="lineno"> 2620 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2621 </span><span class="spaces">  </span><span class="istickedoff">-- translate each CaseAlt into a Cryptol function:</span>
+<span class="lineno"> 2622 </span><span class="spaces">  </span><span class="istickedoff">let funcs = map (\(C.CaseAlt xs body)-&gt;</span>
+<span class="lineno"> 2623 </span><span class="spaces">                      </span><span class="istickedoff">foldr (\(n,t) e-&gt; C.EAbs n t e) body xs)</span>
+<span class="lineno"> 2624 </span><span class="spaces">                  </span><span class="istickedoff">alts</span>
+<span class="lineno"> 2625 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2626 </span><span class="spaces">  </span><span class="istickedoff">-- the Cryptol to SAWCore translations:</span>
+<span class="lineno"> 2627 </span><span class="spaces">  </span><span class="istickedoff">tyArgs'    &lt;- mapM (importType sc env) tyArgs</span>
+<span class="lineno"> 2628 </span><span class="spaces">  </span><span class="istickedoff">b'         &lt;- importType sc env b        -- b is type of whole case expr</span>
+<span class="lineno"> 2629 </span><span class="spaces">  </span><span class="istickedoff">scrutinee' &lt;- importExpr <span class="nottickedoff">sc</span> env scrutinee</span>
+<span class="lineno"> 2630 </span><span class="spaces">  </span><span class="istickedoff">funcs'     &lt;- mapM (importExpr sc env) funcs</span>
+<span class="lineno"> 2631 </span><span class="spaces">  </span><span class="istickedoff">caseExpr   &lt;- scGlobalApply sc (identOfEnumCase nm) $</span>
+<span class="lineno"> 2632 </span><span class="spaces">                  </span><span class="istickedoff">tyArgs'             -- case is expecting the type arguments</span>
+<span class="lineno"> 2633 </span><span class="spaces">                                      </span><span class="istickedoff">--   that the enumtype is instantiated to</span>
+<span class="lineno"> 2634 </span><span class="spaces">                  </span><span class="istickedoff">++ [b']             -- the result type of case expression</span>
+<span class="lineno"> 2635 </span><span class="spaces">                  </span><span class="istickedoff">++ funcs'           -- the eliminator funcs, one for each constructor</span>
+<span class="lineno"> 2636 </span><span class="spaces">                  </span><span class="istickedoff">++ [scrutinee']     -- scrutinee of case, of enum type</span>
+<span class="lineno"> 2637 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2638 </span><span class="spaces">  </span><span class="istickedoff">return caseExpr</span></span>
+<span class="lineno"> 2639 </span>
 <span class="lineno"> 2640 </span>
-<span class="lineno"> 2641 </span>
-<span class="lineno"> 2642 </span>-- Shared naming conventions for Enum support:
-<span class="lineno"> 2643 </span>
-<span class="lineno"> 2644 </span>identOfEnumType :: C.Name -&gt; Ident
-<span class="lineno"> 2645 </span><span class="decl"><span class="istickedoff">identOfEnumType nt = newIdent nt &quot;__TY&quot;</span></span>
-<span class="lineno"> 2646 </span>
-<span class="lineno"> 2647 </span>identOfEnumCase :: C.Name -&gt; Ident
-<span class="lineno"> 2648 </span><span class="decl"><span class="istickedoff">identOfEnumCase nt = newIdent nt &quot;__case&quot;</span></span>
-<span class="lineno"> 2649 </span>
-<span class="lineno"> 2650 </span>newIdent :: C.Name -&gt; Text -&gt; Ident
-<span class="lineno"> 2651 </span><span class="decl"><span class="istickedoff">newIdent name suffix =</span>
-<span class="lineno"> 2652 </span><span class="spaces">  </span><span class="istickedoff">mkIdent</span>
-<span class="lineno"> 2653 </span><span class="spaces">    </span><span class="istickedoff">preludeName</span>
-<span class="lineno"> 2654 </span><span class="spaces">       </span><span class="istickedoff">-- FIXME: These generated definitions should not be added to</span>
-<span class="lineno"> 2655 </span><span class="spaces">       </span><span class="istickedoff">--        the prelude but to the module where the Enum (or ...)</span>
-<span class="lineno"> 2656 </span><span class="spaces">       </span><span class="istickedoff">--        is defined.</span>
-<span class="lineno"> 2657 </span><span class="spaces">    </span><span class="istickedoff">(C.identText (C.nameIdent name) `Text.append` suffix)</span></span>
-<span class="lineno"> 2658 </span>
-<span class="lineno"> 2659 </span>--------------------------------------------------------------------------------
-<span class="lineno"> 2660 </span>-- Utility Functions:
-<span class="lineno"> 2661 </span>
-<span class="lineno"> 2662 </span>mapAccumLM :: (Monad m) =&gt; (a -&gt; x -&gt; m (a, y)) -&gt; a -&gt; [x] -&gt; m (a, [y])
-<span class="lineno"> 2663 </span><span class="decl"><span class="istickedoff">mapAccumLM _ acc []     = return (acc, [])</span>
-<span class="lineno"> 2664 </span><span class="spaces"></span><span class="istickedoff">mapAccumLM f acc (x:xs) = do</span>
-<span class="lineno"> 2665 </span><span class="spaces">                          </span><span class="istickedoff">(acc', y) &lt;- f acc x</span>
-<span class="lineno"> 2666 </span><span class="spaces">                          </span><span class="istickedoff">(acc'', ys) &lt;- mapAccumLM f acc' xs</span>
-<span class="lineno"> 2667 </span><span class="spaces">                          </span><span class="istickedoff">return (acc'', y:ys)</span></span>
-<span class="lineno"> 2668 </span>  -- FIXME: When support ends for ghc-9.4.8, we can remove this
-<span class="lineno"> 2669 </span>  -- definition and call Data.Traversable.mapAccumM instead.
+<span class="lineno"> 2641 </span>-- Shared naming conventions for Enum support:
+<span class="lineno"> 2642 </span>
+<span class="lineno"> 2643 </span>identOfEnumType :: C.Name -&gt; Ident
+<span class="lineno"> 2644 </span><span class="decl"><span class="istickedoff">identOfEnumType nt = newIdent nt &quot;__TY&quot;</span></span>
+<span class="lineno"> 2645 </span>
+<span class="lineno"> 2646 </span>identOfEnumCase :: C.Name -&gt; Ident
+<span class="lineno"> 2647 </span><span class="decl"><span class="istickedoff">identOfEnumCase nt = newIdent nt &quot;__case&quot;</span></span>
+<span class="lineno"> 2648 </span>
+<span class="lineno"> 2649 </span>newIdent :: C.Name -&gt; Text -&gt; Ident
+<span class="lineno"> 2650 </span><span class="decl"><span class="istickedoff">newIdent name suffix =</span>
+<span class="lineno"> 2651 </span><span class="spaces">  </span><span class="istickedoff">mkIdent</span>
+<span class="lineno"> 2652 </span><span class="spaces">    </span><span class="istickedoff">preludeName</span>
+<span class="lineno"> 2653 </span><span class="spaces">       </span><span class="istickedoff">-- FIXME: These generated definitions should not be added to</span>
+<span class="lineno"> 2654 </span><span class="spaces">       </span><span class="istickedoff">--        the prelude but to the module where the Enum (or ...)</span>
+<span class="lineno"> 2655 </span><span class="spaces">       </span><span class="istickedoff">--        is defined.</span>
+<span class="lineno"> 2656 </span><span class="spaces">    </span><span class="istickedoff">(C.identText (C.nameIdent name) `Text.append` suffix)</span></span>
+<span class="lineno"> 2657 </span>
+<span class="lineno"> 2658 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 2659 </span>-- Utility Functions:
+<span class="lineno"> 2660 </span>
+<span class="lineno"> 2661 </span>mapAccumLM :: (Monad m) =&gt; (a -&gt; x -&gt; m (a, y)) -&gt; a -&gt; [x] -&gt; m (a, [y])
+<span class="lineno"> 2662 </span><span class="decl"><span class="istickedoff">mapAccumLM _ acc []     = return (acc, [])</span>
+<span class="lineno"> 2663 </span><span class="spaces"></span><span class="istickedoff">mapAccumLM f acc (x:xs) = do</span>
+<span class="lineno"> 2664 </span><span class="spaces">                          </span><span class="istickedoff">(acc', y) &lt;- f acc x</span>
+<span class="lineno"> 2665 </span><span class="spaces">                          </span><span class="istickedoff">(acc'', ys) &lt;- mapAccumLM f acc' xs</span>
+<span class="lineno"> 2666 </span><span class="spaces">                          </span><span class="istickedoff">return (acc'', y:ys)</span></span>
+<span class="lineno"> 2667 </span>  -- FIXME: When support ends for ghc-9.4.8, we can remove this
+<span class="lineno"> 2668 </span>  -- definition and call Data.Traversable.mapAccumM instead.
 
 </pre>
 </body>

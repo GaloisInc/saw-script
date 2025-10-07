@@ -1110,7 +1110,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1091 </span><span class="spaces">    </span><span class="istickedoff">allocGlobalEnd :: MS.AllocGlobal LLVM -&gt; Integer</span>
 <span class="lineno"> 1092 </span><span class="spaces">    </span><span class="istickedoff">allocGlobalEnd (LLVMAllocGlobal _ (LLVM.Symbol nm)) = globalEnd (Text.pack nm)</span>
 <span class="lineno"> 1093 </span><span class="spaces">    </span><span class="istickedoff">globalEnd :: Text -&gt; Integer</span>
-<span class="lineno"> 1094 </span><span class="spaces">    </span><span class="istickedoff">globalEnd nm = maybe <span class="nottickedoff">0</span> (\entry -&gt; fromIntegral $ Elf.steValue entry + Elf.steSize entry) $</span>
+<span class="lineno"> 1094 </span><span class="spaces">    </span><span class="istickedoff">globalEnd nm = maybe 0 (\entry -&gt; fromIntegral $ Elf.steValue entry + Elf.steSize entry) $</span>
 <span class="lineno"> 1095 </span><span class="spaces">      </span><span class="istickedoff">(Vector.!? 0)</span>
 <span class="lineno"> 1096 </span><span class="spaces">      </span><span class="istickedoff">. Vector.filter (\e -&gt; Elf.steName e == encodeUtf8 nm)</span>
 <span class="lineno"> 1097 </span><span class="spaces">      </span><span class="istickedoff">$ Elf.symtabEntries symTab</span>
