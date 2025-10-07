@@ -499,6 +499,7 @@ buildMirAggregate sym elems xs f = do
 -- offset, size, type, and value of the entry, and its result is stored as the
 -- new value in the output.
 traverseMirAggregate ::
+  forall sym m.
   (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
   sym ->
   [AgElemShape] ->
@@ -507,7 +508,35 @@ traverseMirAggregate ::
   m (MirAggregate sym)
 traverseMirAggregate sym elems (MirAggregate totalSize m) f = do
   agCheckKeysEq "traverseMirAggregate" elems m
-  m' <- sequence $ IntMap.mergeWithKey
+  m' <-
+    -- Hack: we include a special case for when the list of AgElemShapes and
+    -- the MirAggregate are both empty, skipping the call to mergeEntries
+    -- entirely if this is the case. This is because mergeEntries calls
+    -- IntMap.mergeWithKey under the hood, and prior to containers-0.8, the
+    -- implementation of IntMap.mergeWithKey had a bug where merging two empty
+    -- IntMaps would invoke the third callback argument instead of just
+    -- returning an empty map. (See
+    -- https://github.com/haskell/containers/issues/979.) Note that
+    -- mergeEntries uses the third callback argument to panic, however, and we
+    -- definitely don't want to panic if the IntMaps are both empty!
+    --
+    -- Because SAW still supports GHC versions that bundle versions of
+    -- containers that are older than 0.8 (and therefore do not contain a fix
+    -- for the issue above), we include this special case as a workaround. Once
+    -- SAW drops support for pre-0.8 versions of containers, we can remove this
+    -- special case.
+    if null elems && IntMap.null m
+      then pure IntMap.empty
+      else mergeEntries
+  return $ MirAggregate totalSize m'
+ where
+  -- Merge the existing MirAggregate's entries together with the new entries
+  -- from the list of AgElemShapes.
+  --
+  -- Precondition: both the list of AgElemShapes and the MirAggregate are
+  -- non-empty (see the comments above near mergeEntries' call site).
+  mergeEntries :: m (IntMap (MirAggregateEntry sym))
+  mergeEntries = sequence $ IntMap.mergeWithKey
     (\_off' (AgElemShape off _sz' shp) (MirAggregateEntry sz tpr rvPart) -> Just $ do
         Refl <- case testEquality tpr (shapeType shp) of
             Just pf -> return pf
@@ -521,7 +550,6 @@ traverseMirAggregate sym elems (MirAggregate totalSize m) f = do
     (\_ -> panic "traverseMirAggregate" ["mismatched keys in aggregate"])
     (IntMap.fromList [(fromIntegral off, e) | e@(AgElemShape off _ _) <- elems])
     m
-  return $ MirAggregate totalSize m'
 
 -- | Extract values from a `MirAggregate`, one for each entry.  The callback
 -- gets the offset, size, type, and value of the entry.  Callback results are
