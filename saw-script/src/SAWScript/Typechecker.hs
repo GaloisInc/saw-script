@@ -287,6 +287,23 @@ instance PPS.PrettyPrec Kind where
 
 
 ------------------------------------------------------------
+-- Context names {{{
+
+-- Type errors include a "context name" that's typically the name (and
+-- position) of the enclosing function. This should probably be removed
+-- now that we report accurate positions with type errors. However,
+-- until then, wrap it up to avoid confusion and crosstalk.
+
+newtype ContextName = ContextName LName
+
+instance Show ContextName where
+  show (ContextName ln) = show ln
+
+
+-- }}}
+
+
+------------------------------------------------------------
 -- Pass context {{{
 
 --
@@ -439,11 +456,11 @@ namedVarDefinitions = do
 -- for use as context info when printing messages. If there's a
 -- real variable, prefer that (Right cases); otherwise take the
 -- position of the first wildcard or empty tuple (Left cases).
-patternLName :: Pattern -> LName
-patternLName pat0 =
+getPatternContext :: Pattern -> ContextName
+getPatternContext pat0 =
   case visit pat0 of
-    Left pos -> Located "_" "_" pos
-    Right n -> n
+    Left pos -> ContextName $ Located "_" "_" pos
+    Right n -> ContextName $ n
   where
     visit pat =
       case pat of
@@ -733,9 +750,9 @@ mgus t1s t2s = case (t1s, t2s) of
 -- least sometimes it does) and we want the grouping to be clearly
 -- recognizable.
 --
--- The LName passed in is (at least in most cases) the name of the
--- top-level binding the unification happens inside. Its position is
--- therefore usually not where the problem is except in a very
+-- The ContextName passed in is (at least in most cases) the name of
+-- the top-level binding the unification happens inside. Its position
+-- is therefore usually not where the problem is except in a very
 -- abstract sense and shouldn't be printed as if it's the error
 -- location. So tack it onto the end of everything.
 --
@@ -744,8 +761,8 @@ mgus t1s t2s = case (t1s, t2s) of
 -- it entirely, but that seems like a reasonable thing to do in the
 -- future given more clarity.
 --
-unify :: LName -> Type -> Pos -> Type -> TI ()
-unify m t1 pos t2 = do
+unify :: ContextName -> Type -> Pos -> Type -> TI ()
+unify cname t1 pos t2 = do
   t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
   t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
   case mgu t1' t2' of
@@ -754,7 +771,7 @@ unify m t1 pos t2 = do
        recordError pos $ unlines $ firstline : morelines'
        where
          firstline = "Type mismatch."
-         morelines = ppFailMGU msgs ++ ["within " ++ show m]
+         morelines = ppFailMGU msgs ++ ["within " ++ show cname]
          -- Indent all but the first line by four spaces.
          -- Don't indent blank lines; that produces trailing whitespace.
          adjust msg = case msg of
@@ -881,10 +898,10 @@ type OutStmt = Stmt
 -- Take a struct field binding (name and expression) and return the
 -- updated binding as well as the member entry for the enclosing
 -- struct type.
-inferField :: LName -> (Name, Expr) -> TI ((Name, OutExpr), (Name, Type))
-inferField m (n,e) = do
-  (e',t) <- inferExpr (m,e)
-  return ((n,e'),(n,t))
+inferField :: ContextName -> (Name, Expr) -> TI ((Name, OutExpr), (Name, Type))
+inferField cname (n,e) = do
+  (e', t) <- inferExpr (cname, e)
+  return ((n, e'), (n, t))
 
 -- wrap the action m with a type for x
 withVar :: Name -> Schema -> TI a -> TI a
@@ -948,10 +965,10 @@ withAbstractTyVars vars m = do
 --
 -- Infer the type for an expression.
 --
--- The LName is the context name passed to unify, which isn't generally
--- useful and should probably be removed.
+-- The ContextName is the context name passed to unify, which isn't
+-- generally useful and should probably be removed.
 --
-inferExpr :: (LName, Expr) -> TI (OutExpr,Type)
+inferExpr :: (ContextName, Expr) -> TI (OutExpr, Type)
 inferExpr (ln, expr) = case expr of
   Bool pos b    -> return (Bool pos b, tBool (PosInferred InfTerm pos))
   String pos s  -> return (String pos s, tString (PosInferred InfTerm pos))
@@ -1108,10 +1125,10 @@ inferExpr (ln, expr) = case expr of
 -- Check the type of an expr, by inferring and then unifying the
 -- result.
 --
-checkExpr :: LName -> Expr -> Type -> TI OutExpr
-checkExpr m e t = do
-  (e',t') <- inferExpr (m,e)
-  unify m t (getPos e') t'
+checkExpr :: ContextName -> Expr -> Type -> TI OutExpr
+checkExpr cname e t = do
+  (e', t') <- inferExpr (cname, e)
+  unify cname t (getPos e') t'
   return e'
 
 --
@@ -1141,10 +1158,10 @@ inferPattern pat =
 
 -- Check the type of a pattern, by inferring and then unifying the
 -- result.
-checkPattern :: LName -> Type -> Pattern -> TI Pattern
-checkPattern ln t pat =
+checkPattern :: ContextName -> Type -> Pattern -> TI Pattern
+checkPattern cname t pat =
   do (pt, pat') <- inferPattern pat
-     unify ln t (getPos pat) pt
+     unify cname t (getPos pat) pt
      return pat'
 
 --
@@ -1198,8 +1215,8 @@ wrapReturn e =
 --
 -- returns a wrapper for checking subsequent statements as well as
 -- an updated statement.
-inferStmt :: LName -> Bool -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt)
-inferStmt ln atSyntacticTopLevel blockpos ctx s =
+inferStmt :: ContextName -> Bool -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt)
+inferStmt cname atSyntacticTopLevel blockpos ctx s =
     case s of
         StmtBind spos pat e -> do
             (pty, pat') <- inferPattern pat
@@ -1207,7 +1224,7 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
             -- straightforward way to proceed here is to unify both
             -- the monad type (ctx) and the result type expected by
             -- the pattern (pty), like this:
-            --    e' <- checkExpr ln e (tBlock blockpos ctx pty)
+            --    e' <- checkExpr cname e (tBlock blockpos ctx pty)
             --
             -- However, historically when at the syntactic top level
             -- (only), the monad type was left off, meaning that
@@ -1237,14 +1254,14 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
             --
             -- If the special cases don't apply, unify the result type
             -- with the complete type.
-            (e', ty) <- inferExpr (ln, e)
+            (e', ty) <- inferExpr (cname, e)
             ty' <- applyCurrentSubst =<< resolveCurrentTypedefs ty
 
             -- The correct, restricted case
             let restrictToCorrect = do
                   -- unify the type of e with the expected monad and
                   -- pattern types
-                  unify ln (tBlock blockpos ctx pty) (getPos e') ty
+                  unify cname (tBlock blockpos ctx pty) (getPos e') ty
                   return e'
 
             -- The special case for non-monadic values
@@ -1253,7 +1270,7 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
                                        "rewrite as let-binding or use return"
                   recordWarning spos $ "This will become an error in a " ++
                                        "future release of SAW"
-                  unify ln pty (getPos e') ty
+                  unify cname pty (getPos e') ty
                   -- Wrap the expression in "return" to correct the type
                   return $ wrapReturn e'
 
@@ -1283,7 +1300,7 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
                   --    - we _do_ need to wrap the expression in "return"
                   --      so that the ultimate results are well-typed and
                   --      happen in the TopLevel monad
-                  unify ln pty (getPos e') (tBlock spos ctx' valty')
+                  unify cname pty (getPos e') (tBlock spos ctx' valty')
 
                   -- Wrap the expression in "return" to produce an
                   -- expression of type TopLevel (m t).
@@ -1344,8 +1361,8 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
 -- the block (including the monad) to be unified with the result type
 -- found.
 --
-inferBlock :: LName -> Pos -> Type -> Type -> ([Stmt], Expr) -> TI ([OutStmt], OutExpr)
-inferBlock ln blockpos ctx ty (stmts0, lastexpr) = do
+inferBlock :: ContextName -> Pos -> Type -> Type -> ([Stmt], Expr) -> TI ([OutStmt], OutExpr)
+inferBlock cname blockpos ctx ty (stmts0, lastexpr) = do
   let atSyntacticTopLevel = False
 
   -- Check the statements in order, left first, passing through the
@@ -1369,11 +1386,11 @@ inferBlock ln blockpos ctx ty (stmts0, lastexpr) = do
         [] -> do
           -- Check the final expression.
           -- This produces the result type for the block.
-          (lastexpr', ty') <- inferExpr (ln, lastexpr)
-          unify ln ty (getPos lastexpr) ty'
+          (lastexpr', ty') <- inferExpr (cname, lastexpr)
+          unify cname ty (getPos lastexpr) ty'
           return ([], lastexpr')
         stmt : more -> do
-          (wrapper, stmt') <- inferStmt ln atSyntacticTopLevel blockpos ctx stmt
+          (wrapper, stmt') <- inferStmt cname atSyntacticTopLevel blockpos ctx stmt
           (more', lastexpr') <- wrapper $ go more
           return (stmt' : more', lastexpr')
   go stmts0
@@ -1397,12 +1414,12 @@ inferBlock ln blockpos ctx ty (stmts0, lastexpr) = do
 -- any sane incremental typechecking interface requires updating the
 -- environment for sequential declarations, not pretending that
 -- subsequent statements in a block are nested inside prior ones.)
-inferSingleStmt :: LName -> Pos -> Type -> Stmt -> TI Stmt
-inferSingleStmt ln pos ctx s = do
+inferSingleStmt :: ContextName -> Pos -> Type -> Stmt -> TI Stmt
+inferSingleStmt cname pos ctx s = do
   -- currently we are always at the syntactic top level here because
   -- that's how the interpreter works
   let atSyntacticTopLevel = True
-  (_wrapper, s') <- inferStmt ln atSyntacticTopLevel pos ctx s
+  (_wrapper, s') <- inferStmt cname atSyntacticTopLevel pos ctx s
   s'' <- applyCurrentSubst s'
   return s''
 
@@ -1544,11 +1561,11 @@ requireFunction pos ty = do
 -- expression.
 inferDecl :: Decl -> TI Decl
 inferDecl d@(Decl pos pat _ e) = do
-  let n = patternLName pat
+  let cname = getPatternContext pat
   foralls <- inspectDeclFTVs d
   withAbstractTyVars foralls $ do
-    (e',t) <- inferExpr (n, e)
-    pat' <- checkPattern n t pat
+    (e',t) <- inferExpr (cname, e)
+    pat' <- checkPattern cname t pat
     ~[(e1,s)] <- generalize foralls [e'] [t]
     return (Decl pos pat' (Just s) e1)
 
@@ -1572,7 +1589,7 @@ inferRecDecls ds =
        (_ts, pats') <- unzip <$> mapM inferPattern pats
        (es, ts) <- fmap unzip
                    $ flip (foldr withPattern) pats'
-                   $ sequence [ inferExpr (patternLName p, e)
+                   $ sequence [ inferExpr (getPatternContext p, e)
                               | Decl _pos p _ e <- ds
                               ]
 
@@ -1583,7 +1600,7 @@ inferRecDecls ds =
        -- unification vars for any missing types. Running it through
        -- again will have no further effect, so we can ignore the
        -- theoretically-updated-again patterns returned by checkPattern.
-       sequence_ $ zipWith (checkPattern (patternLName firstPat)) ts pats'
+       sequence_ $ zipWith (checkPattern (getPatternContext firstPat)) ts pats'
        ess <- generalize foralls es ts
        return [ Decl pos p (Just s) e1
               | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats' ess
@@ -1772,7 +1789,7 @@ checkStmt avail env tenv ctx stmt =
   -- XXX: we shouldn't need this position here.
   -- The position is used for the following things:
   --
-  --    - to create ln, which is used as part of the error printing
+  --    - to create cname, which is used as part of the error printing
   --      scheme, but is no longer particularly useful after recent
   --      improvements (especially here where it contains no real
   --      information) and should be removed;
@@ -1801,13 +1818,13 @@ checkStmt avail env tenv ctx stmt =
   -- But we don't have a good way of knowing here whether we're
   -- actually in the repl.
   let pos = getPos stmt
-      ln = case ctx of
-          TopLevel -> Located "<toplevel>" "<toplevel>" pos
-          ProofScript -> Located "<proofscript>" "<proofscript>" pos
+      cname = case ctx of
+          TopLevel -> ContextName $ Located "<toplevel>" "<toplevel>" pos
+          ProofScript -> ContextName $ Located "<proofscript>" "<proofscript>" pos
           _ -> panic "checkStmt" ["Invalid monad context " <> Text.pack (pShow ctx)]
       ctxtype = TyCon pos (ContextCon ctx) []
   in
-  evalTIWithEnv avail env tenv (inferSingleStmt ln pos ctxtype stmt)
+  evalTIWithEnv avail env tenv (inferSingleStmt cname pos ctxtype stmt)
 
 -- | Check a single declaration. (This is an external interface.)
 --
