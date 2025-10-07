@@ -650,7 +650,7 @@ jobs:
           - suite: integration-tests
             os: windows-2022
             timeout-minutes: 60
-            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
+            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/2648
         exclude:
           - suite: integration-tests
             os: windows-2022
