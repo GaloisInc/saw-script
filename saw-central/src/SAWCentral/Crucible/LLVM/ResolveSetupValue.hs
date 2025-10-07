@@ -46,7 +46,6 @@ import Data.Void (absurd)
 import qualified Data.Dwarf as Dwarf
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
@@ -88,7 +87,7 @@ import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupVal
 import           SAWCentral.Crucible.Common.ResolveSetupValue (checkBooleanType)
 
 import SAWCentral.Crucible.LLVM.MethodSpecIR
-import SAWCentral.Crucible.LLVM.Setup.Value (LLVMPtr)
+import SAWCentral.Crucible.LLVM.Setup.Value (LLVMPtr, ccUninterp)
 import qualified SAWCentral.Proof as SP
 
 type LLVMVal = Crucible.LLVMVal Sym
@@ -757,16 +756,16 @@ resolveSAWPred cc tm = do
      st <- sawCoreState sym
      let sc = saw_ctx st
      let ss = cc^.ccBasicSS
+         unint = cc ^. ccUninterp
      (_,tm') <- rewriteSharedTerm sc ss tm
 
      checkBooleanType sc tm'
 
-     mx <- case getAllExts tm' of
+     mx <- if not (isConstFoldTerm unint tm') then pure Nothing else
              -- concretely evaluate if it is a closed term
-             [] -> do modmap <- scGetModuleMap sc
-                      let v = Concrete.evalSharedTerm modmap mempty mempty tm'
-                      pure (Just (Concrete.toBool v))
-             _ -> return Nothing
+             do modmap <- scGetModuleMap sc
+                let v = Concrete.evalSharedTerm modmap mempty mempty tm'
+                pure (Just (Concrete.toBool v))
      case mx of
        Just x  -> return $ W4.backendPred sym x
        Nothing
@@ -775,7 +774,7 @@ resolveSAWPred cc tm = do
               (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
               (_,tm''') <- rewriteSharedTerm sc ss tm''
               if all isPreludeName (Map.elems $ getConstantSet tm''') then
-                do (_names, (_mlabels, p)) <- w4Eval sym st sc mempty Set.empty tm'''
+                do (_names, (_mlabels, p)) <- w4Eval sym st sc mempty unint tm'''
                    return p
               else bindSAWTerm sym st W4.BaseBoolRepr tm'
          | otherwise ->
@@ -791,12 +790,13 @@ resolveSAWSymBV cc w tm =
   do let sym = cc^.ccSym
      st <- sawCoreState sym
      let sc = saw_ctx st
-     mx <- case getAllExts tm of
+         unint = cc ^. ccUninterp
+     mx <- if not (isConstFoldTerm unint tm) then pure Nothing else
              -- concretely evaluate if it is a closed term
-             [] -> do modmap <- scGetModuleMap sc
-                      let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                      pure (Just (Prim.unsigned (Concrete.toWord v)))
-             _ -> return Nothing
+             do modmap <- scGetModuleMap sc
+                let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                pure (Just (Prim.unsigned (Concrete.toWord v)))
+            
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
        Nothing
@@ -807,7 +807,7 @@ resolveSAWSymBV cc w tm =
               (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
               (_,tm''') <- rewriteSharedTerm sc ss tm''
               if all isPreludeName (Map.elems $ getConstantSet tm''') then
-                do (_names, _, _, x) <- w4EvalAny sym st sc mempty Set.empty tm'''
+                do (_names, _, _, x) <- w4EvalAny sym st sc mempty unint tm'''
                    case valueToSymExpr x of
                      Just (Some y)
                        | Just Refl <- testEquality (W4.BaseBVRepr w) (W4.exprType y) ->

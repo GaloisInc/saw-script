@@ -248,6 +248,7 @@ module SAWCore.SharedTerm
   , instantiateVar
   , instantiateVarList
   , betaNormalize
+  , isConstFoldTerm
   , getAllExts
   , getAllExtSet
   , getConstantSet
@@ -2730,6 +2731,27 @@ whenModified b f m = ChangeT $ do
   case ca of
     Original{} -> return (Original b)
     Modified a -> Modified <$> f a
+
+-- | Can this term be evaluated to a constant?
+-- The parameter is a set of names which should be considered opaque---if
+-- we encounter any of these then the term is not considered to evaluate to
+-- a constant.
+isConstFoldTerm :: Set VarIndex -> Term -> Bool
+isConstFoldTerm unint t = isJust (go mempty t)
+    where
+    go !vis term =
+      case term of
+        STApp { stAppIndex = idx, stAppTermF = termF }
+          | IntSet.member idx vis -> Just vis
+          | otherwise -> goF (IntSet.insert idx vis) termF
+        Unshared termF -> goF vis termF
+    goF vis tf =
+      case tf of
+        Variable {} -> Nothing
+        Constant c
+          | nameIndex c `Set.member` unint -> Nothing
+          | otherwise -> Just vis
+        _ -> foldM go vis tf
 
 -- | Return a list of all ExtCns subterms in the given term, sorted by
 -- index. Does not traverse the unfoldings of @Constant@ terms.

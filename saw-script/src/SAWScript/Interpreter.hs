@@ -4979,6 +4979,13 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_execute_func`." ]
 
+  , prim "llvm_unint" "Term -> LLVMSetup ()"
+    (pureVal llvm_unint)
+    Current
+    [ "Keep the given name opaque during symbolic simulation."
+    , "The input term should be a name."
+    ] 
+
   , prim "llvm_return" "SetupValue -> LLVMSetup ()"
     (pureVal llvm_return)
     Current

@@ -64,6 +64,7 @@ module SAWCentral.Crucible.LLVM.Setup.Value
   , ccLLVMGlobals
   , ccBasicSS
   , ccBackend
+  , ccUninterp
     -- * PointsTo
   , LLVMPointsTo(..)
   , LLVMPointsToValue(..)
@@ -90,6 +91,7 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Type.Equality (TestEquality(..))
 import           Data.Void (Void)
+import           Data.Set(Set)
 import qualified Prettyprinter as PPL
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
@@ -270,7 +272,6 @@ showLLVMModule (LLVMModule name m _) =
 -- ** CrucibleContext
 
 type instance Setup.CrucibleContext (LLVM arch) = LLVMCrucibleContext arch
-
 data LLVMCrucibleContext arch =
   LLVMCrucibleContext
   { _ccLLVMModule      :: LLVMModule arch
@@ -278,6 +279,7 @@ data LLVMCrucibleContext arch =
   , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   , _ccBasicSS         :: Simpset TheoremNonce
+  , _ccUninterp        :: !(Set VarIndex)
   }
 
 makeLenses ''LLVMCrucibleContext
