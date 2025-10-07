@@ -1,0 +1,7 @@
+module A where
+
+parameter
+  type n : #
+
+newtype E = { unE : [n] }
+enum F = MkF [n]

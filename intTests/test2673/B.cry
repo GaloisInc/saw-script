@@ -1,0 +1,3 @@
+module B = A where
+
+type n = 8

@@ -119,6 +119,11 @@ This release supports [version
   allows extracting a MIR function to a term. See the SAW manual for details on
   what types of MIR functions are supported for extraction.
 
+## Bug Fixes
+
+* Fix a bug that would cause SAW to crash when loading an instantiation of a
+  parameterized Cryptol module that contains newtypes or enums (#2673).
+
 # Version 1.4 -- date still TBD
 
 This release supports [version

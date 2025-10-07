@@ -268,7 +268,7 @@ genTermEnv sc modEnv cryEnv0 = do
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
-      nominals   = ME.loadedNominalTypes modEnv
+      nominals   = loadedNonParamNominalTypes modEnv
   cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
   cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
   return (C.envE cryEnv2)
@@ -345,6 +345,14 @@ getAllIfaceDecls me =
     (map (MI.ifDefines . ME.lmInterface)
          (ME.getLoadedModules (ME.meLoadedModules me)))
 
+-- | Like Cryptol's 'ME.loadedNominalTypes', except that it only returns
+-- nominal types from non-parameterized modules, which are currently the only
+-- types of modules that SAW can import.
+loadedNonParamNominalTypes :: ME.ModuleEnv -> Map MN.Name T.NominalType
+loadedNonParamNominalTypes menv =
+  Map.unions $
+    map (MI.ifNominalTypes . MI.ifDefines . ME.lmInterface)
+        (ME.lmLoadedModules (ME.meLoadedModules menv))
 
 -- Typecheck -------------------------------------------------------------------
 
@@ -492,8 +500,8 @@ loadCryptolModule sc env path = do
                   $ ME.lmLoadedModules
                   $ ME.meLoadedModules modEnv''
       newDeclGroups = concatMap T.mDecls newModules
-      newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
-                                     (ME.loadedNominalTypes modEnv)
+      newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
+                                     (loadedNonParamNominalTypes modEnv)
 
   newTermEnv <-
     do oldCryEnv <- mkCryEnv env
@@ -665,8 +673,8 @@ importModule sc env src as vis imps = do
                     $ ME.lmLoadedModules
                     $ ME.meLoadedModules modEnv'
       newDeclGroups = concatMap T.mDecls newModules
-      newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
-                                     (ME.loadedNominalTypes modEnv)
+      newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
+                                     (loadedNonParamNominalTypes modEnv)
 
   newTermEnv <-
     do oldCryEnv <- mkCryEnv env
