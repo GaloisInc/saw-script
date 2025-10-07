@@ -364,7 +364,7 @@ span.spaces    { background: white }
 <span class="lineno">  345 </span><span class="spaces">          </span><span class="istickedoff">do e' &lt;- apply e x</span>
 <span class="lineno">  346 </span><span class="spaces">             </span><span class="istickedoff">go e' xs args</span>
 <span class="lineno">  347 </span><span class="spaces">        </span><span class="istickedoff">RecursiveArg zs _ixs -&gt;</span>
-<span class="lineno">  348 </span><span class="spaces">          </span><span class="istickedoff">do e1 &lt;- apply e x</span>
+<span class="lineno">  348 </span><span class="spaces">          </span><span class="istickedoff">do e1 &lt;- apply e <span class="nottickedoff">x</span></span>
 <span class="lineno">  349 </span><span class="spaces">             </span><span class="istickedoff">recx &lt;- delay (mk_rec_arg (length zs) x)</span>
 <span class="lineno">  350 </span><span class="spaces">             </span><span class="istickedoff">e2 &lt;- apply e1 recx</span>
 <span class="lineno">  351 </span><span class="spaces">             </span><span class="istickedoff">go e2 xs args</span>
