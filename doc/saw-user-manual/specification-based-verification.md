@@ -1349,6 +1349,9 @@ let s_8_16  = mir_find_adt m "example::S" [mir_u8,  mir_u16];
 let s_32_64 = mir_find_adt m "example::S" [mir_u32, mir_u64];
 :::
 
+See also the [const generics](#const-generics) section for more details on how
+to look up `MIRAdt`s that use const generics.
+
 Note that there is also a command to look up ADTs by their full, _mangled_
 identifiers that include the `_adt<num>` suffix:
 
@@ -1361,9 +1364,7 @@ identifier.
 It is recommended to use `mir_find_adt` over `mir_find_mangled_adt` whenever
 possible, as mangled identifiers can change easily when recompiling Rust code.
 `mir_find_mangled_adt` is generally only needed to work around limitations in
-what `mir_find_adt` can look up. For instance, SAW currently does not have a
-way to look up instantiations of ADTs that use const generics, so
-`mir_find_mangled_adt` is the only way to look up such ADTs at present.
+what `mir_find_adt` can look up.
 
 The `mir_adt` command (for constructing a struct type), `mir_struct_value` (for
 constructing a struct value), and `mir_enum_value` (for constructing an enum
@@ -1447,6 +1448,67 @@ Ideally, users would not have to care about lifetimes at all at the MIR level;
 see [this issue](https://github.com/GaloisInc/mir-json/issues/58) for further
 discussion on this point. If that issue is fixed, then we will likely remove
 `mir_lifetime`, as it will no longer be necessary.
+
+#### Const generics
+
+Rust ADTs can have _const generic_ parameters that allow the ADT to be generic
+over constant values.
+For instance, the following Rust code declares a const generic parameter `N`
+on the struct `S`, as well as on the functions `f` and `g` that compute `S`
+values:
+
+:::{code-block} rust
+pub struct S<const N: usize> {
+    pub x: [u32; N]
+}
+
+pub fn f(y: [u32; 1]) -> S<1> {
+    S { x: y }
+}
+
+pub fn g(y: [u32; 2]) -> S<2> {
+    S { x: y }
+}
+:::
+
+Like with other forms of Rust generics, instantiating `S` with different
+constants will give rise to different identifiers in the compiled MIR code.
+SAW provides a `mir_const` function for specifying the values of constants
+used to instantiate const generic parameters:
+
+- `mir_const : MIRType -> Term -> MIRType`
+
+For instance, if order to look up `S<1>`, use `mir_const` in conjunction with
+`mir_find_adt` like so:
+
+:::{code-block} sawscript
+s_adt = mir_find_adt m "example::S" [mir_const mir_usize {{ 1 : [64] }}]
+:::
+
+Unlike other forms of `MIRType`s, the type returned by `mir_const` is not a
+type that you can create values with.
+For instance, calling `mir_alloc` or `mir_fresh_var` at a type returned by
+`mir_const` will raise an error.
+`mir_const` is only useful for looking up ADTs via `mir_find_adt`.
+
+At present, `mir_const` only supports looking up constant values with the types
+listed
+[here](https://doc.rust-lang.org/1.86.0/reference/items/generics.html#r-items.generics.const.allowed-types)
+in the Rust Reference.
+Specifically, the `MIRType` argument must be one of the following, subject to
+the following restrictions:
+
+- A primitive integer type, i.e., `mir_u{8,16,32,64,128,size}` or
+  `mir_i{8,16,32,64,128,size}`.
+  The `Term` argument must be a bitvector of the corresponding size.
+  For instance, if the `MIRType` is `mir_u8`, then the `Term` must be a
+  bitvector of type `[8]`.
+
+- `mir_bool`.
+  The `Term` argument must be of type `Bit`.
+
+- `mir_char`.
+  The `Term` argument must be of type `[32]`.
 
 ### Bitfields
 

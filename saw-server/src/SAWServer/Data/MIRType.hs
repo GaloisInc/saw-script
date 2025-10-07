@@ -1,3 +1,7 @@
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer.Data.MIRType (JSONMIRType, mirType) where
@@ -5,11 +9,19 @@ module SAWServer.Data.MIRType (JSONMIRType, mirType) where
 import Control.Applicative
 import qualified Control.Exception as X
 import Control.Lens ((^.))
+import Control.Monad.IO.Class (MonadIO(liftIO))
 import qualified Data.Aeson as JSON
 import Data.Aeson (withObject, withText, (.:))
+import Data.ByteString (ByteString)
 
 import qualified Mir.Mir as Mir
 
+import qualified Cryptol.Parser.AST as P
+import CryptolSAWCore.CryptolEnv (CryptolEnv)
+
+import SAWCentral.Crucible.MIR.Builtins (mir_const)
+import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
+import qualified SAWCentral.Value as SV
 -- XXX why are we importing what's theoretically the top-level interface from inside?
 import SAWServer.SAWServer (SAWEnv, ServerName, getMIRAdtEither)
 
@@ -18,6 +30,7 @@ data MIRTypeTag
   | TagArray
   | TagBool
   | TagChar
+  | TagConst
   | TagI8
   | TagI16
   | TagI32
@@ -47,6 +60,7 @@ instance JSON.FromJSON MIRTypeTag where
       "array" -> pure TagArray
       "bool" -> pure TagBool
       "char" -> pure TagChar
+      "const" -> pure TagConst
       "i8" -> pure TagI8
       "i16" -> pure TagI16
       "i32" -> pure TagI32
@@ -79,21 +93,29 @@ instance JSON.FromJSON MIRTypeTag where
 --    The advantage of only containing a 'Mir.TyAdt' is that we do not have to
 --    represent the entirety of a 'Mir.Adt' definition in JSON each time we want
 --    to reference the ADT in a type.
-data JSONMIRType
+--
+-- 3. 'JSONTyConst' contains a Cryptol expression (as denoted by the @e@ type
+--    parameter) instead of a 'Mir.ConstVal', as the constant value is
+--    deserialized from JSON as an arbitrary Cryptol expression. (This is
+--    similar to the approach that the @eval bool@/@eval int@ commands use to
+--    represent their arguments.)
+data JSONMIRType e
   = JSONTyAdt !ServerName
-  | JSONTyArray !JSONMIRType !Int
+  | JSONTyArray !(JSONMIRType e) !Int
   | JSONTyBool
   | JSONTyChar
+  | JSONTyConst !(JSONMIRType e) !e
   | JSONTyFloat !Mir.FloatKind
   | JSONTyInt !Mir.BaseSize
   | JSONTyLifetime
-  | JSONTyRef !JSONMIRType !Mir.Mutability
-  | JSONTySlice !JSONMIRType
+  | JSONTyRef !(JSONMIRType e) !Mir.Mutability
+  | JSONTySlice !(JSONMIRType e)
   | JSONTyStr
-  | JSONTyTuple ![JSONMIRType]
+  | JSONTyTuple ![JSONMIRType e]
   | JSONTyUint !Mir.BaseSize
+  deriving stock (Foldable, Functor, Traversable)
 
-instance JSON.FromJSON JSONMIRType where
+instance JSON.FromJSON e => JSON.FromJSON (JSONMIRType e) where
   parseJSON =
     primType
 
@@ -106,6 +128,7 @@ instance JSON.FromJSON JSONMIRType where
           TagArray -> JSONTyArray <$> o .: "element type" <*> o .: "size"
           TagBool -> pure JSONTyBool
           TagChar -> pure JSONTyChar
+          TagConst -> JSONTyConst <$> o .: "constant type" <*> o .: "constant value"
           TagI8 -> pure $ JSONTyInt Mir.B8
           TagI16 -> pure $ JSONTyInt Mir.B16
           TagI32 -> pure $ JSONTyInt Mir.B32
@@ -127,28 +150,45 @@ instance JSON.FromJSON JSONMIRType where
           TagU128 -> pure $ JSONTyUint Mir.B128
           TagUsize -> pure $ JSONTyUint Mir.USize
 
--- | Convert a 'JSONMIRType' to a 'Mir.Ty'. The only interesting case is the
--- 'JSONTyAdt' case, which looks up a 'Mir.Adt' from a 'ServerName'.
-mirType :: SAWEnv -> JSONMIRType -> Mir.Ty
-mirType sawenv = go
+-- | Convert a 'JSONMIRType' to a 'Mir.Ty'. The only interesting cases are:
+--
+-- * The 'JSONTyAdt' case, which looks up a 'Mir.Adt' from a 'ServerName'.
+--
+-- * The 'JSONTyConst' case, which converts a 'Cryptol.Expression' to a
+--   'Mir.ConstVal'.
+mirType ::
+  (FilePath -> IO ByteString) ->
+  SV.BuiltinContext ->
+  CryptolEnv ->
+  SAWEnv ->
+  JSONMIRType (P.Expr P.PName) ->
+  SV.TopLevel Mir.Ty
+mirType fileReader bic cenv sawenv = go
   where
-    go :: JSONMIRType -> Mir.Ty
+    go :: JSONMIRType (P.Expr P.PName) -> SV.TopLevel Mir.Ty
     go (JSONTyAdt sn) =
       case getMIRAdtEither sawenv sn of
         Left ex -> X.throw ex
         Right adt ->
-          Mir.TyAdt (adt ^. Mir.adtname)
-                    (adt ^. Mir.adtOrigDefId)
-                    (adt ^. Mir.adtOrigSubsts)
+          pure $ Mir.TyAdt (adt ^. Mir.adtname)
+                           (adt ^. Mir.adtOrigDefId)
+                           (adt ^. Mir.adtOrigSubsts)
+    go (JSONTyConst ty val) = do
+      ty' <- go ty
+      (res, warnings) <- liftIO $
+        getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv val
+      case res of
+        Right (val', _) -> mir_const ty' val'
+        Left err -> X.throw $ CryptolModuleException err warnings
 
-    go (JSONTyArray ty n) = Mir.TyArray (go ty) n
-    go JSONTyBool = Mir.TyBool
-    go JSONTyChar = Mir.TyChar
-    go (JSONTyFloat fk) = Mir.TyFloat fk
-    go (JSONTyInt bs) = Mir.TyInt bs
-    go JSONTyLifetime = Mir.TyLifetime
-    go (JSONTyRef ty mut) = Mir.TyRef (go ty) mut
-    go (JSONTySlice ty) = Mir.TySlice (go ty)
-    go JSONTyStr = Mir.TyStr
-    go (JSONTyTuple ts) = Mir.TyTuple (map go ts)
-    go (JSONTyUint bs) = Mir.TyUint bs
+    go (JSONTyArray ty n) = Mir.TyArray <$> go ty <*> pure n
+    go JSONTyBool = pure Mir.TyBool
+    go JSONTyChar = pure Mir.TyChar
+    go (JSONTyFloat fk) = pure $ Mir.TyFloat fk
+    go (JSONTyInt bs) = pure $ Mir.TyInt bs
+    go JSONTyLifetime = pure Mir.TyLifetime
+    go (JSONTyRef ty mut) = Mir.TyRef <$> go ty <*> pure mut
+    go (JSONTySlice ty) = Mir.TySlice <$> go ty
+    go JSONTyStr = pure Mir.TyStr
+    go (JSONTyTuple ts) = Mir.TyTuple <$> traverse go ts
+    go (JSONTyUint bs) = pure $ Mir.TyUint bs

@@ -1,0 +1,2 @@
+#!/bin/sh
+exec "${CRUX_MIR:-crux-mir}" --assert-false-on-error --cargo-test-file "$(dirname "$0")"/'mir_const_generics.linked-mir.json' "$@"
