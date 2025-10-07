@@ -492,8 +492,8 @@ inferFlatTermF ftf =
          unless (Map.member fld ts) $
            throwTCError $ BadRecordField fld (typedType t)
          liftTCM scTypedRecordProj t fld
-    Sort s _ ->
-      liftTCM scTypedSort s
+    Sort s flags ->
+      liftTCM scTypedSort' s flags
     NatLit n ->
       liftTCM scTypedNat n
     ArrayValue tp vs ->

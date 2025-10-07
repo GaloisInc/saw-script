@@ -34,6 +34,7 @@ module SAWCore.SCTypedTerm
   , scTypedRecordValue
   , scTypedRecordProj
   , scTypedSort
+  , scTypedSort'
   , scTypedNat
   , scTypedVector
   , scTypedString
@@ -297,8 +298,13 @@ scTypedRecordProj sc t fname =
 
 -- no possible errors
 scTypedSort :: SharedContext -> Sort -> IO SCTypedTerm
-scTypedSort sc s =
-  do tm <- scSort sc s
+scTypedSort sc s = scTypedSort' sc s noFlags
+
+-- | A variant of 'scTypedSort' that also takes a 'SortFlags' argument.
+-- No possible errors.
+scTypedSort' :: SharedContext -> Sort -> SortFlags -> IO SCTypedTerm
+scTypedSort' sc s flags =
+  do tm <- scFlatTermF sc (Sort s flags)
      tp <- scSort sc (sortOf s)
      pure (SCTypedTerm tm tp IntMap.empty)
 
