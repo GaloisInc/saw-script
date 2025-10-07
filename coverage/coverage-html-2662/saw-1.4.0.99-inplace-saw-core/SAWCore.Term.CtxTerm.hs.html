@@ -100,76 +100,72 @@ span.spaces    { background: white }
 <span class="lineno">   81 </span>
 <span class="lineno">   82 </span>-- | Check that an argument for a constructor has one of the allowed forms
 <span class="lineno">   83 </span>asCtorArg ::
-<span class="lineno">   84 </span>  SharedContext -&gt;
-<span class="lineno">   85 </span>  Name -&gt;
-<span class="lineno">   86 </span>  [ExtCns Term] -&gt;
-<span class="lineno">   87 </span>  [index] -&gt;
-<span class="lineno">   88 </span>  Term -&gt;
-<span class="lineno">   89 </span>  IO (Maybe CtorArg)
-<span class="lineno">   90 </span><span class="decl"><span class="istickedoff">asCtorArg _ d _ _ tp</span>
-<span class="lineno">   91 </span><span class="spaces">  </span><span class="istickedoff">| not (usesDataType d tp)</span>
-<span class="lineno">   92 </span><span class="spaces">  </span><span class="istickedoff">= pure $ Just (ConstArg tp)</span>
-<span class="lineno">   93 </span><span class="spaces"></span><span class="istickedoff">asCtorArg sc d params dt_ixs tp =</span>
-<span class="lineno">   94 </span><span class="spaces">  </span><span class="istickedoff">do (zs, ret) &lt;- scAsPiList <span class="nottickedoff">sc</span> tp</span>
-<span class="lineno">   95 </span><span class="spaces">     </span><span class="istickedoff">case asCtorDTApp d params dt_ixs ret of</span>
-<span class="lineno">   96 </span><span class="spaces">       </span><span class="istickedoff">Just ixs</span>
-<span class="lineno">   97 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">not (any <span class="nottickedoff">(usesDataType d . ecType)</span> zs)</span> -&gt;</span>
-<span class="lineno">   98 </span><span class="spaces">           </span><span class="istickedoff">pure $ Just (RecursiveArg zs ixs)</span>
-<span class="lineno">   99 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  100 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure Nothing</span></span></span>
-<span class="lineno">  101 </span>
-<span class="lineno">  102 </span>-- | Check that a constructor type is a pi-abstraction that takes as input an
-<span class="lineno">  103 </span>-- argument of one of the allowed forms described by 'CtorArg'
-<span class="lineno">  104 </span>asPiCtorArg ::
-<span class="lineno">  105 </span>  SharedContext -&gt;
-<span class="lineno">  106 </span>  Name -&gt;
-<span class="lineno">  107 </span>  [ExtCns Term] -&gt;
-<span class="lineno">  108 </span>  [index] -&gt;
-<span class="lineno">  109 </span>  Term -&gt;
-<span class="lineno">  110 </span>  IO (Maybe (VarName, CtorArg, Term))
-<span class="lineno">  111 </span><span class="decl"><span class="istickedoff">asPiCtorArg sc d params dt_ixs t =</span>
-<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">scAsPi sc t &gt;&gt;= \case</span>
-<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">Just (ec, rest) -&gt;</span>
-<span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">asCtorArg <span class="nottickedoff">sc</span> d params dt_ixs (ecType ec) &gt;&gt;= \case</span>
-<span class="lineno">  116 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  117 </span><span class="spaces">        </span><span class="istickedoff">Just arg -&gt; pure $ Just (ecName ec, arg, rest)</span></span>
-<span class="lineno">  118 </span>
-<span class="lineno">  119 </span>-- | Helper function for 'mkCtorArgStruct'
-<span class="lineno">  120 </span>mkCtorArgsIxs ::
-<span class="lineno">  121 </span>  SharedContext -&gt;
-<span class="lineno">  122 </span>  Name -&gt;
-<span class="lineno">  123 </span>  [ExtCns Term] -&gt;
-<span class="lineno">  124 </span>  [index] -&gt;
-<span class="lineno">  125 </span>  Term -&gt;
-<span class="lineno">  126 </span>  IO (Maybe ([(VarName, CtorArg)], [Term]))
-<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">mkCtorArgsIxs _sc d params dt_ixs (asCtorDTApp d params dt_ixs -&gt; Just ixs) =</span>
-<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">pure $ Just ([], ixs)</span>
-<span class="lineno">  129 </span><span class="spaces"></span><span class="istickedoff">mkCtorArgsIxs sc d params dt_ixs ty =</span>
-<span class="lineno">  130 </span><span class="spaces">  </span><span class="istickedoff">asPiCtorArg sc d params dt_ixs ty &gt;&gt;= \case</span>
-<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">Just (x, arg, rest) -&gt;</span>
-<span class="lineno">  133 </span><span class="spaces">      </span><span class="istickedoff">mkCtorArgsIxs sc d params dt_ixs rest &gt;&gt;= \case</span>
-<span class="lineno">  134 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  135 </span><span class="spaces">        </span><span class="istickedoff">Just (args, ixs) -&gt; pure $ Just ((x, arg) : args, ixs)</span></span>
-<span class="lineno">  136 </span>
-<span class="lineno">  137 </span>-- | Take in a datatype and bindings lists for its parameters and indices, and
-<span class="lineno">  138 </span>-- also a prospective type of a constructor for that datatype, where the
-<span class="lineno">  139 </span>-- constructor type is allowed to have the parameters but not the indices free.
-<span class="lineno">  140 </span>-- Test that the constructor type is an allowed type for a constructor of this
-<span class="lineno">  141 </span>-- datatype, and, if so, build a 'CtorArgStruct' for it.
-<span class="lineno">  142 </span>mkCtorArgStruct ::
-<span class="lineno">  143 </span>  SharedContext -&gt;
-<span class="lineno">  144 </span>  Name -&gt;
-<span class="lineno">  145 </span>  [ExtCns Term] -&gt;
-<span class="lineno">  146 </span>  [ExtCns Term] -&gt;
-<span class="lineno">  147 </span>  Term -&gt;
-<span class="lineno">  148 </span>  IO (Maybe CtorArgStruct)
-<span class="lineno">  149 </span><span class="decl"><span class="istickedoff">mkCtorArgStruct sc d params dt_ixs ctor_tp =</span>
-<span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">mkCtorArgsIxs sc d params dt_ixs ctor_tp &gt;&gt;= \case</span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff">Just (args, ctor_ixs) -&gt;</span>
-<span class="lineno">  153 </span><span class="spaces">      </span><span class="istickedoff">pure $ Just (CtorArgStruct params args ctor_ixs)</span></span>
+<span class="lineno">   84 </span>  Name -&gt;
+<span class="lineno">   85 </span>  [ExtCns Term] -&gt;
+<span class="lineno">   86 </span>  [index] -&gt;
+<span class="lineno">   87 </span>  Term -&gt;
+<span class="lineno">   88 </span>  Maybe CtorArg
+<span class="lineno">   89 </span><span class="decl"><span class="istickedoff">asCtorArg d _ _ tp</span>
+<span class="lineno">   90 </span><span class="spaces">  </span><span class="istickedoff">| not (usesDataType d tp)</span>
+<span class="lineno">   91 </span><span class="spaces">  </span><span class="istickedoff">= Just (ConstArg tp)</span>
+<span class="lineno">   92 </span><span class="spaces"></span><span class="istickedoff">asCtorArg d params dt_ixs tp =</span>
+<span class="lineno">   93 </span><span class="spaces">  </span><span class="istickedoff">do let (zs, ret) = asPiList tp</span>
+<span class="lineno">   94 </span><span class="spaces">     </span><span class="istickedoff">case asCtorDTApp d params dt_ixs ret of</span>
+<span class="lineno">   95 </span><span class="spaces">       </span><span class="istickedoff">Just ixs</span>
+<span class="lineno">   96 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">not (any <span class="nottickedoff">(usesDataType d . snd)</span> zs)</span> -&gt;</span>
+<span class="lineno">   97 </span><span class="spaces">           </span><span class="istickedoff">Just (RecursiveArg (map <span class="nottickedoff">(uncurry EC)</span> zs) ixs)</span>
+<span class="lineno">   98 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">   99 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>-- | Check that a constructor type is a pi-abstraction that takes as input an
+<span class="lineno">  102 </span>-- argument of one of the allowed forms described by 'CtorArg'
+<span class="lineno">  103 </span>asPiCtorArg ::
+<span class="lineno">  104 </span>  Name -&gt;
+<span class="lineno">  105 </span>  [ExtCns Term] -&gt;
+<span class="lineno">  106 </span>  [index] -&gt;
+<span class="lineno">  107 </span>  Term -&gt;
+<span class="lineno">  108 </span>  Maybe (VarName, CtorArg, Term)
+<span class="lineno">  109 </span><span class="decl"><span class="istickedoff">asPiCtorArg d params dt_ixs t =</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">case asPi t of</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="istickedoff">Just (nm, tp, rest) -&gt;</span>
+<span class="lineno">  113 </span><span class="spaces">      </span><span class="istickedoff">case asCtorArg d params dt_ixs tp of</span>
+<span class="lineno">  114 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  115 </span><span class="spaces">        </span><span class="istickedoff">Just arg -&gt; Just (nm, arg, rest)</span></span>
+<span class="lineno">  116 </span>
+<span class="lineno">  117 </span>-- | Helper function for 'mkCtorArgStruct'
+<span class="lineno">  118 </span>mkCtorArgsIxs ::
+<span class="lineno">  119 </span>  Name -&gt;
+<span class="lineno">  120 </span>  [ExtCns Term] -&gt;
+<span class="lineno">  121 </span>  [index] -&gt;
+<span class="lineno">  122 </span>  Term -&gt;
+<span class="lineno">  123 </span>  Maybe ([(VarName, CtorArg)], [Term])
+<span class="lineno">  124 </span><span class="decl"><span class="istickedoff">mkCtorArgsIxs d params dt_ixs (asCtorDTApp d params dt_ixs -&gt; Just ixs) =</span>
+<span class="lineno">  125 </span><span class="spaces">  </span><span class="istickedoff">Just ([], ixs)</span>
+<span class="lineno">  126 </span><span class="spaces"></span><span class="istickedoff">mkCtorArgsIxs d params dt_ixs ty =</span>
+<span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">case asPiCtorArg d params dt_ixs ty of</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">Just (x, arg, rest) -&gt;</span>
+<span class="lineno">  130 </span><span class="spaces">      </span><span class="istickedoff">case mkCtorArgsIxs d params dt_ixs rest of</span>
+<span class="lineno">  131 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  132 </span><span class="spaces">        </span><span class="istickedoff">Just (args, ixs) -&gt; Just ((x, arg) : args, ixs)</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>-- | Take in a datatype and bindings lists for its parameters and indices, and
+<span class="lineno">  135 </span>-- also a prospective type of a constructor for that datatype, where the
+<span class="lineno">  136 </span>-- constructor type is allowed to have the parameters but not the indices free.
+<span class="lineno">  137 </span>-- Test that the constructor type is an allowed type for a constructor of this
+<span class="lineno">  138 </span>-- datatype, and, if so, build a 'CtorArgStruct' for it.
+<span class="lineno">  139 </span>mkCtorArgStruct ::
+<span class="lineno">  140 </span>  Name -&gt;
+<span class="lineno">  141 </span>  [ExtCns Term] -&gt;
+<span class="lineno">  142 </span>  [ExtCns Term] -&gt;
+<span class="lineno">  143 </span>  Term -&gt;
+<span class="lineno">  144 </span>  Maybe CtorArgStruct
+<span class="lineno">  145 </span><span class="decl"><span class="istickedoff">mkCtorArgStruct d params dt_ixs ctor_tp =</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">case mkCtorArgsIxs d params dt_ixs ctor_tp of</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">Just (args, ctor_ixs) -&gt;</span>
+<span class="lineno">  149 </span><span class="spaces">      </span><span class="istickedoff">Just (CtorArgStruct params args ctor_ixs)</span></span>
 
 </pre>
 </body>

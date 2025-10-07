@@ -90,7 +90,7 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span>  , FirstOrderValue(..)
 <span class="lineno">   72 </span>  , scFirstOrderValue
 <span class="lineno">   73 </span>  )
-<span class="lineno">   74 </span>import SAWCore.Name (ecShortName)
+<span class="lineno">   74 </span>import SAWCore.Name (VarName(..), ecShortName)
 <span class="lineno">   75 </span>import SAWCore.SATQuery
 <span class="lineno">   76 </span>import SAWCore.SCTypeCheck
 <span class="lineno">   77 </span>import SAWCore.Recognizer
@@ -291,10 +291,10 @@ span.spaces    { background: white }
 <span class="lineno">  272 </span><span class="spaces">  </span><span class="nottickedoff">let tpat  = ttTerm pat</span>
 <span class="lineno">  273 </span><span class="spaces">  </span><span class="nottickedoff">let trepl = ttTerm replace</span>
 <span class="lineno">  274 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  275 </span><span class="spaces">  </span><span class="nottickedoff">unless (termIsClosed tpat) $ fail $ unlines</span>
+<span class="lineno">  275 </span><span class="spaces">  </span><span class="nottickedoff">unless (closedTerm tpat) $ fail $ unlines</span>
 <span class="lineno">  276 </span><span class="spaces">    </span><span class="nottickedoff">[ &quot;pattern term is not closed&quot;, show tpat ]</span>
 <span class="lineno">  277 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  278 </span><span class="spaces">  </span><span class="nottickedoff">unless (termIsClosed trepl) $ fail $ unlines</span>
+<span class="lineno">  278 </span><span class="spaces">  </span><span class="nottickedoff">unless (closedTerm trepl) $ fail $ unlines</span>
 <span class="lineno">  279 </span><span class="spaces">    </span><span class="nottickedoff">[ &quot;replacement term is not closed&quot;, show trepl ]</span>
 <span class="lineno">  280 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  281 </span><span class="spaces">  </span><span class="nottickedoff">io $ do</span>
@@ -751,15 +751,15 @@ span.spaces    { background: white }
 <span class="lineno">  732 </span><span class="spaces">     </span><span class="istickedoff">case asPiList ty of</span>
 <span class="lineno">  733 </span><span class="spaces">       </span><span class="istickedoff">([],_) -&gt; <span class="nottickedoff">fail &quot;congruence_for: Term is not a function&quot;</span></span>
 <span class="lineno">  734 </span><span class="spaces">       </span><span class="istickedoff">(pis, body) -&gt;</span>
-<span class="lineno">  735 </span><span class="spaces">         </span><span class="istickedoff">if <span class="tickonlytrue">termIsClosed body</span> then</span>
+<span class="lineno">  735 </span><span class="spaces">         </span><span class="istickedoff">if <span class="tickonlytrue">closedTerm body</span> then</span>
 <span class="lineno">  736 </span><span class="spaces">           </span><span class="istickedoff">loop pis []</span>
 <span class="lineno">  737 </span><span class="spaces">         </span><span class="istickedoff">else</span>
 <span class="lineno">  738 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">fail &quot;congruence_for: cannot build congruence for dependent functions&quot;</span></span>
 <span class="lineno">  739 </span><span class="spaces"> </span><span class="istickedoff">where</span>
 <span class="lineno">  740 </span><span class="spaces">  </span><span class="istickedoff">loop ((nm,tp):pis) vars =</span>
-<span class="lineno">  741 </span><span class="spaces">    </span><span class="istickedoff">if <span class="tickonlytrue">termIsClosed tp</span> then</span>
-<span class="lineno">  742 </span><span class="spaces">      </span><span class="istickedoff">do l &lt;- scFreshEC sc (nm &lt;&gt; &quot;_1&quot;) tp</span>
-<span class="lineno">  743 </span><span class="spaces">         </span><span class="istickedoff">r &lt;- scFreshEC sc (nm &lt;&gt; &quot;_2&quot;) tp</span>
+<span class="lineno">  741 </span><span class="spaces">    </span><span class="istickedoff">if <span class="tickonlytrue">closedTerm tp</span> then</span>
+<span class="lineno">  742 </span><span class="spaces">      </span><span class="istickedoff">do l &lt;- scFreshEC sc (vnName nm &lt;&gt; &quot;_1&quot;) tp</span>
+<span class="lineno">  743 </span><span class="spaces">         </span><span class="istickedoff">r &lt;- scFreshEC sc (vnName nm &lt;&gt; &quot;_2&quot;) tp</span>
 <span class="lineno">  744 </span><span class="spaces">         </span><span class="istickedoff">loop pis ((l,r):vars)</span>
 <span class="lineno">  745 </span><span class="spaces">     </span><span class="istickedoff">else</span>
 <span class="lineno">  746 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">fail &quot;congruence_for: cannot build congruence for dependent functions&quot;</span></span>
@@ -926,7 +926,7 @@ span.spaces    { background: white }
 <span class="lineno">  907 </span>
 <span class="lineno">  908 </span>-- | Bit-blast a proposition check its validity using the RME library.
 <span class="lineno">  909 </span>proveRME :: ProofScript ()
-<span class="lineno">  910 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] <span class="nottickedoff">Prover.proveRME</span> Set.empty</span></span>
+<span class="lineno">  910 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] Prover.proveRME Set.empty</span></span>
 <span class="lineno">  911 </span>
 <span class="lineno">  912 </span>codegenSBV :: SharedContext -&gt; Text -&gt; [Text] -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno">  913 </span><span class="decl"><span class="nottickedoff">codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do</span>
@@ -1083,7 +1083,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1064 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1065 </span>
 <span class="lineno"> 1066 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1067 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
+<span class="lineno"> 1067 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
 <span class="lineno"> 1068 </span>
 <span class="lineno"> 1069 </span>w4_unint_rme :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1070 </span><span class="decl"><span class="istickedoff">w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme</span></span>
@@ -1103,10 +1103,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1084 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1085 </span>
 <span class="lineno"> 1086 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1087 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
+<span class="lineno"> 1087 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
 <span class="lineno"> 1088 </span>
 <span class="lineno"> 1089 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1090 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
+<span class="lineno"> 1090 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
 <span class="lineno"> 1091 </span>
 <span class="lineno"> 1092 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1093 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1196,7 +1196,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1177 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1178 </span>
 <span class="lineno"> 1179 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1180 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
+<span class="lineno"> 1180 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
 <span class="lineno"> 1181 </span>
 <span class="lineno"> 1182 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1183 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
@@ -1415,8 +1415,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1396 </span><span class="spaces">  </span><span class="nottickedoff">-- and the width of the bitvector we are doing induction on.</span>
 <span class="lineno"> 1397 </span><span class="spaces">  </span><span class="nottickedoff">checkInductionScheme sc opts pis ty =</span>
 <span class="lineno"> 1398 </span><span class="spaces">    </span><span class="nottickedoff">do ty' &lt;- scWhnf sc ty</span>
-<span class="lineno"> 1399 </span><span class="spaces">       </span><span class="nottickedoff">scAsPi sc ty' &gt;&gt;= \case</span>
-<span class="lineno"> 1400 </span><span class="spaces">         </span><span class="nottickedoff">Just (ec, body) -&gt; checkInductionScheme sc opts (ec : pis) body</span>
+<span class="lineno"> 1399 </span><span class="spaces">       </span><span class="nottickedoff">case asPi ty' of</span>
+<span class="lineno"> 1400 </span><span class="spaces">         </span><span class="nottickedoff">Just (nm, tp, body) -&gt; checkInductionScheme sc opts (EC nm tp : pis) body</span>
 <span class="lineno"> 1401 </span><span class="spaces">         </span><span class="nottickedoff">Nothing -&gt;</span>
 <span class="lineno"> 1402 </span><span class="spaces">           </span><span class="nottickedoff">case asTupleType ty' of</span>
 <span class="lineno"> 1403 </span><span class="spaces">             </span><span class="nottickedoff">Just [bv, bool] -&gt;</span>
@@ -1994,7 +1994,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1975 </span><span class="spaces">     </span><span class="istickedoff">let mnm =</span>
 <span class="lineno"> 1976 </span><span class="spaces">           </span><span class="istickedoff">mkModuleName $ Text.splitOn &quot;.&quot; mnm_str</span>
 <span class="lineno"> 1977 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- io $ scFindModule sc mnm -- Check that mnm exists</span>
-<span class="lineno"> 1978 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTermCtx sc (Just mnm) [] uterm</span>
+<span class="lineno"> 1978 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTermCtx sc (Just mnm) <span class="nottickedoff">mempty</span> uterm</span>
 <span class="lineno"> 1979 </span><span class="spaces">     </span><span class="istickedoff">case err_or_t of</span>
 <span class="lineno"> 1980 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; fail (show err)</span>
 <span class="lineno"> 1981 </span><span class="spaces">       </span><span class="istickedoff">Right x -&gt; pure x</span></span>
