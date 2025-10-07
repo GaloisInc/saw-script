@@ -990,7 +990,6 @@ test-suite saw-core-tests
     Tests.CacheTests
     Tests.Functor
     Tests.Parser
-    Tests.Rewriter
     Tests.SharedTerm
 
 
