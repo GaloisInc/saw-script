@@ -325,7 +325,7 @@ instance Show ContextName where
 --
 
 newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
-                        deriving (Functor,Applicative,Monad,MonadReader RO)
+    deriving (Functor, Applicative, Monad, MonadReader RO, MonadState RW)
 
 -- | The "readonly" portion
 data RO = RO {
@@ -367,9 +367,9 @@ initialRW varenv tyenv = RW {
 -- Get a fresh unification var number.
 getFreshTypeIndex :: TI TypeIndex
 getFreshTypeIndex = do
-  rw <- TI get
-  TI $ put $ rw { nextTypeIndex = nextTypeIndex rw + 1 }
-  return $ nextTypeIndex rw
+  next <- gets nextTypeIndex
+  modify $ (\rw -> rw { nextTypeIndex = next + 1 })
+  return next
 
 -- Construct a fresh type variable.
 --
@@ -393,17 +393,17 @@ getErrorTyVar pos = getFreshTyVar pos
 -- Add an error message.
 recordError :: Pos -> String -> TI ()
 recordError pos err = do
-  TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
+  modify $ \rw -> rw { errors = (pos, err) : errors rw }
 
 -- Add a warning message.
 recordWarning :: Pos -> String -> TI ()
 recordWarning pos msg = do
-  TI $ modify $ \rw -> rw { warnings = (pos, msg) : warnings rw }
+  modify $ \rw -> rw { warnings = (pos, msg) : warnings rw }
 
 -- Apply the current substitution with appSubst.
 applyCurrentSubst :: AppSubst t => t -> TI t
 applyCurrentSubst t = do
-  s <- TI $ gets subst
+  s <- gets subst
   return $ appSubst s t
 
 -- Apply the current typedef collection with substituteTyVars.
@@ -412,8 +412,8 @@ applyCurrentSubst t = do
 -- to something in the typedef collection that's not visible.
 resolveCurrentTypedefs :: SubstituteTyVars t => t -> TI t
 resolveCurrentTypedefs t = do
-  avail <- TI $ asks primsAvail
-  s <- TI $ gets tyEnv
+  avail <- asks primsAvail
+  s <- gets tyEnv
   return $ substituteTyVars avail s t
 
 -- Get the unification vars that are used in the current variable typing
@@ -440,8 +440,8 @@ resolveCurrentTypedefs t = do
 -- Returns a map of the index number to the occurrence position.
 unifyVarsInEnvs :: TI (M.Map TypeIndex Pos)
 unifyVarsInEnvs = do
-  venv <- TI $ gets varEnv
-  tenv <- TI $ gets tyEnv
+  venv <- gets varEnv
+  tenv <- gets tyEnv
   vtys <- mapM applyCurrentSubst $ M.elems venv
   ttys <- mapM applyCurrentSubst $ M.elems tenv
   return $ M.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
@@ -450,7 +450,7 @@ unifyVarsInEnvs = do
 -- environment.
 namedVarDefinitions :: TI (S.Set Name)
 namedVarDefinitions = do
-   env <- TI $ gets tyEnv
+   env <- gets tyEnv
    return $ M.keysSet env
 
 -- Get the position and name of the first binding in a pattern,
@@ -767,7 +767,7 @@ unify cname t1 pos t2 = do
   t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
   t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
   case mgu t1' t2' of
-    Right s -> TI $ modify $ \rw -> rw { subst = mergeSubst s $ subst rw }
+    Right s -> modify $ \rw -> rw { subst = mergeSubst s $ subst rw }
     Left msgs ->
        recordError pos $ unlines $ firstline : morelines'
        where
@@ -841,7 +841,7 @@ inspectTypeFTVs ty = case ty of
     TyRecord _pos fields -> M.unions <$> traverse inspectTypeFTVs fields
     TyUnifyVar _pos _x -> return M.empty
     TyVar pos x -> do
-        tyenv <- TI $ gets tyEnv
+        tyenv <- gets tyEnv
         case M.lookup x tyenv of
             Nothing -> return $ M.singleton x pos
             Just _ -> return $ M.empty
@@ -907,10 +907,10 @@ inferField cname (n,e) = do
 -- wrap the action m with a type for x
 withVar :: Name -> Schema -> TI a -> TI a
 withVar x s m = do
-  orig <- TI $ gets varEnv
-  TI $ modify (\rw -> rw { varEnv = M.insert x (Current, s) orig })
+  orig <- gets varEnv
+  modify (\rw -> rw { varEnv = M.insert x (Current, s) orig })
   result <- m
-  TI $ modify (\rw -> rw { varEnv = orig })
+  modify (\rw -> rw { varEnv = orig })
   return result
 
 -- wrap the action m with types for a list of vars
@@ -965,11 +965,11 @@ withAbstractTyVars :: Map Name Pos -> TI a -> TI a
 withAbstractTyVars vars m = do
     let insertOne x _pos tyenv = M.insert x (Current, AbstractType) tyenv
         insertAll tyenv = M.foldrWithKey insertOne tyenv vars
-    tyenv <- TI $ gets tyEnv
+    tyenv <- gets tyEnv
     let tyenv' = insertAll tyenv
-    TI $ modify (\rw -> rw { tyEnv = tyenv' })
+    modify (\rw -> rw { tyEnv = tyenv' })
     result <- m
-    TI $ modify (\rw -> rw { tyEnv = tyenv })
+    modify (\rw -> rw { tyEnv = tyenv })
     return result
 
 --
@@ -1066,8 +1066,8 @@ inferExpr (ln, expr) = case expr of
        return (TLookup pos e1 i, elTy)
 
   Var pos x ->
-    do avail <- TI $ asks primsAvail
-       env <- TI $ gets varEnv
+    do avail <- asks primsAvail
+       env <- gets varEnv
        case M.lookup x env of
          Nothing -> do
            recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
@@ -1184,13 +1184,13 @@ checkPattern cname t pat =
 -- refers to something not visible in the environment.
 withTypedef :: Name -> Type -> TI a -> TI a
 withTypedef a ty m = do
-  avail <- TI $ asks primsAvail
-  env <- TI $ gets tyEnv
+  avail <- asks primsAvail
+  env <- gets tyEnv
   let ty' = substituteTyVars avail env ty
       env' = M.insert a (Current, ConcreteType ty') env
-  TI $ modify (\rw -> rw { tyEnv = env' })
+  modify (\rw -> rw { tyEnv = env' })
   result <- m
-  TI $ modify (\rw -> rw { tyEnv = env })
+  modify (\rw -> rw { tyEnv = env })
   return result
 
 -- break a monadic type down into its monad and value types, if it is one
@@ -1713,8 +1713,8 @@ checkType kind ty = case ty of
           return $ TyRecord pos fields'
 
   TyVar pos x -> do
-      avail <- TI $ asks primsAvail
-      tyenv <- TI $ gets tyEnv
+      avail <- asks primsAvail
+      tyenv <- gets tyEnv
       case M.lookup x tyenv of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ Text.unpack x)
