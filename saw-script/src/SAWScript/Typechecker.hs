@@ -957,8 +957,8 @@ withVars bindings m = do
 --
 -- (Note that the pattern should have already been processed so it
 -- contains types; hence the irrefutable Just t.)
-_addPattern :: Pattern -> TI ()
-_addPattern pat = addVars bindings
+addPattern :: Pattern -> TI ()
+addPattern pat = addVars bindings
   where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
 
 -- Add all the vars in a pattern to the environment, while running m.
@@ -1002,9 +1002,9 @@ withDecl (Decl _ _ Nothing _) m = m
 withDecl (Decl _ p (Just s) _) m = withPatternSchema p s m
 
 -- Add all the vars in a declaration to the environment, while running m.
-_addDeclGroup :: DeclGroup -> TI ()
-_addDeclGroup (NonRecursive d) = addDecl d
-_addDeclGroup (Recursive ds) = mapM_ addDecl ds
+addDeclGroup :: DeclGroup -> TI ()
+addDeclGroup (NonRecursive d) = addDecl d
+addDeclGroup (Recursive ds) = mapM_ addDecl ds
 
 -- Add all the vars in a declaration to the environment, while running m.
 withDeclGroup :: DeclGroup -> TI a -> TI a
@@ -1396,13 +1396,13 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
                                    _ -> allowNonMonadic
 
             let s' = StmtBind spos pat' e''
-            let wrapper = withPattern pat'
-            return (wrapper, s')
+            addPattern pat'
+            return (id, s')
         StmtLet spos dg -> do
             dg' <- inferDeclGroup dg
             let s' = StmtLet spos dg'
-            let wrapper = withDeclGroup dg'
-            return (wrapper, s')
+            addDeclGroup dg'
+            return (id, s')
         StmtCode _allpos _spos _txt ->
             return (id, s)
         StmtImport _spos _ ->
