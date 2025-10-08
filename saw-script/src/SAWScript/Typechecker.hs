@@ -1421,38 +1421,18 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
 -- found.
 --
 inferBlock :: ContextName -> Pos -> Type -> Type -> ([Stmt], Expr) -> TI ([OutStmt], OutExpr)
-inferBlock cname blockpos ctx ty (stmts0, lastexpr) = do
+inferBlock cname blockpos ctx ty (stmts, lastexpr) = do
   let atSyntacticTopLevel = False
 
-  -- Check the statements in order, left first, passing through the
-  -- wrapper produced by inferStmt.
-  --
-  -- XXX: this should really use foldlM on the statement list, except
-  -- it doesn't typecheck that way because the type of the wrapper
-  -- goes ... off the rails.
-  --
-  -- XXX: those wrappers should go away anyhow; it's a messy way of
-  -- updating the typing environment by pretending that each statement
-  -- in a do-block is nested inside the previous one. Things should
-  -- get rearranged so we just update the environment in the monad
-  -- context, instead of pretending that's not what we're doing.
-  --
-  -- XXX: Because of this rubbish we have to check the last expression
-  -- _inside_ the loop when we get to the end of the list, instead of
-  -- just doing it afterwards. Blegh.
-  --
-  let go stmts = case stmts of
-        [] -> do
-          -- Check the final expression.
-          -- This produces the result type for the block.
-          (lastexpr', ty') <- inferExpr (cname, lastexpr)
-          unify cname ty (getPos lastexpr) ty'
-          return ([], lastexpr')
-        stmt : more -> do
-          stmt' <- inferStmt cname atSyntacticTopLevel blockpos ctx stmt
-          (more', lastexpr') <- go more
-          return (stmt' : more', lastexpr')
-  go stmts0
+  -- Check the statements in order, left first.
+  stmts' <- mapM (inferStmt cname atSyntacticTopLevel blockpos ctx) stmts
+
+  -- Check the final expression.
+  -- This produces the result type for the block.
+  (lastexpr', ty') <- inferExpr (cname, lastexpr)
+  unify cname ty (getPos lastexpr) ty'
+
+  return (stmts', lastexpr')
 
 -- Wrapper around inferStmt suitable for checking one statement at a
 -- time. This is temporary scaffolding for the interpreter while
