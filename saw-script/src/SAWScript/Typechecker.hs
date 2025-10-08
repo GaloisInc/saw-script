@@ -933,42 +933,80 @@ inferField cname (n,e) = do
   (e', t) <- inferExpr (cname, e)
   return ((n, e'), (n, t))
 
--- wrap the action m with a type for x
-withVar :: Name -> Schema -> TI a -> TI a
-withVar x s m = do
-  orig <- gets varEnv
-  modify (\rw -> rw { varEnv = M.insert x (Current, s) orig })
+-- Add x with type ty to the environment.
+addVar :: Name -> Schema -> TI ()
+addVar x ty = do
+  env <- gets varEnv
+  let env' = M.insert x (Current, ty) env
+  modify (\rw -> rw { varEnv = env' })
+
+-- Add xs with type tys to the environment.
+addVars :: [(Name, Schema)] -> TI ()
+addVars bindings = mapM_ (uncurry addVar) bindings
+
+-- Add xs with type tys to the environment, while running m.
+withVars :: [(Name, Schema)] -> TI a -> TI a
+withVars bindings m = do
+  save <- gets varEnv
+  addVars bindings
   result <- m
-  modify (\rw -> rw { varEnv = orig })
+  modify (\rw -> rw { varEnv = save })
   return result
 
--- wrap the action m with types for a list of vars
-withVars :: [(Name, Schema)] -> TI a -> TI a
-withVars bindings m = foldr (uncurry withVar) m bindings
-
--- wrap the action m with types for all the vars in a pattern
+-- Add all the vars in a pattern to the environment.
 --
--- (note that the pattern should have already been processed so it
--- contains types; hence the irrefutable Just t)
+-- (Note that the pattern should have already been processed so it
+-- contains types; hence the irrefutable Just t.)
+_addPattern :: Pattern -> TI ()
+_addPattern pat = addVars bindings
+  where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
+
+-- Add all the vars in a pattern to the environment, while running m.
+--
+-- (Note that the pattern should have already been processed so it
+-- contains types; hence the irrefutable Just t.)
 withPattern :: Pattern -> TI a -> TI a
 withPattern pat m = withVars bindings m
   where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
 
--- wrap the action m with types for all the vars in a pattern, using
--- the passed-in schema to produce the types and ignoring the types
--- already loaded into the pattern.
+-- Add all the vars in a pattern to the environment.
+--
+-- Variant version that uses the passed-in schema to produce the types
+-- and ignoring the types already loaded into the pattern.
+addPatternSchema :: Pattern -> Schema -> TI ()
+addPatternSchema pat ty = addVars bindings
+  where bindings = patternBindingsWithSchema pat ty
+
+-- Add all the vars in a pattern to the environment, while running m.
+--
+-- Variant version that uses the passed-in schema to produce the types
+-- and ignoring the types already loaded into the pattern.
 withPatternSchema :: Pattern -> Schema -> TI a -> TI a
 withPatternSchema pat ty m = withVars bindings m
   where bindings = patternBindingsWithSchema pat ty
 
--- wrap the action m with types for the vars in a declaration.
+-- Add all the vars in a declaration to the environment.
 --
 -- Do nothing if there's no type schema in this declaration yet.
+-- XXX: is that reasonable? shouldn't it panic?
+addDecl :: Decl -> TI ()
+addDecl (Decl _ _ Nothing _) = return ()
+addDecl (Decl _ p (Just s) _) = addPatternSchema p s
+
+-- Add all the vars in a declaration to the environment, while running m.
+--
+-- Do nothing if there's no type schema in this declaration yet.
+-- XXX: is that reasonable? shouldn't it panic?
 withDecl :: Decl -> TI a -> TI a
 withDecl (Decl _ _ Nothing _) m = m
 withDecl (Decl _ p (Just s) _) m = withPatternSchema p s m
 
--- wrap the action m with types for the vars in a declgroup.
+-- Add all the vars in a declaration to the environment, while running m.
+_addDeclGroup :: DeclGroup -> TI ()
+_addDeclGroup (NonRecursive d) = addDecl d
+_addDeclGroup (Recursive ds) = mapM_ addDecl ds
+
+-- Add all the vars in a declaration to the environment, while running m.
 withDeclGroup :: DeclGroup -> TI a -> TI a
 withDeclGroup (NonRecursive d) m = withDecl d m
 withDeclGroup (Recursive ds) m = foldr withDecl m ds
