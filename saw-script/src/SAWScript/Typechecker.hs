@@ -328,19 +328,16 @@ newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
                         deriving (Functor,Applicative,Monad,MonadReader RO)
 
 -- | The "readonly" portion
-data RO = RO
-  {
+data RO = RO {
     -- | The variable availability (lifecycle set)
-    primsAvail :: Set PrimitiveLifecycle,
-
-    -- | The variable typing environment (variable name to type scheme)
-    varEnv :: VarEnv
-
-  }
+    primsAvail :: Set PrimitiveLifecycle
+}
 
 -- | The read-write portion
-data RW = RW
-  {
+data RW = RW {
+    -- | The variable typing environment (variable name to type scheme)
+    varEnv :: VarEnv,
+
     -- | The type environment: named type variables, which are either
     --   typedefs (map to ConcreteType) or abstract types (AbstractType)
     tyEnv :: TyEnv,
@@ -354,16 +351,18 @@ data RW = RW
     -- | Any type errors and warnings we've generated so far
     errors :: [(Pos, String)],
     warnings :: [(Pos, String)]
-  }
+}
 
-initialRW :: TyEnv -> RW
-initialRW tyenv = RW
-  { tyEnv = tyenv
-  , nextTypeIndex = 0
-  , subst = emptySubst
-  , errors = []
-  , warnings = []
-  }
+-- | A startup read-write state, given an initial varEnv and tyEnv.
+initialRW :: VarEnv -> TyEnv -> RW
+initialRW varenv tyenv = RW {
+    varEnv = varenv,
+    tyEnv = tyenv,
+    nextTypeIndex = 0,
+    subst = emptySubst,
+    errors = [],
+    warnings = []
+}
 
 -- Get a fresh unification var number.
 getFreshTypeIndex :: TI TypeIndex
@@ -441,7 +440,7 @@ resolveCurrentTypedefs t = do
 -- Returns a map of the index number to the occurrence position.
 unifyVarsInEnvs :: TI (M.Map TypeIndex Pos)
 unifyVarsInEnvs = do
-  venv <- TI $ asks varEnv
+  venv <- TI $ gets varEnv
   tenv <- TI $ gets tyEnv
   vtys <- mapM applyCurrentSubst $ M.elems venv
   ttys <- mapM applyCurrentSubst $ M.elems tenv
@@ -907,8 +906,12 @@ inferField cname (n,e) = do
 
 -- wrap the action m with a type for x
 withVar :: Name -> Schema -> TI a -> TI a
-withVar x s m =
-  TI $ local (\ro -> ro { varEnv = M.insert x (Current, s) $ varEnv ro }) $ unTI m
+withVar x s m = do
+  orig <- TI $ gets varEnv
+  TI $ modify (\rw -> rw { varEnv = M.insert x (Current, s) orig })
+  result <- m
+  TI $ modify (\rw -> rw { varEnv = orig })
+  return result
 
 -- wrap the action m with types for a list of vars
 withVars :: [(Name, Schema)] -> TI a -> TI a
@@ -1064,7 +1067,7 @@ inferExpr (ln, expr) = case expr of
 
   Var pos x ->
     do avail <- TI $ asks primsAvail
-       env <- TI $ asks varEnv
+       env <- TI $ gets varEnv
        case M.lookup x env of
          Nothing -> do
            recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
@@ -1775,8 +1778,8 @@ type Result a = (Either MsgList a, MsgList)
 runTIWithEnv :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
 runTIWithEnv avail env tenv m = (a, subst rw, reverse $ errors rw, reverse $ warnings rw)
   where
-  m' = runReaderT (unTI m) (RO avail env)
-  (a, rw) = runState m' (initialRW tenv)
+  m' = runReaderT (unTI m) (RO avail)
+  (a, rw) = runState m' (initialRW env tenv)
 
 -- Run the TI monad and interpret/collect the results
 -- (failure if any errors were produced)
