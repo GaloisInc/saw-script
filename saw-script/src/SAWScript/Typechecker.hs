@@ -1229,20 +1229,17 @@ checkPattern cname t pat =
 -- statements
 --
 
--- Wrap m with a typedef binding.
+-- Add a typedef binding to the environment.
 --
 -- The expansion (t) has been checked, so it's ok to panic if it
 -- refers to something not visible in the environment.
-withTypedef :: Name -> Type -> TI a -> TI a
-withTypedef a ty m = do
+addTypedef :: Name -> Type -> TI ()
+addTypedef a ty = do
   avail <- asks primsAvail
   env <- gets tyEnv
   let ty' = substituteTyVars avail env ty
       env' = M.insert a (Current, ConcreteType ty') env
   modify (\rw -> rw { tyEnv = env' })
-  result <- m
-  modify (\rw -> rw { tyEnv = env })
-  return result
 
 -- break a monadic type down into its monad and value types, if it is one
 --
@@ -1410,8 +1407,8 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
         StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
             let s' = StmtTypedef allpos apos a ty'
-            let wrapper = withTypedef a ty'
-            return (wrapper, s')
+            addTypedef a ty'
+            return (id, s')
 
 -- Inference for a do-block.
 --
