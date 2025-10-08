@@ -698,8 +698,8 @@ loadAndTranslateModule sc env src =
                         sc C.defaultPrimitiveOptions cEnv newDeclGroups
           return (C.envE newCryEnv)
      when debug $ do
-        putStrLn $ show (ppListX "newDeclGroups" newDeclGroups)
-        putStrLn $ show (ppListX "newTermEnv"
+        putStrLn $ show (ppListX "LOG: newDeclGroups" newDeclGroups)
+        putStrLn $ show (ppListX "LOG: newTermEnv"
                            ({- map MN.nameIdent $ -} Map.keys newTermEnv))
      return ( m
             , env{ eModuleEnv = modEnv'
@@ -785,22 +785,22 @@ importCryptolModule sc env src as vis imps =
         nmsPP = MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm
           -- works, but doesn't "inline" submodule defs.
 
-    putStrLn "importCrytolModule:"
-    print $ ppListX "nms1:   " $ Set.toList $ Map.keysSet nms1
-    print $ text "namingEnvFromNames:"
+    putStrLn "LOG: importCrytolModule:"
+    print $ ppListX "LOG: nms1:   " $ Set.toList $ Map.keysSet nms1
+    print $ text "LOG: namingEnvFromNames:"
                   <> pp (MN.namingEnvFromNames (Map.keysSet nms1))
-    print $ ppListX "nmsPu:   " $ Set.toList nmsPu
-    print $ ppListX "nmsPuPr: " $ Set.toList nmsPP
-    print $ text "namingEnv:" <> pp (ME.lmNamingEnv lm)
+    print $ ppListX "LOG: nmsPu:   " $ Set.toList nmsPu
+    print $ ppListX "LOG: nmsPuPr: " $ Set.toList nmsPP
+    print $ text "LOG: namingEnv:" <> pp (ME.lmNamingEnv lm)
             -- shows everything in scope, excluding hidden from the top level
 
-    putStrLn "importCrytolModule: submodules("
+    putStrLn "LOG: importCrytolModule: submodules("
     flip mapM_ (Map.toList $ T.mSubmodules mod') $ \(nm,sm)->
                    do
-                   putStrLn ("submodule: " ++ show (pp nm))
+                   putStrLn ("LOG: submodule: " ++ show (pp nm))
                    print $ pp (T.smInScope sm)
                    putStrLn ""
-    putStrLn ")"
+    putStrLn "LOG ) /* submodules */\n"
 
   return $ env' {eImports= import' : eImports env }
 
