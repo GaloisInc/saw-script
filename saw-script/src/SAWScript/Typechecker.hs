@@ -1273,9 +1273,8 @@ wrapReturn e =
 -- the passed-in position should be the position associated with the monad type
 -- the first type argument (ctx) is the monad type for any binds that occur
 --
--- returns a wrapper for checking subsequent statements as well as
--- an updated statement.
-inferStmt :: ContextName -> Bool -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt)
+-- Returns an updated statement.
+inferStmt :: ContextName -> Bool -> Pos -> Type -> Stmt -> TI Stmt
 inferStmt cname atSyntacticTopLevel blockpos ctx s =
     case s of
         StmtBind spos pat e -> do
@@ -1394,21 +1393,21 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
 
             let s' = StmtBind spos pat' e''
             addPattern pat'
-            return (id, s')
+            return s'
         StmtLet spos dg -> do
             dg' <- inferDeclGroup dg
             let s' = StmtLet spos dg'
             addDeclGroup dg'
-            return (id, s')
+            return s'
         StmtCode _allpos _spos _txt ->
-            return (id, s)
+            return s
         StmtImport _spos _ ->
-            return (id, s)
+            return s
         StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
             let s' = StmtTypedef allpos apos a ty'
             addTypedef a ty'
-            return (id, s')
+            return s'
 
 -- Inference for a do-block.
 --
@@ -1450,8 +1449,8 @@ inferBlock cname blockpos ctx ty (stmts0, lastexpr) = do
           unify cname ty (getPos lastexpr) ty'
           return ([], lastexpr')
         stmt : more -> do
-          (wrapper, stmt') <- inferStmt cname atSyntacticTopLevel blockpos ctx stmt
-          (more', lastexpr') <- wrapper $ go more
+          stmt' <- inferStmt cname atSyntacticTopLevel blockpos ctx stmt
+          (more', lastexpr') <- go more
           return (stmt' : more', lastexpr')
   go stmts0
 
@@ -1467,19 +1466,16 @@ inferBlock cname blockpos ctx ty (stmts0, lastexpr) = do
 -- them, and this is how it does that.
 --
 -- Run inferStmt and then apply the current substitution before
--- returning the updated statement. Ignore the wrapper returned for
--- typechecking subsequent statements; the interpreter has its own
--- (misbegotten) logic for handling that in its own way. (Which should
--- be removed, but we need to get rid of these wrappers here first;
--- any sane incremental typechecking interface requires updating the
--- environment for sequential declarations, not pretending that
--- subsequent statements in a block are nested inside prior ones.)
+-- returning the updated statement. Note that currently the caller
+-- will throw away the updated environment; the interpreter has its
+-- own misbegotten logic for handling that in its own way. (Which
+-- should be removed.)
 inferSingleStmt :: ContextName -> Pos -> Type -> Stmt -> TI Stmt
 inferSingleStmt cname pos ctx s = do
   -- currently we are always at the syntactic top level here because
   -- that's how the interpreter works
   let atSyntacticTopLevel = True
-  (_wrapper, s') <- inferStmt cname atSyntacticTopLevel pos ctx s
+  s' <- inferStmt cname atSyntacticTopLevel pos ctx s
   s'' <- applyCurrentSubst s'
   return s''
 
