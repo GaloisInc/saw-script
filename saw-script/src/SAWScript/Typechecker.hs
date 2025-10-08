@@ -334,16 +334,17 @@ data RO = RO
     primsAvail :: Set PrimitiveLifecycle,
 
     -- | The variable typing environment (variable name to type scheme)
-    varEnv :: VarEnv,
+    varEnv :: VarEnv
 
-    -- | The type environment: named type variables, which are either
-    --   typedefs (map to ConcreteType) or abstract types (AbstractType)
-    tyEnv :: TyEnv
   }
 
 -- | The read-write portion
 data RW = RW
   {
+    -- | The type environment: named type variables, which are either
+    --   typedefs (map to ConcreteType) or abstract types (AbstractType)
+    tyEnv :: TyEnv,
+
     -- | The next fresh unification var number
     nextTypeIndex :: TypeIndex,
 
@@ -355,9 +356,10 @@ data RW = RW
     warnings :: [(Pos, String)]
   }
 
-emptyRW :: RW
-emptyRW = RW
-  { nextTypeIndex = 0
+initialRW :: TyEnv -> RW
+initialRW tyenv = RW
+  { tyEnv = tyenv
+  , nextTypeIndex = 0
   , subst = emptySubst
   , errors = []
   , warnings = []
@@ -412,7 +414,7 @@ applyCurrentSubst t = do
 resolveCurrentTypedefs :: SubstituteTyVars t => t -> TI t
 resolveCurrentTypedefs t = do
   avail <- TI $ asks primsAvail
-  s <- TI $ asks tyEnv
+  s <- TI $ gets tyEnv
   return $ substituteTyVars avail s t
 
 -- Get the unification vars that are used in the current variable typing
@@ -440,7 +442,7 @@ resolveCurrentTypedefs t = do
 unifyVarsInEnvs :: TI (M.Map TypeIndex Pos)
 unifyVarsInEnvs = do
   venv <- TI $ asks varEnv
-  tenv <- TI $ asks tyEnv
+  tenv <- TI $ gets tyEnv
   vtys <- mapM applyCurrentSubst $ M.elems venv
   ttys <- mapM applyCurrentSubst $ M.elems tenv
   return $ M.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
@@ -449,7 +451,7 @@ unifyVarsInEnvs = do
 -- environment.
 namedVarDefinitions :: TI (S.Set Name)
 namedVarDefinitions = do
-   env <- TI $ asks tyEnv
+   env <- TI $ gets tyEnv
    return $ M.keysSet env
 
 -- Get the position and name of the first binding in a pattern,
@@ -840,7 +842,7 @@ inspectTypeFTVs ty = case ty of
     TyRecord _pos fields -> M.unions <$> traverse inspectTypeFTVs fields
     TyUnifyVar _pos _x -> return M.empty
     TyVar pos x -> do
-        tyenv <- TI $ asks tyEnv
+        tyenv <- TI $ gets tyEnv
         case M.lookup x tyenv of
             Nothing -> return $ M.singleton x pos
             Just _ -> return $ M.empty
@@ -955,12 +957,17 @@ withDeclGroup :: DeclGroup -> TI a -> TI a
 withDeclGroup (NonRecursive d) m = withDecl d m
 withDeclGroup (Recursive ds) m = foldr withDecl m ds
 
--- wrap the action m with some abstract type variables.
+-- Wrap the action m with some abstract type variables.
 withAbstractTyVars :: Map Name Pos -> TI a -> TI a
 withAbstractTyVars vars m = do
     let insertOne x _pos tyenv = M.insert x (Current, AbstractType) tyenv
         insertAll tyenv = M.foldrWithKey insertOne tyenv vars
-    TI $ local (\ro -> ro { tyEnv = insertAll $ tyEnv ro }) $ unTI m
+    tyenv <- TI $ gets tyEnv
+    let tyenv' = insertAll tyenv
+    TI $ modify (\rw -> rw { tyEnv = tyenv' })
+    result <- m
+    TI $ modify (\rw -> rw { tyEnv = tyenv })
+    return result
 
 --
 -- Infer the type for an expression.
@@ -1173,13 +1180,15 @@ checkPattern cname t pat =
 -- The expansion (t) has been checked, so it's ok to panic if it
 -- refers to something not visible in the environment.
 withTypedef :: Name -> Type -> TI a -> TI a
-withTypedef n t m =
-  TI $
-  local
-    (\ro ->
-      let t' = substituteTyVars (primsAvail ro) (tyEnv ro) t
-      in  ro { tyEnv = M.insert n (Current, ConcreteType t') $ tyEnv ro })
-    $ unTI m
+withTypedef a ty m = do
+  avail <- TI $ asks primsAvail
+  env <- TI $ gets tyEnv
+  let ty' = substituteTyVars avail env ty
+      env' = M.insert a (Current, ConcreteType ty') env
+  TI $ modify (\rw -> rw { tyEnv = env' })
+  result <- m
+  TI $ modify (\rw -> rw { tyEnv = env })
+  return result
 
 -- break a monadic type down into its monad and value types, if it is one
 --
@@ -1702,7 +1711,7 @@ checkType kind ty = case ty of
 
   TyVar pos x -> do
       avail <- TI $ asks primsAvail
-      tyenv <- TI $ asks tyEnv
+      tyenv <- TI $ gets tyEnv
       case M.lookup x tyenv of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ Text.unpack x)
@@ -1766,8 +1775,8 @@ type Result a = (Either MsgList a, MsgList)
 runTIWithEnv :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
 runTIWithEnv avail env tenv m = (a, subst rw, reverse $ errors rw, reverse $ warnings rw)
   where
-  m' = runReaderT (unTI m) (RO avail env tenv)
-  (a,rw) = runState m' emptyRW
+  m' = runReaderT (unTI m) (RO avail env)
+  (a, rw) = runState m' (initialRW tenv)
 
 -- Run the TI monad and interpret/collect the results
 -- (failure if any errors were produced)
