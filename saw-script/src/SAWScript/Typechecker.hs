@@ -1037,42 +1037,42 @@ inferExpr (ln, expr) = case expr of
   Code pos s    -> return (Code pos s, tTerm (PosInferred InfTerm pos))
   CType pos s   -> return (CType pos s, tType (PosInferred InfTerm pos))
 
-  Array pos [] ->
-    do a <- getFreshTyVar pos
+  Array pos [] -> do
+       a <- getFreshTyVar pos
        return (Array pos [], tArray (PosInferred InfTerm pos) a)
 
-  Array pos (e:es) ->
-    do (e',t) <- inferExpr (ln, e)
+  Array pos (e:es) -> do
+       (e',t) <- inferExpr (ln, e)
        es' <- mapM (flip (checkExpr ln) t) es
        return (Array pos (e':es'), tArray (PosInferred InfTerm pos) t)
 
-  Block pos body ->
-    do ctx <- getFreshTyVar pos
+  Block pos body -> do
+       ctx <- getFreshTyVar pos
        tyResult <- getFreshTyVar pos
        let ty = tBlock (PosInferred InfTerm pos) ctx tyResult
        body' <- inferBlock ln pos ctx ty body
        return (Block pos body', ty)
 
-  Tuple pos es ->
-    do (es',ts) <- unzip `fmap` mapM (inferExpr . (ln,)) es
+  Tuple pos es -> do
+       (es',ts) <- unzip `fmap` mapM (inferExpr . (ln,)) es
        return (Tuple pos es', tTuple (PosInferred InfTerm pos) ts)
 
-  Record pos fs ->
-    do (nes',nts) <- unzip `fmap` mapM (inferField ln) (M.toList fs)
+  Record pos fs -> do
+       (nes',nts) <- unzip `fmap` mapM (inferField ln) (M.toList fs)
        let ty = TyRecord (PosInferred InfTerm pos) $ M.fromList nts
        return (Record pos (M.fromList nes'), ty)
 
   -- XXX this is currently unreachable because there's no concrete
   -- syntax for it; the parser will never produce it.
-  Index pos ar ix ->
-    do (ar',at) <- inferExpr (ln,ar)
+  Index pos ar ix -> do
+       (ar',at) <- inferExpr (ln,ar)
        ix'      <- checkExpr ln ix (tInt (PosInferred InfContext (getPos ix)))
        t        <- getFreshTyVar (getPos ix')
        unify ln (tArray (PosInferred InfContext (getPos ar')) t) (getPos ar') at
        return (Index pos ar' ix', t)
 
-  Lookup pos e n ->
-    do (e1,t) <- inferExpr (ln, e)
+  Lookup pos e n -> do
+       (e1,t) <- inferExpr (ln, e)
        t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
        elTy <- case t1 of
            TyRecord typos fs
@@ -1093,8 +1093,8 @@ inferExpr (ln, expr) = case expr of
                getErrorTyVar pos
        return (Lookup pos e1 n, elTy)
 
-  TLookup pos e i ->
-    do (e1,t) <- inferExpr (ln,e)
+  TLookup pos e i -> do
+       (e1,t) <- inferExpr (ln,e)
        t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
        elTy <- case t1 of
            TyCon typos (TupleCon n) tys
@@ -1116,8 +1116,8 @@ inferExpr (ln, expr) = case expr of
                getErrorTyVar pos
        return (TLookup pos e1 i, elTy)
 
-  Var pos x ->
-    do avail <- asks primsAvail
+  Var pos x -> do
+       avail <- asks primsAvail
        env <- gets varEnv
        case M.lookup x env of
          Nothing -> do
@@ -1149,13 +1149,15 @@ inferExpr (ln, expr) = case expr of
            t' <- getFreshTyVar pos
            return (Var pos x, t')
 
-  Lambda pos mname pat body ->
-    do (pt, pat') <- inferPattern pat
-       (body', t) <- withPattern pat' $ inferExpr (ln, body)
-       return (Lambda pos mname pat' body', tFun (PosInferred InfContext (getPos body)) pt t)
+  Lambda pos mname pat body -> do
+       (typat, pat') <- inferPattern pat
+       (body', tybody) <- withPattern pat' $ inferExpr (ln, body)
+       let e' = Lambda pos mname pat' body'
+           ty = tFun (PosInferred InfContext (getPos body)) typat tybody
+       return (e', ty)
 
-  Application pos f arg ->
-    do argtype <- getFreshTyVar pos
+  Application pos f arg -> do
+       argtype <- getFreshTyVar pos
        rettype <- getFreshTyVar pos
        let ftype = tFun (PosInferred InfContext $ getPos f) argtype rettype
        -- Check f' first so that we complain about the arg (not the
@@ -1165,19 +1167,20 @@ inferExpr (ln, expr) = case expr of
        arg' <- checkExpr ln arg argtype
        return (Application pos f' arg', rettype)
 
-  Let pos dg body ->
-    do dg' <- inferDeclGroup dg
-       (body', t) <- withDeclGroup dg' (inferExpr (ln, body))
-       return (Let pos dg' body', t)
+  Let pos dg body -> do
+       dg' <- inferDeclGroup dg
+       (body', ty) <- withDeclGroup dg' (inferExpr (ln, body))
+       let e' = Let pos dg' body'
+       return (e', ty)
 
-  TSig _pos e t ->
-    do t' <- checkType kindStar t
+  TSig _pos e t -> do
+       t' <- checkType kindStar t
        (e',t'') <- inferExpr (ln,e)
        unify ln t' (getPos e') t''
        return (e',t'')
 
-  IfThenElse pos e1 e2 e3 ->
-    do e1' <- checkExpr ln e1 (tBool (PosInferred InfContext $ getPos e1))
+  IfThenElse pos e1 e2 e3 -> do
+       e1' <- checkExpr ln e1 (tBool (PosInferred InfContext $ getPos e1))
        (e2', t) <- inferExpr (ln, e2)
        e3' <- checkExpr ln e3 t
        return (IfThenElse pos e1' e2' e3', t)
@@ -1229,7 +1232,7 @@ checkPattern cname t pat =
 -- statements
 --
 
--- Add a typedef binding to the environment.
+-- Add a typedef binding to the type environment.
 --
 -- The expansion (t) has been checked, so it's ok to panic if it
 -- refers to something not visible in the environment.
@@ -1273,7 +1276,7 @@ wrapReturn e =
 -- the passed-in position should be the position associated with the monad type
 -- the first type argument (ctx) is the monad type for any binds that occur
 --
--- Returns an updated statement.
+-- Updates the environment and returns an updated statement.
 inferStmt :: ContextName -> Bool -> Pos -> Type -> Stmt -> TI Stmt
 inferStmt cname atSyntacticTopLevel blockpos ctx s =
     case s of
@@ -1589,57 +1592,88 @@ requireFunction pos ty = do
         _ ->
             recordError pos $ "Only functions may be recursive."
 
--- Type inference for a declaration.
+-- | Type inference for a declaration.
 --
 -- Note that the type schema slot in Decl is always Nothing the way it
 -- comes from the parser; if there's an explicit type annotation on
--- the declaration that shows up as a type signature in the
--- expression.
+-- the declaration, it shows up as a type signature in the expression.
+--
+-- This function does _not_ update the variable environment to reflect
+-- the declaration. The caller does that. XXX: this seems messy.
 inferDecl :: Decl -> TI Decl
 inferDecl d@(Decl pos pat _ e) = do
   let cname = getPatternContext pat
+
+  -- collect the free type variables
   foralls <- inspectDeclFTVs d
+
+  -- Add abstract type variables for the foralls while we check the body.
+  -- Note: this is a variable declaration. It doesn't add types; the types
+  -- get forall-bound in the type scheme by the `generalize` call.
   withAbstractTyVars foralls $ do
-    (e',t) <- inferExpr (cname, e)
+    -- Check the body and check the pattern against the body.
+    (e', t) <- inferExpr (cname, e)
     pat' <- checkPattern cname t pat
+
+    -- Use `generalize` to build the type scheme.
     ~[(e1,s)] <- generalize foralls [e'] [t]
+
+    -- Return the updated `Decl`
     return (Decl pos pat' (Just s) e1)
 
--- Type inference for a system of mutually recursive declarations.
+-- | Type inference for a system of mutually recursive declarations.
 --
 -- Note that the type schema slot in the Decls is always Nothing as we
 -- get them from the parser; if there's an explicit type annotation on
 -- some or all of the declarations those shows up as type signatures
 -- in the expressions.
+--
+-- This function does _not_ update the variable environment to reflect
+-- the declaration. The caller does that. XXX: this is messy.
 inferRecDecls :: [Decl] -> TI [Decl]
-inferRecDecls ds =
-  do let pats = map dPat ds
+inferRecDecls ds = do
+     -- Get the patterns out of the decls. Pop out the first one for
+     -- use as a reference name.
+     let pats = map dPat ds
          firstPat =
            case pats of
-             p:_ -> p
-             [] -> panic
-                     "inferRecDecls"
-                     ["Empty list of declarations in recursive group"]
-     foralls <- M.unions <$> mapM inspectDeclFTVs ds
-     withAbstractTyVars foralls $ do
-       (_ts, pats') <- unzip <$> mapM inferPattern pats
-       (es, ts) <- fmap unzip
-                   $ flip (foldr withPattern) pats'
-                   $ sequence [ inferExpr (getPatternContext p, e)
-                              | Decl _pos p _ e <- ds
-                              ]
+             [] -> panic "inferRecDecls" [
+                       "Empty list of declarations in recursive group"
+                   ]
+             p : _ -> p
 
-       -- Only functions can be recursive.
-       zipWithM_ (\d t -> requireFunction (getPos d) t) ds ts
+     -- Collect the free type variables.
+     foralls <- M.unions <$> mapM inspectDeclFTVs ds
+
+     -- Add abstract type variables for the foralls while we check the
+     -- bodies.
+     withAbstractTyVars foralls $ do
+       -- Check the patterns first to get types.
+       (_ts, pats') <- unzip <$> mapM inferPattern pats
+
+       -- Check all the expressions in an environment that includes
+       -- all the bound variables.
+       let checkOneExpr (Decl _pos p _ e) = inferExpr (getPatternContext p, e)
+       (es, tys) <- fmap unzip
+                    $ flip (foldr withPattern) pats'
+                    $ mapM checkOneExpr ds
+
+       -- Only functions can be recursive. Check each participant.
+       zipWithM_ (\d ty -> requireFunction (getPos d) ty) ds tys
 
        -- pats' has already been checked once, which will have inserted
        -- unification vars for any missing types. Running it through
        -- again will have no further effect, so we can ignore the
        -- theoretically-updated-again patterns returned by checkPattern.
-       sequence_ $ zipWith (checkPattern (getPatternContext firstPat)) ts pats'
-       ess <- generalize foralls es ts
+       sequence_ $ zipWith (checkPattern (getPatternContext firstPat)) tys pats'
+
+       -- Run generalize and get back a list of updated expressions and
+       -- type schemes.
+       etys <- generalize foralls es tys
+
+       -- Generate the updated declarations.
        return [ Decl pos p (Just s) e1
-              | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats' ess
+              | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats' etys
               ]
 
 -- Type inference for a decl group.
@@ -1800,10 +1834,11 @@ type Result a = (Either MsgList a, MsgList)
 -- (later messages are consed onto the head of the list) so we
 -- reverse on the way out.
 runTIWithEnv :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
-runTIWithEnv avail env tenv m = (a, subst rw, reverse $ errors rw, reverse $ warnings rw)
+runTIWithEnv avail env tenv m = (a, subst rw', reverse $ errors rw', reverse $ warnings rw')
   where
   m' = runReaderT (unTI m) (RO avail)
-  (a, rw) = runState m' (initialRW env tenv)
+  rw = initialRW env tenv
+  (a, rw') = runState m' rw
 
 -- Run the TI monad and interpret/collect the results
 -- (failure if any errors were produced)
