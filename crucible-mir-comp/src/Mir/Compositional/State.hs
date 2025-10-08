@@ -29,8 +29,15 @@ data MirState t = MirState {
   -- ^ Inforamtion about what terms are loaded
 
   mirKeepUninterp     :: IORef (Set Text),
-  -- ^ Set of names we'd like to keep uninterpreted;
-  -- we use `_cryEnv` to compute what they refer to.
+  {- ^ Set of names we'd like to keep uninterpreted;
+    we use `_cryEnv` to compute what they refer to.
+    Note that in SAW, the MIRContext has a similar field,
+    of type `Set VarIndex`. We can't do the same here, instead we keep the
+    actual `Text` names.  The reason is because `crux-mir-comp` load Cryptol
+    code lazily, only when a function is first called.  As a result we can't
+    resolve the names early, because the Cryptol code would not yet have been
+    loaded.
+  -}
 
   mirSAWCoreState :: SAW.SAWCoreState t
 }

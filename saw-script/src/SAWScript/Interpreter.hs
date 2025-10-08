@@ -4984,6 +4984,20 @@ primitives = Map.fromList
     Current
     [ "Keep the given name opaque during symbolic simulation."
     , "The input term should be a name."
+    ]
+
+  , prim "jvm_unint" "Term -> JVMSetup ()"
+    (pureVal jvm_unint)
+    Current
+    [ "Keep the given name opaque during symbolic simulation."
+    , "The input term should be a name."
+    ] 
+
+  , prim "mir_unint" "Term -> MIRSetup ()"
+    (pureVal mir_unint)
+    Current
+    [ "Keep the given name opaque during symbolic simulation."
+    , "The input term should be a name."
     ] 
 
   , prim "llvm_return" "SetupValue -> LLVMSetup ()"

@@ -8,6 +8,7 @@ Stability   : provisional
 
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE RankNTypes #-}
 
 module SAWCentral.Crucible.Common.Setup.Builtins
   ( crucible_precond
@@ -15,6 +16,7 @@ module SAWCentral.Crucible.Common.Setup.Builtins
   , crucible_return
   , crucible_execute_func
   , crucible_equal
+  , declare_unint
   , CheckPointsToType(..)
   ) where
 
@@ -22,10 +24,13 @@ import           Control.Lens
 import           Control.Monad (when)
 import           Control.Monad.State (get)
 import qualified Data.Map as Map
+import           Data.Set(Set)
 
 import qualified What4.ProgramLoc as W4
 
-import           CryptolSAWCore.TypedTerm (TypedTerm)
+import           SAWCore.Recognizer(asConstant)
+import           SAWCore.Name(VarIndex, nameIndex)
+import           CryptolSAWCore.TypedTerm (TypedTerm, ttTerm)
 
 import           SAWCentral.Value
 
@@ -36,6 +41,24 @@ import           SAWCentral.Crucible.Common.Setup.Type
 -- ** Builtins
 
 -- TODO: crucible_fresh_var?
+
+-- | Declare a particular name as opaque
+declare_unint ::
+  String {- ^ Name of command for error messages -} ->
+  Setter' (MS.CrucibleContext ext) (Set VarIndex) {-^ Keep uninterpreted names here -} ->
+  TypedTerm {- ^ Term corresponding to the name -} ->
+  CrucibleSetup ext ()
+declare_unint cmd unintF term =
+  do
+    prePost <- use csPrePost
+    case prePost of
+      MS.PreState ->
+        case asConstant (ttTerm term) of
+          Nothing -> fail ("The argument to `" ++ cmd ++ "` should be a name.")
+          Just n  -> csCrucibleContext . unintF . contains (nameIndex n) .= True
+      MS.PostState ->
+        fail ("`" ++ cmd ++ "` works only int the pre-condition of a specification.")
+     
 
 crucible_precond ::
   W4.ProgramLoc ->

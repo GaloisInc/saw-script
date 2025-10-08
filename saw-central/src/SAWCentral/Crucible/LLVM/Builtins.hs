@@ -170,7 +170,7 @@ import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
 -- saw-core
 import SAWCore.FiniteValue (ppFirstOrderValue)
-import SAWCore.Name (ecShortName, nameIndex)
+import SAWCore.Name (ecShortName)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import SAWCore.Term.Pretty (showTerm)
@@ -205,8 +205,8 @@ import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
 
 import SAWCentral.Crucible.LLVM.Override
 import SAWCentral.Crucible.LLVM.ResolveSetupValue
-import SAWCentral.Crucible.LLVM.MethodSpecIR
 import SAWCentral.Crucible.LLVM.Setup.Value(ccUninterp)
+import SAWCentral.Crucible.LLVM.MethodSpecIR
 import SAWCentral.Panic (panic)
 
 type AssumptionReason = (MS.ConditionMetadata, String)
@@ -1780,7 +1780,7 @@ setupLLVMCrucibleContext pathSat lm action =
                                      , _ccLLVMSimContext = lsimctx
                                      , _ccLLVMGlobals = lglobals
                                      , _ccBasicSS = basic_ss
-                                     , _ccUninterp = Set.empty
+                                     , _ccUninterp = mempty
                                      }
           action cc
 
@@ -2012,17 +2012,7 @@ llvm_postcond term =
 
 llvm_unint :: TypedTerm -> LLVMCrucibleSetupM ()
 llvm_unint term =
-  LLVMCrucibleSetupM $
-    do
-      prePost <- use Setup.csPrePost
-      case prePost of
-        PreState ->
-          case asConstant (ttTerm term) of
-            Nothing -> fail "The argument to `llvm_unint` should be a name."
-            Just n ->
-              do 
-                 Setup.csCrucibleContext . ccUninterp . contains (nameIndex n) .= True
-        PostState -> fail "`llvm_unint` works only int the pre-condition of a specification."
+  LLVMCrucibleSetupM (Setup.declare_unint "llvm_unint" ccUninterp term)
           
 
 llvm_return ::

@@ -111,7 +111,7 @@ import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.JVM.MethodSpecIR
 import           SAWCentral.Crucible.JVM.ResolveSetupValue
-import           SAWCentral.Crucible.JVM.Setup.Value ()
+import           SAWCentral.Crucible.JVM.Setup.Value (jccUninterp)
 import           SAWCentral.Options
 import           SAWCentral.Panic
 import           SAWCentral.Utils (handleException)
@@ -730,7 +730,7 @@ learnPred ::
 learnPred sc cc md prepost t =
   do s <- OM (use termSub)
      u <- liftIO $ scInstantiateExt sc s t
-     p <- liftIO $ resolveBoolTerm (cc ^. jccSym) u
+     p <- liftIO $ resolveBoolTerm (cc ^. jccSym) (cc ^. jccUninterp) u
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
 
@@ -918,7 +918,7 @@ executePred ::
 executePred sc cc md tt =
   do s <- OM (use termSub)
      t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
-     p <- liftIO $ resolveBoolTerm (cc ^. jccSym) t
+     p <- liftIO $ resolveBoolTerm (cc ^. jccSym) (cc ^. jccUninterp) t
      addAssume p md
 
 ------------------------------------------------------------------------

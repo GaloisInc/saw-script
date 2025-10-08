@@ -37,6 +37,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_return
   , mir_unsafe_assume_spec
   , mir_verify
+  , mir_unint
     -- ** MIR enums
   , mir_enum_value
     -- ** MIR slices
@@ -174,6 +175,7 @@ import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Utils (neGroupOn)
 import SAWCentral.Value
+import SAWCentral.Crucible.MIR.Setup.Value(mccUninterp)
 
 type AssumptionReason = (MS.ConditionMetadata, String)
 type SetupValue = MS.SetupValue MIR
@@ -785,6 +787,9 @@ mir_points_to_internal mode ref val =
            , "  Referent type: " ++ show (PP.pretty referentTy)
            , "  Value type:    " ++ show (PP.pretty valTy)
            ]
+
+mir_unint :: TypedTerm -> MIRSetupM ()
+mir_unint term = MIRSetupM (Setup.declare_unint "mir_unint" mccUninterp term)
 
 -- | Perform a set of validity checks on the LHS reference or pointer value in a
 -- 'mir_points_to' or 'mir_points_to_multi' command. In particular:
@@ -2097,6 +2102,7 @@ setupCrucibleContext rm =
                                , _mccSimContext = simctx1
                                , _mccSymGlobalState = globalsImmutStaticsOnly
                                , _mccStaticInitializerMap = staticInitializerMap
+                               , _mccUninterp = mempty
                                }
 
 -- | Create a result value of the appropriate type, suitable for use in an

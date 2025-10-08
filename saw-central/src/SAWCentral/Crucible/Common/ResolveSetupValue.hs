@@ -1,49 +1,147 @@
 -- | Utilities for resolving 'SetupValue's that are used across language
 -- backends.
+{-# Language DataKinds, TypeOperators, GADTs, TypeApplications #-}
+{-# Language ImplicitParams #-}
 module SAWCentral.Crucible.Common.ResolveSetupValue ( 
-  resolveBoolTerm,
-  checkBooleanType
+  resolveBoolTerm, resolveBoolTerm',
+  resolveBitvectorTerm, resolveBitvectorTerm',
+  ResolveRewrite(..),
   ) where
+
+import qualified Data.Map as Map
+import           Data.Set(Set)
+import qualified Data.BitVector.Sized as BV
+import           Data.Parameterized.Some (Some(..))
+import           Data.Parameterized.NatRepr
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 
+
 import SAWCore.SharedTerm
+import SAWCore.Name
+import qualified SAWCore.Prim as Prim
 
 import qualified SAWCore.Simulator.Concrete as Concrete
+import qualified Lang.Crucible.Types as Crucible
+import qualified Lang.Crucible.Simulator.RegValue as Crucible
 
 import SAWCoreWhat4.ReturnTrip
 
 import SAWCentral.Crucible.Common
 
-import Cryptol.TypeCheck.Type (tIsBit)
+import SAWCentral.Proof (TheoremNonce)
+import SAWCore.Rewriter (Simpset, rewriteSharedTerm)
+import qualified CryptolSAWCore.Simpset as Cryptol
+import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
+
+import Cryptol.TypeCheck.Type (tIsBit, tIsSeq, tIsNum)
 import CryptolSAWCore.TypedTerm (mkTypedTerm, ttType, ttIsMono)
 import qualified Cryptol.Utils.PP as PP
 
--- | Resolve a SAWCore 'Term' into a What4 'W4.Pred'.
-resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
-resolveBoolTerm sym tm =
-  do st <- sawCoreState sym
-     let sc = saw_ctx st
-     mx <- case getAllExts tm of
-             -- concretely evaluate if it is a closed term
-             [] ->
-               do modmap <- scGetModuleMap sc
-                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                  pure (Just (Concrete.toBool v))
-             _ -> return Nothing
-     case mx of
-       Just x  -> return (W4.backendPred sym x)
-       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm
 
--- | Ensure that the term has Cryptol type @Bit@.
-checkBooleanType :: SharedContext -> Term -> IO ()
-checkBooleanType sc tm = do
-  tt <- mkTypedTerm sc tm
-  case ttIsMono (ttType tt) of
-    Just ty | tIsBit ty -> pure ()
-            | otherwise -> fail $ unlines
-                 [ "Expected type: Bit"
-                 , "Actual type:   " ++ show (PP.pp ty)
-                 ]
-    Nothing -> fail "Expected monomorphic Cryptol type, got polymorphic or unrecognized type"
+-- | Optional rewrites to do when resolving a term
+data ResolveRewrite = ResolveRewrite {
+  rrBasicSS :: Maybe (Simpset TheoremNonce),
+  -- ^ Rewrite terms using these rewrites
+
+  rrWhat4Eval :: Bool
+  -- ^ Also simplify terms using What4 evaluation
+}
+
+-- | Don't do any rewriting
+noResolveRewrite :: ResolveRewrite
+noResolveRewrite = ResolveRewrite { rrBasicSS = Nothing, rrWhat4Eval = False }
+
+-- Convert a term to a What4 expression, trying to simplify it in the process.
+resolveTerm ::
+  Sym {- ^ Backend state -} ->
+  Set VarIndex {- ^ Keep these opaque -} ->
+  W4.BaseTypeRepr t  {- ^ Type of term -} ->
+  ResolveRewrite {- ^ Optional rewrites to do on the term -} ->
+  Term {- ^ Term to process -} ->
+  IO (Crucible.RegValue Sym (Crucible.BaseToType t))
+resolveTerm sym unint bt rr tm =
+  do
+    st       <- sawCoreState sym
+    tm'      <- basicRewrite st tm
+    case () of
+      _ | isConstFoldTerm unint tm' ->
+          do -- Evaluate as constant
+            modmap <- scGetModuleMap (saw_ctx st)
+            let v = Concrete.evalSharedTerm modmap mempty mempty tm'
+            case bt of
+              W4.BaseBoolRepr -> pure (W4.backendPred sym (Concrete.toBool v))
+              W4.BaseBVRepr w -> W4.bvLit sym w (BV.mkBV w (Prim.unsigned (Concrete.toWord v)))
+              _ -> fail "resolveTerm: expected `Bool` or bit-vector"
+
+        | rrWhat4Eval rr ->
+          do -- Try to use rewrites to simplify the term
+            let sc = saw_ctx st
+            cryptol_ss <- Cryptol.mkCryptolSimpset @TheoremNonce sc
+            tm''       <- snd <$> rewriteSharedTerm sc cryptol_ss tm'
+            tm'''      <- basicRewrite st tm''
+            if all isPreludeName (Map.elems (getConstantSet tm''')) then
+              do
+                (_, _, _, p) <- w4EvalAny sym st sc mempty unint tm'''
+                case valueToSymExpr p of
+                  Just (Some y)
+                    | Just Refl <- testEquality bt ty -> pure y
+                    | otherwise -> typeError (show ty)
+                    where ty = W4.exprType y
+                  _ -> fail ("resolveTem: unexpected w4Eval result " ++ show p)
+              else
+                doBind st tm'''
+
+          -- Just bind the term
+        | otherwise -> doBind st tm'
+
+  where
+  basicRewrite st =
+    case rrBasicSS rr of
+      Nothing -> pure
+      Just ss -> \t -> snd <$> rewriteSharedTerm (saw_ctx st) ss t
+
+  isPreludeName nm =
+    case nm of
+      ModuleIdentifier ident -> identModule ident == preludeName
+      _ -> False
+
+  doBind st te =
+    do
+      tt <- mkTypedTerm (saw_ctx st) tm
+      case ttIsMono (ttType tt) of
+          Just ty
+            | tIsBit ty, W4.BaseBoolRepr <- bt -> pure ()
+            | Just (n,el) <- (tIsSeq ty)
+            , tIsBit el, Just i <- tIsNum n, W4.BaseBVRepr w <- bt
+            , intValue w == i -> pure ()
+            | otherwise -> typeError (show (PP.pp ty)) :: IO ()
+          Nothing -> fail "Expected monomorphic Cryptol type, got polymorphic or unrecognized type"
+
+      bindSAWTerm sym st bt te
+
+  typeError :: String -> IO a
+  typeError t = fail $ unlines [
+    "Expected type: " ++ show bt,
+    "Actual type: " ++ t
+    ]
+
+-- 'resolveTerm' specialized to booleans.
+resolveBoolTerm' :: Sym -> Set VarIndex -> ResolveRewrite -> Term -> IO (W4.Pred Sym)
+resolveBoolTerm' sym unint = resolveTerm sym unint W4.BaseBoolRepr
+
+-- 'resolveTerm' specialized to booleans, without rewriting.
+resolveBoolTerm :: Sym -> Set VarIndex -> Term -> IO (W4.Pred Sym)
+resolveBoolTerm sym unint = resolveBoolTerm' sym unint noResolveRewrite
+
+-- 'resolveTerm' specialized to bit-vectors.
+resolveBitvectorTerm' ::
+  (1 W4.<= w) => Sym -> Set VarIndex -> W4.NatRepr w -> ResolveRewrite -> Term -> IO (W4.SymBV Sym w)
+resolveBitvectorTerm' sym unint w = resolveTerm sym unint (W4.BaseBVRepr w)
+                  
+-- 'resolveTerm' specialized to bit-vectors, without rewriting.
+resolveBitvectorTerm :: 
+  (1 W4.<= w) => Sym -> Set VarIndex -> W4.NatRepr w -> Term -> IO (W4.SymBV Sym w)
+resolveBitvectorTerm sym unint w = resolveBitvectorTerm' sym unint w noResolveRewrite
+

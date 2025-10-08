@@ -46,6 +46,7 @@ module SAWCentral.Crucible.JVM.Builtins
     , jvm_setup_with_tag
     , jvm_ghost_value
     , jvm_equal
+    , jvm_unint
     ) where
 
 import           Control.Lens
@@ -139,6 +140,7 @@ import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
 import qualified SAWCentral.Crucible.Common.Setup.Builtins as Setup
+import SAWCentral.Crucible.JVM.Setup.Value(jccUninterp)
 import SAWCentral.Crucible.JVM.MethodSpecIR
 import SAWCentral.Crucible.JVM.Override
 import SAWCentral.Crucible.JVM.ResolveSetupValue
@@ -862,6 +864,7 @@ setupCrucibleContext jclass =
                                , _jccBackend = bak
                                , _jccJVMContext = jc
                                , _jccHandleAllocator = halloc
+                               , _jccUninterp = mempty
                                }
 
 --------------------------------------------------------------------------------
@@ -1473,6 +1476,9 @@ jvm_equal val1 val2 =
        , show ty2
        ]
      Setup.crucible_equal loc val1 val2
+
+jvm_unint :: TypedTerm -> JVMSetupM ()
+jvm_unint term = JVMSetupM (Setup.declare_unint "jvm_unint" jccUninterp term)
 
 --------------------------------------------------------------------------------
 
