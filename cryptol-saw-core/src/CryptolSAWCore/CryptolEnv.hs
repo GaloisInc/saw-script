@@ -108,6 +108,8 @@ import CryptolSAWCore.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- import SAWCentral.AST (Located(getVal, locatedPos), Import(..))
 
+debug :: Bool
+debug = True
 
 ---- Key Types -----------------------------------------------------------------
 
@@ -695,13 +697,20 @@ loadAndTranslateModule sc env src =
           newCryEnv <- C.importTopLevelDeclGroups
                         sc C.defaultPrimitiveOptions cEnv newDeclGroups
           return (C.envE newCryEnv)
-
+     when debug $ do
+        putStrLn $ show (ppListX "newDeclGroups" newDeclGroups)
+        putStrLn $ show (ppListX "newTermEnv"
+                           ({- map MN.nameIdent $ -} Map.keys newTermEnv))
      return ( m
             , env{ eModuleEnv = modEnv'
                  , eTermEnv   = newTermEnv
                  , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
                  }
             )
+
+ppListX :: PP a => String -> [a] -> Doc
+ppListX s xs = text s <+> ppList (map pp xs)
+
 
 checkNotParameterized :: T.Module -> IO ()
 checkNotParameterized m =
@@ -756,6 +765,43 @@ importCryptolModule sc env src as vis imps =
   do
   (mod', env') <- loadAndTranslateModule sc env src
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
+  when debug $
+    do
+    let lm = case ME.lookupModule (T.mName mod') (eModuleEnv env') of
+               Just lm' -> lm'
+               Nothing  -> panic "importImportModule" []
+
+        nms1 :: Map MN.Name MI.IfaceDecl
+        nms1 = MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
+          -- Correct for PuPr
+
+        -- ne = getNamingEnvForImport (eModuleEnv env') import'
+
+        nmsPu :: Set.Set MN.Name
+        nmsPu = MI.ifsPublic  $ MI.ifNames $ ME.lmInterface lm
+          -- Correct for PublicOnly
+
+        nmsPP :: Set.Set MN.Name
+        nmsPP = MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm
+          -- works, but doesn't "inline" submodule defs.
+
+    putStrLn "importCrytolModule:"
+    print $ ppListX "nms1:   " $ Set.toList $ Map.keysSet nms1
+    print $ text "namingEnvFromNames:"
+                  <> pp (MN.namingEnvFromNames (Map.keysSet nms1))
+    print $ ppListX "nmsPu:   " $ Set.toList nmsPu
+    print $ ppListX "nmsPuPr: " $ Set.toList nmsPP
+    print $ text "namingEnv:" <> pp (ME.lmNamingEnv lm)
+            -- shows everything in scope, excluding hidden from the top level
+
+    putStrLn "importCrytolModule: submodules("
+    flip mapM_ (Map.toList $ T.mSubmodules mod') $ \(nm,sm)->
+                   do
+                   putStrLn ("submodule: " ++ show (pp nm))
+                   print $ pp (T.smInScope sm)
+                   putStrLn ""
+    putStrLn ")"
+
   return $ env' {eImports= import' : eImports env }
 
 mkImport :: ImportVisibility
