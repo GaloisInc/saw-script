@@ -331,7 +331,7 @@ getNamingEnvForImport modEnv (vis, imprt) =
   $ adjustVisible            -- adjust if OnlyPublic names
   $ ME.mctxNames mctx        -- namingEnv for PublicAndPrivate
       -- FIXME: this does not do what we want: ...!
-      --  - PublicAndPrivate: doesn't work
+      --  - PublicAndPrivate: cannot see privates inside submodules.
       --  - OnlyPublic really work??
 
   where
