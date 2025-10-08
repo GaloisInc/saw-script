@@ -482,6 +482,35 @@ patternBindings pat =
     PVar _ _ x mt -> [(x, mt)]
     PTuple _ ps -> concatMap patternBindings ps
 
+-- Get all the bindings in a pattern, using a separate passed-in
+-- schema to get the types. Ignore the types in the pattern.
+--
+-- XXX: is that reasonable? Should probably assert that the schema
+-- matches the types in the pattern, unless the pattern hasn't already
+-- been checked yet, and that seems like it would be a bug.
+--
+-- Note that if the pattern is a tuple and the schema is not a tuple
+-- type, we return nothing. Presumably in this case a type error has
+-- already been generated and we don't need another one? But it would
+-- probably be a good idea to check up on that. XXX
+--
+-- Alternatively if the pattern has had its types filled in, this
+-- should not be different from the plain patternBindings and should
+-- probably just be removed.
+--
+patternBindingsWithSchema :: Pattern -> Schema -> [(Name, Schema)]
+patternBindingsWithSchema pat sch =
+  case pat of
+    PWild _ _ -> []
+    PVar _ _ x _ -> [(x, sch)]
+    PTuple _ ps ->
+      case sch of
+        Forall vs t -> case t of
+          TyCon _pos (TupleCon _) ts' ->
+            let once p t' = patternBindingsWithSchema p (Forall vs t') in
+            concat $ zipWith once ps ts'
+          _ -> []
+
 -- }}}
 
 
@@ -928,25 +957,9 @@ withPattern pat m = withVars bindings m
 -- wrap the action m with types for all the vars in a pattern, using
 -- the passed-in schema to produce the types and ignoring the types
 -- already loaded into the pattern.
---
--- XXX: is that what we want? should probably assert that the schema
--- matches the types in the pattern, unless the pattern hasn't already
--- been checked yet, and that seems like it would be a bug.
---
--- Note that if the pattern is a tuple and the schema is not a tuple
--- type, we do nothing. Presumably in this case a type error has
--- already been generated and we don't need another one? But it would
--- probably be a good idea to check up on that. XXX
 withPatternSchema :: Pattern -> Schema -> TI a -> TI a
-withPatternSchema pat s@(Forall vs t) m =
-  case pat of
-    PWild _ _ -> m
-    PVar _ _ x _ -> withVar x s m
-    PTuple _ ps ->
-      case t of
-        TyCon _pos (TupleCon _) ts -> foldr ($) m
-          [ withPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
-        _ -> m
+withPatternSchema pat ty m = withVars bindings m
+  where bindings = patternBindingsWithSchema pat ty
 
 -- wrap the action m with types for the vars in a declaration.
 --
