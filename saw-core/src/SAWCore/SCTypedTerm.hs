@@ -9,7 +9,6 @@ Portability : non-portable (language extensions)
 
 module SAWCore.SCTypedTerm
   ( SCTypedTerm -- abstract
-  , unsafeSCTypedTerm
   , typedVal
   , typedType
   , typedCtx
@@ -69,9 +68,6 @@ data SCTypedTerm =
   Term -- ^ value
   Term -- ^ type
   (IntMap Term) -- ^ typing context
-
-unsafeSCTypedTerm :: Term -> Term -> IntMap Term -> SCTypedTerm
-unsafeSCTypedTerm = SCTypedTerm
 
 -- | The raw 'Term' of an 'SCTypedTerm'.
 typedVal :: SCTypedTerm -> Term
