@@ -1,0 +1,4 @@
+import "B.cry";
+
+prove_print z3 {{ \(x : [8]) -> (E { unE = x }).unE == x }};
+prove_print z3 {{ \(x : [8]) -> case MkF x of MkF y -> x == y }};
