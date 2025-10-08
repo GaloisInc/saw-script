@@ -2,20 +2,26 @@ module F where
 import B
 import C
 
-top0  = 2000 + b + c
-topd2 = 5  + D3::d2
-topd3 = 10 + D3::D4::d3
+top1 = 2000 + b + c
+top2 = 5  + D3::d3
+top3 = 10 + D3::D4::d4
 
 d00 : [32]
 d00 = 1 // let's conflict with D.cry
 
+private
+  top_pri = 5
+
 submodule D3 where
-  d2   = 10000 + top0
-  d3D2 =     1 + D4::d3
-  d2'  =     1 + d3P
+  d3   = 10000 + top1
+  d3a  =     1 + D4::d4
+  d3b  =     1 + d3_pri
 
   private
-    d3P = 1 + d2
+    d3_pri = 1 + d3
 
   submodule D4 where
-    d3 = 20000 + top0 + d2
+    d4 = 20000 + top1 + d3 + d4_pri
+
+    private
+    d4_pri = 5
