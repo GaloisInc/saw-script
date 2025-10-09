@@ -68,12 +68,10 @@ import Prelude hiding (mapM, maximum)
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
-import SAWCore.Conversion (natConversions)
 import SAWCore.Module
   ( ctorName
   , dtName
   , lookupVarIndexInMap
-  , resolvedNameType
   , Ctor(..)
   , DataType(..)
   , ResolvedName(..)
@@ -81,13 +79,13 @@ import SAWCore.Module
 import SAWCore.Name
 import SAWCore.Parser.Position
 import SAWCore.Recognizer
-import SAWCore.Rewriter
+import SAWCore.SCTypedTerm
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTermInCtx)
 
 -- | The state for a type-checking computation = a memoization table
-type TCState = Map TermIndex Term
+type TCState = IntMap SCTypedTerm
 
 -- | The 'ReaderT' environment for a type-checking computation.
 data TCEnv =
@@ -113,7 +111,7 @@ newtype TCM a = TCM (ReaderT TCEnv (StateT TCState (ExceptT TCError IO)) a)
 runTCM ::
   TCM a -> SharedContext -> IntMap Term -> IO (Either TCError a)
 runTCM (TCM m) sc ctx =
-  runExceptT $ evalStateT (runReaderT m (TCEnv sc ctx)) Map.empty
+  runExceptT $ evalStateT (runReaderT m (TCEnv sc ctx)) IntMap.empty
 
 -- | Read the current typing context
 askCtx :: TCM (IntMap Term)
@@ -146,7 +144,7 @@ rethrowTCError f m = catchError m (throwError . f)
 withEmptyTCState :: (MonadState TCState m) => m a -> m a
 withEmptyTCState m =
   do saved_table <- get
-     put Map.empty
+     put IntMap.empty
      a <- m
      put saved_table
      pure a
@@ -244,11 +242,11 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadTupleIndex n ty) =
       ppWithPos [ return ("Bad tuple index (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (NotRecordType (SCTypedTerm trm tp _ctx)) =
+  helper (NotRecordType t) =
       ppWithPos [ return "Record field projection with non-record type"
-                , ishow tp
+                , ishow (typedType t)
                 , return "In term:"
-                , ishow trm ]
+                , ishow (typedVal t) ]
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
@@ -346,26 +344,6 @@ scCheckSubtype sc arg req_tp =
   either (fail . unlines . prettyTCError) return =<<
   runTCM (checkSubtype arg req_tp) sc IntMap.empty
 
--- | An abstract datatype pairing a 'Term' with its type.
-data SCTypedTerm =
-  SCTypedTerm
-  Term -- ^ value
-  Term -- ^ type
-  (IntMap Term) -- ^ typing context
-
--- | The raw 'Term' of an 'SCTypedTerm'.
-typedVal :: SCTypedTerm -> Term
-typedVal (SCTypedTerm trm _ _) = trm
-
--- | The type of an 'SCTypedTerm' as a 'Term'.
-typedType :: SCTypedTerm -> Term
-typedType (SCTypedTerm _ typ _) = typ
-
--- | The de Bruijn typing context of an 'SCTypedTerm', with de Bruijn
--- index 0 at the head of the list.
-typedCtx :: SCTypedTerm -> IntMap Term
-typedCtx (SCTypedTerm _ _ ctx) = ctx
-
 -- | The class of things that we can infer types of. The 'typeInfer' method
 -- returns the most general (with respect to subtyping) type of its input.
 class TypeInfer a where
@@ -378,152 +356,153 @@ class TypeInfer a where
 -- resulting term to WHNF
 typeInferCompleteWHNF :: TypeInfer a => a -> TCM SCTypedTerm
 typeInferCompleteWHNF a =
-  do SCTypedTerm a_trm a_tp ctx <- typeInferComplete a
-     a_whnf <- typeCheckWHNF a_trm
-     return $ SCTypedTerm a_whnf a_tp ctx
-
+  do t <- typeInferComplete a
+     liftTCM scTypedTermWHNF t
 
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work
 instance TypeInfer Term where
-  typeInfer t@(Unshared tf) = withErrorTerm t $ typeInfer tf
-  typeInfer t@(STApp{ stAppIndex = i, stAppTermF = tf}) =
-    do table <- TCM get
-       case Map.lookup i table of
-         Just x  -> return x
-         Nothing ->
-           do x  <- withErrorTerm t $ typeInfer tf
-              x' <- typeCheckWHNF x
-              modify (Map.insert i x')
-              return x'
-  typeInferComplete trm =
-    SCTypedTerm trm <$> typeInfer trm <*> askCtx
+  typeInfer t = typedType <$> typeInferComplete t
+  typeInferComplete t =
+    case t of
+      Unshared tf ->
+        withErrorTerm t $ typeInferComplete tf
+      STApp{stAppIndex = i, stAppTermF = tf} ->
+        do table <- get
+           case IntMap.lookup i table of
+             Just x -> pure x
+             Nothing ->
+               do x <- withErrorTerm t $ typeInferComplete tf
+                  modify (IntMap.insert i x)
+                  pure x
 
 -- Type inference for TermF Term dispatches to that for TermF SCTypedTerm by
 -- calling inference on all the sub-components and extending the context inside
 -- of the binding forms
 instance TypeInfer (TermF Term) where
-  typeInfer (FTermF ftf) =
-    -- Dispatch to the TypeInfer instance for FlatTermF Term, which does some
-    -- special-case handling itself
-    typeInfer ftf
-  typeInfer (Lambda x a rhs) =
-    do a_whnf <- typeInferCompleteWHNF a
-       -- NOTE: before adding a type to the context, we want to be sure it is in
-       -- WHNF, so we don't have to normalize each time we look up a var type,
-       -- but we want to leave the non-normalized value of a in the returned
-       -- term, so we create a_tptrm with the type of a_whnf but the value of a
-       rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
-       let a_tptrm = SCTypedTerm a (typedType a_whnf) (typedCtx a_whnf)
-       typeInfer (Lambda x a_tptrm rhs_tptrm)
-  typeInfer (Pi x a rhs) =
-    do a_whnf <- typeInferCompleteWHNF a
-       -- NOTE: before adding a type to the context, we want to be sure it is in
-       -- WHNF, so we don't have to normalize each time we look up a var type,
-       -- but we want to leave the non-normalized value of a in the returned
-       -- term, so we create a_typed with the type of a_whnf but the value of a
-       rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
-       let a_tptrm = SCTypedTerm a (typedType a_whnf) (typedCtx a_whnf)
-       typeInfer (Pi x a_tptrm rhs_tptrm)
-  typeInfer (Constant nm) = typeInferConstant nm
-  typeInfer t = typeInfer =<< mapM typeInferComplete t
+  typeInfer tf = typedType <$> typeInferComplete tf
   typeInferComplete tf =
-    SCTypedTerm <$> liftTCM scTermF tf <*> withErrorTermF tf (typeInfer tf) <*> askCtx
+    case tf of
+      FTermF ftf ->
+        -- Dispatch to the TypeInfer instance for FlatTermF Term
+        do typeInferComplete ftf
+      App t1 t2 ->
+        do t1t <- typeInferComplete t1
+           t2t <- typeInferComplete t2
+           inferTermF (App t1t t2t)
+      Lambda x t1 t2 ->
+        do t1t <- typeInferComplete t1
+           t2t <- withVar x (typedVal t1t) $ typeInferComplete t2
+           inferTermF (Lambda x t1t t2t)
+      Pi x t1 t2 ->
+        do t1t <- typeInferComplete t1
+           t2t <- withVar x (typedVal t1t) $ typeInferComplete t2
+           inferTermF (Pi x t1t t2t)
+      Constant nm ->
+        do inferTermF (Constant nm)
+      Variable x t1 ->
+        do t1t <- typeInferComplete t1
+           inferTermF (Variable x t1t)
 
-typeInferConstant :: Name -> TCM Term
-typeInferConstant nm =
-  do mm <- liftTCM scGetModuleMap
-     case lookupVarIndexInMap (nameIndex nm) mm of
-       Just r -> pure (resolvedNameType r)
-       Nothing -> throwTCError $ NoSuchConstant (nameInfo nm)
-
--- Type inference for FlatTermF Term dispatches to that for FlatTermF SCTypedTerm,
--- with special cases for primitives and constants to avoid re-type-checking
--- their types as we are assuming they were type-checked when they were created
+-- Type inference for FlatTermF Term dispatches to that for FlatTermF SCTypedTerm.
 instance TypeInfer (FlatTermF Term) where
-  typeInfer t = typeInfer =<< mapM typeInferComplete t
+  typeInfer ftf = typedType <$> typeInferComplete ftf
   typeInferComplete ftf =
-    SCTypedTerm
-    <$> liftTCM scFlatTermF ftf
-    <*> typeInfer ftf
-    <*> askCtx
-
+    typeInferComplete =<< mapM typeInferComplete ftf
 
 -- Type inference for TermF SCTypedTerm is the main workhorse. Intuitively, this
 -- represents the case where each immediate subterm of a term is labeled with
 -- its (most general) type.
 instance TypeInfer (TermF SCTypedTerm) where
-  typeInfer (FTermF ftf) = typeInfer ftf
-  typeInfer (App x@(SCTypedTerm _ x_tp _) y) =
-    applyPiTyped (NotFuncTypeInApp x y) x_tp y
-  typeInfer (Lambda x (SCTypedTerm a a_tp _) (SCTypedTerm _ b _)) =
-    void (ensureSort a_tp) >> liftTCM scPi x a b
-  typeInfer (Pi _ (SCTypedTerm _ a_tp _) (SCTypedTerm _ b_tp _)) =
-    do s1 <- ensureSort a_tp
-       s2 <- ensureSort b_tp
-       -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
-       -- when b is a Prop (this is a forall proposition), otherwise it is a
-       -- (Type (max (sortOf a) (sortOf b)))
-       liftTCM scSort $ if s2 == propSort then propSort else max s1 s2
-  typeInfer (Constant nm) = typeInferConstant nm
-  typeInfer (Variable _nm tp) =
-    -- FIXME: should we check that the type of ecType is a sort?
-    typeCheckWHNF $ typedVal tp
-
+  typeInfer tf = typedType <$> typeInferComplete tf
   typeInferComplete tf =
-    SCTypedTerm
-    <$> liftTCM scTermF (fmap typedVal tf)
-    <*> withErrorSCTypedTermF tf (typeInfer tf)
-    <*> askCtx
-
+    withErrorSCTypedTermF tf (inferTermF tf)
 
 -- Type inference for FlatTermF SCTypedTerm is the main workhorse for flat
 -- terms. Intuitively, this represents the case where each immediate subterm of
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF SCTypedTerm) where
-  typeInfer UnitValue = liftTCM scUnitType
-  typeInfer UnitType = liftTCM scSort (mkSort 0)
-  typeInfer (PairValue (SCTypedTerm _ tx _) (SCTypedTerm _ ty _)) =
-    liftTCM scPairType tx ty
-  typeInfer (PairType (SCTypedTerm _ tx _) (SCTypedTerm _ ty _)) =
-    do sx <- ensureSort tx
-       sy <- ensureSort ty
-       liftTCM scSort (max sx sy)
-  typeInfer (PairLeft (SCTypedTerm _ tp _)) =
-    ensurePairType tp >>= \(t1,_) -> return t1
-  typeInfer (PairRight (SCTypedTerm _ tp _)) =
-    ensurePairType tp >>= \(_,t2) -> return t2
-
-  typeInfer (Recursor crec) =
-    inferRecursor crec
-
-  typeInfer (RecordType elems) =
-    -- NOTE: record types are always predicative, i.e., non-Propositional, so we
-    -- ensure below that we return at least sort 0
-    do sorts <- mapM (ensureSort . typedType . snd) elems
-       liftTCM scSort (maxSort $ mkSort 0 : sorts)
-  typeInfer (RecordValue elems) =
-    liftTCM scFlatTermF $ RecordType $
-    map (\(f,SCTypedTerm _ tp _) -> (f,tp)) elems
-  typeInfer (RecordProj t@(SCTypedTerm _ t_tp _) fld) =
-    ensureRecordType (NotRecordType t) t_tp >>= \case
-    (Map.lookup fld -> Just tp) -> return tp
-    _ -> throwTCError $ BadRecordField fld t_tp
-  typeInfer (Sort s _) = liftTCM scSort (sortOf s)
-  typeInfer (NatLit _) = liftTCM scNatType
-  typeInfer (ArrayValue (SCTypedTerm tp tp_tp _) vs) =
-    do n <- liftTCM scNat (fromIntegral (V.length vs))
-       _ <- ensureSort tp_tp -- TODO: do we care about the level?
-       tp' <- typeCheckWHNF tp
-       forM_ vs $ \v_elem -> checkSubtype v_elem tp'
-       liftTCM scVecType n tp'
-  typeInfer (StringLit{}) = liftTCM scStringType
-
+  typeInfer ftf =
+    typedType <$> inferFlatTermF ftf
   typeInferComplete ftf =
-    SCTypedTerm
-    <$> liftTCM scFlatTermF (fmap typedVal ftf)
-    <*> withErrorSCTypedTermF (FTermF ftf) (typeInfer ftf)
-    <*> askCtx
+    withErrorSCTypedTermF (FTermF ftf) (inferFlatTermF ftf)
+
+-- | Construct a typed term from a 'TermF' where each subterm has
+-- already been labeled with its type.
+inferTermF :: TermF SCTypedTerm -> TCM SCTypedTerm
+inferTermF tf =
+  case tf of
+    FTermF ftf ->
+      inferFlatTermF ftf
+    App t1 t2 ->
+      do let err = NotFuncTypeInApp t1 t2
+         (_nm, arg_tp, _ret_tp) <- ensurePiType err (typedType t1)
+         checkSubtype t2 arg_tp
+         liftTCM scTypedApply t1 t2
+    Lambda x t1 t2 ->
+      do void $ ensureSort (typedType t1)
+         liftTCM scTypedLambda x t1 t2
+    Pi x t1 t2 ->
+      do void $ ensureSort (typedType t1)
+         void $ ensureSort (typedType t2)
+         liftTCM scTypedPi x t1 t2
+    Constant nm ->
+      do mm <- liftTCM scGetModuleMap
+         case lookupVarIndexInMap (nameIndex nm) mm of
+           Nothing -> throwTCError $ NoSuchConstant (nameInfo nm)
+           Just _ -> liftTCM scTypedConstant nm
+    Variable vn tp ->
+      liftTCM scTypedVariable vn tp
+
+-- | Construct a typed term from a 'FlatTermF' where each subterm has
+-- already been labeled with its type.
+inferFlatTermF :: FlatTermF SCTypedTerm -> TCM SCTypedTerm
+inferFlatTermF ftf =
+  case ftf of
+    UnitValue ->
+      liftTCM scTypedUnitValue
+    UnitType ->
+      liftTCM scTypedUnitType
+    PairValue t1 t2 ->
+      liftTCM scTypedPairValue t1 t2
+    PairType t1 t2 ->
+      do void $ ensureSort (typedType t1)
+         void $ ensureSort (typedType t2)
+         liftTCM scTypedPairType t1 t2
+    PairLeft t ->
+      do void $ ensurePairType (typedType t)
+         liftTCM scTypedPairLeft t
+    PairRight t ->
+      do void $ ensurePairType (typedType t)
+         liftTCM scTypedPairRight t
+    Recursor r ->
+      do mm <- liftTCM scGetModuleMap
+         let d = recursorDataType r
+         let s = recursorSort r
+         case lookupVarIndexInMap (nameIndex d) mm of
+           Just (ResolvedDataType _dt) -> liftTCM scTypedRecursor d s
+           _ -> throwTCError $ NoSuchDataType (nameInfo d)
+    RecordType elems ->
+      do void $ mapM (ensureSort . typedType . snd) elems
+         liftTCM scTypedRecordType elems
+    RecordValue elems ->
+      liftTCM scTypedRecordValue elems
+    RecordProj t fld ->
+      do ts <- ensureRecordType (NotRecordType t) (typedType t)
+         unless (Map.member fld ts) $
+           throwTCError $ BadRecordField fld (typedType t)
+         liftTCM scTypedRecordProj t fld
+    Sort s flags ->
+      liftTCM scTypedSort' s flags
+    NatLit n ->
+      liftTCM scTypedNat n
+    ArrayValue tp vs ->
+      do void $ ensureSort (typedType tp)
+         tp' <- typeCheckWHNF (typedVal tp)
+         forM_ vs $ \v_elem -> checkSubtype v_elem tp'
+         liftTCM scTypedVector tp (V.toList vs)
+    StringLit s ->
+      liftTCM scTypedString s
 
 -- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
 -- result of substituting @arg@ for @x@ in the result type @b@, i.e.,
@@ -569,18 +548,13 @@ ensurePiType err tp = ensureRecognizer asPi err tp
 typeCheckWHNF :: Term -> TCM Term
 typeCheckWHNF = liftTCM scTypeCheckWHNF
 
--- | The 'IO' version of 'typeCheckWHNF'
-scTypeCheckWHNF :: SharedContext -> Term -> IO Term
-scTypeCheckWHNF sc t =
-  do (_, t') <- rewriteSharedTerm sc (addConvs natConversions emptySimpset :: Simpset ()) t
-     scWhnf sc t'
-
 -- | Check that one type is a subtype of another, assuming both arguments are
--- types, i.e., that both have type Sort s for some s, and that they are both
--- already in WHNF
+-- types, i.e., that both have type Sort s for some s.
 checkSubtype :: SCTypedTerm -> Term -> TCM ()
 checkSubtype arg req_tp =
-  do ok <- isSubtype (typedType arg) req_tp
+  do arg_tp' <- liftTCM scWhnf (typedType arg)
+     req_tp' <- liftTCM scWhnf req_tp
+     ok <- isSubtype arg_tp' req_tp'
      if ok then return () else throwTCError $ SubtypeFailure arg req_tp
 
 -- | Check if one type is a subtype of another, assuming both arguments are
@@ -626,31 +600,3 @@ compileRecursor dt s =
 
      unless (allowedElimSort dt s) $ throwTCError err
      return crec
-
-inferRecursor ::
-  CompiledRecursor -> TCM Term
-inferRecursor r =
-  do mm <- liftTCM scGetModuleMap
-     let d = recursorDataType r
-     let s = recursorSort r
-     case lookupVarIndexInMap (nameIndex d) mm of
-       Just (ResolvedDataType dt) -> liftTCM scRecursorType dt s
-       _ -> throwTCError $ NoSuchDataType (nameInfo d)
-
--- | Compute the type of an 'SCTypedTerm'.
-scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
-scTypeOfTypedTerm sc (SCTypedTerm _tm tp ctx) =
-  do tp_tp <- scTypeOf' sc ctx tp
-     pure (SCTypedTerm tp tp_tp ctx)
-
--- | Reduce an 'SCTypedTerm' to WHNF (see also 'scTypeCheckWHNF').
-scTypedTermWHNF :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
-scTypedTermWHNF sc (SCTypedTerm tm tp ctx) =
-  do tm' <- scTypeCheckWHNF sc tm
-     pure (SCTypedTerm tm' tp ctx)
-
-scGlobalTypedTerm :: SharedContext -> Ident -> IO SCTypedTerm
-scGlobalTypedTerm sc ident =
-  do tm <- scGlobalDef sc ident
-     tp <- scTypeOfIdent sc ident
-     pure (SCTypedTerm tm tp IntMap.empty)

@@ -147,6 +147,7 @@ module SAWCore.SharedTerm
   , asSort
   , reducePi
   , scTypeOfIdent
+  , scTypeOfName
     -- ** Prelude operations
     -- *** Booleans
   , scNot
@@ -1335,6 +1336,14 @@ scTypeOfIdent sc ident =
      case resolveNameInMap mm ident of
        Just r -> pure (resolvedNameType r)
        Nothing -> fail ("scTypeOfIdent: Identifier not found: " ++ show ident)
+
+-- | Look up the type of a global constant, given its 'Name'.
+scTypeOfName :: SharedContext -> Name -> IO Term
+scTypeOfName sc nm =
+  do mm <- scGetModuleMap sc
+     case lookupVarIndexInMap (nameIndex nm) mm of
+       Just r -> pure (resolvedNameType r)
+       Nothing -> fail ("scTypeOfName: Name not found: " ++ show nm)
 
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
