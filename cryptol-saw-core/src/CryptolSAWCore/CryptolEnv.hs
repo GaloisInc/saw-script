@@ -698,8 +698,10 @@ loadAndTranslateModule sc env src =
                         sc C.defaultPrimitiveOptions cEnv newDeclGroups
           return (C.envE newCryEnv)
      when debug $ do
-        putStrLn $ show (ppListX "LOG: newDeclGroups" newDeclGroups)
-        putStrLn $ show (ppListX "LOG: newTermEnv"
+
+        putStrLn "* LOG: loadAndTranslateModule:"
+        putStrLn $ show (ppListX "** LOG: newDeclGroups\n" newDeclGroups)
+        putStrLn $ show (ppListX "** LOG: newTermEnv\n"
                            ({- map MN.nameIdent $ -} Map.keys newTermEnv))
      return ( m
             , env{ eModuleEnv = modEnv'
@@ -786,21 +788,22 @@ importCryptolModule sc env src as vis imps =
         nmsPP = MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm
           -- works, but doesn't "inline" submodule defs.
 
-    putStrLn "LOG: importCrytolModule:"
-    print $ ppListX "LOG: nms1:   " $ Set.toList $ Map.keysSet nms1
-    print $ text "LOG: namingEnvFromNames:"
+    putStrLn "* LOG: BEGIN importCrytolModule:"
+    print $ text "* LOG: namingEnvFromNames\n:"
                   <> pp (MN.namingEnvFromNames (Map.keysSet nms1))
-    print $ ppListX "LOG: nmsPu:   " $ Set.toList nmsPu
-    print $ ppListX "LOG: nmsPuPr: " $ Set.toList nmsPP
-    print $ text "LOG: namingEnv:" <> pp modNamingEnv
+    putStrLn "* LOG: various names:"
+    print $ ppListX "- LOG: nms1:    " $ Set.toList $ Map.keysSet nms1
+    print $ ppListX "- LOG: nmsPu:   " $ Set.toList nmsPu
+    print $ ppListX "- LOG: nmsPuPr: " $ Set.toList nmsPP
+    print $ text "* LOG: namingEnv:\n" <> pp modNamingEnv
             -- shows everything in scope, excluding hidden from the top level
 
-    putStrLn "LOG: importCrytolModule: submodules("
+    putStrLn "* LOG: importCrytolModule: submodules:"
     smPrivates <-
       flip mapM (Map.toList $ T.mSubmodules mod') $ \(nm,sm)->
         do
-        putStrLn ("LOG: submodule: " ++ show (pp nm))
-        putStrLn ("LOG: submodule names in scope:")
+        putStrLn ("** LOG: submodule: " ++ show (pp nm))
+        putStrLn ("*** LOG: submodule names in scope:")
         print $ pp (T.smInScope sm)
         putStrLn ""
         let modName = textToModName $ identText $ MN.nameIdent nm
@@ -809,17 +812,16 @@ importCryptolModule sc env src as vis imps =
                 (Just modName)   -- qualify with `modName`
                 Nothing          -- no ImportSpec
                 (T.smInScope sm' `MN.without` modNamingEnv)
-        putStrLn ("LOG: qualifiedPrivateDefs:")
+        putStrLn ("*** LOG: qualifiedPrivateDefs:")
         print $ pp $ getQualifiedPrivateDefs sm
         putStrLn ("")
 
         return $ getQualifiedPrivateDefs sm
 
-    putStrLn "LOG ) /* submodules */\n"
-
     let smPrivateNamingEnv = mconcat smPrivates
-    print $ text "LOG: smPrivateNamingEnv: " <> pp smPrivateNamingEnv
+    print $ text "* LOG: smPrivateNamingEnv:\n" <> pp smPrivateNamingEnv
     {-
+    -- unmonadified for use in _
     let sms = T.mSubmodules mod'
         submNamingEnvs =
           map (getQualifiedPrivateDefs mod') sms
@@ -827,6 +829,7 @@ importCryptolModule sc env src as vis imps =
 
         getQualifiedPrivateDefs mod sm
     -}
+    putStrLn "* LOG: END importCrytolModule."
 
   return $ env' {eImports= import' : eImports env }
 
