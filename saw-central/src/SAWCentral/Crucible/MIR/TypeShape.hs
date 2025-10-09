@@ -398,6 +398,7 @@ data CryTermAdaptor a =
     -- We also store the 'M.Collection' here so that we can convert the
     -- element type's 'TypeRepr' to a 'TypeShape' when we need to (see,
     -- for instance, the implementation of `shapeToTerm'`).
+  | AdaptDerefRef M.Collection (CryTermAdaptor a) -- ^ Transparently adapt a reference
     deriving (Functor, Foldable, Traversable)
 
 isCryNoAdapt :: CryTermAdaptor a -> Bool
@@ -456,6 +457,8 @@ shapeToTerm' sc = go
     go (AdaptDerefSlice col n ada) (SliceShape _ elT M.Immut tpr) =
       do et <- go ada (tyToShapeEq col elT tpr)
          liftIO (mkVec n et)
+    go (AdaptDerefRef col ada) (RefShape _ elT M.Immut tpr) =
+      go ada (tyToShapeEq col elT tpr)
     go _ada shp = fail $ "shapeToTerm: unsupported type " ++ show (shapeType shp)
 
     mkVec :: Integral a => a -> SAW.Term -> IO SAW.Term
