@@ -36,7 +36,7 @@ import qualified CryptolSAWCore.Simpset as Cryptol
 import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
 
 import Cryptol.TypeCheck.Type (tIsBit, tIsSeq, tIsNum)
-import CryptolSAWCore.TypedTerm (mkTypedTerm, ttType, ttIsMono)
+import CryptolSAWCore.TypedTerm (mkTypedTerm, ttType, ttIsMono, ppTypedTermType)
 import qualified Cryptol.Utils.PP as PP
 
 
@@ -67,6 +67,7 @@ resolveTerm ::
 resolveTerm sym unint bt rr tm =
   do
     st       <- sawCoreState sym
+    checkType st
     tm'      <- basicRewrite st tm
     case () of
       _ | isConstFoldTerm unint tm' ->
@@ -94,10 +95,10 @@ resolveTerm sym unint bt rr tm =
                     where ty = W4.exprType y
                   _ -> fail ("resolveTerm: unexpected w4Eval result " ++ show p)
               else
-                doBind st tm'''
+                bindSAWTerm sym st bt tm'''
 
           -- Just bind the term
-        | otherwise -> doBind st tm'
+        | otherwise -> bindSAWTerm sym st bt tm'
 
   where
   basicRewrite st =
@@ -110,24 +111,26 @@ resolveTerm sym unint bt rr tm =
       ModuleIdentifier ident -> identModule ident == preludeName
       _ -> False
 
-  doBind st te =
+  checkType st =
     do
-      tt <- mkTypedTerm (saw_ctx st) tm
-      case ttIsMono (ttType tt) of
+      sc <- ttType <$> mkTypedTerm (saw_ctx st) tm
+      case ttIsMono sc of
           Just ty
             | tIsBit ty, W4.BaseBoolRepr <- bt -> pure ()
             | Just (n,el) <- (tIsSeq ty)
             , tIsBit el, Just i <- tIsNum n, W4.BaseBVRepr w <- bt
             , intValue w == i -> pure ()
             | otherwise -> typeError (show (PP.pp ty)) :: IO ()
-          Nothing -> fail "resolveTerm: Expected monomorphic Cryptol type, got polymorphic or unrecognized type"
-
-      bindSAWTerm sym st bt te
+          Nothing -> typeError (show (ppTypedTermType sc))
 
   typeError :: String -> IO a
   typeError t = fail $ unlines [
-    "Expected type: " ++ show bt,
-    "Actual type: " ++ t
+    "Expected type: " ++ (
+      case bt of
+        BaseBoolRepr  -> "Bit"
+        BaseBVRepr w  -> "[" ++ show w ++ "]"
+        _             -> show bt),
+    "Actual type:   " ++ t
     ]
 
 -- 'resolveTerm' specialized to booleans.
