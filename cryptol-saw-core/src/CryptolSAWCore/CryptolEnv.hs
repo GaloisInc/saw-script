@@ -770,10 +770,11 @@ importCryptolModule sc env src as vis imps =
     let lm = case ME.lookupModule (T.mName mod') (eModuleEnv env') of
                Just lm' -> lm'
                Nothing  -> panic "importImportModule" []
+        modNamingEnv = ME.lmNamingEnv lm
 
         nms1 :: Map MN.Name MI.IfaceDecl
         nms1 = MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
-          -- Correct for PuPr
+          -- Correct for PublicAndPrivate
 
         -- ne = getNamingEnvForImport (eModuleEnv env') import'
 
@@ -791,16 +792,41 @@ importCryptolModule sc env src as vis imps =
                   <> pp (MN.namingEnvFromNames (Map.keysSet nms1))
     print $ ppListX "LOG: nmsPu:   " $ Set.toList nmsPu
     print $ ppListX "LOG: nmsPuPr: " $ Set.toList nmsPP
-    print $ text "LOG: namingEnv:" <> pp (ME.lmNamingEnv lm)
+    print $ text "LOG: namingEnv:" <> pp modNamingEnv
             -- shows everything in scope, excluding hidden from the top level
 
     putStrLn "LOG: importCrytolModule: submodules("
-    flip mapM_ (Map.toList $ T.mSubmodules mod') $ \(nm,sm)->
-                   do
-                   putStrLn ("LOG: submodule: " ++ show (pp nm))
-                   print $ pp (T.smInScope sm)
-                   putStrLn ""
+    smPrivates <-
+      flip mapM (Map.toList $ T.mSubmodules mod') $ \(nm,sm)->
+        do
+        putStrLn ("LOG: submodule: " ++ show (pp nm))
+        putStrLn ("LOG: submodule names in scope:")
+        print $ pp (T.smInScope sm)
+        putStrLn ""
+        let modName = textToModName $ identText $ MN.nameIdent nm
+            getQualifiedPrivateDefs  sm' =
+              MN.interpImportEnv'
+                (Just modName)   -- qualify with `modName`
+                Nothing          -- no ImportSpec
+                (T.smInScope sm' `MN.without` modNamingEnv)
+        putStrLn ("LOG: qualifiedPrivateDefs:")
+        print $ pp $ getQualifiedPrivateDefs sm
+        putStrLn ("")
+
+        return $ getQualifiedPrivateDefs sm
+
     putStrLn "LOG ) /* submodules */\n"
+
+    let smPrivateNamingEnv = mconcat smPrivates
+    print $ text "LOG: smPrivateNamingEnv: " <> pp smPrivateNamingEnv
+    {-
+    let sms = T.mSubmodules mod'
+        submNamingEnvs =
+          map (getQualifiedPrivateDefs mod') sms
+        namingEnv' = mconcat (ME.lmNamingEnv lm : submNamingEnvs)
+
+        getQualifiedPrivateDefs mod sm
+    -}
 
   return $ env' {eImports= import' : eImports env }
 
