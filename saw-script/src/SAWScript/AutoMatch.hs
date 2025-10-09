@@ -358,55 +358,55 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
       nameRight  str = (("right_" <> str <> "_") <>)
       nameCenter str = ((str <> "_") <>)
 
-      loadFile :: (Text -> Text) -> SourceLanguage -> FilePath -> ScriptWriter s tp (SAWScript.LName)
+      loadFile :: (Text -> Text) -> SourceLanguage -> FilePath -> ScriptWriter s tp (SAWScript.Name)
       loadFile prefix lang file = do
          boundName <- newNameWith prefix
          returning boundName . tell $
             case lang of
                Cryptol ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos boundName Nothing)
+                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
-                        (SAWScript.Var $ locate "cryptol_load")
+                        (SAWScript.Var triggerPos "cryptol_load")
                         (SAWScript.String triggerPos $ Text.pack file))]
                LLVM ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos boundName Nothing)
+                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
-                        (SAWScript.Var $ locate "llvm_load_module")
+                        (SAWScript.Var triggerPos "llvm_load_module")
                         (SAWScript.String triggerPos $ Text.pack file))]
                JVM ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos boundName Nothing)
+                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
-                        (SAWScript.Var $ locate "java_load_class")
+                        (SAWScript.Var triggerPos "java_load_class")
                         (SAWScript.String triggerPos $ Text.pack $ dropExtension file))]
 
-      extractFunction :: (Text -> Text) -> SourceLanguage -> Text -> SAWScript.LName -> ScriptWriter s tp (SAWScript.LName)
+      extractFunction :: (Text -> Text) -> SourceLanguage -> Text -> SAWScript.Name -> ScriptWriter s tp (SAWScript.Name)
       extractFunction prefix lang function loadedModule = do
          boundName <- newNameWith prefix
          returning boundName . tell $
             case lang of
                Cryptol ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos boundName Nothing)
+                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
                         (SAWScript.Application triggerPos
-                           (SAWScript.Var $ locate "cryptol_extract")
-                           (SAWScript.Var loadedModule))
+                           (SAWScript.Var triggerPos "cryptol_extract")
+                           (SAWScript.Var triggerPos loadedModule))
                         (SAWScript.String triggerPos function))]
                LLVM ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos boundName Nothing)
+                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
                         (SAWScript.Application triggerPos
-                           (SAWScript.Var $ locate "llvm_extract")
-                           (SAWScript.Var loadedModule))
+                           (SAWScript.Var triggerPos "llvm_extract")
+                           (SAWScript.Var triggerPos loadedModule))
                         (SAWScript.String triggerPos function))]
                JVM ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos boundName Nothing)
+                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
                         (SAWScript.Application triggerPos
-                           (SAWScript.Var $ locate "jvm_extract")
-                           (SAWScript.Var loadedModule))
+                           (SAWScript.Var triggerPos "jvm_extract")
+                           (SAWScript.Var triggerPos loadedModule))
                         (SAWScript.String triggerPos function))]
 
-      equivalenceTheorem :: (Text -> Text) -> SAWScript.LName -> SAWScript.LName -> Assignments -> ScriptWriter s tp (SAWScript.LName)
+      equivalenceTheorem :: (Text -> Text) -> SAWScript.Name -> SAWScript.Name -> Assignments -> ScriptWriter s tp (SAWScript.Name)
       equivalenceTheorem prefix leftFunction rightFunction assigns = do
          theoremName <- newNameWith prefix
          (leftArgs, rightArgs) <-
@@ -416,23 +416,23 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                   name <- newNameWith (nameCenter (leftName <> "_" <> rightName))
                   return ((leftIndex, name), (rightIndex, name))
          returning theoremName . tell $
-            [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos theoremName Nothing) .
-                SAWScript.Code . locate .
+            [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos theoremName Nothing) .
+                SAWScript.Code triggerPos .
                    Text.pack . show . Cryptol.ppPrec 0 .
                       cryptolAbstractNamesSAW leftArgs .
-                         cryptolApplyFunction (Cryptol.EParens . Cryptol.EVar . nameCryptolFromSAW . locate $ "==") $
+                         cryptolApplyFunction (Cryptol.EParens . Cryptol.EVar . nameCryptolFromSAW $ "==") $
                             [ cryptolApplyFunctionSAW leftFunction  leftArgs
                             , cryptolApplyFunctionSAW rightFunction rightArgs ]]
 
-      nameCryptolFromSAW :: SAWScript.LName -> Cryptol.PName
-      nameCryptolFromSAW = Cryptol.mkUnqual . Cryptol.mkIdent . SAWScript.getVal
+      nameCryptolFromSAW :: SAWScript.Name -> Cryptol.PName
+      nameCryptolFromSAW = Cryptol.mkUnqual . Cryptol.mkIdent
 
-      cryptolAbstractNamesSAW :: [SAWScript.LName] -> Cryptol.Expr Cryptol.PName -> Cryptol.Expr Cryptol.PName
+      cryptolAbstractNamesSAW :: [SAWScript.Name] -> Cryptol.Expr Cryptol.PName -> Cryptol.Expr Cryptol.PName
       cryptolAbstractNamesSAW names expr =
          Cryptol.EFun Cryptol.emptyFunDesc
-         (for names $ Cryptol.PVar . cryptolLocate . SAWScript.getVal) expr
+         (for names $ Cryptol.PVar . cryptolLocate) expr
 
-      cryptolApplyFunctionSAW :: SAWScript.LName -> [SAWScript.LName] -> Cryptol.Expr Cryptol.PName
+      cryptolApplyFunctionSAW :: SAWScript.Name -> [SAWScript.Name] -> Cryptol.Expr Cryptol.PName
       cryptolApplyFunctionSAW function args =
          cryptolApplyFunction (Cryptol.EVar $ nameCryptolFromSAW function)
                               (map (Cryptol.EVar . nameCryptolFromSAW) args)
@@ -441,25 +441,21 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
       cryptolApplyFunction function args =
          foldl Cryptol.EApp function args
 
-      prove :: SAWScript.LName -> ScriptWriter s tp ()
+      prove :: SAWScript.Name -> ScriptWriter s tp ()
       prove theorem = tell $
          [SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)
              (SAWScript.Application triggerPos
                 (SAWScript.Application triggerPos
-                   (SAWScript.Var $ locate "prove_print")
-                   (SAWScript.Var $ locate "abc"))
-                (SAWScript.Var theorem))]
+                   (SAWScript.Var triggerPos "prove_print")
+                   (SAWScript.Var triggerPos "abc"))
+                (SAWScript.Var triggerPos theorem))]
 
       printString :: Text -> ScriptWriter s tp ()
       printString string = tell $
          [SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)
              (SAWScript.Application triggerPos
-                (SAWScript.Var $ locate "print")
+                (SAWScript.Var triggerPos "print")
                 (SAWScript.String triggerPos string))]
-
-      locate :: Text -> SAWScript.LName
-      locate name =
-         SAWScript.Located name "" triggerPos
 
       cryptolLocate :: Text -> Cryptol.LPName
       cryptolLocate name =
@@ -470,11 +466,11 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                (error "bogus position generated by auto_match"))
             (Cryptol.mkUnqual (Cryptol.mkIdent name))
 
-      newNameWith :: (Text -> Text) -> ScriptWriter s tp (SAWScript.LName)
+      newNameWith :: (Text -> Text) -> ScriptWriter s tp (SAWScript.Name)
       newNameWith prefix = do
         gen   <- lift ask
         nonce <- lift $ lift $ Nonce.freshNonce gen
-        pure . locate . prefix . Text.pack . show . Nonce.indexValue $ nonce
+        pure . prefix . Text.pack . show . Nonce.indexValue $ nonce
 
       -- Here's the template for the output script:
       script :: [SAWScript.Stmt]

@@ -60,7 +60,7 @@ import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
 
 -- saw-support
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShow)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText)
 
 -- saw-core
 import qualified SAWCore.Parser.AST as Un
@@ -123,7 +123,6 @@ import Lang.Crucible.CFG.Common (freshGlobalVar)
 
 import SAWCentral.ImportAIG
 
-import SAWCentral.AST (getVal, Located(..))
 import SAWCentral.Options as Opts
 import SAWCentral.Panic (panic)
 import SAWCentral.Proof
@@ -1703,12 +1702,11 @@ envCmd = do
   rw <- SV.getMergedEnv
   let avail = rwPrimsAvail rw
       vals = rwValueInfo rw
-      keep (_x, (lc, _ty, _v)) = Set.member lc avail
+      keep (_x, (lc, _ty, _v, _doc)) = Set.member lc avail
       vals' = filter keep $ Map.assocs vals
-      showLName = Text.unpack . getVal
-      printit (x, (_lc, ty, _v)) = showLName x ++ " : " ++ PPS.pShow ty
+      printit (x, (_lc, ty, _v, _doc)) = x <> " : " <> PPS.pShowText ty
   opts <- getOptions
-  io $ sequence_ [ printOutLn opts Info (printit item) | item <- vals' ]
+  io $ sequence_ [ printOutLn opts Info (Text.unpack $ printit item) | item <- vals' ]
 
 exitPrim :: Integer -> IO ()
 exitPrim code = Exit.exitWith exitCode
