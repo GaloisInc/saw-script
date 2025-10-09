@@ -127,8 +127,8 @@ resolveTerm sym unint bt rr tm =
   typeError t = fail $ unlines [
     "Expected type: " ++ (
       case bt of
-        BaseBoolRepr  -> "Bit"
-        BaseBVRepr w  -> "[" ++ show w ++ "]"
+        W4.BaseBoolRepr  -> "Bit"
+        W4.BaseBVRepr w  -> "[" ++ show w ++ "]"
         _             -> show bt),
     "Actual type:   " ++ t
     ]
