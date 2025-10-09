@@ -117,7 +117,7 @@ resolveTerm sym unint bt rr tm =
             , tIsBit el, Just i <- tIsNum n, W4.BaseBVRepr w <- bt
             , intValue w == i -> pure ()
             | otherwise -> typeError (show (PP.pp ty)) :: IO ()
-          Nothing -> fail "Expected monomorphic Cryptol type, got polymorphic or unrecognized type"
+          Nothing -> fail "resolveTerm: Expected monomorphic Cryptol type, got polymorphic or unrecognized type"
 
       bindSAWTerm sym st bt te
 
