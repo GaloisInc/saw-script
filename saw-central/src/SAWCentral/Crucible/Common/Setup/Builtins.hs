@@ -25,17 +25,19 @@ import           Control.Monad (when)
 import           Control.Monad.State (get)
 import qualified Data.Map as Map
 import           Data.Set(Set)
+import qualified Data.Set as Set
+import           Data.Text(Text)
 
 import qualified What4.ProgramLoc as W4
 
-import           SAWCore.Recognizer(asConstant)
-import           SAWCore.Name(VarIndex, nameIndex)
-import           CryptolSAWCore.TypedTerm (TypedTerm, ttTerm)
+import           SAWCore.Name(VarIndex)
+import           CryptolSAWCore.TypedTerm (TypedTerm)
 
 import           SAWCentral.Value
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.Common.Setup.Type
+import           SAWCentral.Builtins(resolveNames)
 
 --------------------------------------------------------------------------------
 -- ** Builtins
@@ -46,19 +48,18 @@ import           SAWCentral.Crucible.Common.Setup.Type
 declare_unint ::
   String {- ^ Name of command for error messages -} ->
   Setter' (MS.CrucibleContext ext) (Set VarIndex) {-^ Keep uninterpreted names here -} ->
-  TypedTerm {- ^ Term corresponding to the name -} ->
+  [Text] {- ^ Names for the things to be left uninterpreted -} ->
   CrucibleSetup ext ()
-declare_unint cmd unintF term =
+declare_unint cmd unintF names = 
   do
     prePost <- use csPrePost
     case prePost of
       MS.PreState ->
-        case asConstant (ttTerm term) of
-          Nothing -> fail ("The argument to `" ++ cmd ++ "` should be a name.")
-          Just n  -> csCrucibleContext . unintF . contains (nameIndex n) .= True
+        do
+          ns <- crucibleSetupTopLevel (resolveNames names)
+          csCrucibleContext . unintF %= Set.union ns
       MS.PostState ->
         fail ("`" ++ cmd ++ "` works only in the pre-condition of a specification.")
-     
 
 crucible_precond ::
   W4.ProgramLoc ->

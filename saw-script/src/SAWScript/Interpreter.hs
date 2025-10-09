@@ -4979,26 +4979,20 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_execute_func`." ]
 
-  , prim "llvm_unint" "Term -> LLVMSetup ()"
+  , prim "llvm_unint" "[String] -> LLVMSetup ()"
     (pureVal llvm_unint)
     Current
-    [ "Keep the given name opaque during symbolic simulation."
-    , "The input term should be a name."
-    ]
+    [ "Keep the given names opaque during symbolic simulation." ]
 
-  , prim "jvm_unint" "Term -> JVMSetup ()"
+  , prim "jvm_unint" "[String] -> JVMSetup ()"
     (pureVal jvm_unint)
     Current
-    [ "Keep the given name opaque during symbolic simulation."
-    , "The input term should be a name."
-    ] 
+    [ "Keep the given names opaque during symbolic simulation." ] 
 
-  , prim "mir_unint" "Term -> MIRSetup ()"
+  , prim "mir_unint" "[String] -> MIRSetup ()"
     (pureVal mir_unint)
     Current
-    [ "Keep the given name opaque during symbolic simulation."
-    , "The input term should be a name."
-    ] 
+    [ "Keep the given names opaque during symbolic simulation." ] 
 
   , prim "llvm_return" "SetupValue -> LLVMSetup ()"
     (pureVal llvm_return)

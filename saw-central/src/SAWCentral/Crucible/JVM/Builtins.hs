@@ -1477,7 +1477,7 @@ jvm_equal val1 val2 =
        ]
      Setup.crucible_equal loc val1 val2
 
-jvm_unint :: TypedTerm -> JVMSetupM ()
+jvm_unint :: [Text] -> JVMSetupM ()
 jvm_unint term = JVMSetupM (Setup.declare_unint "jvm_unint" jccUninterp term)
 
 --------------------------------------------------------------------------------

@@ -788,7 +788,7 @@ mir_points_to_internal mode ref val =
            , "  Value type:    " ++ show (PP.pretty valTy)
            ]
 
-mir_unint :: TypedTerm -> MIRSetupM ()
+mir_unint :: [Text] -> MIRSetupM ()
 mir_unint term = MIRSetupM (Setup.declare_unint "mir_unint" mccUninterp term)
 
 -- | Perform a set of validity checks on the LHS reference or pointer value in a

@@ -2010,7 +2010,7 @@ llvm_postcond term =
   do loc <- getW4Position "llvm_postcond"
      Setup.crucible_postcond loc term
 
-llvm_unint :: TypedTerm -> LLVMCrucibleSetupM ()
+llvm_unint :: [Text] -> LLVMCrucibleSetupM ()
 llvm_unint term =
   LLVMCrucibleSetupM (Setup.declare_unint "llvm_unint" ccUninterp term)
           

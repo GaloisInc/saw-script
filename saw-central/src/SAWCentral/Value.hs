@@ -176,6 +176,7 @@ module SAWCentral.Value (
     llvmTopLevel,
     jvmTopLevel,
     mirTopLevel,
+    crucibleSetupTopLevel,
     -- used in SAWScript.Interpreter
     -- XXX: probably belongs in SAWSupport
     underStateT,
@@ -1287,6 +1288,9 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
             putTheoremDB db'
             pure thmResult
 
+
+crucibleSetupTopLevel :: TopLevel a -> CrucibleSetup ext a
+crucibleSetupTopLevel m = lift (lift m)
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
