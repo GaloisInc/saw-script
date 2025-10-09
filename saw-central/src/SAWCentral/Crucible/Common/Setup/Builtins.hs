@@ -57,7 +57,7 @@ declare_unint cmd unintF term =
           Nothing -> fail ("The argument to `" ++ cmd ++ "` should be a name.")
           Just n  -> csCrucibleContext . unintF . contains (nameIndex n) .= True
       MS.PostState ->
-        fail ("`" ++ cmd ++ "` works only int the pre-condition of a specification.")
+        fail ("`" ++ cmd ++ "` works only in the pre-condition of a specification.")
      
 
 crucible_precond ::
