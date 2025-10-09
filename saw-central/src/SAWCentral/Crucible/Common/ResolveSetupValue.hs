@@ -54,7 +54,7 @@ noResolveRewrite :: ResolveRewrite
 noResolveRewrite = ResolveRewrite { rrBasicSS = Nothing, rrWhat4Eval = False }
 
 -- Convert a term to a What4 expression, trying to simplify it in the process.
--- Currently this expects the terms to be wither boolean or bit-vectors, as
+-- Currently this expects the terms to be either boolean or bit-vectors, as
 -- that's all we use it for.   It should be fairly straightforward to generalize
 -- if need be.
 resolveTerm ::
