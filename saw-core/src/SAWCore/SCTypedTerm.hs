@@ -8,36 +8,36 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.SCTypedTerm
-  ( SCTypedTerm -- abstract
-  , typedVal
-  , typedType
-  , typedCtx
+  ( Term -- abstract
+  , rawTerm
+  , rawType
+  , rawCtx
   , scTypeCheckWHNF
-  , scTypeOfTypedTerm
-  , scTypedTermWHNF
-  , scGlobalTypedTerm
-    -- * Building typed terms
-  , scTypedApply
-  , scTypedLambda
-  , scTypedPi
-  , scTypedFun
-  , scTypedConstant
-  , scTypedVariable
-  , scTypedUnitValue
-  , scTypedUnitType
-  , scTypedPairValue
-  , scTypedPairType
-  , scTypedPairLeft
-  , scTypedPairRight
-  , scTypedRecursor
-  , scTypedRecordType
-  , scTypedRecordValue
-  , scTypedRecordProj
-  , scTypedSort
-  , scTypedSort'
-  , scTypedNat
-  , scTypedVector
-  , scTypedString
+  , scTypeOf
+  , scWHNF
+    -- * Building certified terms
+  , scApply
+  , scLambda
+  , scPi
+  , scFun
+  , scConstant
+  , scGlobal
+  , scVariable
+  , scUnitValue
+  , scUnitType
+  , scPairValue
+  , scPairType
+  , scPairLeft
+  , scPairRight
+  , scRecursor
+  , scRecordType
+  , scRecordValue
+  , scRecordProj
+  , scSort
+  , scSort'
+  , scNat
+  , scVector
+  , scString
   ) where
 
 import Control.Monad (foldM, unless, when)
@@ -56,55 +56,56 @@ import SAWCore.Module (Ctor(..), DataType(..), ResolvedName(..), lookupVarIndexI
 import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.Rewriter
-import SAWCore.SharedTerm
+import SAWCore.SharedTerm (SharedContext)
+import qualified SAWCore.SharedTerm as Raw
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (showTerm)
-import SAWCore.Term.Raw
+import SAWCore.Term.Raw (alphaEquiv, freeVars, unwrapTermF)
 
 --------------------------------------------------------------------------------
 -- * Certified typed terms
 
--- | An abstract datatype pairing a well-formed 'Term' with its type.
-data SCTypedTerm =
-  SCTypedTerm
-  Term -- ^ value
-  Term -- ^ type
-  (IntMap Term) -- ^ typing context
+-- | An abstract datatype pairing a well-formed 'Raw.Term' with its type.
+data Term =
+  Term
+  Raw.Term -- ^ value
+  Raw.Term -- ^ type
+  (IntMap Raw.Term) -- ^ typing context
 
--- | The raw 'Term' of an 'SCTypedTerm'.
-typedVal :: SCTypedTerm -> Term
-typedVal (SCTypedTerm trm _ _) = trm
+-- | The raw term of a 'Term'.
+rawTerm :: Term -> Raw.Term
+rawTerm (Term trm _ _) = trm
 
--- | The type of an 'SCTypedTerm' as a 'Term'.
-typedType :: SCTypedTerm -> Term
-typedType (SCTypedTerm _ typ _) = typ
+-- | The type of a 'Term' as a raw term.
+rawType :: Term -> Raw.Term
+rawType (Term _ typ _) = typ
 
--- | The typing context of an 'SCTypedTerm', keyed by the 'VarIndex'
--- of each 'VarName' in the term.
-typedCtx :: SCTypedTerm -> IntMap Term
-typedCtx (SCTypedTerm _ _ ctx) = ctx
+-- | The typing context of a 'Term', keyed by the 'VarIndex' of each
+-- 'VarName' in the term.
+rawCtx :: Term -> IntMap Raw.Term
+rawCtx (Term _ _ scx) = scx
 
--- | Reduce the given 'Term' to WHNF, using all reductions allowed by
+-- | Reduce the given 'Raw.Term' to WHNF, using all reductions allowed by
 -- the SAWCore type system.
-scTypeCheckWHNF :: SharedContext -> Term -> IO Term
+scTypeCheckWHNF :: SharedContext -> Raw.Term -> IO Raw.Term
 scTypeCheckWHNF sc t =
   do (_, t') <- rewriteSharedTerm sc (addConvs natConversions emptySimpset :: Simpset ()) t
-     scWhnf sc t'
+     Raw.scWhnf sc t'
 
 -- | Check if two terms are "convertible for type-checking", meaning that they
 -- are convertible up to 'natConversions'.
-scTypeConvertible :: SharedContext -> Term -> Term -> IO Bool
-scTypeConvertible sc t1 t2 = scConvertibleEval sc scTypeCheckWHNF True t1 t2
+scTypeConvertible :: SharedContext -> Raw.Term -> Raw.Term -> IO Bool
+scTypeConvertible sc t1 t2 = Raw.scConvertibleEval sc scTypeCheckWHNF True t1 t2
 
 -- | Check whether one type is a subtype of another: Either they are
 -- convertible, or they are both Pi types with convertible argument
 -- types and result sorts @s1@ and @s2@ with @s1 <= s2@.
-scSubtype :: SharedContext -> Term -> Term -> IO Bool
+scSubtype :: SharedContext -> Raw.Term -> Raw.Term -> IO Bool
 scSubtype sc t1 t2
   | alphaEquiv t1 t2 = pure True
   | otherwise =
-    do t1' <- scWhnf sc t1
-       t2' <- scWhnf sc t2
+    do t1' <- Raw.scWhnf sc t1
+       t2' <- Raw.scWhnf sc t2
        case (t1', t2') of
          (asSort -> Just s1, asSort -> Just s2) ->
            pure (s1 <= s2)
@@ -113,8 +114,8 @@ scSubtype sc t1 t2
              (&&) <$> scTypeConvertible sc a1 a2 <*> scSubtype sc b1 b2
            | otherwise ->
              do conv1 <- scTypeConvertible sc a1 a2
-                var1 <- scVariable sc (EC x1 a1)
-                b2' <- scInstantiateExt sc (IntMap.singleton (vnIndex x2) var1) b2
+                var1 <- Raw.scVariable sc (EC x1 a1)
+                b2' <- Raw.scInstantiateExt sc (IntMap.singleton (vnIndex x2) var1) b2
                 conv2 <- scSubtype sc b1 b2'
                 pure (conv1 && conv2)
          _ ->
@@ -123,224 +124,224 @@ scSubtype sc t1 t2
 --------------------------------------------------------------------------------
 -- * Operations on typed terms
 
--- | Compute the type of an 'SCTypedTerm'.
-scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
-scTypeOfTypedTerm sc (SCTypedTerm _tm tp ctx) =
-  do tp_tp <- scTypeOf' sc ctx tp
+-- | Compute the type of a 'Term'.
+scTypeOf :: SharedContext -> Term -> IO Term
+scTypeOf sc (Term _tm tp scx) =
+  do tp_tp <- Raw.scTypeOf' sc scx tp
      -- Shrink typing context if possible
-     let ctx' = pruneContext (freeVars tp_tp) ctx
-     pure (SCTypedTerm tp tp_tp ctx')
+     let scx' = pruneContext (freeVars tp_tp) scx
+     pure (Term tp tp_tp scx')
 
--- | Reduce an 'SCTypedTerm' to WHNF (see also 'scTypeCheckWHNF').
-scTypedTermWHNF :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
-scTypedTermWHNF sc (SCTypedTerm tm tp ctx) =
+-- | Reduce a 'Cterm' to WHNF (see also 'scTypeCheckWHNF').
+scWHNF :: SharedContext -> Term -> IO Term
+scWHNF sc (Term tm tp scx) =
   do tm' <- scTypeCheckWHNF sc tm
-     pure (SCTypedTerm tm' tp ctx)
+     pure (Term tm' tp scx)
 
-scGlobalTypedTerm :: SharedContext -> Ident -> IO SCTypedTerm
-scGlobalTypedTerm sc ident =
-  do tm <- scGlobalDef sc ident
-     tp <- scTypeOfIdent sc ident
-     pure (SCTypedTerm tm tp IntMap.empty)
+scGlobal :: SharedContext -> Ident -> IO Term
+scGlobal sc ident =
+  do tm <- Raw.scGlobalDef sc ident
+     tp <- Raw.scTypeOfIdent sc ident
+     pure (Term tm tp IntMap.empty)
 
 --------------------------------------------------------------------------------
--- * Building typed terms
+-- * Building certified terms
 
 -- possible errors: not a pi type, bad argument type, context mismatch
-scTypedApply :: SharedContext -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
-scTypedApply sc f arg =
-  do tm <- scApply sc (typedVal f) (typedVal arg)
-     (vnIndex -> i, t1, t2) <- ensurePi sc (typedType f)
-     ok <- scSubtype sc (typedType arg) t1
+scApply :: SharedContext -> Term -> Term -> IO Term
+scApply sc f arg =
+  do tm <- Raw.scApply sc (rawTerm f) (rawTerm arg)
+     (vnIndex -> i, t1, t2) <- ensurePi sc (rawType f)
+     ok <- scSubtype sc (rawType arg) t1
      unless ok $ fail $ unlines $
-       ["Not a subtype", "expected: " ++ showTerm t1, "got: " ++ showTerm (typedType arg)]
-     tp <- scInstantiateExt sc (IntMap.singleton i (typedVal arg)) t2
-     ctx <- unifyContexts "scTypedApply" (typedCtx f) (typedCtx arg)
-     pure (SCTypedTerm tm tp ctx)
+       ["Not a subtype", "expesced: " ++ showTerm t1, "got: " ++ showTerm (rawType arg)]
+     tp <- Raw.scInstantiateExt sc (IntMap.singleton i (rawTerm arg)) t2
+     scx <- unifyContexts "scApply" (rawCtx f) (rawCtx arg)
+     pure (Term tm tp scx)
 
 -- possible errors: not a type, context mismatch, variable free in context
-scTypedLambda :: SharedContext -> VarName -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
-scTypedLambda sc x t body =
-  do _s <- ensureSort sc (typedType t)
-     tm <- scLambda sc x (typedVal t) (typedVal body)
+scLambda :: SharedContext -> VarName -> Term -> Term -> IO Term
+scLambda sc x t body =
+  do _s <- ensureSort sc (rawType t)
+     tm <- Raw.scLambda sc x (rawTerm t) (rawTerm body)
      ensureNotFreeInContext x body
-     _ <- unifyContexts "scTypedLambda" (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)
-     ctx <- unifyContexts "scTypedLambda" (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))
-     tp <- scPi sc x (typedVal t) (typedType body)
-     pure (SCTypedTerm tm tp ctx)
+     _ <- unifyContexts "scLambda" (IntMap.singleton (vnIndex x) (rawTerm t)) (rawCtx body)
+     scx <- unifyContexts "scLambda" (rawCtx t) (IntMap.delete (vnIndex x) (rawCtx body))
+     tp <- Raw.scPi sc x (rawTerm t) (rawType body)
+     pure (Term tm tp scx)
 
 -- possible errors: not a type, context mismatch, variable free in context
-scTypedPi :: SharedContext -> VarName -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
-scTypedPi sc x t body =
-  do tm <- scPi sc x (typedVal t) (typedVal body)
+scPi :: SharedContext -> VarName -> Term -> Term -> IO Term
+scPi sc x t body =
+  do tm <- Raw.scPi sc x (rawTerm t) (rawTerm body)
      ensureNotFreeInContext x body
-     _ <- unifyContexts "scTypedPi" (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)
-     ctx <- unifyContexts "scTypedPi" (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))
-     s1 <- ensureSort sc (typedType t)
-     s2 <- ensureSort sc (typedType body)
-     tp <- scSort sc (piSort s1 s2)
-     pure (SCTypedTerm tm tp ctx)
+     _ <- unifyContexts "scTypedPi" (IntMap.singleton (vnIndex x) (rawTerm t)) (rawCtx body)
+     scx <- unifyContexts "scTypedPi" (rawCtx t) (IntMap.delete (vnIndex x) (rawCtx body))
+     s1 <- ensureSort sc (rawType t)
+     s2 <- ensureSort sc (rawType body)
+     tp <- Raw.scSort sc (piSort s1 s2)
+     pure (Term tm tp scx)
 
 -- possible errors: not a type, context mismatch
-scTypedFun :: SharedContext -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
-scTypedFun sc a b =
-  do tm <- scFun sc (typedVal a) (typedVal b)
-     sa <- ensureSort sc (typedType a)
-     sb <- ensureSort sc (typedType b)
-     tp <- scSort sc (piSort sa sb)
-     ctx <- unifyContexts "scTypedFun" (typedCtx a) (typedCtx b)
-     pure (SCTypedTerm tm tp ctx)
+scFun :: SharedContext -> Term -> Term -> IO Term
+scFun sc a b =
+  do tm <- Raw.scFun sc (rawTerm a) (rawTerm b)
+     sa <- ensureSort sc (rawType a)
+     sb <- ensureSort sc (rawType b)
+     tp <- Raw.scSort sc (piSort sa sb)
+     scx <- unifyContexts "scFun" (rawCtx a) (rawCtx b)
+     pure (Term tm tp scx)
 
 -- possible errors: constant not defined
-scTypedConstant :: SharedContext -> Name -> IO SCTypedTerm
-scTypedConstant sc nm =
-  do tm <- scConst sc nm
-     tp <- scTypeOfName sc nm
-     pure (SCTypedTerm tm tp IntMap.empty)
+scConstant :: SharedContext -> Name -> IO Term
+scConstant sc nm =
+  do tm <- Raw.scConst sc nm
+     tp <- Raw.scTypeOfName sc nm
+     pure (Term tm tp IntMap.empty)
 
 -- possible errors: not a type
-scTypedVariable :: SharedContext -> VarName -> SCTypedTerm -> IO SCTypedTerm
-scTypedVariable sc vn t =
-  do let tp = typedVal t
-     tm <- scVariable sc (EC vn tp)
-     let ctx = IntMap.insert (vnIndex vn) tp (typedCtx t)
-     pure (SCTypedTerm tm tp ctx)
+scVariable :: SharedContext -> VarName -> Term -> IO Term
+scVariable sc vn t =
+  do let tp = rawTerm t
+     tm <- Raw.scVariable sc (EC vn tp)
+     let scx = IntMap.insert (vnIndex vn) tp (rawCtx t)
+     pure (Term tm tp scx)
 
 -- possible errors: none
-scTypedUnitValue :: SharedContext -> IO SCTypedTerm
-scTypedUnitValue sc =
-  do tm <- scUnitValue sc
-     tp <- scUnitType sc
-     pure (SCTypedTerm tm tp IntMap.empty)
+scUnitValue :: SharedContext -> IO Term
+scUnitValue sc =
+  do tm <- Raw.scUnitValue sc
+     tp <- Raw.scUnitType sc
+     pure (Term tm tp IntMap.empty)
 
 -- possible errors: none
-scTypedUnitType :: SharedContext -> IO SCTypedTerm
-scTypedUnitType sc =
-  do tm <- scUnitType sc
-     tp <- scSort sc (mkSort 0)
-     pure (SCTypedTerm tm tp IntMap.empty)
+scUnitType :: SharedContext -> IO Term
+scUnitType sc =
+  do tm <- Raw.scUnitType sc
+     tp <- Raw.scSort sc (mkSort 0)
+     pure (Term tm tp IntMap.empty)
 
 -- possible errors: none (could redesign to require types in sort 0)
-scTypedPairValue :: SharedContext -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
-scTypedPairValue sc x y =
-  do tm <- scPairValue sc (typedVal x) (typedVal y)
-     tp <- scPairType sc (typedType x) (typedType y)
-     ctx <- unifyContexts "scTypedPairValue" (typedCtx x) (typedCtx y)
-     pure (SCTypedTerm tm tp ctx)
+scPairValue :: SharedContext -> Term -> Term -> IO Term
+scPairValue sc x y =
+  do tm <- Raw.scPairValue sc (rawTerm x) (rawTerm y)
+     tp <- Raw.scPairType sc (rawType x) (rawType y)
+     scx <- unifyContexts "scPairValue" (rawCtx x) (rawCtx y)
+     pure (Term tm tp scx)
 
 -- possible errors: not a type
-scTypedPairType :: SharedContext -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
-scTypedPairType sc x y =
-  do tm <- scPairType sc (typedVal x) (typedVal y)
-     sx <- ensureSort sc (typedType x)
-     sy <- ensureSort sc (typedType y)
-     tp <- scSort sc (max sx sy)
-     ctx <- unifyContexts "scTypedPairType" (typedCtx x) (typedCtx y)
-     pure (SCTypedTerm tm tp ctx)
+scPairType :: SharedContext -> Term -> Term -> IO Term
+scPairType sc x y =
+  do tm <- Raw.scPairType sc (rawTerm x) (rawTerm y)
+     sx <- ensureSort sc (rawType x)
+     sy <- ensureSort sc (rawType y)
+     tp <- Raw.scSort sc (max sx sy)
+     scx <- unifyContexts "scPairType" (rawCtx x) (rawCtx y)
+     pure (Term tm tp scx)
 
 -- possible errors: not a pair
-scTypedPairLeft :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
-scTypedPairLeft sc x =
-  do tm <- scPairLeft sc (typedVal x)
-     tp <- fst <$> ensurePairType sc (typedType x)
-     let ctx = typedCtx x
-     pure (SCTypedTerm tm tp ctx)
+scPairLeft :: SharedContext -> Term -> IO Term
+scPairLeft sc x =
+  do tm <- Raw.scPairLeft sc (rawTerm x)
+     tp <- fst <$> ensurePairType sc (rawType x)
+     let scx = rawCtx x
+     pure (Term tm tp scx)
 
 -- possible errors: not a pair
-scTypedPairRight :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
-scTypedPairRight sc x =
-  do tm <- scPairRight sc (typedVal x)
-     tp <- snd <$> ensurePairType sc (typedType x)
-     let ctx = typedCtx x
-     pure (SCTypedTerm tm tp ctx)
+scPairRight :: SharedContext -> Term -> IO Term
+scPairRight sc x =
+  do tm <- Raw.scPairRight sc (rawTerm x)
+     tp <- snd <$> ensurePairType sc (rawType x)
+     let scx = rawCtx x
+     pure (Term tm tp scx)
 
 -- possible errors: not a datatype, bad elimination sort
-scTypedRecursor :: SharedContext -> Name -> Sort -> IO SCTypedTerm
-scTypedRecursor sc nm s =
-  do mm <- scGetModuleMap sc
+scRecursor :: SharedContext -> Name -> Sort -> IO Term
+scRecursor sc nm s =
+  do mm <- Raw.scGetModuleMap sc
      case lookupVarIndexInMap (nameIndex nm) mm of
        Just (ResolvedDataType dt) ->
-         do unless (allowedElimSort dt s) $ fail "Disallowed propositional elimination"
+         do unless (Raw.allowedElimSort dt s) $ fail "Disallowed propositional elimination"
             let d = dtName dt
             let nparams = length (dtParams dt)
             let nixs = length (dtIndices dt)
             let ctorOrder = map ctorName (dtCtors dt)
             let crec = CompiledRecursor d s nparams nixs ctorOrder
-            tm <- scFlatTermF sc (Recursor crec)
-            tp <- scRecursorType sc dt s
-            pure (SCTypedTerm tm tp IntMap.empty)
+            tm <- Raw.scFlatTermF sc (Recursor crec)
+            tp <- Raw.scRecursorType sc dt s
+            pure (Term tm tp IntMap.empty)
        _ ->
          fail "datatype not found"
 
 -- possible errors: field not a type, context mismatch
-scTypedRecordType :: SharedContext -> [(FieldName, SCTypedTerm)] -> IO SCTypedTerm
-scTypedRecordType sc fields =
-  do tm <- scRecordType sc (map (fmap typedVal) fields)
-     sorts <- traverse (ensureSort sc . typedType . snd) fields
-     tp <- scSort sc (foldl max (mkSort 0) sorts)
-     ctx <- unifyContextList "scTypedRecordType" (map (typedCtx . snd) fields)
-     pure (SCTypedTerm tm tp ctx)
+scRecordType :: SharedContext -> [(FieldName, Term)] -> IO Term
+scRecordType sc fields =
+  do tm <- Raw.scRecordType sc (map (fmap rawTerm) fields)
+     sorts <- traverse (ensureSort sc . rawType . snd) fields
+     tp <- Raw.scSort sc (foldl max (mkSort 0) sorts)
+     scx <- unifyContextList "scRecordType" (map (rawCtx . snd) fields)
+     pure (Term tm tp scx)
 
 -- possible errors: duplicate field name
-scTypedRecordValue :: SharedContext -> [(FieldName, SCTypedTerm)] -> IO SCTypedTerm
-scTypedRecordValue sc fields =
-  do tm <- scFlatTermF sc $ RecordValue (map (fmap typedVal) fields)
-     tp <- scRecordType sc (map (fmap typedType) fields)
-     ctx <- foldM (unifyContexts "scTypedRecordValue") IntMap.empty (map (typedCtx . snd) fields)
-     pure (SCTypedTerm tm tp ctx)
+scRecordValue :: SharedContext -> [(FieldName, Term)] -> IO Term
+scRecordValue sc fields =
+  do tm <- Raw.scFlatTermF sc $ RecordValue (map (fmap rawTerm) fields)
+     tp <- Raw.scRecordType sc (map (fmap rawType) fields)
+     scx <- foldM (unifyContexts "scRecordValue") IntMap.empty (map (rawCtx . snd) fields)
+     pure (Term tm tp scx)
 
 -- possible errors: not a record type, field name not found
-scTypedRecordProj :: SharedContext -> SCTypedTerm -> FieldName -> IO SCTypedTerm
-scTypedRecordProj sc t fname =
-  do tm <- scRecordSelect sc (typedVal t) fname
-     let ctx = typedCtx t
-     tps <- ensureRecordType sc (typedType t)
+scRecordProj :: SharedContext -> Term -> FieldName -> IO Term
+scRecordProj sc t fname =
+  do tm <- Raw.scRecordSelect sc (rawTerm t) fname
+     let scx = rawCtx t
+     tps <- ensureRecordType sc (rawType t)
      case Map.lookup fname tps of
-       Nothing -> fail "scTypedRecordProj: field name not found"
-       Just tp -> pure (SCTypedTerm tm tp ctx)
+       Nothing -> fail "scRecordProj: field name not found"
+       Just tp -> pure (Term tm tp scx)
 
 -- no possible errors
-scTypedSort :: SharedContext -> Sort -> IO SCTypedTerm
-scTypedSort sc s = scTypedSort' sc s noFlags
+scSort :: SharedContext -> Sort -> IO Term
+scSort sc s = scSort' sc s noFlags
 
--- | A variant of 'scTypedSort' that also takes a 'SortFlags' argument.
+-- | A variant of 'scSort' that also takes a 'SortFlags' argument.
 -- No possible errors.
-scTypedSort' :: SharedContext -> Sort -> SortFlags -> IO SCTypedTerm
-scTypedSort' sc s flags =
-  do tm <- scFlatTermF sc (Sort s flags)
-     tp <- scSort sc (sortOf s)
-     pure (SCTypedTerm tm tp IntMap.empty)
+scSort' :: SharedContext -> Sort -> SortFlags -> IO Term
+scSort' sc s flags =
+  do tm <- Raw.scFlatTermF sc (Sort s flags)
+     tp <- Raw.scSort sc (sortOf s)
+     pure (Term tm tp IntMap.empty)
 
 -- no possible errors
-scTypedNat :: SharedContext -> Natural -> IO SCTypedTerm
-scTypedNat sc n =
-  do tm <- scNat sc n
-     tp <- scNatType sc
-     pure (SCTypedTerm tm tp IntMap.empty)
+scNat :: SharedContext -> Natural -> IO Term
+scNat sc n =
+  do tm <- Raw.scNat sc n
+     tp <- Raw.scNatType sc
+     pure (Term tm tp IntMap.empty)
 
 -- possible errors: context mismatch, element type not a type, element wrong type
-scTypedVector :: SharedContext -> SCTypedTerm -> [SCTypedTerm] -> IO SCTypedTerm
-scTypedVector sc e xs =
+scVector :: SharedContext -> Term -> [Term] -> IO Term
+scVector sc e xs =
   do -- TODO: check that all xs have type e
-     tm <- scVector sc (typedVal e) (map typedVal xs)
-     n <- scNat sc (fromIntegral (length xs))
-     tp <- scVecType sc n (typedVal e)
-     ctx <- foldM (unifyContexts "scTypedVector") (typedCtx e) (map typedCtx xs)
-     pure (SCTypedTerm tm tp ctx)
+     tm <- Raw.scVector sc (rawTerm e) (map rawTerm xs)
+     n <- Raw.scNat sc (fromIntegral (length xs))
+     tp <- Raw.scVecType sc n (rawTerm e)
+     scx <- foldM (unifyContexts "scVector") (rawCtx e) (map rawCtx xs)
+     pure (Term tm tp scx)
 
 -- no possible errors
-scTypedString :: SharedContext -> Text -> IO SCTypedTerm
-scTypedString sc s =
-  do tm <- scString sc s
-     tp <- scStringType sc
-     pure (SCTypedTerm tm tp IntMap.empty)
+scString :: SharedContext -> Text -> IO Term
+scString sc s =
+  do tm <- Raw.scString sc s
+     tp <- Raw.scStringType sc
+     pure (Term tm tp IntMap.empty)
 
 --------------------------------------------------------------------------------
--- * Utility functions
+-- * Utility funscions
 
 -- | Prune a typing context by dropping indices unreachable from the
 -- given 'IntSet'.
-pruneContext :: IntSet -> IntMap Term -> IntMap Term
+pruneContext :: IntSet -> IntMap Raw.Term -> IntMap Raw.Term
 pruneContext vs0 ctx = IntMap.restrictKeys ctx (reachable mempty vs0)
   where
     fvs = fmap freeVars ctx
@@ -350,9 +351,9 @@ pruneContext vs0 ctx = IntMap.restrictKeys ctx (reachable mempty vs0)
           where old' = old <> new
                 new' = IntSet.difference (Fold.fold (IntMap.restrictKeys fvs new)) old'
 
--- | Two typing contexts are unifiable if they agree perfectly on all
+-- | Two typing contexts are unifiable if they agree perfescly on all
 -- entries where they overlap.
-unifyContexts :: String -> IntMap Term -> IntMap Term -> IO (IntMap Term)
+unifyContexts :: String -> IntMap Raw.Term -> IntMap Raw.Term -> IO (IntMap Raw.Term)
 unifyContexts msg ctx1 ctx2 =
   do let check t1 t2 =
            unless (t1 == t2) $
@@ -362,10 +363,10 @@ unifyContexts msg ctx1 ctx2 =
      sequence_ (IntMap.intersectionWith check ctx1 ctx2)
      pure (IntMap.union ctx1 ctx2)
 
-unifyContextList :: String -> [IntMap Term] -> IO (IntMap Term)
+unifyContextList :: String -> [IntMap Raw.Term] -> IO (IntMap Raw.Term)
 unifyContextList msg = foldM (unifyContexts msg) IntMap.empty
 
-ensureRecognizer :: String -> SharedContext -> (Term -> Maybe a) -> Term -> IO a
+ensureRecognizer :: String -> SharedContext -> (Raw.Term -> Maybe a) -> Raw.Term -> IO a
 ensureRecognizer s sc f trm =
   case f trm of
     Just a -> pure a
@@ -376,25 +377,25 @@ ensureRecognizer s sc f trm =
            Nothing ->
              fail $ "ensureRecognizer: Expected " ++ s ++ ", found: " ++ showTerm trm'
 
-ensureSort :: SharedContext -> Term -> IO Sort
+ensureSort :: SharedContext -> Raw.Term -> IO Sort
 ensureSort sc tp = ensureRecognizer "Sort" sc asSort tp
 
-ensurePi :: SharedContext -> Term -> IO (VarName, Term, Term)
+ensurePi :: SharedContext -> Raw.Term -> IO (VarName, Raw.Term, Raw.Term)
 ensurePi sc tp = ensureRecognizer "Pi" sc asPi tp
 
-ensurePairType :: SharedContext -> Term -> IO (Term, Term)
+ensurePairType :: SharedContext -> Raw.Term -> IO (Raw.Term, Raw.Term)
 ensurePairType sc tp = ensureRecognizer "PairType" sc asPairType tp
 
-ensureRecordType :: SharedContext -> Term -> IO (Map FieldName Term)
+ensureRecordType :: SharedContext -> Raw.Term -> IO (Map FieldName Raw.Term)
 ensureRecordType sc tp = ensureRecognizer "RecordType" sc asRecordType tp
 
 piSort :: Sort -> Sort -> Sort
 piSort s1 s2 = if s2 == propSort then propSort else max s1 s2
 
 -- | Check whether the given 'VarName' occurs free in the type of
--- another variable in the context of the given 'SCTypedTerm', and
--- fail if it does.
-ensureNotFreeInContext :: VarName -> SCTypedTerm -> IO ()
+-- another variable in the context of the given 'Term', and fail if it
+-- does.
+ensureNotFreeInContext :: VarName -> Term -> IO ()
 ensureNotFreeInContext x body =
-  when (any (IntSet.member (vnIndex x) . freeVars) (typedCtx body)) $
+  when (any (IntSet.member (vnIndex x) . freeVars) (rawCtx body)) $
     fail $ "Variable occurs free in context: " ++ show (vnName x)

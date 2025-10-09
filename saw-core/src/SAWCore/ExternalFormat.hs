@@ -28,7 +28,14 @@ import Text.URI
 
 import SAWCore.Name
 import SAWCore.SharedTerm
+  ( SharedContext
+  , scFreshVarName
+  , scRegisterName
+  , scResolveNameByURI
+  )
+import qualified SAWCore.SharedTerm as Raw
 import SAWCore.Term.Functor
+import SAWCore.Term.Raw (TermIndex)
 import SAWCore.SCTypedTerm
 
 --------------------------------------------------------------------------------
@@ -57,7 +64,7 @@ readNames xs = Map.fromList <$> (mapM readName =<< readMaybe xs)
           pure (idx, Right (ImportedName uri' as))
 
 -- | Render to external text format
-scWriteExternal :: Term -> String
+scWriteExternal :: Raw.Term -> String
 scWriteExternal t0 =
     let (x, (_, nms, lns, _)) = State.runState (go t0) (Map.empty, Map.empty, [], 1)
     in unlines $
@@ -88,15 +95,15 @@ scWriteExternal t0 =
        do (m, nms, lns, x) <- State.get
           State.put (m, Map.insert (vnIndex vn) (Left (vnName vn)) nms, lns, x)
 
-    go :: Term -> WriteM Int
-    go (Unshared tf) = do
+    go :: Raw.Term -> WriteM Int
+    go (Raw.Unshared tf) = do
       tf' <- traverse go tf
       body <- writeTermF tf'
       x <- nextId
       output (unwords [show x, body])
       return x
 
-    go STApp{ stAppIndex = i, stAppTermF = tf } = do
+    go Raw.STApp{ Raw.stAppIndex = i, Raw.stAppTermF = tf } = do
       (memo, _, _, _) <- State.get
       case Map.lookup i memo of
         Just x -> return x
@@ -156,7 +163,7 @@ scWriteExternal t0 =
 -- 'SharedContext'.
 data ReadState =
   ReadState
-  { rsTerms :: Map Int SCTypedTerm
+  { rsTerms :: Map Int Term
     -- ^ Map 'Int' term identifiers from external core file to SAWCore terms
   , rsNames :: Map VarIndex (Either Text NameInfo)
     -- ^ Map 'VarIndex'es from external core file to global names
@@ -166,10 +173,10 @@ data ReadState =
 
 type ReadM = State.StateT ReadState IO
 
-scReadExternal :: SharedContext -> String -> IO Term
-scReadExternal sc input = typedVal <$> scReadExternalTyped sc input
+scReadExternal :: SharedContext -> String -> IO Raw.Term
+scReadExternal sc input = rawTerm <$> scReadExternalTyped sc input
 
-scReadExternalTyped :: SharedContext -> String -> IO SCTypedTerm
+scReadExternalTyped :: SharedContext -> String -> IO Term
 scReadExternalTyped sc input =
   case lines input of
     ( (words -> ["SAWCoreTerm", final]) : nmlist : rows ) ->
@@ -193,14 +200,14 @@ scReadExternalTyped sc input =
         Nothing -> fail $ "scReadExternal: parse error: " ++ show tok
         Just x -> pure x
 
-    getTerm :: Int -> ReadM SCTypedTerm
+    getTerm :: Int -> ReadM Term
     getTerm i =
       do ts <- State.gets rsTerms
          case Map.lookup i ts of
            Nothing -> fail $ "scReadExternal: invalid term index: " ++ show i
            Just t -> pure t
 
-    readIdx :: String -> ReadM SCTypedTerm
+    readIdx :: String -> ReadM Term
     readIdx tok = getTerm =<< readM tok
 
     readName' :: VarIndex -> ReadM Name
@@ -249,61 +256,61 @@ scReadExternalTyped sc input =
       do vi <- readM i
          readVarName' vi
 
-    parse :: [String] -> ReadM SCTypedTerm
+    parse :: [String] -> ReadM Term
     parse tokens =
       case tokens of
         ["App", e1, e2]     -> do t1 <- readIdx e1
                                   t2 <- readIdx e2
-                                  lift $ scTypedApply sc t1 t2
+                                  lift $ scApply sc t1 t2
         ["Lam", s, e1, e2]  -> do x <- readVarName s
                                   t1 <- readIdx e1
                                   t2 <- readIdx e2
-                                  lift $ scTypedLambda sc x t1 t2
+                                  lift $ scLambda sc x t1 t2
         ["Pi", s, e1, e2]   -> do x <- readVarName s
                                   t1 <- readIdx e1
                                   t2 <- readIdx e2
-                                  lift $ scTypedPi sc x t1 t2
+                                  lift $ scPi sc x t1 t2
         ["Constant", i]     -> do nm <- readName i
-                                  lift $ scTypedConstant sc nm
-        ["Unit"]            -> lift $ scTypedUnitValue sc
-        ["UnitT"]           -> lift $ scTypedUnitType sc
+                                  lift $ scConstant sc nm
+        ["Unit"]            -> lift $ scUnitValue sc
+        ["UnitT"]           -> lift $ scUnitType sc
         ["Pair", e1, e2]    -> do t1 <- readIdx e1
                                   t2 <- readIdx e2
-                                  lift $ scTypedPairValue sc t1 t2
+                                  lift $ scPairValue sc t1 t2
         ["PairT", e1, e2]   -> do t1 <- readIdx e1
                                   t2 <- readIdx e2
-                                  lift $ scTypedPairType sc t1 t2
+                                  lift $ scPairType sc t1 t2
         ["ProjL", e1]       -> do t1 <- readIdx e1
-                                  lift $ scTypedPairLeft sc t1
+                                  lift $ scPairLeft sc t1
         ["ProjR", e1]       -> do t1 <- readIdx e1
-                                  lift $ scTypedPairRight sc t1
+                                  lift $ scPairRight sc t1
 
         ["Recursor", i, s]  ->
           do nm <- readName i
              s' <- if s == "Prop" then pure propSort else mkSort <$> readM s
-             lift $ scTypedRecursor sc nm s'
+             lift $ scRecursor sc nm s'
 
         ["RecordType", elem_tps]
                             -> do ts <- traverse (traverse getTerm) =<< readM elem_tps
-                                  lift $ scTypedRecordType sc ts
+                                  lift $ scRecordType sc ts
         ["Record", elems]   -> do ts <- traverse (traverse getTerm) =<< readM elems
-                                  lift $ scTypedRecordValue sc ts
+                                  lift $ scRecordValue sc ts
         ["RecordProj", e, prj]
                             -> do t <- readIdx e
-                                  lift $ scTypedRecordProj sc t (Text.pack prj)
+                                  lift $ scRecordProj sc t (Text.pack prj)
         ("Prop" : h)        -> do flags <- sortFlagsFromList <$> mapM readM h
-                                  lift $ scTypedSort' sc propSort flags
+                                  lift $ scSort' sc propSort flags
         ("Sort" : s : h)    -> do s' <- mkSort <$> readM s
                                   flags <- sortFlagsFromList <$> mapM readM h
-                                  lift $ scTypedSort' sc s' flags
+                                  lift $ scSort' sc s' flags
         ["Nat", n]          -> do n' <- readM n
-                                  lift $ scTypedNat sc n'
+                                  lift $ scNat sc n'
         ("Array" : e : es)  -> do t <- readIdx e
                                   ts <- traverse readIdx es
-                                  lift $ scTypedVector sc t ts
+                                  lift $ scVector sc t ts
         ("String" : ts)     -> do str <- readM (unwords ts)
-                                  lift $ scTypedString sc str
+                                  lift $ scString sc str
         ["Variable", i, t]  -> do vn <- readVarName i
                                   tp <- readIdx t
-                                  lift $ scTypedVariable sc vn tp
+                                  lift $ scVariable sc vn tp
         _ -> fail $ "Parse error: " ++ unwords tokens
