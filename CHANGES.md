@@ -86,6 +86,10 @@ This release supports [version
 
 ## New Features
 
+* We have new commands `llvm_unit: [String] -> LLVMSetup ()` and
+  and analagous commands for JVM and MIR, which can be used to declare that some
+  Cryptol names should be kept opaque during symbolic simulation.
+
 * The Cryptol import syntax has been extended.
   - You can now import Cryptol module names, including qualified module
     names (which are resolved via the Cryptol load path) as well as
