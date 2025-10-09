@@ -734,6 +734,15 @@ evaluateTypedTerm _sc (TypedTerm tp _) =
 
 -- TopLevel Monad --------------------------------------------------------------
 
+-- | Entry in the interpreter's local (as opposed to global) variable
+--   environment.
+--
+--   The Maybe [Text] field is the help text for the value, if any.
+--   Note that currently there's no way I know of to actually provide
+--   help text for a local variable, nor is there any way to get at
+--   one with the REPL :help command to print it, but the interpreter's
+--   plumbing demands that the field exist...
+--
 data LocalBinding
   = LocalLet SS.Name SS.Schema (Maybe [Text]) Value
   | LocalTypedef SS.Name SS.Type
@@ -811,8 +820,22 @@ data JavaCodebase =
 
 data TopLevelRW =
   TopLevelRW
-  { rwValueInfo  :: Map SS.Name (SS.PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
+  {
+    -- | The variable environment: a map from variable names to:
+    --      - the lifecycle setting (experimental/current/deprecated/etc)
+    --      - the type scheme
+    --      - the value
+    --      - the help text if any
+    rwValueInfo  :: Map SS.Name (SS.PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
+
+    -- | The type environment: a map from type names to:
+    --      - the lifecycle setting (experimental/current/deprecated/etc)
+    --      - the expansion, which might be another type (this is how
+    --        typedefs/type aliases appear) or "abstract" (this is how
+    --        builtin types that aren't special cases in the AST appear)
   , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
+
+    -- | The Cryptol naming environment.
   , rwCryptol    :: CEnv.CryptolEnv
 
     -- | The current execution position. This is only valid when the
