@@ -33,7 +33,7 @@ data MirState t = MirState {
     we use `_cryEnv` to compute what they refer to.
     Note that in SAW, the MIRContext has a similar field,
     of type `Set VarIndex`. We can't do the same here, instead we keep the
-    actual `Text` names.  The reason is because `crux-mir-comp` load Cryptol
+    actual `Text` names.  The reason is because `crux-mir-comp` loads Cryptol
     code lazily, only when a function is first called.  As a result we can't
     resolve the names early, because the Cryptol code would not yet have been
     loaded.
