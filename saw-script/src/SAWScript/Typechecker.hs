@@ -969,6 +969,17 @@ withPattern :: Pattern -> TI a -> TI a
 withPattern pat m = withVars bindings m
   where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
 
+-- Add all the vars in a list of patterns to the environment, while
+-- running m.
+--
+-- (Note that the patterns should have already been processed so they
+-- contain types; hence the irrefutable Just t.)
+withPatterns :: [Pattern] -> TI a -> TI a
+withPatterns pats m = withVars allbindings m
+  where
+     bindings pat = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
+     allbindings = concatMap bindings pats
+
 -- Add all the vars in a pattern to the environment.
 --
 -- Variant version that uses the passed-in schema to produce the types
@@ -1654,9 +1665,7 @@ inferRecDecls ds = do
        -- Check all the expressions in an environment that includes
        -- all the bound variables.
        let checkOneExpr (Decl _pos p _ e) = inferExpr (getPatternContext p, e)
-       (es, tys) <- fmap unzip
-                    $ flip (foldr withPattern) pats'
-                    $ mapM checkOneExpr ds
+       (es, tys) <- fmap unzip $ withPatterns pats' $ mapM checkOneExpr ds
 
        -- Only functions can be recursive. Check each participant.
        zipWithM_ (\d ty -> requireFunction (getPos d) ty) ds tys
@@ -1672,9 +1681,10 @@ inferRecDecls ds = do
        etys <- generalize foralls es tys
 
        -- Generate the updated declarations.
-       return [ Decl pos p (Just s) e1
-              | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats' etys
-              ]
+       let rebuild pos pat (e1, ty) = Decl pos pat (Just ty) e1
+           ds' = zipWith3 rebuild (map getPos ds) pats' etys
+
+       return ds'
 
 -- Type inference for a decl group.
 inferDeclGroup :: DeclGroup -> TI DeclGroup
