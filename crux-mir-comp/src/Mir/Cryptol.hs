@@ -590,6 +590,10 @@ typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Fo
            | not isArg -> typeErr desc shp ty "Slice references may appear only in parameters"
            | Just (len,cryEl) <- Cry.tIsSeq ty ->
              AdaptDerefSlice col len <$> goOne isArg desc (tyToShapeEq col elTy elTyRepr) cryEl
+        (RefShape _refTy elTy M.Immut elTyRepr, _)
+           | not isArg -> typeErr desc shp ty "References may appear only in parameters"
+           | otherwise ->
+             AdaptDerefRef col <$> goOne isArg desc (tyToShapeEq col elTy elTyRepr) ty
 
         _ -> typeErr desc shp ty ""
 
