@@ -89,7 +89,7 @@ resolveTerm sym unint bt rr tm =
                     | Just Refl <- testEquality bt ty -> pure y
                     | otherwise -> typeError (show ty)
                     where ty = W4.exprType y
-                  _ -> fail ("resolveTem: unexpected w4Eval result " ++ show p)
+                  _ -> fail ("resolveTerm: unexpected w4Eval result " ++ show p)
               else
                 doBind st tm'''
 
