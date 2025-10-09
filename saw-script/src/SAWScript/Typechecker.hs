@@ -325,25 +325,23 @@ instance Show ContextName where
 --
 
 newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
-                        deriving (Functor,Applicative,Monad,MonadReader RO)
+    deriving (Functor, Applicative, Monad, MonadReader RO, MonadState RW)
 
 -- | The "readonly" portion
-data RO = RO
-  {
+data RO = RO {
     -- | The variable availability (lifecycle set)
-    primsAvail :: Set PrimitiveLifecycle,
+    primsAvail :: Set PrimitiveLifecycle
+}
 
+-- | The read-write portion
+data RW = RW {
     -- | The variable typing environment (variable name to type scheme)
     varEnv :: VarEnv,
 
     -- | The type environment: named type variables, which are either
     --   typedefs (map to ConcreteType) or abstract types (AbstractType)
-    tyEnv :: TyEnv
-  }
+    tyEnv :: TyEnv,
 
--- | The read-write portion
-data RW = RW
-  {
     -- | The next fresh unification var number
     nextTypeIndex :: TypeIndex,
 
@@ -353,22 +351,25 @@ data RW = RW
     -- | Any type errors and warnings we've generated so far
     errors :: [(Pos, String)],
     warnings :: [(Pos, String)]
-  }
+}
 
-emptyRW :: RW
-emptyRW = RW
-  { nextTypeIndex = 0
-  , subst = emptySubst
-  , errors = []
-  , warnings = []
-  }
+-- | A startup read-write state, given an initial varEnv and tyEnv.
+initialRW :: VarEnv -> TyEnv -> RW
+initialRW varenv tyenv = RW {
+    varEnv = varenv,
+    tyEnv = tyenv,
+    nextTypeIndex = 0,
+    subst = emptySubst,
+    errors = [],
+    warnings = []
+}
 
 -- Get a fresh unification var number.
 getFreshTypeIndex :: TI TypeIndex
 getFreshTypeIndex = do
-  rw <- TI get
-  TI $ put $ rw { nextTypeIndex = nextTypeIndex rw + 1 }
-  return $ nextTypeIndex rw
+  next <- gets nextTypeIndex
+  modify $ (\rw -> rw { nextTypeIndex = next + 1 })
+  return next
 
 -- Construct a fresh type variable.
 --
@@ -392,18 +393,18 @@ getErrorTyVar pos = getFreshTyVar pos
 -- Add an error message.
 recordError :: Pos -> String -> TI ()
 recordError pos err = do
-  TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
+    modify $ \rw -> rw { errors = (pos, err) : errors rw }
 
 -- Add a warning message.
 recordWarning :: Pos -> String -> TI ()
 recordWarning pos msg = do
-  TI $ modify $ \rw -> rw { warnings = (pos, msg) : warnings rw }
+    modify $ \rw -> rw { warnings = (pos, msg) : warnings rw }
 
 -- Apply the current substitution with appSubst.
 applyCurrentSubst :: AppSubst t => t -> TI t
 applyCurrentSubst t = do
-  s <- TI $ gets subst
-  return $ appSubst s t
+    s <- gets subst
+    return $ appSubst s t
 
 -- Apply the current typedef collection with substituteTyVars.
 --
@@ -411,9 +412,9 @@ applyCurrentSubst t = do
 -- to something in the typedef collection that's not visible.
 resolveCurrentTypedefs :: SubstituteTyVars t => t -> TI t
 resolveCurrentTypedefs t = do
-  avail <- TI $ asks primsAvail
-  s <- TI $ asks tyEnv
-  return $ substituteTyVars avail s t
+    avail <- asks primsAvail
+    s <- gets tyEnv
+    return $ substituteTyVars avail s t
 
 -- Get the unification vars that are used in the current variable typing
 -- and named type environments.
@@ -439,18 +440,18 @@ resolveCurrentTypedefs t = do
 -- Returns a map of the index number to the occurrence position.
 unifyVarsInEnvs :: TI (M.Map TypeIndex Pos)
 unifyVarsInEnvs = do
-  venv <- TI $ asks varEnv
-  tenv <- TI $ asks tyEnv
-  vtys <- mapM applyCurrentSubst $ M.elems venv
-  ttys <- mapM applyCurrentSubst $ M.elems tenv
-  return $ M.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
+    venv <- gets varEnv
+    tenv <- gets tyEnv
+    vtys <- mapM applyCurrentSubst $ M.elems venv
+    ttys <- mapM applyCurrentSubst $ M.elems tenv
+    return $ M.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
 
 -- Get the named type vars that occur as keys in the current type name
 -- environment.
 namedVarDefinitions :: TI (S.Set Name)
 namedVarDefinitions = do
-   env <- TI $ asks tyEnv
-   return $ M.keysSet env
+    env <- gets tyEnv
+    return $ M.keysSet env
 
 -- Get the position and name of the first binding in a pattern,
 -- for use as context info when printing messages. If there's a
@@ -480,6 +481,35 @@ patternBindings pat =
     PWild _ _mt -> []
     PVar _ _ x mt -> [(x, mt)]
     PTuple _ ps -> concatMap patternBindings ps
+
+-- Get all the bindings in a pattern, using a separate passed-in
+-- schema to get the types. Ignore the types in the pattern.
+--
+-- XXX: is that reasonable? Should probably assert that the schema
+-- matches the types in the pattern, unless the pattern hasn't already
+-- been checked yet, and that seems like it would be a bug.
+--
+-- Note that if the pattern is a tuple and the schema is not a tuple
+-- type, we return nothing. Presumably in this case a type error has
+-- already been generated and we don't need another one? But it would
+-- probably be a good idea to check up on that. XXX
+--
+-- Alternatively if the pattern has had its types filled in, this
+-- should not be different from the plain patternBindings and should
+-- probably just be removed.
+--
+patternBindingsWithSchema :: Pattern -> Schema -> [(Name, Schema)]
+patternBindingsWithSchema pat sch =
+  case pat of
+    PWild _ _ -> []
+    PVar _ _ x _ -> [(x, sch)]
+    PTuple _ ps ->
+      case sch of
+        Forall vs t -> case t of
+          TyCon _pos (TupleCon _) ts' ->
+            let once p t' = patternBindingsWithSchema p (Forall vs t') in
+            concat $ zipWith once ps ts'
+          _ -> []
 
 -- }}}
 
@@ -766,7 +796,7 @@ unify cname t1 pos t2 = do
   t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
   t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
   case mgu t1' t2' of
-    Right s -> TI $ modify $ \rw -> rw { subst = mergeSubst s $ subst rw }
+    Right s -> modify $ \rw -> rw { subst = mergeSubst s $ subst rw }
     Left msgs ->
        recordError pos $ unlines $ firstline : morelines'
        where
@@ -840,7 +870,7 @@ inspectTypeFTVs ty = case ty of
     TyRecord _pos fields -> M.unions <$> traverse inspectTypeFTVs fields
     TyUnifyVar _pos _x -> return M.empty
     TyVar pos x -> do
-        tyenv <- TI $ asks tyEnv
+        tyenv <- gets tyEnv
         case M.lookup x tyenv of
             Nothing -> return $ M.singleton x pos
             Just _ -> return $ M.empty
@@ -900,67 +930,109 @@ type OutStmt = Stmt
 -- struct type.
 inferField :: ContextName -> (Name, Expr) -> TI ((Name, OutExpr), (Name, Type))
 inferField cname (n,e) = do
-  (e', t) <- inferExpr (cname, e)
-  return ((n, e'), (n, t))
+    (e', t) <- inferExpr (cname, e)
+    return ((n, e'), (n, t))
 
--- wrap the action m with a type for x
-withVar :: Name -> Schema -> TI a -> TI a
-withVar x s m =
-  TI $ local (\ro -> ro { varEnv = M.insert x (Current, s) $ varEnv ro }) $ unTI m
+-- Add x with type ty to the environment.
+addVar :: Name -> Schema -> TI ()
+addVar x ty = do
+    env <- gets varEnv
+    let env' = M.insert x (Current, ty) env
+    modify (\rw -> rw { varEnv = env' })
 
--- wrap the action m with types for a list of vars
+-- Add xs with type tys to the environment.
+addVars :: [(Name, Schema)] -> TI ()
+addVars bindings = mapM_ (uncurry addVar) bindings
+
+-- Add xs with type tys to the environment, while running m.
 withVars :: [(Name, Schema)] -> TI a -> TI a
-withVars bindings m = foldr (uncurry withVar) m bindings
+withVars bindings m = do
+    save <- gets varEnv
+    addVars bindings
+    result <- m
+    modify (\rw -> rw { varEnv = save })
+    return result
 
--- wrap the action m with types for all the vars in a pattern
+-- Add all the vars in a pattern to the environment.
 --
--- (note that the pattern should have already been processed so it
--- contains types; hence the irrefutable Just t)
+-- (Note that the pattern should have already been processed so it
+-- contains types; hence the irrefutable Just t.)
+addPattern :: Pattern -> TI ()
+addPattern pat = addVars bindings
+  where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
+
+-- Add all the vars in a pattern to the environment, while running m.
+--
+-- (Note that the pattern should have already been processed so it
+-- contains types; hence the irrefutable Just t.)
 withPattern :: Pattern -> TI a -> TI a
 withPattern pat m = withVars bindings m
   where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
 
--- wrap the action m with types for all the vars in a pattern, using
--- the passed-in schema to produce the types and ignoring the types
--- already loaded into the pattern.
+-- Add all the vars in a list of patterns to the environment, while
+-- running m.
 --
--- XXX: is that what we want? should probably assert that the schema
--- matches the types in the pattern, unless the pattern hasn't already
--- been checked yet, and that seems like it would be a bug.
---
--- Note that if the pattern is a tuple and the schema is not a tuple
--- type, we do nothing. Presumably in this case a type error has
--- already been generated and we don't need another one? But it would
--- probably be a good idea to check up on that. XXX
-withPatternSchema :: Pattern -> Schema -> TI a -> TI a
-withPatternSchema pat s@(Forall vs t) m =
-  case pat of
-    PWild _ _ -> m
-    PVar _ _ x _ -> withVar x s m
-    PTuple _ ps ->
-      case t of
-        TyCon _pos (TupleCon _) ts -> foldr ($) m
-          [ withPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
-        _ -> m
+-- (Note that the patterns should have already been processed so they
+-- contain types; hence the irrefutable Just t.)
+withPatterns :: [Pattern] -> TI a -> TI a
+withPatterns pats m = withVars allbindings m
+  where
+     bindings pat = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
+     allbindings = concatMap bindings pats
 
--- wrap the action m with types for the vars in a declaration.
+-- Add all the vars in a pattern to the environment.
+--
+-- Variant version that uses the passed-in schema to produce the types
+-- and ignoring the types already loaded into the pattern.
+addPatternSchema :: Pattern -> Schema -> TI ()
+addPatternSchema pat ty = addVars bindings
+  where bindings = patternBindingsWithSchema pat ty
+
+-- Add all the vars in a pattern to the environment, while running m.
+--
+-- Variant version that uses the passed-in schema to produce the types
+-- and ignoring the types already loaded into the pattern.
+withPatternSchema :: Pattern -> Schema -> TI a -> TI a
+withPatternSchema pat ty m = withVars bindings m
+  where bindings = patternBindingsWithSchema pat ty
+
+-- Add all the vars in a declaration to the environment.
 --
 -- Do nothing if there's no type schema in this declaration yet.
+-- XXX: is that reasonable? shouldn't it panic?
+addDecl :: Decl -> TI ()
+addDecl (Decl _ _ Nothing _) = return ()
+addDecl (Decl _ p (Just s) _) = addPatternSchema p s
+
+-- Add all the vars in a declaration to the environment, while running m.
+--
+-- Do nothing if there's no type schema in this declaration yet.
+-- XXX: is that reasonable? shouldn't it panic?
 withDecl :: Decl -> TI a -> TI a
 withDecl (Decl _ _ Nothing _) m = m
 withDecl (Decl _ p (Just s) _) m = withPatternSchema p s m
 
--- wrap the action m with types for the vars in a declgroup.
+-- Add all the vars in a declaration to the environment, while running m.
+addDeclGroup :: DeclGroup -> TI ()
+addDeclGroup (NonRecursive d) = addDecl d
+addDeclGroup (Recursive ds) = mapM_ addDecl ds
+
+-- Add all the vars in a declaration to the environment, while running m.
 withDeclGroup :: DeclGroup -> TI a -> TI a
 withDeclGroup (NonRecursive d) m = withDecl d m
 withDeclGroup (Recursive ds) m = foldr withDecl m ds
 
--- wrap the action m with some abstract type variables.
+-- Wrap the action m with some abstract type variables.
 withAbstractTyVars :: Map Name Pos -> TI a -> TI a
 withAbstractTyVars vars m = do
     let insertOne x _pos tyenv = M.insert x (Current, AbstractType) tyenv
         insertAll tyenv = M.foldrWithKey insertOne tyenv vars
-    TI $ local (\ro -> ro { tyEnv = insertAll $ tyEnv ro }) $ unTI m
+    tyenv <- gets tyEnv
+    let tyenv' = insertAll tyenv
+    modify (\rw -> rw { tyEnv = tyenv' })
+    result <- m
+    modify (\rw -> rw { tyEnv = tyenv })
+    return result
 
 --
 -- Infer the type for an expression.
@@ -976,150 +1048,153 @@ inferExpr (ln, expr) = case expr of
   Code pos s    -> return (Code pos s, tTerm (PosInferred InfTerm pos))
   CType pos s   -> return (CType pos s, tType (PosInferred InfTerm pos))
 
-  Array pos [] ->
-    do a <- getFreshTyVar pos
-       return (Array pos [], tArray (PosInferred InfTerm pos) a)
+  Array pos [] -> do
+      a <- getFreshTyVar pos
+      return (Array pos [], tArray (PosInferred InfTerm pos) a)
 
-  Array pos (e:es) ->
-    do (e',t) <- inferExpr (ln, e)
-       es' <- mapM (flip (checkExpr ln) t) es
-       return (Array pos (e':es'), tArray (PosInferred InfTerm pos) t)
+  Array pos (e:es) -> do
+      (e',t) <- inferExpr (ln, e)
+      es' <- mapM (flip (checkExpr ln) t) es
+      return (Array pos (e':es'), tArray (PosInferred InfTerm pos) t)
 
-  Block pos body ->
-    do ctx <- getFreshTyVar pos
-       tyResult <- getFreshTyVar pos
-       let ty = tBlock (PosInferred InfTerm pos) ctx tyResult
-       body' <- inferBlock ln pos ctx ty body
-       return (Block pos body', ty)
+  Block pos body -> do
+      ctx <- getFreshTyVar pos
+      tyResult <- getFreshTyVar pos
+      let ty = tBlock (PosInferred InfTerm pos) ctx tyResult
+      body' <- inferBlock ln pos ctx ty body
+      return (Block pos body', ty)
 
-  Tuple pos es ->
-    do (es',ts) <- unzip `fmap` mapM (inferExpr . (ln,)) es
-       return (Tuple pos es', tTuple (PosInferred InfTerm pos) ts)
+  Tuple pos es -> do
+      (es',ts) <- unzip `fmap` mapM (inferExpr . (ln,)) es
+      return (Tuple pos es', tTuple (PosInferred InfTerm pos) ts)
 
-  Record pos fs ->
-    do (nes',nts) <- unzip `fmap` mapM (inferField ln) (M.toList fs)
-       let ty = TyRecord (PosInferred InfTerm pos) $ M.fromList nts
-       return (Record pos (M.fromList nes'), ty)
+  Record pos fs -> do
+      (nes',nts) <- unzip `fmap` mapM (inferField ln) (M.toList fs)
+      let ty = TyRecord (PosInferred InfTerm pos) $ M.fromList nts
+      return (Record pos (M.fromList nes'), ty)
 
   -- XXX this is currently unreachable because there's no concrete
   -- syntax for it; the parser will never produce it.
-  Index pos ar ix ->
-    do (ar',at) <- inferExpr (ln,ar)
-       ix'      <- checkExpr ln ix (tInt (PosInferred InfContext (getPos ix)))
-       t        <- getFreshTyVar (getPos ix')
-       unify ln (tArray (PosInferred InfContext (getPos ar')) t) (getPos ar') at
-       return (Index pos ar' ix', t)
+  Index pos ar ix -> do
+      (ar',at) <- inferExpr (ln,ar)
+      ix'      <- checkExpr ln ix (tInt (PosInferred InfContext (getPos ix)))
+      t        <- getFreshTyVar (getPos ix')
+      unify ln (tArray (PosInferred InfContext (getPos ar')) t) (getPos ar') at
+      return (Index pos ar' ix', t)
 
-  Lookup pos e n ->
-    do (e1,t) <- inferExpr (ln, e)
-       t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
-       elTy <- case t1 of
-           TyRecord typos fs
-            | Just ty <- M.lookup n fs -> do
-               return ty
-            | otherwise -> do
-               recordError pos $
-                   "Record type has no field named " ++ Text.unpack n
-               getErrorTyVar typos
-           TyUnifyVar _ _ -> do
-               recordError pos $
-                   "Cannot infer a record type for field " ++
-                   Text.unpack n ++ "; please use a type annotation"
-               getErrorTyVar pos
-           _ -> do
-               recordError pos $
-                   "Record lookup on non-record value of type " ++ pShow t1
-               getErrorTyVar pos
-       return (Lookup pos e1 n, elTy)
+  Lookup pos e n -> do
+      (e1,t) <- inferExpr (ln, e)
+      t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
+      elTy <- case t1 of
+          TyRecord typos fs
+           | Just ty <- M.lookup n fs -> do
+              return ty
+           | otherwise -> do
+              recordError pos $
+                  "Record type has no field named " ++ Text.unpack n
+              getErrorTyVar typos
+          TyUnifyVar _ _ -> do
+              recordError pos $
+                  "Cannot infer a record type for field " ++
+                  Text.unpack n ++ "; please use a type annotation"
+              getErrorTyVar pos
+          _ -> do
+              recordError pos $
+                  "Record lookup on non-record value of type " ++ pShow t1
+              getErrorTyVar pos
+      return (Lookup pos e1 n, elTy)
 
-  TLookup pos e i ->
-    do (e1,t) <- inferExpr (ln,e)
-       t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
-       elTy <- case t1 of
-           TyCon typos (TupleCon n) tys
-            | i < n ->
-               return (tys !! fromIntegral i)
-            | otherwise -> do
-               recordError pos $
-                   "Tuple index " ++ show i ++ " out of bounds; limit is " ++
-                   show n
-               getErrorTyVar typos
-           TyUnifyVar _ _ -> do
-               recordError pos $
-                   "Cannot infer tuple arity for lookup of element " ++
-                   show i ++ "; please use a type annotation"
-               getErrorTyVar pos
-           _ -> do
-               recordError pos $ 
-                   "Tuple lookup on non-tuple value of type " ++ pShow t1
-               getErrorTyVar pos
-       return (TLookup pos e1 i, elTy)
+  TLookup pos e i -> do
+      (e1,t) <- inferExpr (ln,e)
+      t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
+      elTy <- case t1 of
+          TyCon typos (TupleCon n) tys
+           | i < n ->
+              return (tys !! fromIntegral i)
+           | otherwise -> do
+              recordError pos $
+                  "Tuple index " ++ show i ++ " out of bounds; limit is " ++
+                  show n
+              getErrorTyVar typos
+          TyUnifyVar _ _ -> do
+              recordError pos $
+                  "Cannot infer tuple arity for lookup of element " ++
+                  show i ++ "; please use a type annotation"
+              getErrorTyVar pos
+          _ -> do
+              recordError pos $ 
+                  "Tuple lookup on non-tuple value of type " ++ pShow t1
+              getErrorTyVar pos
+      return (TLookup pos e1 i, elTy)
 
-  Var pos x ->
-    do avail <- TI $ asks primsAvail
-       env <- TI $ asks varEnv
-       case M.lookup x env of
-         Nothing -> do
-           recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
-           t <- getFreshTyVar pos
-           return (Var pos x, t)
-         Just (lc, Forall as t)
-          | S.member lc avail -> do
-           when (isDeprecated lc) $
-               case t of
-                   TyCon _typos FunCon _args ->
-                       recordWarning pos $ "Function is deprecated: " <> show x
-                   _ ->
-                       recordWarning pos $ "Value is deprecated: " <> show x
+  Var pos x -> do
+      avail <- asks primsAvail
+      env <- gets varEnv
+      case M.lookup x env of
+        Nothing -> do
+          recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
+          t <- getFreshTyVar pos
+          return (Var pos x, t)
+        Just (lc, Forall as t)
+         | S.member lc avail -> do
+          when (isDeprecated lc) $
+              case t of
+                  TyCon _typos FunCon _args ->
+                      recordWarning pos $ "Function is deprecated: " <> show x
+                  _ ->
+                      recordWarning pos $ "Value is deprecated: " <> show x
 
-           -- get a fresh tyvar for each quantifier binding, convert
-           -- to a name -> ty map, and substitute the fresh tyvars
-           let once (apos, a) = do
-                 at <- getFreshTyVar apos
-                 return (a, (Current, ConcreteType at))
-           substs <- mapM once as
-           let t' = substituteTyVars avail (M.fromList substs) t
-           return (Var pos x, t')
-          | otherwise -> do
-           recordError pos $ "Inaccessible variable: " ++ show x ++ " (" ++ show pos ++ ")"
-           let how = if lc == HideDeprecated then "deprecated" else "experimental"
-           recordError pos $ "This command is available only after running " ++
-                             "`enable_" ++ how ++ "`."
-           t' <- getFreshTyVar pos
-           return (Var pos x, t')
+          -- get a fresh tyvar for each quantifier binding, convert
+          -- to a name -> ty map, and substitute the fresh tyvars
+          let once (apos, a) = do
+                at <- getFreshTyVar apos
+                return (a, (Current, ConcreteType at))
+          substs <- mapM once as
+          let t' = substituteTyVars avail (M.fromList substs) t
+          return (Var pos x, t')
+         | otherwise -> do
+          recordError pos $ "Inaccessible variable: " ++ show x ++ " (" ++ show pos ++ ")"
+          let how = if lc == HideDeprecated then "deprecated" else "experimental"
+          recordError pos $ "This command is available only after running " ++
+                            "`enable_" ++ how ++ "`."
+          t' <- getFreshTyVar pos
+          return (Var pos x, t')
 
-  Lambda pos mname pat body ->
-    do (pt, pat') <- inferPattern pat
-       (body', t) <- withPattern pat' $ inferExpr (ln, body)
-       return (Lambda pos mname pat' body', tFun (PosInferred InfContext (getPos body)) pt t)
+  Lambda pos mname pat body -> do
+      (typat, pat') <- inferPattern pat
+      (body', tybody) <- withPattern pat' $ inferExpr (ln, body)
+      let e' = Lambda pos mname pat' body'
+          ty = tFun (PosInferred InfContext (getPos body)) typat tybody
+      return (e', ty)
 
-  Application pos f arg ->
-    do argtype <- getFreshTyVar pos
-       rettype <- getFreshTyVar pos
-       let ftype = tFun (PosInferred InfContext $ getPos f) argtype rettype
-       -- Check f' first so that we complain about the arg (not the
-       -- function) if they don't match. This is what everyone expects
-       -- and doing it the other way is surprisingly confusing.
-       f' <- checkExpr ln f ftype
-       arg' <- checkExpr ln arg argtype
-       return (Application pos f' arg', rettype)
+  Application pos f arg -> do
+      argtype <- getFreshTyVar pos
+      rettype <- getFreshTyVar pos
+      let ftype = tFun (PosInferred InfContext $ getPos f) argtype rettype
+      -- Check f' first so that we complain about the arg (not the
+      -- function) if they don't match. This is what everyone expects
+      -- and doing it the other way is surprisingly confusing.
+      f' <- checkExpr ln f ftype
+      arg' <- checkExpr ln arg argtype
+      return (Application pos f' arg', rettype)
 
-  Let pos dg body ->
-    do dg' <- inferDeclGroup dg
-       (body', t) <- withDeclGroup dg' (inferExpr (ln, body))
-       return (Let pos dg' body', t)
+  Let pos dg body -> do
+      dg' <- inferDeclGroup dg
+      (body', ty) <- withDeclGroup dg' (inferExpr (ln, body))
+      let e' = Let pos dg' body'
+      return (e', ty)
 
-  TSig _pos e t ->
-    do t' <- checkType kindStar t
-       (e',t'') <- inferExpr (ln,e)
-       unify ln t' (getPos e') t''
-       return (e',t'')
+  TSig _pos e t -> do
+      t' <- checkType kindStar t
+      (e',t'') <- inferExpr (ln,e)
+      unify ln t' (getPos e') t''
+      return (e',t'')
 
-  IfThenElse pos e1 e2 e3 ->
-    do e1' <- checkExpr ln e1 (tBool (PosInferred InfContext $ getPos e1))
-       (e2', t) <- inferExpr (ln, e2)
-       e3' <- checkExpr ln e3 t
-       return (IfThenElse pos e1' e2' e3', t)
+  IfThenElse pos e1 e2 e3 -> do
+      e1' <- checkExpr ln e1 (tBool (PosInferred InfContext $ getPos e1))
+      (e2', t) <- inferExpr (ln, e2)
+      e3' <- checkExpr ln e3 t
+      return (IfThenElse pos e1' e2' e3', t)
 
 --
 -- Check the type of an expr, by inferring and then unifying the
@@ -1127,9 +1202,9 @@ inferExpr (ln, expr) = case expr of
 --
 checkExpr :: ContextName -> Expr -> Type -> TI OutExpr
 checkExpr cname e t = do
-  (e', t') <- inferExpr (cname, e)
-  unify cname t (getPos e') t'
-  return e'
+    (e', t') <- inferExpr (cname, e)
+    unify cname t (getPos e') t'
+    return e'
 
 --
 -- patterns
@@ -1168,18 +1243,17 @@ checkPattern cname t pat =
 -- statements
 --
 
--- Wrap m with a typedef binding.
+-- Add a typedef binding to the type environment.
 --
 -- The expansion (t) has been checked, so it's ok to panic if it
 -- refers to something not visible in the environment.
-withTypedef :: Name -> Type -> TI a -> TI a
-withTypedef n t m =
-  TI $
-  local
-    (\ro ->
-      let t' = substituteTyVars (primsAvail ro) (tyEnv ro) t
-      in  ro { tyEnv = M.insert n (Current, ConcreteType t') $ tyEnv ro })
-    $ unTI m
+addTypedef :: Name -> Type -> TI ()
+addTypedef a ty = do
+    avail <- asks primsAvail
+    env <- gets tyEnv
+    let ty' = substituteTyVars avail env ty
+        env' = M.insert a (Current, ConcreteType ty') env
+    modify (\rw -> rw { tyEnv = env' })
 
 -- break a monadic type down into its monad and value types, if it is one
 --
@@ -1199,11 +1273,11 @@ monadType ty = case ty of
 -- wrap an expression in "return"
 wrapReturn :: Expr -> Expr
 wrapReturn e =
-   let ePos = getPos e
-       retPos = PosInternal "<implicitly inserted return>"
-       ret = Var retPos "return"
-   in
-   Application ePos ret e
+    let ePos = getPos e
+        retPos = PosInternal "<implicitly inserted return>"
+        ret = Var retPos "return"
+    in
+    Application ePos ret e
 
 -- type inference for a single statement
 --
@@ -1213,9 +1287,8 @@ wrapReturn e =
 -- the passed-in position should be the position associated with the monad type
 -- the first type argument (ctx) is the monad type for any binds that occur
 --
--- returns a wrapper for checking subsequent statements as well as
--- an updated statement.
-inferStmt :: ContextName -> Bool -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt)
+-- Updates the environment and returns an updated statement.
+inferStmt :: ContextName -> Bool -> Pos -> Type -> Stmt -> TI Stmt
 inferStmt cname atSyntacticTopLevel blockpos ctx s =
     case s of
         StmtBind spos pat e -> do
@@ -1333,22 +1406,22 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
                                    _ -> allowNonMonadic
 
             let s' = StmtBind spos pat' e''
-            let wrapper = withPattern pat'
-            return (wrapper, s')
+            addPattern pat'
+            return s'
         StmtLet spos dg -> do
             dg' <- inferDeclGroup dg
             let s' = StmtLet spos dg'
-            let wrapper = withDeclGroup dg'
-            return (wrapper, s')
+            addDeclGroup dg'
+            return s'
         StmtCode _allpos _spos _txt ->
-            return (id, s)
+            return s
         StmtImport _spos _ ->
-            return (id, s)
+            return s
         StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
             let s' = StmtTypedef allpos apos a ty'
-            let wrapper = withTypedef a ty'
-            return (wrapper, s')
+            addTypedef a ty'
+            return s'
 
 -- Inference for a do-block.
 --
@@ -1362,38 +1435,18 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
 -- found.
 --
 inferBlock :: ContextName -> Pos -> Type -> Type -> ([Stmt], Expr) -> TI ([OutStmt], OutExpr)
-inferBlock cname blockpos ctx ty (stmts0, lastexpr) = do
-  let atSyntacticTopLevel = False
+inferBlock cname blockpos ctx ty (stmts, lastexpr) = do
+    let atSyntacticTopLevel = False
 
-  -- Check the statements in order, left first, passing through the
-  -- wrapper produced by inferStmt.
-  --
-  -- XXX: this should really use foldlM on the statement list, except
-  -- it doesn't typecheck that way because the type of the wrapper
-  -- goes ... off the rails.
-  --
-  -- XXX: those wrappers should go away anyhow; it's a messy way of
-  -- updating the typing environment by pretending that each statement
-  -- in a do-block is nested inside the previous one. Things should
-  -- get rearranged so we just update the environment in the monad
-  -- context, instead of pretending that's not what we're doing.
-  --
-  -- XXX: Because of this rubbish we have to check the last expression
-  -- _inside_ the loop when we get to the end of the list, instead of
-  -- just doing it afterwards. Blegh.
-  --
-  let go stmts = case stmts of
-        [] -> do
-          -- Check the final expression.
-          -- This produces the result type for the block.
-          (lastexpr', ty') <- inferExpr (cname, lastexpr)
-          unify cname ty (getPos lastexpr) ty'
-          return ([], lastexpr')
-        stmt : more -> do
-          (wrapper, stmt') <- inferStmt cname atSyntacticTopLevel blockpos ctx stmt
-          (more', lastexpr') <- wrapper $ go more
-          return (stmt' : more', lastexpr')
-  go stmts0
+    -- Check the statements in order, left first.
+    stmts' <- mapM (inferStmt cname atSyntacticTopLevel blockpos ctx) stmts
+
+    -- Check the final expression.
+    -- This produces the result type for the block.
+    (lastexpr', ty') <- inferExpr (cname, lastexpr)
+    unify cname ty (getPos lastexpr) ty'
+
+    return (stmts', lastexpr')
 
 -- Wrapper around inferStmt suitable for checking one statement at a
 -- time. This is temporary scaffolding for the interpreter while
@@ -1407,21 +1460,18 @@ inferBlock cname blockpos ctx ty (stmts0, lastexpr) = do
 -- them, and this is how it does that.
 --
 -- Run inferStmt and then apply the current substitution before
--- returning the updated statement. Ignore the wrapper returned for
--- typechecking subsequent statements; the interpreter has its own
--- (misbegotten) logic for handling that in its own way. (Which should
--- be removed, but we need to get rid of these wrappers here first;
--- any sane incremental typechecking interface requires updating the
--- environment for sequential declarations, not pretending that
--- subsequent statements in a block are nested inside prior ones.)
+-- returning the updated statement. Note that currently the caller
+-- will throw away the updated environment; the interpreter has its
+-- own misbegotten logic for handling that in its own way. (Which
+-- should be removed.)
 inferSingleStmt :: ContextName -> Pos -> Type -> Stmt -> TI Stmt
 inferSingleStmt cname pos ctx s = do
-  -- currently we are always at the syntactic top level here because
-  -- that's how the interpreter works
-  let atSyntacticTopLevel = True
-  (_wrapper, s') <- inferStmt cname atSyntacticTopLevel pos ctx s
-  s'' <- applyCurrentSubst s'
-  return s''
+    -- currently we are always at the syntactic top level here because
+    -- that's how the interpreter works
+    let atSyntacticTopLevel = True
+    s' <- inferStmt cname atSyntacticTopLevel pos ctx s
+    s'' <- applyCurrentSubst s'
+    return s''
 
 --
 -- decls
@@ -1437,83 +1487,83 @@ inferSingleStmt cname pos ctx s = do
 -- explicitly and should be forall-bound.
 generalize :: Map Name Pos -> [OutExpr] -> [Type] -> TI [(OutExpr,Schema)]
 generalize foralls es0 ts0 = do
-     -- first, substitute away any resolved unification variables
-     -- in both the expressions and types.
-     es <- applyCurrentSubst es0
-     ts <- applyCurrentSubst ts0
+    -- first, substitute away any resolved unification variables
+    -- in both the expressions and types.
+    es <- applyCurrentSubst es0
+    ts <- applyCurrentSubst ts0
 
-     -- Extract lists of any unification vars and named type vars that
-     -- still appear.
-     let is0 = unifyVars ts
-     let bs0 = namedTyVars ts
+    -- Extract lists of any unification vars and named type vars that
+    -- still appear.
+    let is0 = unifyVars ts
+    let bs0 = namedTyVars ts
 
-     -- Drop any unification vars and named type vars that we
-     -- shouldn't forall-bind.
-     --
-     -- For unification vars, any whose scope reaches beyond the
-     -- current declaration should be left alone; they should only be
-     -- bound when they eventually move out of scope. Get these by
-     -- examining the types used in the right-hand sides of both the
-     -- variable environment and the type environment.
-     --
-     -- For named vars, exclude any that appear that appear as keys
-     -- (on the left-hand side) of the type environment. Those are
-     -- already defined.
-     --
-     -- The only other named variables involved should be the set we
-     -- explicitly intend to be forall-bound as passed in. Insert
-     -- those, and favor their positions.
-     --
-     -- It would be handy for scaling if we didn't have to examine
-     -- the entire variable environment (on the grounds that there
-     -- should be no loose unification vars at the top level where
-     -- most definitions will come from) but (a) we don't have the
-     -- structure to support that and (b) it is not absolutely clear
-     -- that there isn't a way to get such loose unification vars,
-     -- in which case we'd have to do something about it.
-     --
-     -- This code also used to exclude named vars used on the
-     -- right-hand side of the variable environment; this was to allow
-     -- the use of otherwise undefined type names in the primitives
-     -- table. There is no longer any need for such hackery, and
-     -- undefined type names are not allowed to appear in the variable
-     -- environment.
-     --
-     -- FUTURE: we end up replacing the user's forall-bound names with
-     -- generated names, and I'm not sure why. It seems like it
-     -- shouldn't be possible the way the code is structured. But the
-     -- type signatures are coming out correct (which they wouldn't if
-     -- something were seriously wrong) and we aren't inappropriately
-     -- unifying these vars with each other or with other things, so
-     -- I'm not going to stress over it right now.
+    -- Drop any unification vars and named type vars that we
+    -- shouldn't forall-bind.
+    --
+    -- For unification vars, any whose scope reaches beyond the
+    -- current declaration should be left alone; they should only be
+    -- bound when they eventually move out of scope. Get these by
+    -- examining the types used in the right-hand sides of both the
+    -- variable environment and the type environment.
+    --
+    -- For named vars, exclude any that appear that appear as keys
+    -- (on the left-hand side) of the type environment. Those are
+    -- already defined.
+    --
+    -- The only other named variables involved should be the set we
+    -- explicitly intend to be forall-bound as passed in. Insert
+    -- those, and favor their positions.
+    --
+    -- It would be handy for scaling if we didn't have to examine
+    -- the entire variable environment (on the grounds that there
+    -- should be no loose unification vars at the top level where
+    -- most definitions will come from) but (a) we don't have the
+    -- structure to support that and (b) it is not absolutely clear
+    -- that there isn't a way to get such loose unification vars,
+    -- in which case we'd have to do something about it.
+    --
+    -- This code also used to exclude named vars used on the
+    -- right-hand side of the variable environment; this was to allow
+    -- the use of otherwise undefined type names in the primitives
+    -- table. There is no longer any need for such hackery, and
+    -- undefined type names are not allowed to appear in the variable
+    -- environment.
+    --
+    -- FUTURE: we end up replacing the user's forall-bound names with
+    -- generated names, and I'm not sure why. It seems like it
+    -- shouldn't be possible the way the code is structured. But the
+    -- type signatures are coming out correct (which they wouldn't if
+    -- something were seriously wrong) and we aren't inappropriately
+    -- unifying these vars with each other or with other things, so
+    -- I'm not going to stress over it right now.
 
-     envUnifyVars <- unifyVarsInEnvs
-     knownNamedVars <- namedVarDefinitions
-     let is1 = is0 M.\\ envUnifyVars
-     let bs1 = M.union foralls $ M.withoutKeys bs0 knownNamedVars
+    envUnifyVars <- unifyVarsInEnvs
+    knownNamedVars <- namedVarDefinitions
+    let is1 = is0 M.\\ envUnifyVars
+    let bs1 = M.union foralls $ M.withoutKeys bs0 knownNamedVars
 
-     -- convert to lists
-     let is2 = M.toList is1
-     let bs2 = M.toList bs1
+    -- convert to lists
+    let is2 = M.toList is1
+    let bs2 = M.toList bs1
 
-     -- if the position is "fresh" turn it into "inferred from term"
-     let adjustPos pos = case pos of
-           PosInferred InfFresh pos' -> PosInferred InfTerm pos'
-           _ -> pos
+    -- if the position is "fresh" turn it into "inferred from term"
+    let adjustPos pos = case pos of
+          PosInferred InfFresh pos' -> PosInferred InfTerm pos'
+          _ -> pos
 
-     -- generate names for the unification vars
-     let is3 = [ (i, adjustPos pos, "a." <> Text.pack (show i)) | (i, pos) <- is2 ]
+    -- generate names for the unification vars
+    let is3 = [ (i, adjustPos pos, "a." <> Text.pack (show i)) | (i, pos) <- is2 ]
 
-     -- build a substitution
-     let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is3 ]
+    -- build a substitution
+    let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is3 ]
 
-     -- get the names for the Forall
-     let inames = [ (pos, n) | (_i, pos, n) <- is3 ]
-     let bnames = [ (pos, x) | (x, pos) <- bs2 ]
+    -- get the names for the Forall
+    let inames = [ (pos, n) | (_i, pos, n) <- is3 ]
+    let bnames = [ (pos, x) | (x, pos) <- bs2 ]
 
-     let mk e t = (appSubst s e, Forall (inames ++ bnames) (appSubst s t))
+    let mk e t = (appSubst s e, Forall (inames ++ bnames) (appSubst s t))
 
-     return $ zipWith mk es ts
+    return $ zipWith mk es ts
 
 
 -- Check that a type is a function and isn't a plain value, in order
@@ -1553,68 +1603,98 @@ requireFunction pos ty = do
         _ ->
             recordError pos $ "Only functions may be recursive."
 
--- Type inference for a declaration.
+-- | Type inference for a declaration.
 --
 -- Note that the type schema slot in Decl is always Nothing the way it
 -- comes from the parser; if there's an explicit type annotation on
--- the declaration that shows up as a type signature in the
--- expression.
+-- the declaration, it shows up as a type signature in the expression.
+--
+-- This function does _not_ update the variable environment to reflect
+-- the declaration. The caller does that. XXX: this seems messy.
 inferDecl :: Decl -> TI Decl
 inferDecl d@(Decl pos pat _ e) = do
-  let cname = getPatternContext pat
-  foralls <- inspectDeclFTVs d
-  withAbstractTyVars foralls $ do
-    (e',t) <- inferExpr (cname, e)
-    pat' <- checkPattern cname t pat
-    ~[(e1,s)] <- generalize foralls [e'] [t]
-    return (Decl pos pat' (Just s) e1)
+    let cname = getPatternContext pat
 
--- Type inference for a system of mutually recursive declarations.
+    -- collect the free type variables
+    foralls <- inspectDeclFTVs d
+
+    -- Add abstract type variables for the foralls while we check the body.
+    -- Note: this is a variable declaration. It doesn't add types; the types
+    -- get forall-bound in the type scheme by the `generalize` call.
+    withAbstractTyVars foralls $ do
+        -- Check the body and check the pattern against the body.
+        (e', t) <- inferExpr (cname, e)
+        pat' <- checkPattern cname t pat
+
+        -- Use `generalize` to build the type scheme.
+        ~[(e1,s)] <- generalize foralls [e'] [t]
+
+        -- Return the updated `Decl`
+        return (Decl pos pat' (Just s) e1)
+
+-- | Type inference for a system of mutually recursive declarations.
 --
 -- Note that the type schema slot in the Decls is always Nothing as we
 -- get them from the parser; if there's an explicit type annotation on
 -- some or all of the declarations those shows up as type signatures
 -- in the expressions.
+--
+-- This function does _not_ update the variable environment to reflect
+-- the declaration. The caller does that. XXX: this is messy.
 inferRecDecls :: [Decl] -> TI [Decl]
-inferRecDecls ds =
-  do let pats = map dPat ds
-         firstPat =
-           case pats of
-             p:_ -> p
-             [] -> panic
-                     "inferRecDecls"
-                     ["Empty list of declarations in recursive group"]
-     foralls <- M.unions <$> mapM inspectDeclFTVs ds
-     withAbstractTyVars foralls $ do
-       (_ts, pats') <- unzip <$> mapM inferPattern pats
-       (es, ts) <- fmap unzip
-                   $ flip (foldr withPattern) pats'
-                   $ sequence [ inferExpr (getPatternContext p, e)
-                              | Decl _pos p _ e <- ds
-                              ]
+inferRecDecls ds = do
+    -- Get the patterns out of the decls. Pop out the first one for
+    -- use as a reference name.
+    let pats = map dPat ds
+        firstPat =
+          case pats of
+            [] -> panic "inferRecDecls" [
+                      "Empty list of declarations in recursive group"
+                  ]
+            p : _ -> p
 
-       -- Only functions can be recursive.
-       zipWithM_ (\d t -> requireFunction (getPos d) t) ds ts
+    -- Collect the free type variables.
+    foralls <- M.unions <$> mapM inspectDeclFTVs ds
 
-       -- pats' has already been checked once, which will have inserted
-       -- unification vars for any missing types. Running it through
-       -- again will have no further effect, so we can ignore the
-       -- theoretically-updated-again patterns returned by checkPattern.
-       sequence_ $ zipWith (checkPattern (getPatternContext firstPat)) ts pats'
-       ess <- generalize foralls es ts
-       return [ Decl pos p (Just s) e1
-              | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats' ess
-              ]
+    -- Add abstract type variables for the foralls while we check the
+    -- bodies.
+    withAbstractTyVars foralls $ do
+      -- Check the patterns first to get types.
+      (_ts, pats') <- unzip <$> mapM inferPattern pats
+
+      -- Check all the expressions in an environment that includes
+      -- all the bound variables.
+      let checkOneExpr (Decl _pos p _ e) = inferExpr (getPatternContext p, e)
+      (es, tys) <- fmap unzip $ withPatterns pats' $ mapM checkOneExpr ds
+
+      -- Only functions can be recursive. Check each participant.
+      zipWithM_ (\d ty -> requireFunction (getPos d) ty) ds tys
+
+      -- pats' has already been checked once, which will have inserted
+      -- unification vars for any missing types. Running it through
+      -- again will have no further effect, so we can ignore the
+      -- theoretically-updated-again patterns returned by checkPattern.
+      sequence_ $ zipWith (checkPattern (getPatternContext firstPat)) tys pats'
+
+      -- Run generalize and get back a list of updated expressions and
+      -- type schemes.
+      etys <- generalize foralls es tys
+
+      -- Generate the updated declarations.
+      let rebuild pos pat (e1, ty) = Decl pos pat (Just ty) e1
+          ds' = zipWith3 rebuild (map getPos ds) pats' etys
+
+      return ds'
 
 -- Type inference for a decl group.
 inferDeclGroup :: DeclGroup -> TI DeclGroup
 inferDeclGroup (NonRecursive d) = do
-  d' <- inferDecl d
-  return (NonRecursive d')
+    d' <- inferDecl d
+    return (NonRecursive d')
 
 inferDeclGroup (Recursive ds) = do
-  ds' <- inferRecDecls ds
-  return (Recursive ds')
+    ds' <- inferRecDecls ds
+    return (Recursive ds')
 
 --
 -- types
@@ -1624,26 +1704,26 @@ inferDeclGroup (Recursive ds) = do
 -- types) and return its params as a list of kinds.
 lookupTyCon :: TyCon -> [Kind]
 lookupTyCon tycon = case tycon of
-  TupleCon n -> genericTake n (repeat kindStar)
-  ArrayCon -> [kindStar]
-  FunCon -> [kindStar, kindStar]
-  StringCon -> []
-  TermCon -> []
-  TypeCon -> []
-  BoolCon -> []
-  IntCon -> []
-  BlockCon -> [kindStar, kindStar]
-  AIGCon -> []
-  CFGCon -> []
-  JVMSpecCon -> []
-  LLVMSpecCon -> []
-  MIRSpecCon -> []
-  ContextCon _ctx ->
-    -- XXX: while BlockCon exists, ContextCon has kind * and you
-    -- have to use BlockCon to paste a result type to a ContextCon.
-    -- (BlockCon should be removed. Then ContextCon has kind * -> *
-    -- like you'd expect.)
-    []
+    TupleCon n -> genericTake n (repeat kindStar)
+    ArrayCon -> [kindStar]
+    FunCon -> [kindStar, kindStar]
+    StringCon -> []
+    TermCon -> []
+    TypeCon -> []
+    BoolCon -> []
+    IntCon -> []
+    BlockCon -> [kindStar, kindStar]
+    AIGCon -> []
+    CFGCon -> []
+    JVMSpecCon -> []
+    LLVMSpecCon -> []
+    MIRSpecCon -> []
+    ContextCon _ctx ->
+      -- XXX: while BlockCon exists, ContextCon has kind * and you
+      -- have to use BlockCon to paste a result type to a ContextCon.
+      -- (BlockCon should be removed. Then ContextCon has kind * -> *
+      -- like you'd expect.)
+      []
 
 -- Check a type for validity and also for having the
 -- correct kinding.
@@ -1701,8 +1781,8 @@ checkType kind ty = case ty of
           return $ TyRecord pos fields'
 
   TyVar pos x -> do
-      avail <- TI $ asks primsAvail
-      tyenv <- TI $ asks tyEnv
+      avail <- asks primsAvail
+      tyenv <- gets tyEnv
       case M.lookup x tyenv of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ Text.unpack x)
@@ -1764,10 +1844,11 @@ type Result a = (Either MsgList a, MsgList)
 -- (later messages are consed onto the head of the list) so we
 -- reverse on the way out.
 runTIWithEnv :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
-runTIWithEnv avail env tenv m = (a, subst rw, reverse $ errors rw, reverse $ warnings rw)
+runTIWithEnv avail env tenv m = (a, subst rw', reverse $ errors rw', reverse $ warnings rw')
   where
-  m' = runReaderT (unTI m) (RO avail env tenv)
-  (a,rw) = runState m' emptyRW
+    m' = runReaderT (unTI m) (RO avail)
+    rw = initialRW env tenv
+    (a, rw') = runState m' rw
 
 -- Run the TI monad and interpret/collect the results
 -- (failure if any errors were produced)
@@ -1786,45 +1867,45 @@ evalTIWithEnv avail env tenv m =
 -- context/monad type associated with the execution.
 checkStmt :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Context -> Stmt -> Result Stmt
 checkStmt avail env tenv ctx stmt =
-  -- XXX: we shouldn't need this position here.
-  -- The position is used for the following things:
-  --
-  --    - to create cname, which is used as part of the error printing
-  --      scheme, but is no longer particularly useful after recent
-  --      improvements (especially here where it contains no real
-  --      information) and should be removed;
-  --
-  --    - to be the position associated with the monad context, which
-  --      in a tidy world should just be PosRepl (as in, the only
-  --      time we should be typechecking a single statement is when
-  --      it was just typed interactively, and which monad we're in
-  --      is a direct property of that context) but this is not
-  --      currently true and will require a good bit of interpreter
-  --      cleanup to make it true;
-  --
-  --    - to pass to inferStmt, which also uses it as part of the
-  --      position associated with the monad context. (This part is a
-  --      result of BlockCon existing and can go away when BlockCon is
-  --      removed.)
-  --
-  -- XXX: using the position of the statement as the position
-  -- associated with the monad context is not correct (or at least,
-  -- will be confusing) and we should figure something else out if the
-  -- interpreter cleanup doesn't come through soon. Note that
-  -- currently we come through here only for syntactically top-level
-  -- statements in the interpreter; these are TopLevel except when in
-  -- the ProofScript repl. So perhaps we should use PosRepl when in
-  -- ProofScript, and then either PosRepl or PosBuiltin for TopLevel?
-  -- But we don't have a good way of knowing here whether we're
-  -- actually in the repl.
-  let pos = getPos stmt
-      cname = case ctx of
-          TopLevel -> ContextName pos "<toplevel>"
-          ProofScript -> ContextName pos "<proofscript>"
-          _ -> panic "checkStmt" ["Invalid monad context " <> Text.pack (pShow ctx)]
-      ctxtype = TyCon pos (ContextCon ctx) []
-  in
-  evalTIWithEnv avail env tenv (inferSingleStmt cname pos ctxtype stmt)
+    -- XXX: we shouldn't need this position here.
+    -- The position is used for the following things:
+    --
+    --    - to create cname, which is used as part of the error printing
+    --      scheme, but is no longer particularly useful after recent
+    --      improvements (especially here where it contains no real
+    --      information) and should be removed;
+    --
+    --    - to be the position associated with the monad context, which
+    --      in a tidy world should just be PosRepl (as in, the only
+    --      time we should be typechecking a single statement is when
+    --      it was just typed interactively, and which monad we're in
+    --      is a direct property of that context) but this is not
+    --      currently true and will require a good bit of interpreter
+    --      cleanup to make it true;
+    --
+    --    - to pass to inferStmt, which also uses it as part of the
+    --      position associated with the monad context. (This part is a
+    --      result of BlockCon existing and can go away when BlockCon is
+    --      removed.)
+    --
+    -- XXX: using the position of the statement as the position
+    -- associated with the monad context is not correct (or at least,
+    -- will be confusing) and we should figure something else out if the
+    -- interpreter cleanup doesn't come through soon. Note that
+    -- currently we come through here only for syntactically top-level
+    -- statements in the interpreter; these are TopLevel except when in
+    -- the ProofScript repl. So perhaps we should use PosRepl when in
+    -- ProofScript, and then either PosRepl or PosBuiltin for TopLevel?
+    -- But we don't have a good way of knowing here whether we're
+    -- actually in the repl.
+    let pos = getPos stmt
+        cname = case ctx of
+            TopLevel -> ContextName pos "<toplevel>"
+            ProofScript -> ContextName pos "<proofscript>"
+            _ -> panic "checkStmt" ["Invalid monad context " <> Text.pack (pShow ctx)]
+        ctxtype = TyCon pos (ContextCon ctx) []
+    in
+    evalTIWithEnv avail env tenv (inferSingleStmt cname pos ctxtype stmt)
 
 -- | Check a single declaration. (This is an external interface.)
 --
@@ -1832,7 +1913,7 @@ checkStmt avail env tenv ctx stmt =
 -- environments to use.
 checkDecl :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Decl -> Result Decl
 checkDecl avail env tenv decl =
-  evalTIWithEnv avail env tenv (inferDecl decl)
+    evalTIWithEnv avail env tenv (inferDecl decl)
 
 -- | Check a found type (first argument) against an expected type
 --   (second argument) and return True if they can be unified.
