@@ -1,0 +1,35 @@
+m <- llvm_load_module "example.bc";
+
+import "Example.cry";
+
+thm_id <- llvm_verify
+  m "c_ID" [] false
+  do {
+    X <- llvm_fresh_var "X" (llvm_int 8);
+    llvm_execute_func [llvm_term X];
+    llvm_return (llvm_term {{ cry_ID X }} );
+  }
+  rme;
+
+fails (llvm_verify
+  m "c_FIVE" [thm_id] false
+  do {
+    Y <- llvm_fresh_var "Y" (llvm_int 8);
+    llvm_execute_func [llvm_term Y];
+    llvm_return (llvm_term {{ cry_FIVE Y }});
+  }
+  do {
+    w4_unint_rme ["cry_ID"];
+  });
+
+thm_five <- llvm_verify
+  m "c_FIVE" [thm_id] false
+  do {
+    llvm_unint ["cry_ID"];
+    Y <- llvm_fresh_var "Y" (llvm_int 8);
+    llvm_execute_func [llvm_term Y];
+    llvm_return (llvm_term {{ cry_FIVE Y }});
+  }
+  do {
+    w4_unint_rme ["cry_ID"];
+  };

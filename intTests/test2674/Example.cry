@@ -1,0 +1,7 @@
+module Example where
+
+cry_ID : [8] -> [8]
+cry_ID x = x
+
+cry_FIVE : [8] -> [8]
+cry_FIVE y = cry_ID 5 + y
