@@ -363,8 +363,8 @@ unifyContexts msg ctx1 ctx2 =
 unifyContextList :: String -> [IntMap Term] -> IO (IntMap Term)
 unifyContextList msg = foldM (unifyContexts msg) IntMap.empty
 
-ensureRecognizer :: SharedContext -> (Term -> Maybe a) -> Term -> IO a
-ensureRecognizer sc f trm =
+ensureRecognizer :: String -> SharedContext -> (Term -> Maybe a) -> Term -> IO a
+ensureRecognizer s sc f trm =
   case f trm of
     Just a -> pure a
     Nothing ->
@@ -372,19 +372,19 @@ ensureRecognizer sc f trm =
          case f trm' of
            Just a -> pure a
            Nothing ->
-             fail "ensureRecognizer"
+             fail $ "ensureRecognizer: Expected " ++ s ++ ", found: " ++ showTerm trm'
 
 ensureSort :: SharedContext -> Term -> IO Sort
-ensureSort sc tp = ensureRecognizer sc asSort tp
+ensureSort sc tp = ensureRecognizer "Sort" sc asSort tp
 
 ensurePi :: SharedContext -> Term -> IO (VarName, Term, Term)
-ensurePi sc tp = ensureRecognizer sc asPi tp
+ensurePi sc tp = ensureRecognizer "Pi" sc asPi tp
 
 ensurePairType :: SharedContext -> Term -> IO (Term, Term)
-ensurePairType sc tp = ensureRecognizer sc asPairType tp
+ensurePairType sc tp = ensureRecognizer "PairType" sc asPairType tp
 
 ensureRecordType :: SharedContext -> Term -> IO (Map FieldName Term)
-ensureRecordType sc tp = ensureRecognizer sc asRecordType tp
+ensureRecordType sc tp = ensureRecognizer "RecordType" sc asRecordType tp
 
 piSort :: Sort -> Sort -> Sort
 piSort s1 s2 = if s2 == propSort then propSort else max s1 s2
