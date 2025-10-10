@@ -18,8 +18,6 @@ module SAWCentral.AST
        , everythingAvailable
        , defaultAvailable
        , Name
-       , LName
-       , Located(..)
        , Import(..)
        , Expr(..)
        , Pattern(..)
@@ -87,36 +85,6 @@ type Name = Text
 
 -- }}}
 
--- Location tracking {{{
-
---
--- Type to wrap a thing with a position
---
--- This is declared with record syntax to provide accessors/projection
--- functions; it is intended to be used positionally.
---
-data Located a = Located {
-  getVal :: a,          -- the thing
-  getOrig :: Name,      -- a name/string for it, where applicable
-  locatedPos :: Pos     -- the position
-} deriving (Functor, Foldable, Traversable)
-
-instance Show (Located a) where
-  show (Located _ v p) = show v ++ " (" ++ show p ++ ")"
-
-instance Positioned (Located a) where
-  getPos = locatedPos
-
-instance Eq a => Eq (Located a) where
-  a == b = getVal a == getVal b
-
-instance Ord a => Ord (Located a) where
-  compare a b = compare (getVal a) (getVal b)
-
-type LName = Located Name
-
--- }}}
-
 -- Expr Level {{{
 
 data Import = Import
@@ -135,8 +103,8 @@ data Expr
   = Bool Pos Bool
   | String Pos Text
   | Int Pos Integer
-  | Code (Located Text)
-  | CType (Located Text)
+  | Code Pos Text
+  | CType Pos Text
   -- Structures
   | Array  Pos [Expr]
     -- | A do-block, with zero or more statements and a final expression.
@@ -150,7 +118,7 @@ data Expr
   | Lookup  Pos Expr Name
   | TLookup Pos Expr Integer
   -- LC
-  | Var (Located Name)
+  | Var Pos Name
   -- | All functions are handled as lambdas. We hang onto the name
   --   from the function declaration (if there was one) for use in
   --   stack traces.
@@ -166,8 +134,8 @@ instance Positioned Expr where
   getPos (Bool pos _) = pos
   getPos (String pos _) = pos
   getPos (Int pos _) = pos
-  getPos (Code c) = getPos c
-  getPos (CType t) = getPos t
+  getPos (Code pos _) = pos
+  getPos (CType pos _) = pos
   getPos (Array pos _) = pos
   getPos (Block pos _) = pos
   getPos (Tuple pos _) = pos
@@ -175,38 +143,52 @@ instance Positioned Expr where
   getPos (Index pos _ _) = pos
   getPos (Lookup pos _ _) = pos
   getPos (TLookup pos _ _) = pos
-  getPos (Var n) = getPos n
+  getPos (Var pos _) = pos
   getPos (Lambda pos _ _ _) = pos
   getPos (Application pos _ _) = pos
   getPos (Let pos _ _) = pos
   getPos (TSig pos _ _) = pos
   getPos (IfThenElse pos _ _ _) = pos
 
+-- | Patterns.
+--
+--   In `PVar` the first `Pos` is the position of the whole pattern
+--   (including any type) and the second is the position of just the
+--   name itself.
 data Pattern
   = PWild Pos (Maybe Type)
-  | PVar Pos LName (Maybe Type)
+  | PVar Pos Pos Name (Maybe Type)
   | PTuple Pos [Pattern]
   deriving Show
 
 instance Positioned Pattern where
   getPos (PWild pos _) = pos
-  getPos (PVar pos _ _) = pos
+  getPos (PVar fullpos _namepos _ _) = fullpos
   getPos (PTuple pos _) = pos
 
+-- | Statements.
+--
+--   In `StmtCode` the first `Pos` is the position of the whole
+--   construct (including the initial "let") and the second is the
+--   position of just the Cryptol text.
+--
+--   Similarly, in `StmtTypedef` the first `Pos` is the position of
+--   the whole construct (including the expansion) and the second is
+--   the position of the name.
 data Stmt
   = StmtBind     Pos Pattern Expr
   | StmtLet      Pos DeclGroup
-  | StmtCode     Pos (Located Text)
+  | StmtCode     Pos Pos Text
   | StmtImport   Pos Import
-  | StmtTypedef  Pos (Located Text) Type
+  | StmtTypedef  Pos Pos Text Type
   deriving Show
 
 instance Positioned Stmt where
   getPos (StmtBind pos _ _)  = pos
   getPos (StmtLet pos _)       = pos
-  getPos (StmtCode pos _)      = pos
+  getPos (StmtCode allpos _spos _str) = allpos
   getPos (StmtImport pos _)    = pos
-  getPos (StmtTypedef pos _ _) = pos
+  getPos (StmtTypedef allpos _apos _a _ty) = allpos
 
 data DeclGroup
   = Recursive [Decl]
@@ -319,8 +301,8 @@ instance Pretty Expr where
     Bool _ b   -> PP.viaShow b
     String _ s -> PP.dquotes (PP.pretty s)
     Int _ i    -> PP.pretty i
-    Code ls    -> PP.braces . PP.braces $ PP.pretty (getVal ls)
-    CType (Located string _ _) -> PP.braces . PP.pretty $ "|" <> string <> "|"
+    Code _ s   -> PP.braces $ PP.braces $ PP.pretty s
+    CType _ s  -> PP.braces $ PP.pretty $ "|" <> s <> "|"
     Array _ xs -> PP.list (map PP.pretty xs)
     Block _ (stmts, lastexpr) ->
       let stmts' = map PP.pretty stmts
@@ -337,7 +319,7 @@ instance Pretty Expr where
     Index _ _ _ -> error "No concrete syntax for AST node 'Index'"
     Lookup _ expr name -> PP.pretty expr PP.<> PP.dot PP.<> PP.pretty name
     TLookup _ expr int -> PP.pretty expr PP.<> PP.dot PP.<> PP.pretty int
-    Var (Located name _ _) ->
+    Var _ name ->
       PP.pretty name
     Lambda _ _mname pat expr ->
       "\\" PP.<+> PP.pretty pat PP.<+> "->" PP.<+> PP.pretty expr
@@ -369,7 +351,7 @@ instance Pretty Pattern where
   pretty pat = case pat of
     PWild _ mType ->
       prettyMaybeTypedArg ("_", mType)
-    PVar _ (Located name _ _) mType ->
+    PVar _ _ name mType ->
       prettyMaybeTypedArg (name, mType)
     PTuple _ pats ->
       PP.tupled (map PP.pretty pats)
@@ -387,7 +369,7 @@ instance Pretty Stmt where
          PP.cat (PP.punctuate
             (PP.fillSep [PP.emptyDoc, "and" PP.<> PP.space])
             (map prettyDef decls))
-      StmtCode _ (Located code _ _) ->
+      StmtCode _ _ code ->
          "let" PP.<+>
             (PP.braces . PP.braces $ PP.pretty code)
       StmtImport _ Import{iModule,iAs,iSpec} ->
@@ -407,7 +389,7 @@ instance Pretty Stmt where
             Just (P.Only names) ->
                PP.space PP.<> PP.tupled (map ppIdent names)
             Nothing -> PP.emptyDoc)
-      StmtTypedef _ (Located name _ _) ty ->
+      StmtTypedef _ _ name ty ->
          "typedef" PP.<+> PP.pretty name PP.<+> PPS.prettyPrec 0 ty
       --expr -> PP.cyan . PP.viaShow expr
 

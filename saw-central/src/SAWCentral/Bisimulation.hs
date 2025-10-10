@@ -259,7 +259,6 @@ openConstantApp :: TypedTerm
                 -- 'Constant' (will be unfolded).
                 -> TopLevel (ExtCns Term, TermF Term)
 openConstantApp constant t = do
-  sc <- getSharedContext
   -- Unfold constant
   name <- constantName (unwrapTermF (ttTerm t))
   tUnfolded <- unfold_term [name] t
@@ -269,15 +268,15 @@ openConstantApp constant t = do
 
   -- Replace outer function's argument with an 'ExtCns'
   -- NOTE: The bisimulation relation type ensures this is a single argument
-  -- lambda, so it's OK to apply scOpenTerm once and not recurse
-  (ec, tExtconsified) <- io $ scOpenTerm sc nm tp 0 body
-  extractedF <- extractApp constant tExtconsified
+  -- lambda, so it's OK to not recurse
+  let ec = EC nm tp
+  extractedF <- extractApp constant body
   pure (ec, extractedF)
 
   where
     -- Break down lambda into its component parts.  Fails if 'tt' is not a
     -- lambda.
-    lambdaOrFail :: TypedTerm -> TopLevel (LocalName, Term, Term)
+    lambdaOrFail :: TypedTerm -> TopLevel (VarName, Term, Term)
     lambdaOrFail tt =
       case asLambda (ttTerm tt) of
         Just lambda -> return lambda

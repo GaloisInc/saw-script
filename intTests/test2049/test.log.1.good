@@ -11,9 +11,7 @@
  Subgoal failed: zero test.saw:52:4: error: in ghost_value
 Literal equality postcondition
 Expected term: 
-let { x@1 = Prelude.Vec 8 Prelude.Bool
-    }
- in zero::table
+zero::table
 Actual term:
 let { x@1 = Prelude.Vec 8 Prelude.Bool
     }

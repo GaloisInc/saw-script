@@ -245,7 +245,6 @@ initialState readFileFn =
          rw = TopLevelRW
                 { rwValueInfo = mempty
                 , rwTypeInfo = mempty
-                , rwDocs = mempty
                 , rwCryptol = cenv
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty

@@ -482,7 +482,7 @@ asPiTypes sc t =
        Nothing -> pure ([], t)
        Just (n, t1, t2) ->
          do (args, ret) <- asPiTypes sc t2
-            pure ((Text.unpack n, t1) : args, ret)
+            pure ((Text.unpack (vnName n), t1) : args, ret)
 
 bitBlastTerm ::
   AIG.IsAIG l g =>

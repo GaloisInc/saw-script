@@ -49,7 +49,6 @@ module SAWCore.Recognizer
   , asLambdaList
   , asPi
   , asPiList
-  , asLocalVar
   , asConstant
   , asVariable
   , asSort
@@ -309,29 +308,25 @@ asArrayValue _ = Nothing
 asStringLit :: Recognizer Term Text
 asStringLit t = do StringLit i <- asFTermF t; return i
 
-asLambda :: Recognizer Term (LocalName, Term, Term)
+asLambda :: Recognizer Term (VarName, Term, Term)
 asLambda (unwrapTermF -> Lambda s ty body) = return (s, ty, body)
 asLambda _ = Nothing
 
-asLambdaList :: Term -> ([(LocalName, Term)], Term)
+asLambdaList :: Term -> ([(VarName, Term)], Term)
 asLambdaList = go []
   where go r (asLambda -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
         go r rhs = (reverse r, rhs)
 
-asPi :: Recognizer Term (LocalName, Term, Term)
+asPi :: Recognizer Term (VarName, Term, Term)
 asPi (unwrapTermF -> Pi nm tp body) = return (nm, tp, body)
 asPi _ = Nothing
 
 -- | Decomposes a term into a list of pi bindings, followed by a right
 -- term that is not a pi binding.
-asPiList :: Term -> ([(LocalName, Term)], Term)
+asPiList :: Term -> ([(VarName, Term)], Term)
 asPiList = go []
   where go r (asPi -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
         go r rhs = (reverse r, rhs)
-
-asLocalVar :: Recognizer Term DeBruijnIndex
-asLocalVar (unwrapTermF -> LocalVar i) = return i
-asLocalVar _ = Nothing
 
 asConstant :: Recognizer Term Name
 asConstant (unwrapTermF -> Constant nm) = pure nm
@@ -340,8 +335,8 @@ asConstant _ = Nothing
 asVariable :: Recognizer Term (ExtCns Term)
 asVariable t =
   case unwrapTermF t of
-    Variable ec -> pure ec
-    _           -> Nothing
+    Variable nm tp -> pure (EC nm tp)
+    _              -> Nothing
 
 asSort :: Recognizer Term Sort
 asSort t = do

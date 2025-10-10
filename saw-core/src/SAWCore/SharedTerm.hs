@@ -32,8 +32,6 @@ module SAWCore.SharedTerm
     -- * Shared terms
   , Term(..)
   , TermIndex
-  , looseVars
-  , smallestLooseVar
   , scSharedTerm
   , unshare
   , scImport
@@ -98,7 +96,6 @@ module SAWCore.SharedTerm
   , scISort
   , scSortWithFlags
     -- *** Variables and constants
-  , scLocalVar
   , scConst
   , scConstApply
     -- *** Functions and function application
@@ -150,6 +147,7 @@ module SAWCore.SharedTerm
   , asSort
   , reducePi
   , scTypeOfIdent
+  , scTypeOfName
     -- ** Prelude operations
     -- *** Booleans
   , scNot
@@ -235,18 +233,7 @@ module SAWCore.SharedTerm
   , scArrayCopy
   , scArraySet
   , scArrayRangeEq
-    -- ** Utilities
---  , scTrue
---  , scFalse
-   , scOpenTerm
-   , scCloseTerm
-  , scAsLambda
-  , scAsLambdaList
-  , scAsPi
-  , scAsPiList
     -- ** Variable substitution
-  , instantiateVar
-  , instantiateVarList
   , betaNormalize
   , isConstFoldTerm
   , getAllExts
@@ -258,7 +245,6 @@ module SAWCore.SharedTerm
   , scAbstractExtsEtaCollapse
   , scGeneralizeExts
   , scGeneralizeTerms
-  , incVars
   , scUnfoldConstants
   , scUnfoldConstants'
   , scUnfoldConstantSet
@@ -282,7 +268,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Bits
-import Data.List (inits, find)
+import Data.List (find)
 import Data.Maybe
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM, maximum)
@@ -447,7 +433,7 @@ scConstApply sc i ts =
 
 -- | Create a named variable 'Term' from an 'ExtCns'.
 scVariable :: SharedContext -> ExtCns Term -> IO Term
-scVariable sc ec = scTermF sc (Variable ec)
+scVariable sc (EC nm tp) = scTermF sc (Variable nm tp)
 
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
@@ -759,7 +745,6 @@ getTerm cache termF =
         i <- getUniqueInt
         let term = STApp { stAppIndex = i
                          , stAppHash = hash termF
-                         , stAppLooseVars = looseTermF (fmap looseVars termF)
                          , stAppFreeVars = freesTermF (fmap freeVars termF)
                          , stAppTermF = termF
                          }
@@ -1175,7 +1160,7 @@ scWhnf sc t0 =
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
     go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
-    go (ElimApp x : xs)       (asLambda -> Just (_, _, body))   = betaReduce xs [x] body
+    go (ElimApp x : xs)       (asLambda -> Just (vn, _, body))  = betaReduce xs [(vn, x)] body
     go (ElimPair i : xs)      (asPairValue -> Just (a, b))      = go xs (if i then b else a)
     go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case Map.lookup fld elems of
                                                                     Just t -> go xs t
@@ -1220,11 +1205,13 @@ scWhnf sc t0 =
     go xs                     t                                 = foldM reapply t xs
 
     betaReduce :: (?cache :: Cache IO TermIndex Term) =>
-      [WHNFElim] -> [Term] -> Term -> IO Term
-    betaReduce (ElimApp x : xs) vs (asLambda -> Just (_,_,body)) =
-      betaReduce xs (x:vs) body
+      [WHNFElim] -> [(VarName, Term)] -> Term -> IO Term
+    betaReduce (ElimApp x : xs) vs (asLambda -> Just (vn,_,body)) =
+      betaReduce xs ((vn, x) : vs) body
     betaReduce xs vs body =
-      instantiateVarList sc 0 vs body >>= go xs
+      do let subst = IntMap.fromList [ (vnIndex vn, x) | (vn, x) <- vs ]
+         body' <- scInstantiateExt sc subst body
+         go xs body'
 
     reapply :: Term -> WHNFElim -> IO Term
     reapply t (ElimApp x) = scApply sc t x
@@ -1266,55 +1253,58 @@ scConvertibleEval :: SharedContext
                   -> IO Bool
 scConvertibleEval sc eval unfoldConst tm1 tm2 = do
    c <- newCache
-   go c tm1 tm2
+   go c IntMap.empty tm1 tm2
 
  where whnf :: Cache IO TermIndex Term -> Term -> IO (TermF Term)
        whnf _c t@(Unshared _) = unwrapTermF <$> eval sc t
        whnf c t@(STApp{ stAppIndex = idx}) =
          unwrapTermF <$> useCache c idx (eval sc t)
 
-       go :: Cache IO TermIndex Term -> Term -> Term -> IO Bool
-       go _c (STApp{ stAppIndex = idx1}) (STApp{ stAppIndex = idx2})
-           | idx1 == idx2 = return True   -- succeed early case
-       go c t1 t2 = join (goF c <$> whnf c t1 <*> whnf c t2)
+       go :: Cache IO TermIndex Term -> IntMap VarIndex -> Term -> Term -> IO Bool
+       go _c vm (STApp{stAppIndex = idx1, stAppFreeVars = vs1}) (STApp{stAppIndex = idx2})
+         | IntSet.disjoint vs1 (IntMap.keysSet vm) && idx1 == idx2 = pure True   -- succeed early case
+       go c vm t1 t2 = join (goF c vm <$> whnf c t1 <*> whnf c t2)
 
-       goF :: Cache IO TermIndex Term -> TermF Term -> TermF Term -> IO Bool
+       goF :: Cache IO TermIndex Term -> IntMap VarIndex -> TermF Term -> TermF Term -> IO Bool
 
-       goF _c (Constant nx) (Constant ny) | nameIndex nx == nameIndex ny = pure True
-       goF c (Constant nx) y
+       goF _c _vm (Constant nx) (Constant ny) | nameIndex nx == nameIndex ny = pure True
+       goF c vm (Constant nx) y
            | unfoldConst =
              do mx <- scFindDefBody sc (nameIndex nx)
                 case mx of
-                  Just x -> join (goF c <$> whnf c x <*> return y)
+                  Just x -> join (goF c vm <$> whnf c x <*> return y)
                   Nothing -> pure False
-       goF c x (Constant ny)
+       goF c vm x (Constant ny)
            | unfoldConst =
              do my <- scFindDefBody sc (nameIndex ny)
                 case my of
-                  Just y -> join (goF c <$> return x <*> whnf c y)
+                  Just y -> join (goF c vm <$> return x <*> whnf c y)
                   Nothing -> pure False
 
-       goF c (FTermF ftf1) (FTermF ftf2) =
-               case zipWithFlatTermF (go c) ftf1 ftf2 of
+       goF c vm (FTermF ftf1) (FTermF ftf2) =
+               case zipWithFlatTermF (go c vm) ftf1 ftf2 of
                  Nothing -> return False
                  Just zipped -> Fold.and <$> traverse id zipped
 
-       goF _c (LocalVar i) (LocalVar j) = return (i == j)
+       goF c vm (App f1 x1) (App f2 x2) =
+              pure (&&) <*> go c vm f1 f2 <*> go c vm x1 x2
 
-       goF c (App f1 x1) (App f2 x2) =
-              pure (&&) <*> go c f1 f2 <*> go c x1 x2
+       goF c vm (Lambda (vnIndex -> i1) ty1 body1) (Lambda (vnIndex -> i2) ty2 body2) =
+         pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
+           where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
 
-       goF c (Lambda _ ty1 body1) (Lambda _ ty2 body2) =
-              pure (&&) <*> go c ty1 ty2 <*> go c body1 body2
+       goF c vm (Pi (vnIndex -> i1) ty1 body1) (Pi (vnIndex -> i2) ty2 body2) =
+         pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
+           where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
 
-       goF c (Pi _ ty1 body1) (Pi _ ty2 body2) =
-              pure (&&) <*> go c ty1 ty2 <*> go c body1 body2
-
-       goF c (Variable ec1) (Variable ec2)
-           | ecVarIndex ec1 == ecVarIndex ec2 = go c (ecType ec1) (ecType ec2)
+       goF c vm (Variable x1 t1) (Variable x2 t2)
+         | i' == vnIndex x2 = go c vm t1 t2
+           where i' = case IntMap.lookup (vnIndex x1) vm of
+                        Nothing -> vnIndex x1
+                        Just i -> i
 
        -- final catch-all case
-       goF _c _x _y = return False
+       goF _c _vm _x _y = pure False
 
 -- | Test if two terms are convertible using 'scWhnf' for evaluation
 scConvertible :: SharedContext
@@ -1333,7 +1323,8 @@ reducePi :: SharedContext -> Term -> Term -> IO Term
 reducePi sc t arg = do
   t' <- scWhnf sc t
   case asPi t' of
-    Just (_, _, body) -> instantiateVar sc 0 arg body
+    Just (vn, _, body) ->
+      scInstantiateExt sc (IntMap.singleton (vnIndex vn) arg) body
     _ ->
       fail $ unlines ["reducePi: not a Pi term", showTerm t']
 
@@ -1347,13 +1338,21 @@ scTypeOfIdent sc ident =
        Just r -> pure (resolvedNameType r)
        Nothing -> fail ("scTypeOfIdent: Identifier not found: " ++ show ident)
 
+-- | Look up the type of a global constant, given its 'Name'.
+scTypeOfName :: SharedContext -> Name -> IO Term
+scTypeOfName sc nm =
+  do mm <- scGetModuleMap sc
+     case lookupVarIndexInMap (nameIndex nm) mm of
+       Just r -> pure (resolvedNameType r)
+       Nothing -> fail ("scTypeOfName: Name not found: " ++ show nm)
+
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
 scTypeOf :: SharedContext -> Term -> IO Term
-scTypeOf sc t0 = scTypeOf' sc [] t0
+scTypeOf sc t0 = scTypeOf' sc IntMap.empty t0
 
--- | A version for open terms; the list argument encodes the type environment.
-scTypeOf' :: SharedContext -> [Term] -> Term -> IO Term
+-- | A version for open terms; the map argument encodes the type environment.
+scTypeOf' :: SharedContext -> IntMap Term -> Term -> IO Term
 scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: Term -> State.StateT (Map TermIndex Term) IO Term
@@ -1381,28 +1380,28 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         App x y -> do
           tx <- memo x
           lift $ reducePi sc tx y
-        Lambda name tp rhs -> do
-          rtp <- lift $ scTypeOf' sc (tp : env) rhs
-          lift $ scTermF sc (Pi name tp rtp)
-        Pi _ tp rhs -> do
-          ltp <- sort tp
-          rtp <- toSort =<< lift (scTypeOf' sc (tp : env) rhs)
-
-          -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
-          -- when b is a Prop (this is a forall proposition), otherwise it is a
-          -- (Type (max (sortOf a) (sortOf b)))
-          let srt = if rtp == propSort then propSort else max ltp rtp
-
-          lift $ scSort sc srt
-        LocalVar i
-          | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
-          | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
+        Lambda x tp rhs ->
+          do let env' = IntMap.insert (vnIndex x) tp env
+             rtp <- lift $ scTypeOf' sc env' rhs
+             lift $ scPi sc x tp rtp
+        Pi x tp rhs ->
+          do ltp <- sort tp
+             let env' = IntMap.insert (vnIndex x) tp env
+             rtp <- toSort =<< lift (scTypeOf' sc env' rhs)
+             -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
+             -- when b is a Prop (this is a forall proposition), otherwise it is a
+             -- (Type (max (sortOf a) (sortOf b)))
+             let srt = if rtp == propSort then propSort else max ltp rtp
+             lift $ scSort sc srt
         Constant nm ->
           do mm <- liftIO $ scGetModuleMap sc
              case lookupVarIndexInMap (nameIndex nm) mm of
                Just r -> pure $ resolvedNameType r
                _ -> panic "scTypeOf'" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
-        Variable ec -> pure $ ecType ec
+        Variable x tp ->
+          case IntMap.lookup (vnIndex x) env of
+            Just tx -> pure tx
+            Nothing -> pure tp
     ftermf :: FlatTermF Term
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
@@ -1494,131 +1493,6 @@ scImport sc t0 =
           useCache cache idx (scTermF sc =<< traverse (go cache) tf)
 
 --------------------------------------------------------------------------------
--- Instantiating variables
-
--- | The second argument is a function that takes the number of
--- enclosing lambdas and the de Bruijn index of the variable,
--- returning the new term to replace it with.
-instantiateLocalVars ::
-  SharedContext ->
-  (DeBruijnIndex -> DeBruijnIndex -> IO Term) ->
-  DeBruijnIndex -> Term -> IO Term
-instantiateLocalVars sc f initialLevel t0 =
-  do cache <- newCache
-     let ?cache = cache in go initialLevel t0
-  where
-    go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
-          DeBruijnIndex -> Term -> IO Term
-    go l t =
-      case t of
-        Unshared tf -> go' l tf
-        STApp{ stAppIndex = tidx, stAppTermF = tf }
-          | termIsClosed t -> return t -- closed terms map to themselves
-          | otherwise -> useCache ?cache (tidx, l) (go' l tf)
-
-    go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
-           DeBruijnIndex -> TermF Term -> IO Term
-    go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
-    go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
-    go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
-    go' l (Pi i lhs rhs)    = scTermF sc =<< (Pi i <$> go l lhs <*> go (l+1) rhs)
-    go' l (LocalVar i)
-      | i < l     = scTermF sc (LocalVar i)
-      | otherwise = f l i
-    go' _ tf@(Constant {}) = scTermF sc tf
-    go' _ tf@(Variable {}) = scTermF sc tf
-
-instantiateVars :: SharedContext
-                -> ((Term -> IO Term) -> DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term)
-                -> DeBruijnIndex -> Term -> IO Term
-instantiateVars sc f initialLevel t0 =
-    do cache <- newCache
-       let ?cache = cache in go initialLevel t0
-  where
-    go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
-          DeBruijnIndex -> Term -> IO Term
-    go l (Unshared tf) =
-            go' l tf
-    go l (STApp{ stAppIndex = tidx, stAppTermF = tf}) =
-            useCache ?cache (tidx, l) (go' l tf)
-
-    go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
-           DeBruijnIndex -> TermF Term -> IO Term
-    go' l (Variable ec)     = f (go l) l (Left ec)
-    go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
-    go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
-    go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
-    go' l (Pi i lhs rhs)    = scTermF sc =<< (Pi i <$> go l lhs <*> go (l+1) rhs)
-    go' l (LocalVar i)
-      | i < l     = scTermF sc (LocalVar i)
-      | otherwise = f (go l) l (Right i)
-    go' _ tf@(Constant {}) = scTermF sc tf
-
--- | @incVars k j t@ increments free variables at least @k@ by @j@.
--- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
-incVars :: SharedContext
-        -> DeBruijnIndex -> DeBruijnIndex -> Term -> IO Term
-incVars sc initialLevel j
-  | j == 0    = return
-  | otherwise = instantiateLocalVars sc fn initialLevel
-  where
-    fn _ i = scTermF sc (LocalVar (i+j))
-
--- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
--- dangling variables.
-instantiateVar :: SharedContext
-               -> DeBruijnIndex -> Term -> Term -> IO Term
-instantiateVar sc k t0 t =
-    do cache <- newCache
-       let ?cache = cache in instantiateLocalVars sc fn k t
-  where -- Use map reference to memoize instantiated versions of t.
-        term :: (?cache :: Cache IO DeBruijnIndex Term) =>
-                DeBruijnIndex -> IO Term
-        term i = useCache ?cache i (incVars sc 0 i t0)
-        -- Instantiate variable 0.
-        fn :: (?cache :: Cache IO DeBruijnIndex Term) =>
-              DeBruijnIndex -> DeBruijnIndex -> IO Term
-        fn i j | j  > i     = scTermF sc (LocalVar (j - 1))
-               | j == i     = term i
-               | otherwise  = scTermF sc (LocalVar j)
-
--- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and decrement all
--- higher deBruijn indices by @length ts@. Assume that deBruijn index 0 in @ts@
--- refers to deBruijn index @k + length ts@ in the current term; i.e., this
--- substitution lifts terms in @ts@ by @k@ (plus any additional binders).
---
--- For example, @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of
---
--- > Lam (Lam (Lam t)) `App` z `App` y `App` x
---
--- Note that the first element of the @ts@ list corresponds to @x@, which is the
--- outermost, or last, application. In terms of 'instantiateVar', we can write
--- this as:
---
--- > instantiateVarList 0 [x,y,z] t ==
--- >    instantiateVar 0 x (instantiateVar 1 (incVars 0 1 y)
--- >                       (instantiateVar 2 (incVars 0 2 z) t))
-instantiateVarList :: SharedContext
-                   -> DeBruijnIndex -> [Term] -> Term -> IO Term
-instantiateVarList _ _ [] t = return t
-instantiateVarList sc k ts t =
-    do caches <- mapM (const newCache) ts
-       instantiateLocalVars sc (fn (zip caches ts)) k t
-  where
-    l = length ts
-    -- Memoize instantiated versions of ts.
-    term :: (Cache IO DeBruijnIndex Term, Term)
-         -> DeBruijnIndex -> IO Term
-    term (cache, x) i = useCache cache i (incVars sc 0 (i-k) x)
-    -- Instantiate variables [k .. k+l-1].
-    fn :: [(Cache IO DeBruijnIndex Term, Term)]
-       -> DeBruijnIndex -> DeBruijnIndex -> IO Term
-    fn rs i j | j >= i + l     = scTermF sc (LocalVar (j - l))
-              | j >= i         = term (rs !! (j - i)) i
-              | otherwise      = scTermF sc (LocalVar j)
-
-
---------------------------------------------------------------------------------
 -- Beta Normalization
 
 -- | Beta-reduce a term to normal form.
@@ -1639,9 +1513,11 @@ betaNormalize sc t0 =
       let n = length (zip args params)
       if n == 0 then go3 t else do
         body' <- go body
-        f' <- scLambdaList sc (drop n params) body'
+        let ecs = map (uncurry EC) (drop n params)
+        f' <- scAbstractExts sc ecs body'
         args' <- mapM go args
-        f'' <- instantiateVarList sc 0 (reverse (take n args')) f'
+        let sub = IntMap.fromList [(vnIndex nm, arg) | (arg, (nm, _)) <- zip args params]
+        f'' <- scInstantiateExt sc sub f'
         scApplyAll sc f'' (drop n args')
 
     go3 :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
@@ -1662,9 +1538,12 @@ scApplyAll sc = foldlM (scApply sc)
 
 -- | Apply a function to an argument, beta-reducing if the function is a lambda
 scApplyBeta :: SharedContext -> Term -> Term -> IO Term
-scApplyBeta sc (asLambda -> Just (_, _, body)) arg =
-  instantiateVar sc 0 arg body
-scApplyBeta sc f arg = scApply sc f arg
+scApplyBeta sc f arg =
+  case asLambda f of
+    Just (name, _, body) ->
+      scInstantiateExt sc (IntMap.singleton (vnIndex name) arg) body
+    Nothing ->
+      scApply sc f arg
 
 -- | Apply a function 'Term' to zero or more arguments, beta reducing any time
 -- the function is a lambda
@@ -1793,8 +1672,9 @@ scFun :: SharedContext
       -> Term -- ^ The parameter type
       -> Term -- ^ The result type
       -> IO Term
-scFun sc a b = do b' <- incVars sc 0 1 b
-                  scTermF sc (Pi "_" a b')
+scFun sc a b =
+  do nm <- scFreshVarName sc "_"
+     scTermF sc (Pi nm a b)
 
 -- | Create a term representing the type of a non-dependent n-ary function,
 -- given a list of parameter types and a result type (as terms).
@@ -1808,7 +1688,7 @@ scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 -- (as a 'Term'), and a body. Regarding deBruijn indices, in the body of the
 -- function, an index of 0 refers to the bound parameter.
 scLambda :: SharedContext
-         -> LocalName -- ^ The parameter name
+         -> VarName -- ^ The parameter name
          -> Term   -- ^ The parameter type
          -> Term   -- ^ The body
          -> IO Term
@@ -1820,7 +1700,7 @@ scLambda sc varname ty body = scTermF sc (Lambda varname ty body)
 -- parameter in the list, and n-1 (where n is the list length) refers to the
 -- first.
 scLambdaList :: SharedContext
-             -> [(LocalName, Term)] -- ^ List of parameter / parameter type pairs
+             -> [(VarName, Term)] -- ^ List of parameter / parameter type pairs
              -> Term -- ^ The body
              -> IO Term
 scLambdaList _ [] rhs = return rhs
@@ -1828,30 +1708,23 @@ scLambdaList sc ((nm,tp):r) rhs =
   scLambda sc nm tp =<< scLambdaList sc r rhs
 
 -- | Create a (possibly dependent) function given a parameter name, parameter
--- type (as a 'Term'), and a body. This function follows the same deBruijn
--- index convention as 'scLambda'.
+-- type (as a 'Term'), and a body.
 scPi :: SharedContext
-     -> LocalName -- ^ The parameter name
+     -> VarName -- ^ The parameter name
      -> Term   -- ^ The parameter type
      -> Term   -- ^ The body
      -> IO Term
 scPi sc nm tp body = scTermF sc (Pi nm tp body)
 
+
 -- | Create a (possibly dependent) function of multiple arguments (curried)
 -- from a list associating parameter names to types (as 'Term's) and a body.
--- This function follows the same deBruijn index convention as 'scLambdaList'.
 scPiList :: SharedContext
-         -> [(LocalName, Term)] -- ^ List of parameter / parameter type pairs
+         -> [(VarName, Term)] -- ^ List of parameter / parameter type pairs
          -> Term -- ^ The body
          -> IO Term
 scPiList _ [] rhs = return rhs
 scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
-
--- | Create a local variable term from a 'DeBruijnIndex'.
-scLocalVar :: SharedContext
-           -> DeBruijnIndex
-           -> IO Term
-scLocalVar sc i = scTermF sc (LocalVar i)
 
 -- | Create an abstract constant with the specified name, body, and
 -- type. The term for the body must not have any loose de Bruijn
@@ -1863,7 +1736,7 @@ scConstant :: SharedContext
            -> Term   -- ^ The type
            -> IO Term
 scConstant sc name rhs ty =
-  do unless (termIsClosed rhs) $
+  do unless (closedTerm rhs) $
        fail "scConstant: term contains loose variables"
      unless (null (getAllExts rhs)) $
        fail $ unlines
@@ -1892,7 +1765,7 @@ scConstant' :: SharedContext
             -> Term   -- ^ The type
             -> IO Term
 scConstant' sc nmi rhs ty =
-  do unless (termIsClosed rhs) $
+  do unless (closedTerm rhs) $
        fail "scConstant': term contains loose variables"
      unless (null (getAllExts rhs)) $
        fail $ unlines
@@ -2761,18 +2634,33 @@ getAllExts t = Set.toList (getAllExtSet t)
 -- | Return a set of all ExtCns subterms in the given term.
 --   Does not traverse the unfoldings of @Constant@ terms.
 getAllExtSet :: Term -> Set.Set (ExtCns Term)
-getAllExtSet t = snd $ getExtCns (IntSet.empty, Set.empty) t
-    where getExtCns acc@(is, _) (STApp{ stAppIndex = idx }) | IntSet.member idx is = acc
-          getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = (Variable ec) }) =
-            (IntSet.insert idx is, Set.insert ec a)
-          getExtCns (is, a) (Unshared (Variable ec)) =
-            (is, Set.insert ec a)
-          getExtCns acc (STApp{ stAppTermF = Constant {} }) = acc
-          getExtCns acc (Unshared (Constant {})) = acc
-          getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = tf'}) =
-            foldl' getExtCns (IntSet.insert idx is, a) tf'
-          getExtCns acc (Unshared tf') =
-            foldl' getExtCns acc tf'
+getAllExtSet t = State.evalState (go t) IntMap.empty
+  where
+    go :: Term -> State.State (IntMap (Set.Set (ExtCns Term))) (Set.Set (ExtCns Term))
+    go (Unshared tf) = termf tf
+    go STApp{ stAppIndex = i, stAppTermF = tf, stAppFreeVars = fvs }
+      | IntSet.null fvs = pure Set.empty
+      | otherwise =
+        do memo <- State.get
+           case IntMap.lookup i memo of
+             Just ecs -> pure ecs
+             Nothing ->
+               do ecs <- termf tf
+                  State.modify' (IntMap.insert i ecs)
+                  pure ecs
+    termf :: TermF Term -> State.State (IntMap (Set.Set (ExtCns Term))) (Set.Set (ExtCns Term))
+    termf tf =
+      case tf of
+        Variable x tp -> pure (Set.singleton (EC x tp))
+        Lambda x t1 t2 ->
+          do ecs1 <- go t1
+             ecs2 <- go t2
+             pure (ecs1 <> Set.delete (EC x t1) ecs2)
+        Pi x t1 t2 ->
+          do ecs1 <- go t1
+             ecs2 <- go t2
+             pure (ecs1 <> Set.delete (EC x t1) ecs2)
+        _ -> Fold.fold <$> traverse go tf
 
 getConstantSet :: Term -> Map VarIndex NameInfo
 getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
@@ -2787,26 +2675,14 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
         Constant (Name vidx n) -> (idxs, Map.insert vidx n names)
         _ -> foldl' go acc tf
 
--- | Instantiate some of the external constants.
---   Note: this replacement is _not_ applied recursively
---   to the terms in the replacement map; so external constants
---   in those terms will not be replaced.
+-- | Instantiate some of the named variables in the term.
+-- The 'IntMap' is keyed by 'VarIndex'.
+-- Note: The replacement is _not_ applied recursively
+-- to the terms in the substitution map.
 scInstantiateExt :: SharedContext -> IntMap Term -> Term -> IO Term
-scInstantiateExt sc vmap
-  | all termIsClosed vmap = scInstantiateExtClosed sc vmap
-  | otherwise = instantiateVars sc fn 0
-  where fn _rec l (Left ec) =
-            case IntMap.lookup (ecVarIndex ec) vmap of
-               Just t  -> incVars sc 0 l t
-               Nothing -> scVariable sc ec
-        fn _ _ (Right i) = scLocalVar sc i
-
--- | Internal variant of 'scInstantiateExt' that requires the
--- substituted terms to all be closed, i.e. they must not have any
--- loose de Bruijn indices.
-scInstantiateExtClosed :: SharedContext -> IntMap Term -> Term -> IO Term
-scInstantiateExtClosed sc vmap t0 =
-  do let vs = IntMap.keysSet vmap
+scInstantiateExt sc vmap t0 =
+  do let domainVars = IntMap.keysSet vmap
+     let rangeVars = foldMap freeVars vmap
      tcache <- newCacheIntMap
      let memo :: Term -> IO Term
          memo t =
@@ -2815,66 +2691,52 @@ scInstantiateExtClosed sc vmap t0 =
              STApp {stAppIndex = i} -> useCache tcache i (go t)
          go :: Term -> IO Term
          go t
-           | IntSet.disjoint vs (freeVars t) = pure t
+           | IntSet.disjoint domainVars (freeVars t) = pure t
            | otherwise =
              case unwrapTermF t of
                FTermF ftf     -> scFlatTermF sc =<< traverse memo ftf
                App t1 t2      -> scTermF sc =<< App <$> memo t1 <*> memo t2
-               Lambda x t1 t2 -> scTermF sc =<< Lambda x <$> memo t1 <*> memo t2
-               Pi x t1 t2     -> scTermF sc =<< Pi x <$> memo t1 <*> memo t2
-               LocalVar {} -> pure t
+               Lambda x t1 t2 ->
+                 do t1' <- memo t1
+                    (x', t2') <- goBinder x t1' t2
+                    scLambda sc x' t1' t2'
+               Pi x t1 t2 ->
+                 do t1' <- memo t1
+                    (x', t2') <- goBinder x t1' t2
+                    scPi sc x' t1' t2'
                Constant {} -> pure t
-               Variable ec ->
-                 case IntMap.lookup (ecVarIndex ec) vmap of
+               Variable nm tp ->
+                 case IntMap.lookup (vnIndex nm) vmap of
                    Just t' -> pure t'
-                   Nothing -> pure t
+                   Nothing -> scVariable sc =<< traverse memo (EC nm tp)
+         goBinder :: VarName -> Term -> Term -> IO (VarName, Term)
+         goBinder x@(vnIndex -> i) t body
+           | IntSet.member i rangeVars =
+               -- Possibility of capture; rename bound variable.
+               do x' <- scFreshVarName sc (vnName x)
+                  var <- scVariable sc (EC x' t)
+                  let vmap' = IntMap.insert i var vmap
+                  body' <- scInstantiateExt sc vmap' body
+                  pure (x', body')
+           | IntMap.member i vmap =
+               -- Shadowing; remove entry from substitution.
+               do let vmap' = IntMap.delete i vmap
+                  body' <- scInstantiateExt sc vmap' body
+                  pure (x, body')
+           | otherwise =
+               -- No possibility of shadowing or capture.
+               do body' <- memo body
+                  pure (x, body')
      go t0
-
--- | Convert the given list of external constants to local variables,
--- with the right-most mapping to local variable 0. If the term is
--- open (i.e. it contains loose de Bruijn indices) then increment them
--- accordingly.
-scExtsToLocals :: SharedContext -> [ExtCns Term] -> Term -> IO Term
-scExtsToLocals _ [] x = return x
-scExtsToLocals sc exts x = instantiateVars sc fn 0 x
-  where
-    m = Map.fromList [ (ecVarIndex ec, k) | (ec, k) <- zip (reverse exts) [0 ..] ]
-    fn r l e =
-      case e of
-        Left ec ->
-          case Map.lookup (ecVarIndex ec) m of
-            Just k  -> scLocalVar sc (l + k)
-            Nothing -> scVariable sc =<< traverse r ec
-        Right i ->
-          scLocalVar sc (i + length exts)
 
 -- | Abstract over the given list of external constants by wrapping
 --   the given term with lambdas and replacing the external constant
 --   occurrences with the appropriate local variables.
 scAbstractExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
 scAbstractExts _ [] x = return x
-scAbstractExts sc exts x = loop (zip (inits exts) exts)
-  where
-    -- each pair contains a single ExtCns and a list of all
-    -- the ExtCns values that appear before it in the original list.
-    loop :: [([ExtCns Term], ExtCns Term)] -> IO Term
-
-    -- special case: outermost variable, no need to abstract
-    -- inside the type of ec
-    loop (([],ec):ecs) =
-      do tm' <- loop ecs
-         scLambda sc (ecShortName ec) (ecType ec) tm'
-
-    -- ordinary case. We need to abstract over all the ExtCns in @begin@
-    -- before apply scLambda.  This ensures any dependencies between the
-    -- types are handled correctly.
-    loop ((begin,ec):ecs) =
-      do tm' <- loop ecs
-         tp' <- scExtsToLocals sc begin (ecType ec)
-         scLambda sc (ecShortName ec) tp' tm'
-
-    -- base case, convert all the exts in the body of x into deBruijn variables
-    loop [] = scExtsToLocals sc exts x
+scAbstractExts sc (ec : ecs) x =
+  do body <- scAbstractExts sc ecs x
+     scLambda sc (ecName ec) (ecType ec) body
 
 -- | Create a lambda term by abstracting over the list of arguments,
 -- which must all be named variables (e.g. terms generated by
@@ -2917,28 +2779,9 @@ scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
 -- occurrences with the appropriate local variables.
 scGeneralizeExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
 scGeneralizeExts _ [] x = return x
-scGeneralizeExts sc exts x = loop (zip (inits exts) exts)
-  where
-    -- each pair contains a single ExtCns and a list of all
-    -- the ExtCns values that appear before it in the original list.
-    loop :: [([ExtCns Term], ExtCns Term)] -> IO Term
-
-    -- specical case: outermost variable, no need to abstract
-    -- inside the type of ec
-    loop (([],ec):ecs) =
-      do tm' <- loop ecs
-         scPi sc (ecShortName ec) (ecType ec) tm'
-
-    -- ordinary case. We need to abstract over all the ExtCns in @begin@
-    -- before apply scLambda.  This ensures any dependenices between the
-    -- types are handled correctly.
-    loop ((begin,ec):ecs) =
-      do tm' <- loop ecs
-         tp' <- scExtsToLocals sc begin (ecType ec)
-         scPi sc (ecShortName ec) tp' tm'
-
-    -- base case, convert all the exts in the body of x into deBruijn variables
-    loop [] = scExtsToLocals sc exts x
+scGeneralizeExts sc (ec : ecs) x =
+  do body <- scGeneralizeExts sc ecs x
+     scPi sc (ecName ec) (ecType ec) body
 
 -- | Create a pi term by abstracting over the list of arguments, which
 -- must all be named variables (e.g. terms generated by 'scVariable' or
@@ -3090,81 +2933,3 @@ scTreeSizeAux = go
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert idx sz' seen')
           where (sz', seen') = foldl' go (1, seen) tf
-
-
--- | `openTerm sc nm ty i body` replaces the loose deBruijn variable `i`
---   with a fresh external constant (with name `nm`, and type `ty`) in `body`.
-scOpenTerm :: SharedContext
-         -> Text
-         -> Term
-         -> DeBruijnIndex
-         -> Term
-         -> IO (ExtCns Term, Term)
-scOpenTerm sc nm tp idx body = do
-    ec <- scFreshEC sc nm tp
-    ec_term <- scVariable sc ec
-    body' <- instantiateVar sc idx ec_term body
-    return (ec, body')
-
--- | `closeTerm close sc ec body` replaces the external constant `ec` in `body` by
---   a new deBruijn variable and binds it using the binding form given by 'close'.
---   The name and type of the new bound variable are given by the name and type of `ec`.
-scCloseTerm :: (SharedContext -> LocalName -> Term -> Term -> IO Term)
-          -> SharedContext
-          -> ExtCns Term
-          -> Term
-          -> IO Term
-scCloseTerm close sc ec body = do
-    lv <- scLocalVar sc 0
-    body' <- scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) lv) =<< incVars sc 0 1 body
-    close sc (ecShortName ec) (ecType ec) body'
-
--- | Deconstruct a lambda term into a bound variable and a body, using
--- a fresh 'ExtCns' for the bound variable.
-scAsLambda :: SharedContext -> Term -> IO (Maybe (ExtCns Term, Term))
-scAsLambda sc t =
-  case asLambda t of
-    Nothing -> pure Nothing
-    Just (nm, tp, body) -> Just <$> scOpenTerm sc nm tp 0 body
-
--- | Deconstruct a nested lambda term with 0 or more binders into a
--- list of bound variables and a body, using a fresh 'ExtCns' for each
--- bound variable.
-scAsLambdaList :: SharedContext -> Term -> IO ([ExtCns Term], Term)
-scAsLambdaList sc = loop [] []
-  where
-    loop ecs vs t =
-      case asLambda t of
-        Nothing ->
-          do t' <- instantiateVarList sc 0 vs t
-             pure (reverse ecs, t')
-        Just (nm, tp, body) ->
-          do tp' <- instantiateVarList sc 0 vs tp
-             ec  <- scFreshEC sc nm tp'
-             v   <- scVariable sc ec
-             loop (ec : ecs) (v : vs) body
-
--- | Deconstruct a pi term into a bound variable and a body, using
--- a fresh 'ExtCns' for the bound variable.
-scAsPi :: SharedContext -> Term -> IO (Maybe (ExtCns Term, Term))
-scAsPi sc t =
-  case asPi t of
-    Nothing -> pure Nothing
-    Just (nm, tp, body) -> Just <$> scOpenTerm sc nm tp 0 body
-
--- | Deconstruct a nested pi term with 0 or more binders into a list
--- of bound variables and a body, using a fresh 'ExtCns' for each
--- bound variable.
-scAsPiList :: SharedContext -> Term -> IO ([ExtCns Term], Term)
-scAsPiList sc = loop [] []
-  where
-    loop ecs vs t =
-      case asPi t of
-        Nothing ->
-          do t' <- instantiateVarList sc 0 vs t
-             pure (reverse ecs, t')
-        Just (nm, tp, body) ->
-          do tp' <- instantiateVarList sc 0 vs tp
-             ec  <- scFreshEC sc nm tp'
-             v   <- scVariable sc ec
-             loop (ec : ecs) (v : vs) body

@@ -137,6 +137,7 @@ import           Control.Monad.Except (ExceptT, MonadError(..), runExceptT)
 import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Foldable as Fold
 import qualified Data.IntMap as IntMap
+import qualified Data.IntSet as IntSet
 import           Data.List (genericDrop, genericLength, genericSplitAt)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -156,7 +157,7 @@ import SAWCore.Prelude (scApplyPrelude_False)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
-import SAWCore.Name (DisplayNameEnv, ecShortName)
+import SAWCore.Name (DisplayNameEnv, VarName(..), ecShortName)
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import CryptolSAWCore.TypedTerm
@@ -255,23 +256,23 @@ splitIte sc (Prop p) =
 -- | Attempt to split a conjunctive proposition into two propositions.
 splitConj :: SharedContext -> Prop -> IO (Maybe (Prop, Prop))
 splitConj sc (Prop p) =
-  do (vars, body) <- scAsPiList sc p
+  do let (vars, body) = asPiList p
      case (isGlobalDef "Prelude.and" <@> return <@> return) =<< asEqTrue body of
        Nothing -> pure Nothing
        Just (_ :*: p1 :*: p2) ->
-         do t1 <- scGeneralizeExts sc vars =<< scEqTrue sc p1
-            t2 <- scGeneralizeExts sc vars =<< scEqTrue sc p2
+         do t1 <- scPiList sc vars =<< scEqTrue sc p1
+            t2 <- scPiList sc vars =<< scEqTrue sc p2
             return (Just (Prop t1,Prop t2))
 
 -- | Attempt to split a disjunctive proposition into two propositions.
 splitDisj :: SharedContext -> Prop -> IO (Maybe (Prop, Prop))
 splitDisj sc (Prop p) =
-  do (vars, body) <- scAsPiList sc p
+  do let (vars, body) = asPiList p
      case (isGlobalDef "Prelude.or" <@> return <@> return) =<< asEqTrue body of
        Nothing -> pure Nothing
        Just (_ :*: p1 :*: p2) ->
-         do t1 <- scGeneralizeExts sc vars =<< scEqTrue sc p1
-            t2 <- scGeneralizeExts sc vars =<< scEqTrue sc p2
+         do t1 <- scPiList sc vars =<< scEqTrue sc p1
+            t2 <- scPiList sc vars =<< scEqTrue sc p2
             return (Just (Prop t1,Prop t2))
 
 -- | Attempt to split an implication into a hypothesis and a conclusion
@@ -295,8 +296,8 @@ splitImpl sc (Prop p)
        return (Just (Prop h', Prop c'))
 
   -- Handle the case of (H1 -> H2), where H1 and H2 are in Prop
-  | Just (_nm, arg, c) <- asPi p
-  , termIsClosed c -- make sure this is a nondependent Pi (AKA arrow type)
+  | Just (nm, arg, c) <- asPi p
+  , IntSet.notMember (vnIndex nm) (freeVars c) -- make sure this is a nondependent Pi (AKA arrow type)
   = termToMaybeProp sc arg >>= \case
       Nothing -> return Nothing
       Just h  -> return (Just (h, Prop c))
@@ -448,7 +449,9 @@ hoistIfsInProp sc p = do
 --   fresh ExtCns values, being careful to ensure that
 --   dependent types are properly substituted.
 unbindAndFreshenProp :: SharedContext -> Prop -> IO ([ExtCns Term], Term)
-unbindAndFreshenProp sc (Prop p0) = scAsPiList sc p0
+unbindAndFreshenProp _sc (Prop p0) =
+  do let (vars, body) = asPiList p0
+     pure (map (uncurry EC) vars, body)
 
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
@@ -488,10 +491,10 @@ trivialProofTerm :: SharedContext -> Prop -> IO (Either String Term)
 trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
   where
     loop t =
-      lift (scAsPi sc t) >>= \case
-        Just (ec, body) ->
+      case asPi t of
+        Just (nm, tp, body) ->
           do pf <- loop =<< lift (scWhnf sc body)
-             lift $ scAbstractExts sc [ec] pf
+             lift $ scLambda sc nm tp pf
         Nothing ->
           case asEq t of
             Just (tp, x, _y) ->
@@ -1222,7 +1225,7 @@ specializeTheorem sc what4PushMuxOps db loc rsn thm ts =
          constructTheorem sc what4PushMuxOps db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
 
 specializeProp :: SharedContext -> Prop -> [Term] -> IO (Either TC.TCError Prop)
-specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc []
+specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc mempty
  where
   loop p [] = return (Prop p)
   loop p (t:ts) =
@@ -1311,12 +1314,12 @@ predicateToProp :: SharedContext -> Quantification -> Term -> IO Prop
 predicateToProp sc quant = loop
   where
   loop t =
-    scAsLambda sc t >>= \case
-      Just (x, body) ->
+    case asLambda t of
+      Just (x, ty, body) ->
         do Prop body' <- loop body
-           Prop <$> scGeneralizeExts sc [x] body'
+           Prop <$> scPi sc x ty body'
       Nothing ->
-        do (argTs, resT) <- scAsPiList sc =<< scTypeOf sc t
+        do (argTs, resT) <- asPiList <$> scTypeOf sc t
            let toPi [] t0 =
                  case asBoolType resT of
                    Nothing -> fail $ unlines ["predicateToProp : Expected boolean result type but got", showTerm resT]
@@ -1324,10 +1327,10 @@ predicateToProp sc quant = loop
                      case quant of
                        Universal -> scEqTrue sc t0
                        Existential -> scEqTrue sc =<< scNot sc t0
-               toPi (ec : ecs) t1 =
-                 do t2 <- scApply sc t1 =<< scVariable sc ec
-                    t3 <- toPi ecs t2
-                    scGeneralizeExts sc [ec] t3
+               toPi ((x, xT) : tys) t1 =
+                 do t2 <- scApply sc t1 =<< scVariable sc (EC x xT)
+                    t3 <- toPi tys t2
+                    scPi sc x xT t3
            Prop <$> toPi argTs t
 
 
@@ -1465,9 +1468,9 @@ normalizeConcl sc p =
        _ ->
          -- handle the case of (H1 -> H2), where H1 and H2 are in Prop
          case asPi t of
-           Just (_nm, arg, body)
+           Just (nm, arg, body)
              -- check that this is non-dependent Pi (AKA arrow type)
-             | termIsClosed body ->
+             | IntSet.notMember (vnIndex nm) (freeVars body) ->
              termToMaybeProp sc arg >>= \case
                Nothing -> return (RawSequent [] [p])
                Just h  ->
@@ -1532,8 +1535,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
     -- (i.e., nondependent Pi quantifying over a Prop)
     -- and the given evidence must match the expected prop.
     checkApply nenv mkSqt (Prop p) (Right e:es)
-      | Just (_lnm, tp, body) <- asPi p
-      , termIsClosed body
+      | Just (lnm, tp, body) <- asPi p
+      , IntSet.notMember (vnIndex lnm) (freeVars body)
       = do (d1,sy1) <- check nenv e . mkSqt =<< termToProp sc tp
            (d2,sy2,p') <- checkApply nenv mkSqt (Prop body) es
            return (Set.union d1 d2, sy1 <> sy2, p')
@@ -1549,7 +1552,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                     p_typed <- TC.typeInferComplete p
                     let err = TC.NotFuncTypeInApp p_typed tm'
                     TC.applyPiTyped err p tm'
-         res <- TC.runTCM m sc []
+         res <- TC.runTCM m sc mempty
          case res of
            Left msg -> fail (unlines (TC.prettyTCError msg))
            Right p' -> checkApply nenv mkSqt (Prop p') es
@@ -1734,11 +1737,10 @@ checkEvidence sc what4PushMuxOps = \e p -> do
           Unfocused -> fail "Intro evidence requires a focused sequent"
           HypFocus _ _ -> fail "Intro evidence apply in hypothesis"
           ConclFocus (Prop ptm) mkSqt ->
-            scAsPi sc ptm >>= \case
+            case asPi ptm of
               Nothing -> fail $ unlines ["Intro evidence expected function prop", showTerm ptm]
-              Just (ec, body) ->
-                do let ty = ecType ec
-                   let ty' = ecType x
+              Just (nm, ty, body) ->
+                do let ty' = ecType x
                    ok <- scConvertible sc False ty ty'
                    unless ok $ fail $ unlines
                      ["Intro evidence types do not match"
@@ -1746,7 +1748,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                      , showTerm ty
                      ]
                    x' <- scVariable sc x
-                   body' <- scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) x') body
+                   body' <- scInstantiateExt sc (IntMap.singleton (vnIndex nm) x') body
                    check nenv e' (mkSqt (Prop body'))
 
 passthroughEvidence :: [Evidence] -> IO Evidence
@@ -1889,12 +1891,12 @@ predicateToSATQuery sc unintSet tm0 =
         Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
 
     processTerm mmap vars tm =
-      scAsLambda sc tm >>= \case
-        Just (ec, body) ->
-          case evalFOT mmap (ecType ec) of
-            Nothing -> fail ("predicateToSATQuery: expected first order type: " ++ showTerm (ecType ec))
+      case asLambda tm of
+        Just (nm, tp, body) ->
+          case evalFOT mmap tp of
+            Nothing -> fail ("predicateToSATQuery: expected first order type: " ++ showTerm tp)
             Just fot ->
-              processTerm mmap (Map.insert ec fot vars) body
+              processTerm mmap (Map.insert (EC nm tp) fot vars) body
 
           -- TODO: check that the type is a boolean
         Nothing ->
@@ -1949,16 +1951,15 @@ sequentToSATQuery sc unintSet sqt =
       do -- TODO: See related TODO in processConcl
          let tm' = tm
 
-         scAsPi sc tm' >>= \case
-           Just (ec, body) ->
-             do let tp = ecType ec
-                -- TODO, same issue
+         case asPi tm' of
+           Just (nm, tp, body) ->
+             do -- TODO, same issue
                 let tp' = tp
                 case evalFOT mmap tp' of
                   Just fot ->
-                    processUnivAssert mmap ((ec, fot) : vars) xs body
+                    processUnivAssert mmap ((EC nm tp, fot) : vars) xs body
                   Nothing
-                    | termIsClosed body ->
+                    | IntSet.null (foldr IntSet.delete (freeVars body) (map (ecVarIndex . fst) vars)) ->
                       case asEqTrue tp' of
                         Just x  -> processUnivAssert mmap vars (x:xs) body
                         Nothing ->
@@ -1979,17 +1980,16 @@ sequentToSATQuery sc unintSet sqt =
          -- tm' <- scWhnf sc tm
          let tm' = tm
 
-         scAsPi sc tm' >>= \case
-           Just (ec, body) ->
-             do let tp = ecType ec
-                -- same issue with WHNF
+         case asPi tm' of
+           Just (nm, tp, body) ->
+             do -- same issue with WHNF
                 -- tp' <- scWhnf sc tp
                 let tp' = tp
                 case evalFOT mmap tp' of
                   Just fot ->
-                    processConcl mmap (Map.insert ec fot vars, xs) body
+                    processConcl mmap (Map.insert (EC nm tp) fot vars, xs) body
                   Nothing
-                    | termIsClosed body ->
+                    | IntSet.null (foldr IntSet.delete (freeVars body) (map ecVarIndex (Map.keys vars))) ->
                         do asrt <- processAssert mmap tp
                            processConcl mmap (vars, asrt : xs) body
                     | otherwise ->
@@ -2010,7 +2010,7 @@ propApply ::
   Prop {- ^ propsition to apply (usually a quantified and/or implication term) -} ->
   Prop {- ^ goal to apply the proposition to -} ->
   IO (Maybe [Either Term Prop])
-propApply sc rule goal = applyFirst =<< asPiLists (unProp rule)
+propApply sc rule goal = applyFirst (asPiLists (unProp rule))
   where
     applyFirst :: [([ExtCns Term], Term)] -> IO (Maybe [Either Term Prop])
     applyFirst [] = pure Nothing
@@ -2035,13 +2035,12 @@ propApply sc rule goal = applyFirst =<< asPiLists (unProp rule)
                           pure (Left tm)
                 Just <$> traverse mkNewGoal ruleArgs
 
-    asPiLists :: Term -> IO [([ExtCns Term], Term)]
+    asPiLists :: Term -> [([ExtCns Term], Term)]
     asPiLists t =
-      scAsPi sc t >>= \case
-        Nothing -> pure [([], t)]
-        Just (ec, body) ->
-          do lists <- asPiLists body
-             pure $ [ (ec : args, concl) | (args, concl) <- lists ] ++ [([], t)]
+      case asPi t of
+        Nothing -> [([], t)]
+        Just (nm, tp, body) ->
+          [ (EC nm tp : args, concl) | (args, concl) <- asPiLists body ] ++ [([], t)]
 
 
 -- | Attempt to prove a universally quantified goal by introducing a fresh variable
@@ -2053,15 +2052,14 @@ tacticIntro :: (F.MonadFail m, MonadIO m) =>
 tacticIntro sc usernm = Tactic \goal ->
   case sequentState (goalSequent goal) of
     ConclFocus p mkSqt ->
-      liftIO (scAsPi sc (unProp p)) >>= \case
-        Just (ec, body) ->
-          do let nm = ecShortName ec
-             let tp = ecType ec
+      case asPi (unProp p) of
+        Just (vn, tp, body) ->
+          do let nm = vnName vn
              let name = if Text.null usernm then nm else usernm
              xv <- liftIO $ scFreshEC sc name tp
              x  <- liftIO $ scVariable sc xv
              tt <- liftIO $ mkTypedTerm sc x
-             body' <- liftIO $ scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) x) body
+             body' <- liftIO $ scInstantiateExt sc (IntMap.singleton (vnIndex vn) x) body
              let goal' = goal { goalSequent = mkSqt (Prop body') }
              return (tt, mempty, [goal'], introEvidence xv)
 
