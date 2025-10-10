@@ -24,7 +24,6 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , indexSeqTerm
   , indexMirVector
   , usizeBvLit
-  , equalRefsPred
   , equalValsPred
   , checkCompatibleTys
   , readMaybeType
@@ -1186,19 +1185,6 @@ indexMirVector sym i elemShp vec =
 -- | Create a symbolic @usize@ from an 'Int'.
 usizeBvLit :: Sym -> Int -> IO (W4.SymBV Sym Mir.SizeBits)
 usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger
-
--- | Check if two MIR references are equal.
-equalRefsPred ::
-  MIRCrucibleContext ->
-  MirPointer Sym tp1 ->
-  MirPointer Sym tp2 ->
-  IO (W4.Pred Sym)
-equalRefsPred cc mp1 mp2 =
-  mccWithBackend cc $ \bak ->
-  let sym = backendGetSym bak in
-  case W4.testEquality (mp1^.mpType) (mp2^.mpType) of
-    Nothing -> pure $ W4.falsePred sym
-    Just Refl -> Mir.mirRef_eqIO bak (mp1^.mpRef) (mp2^.mpRef)
 
 -- | Check if two 'MIRVal's are equal.
 equalValsPred ::
