@@ -1897,7 +1897,7 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       liftIO (scUnitValue sc)
     (Cryptol.TVTuple tys, TupleShape _ elems)
       -> do terms <- accessMirAggregate' sym elems tys val $
-              \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val') 
+              \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val')
             liftIO (scTupleReduced sc terms)
     (Cryptol.TVSeq n cryty, ArrayShape _ _ arrShp)
       |  Mir.MirVector_Vector vals <- val
