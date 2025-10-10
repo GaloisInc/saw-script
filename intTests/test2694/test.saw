@@ -1,0 +1,53 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+// Overlapping inputs
+
+let f_spec = do {
+    x <- mir_alloc_raw_ptr_const_multi 2 mir_u32;
+    y <- mir_alloc_raw_ptr_const mir_u32;
+    mir_execute_func [x, y];
+    mir_return (mir_term {{ False }});
+};
+
+f_ov <- mir_verify m "test::f" [] false f_spec z3;
+
+let g_spec0 = do {
+    mir_execute_func [];
+    mir_return (mir_term {{ False }});
+};
+
+fails (mir_verify m "test::g" [f_ov] false g_spec0 z3);
+
+let g_spec1 = do {
+    mir_execute_func [];
+    mir_return (mir_term {{ True }});
+};
+
+mir_verify m "test::g" [] false g_spec1 z3;
+
+// Inputs of different pointee types
+
+let h_spec = do {
+    x <- mir_alloc_raw_ptr_const mir_u32;
+    y <- mir_alloc_raw_ptr_const mir_u8;
+    mir_execute_func [x, y];
+    mir_return (mir_term {{ False }});
+};
+
+h_ov <- mir_verify m "test::h" [] false h_spec z3;
+
+let i_spec0 = do {
+    mir_execute_func [];
+    mir_return (mir_term {{ False }});
+};
+
+fails (mir_verify m "test::i" [h_ov] false i_spec0 z3);
+
+let i_spec1 = do {
+    mir_execute_func [];
+    mir_return (mir_term {{ True }});
+};
+
+mir_verify m "test::i" [] false i_spec1 z3;
