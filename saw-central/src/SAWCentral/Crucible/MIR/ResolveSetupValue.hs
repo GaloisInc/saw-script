@@ -40,6 +40,7 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , findStatic
   , findStaticInitializer
   , findStaticVar
+  , staticMirPointer
   , staticRefMux
     -- * Enum discriminants
   , getEnumVariantDiscr
@@ -501,15 +502,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
   mccWithBackend mcc $ \bak ->
   let sym = backendGetSym bak in
   case val of
-    MS.SetupVar i -> do
-      Some ptr <- pure $ lookupAllocIndex env i
-      let pointeeType = ptr ^. mpMirType
-      pure $ MIRVal (RefShape
-                        (ptrKindToTy (ptr ^. mpKind) pointeeType (ptr ^. mpMutbl))
-                        pointeeType
-                        (ptr ^. mpMutbl)
-                        (ptr ^. mpType))
-                    (ptr ^. mpRef)
+    MS.SetupVar i -> pure $ mirPointerToMIRVal $ lookupAllocIndex env i
     MS.SetupTerm tm -> resolveTypedTerm mcc tm
     MS.SetupNull empty                -> absurd empty
     MS.SetupStruct adt flds ->
@@ -799,11 +792,8 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobal () name -> do
       static <- findStatic cs name
-      Mir.StaticVar gv <- findStaticVar cs (static ^. Mir.sName)
-      let sMut = staticMutability static
-          sTy  = static ^. Mir.sTy
-      pure $ MIRVal (RefShape (staticTyRef static) sTy sMut (globalType gv))
-           $ staticRefMux sym gv
+      staticVar <- findStaticVar cs (static ^. Mir.sName)
+      pure $ mirPointerToMIRVal $ staticMirPointer sym static staticVar
     MS.SetupGlobalInitializer () name -> do
       static <- findStatic cs name
       findStaticInitializer mcc static
@@ -835,6 +825,16 @@ resolveSetupVal mcc env tyenv nameEnv val =
     cs  = mcc ^. mccRustModule . Mir.rmCS
     col = cs ^. Mir.collection
     iTypes = mcc ^. mccIntrinsicTypes
+
+    mirPointerToMIRVal :: Some (MirPointer Sym) -> MIRVal
+    mirPointerToMIRVal (Some ptr) =
+      MIRVal (RefShape (ptrKindToTy (ptr ^. mpKind)
+                                    (ptr ^. mpMirType)
+                                    (ptr ^. mpMutbl))
+                       (ptr ^. mpMirType)
+                       (ptr ^. mpMutbl)
+                       (ptr ^. mpType))
+             (ptr ^. mpRef)
 
     -- Perform a light amount of typechecking on the fields in a struct or enum
     -- variant. This ensures that the variant receives the expected number of
@@ -1823,6 +1823,23 @@ findStaticVar cs staticDefId =
   case Map.lookup staticDefId (cs ^. Mir.staticMap) of
     Nothing -> X.throwM $ MIRStaticNotFound staticDefId
     Just sv -> pure sv
+
+-- | Create a 'MirPointer' from the 'Mir.Static' and 'Mir.StaticVar'
+-- corresponding to a static.
+staticMirPointer ::
+  W4.IsSymExprBuilder sym =>
+  sym ->
+  Mir.Static ->
+  Mir.StaticVar ->
+  Some (MirPointer sym)
+staticMirPointer sym static (Mir.StaticVar gv) =
+  Some MirPointer
+    { _mpType = globalType gv
+    , _mpKind = tyToPtrKind $ staticTyRef static
+    , _mpMutbl = staticMutability static
+    , _mpMirType = static ^. Mir.sTy
+    , _mpRef = staticRefMux sym gv
+    }
 
 -- | Compute the 'Mir.Mutability' of a 'Mir.Static' value.
 staticMutability :: Mir.Static -> Mir.Mutability

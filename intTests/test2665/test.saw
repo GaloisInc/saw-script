@@ -1,0 +1,212 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+// Aliasing input and output
+
+let foo_in_out_spec = do {
+    x <- mir_alloc_raw_ptr_const mir_u32;
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [x];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    y <- mir_alloc_raw_ptr_const mir_u32;
+    mir_return y;
+};
+
+fails (mir_verify m "test::foo_in_out" [] false foo_in_out_spec z3);
+
+/*
+let bar_in_out_spec0 = do {
+    x <- mir_alloc_raw_ptr_const mir_u32;
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [x];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ False }});
+};
+
+mir_verify m "test::bar_in_out" [foo_in_out_ov] false bar_in_out_spec0 z3;
+
+let bar_in_out_spec1 = do {
+    x <- mir_alloc_raw_ptr_const mir_u32;
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [x];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ True }});
+};
+
+mir_verify m "test::bar_in_out" [] false bar_in_out_spec1 z3;
+*/
+
+// Aliasing input and mutable static
+
+let foo_in_static_mut_spec = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    x <- mir_alloc_raw_ptr_mut mir_u32;
+    x_contents <- mir_fresh_var "x" mir_u32;
+    mir_points_to x (mir_term x_contents);
+
+    mir_execute_func [x];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_points_to x (mir_term x_contents);
+    mir_return (mir_term {{ False }});
+};
+
+foo_in_static_mut_ov <- mir_verify m "test::foo_in_static_mut" [] false foo_in_static_mut_spec z3;
+
+let bar_in_static_mut_spec0 = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ False }});
+};
+
+fails (mir_verify m "test::bar_in_static_mut" [foo_in_static_mut_ov] false bar_in_static_mut_spec0 z3);
+
+let bar_in_static_mut_spec1 = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ True }});
+};
+
+mir_verify m "test::bar_in_static_mut" [] false bar_in_static_mut_spec1 z3;
+
+// Aliasing input and immutable static
+
+let foo_in_static_spec = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    x <- mir_alloc_raw_ptr_const mir_u32;
+    x_contents <- mir_fresh_var "x" mir_u32;
+    mir_points_to x (mir_term x_contents);
+
+    mir_execute_func [x];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ False }});
+};
+
+foo_in_static_ov <- mir_verify m "test::foo_in_static" [] false foo_in_static_spec z3;
+
+let bar_in_static_spec0 = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ False }});
+};
+
+fails (mir_verify m "test::bar_in_static" [foo_in_static_ov] false bar_in_static_spec0 z3);
+
+let bar_in_static_spec1 = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ True }});
+};
+
+mir_verify m "test::bar_in_static" [] false bar_in_static_spec1 z3;
+
+// Aliasing output and mutable static
+
+let foo_out_static_mut_spec = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    y <- mir_alloc_raw_ptr_mut mir_u32;
+    mir_return y;
+};
+
+fails (mir_verify m "test::foo_out_static_mut" [] false foo_out_static_mut_spec z3);
+
+/*
+let bar_out_static_mut_spec0 = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ False }});
+};
+
+mir_verify m "test::bar_out_static_mut" [foo_out_static_mut_ov] false bar_out_static_mut_spec0 z3;
+
+let bar_out_static_mut_spec1 = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ True }});
+};
+
+mir_verify m "test::bar_out_static_mut" [] false bar_out_static_mut_spec1 z3;
+*/
+
+// Aliasing output and immutable static
+
+let foo_out_static_spec = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    y <- mir_alloc_raw_ptr_const mir_u32;
+    mir_return y;
+};
+
+fails (mir_verify m "test::foo_out_static" [] false foo_out_static_spec z3);
+
+/*
+let bar_out_static_spec0 = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ False }});
+};
+
+mir_verify m "test::bar_out_static" [foo_out_static_ov] false bar_out_static_spec0 z3;
+
+let bar_out_static_spec1 = do {
+    glob_mut_contents <- mir_fresh_var "GLOB_MUT" mir_u32;
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+
+    mir_execute_func [];
+
+    mir_points_to (mir_static "test::GLOB_MUT") (mir_term glob_mut_contents);
+    mir_return (mir_term {{ True }});
+};
+
+mir_verify m "test::bar_out_static" [] false bar_out_static_spec1 z3;
+*/

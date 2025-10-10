@@ -44,6 +44,7 @@ import Data.IORef (IORef, modifyIORef)
 import Data.List (tails)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
+import Data.Map (Map)
 import Data.Maybe (catMaybes)
 import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.Context as Ctx
@@ -531,14 +532,27 @@ decodeMIRVal col ty (Crucible.AnyValue repr rv)
       Just Refl -> Just (MIRVal shp rv)
       Nothing   -> Nothing
 
--- | Generate assertions that all of the memory allocations matched by
--- an override's precondition are disjoint.
+-- | Generate assertions that all of the memory allocations matched by an
+-- override's precondition are disjoint from each other, and from all statics
+-- and any extra allocations passed in.
 enforceDisjointness ::
-  MIRCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher MIR w ()
-enforceDisjointness cc loc ss =
+  MIRCrucibleContext ->
+  W4.ProgramLoc ->
+  -- | Additional allocations to check disjointness from (from prestate)
+  Map AllocIndex (Some MirAllocSpec) ->
+  StateSpec ->
+  OverrideMatcher MIR w ()
+enforceDisjointness cc loc extras ss =
   do let sym = cc^.mccSym
      sub <- OM (use setupValueSub)
-     let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
+     let mems = Map.elems $ Map.intersection sub (view MS.csAllocs ss)
+     let mems2 = Map.elems $ Map.intersection sub extras
+
+     let colState = cc ^. mccRustModule . Mir.rmCS
+     let statics = Map.elems $
+           Map.intersectionWith (staticMirPointer sym)
+             (colState ^. Mir.collection ^. Mir.statics)
+             (colState ^. Mir.staticMap)
 
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
@@ -546,15 +560,16 @@ enforceDisjointness cc loc ss =
               , MS.conditionType = "memory region disjointness"
               , MS.conditionContext = ""
               }
-     -- Ensure that all regions are disjoint from each other.
+     -- Ensure that all regions are disjoint from each other and extras and
+     -- statics
      sequence_
         [ do c <- liftIO $ W4.notPred sym =<< equalRefsPred cc p q
              addAssert c md a
 
         | let a = Crucible.SimError loc $
                     Crucible.AssertFailureSimError "Memory regions not disjoint" ""
-        , (_, Some p) : ps <- tails mems
-        , (_, Some q)      <- ps
+        , Some p : ps <- tails mems
+        , Some q      <- ps ++ mems2 ++ statics
         ]
 
 -- | Perform an allocation as indicated by a 'mir_alloc'
@@ -948,14 +963,15 @@ learnCond ::
   MIRCrucibleContext ->
   CrucibleMethodSpecIR ->
   MS.PrePost ->
+  Map AllocIndex (Some MirAllocSpec) ->
   StateSpec ->
   OverrideMatcher MIR w ()
-learnCond opts sc cc cs prepost ss =
+learnCond opts sc cc cs prepost extras ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      F.traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
-     enforceDisjointness cc loc ss
+     enforceDisjointness cc loc extras ss
      enforceCompleteSubstitution loc ss
 
 -- | Process a "mir_equal" statement from the precondition
@@ -1768,7 +1784,7 @@ methodSpecHandler_prestate opts sc cc args cs =
 
      sequence_ [ matchArg opts sc cc cs MS.PreState md x z | (x, z) <- xs]
 
-     learnCond opts sc cc cs MS.PreState (cs ^. MS.csPreState)
+     learnCond opts sc cc cs MS.PreState Map.empty (cs ^. MS.csPreState)
 
 -- | Try to translate the spec\'s 'SetupValue' into a 'MIRVal', pretty-print
 --   the 'MIRVal'.

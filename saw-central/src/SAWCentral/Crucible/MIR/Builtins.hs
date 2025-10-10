@@ -1425,7 +1425,9 @@ verifyPoststate cc mspec env0 globals ret mdMap =
      matchPost <- io $
           runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
            do matchResult opts sc
-              learnCond opts sc cc mspec MS.PostState (mspec ^. MS.csPostState)
+              learnCond opts sc cc mspec MS.PostState
+                (mspec ^. MS.csPreState . MS.csAllocs)
+                (mspec ^. MS.csPostState)
 
      st <- case matchPost of
              Left err      -> fail (show err)
