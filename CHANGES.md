@@ -86,7 +86,7 @@ This release supports [version
 
 ## New Features
 
-* SAW new commands `llvm_unint: [String] -> LLVMSetup ()` and
+* SAW has new commands `llvm_unint: [String] -> LLVMSetup ()` and
   and analogous commands for JVM and MIR, which can be used to declare that some
   Cryptol names should be kept opaque during symbolic simulation.
 
