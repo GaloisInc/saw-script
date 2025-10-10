@@ -137,7 +137,7 @@ span.spaces    { background: white }
 <span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = <span class="nottickedoff">pure3 svSlice</span></span>
 <span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">-- Conditionals</span>
 <span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxBool  = pure3 svIte</span>
-<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = pure3 svIte</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = <span class="nottickedoff">pure3 svIte</span></span>
 <span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxInt   = <span class="nottickedoff">pure3 svIte</span></span>
 <span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxArray = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpMuxArray&quot;</span></span>
 <span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxExtra = <span class="nottickedoff">muxSbvExtra</span></span>
@@ -146,7 +146,7 @@ span.spaces    { background: white }
 <span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = svFalse</span>
 <span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = pure1 svNot</span>
 <span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = <span class="nottickedoff">pure2 svAnd</span></span>
-<span class="lineno">  130 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = pure2 svOr</span>
+<span class="lineno">  130 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = <span class="nottickedoff">pure2 svOr</span></span>
 <span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">pure2 svXOr</span></span>
 <span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = <span class="nottickedoff">pure2 svEqual</span></span>
 <span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
@@ -310,7 +310,7 @@ span.spaces    { background: white }
 <span class="lineno">  291 </span><span class="decl"><span class="istickedoff">vWord lv = VWord lv</span></span>
 <span class="lineno">  292 </span>
 <span class="lineno">  293 </span>vBool :: SBool -&gt; SValue
-<span class="lineno">  294 </span><span class="decl"><span class="istickedoff">vBool l = VBool l</span></span>
+<span class="lineno">  294 </span><span class="decl"><span class="nottickedoff">vBool l = VBool l</span></span>
 <span class="lineno">  295 </span>
 <span class="lineno">  296 </span>vInteger :: SInteger -&gt; SValue
 <span class="lineno">  297 </span><span class="decl"><span class="nottickedoff">vInteger x = VInt x</span></span>
@@ -780,7 +780,7 @@ span.spaces    { background: white }
 <span class="lineno">  761 </span><span class="decl"><span class="istickedoff">newVars nm fot =</span>
 <span class="lineno">  762 </span><span class="spaces">  </span><span class="istickedoff">case fot of</span>
 <span class="lineno">  763 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt;</span>
-<span class="lineno">  764 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (<span class="nottickedoff">BoolLabel s</span>, vBool &lt;$&gt; existsSBool s)</span>
+<span class="lineno">  764 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (BoolLabel s, vBool &lt;$&gt; existsSBool s)</span></span>
 <span class="lineno">  765 </span><span class="spaces">    </span><span class="istickedoff">FOTInt -&gt;</span>
 <span class="lineno">  766 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (IntegerLabel s, vInteger &lt;$&gt; existsSInteger s)</span></span>
 <span class="lineno">  767 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt;</span>

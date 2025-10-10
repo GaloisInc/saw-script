@@ -1604,7 +1604,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1585 </span><span class="spaces">               </span><span class="istickedoff">case declOpts of</span>
 <span class="lineno"> 1586 </span><span class="spaces">                 </span><span class="istickedoff">TopLevelDeclGroup _ -&gt;</span>
 <span class="lineno"> 1587 </span><span class="spaces">                   </span><span class="istickedoff">do nmi &lt;- importName (C.dName d)</span>
-<span class="lineno"> 1588 </span><span class="spaces">                      </span><span class="istickedoff">scConstant' sc nmi r t</span>
+<span class="lineno"> 1588 </span><span class="spaces">                      </span><span class="istickedoff">scConstant' sc nmi r <span class="nottickedoff">t</span></span>
 <span class="lineno"> 1589 </span><span class="spaces">                 </span><span class="istickedoff">NestedDeclGroup -&gt; <span class="nottickedoff">return r</span></span>
 <span class="lineno"> 1590 </span><span class="spaces">      </span><span class="istickedoff">rhss &lt;- sequence (Map.intersectionWith mkRhs dm tm)</span>
 <span class="lineno"> 1591 </span><span class="spaces"></span><span class="istickedoff"></span>
