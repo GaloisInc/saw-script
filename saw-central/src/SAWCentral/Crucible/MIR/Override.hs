@@ -120,10 +120,11 @@ assignVar ::
   OverrideMatcher MIR w ()
 
 assignVar cc md var sref@(Some ref) =
+  mccWithBackend cc $ \bak ->
   do old <- OM (setupValueSub . at var <<.= Just sref)
      let loc = MS.conditionLoc md
      F.for_ old $ \(Some ref') ->
-       do p <- liftIO (equalRefsPred cc ref ref')
+       do p <- liftIO (Mir.mirRef_eqIO bak (ref^.mpRef) (ref'^.mpRef))
           addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased references" ""))
 
 -- | When a specification is used as a composition override, this function
@@ -1897,7 +1898,7 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       liftIO (scUnitValue sc)
     (Cryptol.TVTuple tys, TupleShape _ elems)
       -> do terms <- accessMirAggregate' sym elems tys val $
-              \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val') 
+              \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val')
             liftIO (scTupleReduced sc terms)
     (Cryptol.TVSeq n cryty, ArrayShape _ _ arrShp)
       |  Mir.MirVector_Vector vals <- val
