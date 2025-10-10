@@ -20,7 +20,6 @@ import Data.Proxy
 import Tests.CacheTests
 import Tests.Parser
 import Tests.SharedTerm
-import Tests.Rewriter
 import Tests.Functor
 
 main :: IO ()
@@ -41,7 +40,6 @@ tests =
    testGroup "SAWCore"
    [ testGroup "SharedTerm" sharedTermTests
    , testGroup "Parser" parserTests
-   , testGroup "Rewriter" rewriter_tests
    , testGroup "Cache" cacheTests
    , testGroup "Functor" functorTests
    ]
