@@ -2,7 +2,4 @@
  x=a
  test02.saw:8:5-8:6: Warning: Redeclaration of x
  test02.saw:3:5-3:6: Warning: Previous declaration was here
- fromValue Text
-CallStack (from HasCallStack):
-  error, called at saw-script/src/SAWScript/Interpreter.hs
-FAILED
+ x=a

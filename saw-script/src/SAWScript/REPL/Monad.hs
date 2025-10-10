@@ -49,7 +49,6 @@ module SAWScript.REPL.Monad (
     -- ** SAWScript stuff
   , getSharedContext
   , getTopLevelRO
-  , getTopLevelRWForValues
   , getTopLevelRW, modifyTopLevelRW, putTopLevelRW
   , getTopLevelRWRef
   , getProofStateRef
@@ -85,6 +84,8 @@ import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
 import System.Exit (ExitCode)
 
+import qualified SAWSupport.ScopedMap as ScopedMap
+
 import SAWCore.SharedTerm (Term)
 import CryptolSAWCore.CryptolEnv
 import qualified Data.AIG as AIG
@@ -97,10 +98,7 @@ import SAWCore.SAWCore (SharedContext)
 import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
-import SAWCentral.Value
-  ( AIGProxy(..), mergeLocalEnv
-  , ProofScript(..), showsProofResult,
-  )
+import SAWCentral.Value (AIGProxy(..), ProofScript(..), showsProofResult, Environ(..))
 
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
@@ -479,11 +477,6 @@ getProofStateRef = rProofState <$> getRefs
 getTopLevelRW :: REPL TopLevelRW
 getTopLevelRW = readRef rTopLevelRW
 
-getTopLevelRWForValues :: REPL TopLevelRW
-getTopLevelRWForValues =
-  do rw <- getTopLevelRW
-     io (mergeLocalEnv (rwSharedContext rw) (rwLocalEnv rw) rw)
-
 putTopLevelRW :: TopLevelRW -> REPL ()
 putTopLevelRW = modifyTopLevelRW . const
 
@@ -493,19 +486,21 @@ modifyTopLevelRW = modifyRef rTopLevelRW
 -- | Get visible variable names for Haskeline completion.
 getSAWScriptValueNames :: REPL [String]
 getSAWScriptValueNames = do
-  env <- getTopLevelRW
-  let avail = rwPrimsAvail env
+  rw <- getTopLevelRW
+  let avail = rwPrimsAvail rw
       visible (_, lc, _, _, _, _) = Set.member lc avail
-  let rnames = Map.keys $ Map.filter visible $ rwValueInfo env
+      Environ valenv _tyenv = rwEnviron rw
+  let rnames = ScopedMap.allKeys $ ScopedMap.filter visible valenv
   return (map Text.unpack rnames)
 
 -- | Get visible type names for Haskeline completion.
 getSAWScriptTypeNames :: REPL [String]
 getSAWScriptTypeNames = do
-  env <- getTopLevelRW
-  let avail = rwPrimsAvail env
+  rw <- getTopLevelRW
+  let avail = rwPrimsAvail rw
       visible (lc, _) = Set.member lc avail
-  let rnames = Map.keys $ Map.filter visible $ rwTypeInfo env
+      Environ _valenv tyenv = rwEnviron rw
+  let rnames = ScopedMap.allKeys $ ScopedMap.filter visible tyenv
   return (map Text.unpack rnames)
 
 -- User Environment Interaction ------------------------------------------------

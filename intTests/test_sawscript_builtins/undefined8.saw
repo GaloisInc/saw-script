@@ -1,5 +1,4 @@
-// This does not crash, unlike undefined9. It isn't obvious
-// what's different.
+// This crashes immediately.
 
 let y = let x = undefined in ();
 print "oops didn't die";

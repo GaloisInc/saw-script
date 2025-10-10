@@ -31,7 +31,7 @@ import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.IntMap as IntMap
-import Data.List (isPrefixOf, isInfixOf, sort)
+import Data.List (isPrefixOf, isInfixOf, sort, intersperse)
 import qualified Data.Map as Map
 import Data.Parameterized.Classes (KnownRepr(..))
 import Data.Set (Set)
@@ -60,6 +60,8 @@ import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
 
 -- saw-support
+import qualified SAWSupport.ScopedMap as ScopedMap
+--import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText)
 
 -- saw-core
@@ -1700,14 +1702,21 @@ cexEvalFn sc args tm = do
 
 envCmd :: TopLevel ()
 envCmd = do
-  rw <- SV.getMergedEnv
-  let avail = rwPrimsAvail rw
-      vals = rwValueInfo rw
-      keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail
-      vals' = filter keep $ Map.assocs vals
-      printit (x, (_pos, _lc, _rb, ty, _v, _doc)) = x <> " : " <> PPS.pShowText ty
   opts <- getOptions
-  io $ sequence_ [ printOutLn opts Info (Text.unpack $ printit item) | item <- vals' ]
+  avail <- gets rwPrimsAvail
+  SV.Environ varenv _tyenv <- gets rwEnviron
+  let printItem (x, (_pos, _lc, _rb, ty, _v, _doc)) =
+          printOutLn opts Info $ Text.unpack (x <> " : " <> PPS.pShowText ty)
+      -- Print only the visible objects
+      keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail
+      -- Insert a blank line in the output where there's a scope boundary
+      printScope mItems = case mItems of
+          Nothing -> printOutLn opts Info ""
+          Just items -> mapM_ printItem $ filter keep items
+      -- Reverse the list of scopes so the innermost prints last,
+      -- because that's what people will expect to see.
+      itemses = reverse $ ScopedMap.scopedAssocs varenv
+  io $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
 exitPrim :: Integer -> IO ()
 exitPrim code = Exit.exitWith exitCode

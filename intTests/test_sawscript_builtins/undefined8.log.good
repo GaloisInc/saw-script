@@ -1,4 +1,5 @@
  Loading file "undefined8.saw"
- oops didn't die
- ()
- oops still didn't die
+ interpret: undefined
+CallStack (from HasCallStack):
+  error, called at saw-script/src/SAWScript/Interpreter.hs
+FAILED

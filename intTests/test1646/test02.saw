@@ -1,4 +1,4 @@
-// The second f call will panic with an internal type error.
+// The second f call nowadays just prints a.
 
 let x = "a";
 
@@ -6,4 +6,4 @@ let f () = print (str_concat "x=" x);
 f ();
 
 let x = 5;
-f();
+f ();

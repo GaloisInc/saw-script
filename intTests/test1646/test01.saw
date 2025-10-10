@@ -1,4 +1,4 @@
-// The second f call will print x=b.
+// The second f call nowadays will print x=a.
 
 let x = "a";
 

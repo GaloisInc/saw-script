@@ -10,8 +10,11 @@ This release supports [version
   arbitrarily rebound, such that existing uses would see the updated
   value, has been superseded. Among other problems, it wasn't
   type safe.
-  Substitute functionality is now available by using the new syntax
-  `let rebindable`.
+  Now, rebinding a variable creates a new variable that hides the
+  old one; prior references are not affected.
+
+  Substitute functionality for the old behavior is now available by
+  using the new syntax `let rebindable`.
   After `let rebindable x = 3`, `x` is mutable and a subsequent
   `let rebindable x = 4` will change the value seen by all uses.
   The value type must remain the same; to avoid unnecessary

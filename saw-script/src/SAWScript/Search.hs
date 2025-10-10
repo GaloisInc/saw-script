@@ -22,8 +22,10 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWCentral.AST
 import SAWCentral.ASTUtil (namedTyVars)
+import SAWCentral.Value (TyEnv)
 import SAWScript.Panic (panic)
 
 --
@@ -472,17 +474,6 @@ matchFragList ctx cand0 tgtType patTypes =
 ------------------------------------------------------------
 -- External interface {{{
 
--- short name for the environment type we use
---
--- Let this be polymorphic in the things it carries because all we
--- need from it is the keys.
---
--- (XXX: this type really belongs to the interpreter and should really
--- be in its public interface or shared from somewhere else, but that
--- requires the interpreter to have an interface, which requires
--- still-pending interpreter cleanup)
-type TyEnv a = Map Name a
-
 -- | Check and compile a type schema pattern.
 --
 -- We get passed a list of forall bindings (will often be empty)
@@ -493,10 +484,10 @@ type TyEnv a = Map Name a
 -- different match semantics from forall-bound type variables. See
 -- notes at the top of the file.
 --
-compileSearchPattern :: TyEnv a -> SchemaPattern -> SearchPattern
+compileSearchPattern :: TyEnv -> SchemaPattern -> SearchPattern
 compileSearchPattern tyEnv (SchemaPattern forallList tys) =
   let foralls = Set.fromList $ map (\(_pos, name) -> name) forallList
-      boundVars = Map.keysSet tyEnv
+      boundVars = ScopedMap.allKeysSet tyEnv
       -- treat '_' as a bound var to avoid assorted confusion
       boundVars' = Set.insert "_" boundVars
       oneType ty freeVarsSoFar =
