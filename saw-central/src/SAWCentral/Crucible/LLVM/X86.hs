@@ -437,7 +437,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       opts <- getOptions
       basic_ss <- getBasicSS
       rw <- getTopLevelRW
-      cenv <- getCryptolEnv'
+      cenv <- getCryptolEnv
       sym <- liftIO $ newSAWCoreExprBuilder sc False
       mdMap <- liftIO $ newIORef mempty
       SomeOnlineBackend bak <- liftIO $

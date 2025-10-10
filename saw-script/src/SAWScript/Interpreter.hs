@@ -33,9 +33,8 @@ import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.Reader (ask, asks)
 import Control.Monad.State (gets)
-import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -64,6 +63,8 @@ import Mir.Intrinsics (MIR)
 import qualified Mir.Generator as MIR (RustModule)
 import qualified Mir.Mir as MIR
 
+import qualified SAWSupport.ScopedMap as ScopedMap
+--import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts, pShow, pShowText)
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
@@ -131,6 +132,7 @@ import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
 import qualified Cryptol.Eval.Concrete as V (Concrete(..))
 
+import qualified Prettyprinter as PP (pretty)
 import qualified Prettyprinter.Render.Text as PP (putDoc)
 
 import SAWScript.AutoMatch
@@ -288,68 +290,35 @@ propagateRefChain chain1 v =
 --
 -- XXX: at some point clean this up further.
 --
-bindPatternLocal ::
-    SS.Rebindable -> SS.Pattern -> Maybe SS.Schema -> Value ->
-    LocalEnv -> LocalEnv
-bindPatternLocal rb pat ms v env =
+bindPattern :: SS.Rebindable -> SS.Pattern -> Maybe SS.Schema -> Value -> TopLevel ()
+bindPattern rb pat ms v =
   case pat of
     SS.PWild _pos _ ->
-      env
+      pure ()
     SS.PVar allpos _xpos _x Nothing ->
-      panic "bindPatternLocal" [
+      panic "bindPattern" [
           "Found pattern with no type in it",
           "Source position: " <> Text.pack (show allpos),
           "Pattern: " <> Text.pack (show pat)
       ]
     SS.PVar _allpos xpos x (Just ty) ->
       let s = fromMaybe (SS.tMono ty) ms in
-      extendLocal xpos x rb s Nothing v env
+      extendEnv xpos x rb s Nothing v
     SS.PTuple _pos ps ->
       case v of
-        VTuple vs -> foldr ($) env (zipWith3 (bindPatternLocal rb) ps mss vs)
-          where mss = case ms of
-                  Nothing ->
-                      repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) ->
-                      [ Just (SS.Forall ks t) | t <- ts ]
-                  Just t ->
-                      panic "bindPatternLocal" [
-                          "Expected tuple type, got " <> Text.pack (show t)
-                      ]
+        VTuple vs -> do
+            let mss = case ms of
+                    Nothing ->
+                        repeat Nothing
+                    Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) ->
+                        [ Just (SS.Forall ks t) | t <- ts ]
+                    Just t ->
+                        panic "bindPattern" [
+                            "Expected tuple type, got " <> Text.pack (show t)
+                        ]
+            sequence_ $ zipWith3 (bindPattern rb) ps mss vs
         _ ->
             panic "bindPatternLocal" [
-                "Expected tuple value; got " <> Text.pack (show v)
-            ]
-
--- See notes in bindPatternLocal above regarding the schema argument.
-bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
-bindPatternEnv pat ms v env =
-  case pat of
-    SS.PWild _pos _   ->
-        pure env
-    SS.PVar allpos _xpos _x Nothing ->
-        panic "bindPatternEnv" [
-            "Found pattern with no type in it",
-            "Source position: " <> Text.pack (show allpos),
-            "Pattern: " <> Text.pack (show pat)
-        ]
-    SS.PVar _allpos xpos x (Just ty) -> do
-        sc <- getSharedContext
-        let s = fromMaybe (SS.tMono ty) ms
-        liftIO $ extendEnv sc xpos x SS.ReadOnlyVar s Nothing v env
-    SS.PTuple _pos ps ->
-      case v of
-        VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
-          where mss = case ms of
-                  Nothing -> repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) ->
-                      [ Just (SS.Forall ks t) | t <- ts ]
-                  Just t ->
-                      panic "bindPatternEnv" [
-                          "Expected tuple type, got " <> Text.pack (show t)
-                      ]
-        _ ->
-            panic "bindPatternEnv" [
                 "Expected tuple value; got " <> Text.pack (show v)
             ]
 
@@ -365,42 +334,54 @@ class (Monad m, MonadFail m) => InterpreterMonad m where
   actionFromValue :: FromValue a => FromValueHow -> Value -> m a
   mkValue :: SS.Pos -> RefChain -> m Value -> Value
   getMonadContext :: m SS.Context
-  withLocalEnvAny :: LocalEnv -> m a -> m a
+  pushScopeAny :: m ()
+  popScopeAny :: m ()
+  withEnvironAny :: Environ -> m a -> m a
 
 instance InterpreterMonad TopLevel where
   liftTopLevel m = m
   actionFromValue = fromValue
   mkValue pos chain m = VTopLevel pos chain m
   getMonadContext = return SS.TopLevel
-  withLocalEnvAny = withLocalEnv
+  pushScopeAny = pushScope
+  popScopeAny = popScope
+  withEnvironAny = withEnviron
 
 instance InterpreterMonad ProofScript where
   liftTopLevel m = scriptTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VProofScript pos chain m
   getMonadContext = return SS.ProofScript
-  withLocalEnvAny = withLocalEnvProof
+  pushScopeAny = scriptTopLevel pushScope
+  popScopeAny = scriptTopLevel popScope
+  withEnvironAny = withEnvironProofScript
 
 instance InterpreterMonad LLVMCrucibleSetupM where
   liftTopLevel m = llvmTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VLLVMCrucibleSetup pos chain m
   getMonadContext = return SS.LLVMSetup
-  withLocalEnvAny = withLocalEnvLLVM
+  pushScopeAny = llvmTopLevel pushScope
+  popScopeAny = llvmTopLevel popScope
+  withEnvironAny = withEnvironLLVM
 
 instance InterpreterMonad JVMSetupM where
   liftTopLevel m = jvmTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VJVMSetup pos chain m
   getMonadContext = return SS.JavaSetup
-  withLocalEnvAny = withLocalEnvJVM
+  pushScopeAny = jvmTopLevel pushScope
+  popScopeAny = jvmTopLevel popScope
+  withEnvironAny = withEnvironJVM
 
 instance InterpreterMonad MIRSetupM where
   liftTopLevel m = mirTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VMIRSetup pos chain m
   getMonadContext = return SS.MIRSetup
-  withLocalEnvAny = withLocalEnvMIR
+  pushScopeAny = mirTopLevel pushScope
+  popScopeAny = mirTopLevel popScope
+  withEnvironAny = withEnvironMIR
 
 
 ------------------------------------------------------------
@@ -441,7 +422,12 @@ applyValue pos v1info v1 v2 =
     VLambda env mname pat e -> do
         let name = fromMaybe "(lambda)" mname
         enter name
-        r <- withLocalEnv (bindPatternLocal SS.ReadOnlyVar pat Nothing v2 env) (interpretExpr e)
+        r <- withEnviron env $ do
+            pushScope
+            bindPattern SS.ReadOnlyVar pat Nothing v2
+            r' <- interpretExpr e
+            popScope
+            return r'
         leave
         return $ insertRefChain pos name r
     VBuiltin name args wf -> case wf of
@@ -504,7 +490,7 @@ interpretExpr expr =
       SS.Array _pos es ->
           VArray <$> traverse interpretExpr es
       SS.Block _pos stmts -> do
-          env <- getLocalEnv
+          env <- gets rwEnviron
           return $ VDo [] env stmts
       SS.Tuple _pos es ->
           VTuple <$> traverse interpretExpr es
@@ -521,15 +507,16 @@ interpretExpr expr =
           a <- interpretExpr e
           return (tupleLookupValue pos a i)
       SS.Var pos x -> do
-          rw <- getMergedEnv
-          case Map.lookup x (rwValueInfo rw) of
+          avail <- gets rwPrimsAvail
+          Environ varenv _tyenv _cryenv <- gets rwEnviron
+          case ScopedMap.lookup x varenv of
             Nothing ->
                 -- This should be rejected by the typechecker, so panic
                 panic "interpretExpr" [
                     "Read of unknown variable " <> x
                 ]
             Just (_defpos, lc, _rebindable, _ty, v, _doc)
-              | Set.member lc (rwPrimsAvail rw) -> do
+              | Set.member lc avail -> do
                    let v' = injectPositionIntoMonadicValue pos v
                        v'' = insertRefChain pos x v'
                    return v''
@@ -539,7 +526,7 @@ interpretExpr expr =
                        "Read of inaccessible variable " <> x
                    ]
       SS.Lambda _pos mname pat e -> do
-          env <- getLocalEnv
+          env <- gets rwEnviron
           return $ VLambda env mname pat e
       SS.Application pos e1 e2 -> do
           let v1info = "Expression: " <> PPS.pShowText e1
@@ -548,8 +535,11 @@ interpretExpr expr =
           let v2' = injectPositionIntoMonadicValue (SS.getPos e2) v2
           applyValue pos v1info v1 v2'
       SS.Let _ dg e -> do
-          env' <- interpretDeclGroup SS.ReadOnlyVar dg
-          withLocalEnv env' (interpretExpr e)
+          pushScope
+          interpretDeclGroup SS.ReadOnlyVar dg
+          v <- interpretExpr e
+          popScope
+          return v
       SS.TSig _ e _ ->
           interpretExpr e
       SS.IfThenElse pos e1 e2 e3 -> do
@@ -565,39 +555,73 @@ interpretExpr expr =
                   "Expression: " <> PPS.pShowText e1
               ]
 
--- Eval a "decl", which is the RHS of a let-binding.
--- Evaluates the body expression purely.
-interpretDecl :: SS.Rebindable -> LocalEnv -> SS.Decl -> TopLevel LocalEnv
-interpretDecl rebindable env (SS.Decl _ pat mt expr) = do
-    v <- interpretExpr expr
-    return (bindPatternLocal rebindable pat mt v env)
-
--- Eval the RHS of a single let-binding in a mutually recursive group.
--- These are required to be functions; that's enforced by the
--- typechecker.
-interpretFunction :: LocalEnv -> SS.Expr -> Value
-interpretFunction env expr =
-    case expr of
-      SS.Lambda _ mname pat e -> VLambda env mname pat e
-      SS.TSig _ e _ -> interpretFunction env e
-      _ ->
-        panic "interpretFunction" [
-            "Not a function",
-            "Expression found: " <> PPS.pShowText expr
-        ]
-
 -- Eval a "decl group", which is a let-binding or group of mutually
 -- recursive let-bindings.
-interpretDeclGroup :: SS.Rebindable -> SS.DeclGroup -> TopLevel LocalEnv
-interpretDeclGroup rebindable (SS.NonRecursive d) = do
-    env <- getLocalEnv
-    interpretDecl rebindable env d
-interpretDeclGroup rebindable (SS.Recursive ds) = do
-    env <- getLocalEnv
-    let addDecl (SS.Decl _ pat mty e) =
-            bindPatternLocal rebindable pat mty (interpretFunction env' e)
-        env' = foldr addDecl env ds
-    return env'
+--
+-- The bodies are interpreted purely.
+interpretDeclGroup :: SS.Rebindable -> SS.DeclGroup -> TopLevel ()
+interpretDeclGroup rebindable dg = case dg of
+    SS.NonRecursive (SS.Decl _ pat mt expr) -> do
+        v <- interpretExpr expr
+        bindPattern rebindable pat mt v
+    SS.Recursive ds -> do
+        let
+
+            -- Get a value for the body of one of the declarations.
+            -- Recursive declaration sets are only allowed to contain
+            -- functions; panic if we get anything else.
+            --
+            -- We return a function taking an environment because we
+            -- need to close in the environment containing _all_ the
+            -- declarations _into_ all the declarations, which is a
+            -- circular knot that can only be constructed in very
+            -- specific ways.
+            extractFunction e0 = case e0 of
+                SS.Lambda _ mname pat e1 ->
+                    \env -> VLambda env mname pat e1
+                SS.TSig _ e1 _ ->
+                    extractFunction e1
+                _ ->
+                    panic "interpretDeclGroup" [
+                        "Found non-function in a recursive declaration group",
+                        -- XXX should print the name here!
+                        "Expression found: " <> PPS.pShowText e0
+                    ]
+
+            -- Get the name (and type) for one of the declarations.
+            -- Recursive declaration sets are only allowed to contain
+            -- functions, so the pattern cannot be a tuple.
+            extractName pat = case pat of
+                SS.PWild _ _ -> Nothing
+                SS.PVar _ xpos x (Just ty) -> Just (xpos, x, ty)
+                SS.PVar _ _ x Nothing ->
+                    panic "interpretDeclGroup" [
+                        "Found variable with no type in a recursive decl group",
+                        "Variable: " <> x
+                    ]
+                SS.PTuple{} ->
+                    panic "interpretDeclGroup" [
+                        "Found tuple pattern in a recursive declaration group",
+                        "Pattern: " <> Text.pack (show (PP.pretty pat))
+                    ]
+
+            -- Get all the info for a decl.
+            extractBoth (SS.Decl _ pat _mty e) =
+                case extractName pat of
+                    Nothing -> Nothing
+                    Just (xpos, x, ty) ->
+                        let fv = extractFunction e in
+                        Just (xpos, x, rebindable, SS.tMono ty, Nothing, fv)
+
+            -- Extract all the info for all decls.
+            ds' = mapMaybe extractBoth ds
+
+        -- Now add all the declarations.
+        --
+        -- Note that the lambdas in all the declarations need the final
+        -- resulting environment that contains all the declarations,
+        -- which is something of a headache to arrange in Haskell.
+        extendEnvMulti ds'
 
 -- Bind a monadic value into the monadic execution sequence.
 --
@@ -648,7 +672,11 @@ interpretMonadAction fromHow v = case v of
           FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
       pushTraceFrames chain
 
-    r <- withLocalEnvAny env (interpretDoStmts body)
+    r <- withEnvironAny env $ do
+        pushScopeAny
+        r' <- interpretDoStmts body
+        popScopeAny
+        return r'
 
     liftTopLevel $ do
       popTraceFrames chain
@@ -708,13 +736,12 @@ interpretMonadAction fromHow v = case v of
 -- (XXX: should that be stored into the monad context or not? Apparently
 -- not, currently.)
 --
-interpretDoStmt :: forall m. InterpreterMonad m => SS.Stmt -> m LocalEnv
+interpretDoStmt :: forall m. InterpreterMonad m => SS.Stmt -> m ()
 interpretDoStmt stmt =
     let ?fileReader = BS.readFile in
     -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmt of
       SS.StmtBind pos pat e -> do
-          env <- liftTopLevel getLocalEnv
           -- Execute the expression purely first. ("purely")
           baseVal :: Value <- liftTopLevel $ interpretExpr e
           -- Now bind the resulting value to execute it.
@@ -725,26 +752,21 @@ interpretDoStmt stmt =
           result :: Value <- bindMonadAction pos baseVal
           -- Bind (in the name-binding, not monad-binding sense) the
           -- result to the pattern.
-          return $ bindPatternLocal SS.ReadOnlyVar pat Nothing result env
+          liftTopLevel $ bindPattern SS.ReadOnlyVar pat Nothing result
       SS.StmtLet _pos rebindable dg -> do
           -- Process the declarations
           liftTopLevel $ interpretDeclGroup rebindable dg
       SS.StmtCode _ spos str -> do
           liftTopLevel $ do
             sc <- getSharedContext
-            rw <- getMergedEnv
-            let ce = rwGetCryptolEnv rw
-
+            ce <- getCryptolEnv
             let str' = toInputText spos str
             ce' <- io $ CEnv.parseDecls sc ce str'
-            putTopLevelRW $ rwSetCryptolEnv ce' rw
-          -- return the current local environment unchanged
-          liftTopLevel getLocalEnv
+            setCryptolEnv ce'
       SS.StmtImport _ _ ->
           fail "block-level import unimplemented"
       SS.StmtTypedef _ _ name ty -> do
-          env <- liftTopLevel $ getLocalEnv
-          return $ LocalTypedef name ty : env
+          liftTopLevel $ addTypedef name ty
 
 -- Eval some statements from a do-block.
 --
@@ -800,10 +822,11 @@ interpretDoStmts (stmts, lastexpr) =
           return $ mkValue pos [] result'
 
       stmt : more -> do
-          -- Execute the expression and get the updated environment
-          env' <- interpretDoStmt stmt
+          -- Execute the expression and update the environment
+          interpretDoStmt stmt
           -- Run the rest of the block with the updated environment
-          withLocalEnvAny env' (interpretDoStmts (more, lastexpr))
+          v <- interpretDoStmts (more, lastexpr)
+          return v
 
 -- Execute a top-level bind.
 processStmtBind ::
@@ -813,8 +836,7 @@ processStmtBind ::
   SS.Pattern ->
   SS.Expr ->
   m ()
-processStmtBind printBinds pos pat expr = do -- mx mt
-  rw <- liftTopLevel getMergedEnv
+processStmtBind printBinds pos pat expr = do
 
   -- Eval the expression
   baseVal <- liftTopLevel $ interpretExpr expr
@@ -844,7 +866,7 @@ processStmtBind printBinds pos pat expr = do -- mx mt
 
   -- When in the repl, print the result.
   when printBinds $ do
-    let opts = rwPPOpts rw
+    opts <- liftTopLevel $ gets rwPPOpts
 
     -- Extract the variable, if any, from the pattern. If there isn't
     -- any single variable use "it".
@@ -867,9 +889,7 @@ processStmtBind printBinds pos pat expr = do -- mx mt
         liftTopLevel $ printOutLnTop Info $ Text.unpack $ name <> " : " <> PPS.pShowText ty
       _ -> return ()
 
-  liftTopLevel $
-   do rw' <- getTopLevelRW
-      putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
+  liftTopLevel $ bindPattern SS.ReadOnlyVar pat (Just (SS.tMono ty)) result
 
 -- | Interpret a top-level statement in an interpreter monad (any of the SAWScript monads)
 --   This duplicates the logic in interpretDoStmt for no particularly good reason.
@@ -880,11 +900,17 @@ interpretTopStmt :: InterpreterMonad m =>
 interpretTopStmt printBinds stmt = do
   let ?fileReader = BS.readFile
 
+  avail <- liftTopLevel $ gets rwPrimsAvail
   ctx <- getMonadContext
-  rw <- liftTopLevel getMergedEnv
-  let valueInfo = rwValueInfo rw
-      valueInfo' = Map.map (\(pos, lc, rb, ty, _v, _doc) -> (pos, lc, rb, ty)) valueInfo
-  stmt' <- processTypeCheck $ checkStmt (rwPrimsAvail rw) valueInfo' (rwTypeInfo rw) ctx stmt
+
+  stmt' <- do
+      -- XXX this is not the right way to do this
+      --    - shouldn't have to flatten the environments
+      --    - shouldn't be typechecking one statement at a time regardless
+      Environ varenv tyenv _cryenvs <- liftTopLevel $ gets rwEnviron
+      let varenv' = Map.map (\(pos, lc, rb, ty, _v, _doc) -> (pos, lc, rb, ty)) $ ScopedMap.flatten varenv
+      let tyenv' = ScopedMap.flatten tyenv
+      processTypeCheck $ checkStmt avail varenv' tyenv' ctx stmt
 
   case stmt' of
 
@@ -895,36 +921,32 @@ interpretTopStmt printBinds stmt = do
       processStmtBind printBinds pos pat expr
 
     SS.StmtLet _pos rebindable dg ->
-      liftTopLevel $ do
-         env <- interpretDeclGroup rebindable dg
-         rw' <- getMergedEnv' env
-         putTopLevelRW rw'
+      liftTopLevel $ interpretDeclGroup rebindable dg
 
     SS.StmtCode _ spos str ->
       liftTopLevel $ do
          sc <- getSharedContext
-         let cenv = rwGetCryptolEnv rw
+         cenv <- getCryptolEnv
          --io $ putStrLn $ "Processing toplevel code: " ++ show str
          --showCryptolEnv
          cenv' <- io $ CEnv.parseDecls sc cenv $ toInputText spos str
-         putTopLevelRW $ rwSetCryptolEnv cenv' rw
+         setCryptolEnv cenv'
          --showCryptolEnv
 
     SS.StmtImport _ imp ->
       liftTopLevel $ do
          sc <- getSharedContext
-         let cenv = rwGetCryptolEnv rw
+         cenv <- getCryptolEnv
          --showCryptolEnv
          let mLoc = iModule imp
              qual = iAs imp
              spec = iSpec imp
          cenv' <- io $ CEnv.importCryptolModule sc cenv mLoc qual CEnv.PublicAndPrivate spec
-         putTopLevelRW $ rwSetCryptolEnv cenv' rw
+         setCryptolEnv cenv'
          --showCryptolEnv
 
     SS.StmtTypedef _ _ name ty ->
-      liftTopLevel $ do
-         putTopLevelRW $ addTypedef name ty rw
+      liftTopLevel $ addTypedef name ty
 
 -- Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter
@@ -934,7 +956,16 @@ stmtInterpreter ro rw stmts =
   -- so as to (a) get the right behavior (as long as interpretTopStmt
   -- and interpretDoStmt are different, which they are) and (b) avoid
   -- needing to provide a block result value.
-  fst <$> runTopLevel (withLocalEnv emptyLocal (mapM_ (interpretTopStmt False) stmts)) ro rw
+  --
+  -- XXX what scope should this use? Prior to #2720 it substituted an
+  -- empty "local environment" for the current "local environment",
+  -- which would have dropped an ill-specified part of the namespace.
+  -- That wasn't particularly sensible and probably wasn't correct,
+  -- but we could reasonably here want either the current environment
+  -- or a copy of the environment captured when we start AutoMatch,
+  -- and it's not obvious which. For the moment, we'll use the current
+  -- environment because that doesn't require any fiddling.
+  fst <$> runTopLevel (mapM_ (interpretTopStmt False) stmts) ro rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain =
@@ -964,9 +995,8 @@ interpretFile file runMain =
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
 interpretMain = do
-  rw <- getTopLevelRW
   avail <- gets rwPrimsAvail
-  tyenv <- gets rwTypeInfo
+  Environ varenv tyenv _cryenv <- gets rwEnviron
   let pos = SS.PosInternal "entry"
       -- We need the type to be "TopLevel a", not just "TopLevel ()".
       -- There are several (old) tests in the test suite whose main
@@ -976,14 +1006,16 @@ interpretMain = do
       tyRet = SS.TyVar pos "a"
       tyMonadic = SS.tBlock pos (SS.tContext pos SS.TopLevel) tyRet
       tyExpected = SS.Forall [(pos, "a")] tyMonadic
-  case Map.lookup "main" (rwValueInfo rw) of
+  case ScopedMap.lookup "main" varenv of
     Nothing ->
       -- Don't fail or complain if there's no main.
       return ()
     Just (_defpos, Current, _rebindable, tyFound, v, _doc) -> case tyFound of
         SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) ->
+            -- XXX shouldn't have to do this
+            let tyenv' = ScopedMap.flatten tyenv in
             -- It looks like a monadic value, so check more carefully.
-            case typesMatch avail tyenv tyFound tyExpected of
+            case typesMatch avail tyenv' tyFound tyExpected of
               False ->
                   -- While we accept any TopLevel a, don't encourage people
                   -- to do that.
@@ -1058,16 +1090,14 @@ buildTopLevelEnv proxy opts scriptArgv =
                  , biBasicSS = ss
                  }
        ce0 <- CEnv.initCryptolEnv sc
+       let cryenv0 = CryptolEnvStack ce0 []
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let rw0 = TopLevelRW
-                   { rwValueInfo  = primValueEnv opts bic
-                   , rwTypeInfo   = primNamedTypeEnv
-                   , rwCryptol    = CryptolEnvStack ce0 []
+                   { rwEnviron = primEnviron opts bic cryenv0
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
-                   , rwLocalEnv = []
                    , rwProofs     = []
                    , rwPPOpts     = PPS.defaultOpts
                    , rwSharedContext = sc
@@ -1682,14 +1712,12 @@ add_primitives lc _bic _opts = do
 toplevelSubshell :: () -> TopLevel Value
 toplevelSubshell () = do
      m <- roSubshell <$> ask
-     env <- getLocalEnv
-     toValue "subshell" <$> withLocalEnv env m
+     toValue "subshell" <$> m
 
 proofScriptSubshell :: () -> ProofScript Value
 proofScriptSubshell () = do
      m <- scriptTopLevel $ asks roProofSubshell
-     env <- scriptTopLevel $ getLocalEnv
-     toValue "proof_subshell" <$> withLocalEnvProof env m
+     toValue "proof_subshell" <$> m
 
 -- The "for" builtin.
 --
@@ -2068,7 +2096,7 @@ print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
-  cenv <- getCryptolEnv'
+  cenv <- getCryptolEnv
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
@@ -6448,3 +6476,18 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           let pos = SS.PosInternal "<<builtin>>" in
           (pos, primitiveLife p, SS.ReadOnlyVar, primitiveType p,
            (primitiveFn p) opts bic, Just $ doc n p)
+
+primEnviron :: Options -> BuiltinContext -> CryptolEnvStack -> Environ
+primEnviron opts bic cryenvs =
+
+    -- Do a scope push so the builtins live by themselves in their own
+    -- scope layer. This has the result of separating them from the
+    -- user's variables in the :env output (which is now grouped by
+    -- scope) and, because the builtin layer is readonly, might be
+    -- marginally more efficient as the user's globals are added.
+
+    let tyenv = ScopedMap.push $ ScopedMap.seed primNamedTypeEnv
+        varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
+    in
+    Environ varenv tyenv cryenvs
+

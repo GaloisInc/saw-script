@@ -2,4 +2,4 @@
  x=a
  test01.saw:8:5-8:6: Warning: Redeclaration of x
  test01.saw:3:5-3:6: Warning: Previous declaration was here
- x=b
+ x=a

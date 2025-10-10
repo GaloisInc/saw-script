@@ -44,6 +44,7 @@ import Mir.Generator (RustModule)
 import Mir.Intrinsics (MIR)
 import Mir.Mir (Adt)
 
+import qualified SAWSupport.ScopedMap as ScopedMap
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import qualified SAWCentral.Trace as Trace (empty)
@@ -63,7 +64,7 @@ import SAWCentral.Options (processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), CryptolEnvStack(..), rwModifyCryptolEnv)
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), CryptolEnvStack(..), rwModifyCryptolEnv)
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
@@ -222,6 +223,7 @@ initialState readFileFn =
                               , biBasicSS = ss
                               }
      cenv <- initCryptolEnv sc
+     let cryenvs = CryptolEnvStack cenv []
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
@@ -243,12 +245,9 @@ initialState readFileFn =
                 , roProofSubshell = fail "SAW server does not support subshells."
                 }
          rw = TopLevelRW
-                { rwValueInfo = mempty
-                , rwTypeInfo = mempty
-                , rwCryptol = CryptolEnvStack cenv []
+                { rwEnviron = Environ ScopedMap.empty ScopedMap.empty cryenvs
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty
-                , rwLocalEnv = []
                 , rwPPOpts = PPS.defaultOpts
                 , rwSolverCache = mb_cache
                 , rwTheoremDB = emptyTheoremDB

@@ -1,5 +1,5 @@
 // The second f call should print x=b. So should the third.
-// XXX: currently the third prints x=c.
+// XXX: currently all print x=a.
 
 let rebindable x = "a";
 

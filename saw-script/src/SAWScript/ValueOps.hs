@@ -22,10 +22,6 @@ module SAWScript.ValueOps (
     -- used by SAWScript.Interpreter
     tupleLookupValue,
     -- used by SAWScript.Interpreter
-    emptyLocal,
-    -- used by SAWScript.Interpreter
-    extendLocal,
-    -- used by SAWScript.Interpreter
     bracketTopLevel,
     -- unused but that probably won't stay that way
     TopLevelCheckpoint(..),
@@ -38,11 +34,11 @@ module SAWScript.ValueOps (
     -- used by SAWScript.Interpreter
     proof_checkpoint,
     -- used by SAWScript.Interpreter
-    withLocalEnv,
-    withLocalEnvProof,
-    withLocalEnvLLVM,
-    withLocalEnvJVM,
-    withLocalEnvMIR,
+    withEnviron,
+    withEnvironProofScript,
+    withEnvironLLVM,
+    withEnvironJVM,
+    withEnvironMIR,
     -- used in SAWScript.Interpreter
     withOptions,
  ) where
@@ -67,7 +63,7 @@ import SAWCore.SharedTerm
 import CryptolSAWCore.CryptolEnv as CEnv
 
 import qualified SAWCentral.Position as SS
-import qualified SAWCentral.AST as SS
+--import qualified SAWCentral.AST as SS
 --import qualified SAWCentral.Crucible.JVM.MethodSpecIR ()
 --import qualified SAWCentral.Crucible.MIR.MethodSpecIR ()
 import SAWCentral.Options (Options, Verbosity(..))
@@ -118,12 +114,6 @@ tupleLookupValue pos v1 v2 =
         "Array value: " <> Text.pack (show v1),
         "Index value: " <> Text.pack (show v2)
     ]
-
-emptyLocal :: LocalEnv
-emptyLocal = []
-
-extendLocal :: SS.Pos -> SS.Name -> SS.Rebindable -> SS.Schema -> Maybe [Text] -> Value -> LocalEnv -> LocalEnv
-extendLocal pos x rb ty md v env = LocalLet pos x rb ty md v : env
 
 -- | A version of 'Control.Exception.bracket' specialized to 'TopLevel'. We
 -- can't use 'Control.Monad.Catch.bracket' because it requires 'TopLevel' to
@@ -192,29 +182,29 @@ proof_checkpoint =
        do scriptTopLevel (printOutLnTop Info "Restoring proof state from checkpoint")
           put ps
 
-withLocalEnv :: LocalEnv -> TopLevel a -> TopLevel a
-withLocalEnv env m = do
-  prevEnv <- gets rwLocalEnv
-  modify (\rw -> rw { rwLocalEnv = env })
+withEnviron :: Environ -> TopLevel a -> TopLevel a
+withEnviron env m = do
+  prevEnv <- gets rwEnviron
+  modify (\rw -> rw { rwEnviron = env })
   result <- m
-  modify (\rw -> rw { rwLocalEnv = prevEnv })
+  modify (\rw -> rw { rwEnviron = prevEnv })
   return result
 
-withLocalEnvProof :: LocalEnv -> ProofScript a -> ProofScript a
-withLocalEnvProof env (ProofScript m) = do
-  ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
+withEnvironProofScript :: Environ -> ProofScript a -> ProofScript a
+withEnvironProofScript env (ProofScript m) = do
+  ProofScript (underExceptT (underStateT (withEnviron env)) m)
 
-withLocalEnvLLVM :: LocalEnv -> LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
-withLocalEnvLLVM env (LLVMCrucibleSetupM m) = do
-  LLVMCrucibleSetupM (underReaderT (underStateT (withLocalEnv env)) m)
+withEnvironLLVM :: Environ -> LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
+withEnvironLLVM env (LLVMCrucibleSetupM m) = do
+  LLVMCrucibleSetupM (underReaderT (underStateT (withEnviron env)) m)
 
-withLocalEnvJVM :: LocalEnv -> JVMSetupM a -> JVMSetupM a
-withLocalEnvJVM env (JVMSetupM m) = do
-  JVMSetupM (underReaderT (underStateT (withLocalEnv env)) m)
+withEnvironJVM :: Environ -> JVMSetupM a -> JVMSetupM a
+withEnvironJVM env (JVMSetupM m) = do
+  JVMSetupM (underReaderT (underStateT (withEnviron env)) m)
 
-withLocalEnvMIR :: LocalEnv -> MIRSetupM a -> MIRSetupM a
-withLocalEnvMIR env (MIRSetupM m) = do
-  MIRSetupM (underReaderT (underStateT (withLocalEnv env)) m)
+withEnvironMIR :: Environ -> MIRSetupM a -> MIRSetupM a
+withEnvironMIR env (MIRSetupM m) = do
+  MIRSetupM (underReaderT (underStateT (withEnviron env)) m)
 
 withOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
 withOptions f (TopLevel_ m) =

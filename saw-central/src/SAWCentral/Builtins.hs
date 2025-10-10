@@ -31,7 +31,7 @@ import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.IntMap as IntMap
-import Data.List (isPrefixOf, isInfixOf, sort)
+import Data.List (isPrefixOf, isInfixOf, sort, intersperse)
 import qualified Data.Map as Map
 import Data.Parameterized.Classes (KnownRepr(..))
 import Data.Set (Set)
@@ -60,6 +60,8 @@ import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
 
 -- saw-support
+import qualified SAWSupport.ScopedMap as ScopedMap
+--import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText)
 
 -- saw-core
@@ -558,7 +560,7 @@ resolveNameIO sc cenv nm =
 -- exception is thrown.
 resolveName :: SharedContext -> Text -> TopLevel [VarIndex]
 resolveName sc nm =
-  do cenv <- SV.getCryptolEnv'
+  do cenv <- SV.getCryptolEnv
      scnms <- io (resolveNameIO sc cenv nm)
      case scnms of
        [] -> fail $ Text.unpack $ "Could not resolve name: " <> nm
@@ -1590,7 +1592,7 @@ check_term :: TypedTerm -> TopLevel ()
 check_term tt = do
   sc <- getSharedContext
   opts <- getTopLevelPPOpts
-  cenv <- SV.getCryptolEnv'
+  cenv <- SV.getCryptolEnv
   let t = ttTerm tt
   ty <- io $ scTypeCheckError sc t
   expectedTy <-
@@ -1700,14 +1702,21 @@ cexEvalFn sc args tm = do
 
 envCmd :: TopLevel ()
 envCmd = do
-  rw <- SV.getMergedEnv
-  let avail = rwPrimsAvail rw
-      vals = rwValueInfo rw
-      keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail
-      vals' = filter keep $ Map.assocs vals
-      printit (x, (_pos, _lc, _rb, ty, _v, _doc)) = x <> " : " <> PPS.pShowText ty
   opts <- getOptions
-  io $ sequence_ [ printOutLn opts Info (Text.unpack $ printit item) | item <- vals' ]
+  avail <- gets rwPrimsAvail
+  SV.Environ varenv _tyenv _cryenv <- gets rwEnviron
+  let printItem (x, (_pos, _lc, _rb, ty, _v, _doc)) =
+          printOutLn opts Info $ Text.unpack (x <> " : " <> PPS.pShowText ty)
+      -- Print only the visible objects
+      keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail
+      -- Insert a blank line in the output where there's a scope boundary
+      printScope mItems = case mItems of
+          Nothing -> printOutLn opts Info ""
+          Just items -> mapM_ printItem $ filter keep items
+      -- Reverse the list of scopes so the innermost prints last,
+      -- because that's what people will expect to see.
+      itemses = reverse $ ScopedMap.scopedAssocs varenv
+  io $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
 exitPrim :: Integer -> IO ()
 exitPrim code = Exit.exitWith exitCode
@@ -1766,7 +1775,7 @@ eval_bool t = do
 eval_int :: TypedTerm -> TopLevel Integer
 eval_int t = do
   sc <- getSharedContext
-  cenv <- SV.getCryptolEnv'
+  cenv <- SV.getCryptolEnv
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
@@ -1825,7 +1834,7 @@ term_theories unints t = do
 default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do
   sc <- getSharedContext
-  cenv <- SV.getCryptolEnv'
+  cenv <- SV.getCryptolEnv
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   opts <- getOptions
   io $ defaultTypedTerm opts sc cfg tt
@@ -2099,7 +2108,7 @@ cryptol_load fileReader path = do
 cryptol_extract :: CEnv.ExtCryptolModule -> Text -> TopLevel TypedTerm
 cryptol_extract ecm var = do
   sc <- getSharedContext
-  ce <- SV.getCryptolEnv'
+  ce <- SV.getCryptolEnv
   let ?fileReader = StrictBS.readFile
   io $ CEnv.extractDefFromExtCryptolModule sc ce ecm var
 
@@ -2111,7 +2120,7 @@ cryptol_extract ecm var = do
 -- probably a bad idea.)
 cryptol_add_path :: FilePath -> TopLevel ()
 cryptol_add_path path = do
-     ce <- SV.getCryptolEnv'
+     ce <- SV.getCryptolEnv
      let me = CEnv.eModuleEnv ce
      let me' = me { C.meSearchPath = path : C.meSearchPath me }
      let ce' = ce { CEnv.eModuleEnv = me' }
@@ -2119,14 +2128,14 @@ cryptol_add_path path = do
 
 cryptol_add_prim :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim mnm nm trm = do
-     ce <- SV.getCryptolEnv'
+     ce <- SV.getCryptolEnv
      let prim_name = C.PrimIdent (C.textToModName mnm) nm
          prims' = Map.insert prim_name (ttTerm trm) (CEnv.ePrims ce)
      SV.setCryptolEnv $ ce { CEnv.ePrims = prims' }
 
 cryptol_add_prim_type :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim_type mnm nm tp = do
-     ce <- SV.getCryptolEnv'
+     ce <- SV.getCryptolEnv
      let prim_name = C.PrimIdent (C.textToModName mnm) nm
          prim_types' = Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes ce)
      SV.setCryptolEnv $ ce { CEnv.ePrimTypes = prim_types' }

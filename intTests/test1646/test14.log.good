@@ -1,6 +1,6 @@
  Loading file "test14.saw"
  x=a
- x=b
+ x=a
  test14.saw:12:5-12:6: Warning: Redeclaration of x
  test14.saw:9:16-9:17: Warning: Previous declaration was here
- x=c
+ x=a

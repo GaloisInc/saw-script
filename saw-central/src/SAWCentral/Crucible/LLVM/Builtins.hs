@@ -484,18 +484,13 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           -- XXX could have a real position...
           let pos = PosInternal "llvm_compositional_extract"
           typed_extracted_func_const <- io $ mkTypedTerm shared_context extracted_func_const
-          rw <- getTopLevelRW
-          rw' <-
-            liftIO $
-            extendEnv shared_context
+          extendEnv
               pos
               func_name
               ReadOnlyVar
               (tMono $ tTerm pos)
               Nothing             -- FUTURE: slot for doc string, could put something here
               (VTerm typed_extracted_func_const)
-              rw
-          putTopLevelRW rw'
 
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
 

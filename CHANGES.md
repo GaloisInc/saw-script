@@ -10,8 +10,11 @@ This release supports [version
   arbitrarily rebound, such that existing uses would see the updated
   value, has been superseded. Among other problems, it wasn't
   type safe.
-  Substitute functionality is now available by using the new syntax
-  `let rebindable`.
+  Now, rebinding a variable creates a new variable that hides the
+  old one; prior references are not affected.
+
+  Substitute functionality for the old behavior is now available by
+  using the new syntax `let rebindable`.
   After `let rebindable x = 3`, `x` is mutable and a subsequent
   `let rebindable x = 4` will change the value seen by all uses.
   The value type must remain the same; to avoid unnecessary
@@ -173,6 +176,16 @@ This release supports [version
   what types of MIR functions are supported for extraction.
 
 ## Bug Fixes
+
+* The Cryptol environment now tracks SAWScript scopes properly (#2304).
+  Note though that SAWCore-level names, which are for example bound by
+  uses of `let {{ ... }}`, are still not scoped and can trigger
+  duplicate variable errors.
+  See #2726 for further information.
+
+* A number of internal weirdnesses in SAWScript's internal variable handling
+  have been cleaned out; for example, bindings made in `proof_subshell` no
+  longer escape the subshell (#2243).
 
 * Fix a bug that would cause SAW to crash when loading an instantiation of a
   parameterized Cryptol module that contains newtypes or enums (#2673).
