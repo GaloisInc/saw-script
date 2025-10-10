@@ -22,6 +22,19 @@ fails (llvm_verify
     w4_unint_rme ["cry_ID"];
   });
 
+
+fails (llvm_verify
+  m "c_FIVE" [thm_id] false
+  do {
+    Y <- llvm_fresh_var "Y" (llvm_int 8);
+    llvm_execute_func [llvm_term Y];
+    llvm_unint ["cry_ID"];
+    llvm_return (llvm_term {{ cry_FIVE Y }});
+  }
+  do {
+    w4_unint_rme [];
+  });
+
 thm_five <- llvm_verify
   m "c_FIVE" [thm_id] false
   do {
