@@ -536,7 +536,8 @@ decodeMIRVal col ty (Crucible.AnyValue repr rv)
 enforceDisjointness ::
   MIRCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher MIR w ()
 enforceDisjointness cc loc ss =
-  do let sym = cc^.mccSym
+  mccWithBackend cc $ \bak ->
+  do let sym = backendGetSym bak
      sub <- OM (use setupValueSub)
      let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
 
@@ -548,7 +549,8 @@ enforceDisjointness cc loc ss =
               }
      -- Ensure that all regions are disjoint from each other.
      sequence_
-        [ do c <- liftIO $ W4.notPred sym =<< equalRefsPred cc p q
+        [ do c <- liftIO $
+                    W4.notPred sym =<< Mir.mirRef_overlapsIO bak (p^.mpRef) (q^.mpRef)
              addAssert c md a
 
         | let a = Crucible.SimError loc $
