@@ -29,6 +29,7 @@ module SAWCentral.Crucible.MIR.Setup.Value
   , mccSimContext
   , mccSymGlobalState
   , mccStaticInitializerMap
+  , mccUninterp
 
     -- * @MirStaticInitializerMap@
   , MirStaticInitializerMap
@@ -72,6 +73,7 @@ import Control.Lens (makeLenses)
 import Data.Parameterized.Classes
 import Data.Parameterized.Map (MapF)
 import Data.Parameterized.Some
+import Data.Set(Set)
 import Data.Text (Text)
 import Data.Void (Void)
 
@@ -82,6 +84,7 @@ import Mir.Generator
 import Mir.Intrinsics
 import qualified Mir.Mir as M
 
+import           SAWCore.Name(VarIndex)
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.Setup.Value as MS
 
@@ -119,6 +122,7 @@ data MIRCrucibleContext =
   , _mccSimContext           :: SimContext (SAWCruciblePersonality Sym) Sym MIR
   , _mccSymGlobalState       :: SymGlobalState Sym
   , _mccStaticInitializerMap :: MirStaticInitializerMap
+  , _mccUninterp             :: Set VarIndex
   }
 
 type instance MS.CrucibleContext MIR = MIRCrucibleContext

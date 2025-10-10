@@ -486,6 +486,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
           { _ccLLVMModule = llvmModule
           , _ccBackend = SomeOnlineBackend bak
           , _ccBasicSS = basic_ss
+          , _ccUninterp = Set.empty
 
           -- It's unpleasant that we need to do this to use resolveSetupVal.
           , _ccLLVMSimContext = error "Attempted to access ccLLVMSimContext"

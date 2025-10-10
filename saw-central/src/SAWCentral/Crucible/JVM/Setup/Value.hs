@@ -49,11 +49,13 @@ module SAWCentral.Crucible.JVM.Setup.Value
   , jccJVMContext
   , jccBackend
   , jccHandleAllocator
+  , jccUninterp
 
   , JVMRefVal
   ) where
 
 import           Control.Lens
+import           Data.Set(Set)
 import           Data.Void (Void)
 import qualified Prettyprinter as PPL
 
@@ -70,6 +72,7 @@ import qualified Language.JVM.Parser as J
 -- cryptol-saw-core
 import           CryptolSAWCore.TypedTerm (TypedTerm)
 
+import           SAWCore.Name(VarIndex)
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.Setup.Value as MS
 
@@ -150,6 +153,7 @@ data JVMCrucibleContext =
   , _jccJVMContext     :: CJ.JVMContext
   , _jccBackend        :: SomeOnlineBackend
   , _jccHandleAllocator :: Crucible.HandleAllocator
+  , _jccUninterp       :: Set VarIndex
   }
 
 makeLenses ''JVMCrucibleContext

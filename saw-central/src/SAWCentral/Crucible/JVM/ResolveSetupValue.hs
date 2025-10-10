@@ -47,11 +47,6 @@ import qualified What4.Interface as W4
 import SAWCore.SharedTerm
 import CryptolSAWCore.TypedTerm
 
-import qualified SAWCore.Prim as Prim
-import qualified SAWCore.Simulator.Concrete as Concrete
-
-import SAWCoreWhat4.ReturnTrip
-
 -- crucible
 
 import qualified Lang.Crucible.Simulator as Crucible (RegValue)
@@ -70,9 +65,9 @@ import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
 
 import SAWCentral.Panic
 import SAWCentral.Crucible.JVM.MethodSpecIR
-import SAWCentral.Crucible.JVM.Setup.Value (JVMRefVal)
+import SAWCentral.Crucible.JVM.Setup.Value (JVMRefVal, jccUninterp)
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
-import SAWCentral.Crucible.Common.ResolveSetupValue ( resolveBoolTerm, checkBooleanType )
+import SAWCentral.Crucible.Common.ResolveSetupValue (resolveBoolTerm, resolveBitvectorTerm)
 
 
 data JVMVal
@@ -214,12 +209,7 @@ resolveSAWPred ::
   JVMCrucibleContext ->
   Term ->
   IO (W4.Pred Sym)
-resolveSAWPred cc tm =
-  do let sym = cc^.jccSym
-     st <- sawCoreState sym
-     let sc = saw_ctx st
-     checkBooleanType sc tm
-     bindSAWTerm sym st W4.BaseBoolRepr tm
+resolveSAWPred cc = resolveBoolTerm (cc ^. jccSym) (cc ^. jccUninterp)
 
 resolveSAWTerm ::
   JVMCrucibleContext ->
@@ -229,7 +219,7 @@ resolveSAWTerm ::
 resolveSAWTerm cc tp tm =
   case tp of
     Cryptol.TVBit ->
-      do b <- resolveBoolTerm sym tm
+      do b <- resolveBoolTerm sym (cc ^. jccUninterp) tm
          x0 <- W4.bvLit sym W4.knownNat (BV.zero W4.knownNat)
          x1 <- W4.bvLit sym W4.knownNat (BV.one  W4.knownNat)
          x <- W4.bvIte sym b x1 x0
@@ -245,13 +235,14 @@ resolveSAWTerm cc tp tm =
     Cryptol.TVRational ->
       fail "resolveSAWTerm: unimplemented type Rational (FIXME)"
     Cryptol.TVSeq sz Cryptol.TVBit ->
+      let unint = cc ^. jccUninterp in
       case sz of
-        8  -> do x <- resolveBitvectorTerm sym (W4.knownNat @8) tm
+        8  -> do x <- resolveBitvectorTerm sym unint (W4.knownNat @8) tm
                  IVal <$> W4.bvSext sym W4.knownNat x
-        16 -> do x <- resolveBitvectorTerm sym (W4.knownNat @16) tm
+        16 -> do x <- resolveBitvectorTerm sym unint (W4.knownNat @16) tm
                  IVal <$> W4.bvSext sym W4.knownNat x
-        32 -> IVal <$> resolveBitvectorTerm sym W4.knownNat tm
-        64 -> LVal <$> resolveBitvectorTerm sym W4.knownNat tm
+        32 -> IVal <$> resolveBitvectorTerm sym unint W4.knownNat tm
+        64 -> LVal <$> resolveBitvectorTerm sym unint W4.knownNat tm
         _  -> fail ("Invalid bitvector width: " ++ show sz)
     Cryptol.TVSeq _sz _tp' ->
       fail "resolveSAWTerm: unimplemented sequence type"
@@ -267,27 +258,6 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unsupported nominal type"
   where
     sym = cc^.jccSym
-
-resolveBitvectorTerm ::
-  forall w.
-  (1 W4.<= w) =>
-  Sym ->
-  W4.NatRepr w ->
-  Term ->
-  IO (W4.SymBV Sym w)
-resolveBitvectorTerm sym w tm =
-  do st <- sawCoreState sym
-     let sc = saw_ctx st
-     mx <- case getAllExts tm of
-             -- concretely evaluate if it is a closed term
-             [] ->
-               do modmap <- scGetModuleMap sc
-                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                  pure (Just (Prim.unsigned (Concrete.toWord v)))
-             _ -> return Nothing
-     case mx of
-       Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm
 
 toJVMType :: Cryptol.TValue -> Maybe J.Type
 toJVMType tp =

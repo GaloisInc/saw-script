@@ -31,6 +31,7 @@ module SAWCentral.Crucible.LLVM.Builtins
     , llvm_return
     , llvm_precond
     , llvm_postcond
+    , llvm_unint
     , llvm_assert
     , llvm_cfg
     , llvm_extract
@@ -204,6 +205,7 @@ import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
 
 import SAWCentral.Crucible.LLVM.Override
 import SAWCentral.Crucible.LLVM.ResolveSetupValue
+import SAWCentral.Crucible.LLVM.Setup.Value(ccUninterp)
 import SAWCentral.Crucible.LLVM.MethodSpecIR
 import SAWCentral.Panic (panic)
 
@@ -580,17 +582,18 @@ withMethodSpec pathSat lm nm setup action =
               -- execute commands of the method spec
               io $ W4.setCurrentProgramLoc sym setupLoc
 
-              methodSpec <-
-                view Setup.csMethodSpec <$>
+              
+              setupState  <-
                 (execStateT
                    (runReaderT (runLLVMCrucibleSetupM setup)
                                (Setup.makeCrucibleSetupRO))
                      st0)
+              let methodSpec = setupState ^. Setup.csMethodSpec
+                  cc1        = setupState ^. Setup.csCrucibleContext
+              io $ checkSpecArgumentTypes cc1 methodSpec
+              io $ checkSpecReturnType cc1 methodSpec
 
-              io $ checkSpecArgumentTypes cc methodSpec
-              io $ checkSpecReturnType cc methodSpec
-
-              action cc methodSpec
+              action cc1 methodSpec
 
 verifyMethodSpec ::
   ( ?lc :: Crucible.TypeContext
@@ -1777,6 +1780,7 @@ setupLLVMCrucibleContext pathSat lm action =
                                      , _ccLLVMSimContext = lsimctx
                                      , _ccLLVMGlobals = lglobals
                                      , _ccBasicSS = basic_ss
+                                     , _ccUninterp = mempty
                                      }
           action cc
 
@@ -2005,6 +2009,11 @@ llvm_postcond term =
   LLVMCrucibleSetupM $
   do loc <- getW4Position "llvm_postcond"
      Setup.crucible_postcond loc term
+
+llvm_unint :: [Text] -> LLVMCrucibleSetupM ()
+llvm_unint term =
+  LLVMCrucibleSetupM (Setup.declare_unint "llvm_unint" ccUninterp term)
+          
 
 llvm_return ::
   AllLLVM MS.SetupValue ->

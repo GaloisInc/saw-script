@@ -8,6 +8,7 @@ Stability   : provisional
 
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE RankNTypes #-}
 
 module SAWCentral.Crucible.Common.Setup.Builtins
   ( crucible_precond
@@ -15,6 +16,7 @@ module SAWCentral.Crucible.Common.Setup.Builtins
   , crucible_return
   , crucible_execute_func
   , crucible_equal
+  , declare_unint
   , CheckPointsToType(..)
   ) where
 
@@ -22,20 +24,42 @@ import           Control.Lens
 import           Control.Monad (when)
 import           Control.Monad.State (get)
 import qualified Data.Map as Map
+import           Data.Set(Set)
+import qualified Data.Set as Set
+import           Data.Text(Text)
 
 import qualified What4.ProgramLoc as W4
 
+import           SAWCore.Name(VarIndex)
 import           CryptolSAWCore.TypedTerm (TypedTerm)
 
 import           SAWCentral.Value
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.Common.Setup.Type
+import           SAWCentral.Builtins(resolveNames)
 
 --------------------------------------------------------------------------------
 -- ** Builtins
 
 -- TODO: crucible_fresh_var?
+
+-- | Declare a particular name as opaque
+declare_unint ::
+  String {- ^ Name of command for error messages -} ->
+  Setter' (MS.CrucibleContext ext) (Set VarIndex) {-^ Keep uninterpreted names here -} ->
+  [Text] {- ^ Names for the things to be left uninterpreted -} ->
+  CrucibleSetup ext ()
+declare_unint cmd unintF names = 
+  do
+    prePost <- use csPrePost
+    case prePost of
+      MS.PreState ->
+        do
+          ns <- crucibleSetupTopLevel (resolveNames names)
+          csCrucibleContext . unintF %= Set.union ns
+      MS.PostState ->
+        fail ("`" ++ cmd ++ "` works only in the pre-condition of a specification.")
 
 crucible_precond ::
   W4.ProgramLoc ->

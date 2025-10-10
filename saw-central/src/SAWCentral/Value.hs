@@ -176,6 +176,7 @@ module SAWCentral.Value (
     llvmTopLevel,
     jvmTopLevel,
     mirTopLevel,
+    crucibleSetupTopLevel,
     -- used in SAWScript.Interpreter
     -- XXX: probably belongs in SAWSupport
     underStateT,
@@ -1304,17 +1305,20 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
             pure thmResult
 
 
+crucibleSetupTopLevel :: TopLevel a -> CrucibleSetup ext a
+crucibleSetupTopLevel m = lift (lift m)
+
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
 
 llvmTopLevel :: TopLevel a -> LLVMCrucibleSetupM a
-llvmTopLevel m = LLVMCrucibleSetupM (lift (lift m))
+llvmTopLevel m = LLVMCrucibleSetupM (crucibleSetupTopLevel m)
 
 jvmTopLevel :: TopLevel a -> JVMSetupM a
-jvmTopLevel m = JVMSetupM (lift (lift m))
+jvmTopLevel m = JVMSetupM (crucibleSetupTopLevel m)
 
 mirTopLevel :: TopLevel a -> MIRSetupM a
-mirTopLevel m = MIRSetupM (lift (lift m))
+mirTopLevel m = MIRSetupM (crucibleSetupTopLevel m)
 
 instance MonadIO ProofScript where
   liftIO m = ProofScript (liftIO m)

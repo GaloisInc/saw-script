@@ -42,6 +42,7 @@ llvm_points_to_untyped : SetupValue -> SetupValue -> LLVMSetup ()
 llvm_postcond : Term -> LLVMSetup ()
 llvm_precond : Term -> LLVMSetup ()
 llvm_return : SetupValue -> LLVMSetup ()
+llvm_unint : [String] -> LLVMSetup ()
 llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 19 more matches tagged experimental; use enable_experimental to see them
