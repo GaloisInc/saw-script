@@ -735,8 +735,8 @@ loadAndTranslateModule sc env src =
                        $ ME.lmLoadedModules
                        $ ME.meLoadedModules modEnv'
          newDeclGroups = concatMap T.mDecls newModules
-         newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
-                                        (ME.loadedNominalTypes modEnv)
+         newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
+                                        (loadedNonParamNominalTypes modEnv)
 
      newTermEnv <-
        do oldCryEnv <- mkCryEnv env
