@@ -330,19 +330,7 @@ getNamingEnvForImport :: ME.ModuleEnv
                       -> MR.NamingEnv
 getNamingEnvForImport modEnv (vis, imprt) =
     MN.interpImportEnv imprt -- adjust for qualified imports
-  $ getPublicAndPrivates modEnv vis imprt
-                             -- NamingEnv for PublicAndPrivate definitions
-
-
-getPublicAndPrivates ::
-  ME.ModuleEnv -> ImportVisibility -> T.Import -> MR.NamingEnv
-getPublicAndPrivates modEnv vis imprt =
-
-  case vis of
-    PublicAndPrivate -> modNamingEnv <> envPriv
-    OnlyPublic       -> MN.filterUNames
-                           (`Set.member` nmsPu)
-                           modNamingEnv
+  $ computeNamingEnv lm vis
 
   where
   modName ::C.ModName
@@ -352,27 +340,38 @@ getPublicAndPrivates modEnv vis imprt =
          Just lm' -> lm'
          Nothing  -> panic "FIXME" ["cannot lookupModule"]
 
+computeNamingEnv :: ME.LoadedModule -> ImportVisibility -> MR.NamingEnv
+computeNamingEnv lm vis =
+  case vis of
+    PublicAndPrivate -> envPublic <> envPrivate
+    OnlyPublic       -> envPublic
+
+  where
+
+  -- NamingEnv's:
+  modNamingEnv :: MR.NamingEnv
   modNamingEnv = ME.lmNamingEnv lm
 
+  envPrivate :: MR.NamingEnv
+  envPrivate = MN.namingEnvFromNames' generalNameToPName nmsPr
+
+  envPublic = MN.filterUNames
+                (`Set.member` nmsPu)
+                modNamingEnv
+
+  -- name sets:
   nmsTopLevels :: Set.Set MN.Name
   nmsTopLevels = MN.namingEnvNames modNamingEnv
 
-  nmsPuPr1 :: Set.Set MN.Name
-  nmsPuPr1 = Map.keysSet $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
+  nmsDefined :: Set.Set MN.Name
+  nmsDefined = Map.keysSet $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
     -- Correct for PublicAndPrivate
 
   nmsPu :: Set.Set MN.Name
   nmsPu = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
 
   nmsPr :: Set.Set MN.Name
-  nmsPr = nmsPuPr1 Set.\\ nmsTopLevels
-
-  envPriv = MN.namingEnvFromNames' generalNameToPName nmsPr
-
-
-
-
-
+  nmsPr = nmsDefined Set.\\ nmsTopLevels
 
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
@@ -809,8 +808,6 @@ importCryptolModule sc env src as vis imps =
         nmsPuPr3 = MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm
           -- works, but doesn't "inline" submodule defs.
 
-        ne = getNamingEnvForImport (eModuleEnv env') import'
-
         nmsPu :: Set.Set MN.Name
         nmsPu = MI.ifsPublic  $ MI.ifNames $ ME.lmInterface lm
           -- Correct for PublicOnly
@@ -822,6 +819,11 @@ importCryptolModule sc env src as vis imps =
         nmsPr = nmsPuPr1 Set.\\ nmsTopLevels
 
         envPriv = MN.namingEnvFromNames' generalNameToPName nmsPr
+
+    print $ text "* LOG: NEW: computeNamingEnv PublicAndPrivate:\n"
+            <> pp (computeNamingEnv lm PublicAndPrivate)
+    print $ text "* LOG: NEW: computeNamingEnv OnlyPublic:\n"
+            <> pp (computeNamingEnv lm OnlyPublic)
 
     let ppList' s ns =
           do
