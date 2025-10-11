@@ -767,6 +767,7 @@ importCryptolModule sc env src as vis imps =
   do
   (mod', env') <- loadAndTranslateModule sc env src
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
+
   when debug $
     do
     let lm = case ME.lookupModule (T.mName mod') (eModuleEnv env') of
@@ -774,9 +775,14 @@ importCryptolModule sc env src as vis imps =
                Nothing  -> panic "importImportModule" []
         modNamingEnv = ME.lmNamingEnv lm
 
-        nms1 :: Map MN.Name MI.IfaceDecl
-        nms1 = MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
+        nms1a :: Set.Set MN.Name
+        nms1a = Map.keysSet $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
           -- Correct for PublicAndPrivate
+
+        nms1b :: [MN.Name]
+        nms1b = map MI.ifDeclName
+              $ Map.elems $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
+           -- Equiv to nms1a
 
         -- ne = getNamingEnvForImport (eModuleEnv env') import'
 
@@ -784,19 +790,47 @@ importCryptolModule sc env src as vis imps =
         nmsPu = MI.ifsPublic  $ MI.ifNames $ ME.lmInterface lm
           -- Correct for PublicOnly
 
+        nmsPriv :: Set.Set MN.Name
+        nmsPriv = nms1a Set.\\ nmsPu
+
         nmsPP :: Set.Set MN.Name
         nmsPP = MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm
           -- works, but doesn't "inline" submodule defs.
 
+        envPriv = MN.namingEnvFromNames' generalNameToPName nmsPriv
+
+    let ppList' s ns =
+          do
+          print $ ppListX (unwords ["- LOG: ", s, " :\n"]) ns
+          putStrLn ""
+
     putStrLn "* LOG: BEGIN importCrytolModule:"
-    print $ text "* LOG: namingEnvFromNames\n:"
-                  <> pp (MN.namingEnvFromNames (Map.keysSet nms1))
+    print $ text "* LOG: (namingEnvFromNames nms1a):\n"
+                  <> pp (MN.namingEnvFromNames nms1a)
     putStrLn "* LOG: various names:"
-    print $ ppListX "- LOG: nms1:    " $ Set.toList $ Map.keysSet nms1
-    print $ ppListX "- LOG: nmsPu:   " $ Set.toList nmsPu
-    print $ ppListX "- LOG: nmsPuPr: " $ Set.toList nmsPP
-    print $ text "* LOG: namingEnv:\n" <> pp modNamingEnv
-            -- shows everything in scope, excluding hidden from the top level
+    ppList' "nms1a"   (Set.toList nms1a)
+    ppList' "nms1b"   nms1b
+    ppList' "nmsPu"   (Set.toList nmsPu)
+    ppList' "nmsPuPr" (Set.toList nmsPP)
+    ppList' "nmsPriv" (Set.toList nmsPriv)
+
+    putStrLn "* LOG: print(ms1a):"
+    mapM_ (\n->print n >> putStrLn "")
+          (Set.toList nms1a)
+
+    print $ text "* LOG: print modNamingEnv:\n"
+    flip mapM_ (Map.toList $ MN.namespaceMap C.NSValue modNamingEnv) $
+      (\(k,v)-> do
+                print k
+                print v
+                putStrLn "")
+
+    print $ text "* LOG: pp modNamingEnv:\n"
+            <> pp modNamingEnv
+        -- shows everything in scope at top level
+
+    print $ text "* LOG: pp envPriv:\n"
+            <> pp envPriv
 
     putStrLn "* LOG: importCrytolModule: submodules:"
     smPrivates <-
@@ -806,22 +840,49 @@ importCryptolModule sc env src as vis imps =
         putStrLn ("*** LOG: submodule names in scope:")
         print $ pp (T.smInScope sm)
         putStrLn ""
-        let modName = textToModName $ identText $ MN.nameIdent nm
+        let modName  :: C.ModName
+            modName  = textToModName $ identText $ MN.nameIdent nm
+            modName2 :: MN.Name
+            modName2 = MI.ifsName $ T.smIface sm
             getQualifiedPrivateDefs  sm' =
               MN.interpImportEnv'
                 (Just modName)   -- qualify with `modName`
                 Nothing          -- no ImportSpec
                 (T.smInScope sm' `MN.without` modNamingEnv)
+            getQualifiedPrivateDefs2 sm' =
+              (MN.interpImportEnv'
+                (Just modName)   -- qualify with `modName`
+                Nothing          -- no ImportSpec
+                (T.smInScope sm')) `MN.without` modNamingEnv
+        putStrLn ("*** LOG: modName/2: ")
+        print modName
+        print modName2
+        putStrLn ""
+
+        putStrLn ("*** LOG: value map sizes:")
+        putStrLn $
+          "smInScope: "
+          ++ show (Map.size $ MN.namespaceMap C.NSValue (T.smInScope sm))
+        putStrLn $
+          "modNamingEnv: "
+          ++ show (Map.size $ MN.namespaceMap C.NSValue modNamingEnv)
+
         putStrLn ("*** LOG: qualifiedPrivateDefs:")
         print $ pp $ getQualifiedPrivateDefs sm
-        putStrLn ("")
+        putStrLn ""
+
+        putStrLn ("*** LOG: qualifiedPrivateDefs2:")
+        print $ pp $ getQualifiedPrivateDefs2 sm
+        putStrLn ""
 
         return $ getQualifiedPrivateDefs sm
 
+    putStrLn $ "* LOG: (findAmbig modNamingEnv) = "
+               ++ show (MN.findAmbig modNamingEnv)
     let smPrivateNamingEnv = mconcat smPrivates
     print $ text "* LOG: smPrivateNamingEnv:\n" <> pp smPrivateNamingEnv
     {-
-    -- unmonadified for use in _
+    -- un-monadified for use in getNamingEnv:
     let sms = T.mSubmodules mod'
         submNamingEnvs =
           map (getQualifiedPrivateDefs mod') sms
@@ -1150,3 +1211,21 @@ moduleCmdResult (res, ws) = do
     notDefaulting :: TE.Warning -> Bool
     notDefaulting (TE.DefaultingTo {}) = False
     notDefaulting _ = True
+
+
+-- do these have better home?
+
+generalNameToPName :: T.Name -> P.PName
+generalNameToPName n =
+  case MN.nameInfo n of
+    MN.GlobalName _ og   -> generalOrigNameToPName og
+    MN.LocalName _ _ txt -> P.mkUnqual txt
+
+generalOrigNameToPName :: C.OrigName -> P.PName
+generalOrigNameToPName og =
+  case C.modPathSplit (C.ogModule og) of
+    (_top,[] ) -> P.UnQual ident
+    (_top,ids) -> P.Qual (C.packModName (map identText ids)) ident
+
+  where
+  ident = C.ogName og
