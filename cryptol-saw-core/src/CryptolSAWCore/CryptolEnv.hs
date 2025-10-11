@@ -343,17 +343,28 @@ getNamingEnvForImport modEnv (vis, imprt) =
 computeNamingEnv :: ME.LoadedModule -> ImportVisibility -> MR.NamingEnv
 computeNamingEnv lm vis =
   case vis of
-    PublicAndPrivate -> envPublic <> envPrivate
-    OnlyPublic       -> envPublic
+    PublicAndPrivate -> envPublicAndPrivate  -- all names defined, pub & pri
+    OnlyPublic       -> envPublic            -- i.e., what's exported.
 
   where
+  -- NamingEnv's --
 
-  -- NamingEnv's:
+  -- | envTopLevels
+  --    - Does not include privates in submodules (which makes for
+  --      much of the complications of this function).
+  --    - Includes everything in scope at the toplevel of 'lm' module
   envTopLevels :: MR.NamingEnv
   envTopLevels = ME.lmNamingEnv lm
 
-  envPrivate :: MR.NamingEnv
-  envPrivate = MN.namingEnvFromNames' generalNameToPName nmsPrivate
+  -- | envPublicAndPrivate - awkward as envTopLevels excludes privates
+  envPublicAndPrivate :: MR.NamingEnv
+  envPublicAndPrivate =
+     -- nab all the names defined in module (from toplevel scope):
+     MN.filterUNames (`Set.member` nmsDefined) envTopLevels
+     <>
+     -- we must create a new NamingEnv (since the privates are not
+     -- in `envTopLevels`):
+     MN.namingEnvFromNames' generalNameToPName nmsPrivate
 
   envPublic :: MR.NamingEnv
   envPublic = MN.filterUNames
@@ -361,12 +372,27 @@ computeNamingEnv lm vis =
                 envTopLevels
 
   -- name sets:
+
+  -- | names in scope at Top level of module
   nmsTopLevels :: Set.Set MN.Name
   nmsTopLevels = MN.namingEnvNames envTopLevels
 
+  -- | names defined in module and in submodules
+  --   - this includes `PublicAndPrivate` names!
+  --   - includes submodule names, type synonyms, and nominal types
   nmsDefined :: Set.Set MN.Name
-  nmsDefined = Map.keysSet $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
-    -- Correct for PublicAndPrivate
+  nmsDefined =
+      -- definitions from all submodules:
+      ( Set.unions
+      $ map (MI.ifsDefines . T.smIface)
+      $ Map.elems
+      $ T.mSubmodules
+      $ ME.lmModule lm
+      )
+    `Set.union`
+      -- definitions at the top module:
+      (MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm)
+
 
   nmsPublic :: Set.Set MN.Name
   nmsPublic = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
