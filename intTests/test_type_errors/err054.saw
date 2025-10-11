@@ -1,0 +1,14 @@
+// Check illegal "let rebindable" cases and the resulting error.
+//
+// Note that there are also some instances of it in test1646; however,
+// the point there is to make sure the behavior of redefined variables
+// is as intended; the point here is to make sure that the warning
+// logic itself doesn't regress. In particular it would be reasonable
+// at some point to switch test1646 away from using test-and-diff.sh
+// for simplicity and reduced maintenance, in which case the tests
+// here should take up the load.
+
+// "rebindable" is not allowed in enclosed scopes
+do { let rebindable e = 3; return (); };
+let f0 = do { let rebindable f0' = 3; return (); };
+let f1 () = do { let rebindable f1' = 3; return (); };

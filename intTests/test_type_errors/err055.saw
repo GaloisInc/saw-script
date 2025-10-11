@@ -1,0 +1,4 @@
+// Check the error from misusing "let rebindable".
+
+let x = 6;
+let rebindable x = 7;

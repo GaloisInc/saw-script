@@ -745,7 +745,7 @@ evaluateTypedTerm _sc (TypedTerm tp _) =
 --   plumbing demands that the field exist...
 --
 data LocalBinding
-  = LocalLet SS.Name SS.Schema (Maybe [Text]) Value
+  = LocalLet SS.Pos SS.Name SS.Rebindable SS.Schema (Maybe [Text]) Value
   | LocalTypedef SS.Name SS.Type
  deriving (Show)
 
@@ -764,7 +764,7 @@ addTypedef name ty rw =
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
-  where addBinding (LocalLet x ty md v) = extendEnv sc x ty md v
+  where addBinding (LocalLet pos x rb ty md v) = extendEnv sc pos x rb ty md v
         addBinding (LocalTypedef n ty) = pure . addTypedef n ty
 
 -- XXX: it is not sane to both be in the TopLevel monad and return a TopLevelRW
@@ -823,11 +823,14 @@ data TopLevelRW =
   TopLevelRW
   {
     -- | The variable environment: a map from variable names to:
+    --      - the definition position
     --      - the lifecycle setting (experimental/current/deprecated/etc)
+    --      - whether the binding is rebindable
     --      - the type scheme
     --      - the value
     --      - the help text if any
-    rwValueInfo  :: Map SS.Name (SS.PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
+    rwValueInfo  :: Map SS.Name (SS.Pos, SS.PrimitiveLifecycle, SS.Rebindable,
+                                 SS.Schema, Value, Maybe [Text])
 
     -- | The type environment: a map from type names to:
     --      - the lifecycle setting (experimental/current/deprecated/etc)
@@ -1156,8 +1159,9 @@ addJVMTrans trans = do
 
 extendEnv ::
   SharedContext ->
-  SS.Name -> SS.Schema -> Maybe [Text] -> Value -> TopLevelRW -> IO TopLevelRW
-extendEnv sc name ty doc v rw =
+  SS.Pos -> SS.Name -> SS.Rebindable -> SS.Schema -> Maybe [Text] -> Value ->
+  TopLevelRW -> IO TopLevelRW
+extendEnv sc pos name rb ty doc v rw =
   do ce' <-
        case v of
          VTerm t ->
@@ -1176,10 +1180,9 @@ extendEnv sc name ty doc v rw =
               pure $ CEnv.bindTypedTerm (ident, tt) ce
          _ ->
            pure ce
-     pure $
-      rw { rwValueInfo  = M.insert name (SS.Current, ty, v, doc) (rwValueInfo rw)
-         , rwCryptol = ce'
-         }
+     let valenv = rwValueInfo rw
+         valenv' = M.insert name (pos, SS.Current, rb, ty, v, doc) valenv
+     pure $ rw { rwValueInfo = valenv', rwCryptol = ce' }
   where
     ident = T.mkIdent name
     modname = T.packModName [name]

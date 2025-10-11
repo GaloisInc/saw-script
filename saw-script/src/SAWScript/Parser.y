@@ -63,6 +63,7 @@ import Control.Exception
   'then'         { TReserved _ "then"           }
   'else'         { TReserved _ "else"           }
   'typedef'      { TReserved _ "typedef"        }
+  'rebindable'   { TReserved _ "rebindable"     }
   'CryptolSetup' { TReserved _ "CryptolSetup"   }
   'JavaSetup'    { TReserved _ "JavaSetup"      }
   'LLVMSetup'    { TReserved _ "LLVMSetup"      }
@@ -155,8 +156,9 @@ mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
 Stmt :: { Stmt }
  : Expression                           { StmtBind (getPos $1) (PWild (leadingPos $ getPos $1) Nothing) $1 }
  | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan' x $3) x $3) (toPattern $1) }
- | 'rec' sepBy1(Declaration, 'and')     { StmtLet (maxSpan [tokPos $1, maxSpan $2]) (Recursive $2) }
- | 'let' Declaration                    { StmtLet (maxSpan [tokPos $1, getPos $2]) (NonRecursive $2) }
+ | 'rec' sepBy1(Declaration, 'and')     { buildRec (maxSpan [tokPos $1, maxSpan $2]) $2 }
+ | 'let' Declaration                    { buildLet (maxSpan [tokPos $1, getPos $2]) $2 }
+ | 'let' 'rebindable' Declaration       { buildLetRB (maxSpan [tokPos $1, getPos $3]) $3 }
  | 'let' code                           { StmtCode (maxSpan [tokPos $1, tokPos $2]) (tokPos $2) (tokStr $2) }
  | 'import' Import                      { StmtImport (maxSpan [tokPos $1, getPos $2]) $2 }
  | 'typedef' name '=' Type              { StmtTypedef (maxSpan [tokPos $1, getPos $4]) (tokPos $2) (tokStr $2) $4 }
@@ -410,6 +412,21 @@ buildFunction mname args e =
 buildApplication :: [Expr] -> Expr
 buildApplication es =
   foldl1 (\e body -> Application (maxSpan' e body) e body) es
+
+-- | Build a let-statement.
+buildLet :: Pos -> Decl -> Stmt
+buildLet pos d =
+  StmtLet pos ReadOnlyVar (NonRecursive d)
+
+-- | Build a rebindable let-statement.
+buildLetRB :: Pos -> Decl -> Stmt
+buildLetRB pos d =
+  StmtLet pos RebindableVar (NonRecursive d)
+
+-- | Build a rec-statement.
+buildRec :: Pos -> [Decl] -> Stmt
+buildRec pos ds =
+  StmtLet pos ReadOnlyVar (Recursive ds)
 
 -- | Pop off the last statement in a do-block, which is required to
 --   be a plain expression, and unpack it to an expression.

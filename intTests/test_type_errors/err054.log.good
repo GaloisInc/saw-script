@@ -1,0 +1,6 @@
+ Loading file "err054.saw"
+ Type errors:
+  err054.saw:12:6-12:26: Invalid use of 'rebindable'
+  err054.saw:12:6-12:26: It is only allowed at the syntactic top level
+
+FAILED

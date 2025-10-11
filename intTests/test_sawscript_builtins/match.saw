@@ -15,10 +15,12 @@ print "caseSatResult:";
 resultSat <- sat z3 {{ \x -> x == True }};
 resultUnsat <- sat z3 {{ \x -> (x == True) && (x == False) }};
 
-let no = print "unsat";
-let yes t = print ("sat", t);
-caseSatResult resultSat no yes;
-caseSatResult resultUnsat no yes;
+do {
+   let no = print "unsat";
+   let yes t = print ("sat", t);
+   caseSatResult resultSat no yes;
+   caseSatResult resultUnsat no yes;
+};
 
 // caseProofResult
 //
@@ -30,7 +32,9 @@ print "caseProofResult:";
 resultValid <- prove z3 {{ \(x : [8]) -> x == x }};
 resultInvalid <- prove z3 {{ \(x : [8]) -> x < x }};
 
-let yes thm = print ("Theorem", thm);
-let no cex = print ("Counterexample", cex);
-caseProofResult resultValid yes no;
-caseProofResult resultInvalid yes no;
+do {
+   let yes thm = print ("Theorem", thm);
+   let no cex = print ("Counterexample", cex);
+   caseProofResult resultValid yes no;
+   caseProofResult resultInvalid yes no;
+};

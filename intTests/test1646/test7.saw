@@ -1,0 +1,11 @@
+// The lets will fail because "rebindable" isn't allowed there.
+
+do {
+   let rebindable x = "a";
+
+   let f () = print (str_concat "x=" x);
+   f ();
+
+   let rebindable x = "b";
+   f ();
+};

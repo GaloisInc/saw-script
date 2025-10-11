@@ -1,0 +1,3 @@
+ Loading file "parser005.saw"
+ Parse error at parser005.saw:2:5-2:15: Unexpected `rebindable'
+FAILED

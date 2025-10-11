@@ -1,0 +1,66 @@
+// Test out the redefined variable warning.
+//
+// Note that there are also some instances of it in test1646; however,
+// the point there is to make sure the behavior of redefined variables
+// is as intended; the point here is to make sure that the warning
+// logic itself doesn't regress. In particular it would be reasonable
+// at some point to switch test1646 away from using test-and-diff.sh
+// for simplicity and reduced maintenance, in which case the tests
+// here should take up the load.
+
+let x = 3;
+y <- return 3;
+
+// all twelve of the following should warn
+let x = 3;
+let x = 4;
+do { let x = 5; return (); };
+let f0 = let x = 6 in ();
+let f1 () = let x = 6 in ();
+let f2 () = do { let a = let x = 6 in (); return (); };
+let f3 () = do { let x = 6; return (); };
+let f4 (x: Int) = ();
+let f5 () = let f6 (x: Int) = () in ();
+let f7 () = do { return (let f8 (x: Int) = () in ()); };
+let f9 () = do { let a = let f10 (x: Int) = () in (); return (); };
+let f11 () = do { let f12 (x: Int) = (); return (); };
+
+// all four of the following should warn too
+x <- return 3;
+x <- return 4;
+do { x <- return 5; return (); };
+let f13 () = do { x <- return 6; return (); };
+
+// and these twelve
+let y = 3;
+let y = 4;
+do { let y = 5; return (); };
+let ff0 = let y = 6 in ();
+let ff1 () = let y = 6 in ();
+let ff2 () = do { let a = let y = 6 in (); return (); };
+let ff3 () = do { let y = 6; return (); };
+let ff4 (y: Int) = ();
+let ff5 () = let ff6 (y: Int) = () in ();
+let ff7 () = do { return (let ff8 (y: Int) = () in ()); };
+let ff9 () = do { return (let ff10 (y: Int) = () in ()); return (); };
+let ff11 () = do { let ff12 (y: Int) = (); return (); };
+
+// and these four
+y <- return 3;
+y <- return 4;
+do { y <- return 5; return (); };
+let ff13 () = do { y <- return 6; return (); };
+
+// all of these should also warn
+// (note: there's an extra free warning because "z3" is a builtin)
+let g0 (z0: Int) = let z0 = 3 in ();
+let g1 (z1: Int) = do { return (let z1 = 3 in ()); };
+let g2 (z2: Int) = do { let z2 = 3; return (); };
+do { return (let g3 (z3: Int) = let z3 = 3 in () in ()); };
+do { let g4 (z4: Int) = let z4 = 3 in (); return (); };
+let g6 (z6: Int) = do { z6 <- return 3; return (); };
+do { let g7 (z7: Int) = do { z7 <- return 3; return (); }; return (); };
+
+// these should _not_ warn
+do { let h0 (q0: Int) = 3; let q0 = 4; return (); };
+do { let h1 (q1: Int) = 3; q1 <- return 4; return (); };
