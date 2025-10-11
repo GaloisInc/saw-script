@@ -349,29 +349,30 @@ computeNamingEnv lm vis =
   where
 
   -- NamingEnv's:
-  modNamingEnv :: MR.NamingEnv
-  modNamingEnv = ME.lmNamingEnv lm
+  envTopLevels :: MR.NamingEnv
+  envTopLevels = ME.lmNamingEnv lm
 
   envPrivate :: MR.NamingEnv
-  envPrivate = MN.namingEnvFromNames' generalNameToPName nmsPr
+  envPrivate = MN.namingEnvFromNames' generalNameToPName nmsPrivate
 
+  envPublic :: MR.NamingEnv
   envPublic = MN.filterUNames
-                (`Set.member` nmsPu)
-                modNamingEnv
+                (`Set.member` nmsPublic)
+                envTopLevels
 
   -- name sets:
   nmsTopLevels :: Set.Set MN.Name
-  nmsTopLevels = MN.namingEnvNames modNamingEnv
+  nmsTopLevels = MN.namingEnvNames envTopLevels
 
   nmsDefined :: Set.Set MN.Name
   nmsDefined = Map.keysSet $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
     -- Correct for PublicAndPrivate
 
-  nmsPu :: Set.Set MN.Name
-  nmsPu = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
+  nmsPublic :: Set.Set MN.Name
+  nmsPublic = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
 
-  nmsPr :: Set.Set MN.Name
-  nmsPr = nmsDefined Set.\\ nmsTopLevels
+  nmsPrivate :: Set.Set MN.Name
+  nmsPrivate = nmsDefined Set.\\ nmsTopLevels
 
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
