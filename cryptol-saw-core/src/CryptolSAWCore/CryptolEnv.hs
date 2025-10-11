@@ -316,7 +316,7 @@ ioParseResult res = case res of
 -- NamingEnv and Related -------------------------------------------------------
 
 -- | @'getNamingEnv' env@ - get the full 'MR.NamingEnv' based on all
--- the 'eImports'
+-- the imports (@eImports env@).
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
   eExtraNames env
