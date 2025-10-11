@@ -121,8 +121,8 @@ tupleLookupValue pos v1 v2 =
 emptyLocal :: LocalEnv
 emptyLocal = []
 
-extendLocal :: SS.Name -> SS.Schema -> Maybe [Text] -> Value -> LocalEnv -> LocalEnv
-extendLocal x ty md v env = LocalLet x ty md v : env
+extendLocal :: SS.Pos -> SS.Name -> SS.Rebindable -> SS.Schema -> Maybe [Text] -> Value -> LocalEnv -> LocalEnv
+extendLocal pos x rb ty md v env = LocalLet pos x rb ty md v : env
 
 -- | A version of 'Control.Exception.bracket' specialized to 'TopLevel'. We
 -- can't use 'Control.Monad.Catch.bracket' because it requires 'TopLevel' to

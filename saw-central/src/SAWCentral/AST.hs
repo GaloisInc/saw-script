@@ -22,6 +22,7 @@ module SAWCentral.AST
        , Expr(..)
        , Pattern(..)
        , Stmt(..)
+       , Rebindable(..)
        , DeclGroup(..)
        , Decl(..)
        , Context(..)
@@ -177,15 +178,18 @@ instance Positioned Pattern where
 --   the position of the name.
 data Stmt
   = StmtBind     Pos Pattern Expr
-  | StmtLet      Pos DeclGroup
+  | StmtLet      Pos Rebindable DeclGroup
   | StmtCode     Pos Pos Text
   | StmtImport   Pos Import
   | StmtTypedef  Pos Pos Text Type
   deriving Show
 
+data Rebindable = RebindableVar | ReadOnlyVar
+  deriving (Eq, Show)
+
 instance Positioned Stmt where
   getPos (StmtBind pos _ _)  = pos
-  getPos (StmtLet pos _)       = pos
+  getPos (StmtLet pos _ _)       = pos
   getPos (StmtCode allpos _spos _str) = allpos
   getPos (StmtImport pos _)    = pos
   getPos (StmtTypedef allpos _apos _a _ty) = allpos
@@ -362,9 +366,13 @@ instance Pretty Stmt where
          PP.pretty expr
       StmtBind _ pat expr ->
          PP.pretty pat PP.<+> "<-" PP.<+> PP.align (PP.pretty expr)
-      StmtLet _ (NonRecursive decl) ->
-         "let" PP.<+> prettyDef decl
-      StmtLet _ (Recursive decls) ->
+      StmtLet _ rebindable (NonRecursive decl) ->
+         let header = case rebindable of
+               RebindableVar -> "let rebindable"
+               ReadOnlyVar -> "let"
+         in
+         header PP.<+> prettyDef decl
+      StmtLet _ _ (Recursive decls) ->
          "rec" PP.<+>
          PP.cat (PP.punctuate
             (PP.fillSep [PP.emptyDoc, "and" PP.<> PP.space])

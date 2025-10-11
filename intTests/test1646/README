@@ -13,3 +13,6 @@ they should have closed over the old value. This only applies to
 bindings at the syntactic top level. Bindings within functions, or
 even top-level bindings within a do-block, behave normally.
 
+Update: the syntax and typechecking for the replacement functionality
+proposed in #1646 has been implemented. However, the old behavior has
+not yet been removed.
