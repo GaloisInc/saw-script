@@ -1702,9 +1702,9 @@ envCmd = do
   rw <- SV.getMergedEnv
   let avail = rwPrimsAvail rw
       vals = rwValueInfo rw
-      keep (_x, (lc, _ty, _v, _doc)) = Set.member lc avail
+      keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail
       vals' = filter keep $ Map.assocs vals
-      printit (x, (_lc, ty, _v, _doc)) = x <> " : " <> PPS.pShowText ty
+      printit (x, (_pos, _lc, _rb, ty, _v, _doc)) = x <> " : " <> PPS.pShowText ty
   opts <- getOptions
   io $ sequence_ [ printOutLn opts Info (Text.unpack $ printit item) | item <- vals' ]
 

@@ -1,3 +1,5 @@
  Loading file "test1.saw"
  x=a
+ test1.saw:8:5-8:6: Warning: Warning: redeclaration of x
+ test1.saw:3:5-3:6: Warning: Previous declaration was here
  x=b

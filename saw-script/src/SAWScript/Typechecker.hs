@@ -47,7 +47,7 @@ import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
 
 -- short names for the environment types we use
-type VarEnv = Map Name (PrimitiveLifecycle, Schema)
+type VarEnv = Map Name (Pos, PrimitiveLifecycle, Rebindable, Schema)
 type TyEnv = Map Name (PrimitiveLifecycle, NamedType)
 
 
@@ -72,6 +72,9 @@ instance (UnifyVars a) => UnifyVars [a] where
 
 instance (UnifyVars a) => UnifyVars (PrimitiveLifecycle, a) where
   unifyVars (_lc, t) = unifyVars t
+
+instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) where
+  unifyVars (_pos, _lc, _rb, t) = unifyVars t
 
 instance UnifyVars Type where
   unifyVars t = case t of
@@ -186,6 +189,9 @@ instance (AppSubst t) => AppSubst [t] where
 instance (AppSubst t) => AppSubst (PrimitiveLifecycle, t) where
   appSubst s (lc, x) = (lc, appSubst s x)
 
+instance (AppSubst t) => AppSubst (Pos, PrimitiveLifecycle, Rebindable, t) where
+  appSubst s (pos, lc, rb, x) = (pos, lc, rb, appSubst s x)
+
 instance (Ord k, AppSubst a) => AppSubst (M.Map k a) where
   appSubst s = fmap (appSubst s)
 
@@ -219,7 +225,7 @@ instance AppSubst Pattern where
 instance AppSubst Stmt where
   appSubst s bst = case bst of
     StmtBind pos pat e       -> StmtBind pos (appSubst s pat) (appSubst s e)
-    StmtLet pos dg           -> StmtLet pos (appSubst s dg)
+    StmtLet pos rb dg        -> StmtLet pos rb (appSubst s dg)
     StmtCode allpos spos str -> StmtCode allpos spos str
     StmtImport pos imp       -> StmtImport pos imp
     StmtTypedef allpos apos a ty -> StmtTypedef allpos apos a (appSubst s ty)
@@ -475,11 +481,11 @@ getPatternContext pat0 =
              _ -> Left allpos
 
 -- Get all the bindings in a pattern.
-patternBindings :: Pattern -> [(Name, Maybe Type)]
+patternBindings :: Pattern -> [(Name, Pos, Maybe Type)]
 patternBindings pat =
   case pat of
     PWild _ _mt -> []
-    PVar _ _ x mt -> [(x, mt)]
+    PVar _ xpos x mt -> [(x, xpos, mt)]
     PTuple _ ps -> concatMap patternBindings ps
 
 -- Get all the bindings in a pattern, using a separate passed-in
@@ -498,16 +504,16 @@ patternBindings pat =
 -- should not be different from the plain patternBindings and should
 -- probably just be removed.
 --
-patternBindingsWithSchema :: Pattern -> Schema -> [(Name, Schema)]
+patternBindingsWithSchema :: Pattern -> Schema -> [(Name, Pos, Schema)]
 patternBindingsWithSchema pat sch =
   case pat of
     PWild _ _ -> []
-    PVar _ _ x _ -> [(x, sch)]
+    PVar _ xpos x _ -> [(x, xpos, sch)]
     PTuple _ ps ->
       case sch of
         Forall vs t -> case t of
           TyCon _pos (TupleCon _) ts' ->
-            let once p t' = patternBindingsWithSchema p (Forall vs t') in
+            let once pat' t' = patternBindingsWithSchema pat' (Forall vs t') in
             concat $ zipWith once ps ts'
           _ -> []
 
@@ -934,21 +940,21 @@ inferField cname (n,e) = do
     return ((n, e'), (n, t))
 
 -- Add x with type ty to the environment.
-addVar :: Name -> Schema -> TI ()
-addVar x ty = do
+addVar :: Name -> Pos -> Rebindable -> Schema -> TI ()
+addVar x pos rb ty = do
     env <- gets varEnv
-    let env' = M.insert x (Current, ty) env
+    let env' = M.insert x (pos, Current, rb, ty) env
     modify (\rw -> rw { varEnv = env' })
 
 -- Add xs with type tys to the environment.
-addVars :: [(Name, Schema)] -> TI ()
-addVars bindings = mapM_ (uncurry addVar) bindings
+addVars :: Rebindable -> [(Name, Pos, Schema)] -> TI ()
+addVars rb bindings = mapM_ (\(x, pos, ty) -> addVar x pos rb ty) bindings
 
 -- Add xs with type tys to the environment, while running m.
-withVars :: [(Name, Schema)] -> TI a -> TI a
-withVars bindings m = do
+withVars :: Rebindable -> [(Name, Pos, Schema)] -> TI a -> TI a
+withVars rb bindings m = do
     save <- gets varEnv
-    addVars bindings
+    addVars rb bindings
     result <- m
     modify (\rw -> rw { varEnv = save })
     return result
@@ -958,16 +964,16 @@ withVars bindings m = do
 -- (Note that the pattern should have already been processed so it
 -- contains types; hence the irrefutable Just t.)
 addPattern :: Pattern -> TI ()
-addPattern pat = addVars bindings
-  where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
+addPattern pat = addVars ReadOnlyVar bindings
+  where bindings = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
 
 -- Add all the vars in a pattern to the environment, while running m.
 --
 -- (Note that the pattern should have already been processed so it
 -- contains types; hence the irrefutable Just t.)
 withPattern :: Pattern -> TI a -> TI a
-withPattern pat m = withVars bindings m
-  where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
+withPattern pat m = withVars ReadOnlyVar bindings m
+  where bindings = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
 
 -- Add all the vars in a list of patterns to the environment, while
 -- running m.
@@ -975,17 +981,17 @@ withPattern pat m = withVars bindings m
 -- (Note that the patterns should have already been processed so they
 -- contain types; hence the irrefutable Just t.)
 withPatterns :: [Pattern] -> TI a -> TI a
-withPatterns pats m = withVars allbindings m
+withPatterns pats m = withVars ReadOnlyVar allbindings m
   where
-     bindings pat = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
+     bindings pat = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
      allbindings = concatMap bindings pats
 
 -- Add all the vars in a pattern to the environment.
 --
 -- Variant version that uses the passed-in schema to produce the types
 -- and ignoring the types already loaded into the pattern.
-addPatternSchema :: Pattern -> Schema -> TI ()
-addPatternSchema pat ty = addVars bindings
+addPatternSchema :: Pattern -> Rebindable -> Schema -> TI ()
+addPatternSchema pat rb ty = addVars rb bindings
   where bindings = patternBindingsWithSchema pat ty
 
 -- Add all the vars in a pattern to the environment, while running m.
@@ -993,16 +999,16 @@ addPatternSchema pat ty = addVars bindings
 -- Variant version that uses the passed-in schema to produce the types
 -- and ignoring the types already loaded into the pattern.
 withPatternSchema :: Pattern -> Schema -> TI a -> TI a
-withPatternSchema pat ty m = withVars bindings m
+withPatternSchema pat ty m = withVars ReadOnlyVar bindings m
   where bindings = patternBindingsWithSchema pat ty
 
 -- Add all the vars in a declaration to the environment.
 --
 -- Do nothing if there's no type schema in this declaration yet.
 -- XXX: is that reasonable? shouldn't it panic?
-addDecl :: Decl -> TI ()
-addDecl (Decl _ _ Nothing _) = return ()
-addDecl (Decl _ p (Just s) _) = addPatternSchema p s
+addDecl :: Rebindable -> Decl -> TI ()
+addDecl _rb (Decl _ _ Nothing _) = return ()
+addDecl rb (Decl _ p (Just s) _) = addPatternSchema p rb s
 
 -- Add all the vars in a declaration to the environment, while running m.
 --
@@ -1013,9 +1019,9 @@ withDecl (Decl _ _ Nothing _) m = m
 withDecl (Decl _ p (Just s) _) m = withPatternSchema p s m
 
 -- Add all the vars in a declaration to the environment, while running m.
-addDeclGroup :: DeclGroup -> TI ()
-addDeclGroup (NonRecursive d) = addDecl d
-addDeclGroup (Recursive ds) = mapM_ addDecl ds
+addDeclGroup :: Rebindable -> DeclGroup -> TI ()
+addDeclGroup rb (NonRecursive d) = addDecl rb d
+addDeclGroup rb (Recursive ds) = mapM_ (addDecl rb) ds
 
 -- Add all the vars in a declaration to the environment, while running m.
 withDeclGroup :: DeclGroup -> TI a -> TI a
@@ -1135,7 +1141,7 @@ inferExpr (ln, expr) = case expr of
           recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
           t <- getFreshTyVar pos
           return (Var pos x, t)
-        Just (lc, Forall as t)
+        Just (_prevpos, lc, _rebindable, Forall as t)
          | S.member lc avail -> do
           when (isDeprecated lc) $
               case t of
@@ -1161,7 +1167,7 @@ inferExpr (ln, expr) = case expr of
           return (Var pos x, t')
 
   Lambda pos mname pat body -> do
-      (typat, pat') <- inferPattern pat
+      (typat, pat') <- inferPattern ln ReadOnlyVar pat
       (body', tybody) <- withPattern pat' $ inferExpr (ln, body)
       let e' = Lambda pos mname pat' body'
           ty = tFun (PosInferred InfContext (getPos body)) typat tybody
@@ -1179,7 +1185,7 @@ inferExpr (ln, expr) = case expr of
       return (Application pos f' arg', rettype)
 
   Let pos dg body -> do
-      dg' <- inferDeclGroup dg
+      dg' <- inferDeclGroup ReadOnlyVar dg
       (body', ty) <- withDeclGroup dg' (inferExpr (ln, body))
       let e' = Let pos dg' body'
       return (e', ty)
@@ -1214,8 +1220,13 @@ checkExpr cname e t = do
 --
 -- There may already be types in the pattern if there were explicit
 -- type annotations in the input; if so don't throw them away.
-inferPattern :: Pattern -> TI (Type, Pattern)
-inferPattern pat =
+--
+-- If the enclosing context says "rebindable", either
+--    - the variable is not already present in the environment
+--    - or it is present and already declared "rebindable", in which
+--      case it must have the same type.
+inferPattern :: ContextName -> Rebindable -> Pattern -> TI (Type, Pattern)
+inferPattern cname rebindable pat =
   let resolveType pos mt = case mt of
         Nothing -> getFreshTyVar pos
         Just t -> checkType kindStar t
@@ -1226,16 +1237,61 @@ inferPattern pat =
          return (t, PWild pos (Just t))
     PVar allpos xpos x mt ->
       do t <- resolveType allpos mt
+         env <- gets varEnv
+         case M.lookup x env of
+             Nothing -> pure ()
+             Just (prevpos, lc, prevrb, tyscheme) -> case rebindable of
+                 RebindableVar -> do
+                     let croak msg =
+                           recordError xpos $ "Cannot rebind " ++
+                                              Text.unpack x ++ ": " ++ msg
+                     avail <- asks primsAvail
+                     when (not $ S.member lc avail) $
+                         croak "A previous binding exists but is hidden"
+                     oldt <- case tyscheme of
+                         Forall [] oldt' -> pure oldt'
+                         Forall (_ : _) _ -> do
+                             croak "Polymorphic objects cannot be rebound"
+                             getErrorTyVar xpos
+                     when (prevrb == ReadOnlyVar) $
+                         croak "Previous binding was not tagged 'rebindable'"
+                     unify cname oldt prevpos t
+                 ReadOnlyVar -> do
+                     -- The ocaml-style behavior of being able to do
+                     --    let x = 3;
+                     --    let x = foo x;
+                     --    let x = bar x;
+                     -- to create successive versions of x is often
+                     -- convenient, and an unconditional
+                     -- warning defeats that. However, the historical
+                     -- behavior of SAWScript (in certain contexts)
+                     -- is to mutate x, such that
+                     --     let x = 3;
+                     --     let y = x;
+                     --     let x = 4;
+                     --     print y;
+                     -- would print 4. Therefore, we warn aggressively
+                     -- in case anyone was relying on the old
+                     -- behavior.
+                     --
+                     -- FUTURE: we currently can't identify the scopes
+                     -- that are involved; in the future we might want
+                     -- to (a) issue this warning only for rebinds at
+                     -- the syntactic top level, and (b) have a
+                     -- different warning for locals that shadow
+                     -- variables from outer scopes.
+                     recordWarning xpos $ "Warning: redeclaration of " ++ Text.unpack x
+                     recordWarning prevpos $ "Previous declaration was here"
          return (t, PVar allpos xpos x (Just t))
     PTuple pos ps ->
-      do (ts, ps') <- unzip <$> mapM inferPattern ps
+      do (ts, ps') <- unzip <$> mapM (inferPattern cname rebindable) ps
          return (tTuple (PosInferred InfTerm pos) ts, PTuple pos ps')
 
 -- Check the type of a pattern, by inferring and then unifying the
 -- result.
-checkPattern :: ContextName -> Type -> Pattern -> TI Pattern
-checkPattern cname t pat =
-  do (pt, pat') <- inferPattern pat
+checkPattern :: Rebindable -> ContextName -> Type -> Pattern -> TI Pattern
+checkPattern rebindable cname t pat =
+  do (pt, pat') <- inferPattern cname rebindable pat
      unify cname t (getPos pat) pt
      return pat'
 
@@ -1292,7 +1348,7 @@ inferStmt :: ContextName -> Bool -> Pos -> Type -> Stmt -> TI Stmt
 inferStmt cname atSyntacticTopLevel blockpos ctx s =
     case s of
         StmtBind spos pat e -> do
-            (pty, pat') <- inferPattern pat
+            (pty, pat') <- inferPattern cname ReadOnlyVar pat
             -- The expression should be of monad type. The
             -- straightforward way to proceed here is to unify both
             -- the monad type (ctx) and the result type expected by
@@ -1408,10 +1464,13 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
             let s' = StmtBind spos pat' e''
             addPattern pat'
             return s'
-        StmtLet spos dg -> do
-            dg' <- inferDeclGroup dg
-            let s' = StmtLet spos dg'
-            addDeclGroup dg'
+        StmtLet spos rebindable dg -> do
+            when (rebindable == RebindableVar && not atSyntacticTopLevel) $ do
+                recordError spos $ "Invalid use of 'rebindable'"
+                recordError spos $ "It is only allowed at the syntactic top level"
+            dg' <- inferDeclGroup rebindable dg
+            let s' = StmtLet spos rebindable dg'
+            addDeclGroup rebindable dg'
             return s'
         StmtCode _allpos _spos _txt ->
             return s
@@ -1610,9 +1669,11 @@ requireFunction pos ty = do
 -- the declaration, it shows up as a type signature in the expression.
 --
 -- This function does _not_ update the variable environment to reflect
--- the declaration. The caller does that. XXX: this seems messy.
-inferDecl :: Decl -> TI Decl
-inferDecl d@(Decl pos pat _ e) = do
+-- the declaration. The caller does that. XXX: this seems messy. (But
+-- note that checkDecl is used by the :type REPL command, which
+-- shouldn't update anything, so it's not open and shut.)
+inferDecl :: Rebindable -> Decl -> TI Decl
+inferDecl rebindable d@(Decl pos pat _ e) = do
     let cname = getPatternContext pat
 
     -- collect the free type variables
@@ -1624,7 +1685,7 @@ inferDecl d@(Decl pos pat _ e) = do
     withAbstractTyVars foralls $ do
         -- Check the body and check the pattern against the body.
         (e', t) <- inferExpr (cname, e)
-        pat' <- checkPattern cname t pat
+        pat' <- checkPattern rebindable cname t pat
 
         -- Use `generalize` to build the type scheme.
         ~[(e1,s)] <- generalize foralls [e'] [t]
@@ -1652,6 +1713,7 @@ inferRecDecls ds = do
                       "Empty list of declarations in recursive group"
                   ]
             p : _ -> p
+        cname = getPatternContext firstPat
 
     -- Collect the free type variables.
     foralls <- M.unions <$> mapM inspectDeclFTVs ds
@@ -1660,7 +1722,7 @@ inferRecDecls ds = do
     -- bodies.
     withAbstractTyVars foralls $ do
       -- Check the patterns first to get types.
-      (_ts, pats') <- unzip <$> mapM inferPattern pats
+      (_ts, pats') <- unzip <$> mapM (inferPattern cname ReadOnlyVar) pats
 
       -- Check all the expressions in an environment that includes
       -- all the bound variables.
@@ -1674,7 +1736,7 @@ inferRecDecls ds = do
       -- unification vars for any missing types. Running it through
       -- again will have no further effect, so we can ignore the
       -- theoretically-updated-again patterns returned by checkPattern.
-      sequence_ $ zipWith (checkPattern (getPatternContext firstPat)) tys pats'
+      sequence_ $ zipWith (checkPattern ReadOnlyVar (getPatternContext firstPat)) tys pats'
 
       -- Run generalize and get back a list of updated expressions and
       -- type schemes.
@@ -1687,12 +1749,17 @@ inferRecDecls ds = do
       return ds'
 
 -- Type inference for a decl group.
-inferDeclGroup :: DeclGroup -> TI DeclGroup
-inferDeclGroup (NonRecursive d) = do
-    d' <- inferDecl d
+inferDeclGroup :: Rebindable -> DeclGroup -> TI DeclGroup
+inferDeclGroup rebindable (NonRecursive d) = do
+    d' <- inferDecl rebindable d
     return (NonRecursive d')
 
-inferDeclGroup (Recursive ds) = do
+inferDeclGroup rebindable (Recursive ds) = do
+    -- The parser doesn't accept "rec rebindable" so panic if it appears.
+    when (rebindable == RebindableVar) $
+        panic "inferDeclGroup" [
+            "Found 'rebindable' on a 'rec' declaration"
+        ]
     ds' <- inferRecDecls ds
     return (Recursive ds')
 
@@ -1913,7 +1980,7 @@ checkStmt avail env tenv ctx stmt =
 -- environments to use.
 checkDecl :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Decl -> Result Decl
 checkDecl avail env tenv decl =
-    evalTIWithEnv avail env tenv (inferDecl decl)
+    evalTIWithEnv avail env tenv (inferDecl ReadOnlyVar decl)
 
 -- | Check a found type (first argument) against an expected type
 --   (second argument) and return True if they can be unified.
