@@ -775,14 +775,18 @@ importCryptolModule sc env src as vis imps =
                Nothing  -> panic "importImportModule" []
         modNamingEnv = ME.lmNamingEnv lm
 
-        nms1a :: Set.Set MN.Name
-        nms1a = Map.keysSet $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
+        nmsPuPr1 :: Set.Set MN.Name
+        nmsPuPr1 = Map.keysSet $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
           -- Correct for PublicAndPrivate
 
-        nms1b :: [MN.Name]
-        nms1b = map MI.ifDeclName
+        nmsPuPr2 :: [MN.Name]
+        nmsPuPr2 = map MI.ifDeclName
               $ Map.elems $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
-           -- Equiv to nms1a
+           -- Equiv to nmsPuPr1
+
+        nmsPuPr3 :: Set.Set MN.Name
+        nmsPuPr3 = MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm
+          -- works, but doesn't "inline" submodule defs.
 
         -- ne = getNamingEnvForImport (eModuleEnv env') import'
 
@@ -790,14 +794,13 @@ importCryptolModule sc env src as vis imps =
         nmsPu = MI.ifsPublic  $ MI.ifNames $ ME.lmInterface lm
           -- Correct for PublicOnly
 
-        nmsPriv :: Set.Set MN.Name
-        nmsPriv = nms1a Set.\\ nmsPu
+        nmsTopLevels :: Set.Set MN.Name
+        nmsTopLevels = MN.namingEnvNames modNamingEnv
 
-        nmsPP :: Set.Set MN.Name
-        nmsPP = MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm
-          -- works, but doesn't "inline" submodule defs.
+        nmsPr :: Set.Set MN.Name
+        nmsPr = nmsPuPr1 Set.\\ nmsTopLevels
 
-        envPriv = MN.namingEnvFromNames' generalNameToPName nmsPriv
+        envPriv = MN.namingEnvFromNames' generalNameToPName nmsPr
 
     let ppList' s ns =
           do
@@ -805,18 +808,22 @@ importCryptolModule sc env src as vis imps =
           putStrLn ""
 
     putStrLn "* LOG: BEGIN importCrytolModule:"
-    print $ text "* LOG: (namingEnvFromNames nms1a):\n"
-                  <> pp (MN.namingEnvFromNames nms1a)
+    print $ text "* LOG: (namingEnvFromNames nmsPuPr1):\n"
+                  <> pp (MN.namingEnvFromNames nmsPuPr1)
     putStrLn "* LOG: various names:"
-    ppList' "nms1a"   (Set.toList nms1a)
-    ppList' "nms1b"   nms1b
-    ppList' "nmsPu"   (Set.toList nmsPu)
-    ppList' "nmsPuPr" (Set.toList nmsPP)
-    ppList' "nmsPriv" (Set.toList nmsPriv)
+    ppList' "nmsPuPr1"  (Set.toList nmsPuPr1)
+    ppList' "nmsPuPr2"  nmsPuPr2
+    ppList' "nmsPuPr3"  (Set.toList nmsPuPr3)
+    ppList' "nmsPu"     (Set.toList nmsPu)
+    ppList' "nmsPr"     (Set.toList nmsPr)
 
-    putStrLn "* LOG: print(ms1a):"
+    putStrLn "* LOG: print(nmsPuPr1):"
     mapM_ (\n->print n >> putStrLn "")
-          (Set.toList nms1a)
+          (Set.toList nmsPuPr1)
+
+    putStrLn $ "* LOG: (findAmbig modNamingEnv) = "
+               ++ show (MN.findAmbig modNamingEnv)
+      -- this should be [], then the following works:
 
     print $ text "* LOG: print modNamingEnv:\n"
     flip mapM_ (Map.toList $ MN.namespaceMap C.NSValue modNamingEnv) $
@@ -877,8 +884,6 @@ importCryptolModule sc env src as vis imps =
 
         return $ getQualifiedPrivateDefs sm
 
-    putStrLn $ "* LOG: (findAmbig modNamingEnv) = "
-               ++ show (MN.findAmbig modNamingEnv)
     let smPrivateNamingEnv = mconcat smPrivates
     print $ text "* LOG: smPrivateNamingEnv:\n" <> pp smPrivateNamingEnv
     {-
