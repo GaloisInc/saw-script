@@ -4,9 +4,8 @@ import "HWithSubmodules.cry" as HI;
 
 print (eval_int {{HI::a}});      // public, should succeed.
 print (eval_int {{HI::b}});      // private, should succeed.
-print (eval_int {{HI::H2::c}});   // public, should succeed.
-fails (do {print (eval_int {{ HI::H2::d }});});   // private, should succeed.
-  //
+print (eval_int {{HI::H2::c}});  // public, should succeed.
+print (eval_int {{HI::H2::d}});  // private, should succeed.
 
 //////////////////////////////////////////////
 // testing cryptol_load
@@ -15,15 +14,10 @@ print HL;
 
 print (eval_int {{HL::a}});      // public, should succeed.
 print (eval_int {{HL::b}});      // private, should succeed.
-print (eval_int {{HL::H2::c}});   // public, should succeed.
-
-fails (do {print (eval_int {{HL::H2::d}});});   // private, should succeed.
+print (eval_int {{HL::H2::c}});  // public, should succeed.
+print (eval_int {{HL::H2::d}});  // private, should succeed.
 
 do {x <- cryptol_extract HL "a"; print x;};      // public, should succeed.
 do {x <- cryptol_extract HL "b"; print x;};      // private, should succeed.
 do {x <- cryptol_extract HL "H2::c"; print x;};  // public, should succeed.
-fails (do {x <- cryptol_extract HL "H2::d"; print x;});  // private, should succeed.
-
-// QUESTION:
-//   This does seem to 'match' what `cryptol` REPL does.
-//   What we want?
+do {x <- cryptol_extract HL "H2::d"; print x;};  // private, should succeed.
