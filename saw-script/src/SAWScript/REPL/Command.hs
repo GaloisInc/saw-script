@@ -199,7 +199,7 @@ typeOfCmd str
        Right expr -> return expr
      let pos = getPos expr
          decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
-     rw <- getValueEnvironment
+     rw <- getTopLevelRWForValues
      decl' <- do
        let primsAvail = rwPrimsAvail rw
            valueInfo = rwValueInfo rw
@@ -223,7 +223,7 @@ searchCmd str
      pat <- case SAWScript.Parser.parseSchemaPattern tokens of
        Left err -> fail (show err)
        Right pat -> return pat
-     rw <- getValueEnvironment
+     rw <- getTopLevelRWForValues
 
      -- Always search the entire environment and recognize all type
      -- names in the user's pattern, regardless of whether
@@ -339,7 +339,7 @@ quitCmd  = stop
 
 envCmd :: REPL ()
 envCmd = do
-  rw <- getValueEnvironment
+  rw <- getTopLevelRWForValues
   let avail = rwPrimsAvail rw
       valueInfo = rwValueInfo rw
       keep (_pos, lc, _rb, _ty, _v, _doc) = Set.member lc avail
@@ -350,7 +350,7 @@ envCmd = do
 
 tenvCmd :: REPL ()
 tenvCmd = do
-  rw <- getValueEnvironment
+  rw <- getTopLevelRWForValues
   let avail = rwPrimsAvail rw
       typeInfo = rwTypeInfo rw
       typeInfo' = Map.filter (\(lc, _ty) -> Set.member lc avail) typeInfo
@@ -362,7 +362,7 @@ helpCmd :: String -> REPL ()
 helpCmd cmd
   | null cmd = io (mapM_ putStrLn (genHelp commandList))
   | otherwise =
-    do env <- getEnvironment
+    do env <- getTopLevelRW
        case Map.lookup (Text.pack cmd) (rwValueInfo env) of
          Just (_pos, _lc, _rb, _ty, _v, Just doc) ->
            io $ mapM_ TextIO.putStrLn doc
