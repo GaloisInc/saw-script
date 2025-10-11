@@ -49,9 +49,9 @@ module SAWScript.REPL.Monad (
     -- ** SAWScript stuff
   , getSharedContext
   , getTopLevelRO
-  , getValueEnvironment
-  , getEnvironment, modifyEnvironment, putEnvironment
-  , getEnvironmentRef
+  , getTopLevelRWForValues
+  , getTopLevelRW, modifyTopLevelRW, putTopLevelRW
+  , getTopLevelRWRef
   , getProofStateRef
   , getSAWScriptValueNames
   , getSAWScriptTypeNames
@@ -113,11 +113,11 @@ deriving instance Typeable AIG.Proxy
 
 -- REPL Environment.
 data Refs = Refs
-  { eContinue   :: IORef Bool
-  , eIsBatch    :: Bool
-  , eTopLevelRO :: TopLevelRO
-  , environment :: IORef TopLevelRW
-  , proofState  :: Maybe (IORef ProofState)
+  { rContinue   :: IORef Bool
+  , rIsBatch    :: Bool
+  , rTopLevelRO :: TopLevelRO
+  , rTopLevelRW :: IORef TopLevelRW
+  , rProofState :: Maybe (IORef ProofState)
   }
 
 -- | Initial, empty environment.
@@ -127,11 +127,11 @@ defaultRefs isBatch opts =
      contRef <- newIORef True
      rwRef <- newIORef rw
      return Refs
-       { eContinue   = contRef
-       , eIsBatch    = isBatch
-       , eTopLevelRO = ro
-       , environment = rwRef
-       , proofState  = Nothing
+       { rContinue   = contRef
+       , rIsBatch    = isBatch
+       , rTopLevelRO = ro
+       , rTopLevelRW = rwRef
+       , rProofState  = Nothing
        }
 
 
@@ -158,11 +158,11 @@ subshell (REPL m) = TopLevel_ $
        do contRef <- newIORef True
           rwRef <- newIORef rw
           let refs = Refs
-                     { eContinue = contRef
-                     , eIsBatch  = False
-                     , eTopLevelRO = ro
-                     , environment = rwRef
-                     , proofState  = Nothing
+                     { rContinue = contRef
+                     , rIsBatch  = False
+                     , rTopLevelRO = ro
+                     , rTopLevelRW = rwRef
+                     , rProofState  = Nothing
                      }
           m refs
           readIORef rwRef
@@ -178,11 +178,11 @@ proof_subshell (REPL m) =
           rwRef <- newIORef rw
           proofRef <- newIORef proofSt
           let refs = Refs
-                     { eContinue = contRef
-                     , eIsBatch  = False
-                     , eTopLevelRO = ro
-                     , environment = rwRef
-                     , proofState  = Just proofRef
+                     { rContinue = contRef
+                     , rIsBatch  = False
+                     , rTopLevelRO = ro
+                     , rTopLevelRW = rwRef
+                     , rProofState  = Just proofRef
                      }
           m refs
           (,) <$> readIORef rwRef <*> readIORef proofRef
@@ -291,7 +291,7 @@ rethrowEvalError m = run `X.catch` rethrow
 
 exceptionProtect :: REPL () -> REPL ()
 exceptionProtect cmd =
-      do chk <- io . makeCheckpoint =<< getEnvironment
+      do chk <- io . makeCheckpoint =<< getTopLevelRW
          cmd `catch`      (handlerPP chk)
              `catchFail`  (handlerFail chk)
              `catchOther` (handlerPrint chk)
@@ -312,7 +312,7 @@ exceptionProtect cmd =
 liftTopLevel :: TopLevel a -> REPL a
 liftTopLevel m =
   do ro  <- getTopLevelRO
-     ref <- getEnvironmentRef
+     ref <- getTopLevelRWRef
      io $ do rw <- readIORef ref
              (a, rw') <- runTopLevel m ro rw
              writeIORef ref rw'
@@ -347,7 +347,7 @@ modifyRef r f = REPL (\refs -> modifyIORef (r refs) f)
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
 getPrompt =
-  do batch <- REPL (return . eIsBatch)
+  do batch <- REPL (return . rIsBatch)
      if batch then return ""
      else
        getProofStateRef >>= \case
@@ -357,14 +357,14 @@ getPrompt =
               return ("proof ("++show (length (psGoals ps))++")> ")
 
 shouldContinue :: REPL Bool
-shouldContinue = readRef eContinue
+shouldContinue = readRef rContinue
 
 stop :: REPL ()
-stop = modifyRef eContinue (const False)
+stop = modifyRef rContinue (const False)
 
 unlessBatch :: REPL () -> REPL ()
 unlessBatch body =
-  do batch <- REPL (return . eIsBatch)
+  do batch <- REPL (return . rIsBatch)
      unless batch body
 
 setREPLTitle :: REPL ()
@@ -456,44 +456,44 @@ setModuleEnv :: M.ModuleEnv -> REPL ()
 setModuleEnv me = modifyCryptolEnv (\ce -> ce { eModuleEnv = me })
 
 getCryptolEnv :: REPL CryptolEnv
-getCryptolEnv = rwCryptol `fmap` getEnvironment
+getCryptolEnv = rwCryptol `fmap` getTopLevelRW
 
 modifyCryptolEnv :: (CryptolEnv -> CryptolEnv) -> REPL ()
-modifyCryptolEnv f = modifyEnvironment (\rw -> rw { rwCryptol = f (rwCryptol rw) })
+modifyCryptolEnv f = modifyTopLevelRW (\rw -> rw { rwCryptol = f (rwCryptol rw) })
 
 setCryptolEnv :: CryptolEnv -> REPL ()
 setCryptolEnv x = modifyCryptolEnv (const x)
 
 getSharedContext :: REPL SharedContext
-getSharedContext = rwSharedContext <$> getEnvironment
+getSharedContext = rwSharedContext <$> getTopLevelRW
 
 getTopLevelRO :: REPL TopLevelRO
-getTopLevelRO = REPL (return . eTopLevelRO)
+getTopLevelRO = REPL (return . rTopLevelRO)
 
-getEnvironmentRef :: REPL (IORef TopLevelRW)
-getEnvironmentRef = environment <$> getRefs
+getTopLevelRWRef :: REPL (IORef TopLevelRW)
+getTopLevelRWRef = rTopLevelRW <$> getRefs
 
 getProofStateRef :: REPL (Maybe (IORef ProofState))
-getProofStateRef = proofState <$> getRefs
+getProofStateRef = rProofState <$> getRefs
 
-getEnvironment :: REPL TopLevelRW
-getEnvironment = readRef environment
+getTopLevelRW :: REPL TopLevelRW
+getTopLevelRW = readRef rTopLevelRW
 
-getValueEnvironment :: REPL TopLevelRW
-getValueEnvironment =
-  do rw <- getEnvironment
+getTopLevelRWForValues :: REPL TopLevelRW
+getTopLevelRWForValues =
+  do rw <- getTopLevelRW
      io (mergeLocalEnv (rwSharedContext rw) (rwLocalEnv rw) rw)
 
-putEnvironment :: TopLevelRW -> REPL ()
-putEnvironment = modifyEnvironment . const
+putTopLevelRW :: TopLevelRW -> REPL ()
+putTopLevelRW = modifyTopLevelRW . const
 
-modifyEnvironment :: (TopLevelRW -> TopLevelRW) -> REPL ()
-modifyEnvironment = modifyRef environment
+modifyTopLevelRW :: (TopLevelRW -> TopLevelRW) -> REPL ()
+modifyTopLevelRW = modifyRef rTopLevelRW
 
 -- | Get visible variable names for Haskeline completion.
 getSAWScriptValueNames :: REPL [String]
 getSAWScriptValueNames = do
-  env <- getEnvironment
+  env <- getTopLevelRW
   let avail = rwPrimsAvail env
       visible (_, lc, _, _, _, _) = Set.member lc avail
   let rnames = Map.keys $ Map.filter visible $ rwValueInfo env
@@ -502,7 +502,7 @@ getSAWScriptValueNames = do
 -- | Get visible type names for Haskeline completion.
 getSAWScriptTypeNames :: REPL [String]
 getSAWScriptTypeNames = do
-  env <- getEnvironment
+  env <- getTopLevelRW
   let avail = rwPrimsAvail env
       visible (lc, _) = Set.member lc avail
   let rnames = Map.keys $ Map.filter visible $ rwTypeInfo env
