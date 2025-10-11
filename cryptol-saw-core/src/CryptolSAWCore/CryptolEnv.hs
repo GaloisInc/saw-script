@@ -364,7 +364,7 @@ computeNamingEnv lm vis =
      <>
      -- we must create a new NamingEnv (since the privates are not
      -- in `envTopLevels`):
-     MN.namingEnvFromNames' generalNameToPName nmsPrivate
+     MN.namingEnvFromNames' MN.nameToPNameWithQualifiers nmsPrivate
 
   envPublic :: MR.NamingEnv
   envPublic = MN.filterUNames
@@ -852,7 +852,7 @@ importCryptolModule sc env src as vis imps =
         nmsPr :: Set.Set MN.Name
         nmsPr = nmsPuPr1 Set.\\ nmsTopLevels
 
-        envPriv = MN.namingEnvFromNames' generalNameToPName nmsPr
+        envPriv = MN.namingEnvFromNames' MN.nameToPNameWithQualifiers nmsPr
 
         nmsNested :: Set.Set MN.Name
         nmsNested = MI.ifsNested $ MI.ifNames $ ME.lmInterface lm
@@ -1256,21 +1256,3 @@ moduleCmdResult (res, ws) = do
     notDefaulting :: TE.Warning -> Bool
     notDefaulting (TE.DefaultingTo {}) = False
     notDefaulting _ = True
-
-
--- do these have better home?
-
-generalNameToPName :: T.Name -> P.PName
-generalNameToPName n =
-  case MN.nameInfo n of
-    MN.GlobalName _ og   -> generalOrigNameToPName og
-    MN.LocalName _ _ txt -> P.mkUnqual txt
-
-generalOrigNameToPName :: C.OrigName -> P.PName
-generalOrigNameToPName og =
-  case C.modPathSplit (C.ogModule og) of
-    (_top,[] ) -> P.UnQual ident
-    (_top,ids) -> P.Qual (C.packModName (map identText ids)) ident
-
-  where
-  ident = C.ogName og
