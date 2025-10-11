@@ -330,28 +330,49 @@ getNamingEnvForImport :: ME.ModuleEnv
                       -> MR.NamingEnv
 getNamingEnvForImport modEnv (vis, imprt) =
     MN.interpImportEnv imprt -- adjust for qualified imports
-  $ adjustVisible            -- adjust if OnlyPublic names
-  $ ME.mctxNames mctx        -- namingEnv for PublicAndPrivate
-      -- FIXME: this does not do what we want: ...!
-      --  - PublicAndPrivate: cannot see privates inside submodules.
-      --  - OnlyPublic really work??
+  $ getPublicAndPrivates modEnv vis imprt
+                             -- NamingEnv for PublicAndPrivate definitions
+
+
+getPublicAndPrivates ::
+  ME.ModuleEnv -> ImportVisibility -> T.Import -> MR.NamingEnv
+getPublicAndPrivates modEnv vis imprt =
+
+  case vis of
+    PublicAndPrivate -> modNamingEnv <> envPriv
+    OnlyPublic       -> MN.filterUNames
+                           (`Set.member` nmsPu)
+                           modNamingEnv
 
   where
-  mctx = case ME.modContextOf impNm modEnv of
-           Just c  -> c
-           Nothing -> panic "getNamingEnvForImport"
-                        ["expecting module to be loaded: "
-                         <> Text.pack (show (pp impNm))]
-         where
-         -- | fm - name of a 'top level' import:
-         impNm :: P.ImpName MN.Name
-         impNm = P.ImpTop $ P.thing $ T.iModule imprt
+  modName ::C.ModName
+  modName = P.thing $ T.iModule imprt
 
-  adjustVisible :: MR.NamingEnv -> MR.NamingEnv
-  adjustVisible = case vis of
-    PublicAndPrivate -> id
-    OnlyPublic       ->
-      \env' -> MN.filterUNames (`Set.member` ME.mctxExported mctx) env'
+  lm = case ME.lookupModule modName modEnv of
+         Just lm' -> lm'
+         Nothing  -> panic "FIXME" ["cannot lookupModule"]
+
+  modNamingEnv = ME.lmNamingEnv lm
+
+  nmsTopLevels :: Set.Set MN.Name
+  nmsTopLevels = MN.namingEnvNames modNamingEnv
+
+  nmsPuPr1 :: Set.Set MN.Name
+  nmsPuPr1 = Map.keysSet $ MI.ifDecls $ MI.ifDefines $ ME.lmInterface lm
+    -- Correct for PublicAndPrivate
+
+  nmsPu :: Set.Set MN.Name
+  nmsPu = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
+
+  nmsPr :: Set.Set MN.Name
+  nmsPr = nmsPuPr1 Set.\\ nmsTopLevels
+
+  envPriv = MN.namingEnvFromNames' generalNameToPName nmsPr
+
+
+
+
+
 
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
@@ -772,7 +793,7 @@ importCryptolModule sc env src as vis imps =
     do
     let lm = case ME.lookupModule (T.mName mod') (eModuleEnv env') of
                Just lm' -> lm'
-               Nothing  -> panic "importImportModule" []
+               Nothing  -> panic "importCryptolModule" []
         modNamingEnv = ME.lmNamingEnv lm
 
         nmsPuPr1 :: Set.Set MN.Name
@@ -788,7 +809,7 @@ importCryptolModule sc env src as vis imps =
         nmsPuPr3 = MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm
           -- works, but doesn't "inline" submodule defs.
 
-        -- ne = getNamingEnvForImport (eModuleEnv env') import'
+        ne = getNamingEnvForImport (eModuleEnv env') import'
 
         nmsPu :: Set.Set MN.Name
         nmsPu = MI.ifsPublic  $ MI.ifNames $ ME.lmInterface lm
@@ -839,62 +860,6 @@ importCryptolModule sc env src as vis imps =
     print $ text "* LOG: pp envPriv:\n"
             <> pp envPriv
 
-    putStrLn "* LOG: importCrytolModule: submodules:"
-    smPrivates <-
-      flip mapM (Map.toList $ T.mSubmodules mod') $ \(nm,sm)->
-        do
-        putStrLn ("** LOG: submodule: " ++ show (pp nm))
-        putStrLn ("*** LOG: submodule names in scope:")
-        print $ pp (T.smInScope sm)
-        putStrLn ""
-        let modName  :: C.ModName
-            modName  = textToModName $ identText $ MN.nameIdent nm
-            modName2 :: MN.Name
-            modName2 = MI.ifsName $ T.smIface sm
-            getQualifiedPrivateDefs  sm' =
-              MN.interpImportEnv'
-                (Just modName)   -- qualify with `modName`
-                Nothing          -- no ImportSpec
-                (T.smInScope sm' `MN.without` modNamingEnv)
-            getQualifiedPrivateDefs2 sm' =
-              (MN.interpImportEnv'
-                (Just modName)   -- qualify with `modName`
-                Nothing          -- no ImportSpec
-                (T.smInScope sm')) `MN.without` modNamingEnv
-        putStrLn ("*** LOG: modName/2: ")
-        print modName
-        print modName2
-        putStrLn ""
-
-        putStrLn ("*** LOG: value map sizes:")
-        putStrLn $
-          "smInScope: "
-          ++ show (Map.size $ MN.namespaceMap C.NSValue (T.smInScope sm))
-        putStrLn $
-          "modNamingEnv: "
-          ++ show (Map.size $ MN.namespaceMap C.NSValue modNamingEnv)
-
-        putStrLn ("*** LOG: qualifiedPrivateDefs:")
-        print $ pp $ getQualifiedPrivateDefs sm
-        putStrLn ""
-
-        putStrLn ("*** LOG: qualifiedPrivateDefs2:")
-        print $ pp $ getQualifiedPrivateDefs2 sm
-        putStrLn ""
-
-        return $ getQualifiedPrivateDefs sm
-
-    let smPrivateNamingEnv = mconcat smPrivates
-    print $ text "* LOG: smPrivateNamingEnv:\n" <> pp smPrivateNamingEnv
-    {-
-    -- un-monadified for use in getNamingEnv:
-    let sms = T.mSubmodules mod'
-        submNamingEnvs =
-          map (getQualifiedPrivateDefs mod') sms
-        namingEnv' = mconcat (ME.lmNamingEnv lm : submNamingEnvs)
-
-        getQualifiedPrivateDefs mod sm
-    -}
     putStrLn "* LOG: END importCrytolModule."
 
   return $ env' {eImports= import' : eImports env }
