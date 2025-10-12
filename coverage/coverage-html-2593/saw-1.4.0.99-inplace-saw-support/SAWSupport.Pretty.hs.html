@@ -180,7 +180,7 @@ span.spaces    { background: white }
 <span class="lineno">  161 </span>
 <span class="lineno">  162 </span>    -- | Whether to show the names of local variables. Default is
 <span class="lineno">  163 </span>    --   true. If set to false, prints the deBruijn indexes instead.
-<span class="lineno">  164 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ppShowLocalNames</span></span></span> :: Bool,
+<span class="lineno">  164 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ppShowLocalNames</span></span></span> :: Bool,
 <span class="lineno">  165 </span>
 <span class="lineno">  166 </span>    -- | Maximum depth to recurse into terms. If not set, no limit.
 <span class="lineno">  167 </span>    --   Default is unset.
@@ -226,7 +226,7 @@ span.spaces    { background: white }
 <span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">ppUseAscii = False,</span>
 <span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">ppBase = 10,</span>
 <span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">ppColor = False,</span>
-<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">ppShowLocalNames = True,</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">ppShowLocalNames = <span class="nottickedoff">True</span>,</span>
 <span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff">ppMaxDepth = Nothing,</span>
 <span class="lineno">  212 </span><span class="spaces">    </span><span class="istickedoff">ppNoInlineMemoFresh = mempty,</span>
 <span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff">ppMemoStyle = Incremental,</span>
@@ -314,7 +314,7 @@ span.spaces    { background: white }
 <span class="lineno">  295 </span><span class="decl"><span class="istickedoff">pShow = show . prettyPrec 0</span></span>
 <span class="lineno">  296 </span>
 <span class="lineno">  297 </span>pShowText :: PrettyPrec a =&gt; a -&gt; Text
-<span class="lineno">  298 </span><span class="decl"><span class="nottickedoff">pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . prettyPrec 0</span></span>
+<span class="lineno">  298 </span><span class="decl"><span class="istickedoff">pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . prettyPrec <span class="nottickedoff">0</span></span></span>
 <span class="lineno">  299 </span>
 <span class="lineno">  300 </span>
 <span class="lineno">  301 </span>------------------------------------------------------------

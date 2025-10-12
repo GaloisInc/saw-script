@@ -2645,7 +2645,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2626 </span><span class="spaces">  </span><span class="istickedoff">-- the Cryptol to SAWCore translations:</span>
 <span class="lineno"> 2627 </span><span class="spaces">  </span><span class="istickedoff">tyArgs'    &lt;- mapM (importType sc env) tyArgs</span>
 <span class="lineno"> 2628 </span><span class="spaces">  </span><span class="istickedoff">b'         &lt;- importType sc env b        -- b is type of whole case expr</span>
-<span class="lineno"> 2629 </span><span class="spaces">  </span><span class="istickedoff">scrutinee' &lt;- importExpr <span class="nottickedoff">sc</span> env scrutinee</span>
+<span class="lineno"> 2629 </span><span class="spaces">  </span><span class="istickedoff">scrutinee' &lt;- importExpr sc env scrutinee</span>
 <span class="lineno"> 2630 </span><span class="spaces">  </span><span class="istickedoff">funcs'     &lt;- mapM (importExpr sc env) funcs</span>
 <span class="lineno"> 2631 </span><span class="spaces">  </span><span class="istickedoff">caseExpr   &lt;- scGlobalApply sc (identOfEnumCase nm) $</span>
 <span class="lineno"> 2632 </span><span class="spaces">                  </span><span class="istickedoff">tyArgs'             -- case is expecting the type arguments</span>

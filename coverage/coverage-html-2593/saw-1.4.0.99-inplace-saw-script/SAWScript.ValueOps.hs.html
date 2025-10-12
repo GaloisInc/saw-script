@@ -140,7 +140,7 @@ span.spaces    { background: white }
 <span class="lineno">  121 </span>emptyLocal :: LocalEnv
 <span class="lineno">  122 </span><span class="decl"><span class="nottickedoff">emptyLocal = []</span></span>
 <span class="lineno">  123 </span>
-<span class="lineno">  124 </span>extendLocal :: SS.LName -&gt; SS.Schema -&gt; Maybe String -&gt; Value -&gt; LocalEnv -&gt; LocalEnv
+<span class="lineno">  124 </span>extendLocal :: SS.Name -&gt; SS.Schema -&gt; Maybe [Text] -&gt; Value -&gt; LocalEnv -&gt; LocalEnv
 <span class="lineno">  125 </span><span class="decl"><span class="istickedoff">extendLocal x ty md v env = LocalLet x ty <span class="nottickedoff">md</span> v : env</span></span>
 <span class="lineno">  126 </span>
 <span class="lineno">  127 </span>-- | A version of 'Control.Exception.bracket' specialized to 'TopLevel'. We

@@ -174,7 +174,7 @@ span.spaces    { background: white }
 <span class="lineno">  155 </span>                      SC.Term -&gt; SC.Term -&gt; m ()
 <span class="lineno">  156 </span><span class="decl"><span class="nottickedoff">validateTermAtType sc msg trm tp =</span>
 <span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">liftIO (SC.TC.runTCM (SC.TC.typeInferComplete trm &gt;&gt;= \tp_trm -&gt;</span>
-<span class="lineno">  158 </span><span class="spaces">                         </span><span class="nottickedoff">SC.TC.checkSubtype tp_trm tp) sc []) &gt;&gt;= \case</span>
+<span class="lineno">  158 </span><span class="spaces">                         </span><span class="nottickedoff">SC.TC.checkSubtype tp_trm tp) sc mempty) &gt;&gt;= \case</span>
 <span class="lineno">  159 </span><span class="spaces">  </span><span class="nottickedoff">Right _ -&gt; return ()</span>
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="nottickedoff">Left err -&gt;</span>
 <span class="lineno">  161 </span><span class="spaces">    </span><span class="nottickedoff">throw</span>

@@ -127,7 +127,7 @@ span.spaces    { background: white }
 <span class="lineno">  108 </span>
 <span class="lineno">  109 </span>import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 <span class="lineno">  110 </span>
-<span class="lineno">  111 </span>import           SAWCore.Name (ecShortName)
+<span class="lineno">  111 </span>import           SAWCore.Name (VarName(..), ecShortName)
 <span class="lineno">  112 </span>import           SAWCore.Prelude as SAWVerifier (scEq)
 <span class="lineno">  113 </span>import           SAWCore.SharedTerm as SAWVerifier
 <span class="lineno">  114 </span>import           SAWCore.Term.Functor (unwrapTermF)
@@ -742,9 +742,9 @@ span.spaces    { background: white }
 <span class="lineno">  723 </span><span class="spaces">  </span><span class="istickedoff">do let loc = MS.conditionLoc md</span>
 <span class="lineno">  724 </span><span class="spaces">     </span><span class="istickedoff">free &lt;- OM (use osFree)</span>
 <span class="lineno">  725 </span><span class="spaces">     </span><span class="istickedoff">case unwrapTermF expect of</span>
-<span class="lineno">  726 </span><span class="spaces">       </span><span class="istickedoff">Variable ec</span>
-<span class="lineno">  727 </span><span class="spaces">         </span><span class="istickedoff">| Set.member (ecVarIndex ec) free -&gt;</span>
-<span class="lineno">  728 </span><span class="spaces">         </span><span class="istickedoff">do assignTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">md</span> <span class="nottickedoff">prepost</span> (ecVarIndex ec) real</span>
+<span class="lineno">  726 </span><span class="spaces">       </span><span class="istickedoff">Variable vn _tp</span>
+<span class="lineno">  727 </span><span class="spaces">         </span><span class="istickedoff">| Set.member (vnIndex vn) free -&gt;</span>
+<span class="lineno">  728 </span><span class="spaces">         </span><span class="istickedoff">do assignTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">md</span> <span class="nottickedoff">prepost</span> (vnIndex vn) real</span>
 <span class="lineno">  729 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  730 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno">  731 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- liftIO $ scEq sc real expect</span>

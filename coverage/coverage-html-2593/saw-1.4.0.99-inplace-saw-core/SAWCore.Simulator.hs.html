@@ -65,138 +65,138 @@ span.spaces    { background: white }
 <span class="lineno">   46 </span>import Data.IntMap (IntMap)
 <span class="lineno">   47 </span>import qualified Data.IntMap as IntMap
 <span class="lineno">   48 </span>import qualified Data.IntMap as IMap
-<span class="lineno">   49 </span>import Data.Text (Text)
-<span class="lineno">   50 </span>import qualified Data.Text as Text
-<span class="lineno">   51 </span>import Data.Traversable
-<span class="lineno">   52 </span>import GHC.Stack
-<span class="lineno">   53 </span>
-<span class="lineno">   54 </span>import SAWCore.Panic (panic)
-<span class="lineno">   55 </span>import SAWCore.Module
-<span class="lineno">   56 </span>  ( allModuleActualDefs
-<span class="lineno">   57 </span>  , allModulePrimitives
-<span class="lineno">   58 </span>  , ctorNumParams
-<span class="lineno">   59 </span>  , ctorNumArgs
-<span class="lineno">   60 </span>  , defName
-<span class="lineno">   61 </span>  , dtNumIndices
-<span class="lineno">   62 </span>  , dtNumParams
-<span class="lineno">   63 </span>  , findCtorInMap
-<span class="lineno">   64 </span>  , lookupVarIndexInMap
-<span class="lineno">   65 </span>  , resolvedNameType
-<span class="lineno">   66 </span>  , requireNameInMap
-<span class="lineno">   67 </span>  , Ctor(..)
-<span class="lineno">   68 </span>  , CtorArg(..)
-<span class="lineno">   69 </span>  , CtorArgStruct(..)
-<span class="lineno">   70 </span>  , Def(..)
-<span class="lineno">   71 </span>  , ModuleMap
-<span class="lineno">   72 </span>  , ResolvedName(..)
-<span class="lineno">   73 </span>  )
-<span class="lineno">   74 </span>import SAWCore.Name
-<span class="lineno">   75 </span>import SAWCore.SharedTerm
-<span class="lineno">   76 </span>import SAWCore.Prelude.Constants
-<span class="lineno">   77 </span>
-<span class="lineno">   78 </span>import SAWCore.Simulator.Value
-<span class="lineno">   79 </span>import SAWCore.Term.Functor
-<span class="lineno">   80 </span>import qualified SAWCore.Simulator.Prims as Prims
-<span class="lineno">   81 </span>
-<span class="lineno">   82 </span>type Id = Identity
+<span class="lineno">   49 </span>import Data.IntSet (IntSet)
+<span class="lineno">   50 </span>import qualified Data.IntSet as IntSet
+<span class="lineno">   51 </span>import Data.Text (Text)
+<span class="lineno">   52 </span>import qualified Data.Text as Text
+<span class="lineno">   53 </span>import Data.Traversable
+<span class="lineno">   54 </span>import GHC.Stack
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>import SAWCore.Panic (panic)
+<span class="lineno">   57 </span>import SAWCore.Module
+<span class="lineno">   58 </span>  ( allModuleActualDefs
+<span class="lineno">   59 </span>  , allModulePrimitives
+<span class="lineno">   60 </span>  , ctorNumParams
+<span class="lineno">   61 </span>  , ctorNumArgs
+<span class="lineno">   62 </span>  , defName
+<span class="lineno">   63 </span>  , dtNumIndices
+<span class="lineno">   64 </span>  , dtNumParams
+<span class="lineno">   65 </span>  , findCtorInMap
+<span class="lineno">   66 </span>  , lookupVarIndexInMap
+<span class="lineno">   67 </span>  , resolvedNameType
+<span class="lineno">   68 </span>  , requireNameInMap
+<span class="lineno">   69 </span>  , Ctor(..)
+<span class="lineno">   70 </span>  , CtorArg(..)
+<span class="lineno">   71 </span>  , CtorArgStruct(..)
+<span class="lineno">   72 </span>  , Def(..)
+<span class="lineno">   73 </span>  , ModuleMap
+<span class="lineno">   74 </span>  , ResolvedName(..)
+<span class="lineno">   75 </span>  )
+<span class="lineno">   76 </span>import SAWCore.Name
+<span class="lineno">   77 </span>import SAWCore.SharedTerm
+<span class="lineno">   78 </span>import SAWCore.Prelude.Constants
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>import SAWCore.Simulator.Value
+<span class="lineno">   81 </span>import SAWCore.Term.Functor
+<span class="lineno">   82 </span>import qualified SAWCore.Simulator.Prims as Prims
 <span class="lineno">   83 </span>
-<span class="lineno">   84 </span>type ThunkIn m l           = Thunk (WithM m l)
-<span class="lineno">   85 </span>type OpenValueIn m l       = OpenValue (WithM m l)
-<span class="lineno">   86 </span>--type ValueIn m l           = Value (WithM m l)
-<span class="lineno">   87 </span>type PrimIn m l            = Prims.Prim (WithM m l)
-<span class="lineno">   88 </span>type TValueIn m l          = TValue (WithM m l)
-<span class="lineno">   89 </span>type MValueIn m l          = MValue (WithM m l)
-<span class="lineno">   90 </span>type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
-<span class="lineno">   91 </span>
-<span class="lineno">   92 </span>------------------------------------------------------------
-<span class="lineno">   93 </span>-- Simulator configuration
-<span class="lineno">   94 </span>
-<span class="lineno">   95 </span>data SimulatorConfig l =
-<span class="lineno">   96 </span>  SimulatorConfig
-<span class="lineno">   97 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simPrimitive</span></span></span> :: Name -&gt; MValue l
-<span class="lineno">   98 </span>  -- ^ Interpretation of 'Primitive' terms.
-<span class="lineno">   99 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simExtCns</span></span></span> :: TermF Term -&gt; ExtCns (TValue l) -&gt; MValue l
-<span class="lineno">  100 </span>  -- ^ Interpretation of 'ExtCns' terms.
-<span class="lineno">  101 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simConstant</span></span></span> :: TermF Term -&gt; Name -&gt; TValue l -&gt; Maybe (MValue l)
-<span class="lineno">  102 </span>  -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
-<span class="lineno">  103 </span>  -- the body of the constant should be evaluated. 'Just' indicates
-<span class="lineno">  104 </span>  -- that the constant's definition should be overridden.
-<span class="lineno">  105 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simCtorApp</span></span></span> :: Name -&gt; TValue l -&gt; Maybe (MValue l)
-<span class="lineno">  106 </span>  -- ^ Interpretation of constructor terms. 'Nothing' indicates that
-<span class="lineno">  107 </span>  -- the constructor is treated as normal. 'Just' replaces the
-<span class="lineno">  108 </span>  -- constructor with a custom implementation.
-<span class="lineno">  109 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simModMap</span></span></span> :: ModuleMap
-<span class="lineno">  110 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simLazyMux</span></span></span> :: VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l
-<span class="lineno">  111 </span>  }
-<span class="lineno">  112 </span>
-<span class="lineno">  113 </span>------------------------------------------------------------
-<span class="lineno">  114 </span>-- Evaluation of terms
-<span class="lineno">  115 </span>
-<span class="lineno">  116 </span>type Env l = [Thunk l]
-<span class="lineno">  117 </span>type EnvIn m l = Env (WithM m l)
-<span class="lineno">  118 </span>
-<span class="lineno">  119 </span>-- | Meaning of an open term, parameterized by environment of bound variables
-<span class="lineno">  120 </span>type OpenValue l = Env l -&gt; MValue l
-<span class="lineno">  121 </span>
-<span class="lineno">  122 </span>{-# SPECIALIZE
-<span class="lineno">  123 </span>  evalTermF :: Show (Extra l) =&gt;
-<span class="lineno">  124 </span>    SimulatorConfigIn Id l -&gt;
-<span class="lineno">  125 </span>    (Term -&gt; OpenValueIn Id l) -&gt;
-<span class="lineno">  126 </span>    (Term -&gt; MValueIn Id l) -&gt;
-<span class="lineno">  127 </span>    TermF Term -&gt;
-<span class="lineno">  128 </span>    OpenValueIn Id l #-}
-<span class="lineno">  129 </span>
-<span class="lineno">  130 </span>{-# SPECIALIZE
-<span class="lineno">  131 </span>  evalTermF :: Show (Extra l) =&gt;
-<span class="lineno">  132 </span>    SimulatorConfigIn IO l -&gt;
-<span class="lineno">  133 </span>    (Term -&gt; OpenValueIn IO l) -&gt;
-<span class="lineno">  134 </span>    (Term -&gt; MValueIn IO l) -&gt;
-<span class="lineno">  135 </span>    TermF Term -&gt;
-<span class="lineno">  136 </span>    OpenValueIn IO l #-}
-<span class="lineno">  137 </span>
-<span class="lineno">  138 </span>-- | Generic evaluator for TermFs.
-<span class="lineno">  139 </span>evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =&gt;
-<span class="lineno">  140 </span>             SimulatorConfig l          -- ^ Evaluator for global constants
-<span class="lineno">  141 </span>          -&gt; (Term -&gt; OpenValue l)      -- ^ Evaluator for subterms under binders
-<span class="lineno">  142 </span>          -&gt; (Term -&gt; MValue l)         -- ^ Evaluator for subterms in the same bound variable context
-<span class="lineno">  143 </span>          -&gt; TermF Term -&gt; OpenValue l
-<span class="lineno">  144 </span><span class="decl"><span class="istickedoff">evalTermF cfg lam recEval tf env =</span>
-<span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
-<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">App t1 t2               -&gt; recEval t1 &gt;&gt;= \case</span>
-<span class="lineno">  147 </span><span class="spaces">                                 </span><span class="istickedoff">VFun f -&gt;</span>
-<span class="lineno">  148 </span><span class="spaces">                                   </span><span class="istickedoff">do x &lt;- recEvalDelay t2</span>
-<span class="lineno">  149 </span><span class="spaces">                                      </span><span class="istickedoff">f x</span>
-<span class="lineno">  150 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;evalTermF&quot; [&quot;Expected VFun&quot;]</span></span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">Lambda _nm _tp t        -&gt; pure $ VFun (\x -&gt; lam t (x : env))</span>
-<span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff">Pi _nm t1 t2            -&gt; do v &lt;- evalType t1</span>
-<span class="lineno">  153 </span><span class="spaces">                                  </span><span class="istickedoff">body &lt;-</span>
-<span class="lineno">  154 </span><span class="spaces">                                    </span><span class="istickedoff">if inBitSet 0 (looseVars t2) then</span>
-<span class="lineno">  155 </span><span class="spaces">                                      </span><span class="istickedoff">pure (VDependentPi (\x -&gt; <span class="nottickedoff">toTValue &lt;$&gt; lam t2 (x : env)</span>))</span>
-<span class="lineno">  156 </span><span class="spaces">                                    </span><span class="istickedoff">else</span>
-<span class="lineno">  157 </span><span class="spaces">                                      </span><span class="istickedoff">do -- put dummy values in the environment; the term should never reference them</span>
-<span class="lineno">  158 </span><span class="spaces">                                         </span><span class="istickedoff">let <span class="nottickedoff">val = ready VUnit</span></span>
-<span class="lineno">  159 </span><span class="spaces">                                         </span><span class="istickedoff">VNondependentPi . toTValue &lt;$&gt; lam t2 (<span class="nottickedoff">val</span> : env)</span>
+<span class="lineno">   84 </span>type Id = Identity
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>type ThunkIn m l           = Thunk (WithM m l)
+<span class="lineno">   87 </span>type OpenValueIn m l       = OpenValue (WithM m l)
+<span class="lineno">   88 </span>--type ValueIn m l           = Value (WithM m l)
+<span class="lineno">   89 </span>type PrimIn m l            = Prims.Prim (WithM m l)
+<span class="lineno">   90 </span>type TValueIn m l          = TValue (WithM m l)
+<span class="lineno">   91 </span>type MValueIn m l          = MValue (WithM m l)
+<span class="lineno">   92 </span>type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>------------------------------------------------------------
+<span class="lineno">   95 </span>-- Simulator configuration
+<span class="lineno">   96 </span>
+<span class="lineno">   97 </span>data SimulatorConfig l =
+<span class="lineno">   98 </span>  SimulatorConfig
+<span class="lineno">   99 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simPrimitive</span></span></span> :: Name -&gt; MValue l
+<span class="lineno">  100 </span>  -- ^ Interpretation of 'Primitive' terms.
+<span class="lineno">  101 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simExtCns</span></span></span> :: TermF Term -&gt; ExtCns (TValue l) -&gt; MValue l
+<span class="lineno">  102 </span>  -- ^ Interpretation of 'ExtCns' terms.
+<span class="lineno">  103 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simConstant</span></span></span> :: TermF Term -&gt; Name -&gt; TValue l -&gt; Maybe (MValue l)
+<span class="lineno">  104 </span>  -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
+<span class="lineno">  105 </span>  -- the body of the constant should be evaluated. 'Just' indicates
+<span class="lineno">  106 </span>  -- that the constant's definition should be overridden.
+<span class="lineno">  107 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simCtorApp</span></span></span> :: Name -&gt; TValue l -&gt; Maybe (MValue l)
+<span class="lineno">  108 </span>  -- ^ Interpretation of constructor terms. 'Nothing' indicates that
+<span class="lineno">  109 </span>  -- the constructor is treated as normal. 'Just' replaces the
+<span class="lineno">  110 </span>  -- constructor with a custom implementation.
+<span class="lineno">  111 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simModMap</span></span></span> :: ModuleMap
+<span class="lineno">  112 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simLazyMux</span></span></span> :: VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l
+<span class="lineno">  113 </span>  }
+<span class="lineno">  114 </span>
+<span class="lineno">  115 </span>------------------------------------------------------------
+<span class="lineno">  116 </span>-- Evaluation of terms
+<span class="lineno">  117 </span>
+<span class="lineno">  118 </span>type Env l = IntMap (Thunk l) -- indexed by VarIndex
+<span class="lineno">  119 </span>type EnvIn m l = Env (WithM m l)
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>-- | Meaning of an open term, parameterized by environment of bound variables
+<span class="lineno">  122 </span>type OpenValue l = Env l -&gt; MValue l
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>{-# SPECIALIZE
+<span class="lineno">  125 </span>  evalTermF :: Show (Extra l) =&gt;
+<span class="lineno">  126 </span>    SimulatorConfigIn Id l -&gt;
+<span class="lineno">  127 </span>    (Term -&gt; OpenValueIn Id l) -&gt;
+<span class="lineno">  128 </span>    (Term -&gt; MValueIn Id l) -&gt;
+<span class="lineno">  129 </span>    TermF Term -&gt;
+<span class="lineno">  130 </span>    OpenValueIn Id l #-}
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>{-# SPECIALIZE
+<span class="lineno">  133 </span>  evalTermF :: Show (Extra l) =&gt;
+<span class="lineno">  134 </span>    SimulatorConfigIn IO l -&gt;
+<span class="lineno">  135 </span>    (Term -&gt; OpenValueIn IO l) -&gt;
+<span class="lineno">  136 </span>    (Term -&gt; MValueIn IO l) -&gt;
+<span class="lineno">  137 </span>    TermF Term -&gt;
+<span class="lineno">  138 </span>    OpenValueIn IO l #-}
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>-- | Generic evaluator for TermFs.
+<span class="lineno">  141 </span>evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =&gt;
+<span class="lineno">  142 </span>             SimulatorConfig l          -- ^ Evaluator for global constants
+<span class="lineno">  143 </span>          -&gt; (Term -&gt; OpenValue l)      -- ^ Evaluator for subterms under binders
+<span class="lineno">  144 </span>          -&gt; (Term -&gt; MValue l)         -- ^ Evaluator for subterms in the same bound variable context
+<span class="lineno">  145 </span>          -&gt; TermF Term -&gt; OpenValue l
+<span class="lineno">  146 </span><span class="decl"><span class="istickedoff">evalTermF cfg lam recEval tf env =</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">App t1 t2               -&gt; recEval t1 &gt;&gt;= \case</span>
+<span class="lineno">  149 </span><span class="spaces">                                 </span><span class="istickedoff">VFun f -&gt;</span>
+<span class="lineno">  150 </span><span class="spaces">                                   </span><span class="istickedoff">do x &lt;- recEvalDelay t2</span>
+<span class="lineno">  151 </span><span class="spaces">                                      </span><span class="istickedoff">f x</span>
+<span class="lineno">  152 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;evalTermF&quot; [&quot;Expected VFun&quot;]</span></span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm _tp t         -&gt; pure $ VFun (\x -&gt; lam t (IntMap.insert (vnIndex nm) x env))</span>
+<span class="lineno">  154 </span><span class="spaces">    </span><span class="istickedoff">Pi nm t1 t2             -&gt; do v &lt;- evalType t1</span>
+<span class="lineno">  155 </span><span class="spaces">                                  </span><span class="istickedoff">body &lt;-</span>
+<span class="lineno">  156 </span><span class="spaces">                                    </span><span class="istickedoff">if IntSet.member (vnIndex nm) (freeVars t2) then</span>
+<span class="lineno">  157 </span><span class="spaces">                                      </span><span class="istickedoff">pure (VDependentPi (\x -&gt; <span class="nottickedoff">toTValue &lt;$&gt; lam t2 (IntMap.insert (vnIndex nm) x env)</span>))</span>
+<span class="lineno">  158 </span><span class="spaces">                                    </span><span class="istickedoff">else</span>
+<span class="lineno">  159 </span><span class="spaces">                                      </span><span class="istickedoff">VNondependentPi . toTValue &lt;$&gt; lam t2 env</span>
 <span class="lineno">  160 </span><span class="spaces">                                  </span><span class="istickedoff">return $ TValue $ VPiType v body</span>
 <span class="lineno">  161 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">LocalVar i              -&gt; force (env !! i)</span>
-<span class="lineno">  163 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">Constant nm             -&gt; do let r = requireNameInMap nm (simModMap cfg)</span>
-<span class="lineno">  165 </span><span class="spaces">                                  </span><span class="istickedoff">ty' &lt;- evalType (resolvedNameType r)</span>
-<span class="lineno">  166 </span><span class="spaces">                                  </span><span class="istickedoff">case simConstant cfg <span class="nottickedoff">tf</span> nm ty' of</span>
-<span class="lineno">  167 </span><span class="spaces">                                    </span><span class="istickedoff">Just override -&gt; override</span>
-<span class="lineno">  168 </span><span class="spaces">                                    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  169 </span><span class="spaces">                                      </span><span class="istickedoff">case r of</span>
-<span class="lineno">  170 </span><span class="spaces">                                        </span><span class="istickedoff">ResolvedCtor ctor -&gt;</span>
-<span class="lineno">  171 </span><span class="spaces">                                          </span><span class="istickedoff">ctorValue nm ty' (ctorNumParams ctor) (ctorNumArgs ctor)</span>
-<span class="lineno">  172 </span><span class="spaces">                                        </span><span class="istickedoff">ResolvedDataType dt -&gt;</span>
-<span class="lineno">  173 </span><span class="spaces">                                          </span><span class="istickedoff">dtValue nm (dtNumParams dt) (dtNumIndices dt)</span>
-<span class="lineno">  174 </span><span class="spaces">                                        </span><span class="istickedoff">ResolvedDef d -&gt;</span>
-<span class="lineno">  175 </span><span class="spaces">                                          </span><span class="istickedoff">case defBody d of</span>
-<span class="lineno">  176 </span><span class="spaces">                                            </span><span class="istickedoff">Just t -&gt; recEval t</span>
-<span class="lineno">  177 </span><span class="spaces">                                            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">simPrimitive cfg nm</span></span>
-<span class="lineno">  178 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  179 </span><span class="spaces">    </span><span class="istickedoff">Variable ec             -&gt; do ec' &lt;- traverse evalType ec</span>
-<span class="lineno">  180 </span><span class="spaces">                                  </span><span class="istickedoff">simExtCns cfg tf ec'</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">Constant nm             -&gt; do let r = requireNameInMap nm (simModMap cfg)</span>
+<span class="lineno">  163 </span><span class="spaces">                                  </span><span class="istickedoff">ty' &lt;- evalType (resolvedNameType r)</span>
+<span class="lineno">  164 </span><span class="spaces">                                  </span><span class="istickedoff">case simConstant cfg <span class="nottickedoff">tf</span> nm ty' of</span>
+<span class="lineno">  165 </span><span class="spaces">                                    </span><span class="istickedoff">Just override -&gt; override</span>
+<span class="lineno">  166 </span><span class="spaces">                                    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  167 </span><span class="spaces">                                      </span><span class="istickedoff">case r of</span>
+<span class="lineno">  168 </span><span class="spaces">                                        </span><span class="istickedoff">ResolvedCtor ctor -&gt;</span>
+<span class="lineno">  169 </span><span class="spaces">                                          </span><span class="istickedoff">ctorValue nm ty' (ctorNumParams ctor) (ctorNumArgs ctor)</span>
+<span class="lineno">  170 </span><span class="spaces">                                        </span><span class="istickedoff">ResolvedDataType dt -&gt;</span>
+<span class="lineno">  171 </span><span class="spaces">                                          </span><span class="istickedoff">dtValue nm (dtNumParams dt) (dtNumIndices dt)</span>
+<span class="lineno">  172 </span><span class="spaces">                                        </span><span class="istickedoff">ResolvedDef d -&gt;</span>
+<span class="lineno">  173 </span><span class="spaces">                                          </span><span class="istickedoff">case defBody d of</span>
+<span class="lineno">  174 </span><span class="spaces">                                            </span><span class="istickedoff">Just t -&gt; recEval t</span>
+<span class="lineno">  175 </span><span class="spaces">                                            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">simPrimitive cfg nm</span></span>
+<span class="lineno">  176 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp          -&gt; do tp' &lt;- evalType tp</span>
+<span class="lineno">  178 </span><span class="spaces">                                  </span><span class="istickedoff">case IntMap.lookup (vnIndex nm) env of</span>
+<span class="lineno">  179 </span><span class="spaces">                                    </span><span class="istickedoff">Nothing -&gt; simExtCns cfg tf (EC nm tp')</span>
+<span class="lineno">  180 </span><span class="spaces">                                    </span><span class="istickedoff">Just x -&gt; force x</span>
 <span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf              -&gt;</span>
 <span class="lineno">  182 </span><span class="spaces">      </span><span class="istickedoff">case ftf of</span>
 <span class="lineno">  183 </span><span class="spaces">        </span><span class="istickedoff">UnitValue           -&gt; <span class="nottickedoff">return VUnit</span></span>
@@ -385,7 +385,7 @@ span.spaces    { background: white }
 <span class="lineno">  366 </span>  Map Ident (PrimIn Id l) -&gt;
 <span class="lineno">  367 </span>  (ExtCns (TValueIn Id l) -&gt; MValueIn Id l) -&gt;
 <span class="lineno">  368 </span>  (Name -&gt; TValueIn Id l -&gt; Maybe (MValueIn Id l)) -&gt;
-<span class="lineno">  369 </span>  (Name -&gt; Text -&gt; EnvIn Id l -&gt; MValueIn Id l) -&gt;
+<span class="lineno">  369 </span>  (Name -&gt; Text -&gt; [ThunkIn Id l] -&gt; MValueIn Id l) -&gt;
 <span class="lineno">  370 </span>  (VBool (WithM Id l) -&gt; MValueIn Id l -&gt; MValueIn Id l -&gt; MValueIn Id l) -&gt;
 <span class="lineno">  371 </span>  Id (SimulatorConfigIn Id l) #-}
 <span class="lineno">  372 </span>{-# SPECIALIZE evalGlobal ::
@@ -394,7 +394,7 @@ span.spaces    { background: white }
 <span class="lineno">  375 </span>  Map Ident (PrimIn IO l) -&gt;
 <span class="lineno">  376 </span>  (ExtCns (TValueIn IO l) -&gt; MValueIn IO l) -&gt;
 <span class="lineno">  377 </span>  (Name -&gt; TValueIn IO l -&gt; Maybe (MValueIn IO l)) -&gt;
-<span class="lineno">  378 </span>  (Name -&gt; Text -&gt; EnvIn IO l -&gt; MValueIn IO l) -&gt;
+<span class="lineno">  378 </span>  (Name -&gt; Text -&gt; [ThunkIn IO l] -&gt; MValueIn IO l) -&gt;
 <span class="lineno">  379 </span>  (VBool (WithM IO l) -&gt; MValueIn IO l -&gt; MValueIn IO l -&gt; MValueIn IO l) -&gt;
 <span class="lineno">  380 </span>  IO (SimulatorConfigIn IO l) #-}
 <span class="lineno">  381 </span>evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =&gt;
@@ -402,7 +402,7 @@ span.spaces    { background: white }
 <span class="lineno">  383 </span>              Map Ident (Prims.Prim l) -&gt;
 <span class="lineno">  384 </span>              (ExtCns (TValue l) -&gt; MValue l) -&gt;
 <span class="lineno">  385 </span>              (Name -&gt; TValue l -&gt; Maybe (EvalM l (Value l))) -&gt;
-<span class="lineno">  386 </span>              (Name -&gt; Text -&gt; Env l -&gt; MValue l) -&gt;
+<span class="lineno">  386 </span>              (Name -&gt; Text -&gt; [Thunk l] -&gt; MValue l) -&gt;
 <span class="lineno">  387 </span>              (VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l) -&gt;
 <span class="lineno">  388 </span>              EvalM l (SimulatorConfig l)
 <span class="lineno">  389 </span><span class="decl"><span class="istickedoff">evalGlobal modmap prims extcns uninterpreted primHandler lazymux =</span>
@@ -414,7 +414,7 @@ span.spaces    { background: white }
 <span class="lineno">  395 </span>  Map Ident (PrimIn Id l) -&gt;
 <span class="lineno">  396 </span>  (TermF Term -&gt; ExtCns (TValueIn Id l) -&gt; MValueIn Id l) -&gt;
 <span class="lineno">  397 </span>  (TermF Term -&gt; Name -&gt; TValueIn Id l -&gt; Maybe (MValueIn Id l)) -&gt;
-<span class="lineno">  398 </span>  (Name -&gt; Text -&gt; EnvIn Id l -&gt; MValueIn Id l) -&gt;
+<span class="lineno">  398 </span>  (Name -&gt; Text -&gt; [ThunkIn Id l] -&gt; MValueIn Id l) -&gt;
 <span class="lineno">  399 </span>  (VBool l -&gt; MValueIn Id l -&gt; MValueIn Id l -&gt; MValueIn Id l) -&gt;
 <span class="lineno">  400 </span>  Id (SimulatorConfigIn Id l) #-}
 <span class="lineno">  401 </span>{-# SPECIALIZE evalGlobal' ::
@@ -423,7 +423,7 @@ span.spaces    { background: white }
 <span class="lineno">  404 </span>  Map Ident (PrimIn IO l) -&gt;
 <span class="lineno">  405 </span>  (TermF Term -&gt; ExtCns (TValueIn IO l) -&gt; MValueIn IO l) -&gt;
 <span class="lineno">  406 </span>  (TermF Term -&gt; Name -&gt; TValueIn IO l -&gt; Maybe (MValueIn IO l)) -&gt;
-<span class="lineno">  407 </span>  (Name -&gt; Text -&gt; EnvIn IO l -&gt; MValueIn IO l) -&gt;
+<span class="lineno">  407 </span>  (Name -&gt; Text -&gt; [ThunkIn IO l] -&gt; MValueIn IO l) -&gt;
 <span class="lineno">  408 </span>  (VBool l -&gt; MValueIn IO l -&gt; MValueIn IO l -&gt; MValueIn IO l) -&gt;
 <span class="lineno">  409 </span>  IO (SimulatorConfigIn IO l) #-}
 <span class="lineno">  410 </span>-- | A variant of 'evalGlobal' that lets the uninterpreted function
@@ -438,7 +438,7 @@ span.spaces    { background: white }
 <span class="lineno">  419 </span>  -- | Overrides for Constant terms (e.g. uninterpreted functions)
 <span class="lineno">  420 </span>  (TermF Term -&gt; Name -&gt; TValue l -&gt; Maybe (MValue l)) -&gt;
 <span class="lineno">  421 </span>  -- | Handler for stuck primitives
-<span class="lineno">  422 </span>  (Name -&gt; Text -&gt; Env l -&gt; MValue l) -&gt;
+<span class="lineno">  422 </span>  (Name -&gt; Text -&gt; [Thunk l] -&gt; MValue l) -&gt;
 <span class="lineno">  423 </span>  -- | Lazy mux operation
 <span class="lineno">  424 </span>  (VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l) -&gt;
 <span class="lineno">  425 </span>  EvalM l (SimulatorConfig l)
@@ -527,7 +527,7 @@ span.spaces    { background: white }
 <span class="lineno">  508 </span>                  SimulatorConfig l -&gt; Term -&gt; MValue l
 <span class="lineno">  509 </span><span class="decl"><span class="istickedoff">evalSharedTerm cfg t = do</span>
 <span class="lineno">  510 </span><span class="spaces">  </span><span class="istickedoff">memoClosed &lt;- mkMemoClosed cfg t</span>
-<span class="lineno">  511 </span><span class="spaces">  </span><span class="istickedoff">evalOpen <span class="nottickedoff">cfg</span> memoClosed t <span class="nottickedoff">[]</span></span></span>
+<span class="lineno">  511 </span><span class="spaces">  </span><span class="istickedoff">evalOpen cfg memoClosed t IntMap.empty</span></span>
 <span class="lineno">  512 </span>
 <span class="lineno">  513 </span>{-# SPECIALIZE mkMemoClosed ::
 <span class="lineno">  514 </span>  Show (Extra l) =&gt;
@@ -544,9 +544,9 @@ span.spaces    { background: white }
 <span class="lineno">  525 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  526 </span><span class="spaces">    </span><span class="istickedoff">-- | Map of all closed subterms of t.</span>
 <span class="lineno">  527 </span><span class="spaces">    </span><span class="istickedoff">subterms :: IntMap (TermF Term)</span>
-<span class="lineno">  528 </span><span class="spaces">    </span><span class="istickedoff">subterms = fmap fst $ IMap.filter ((== emptyBitSet) . snd) $ State.execState (go t) IMap.empty</span>
+<span class="lineno">  528 </span><span class="spaces">    </span><span class="istickedoff">subterms = fmap fst $ IMap.filter (IntSet.null . snd) $ State.execState (go t) IMap.empty</span>
 <span class="lineno">  529 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  530 </span><span class="spaces">    </span><span class="istickedoff">go :: Term -&gt; State.State (IntMap (TermF Term, BitSet)) BitSet</span>
+<span class="lineno">  530 </span><span class="spaces">    </span><span class="istickedoff">go :: Term -&gt; State.State (IntMap (TermF Term, IntSet)) IntSet</span>
 <span class="lineno">  531 </span><span class="spaces">    </span><span class="istickedoff">go (Unshared tf) = <span class="nottickedoff">termf tf</span></span>
 <span class="lineno">  532 </span><span class="spaces">    </span><span class="istickedoff">go (STApp{ stAppIndex = i, stAppTermF = tf }) =</span>
 <span class="lineno">  533 </span><span class="spaces">      </span><span class="istickedoff">do memo &lt;- State.get</span>
@@ -557,7 +557,7 @@ span.spaces    { background: white }
 <span class="lineno">  538 </span><span class="spaces">                </span><span class="istickedoff">State.modify (IMap.insert i (tf, b))</span>
 <span class="lineno">  539 </span><span class="spaces">                </span><span class="istickedoff">pure b</span>
 <span class="lineno">  540 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  541 </span><span class="spaces">    </span><span class="istickedoff">termf :: TermF Term -&gt; State.State (IntMap (TermF Term, BitSet)) BitSet</span>
+<span class="lineno">  541 </span><span class="spaces">    </span><span class="istickedoff">termf :: TermF Term -&gt; State.State (IntMap (TermF Term, IntSet)) IntSet</span>
 <span class="lineno">  542 </span><span class="spaces">    </span><span class="istickedoff">termf tf =</span>
 <span class="lineno">  543 </span><span class="spaces">      </span><span class="istickedoff">do -- if tf is a defined constant, traverse the definition body and type</span>
 <span class="lineno">  544 </span><span class="spaces">         </span><span class="istickedoff">case tf of</span>
@@ -568,7 +568,7 @@ span.spaces    { background: white }
 <span class="lineno">  549 </span><span class="spaces">                  </span><span class="istickedoff">ResolvedDef (defBody -&gt; Just body) -&gt; void $ go body</span>
 <span class="lineno">  550 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; pure <span class="nottickedoff">()</span></span>
 <span class="lineno">  551 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno">  552 </span><span class="spaces">         </span><span class="istickedoff">looseTermF &lt;$&gt; traverse go tf</span></span>
+<span class="lineno">  552 </span><span class="spaces">         </span><span class="istickedoff">freesTermF &lt;$&gt; traverse go tf</span></span>
 <span class="lineno">  553 </span>
 <span class="lineno">  554 </span>{-# SPECIALIZE evalClosedTermF ::
 <span class="lineno">  555 </span>  Show (Extra l) =&gt;
@@ -588,10 +588,10 @@ span.spaces    { background: white }
 <span class="lineno">  569 </span>                   SimulatorConfig l
 <span class="lineno">  570 </span>                -&gt; IntMap (Thunk l)
 <span class="lineno">  571 </span>                -&gt; TermF Term -&gt; MValue l
-<span class="lineno">  572 </span><span class="decl"><span class="istickedoff">evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf <span class="nottickedoff">[]</span></span>
+<span class="lineno">  572 </span><span class="decl"><span class="istickedoff">evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf IntMap.empty</span>
 <span class="lineno">  573 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  574 </span><span class="spaces">    </span><span class="istickedoff">lam = evalOpen <span class="nottickedoff">cfg</span> memoClosed</span>
-<span class="lineno">  575 </span><span class="spaces">    </span><span class="istickedoff">recEval (Unshared tf') = <span class="nottickedoff">evalTermF cfg lam recEval tf' []</span></span>
+<span class="lineno">  575 </span><span class="spaces">    </span><span class="istickedoff">recEval (Unshared tf') = <span class="nottickedoff">evalTermF cfg lam recEval tf' IntMap.empty</span></span>
 <span class="lineno">  576 </span><span class="spaces">    </span><span class="istickedoff">recEval (STApp{ stAppIndex = i }) =</span>
 <span class="lineno">  577 </span><span class="spaces">      </span><span class="istickedoff">case IMap.lookup i memoClosed of</span>
 <span class="lineno">  578 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; force x</span>
@@ -621,13 +621,13 @@ span.spaces    { background: white }
 <span class="lineno">  602 </span><span class="spaces">    </span><span class="istickedoff">go :: IntMap (Thunk l) -&gt; Term -&gt; EvalM l (IntMap (Thunk l))</span>
 <span class="lineno">  603 </span><span class="spaces">    </span><span class="istickedoff">go memo (Unshared tf) = <span class="nottickedoff">goTermF memo tf</span></span>
 <span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">go memo (t'@STApp{ stAppIndex = i, stAppTermF = tf })</span>
-<span class="lineno">  605 </span><span class="spaces">      </span><span class="istickedoff">| termIsClosed t' = pure memo</span>
+<span class="lineno">  605 </span><span class="spaces">      </span><span class="istickedoff">| closedTerm t' = pure memo</span>
 <span class="lineno">  606 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
 <span class="lineno">  607 </span><span class="spaces">        </span><span class="istickedoff">case IMap.lookup i memo of</span>
 <span class="lineno">  608 </span><span class="spaces">          </span><span class="istickedoff">Just _ -&gt; pure memo</span>
 <span class="lineno">  609 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  610 </span><span class="spaces">            </span><span class="istickedoff">do memo' &lt;- goTermF memo tf</span>
-<span class="lineno">  611 </span><span class="spaces">               </span><span class="istickedoff">thunk &lt;- delay (evalLocalTermF <span class="nottickedoff">cfg</span> memoClosed memo' tf env)</span>
+<span class="lineno">  611 </span><span class="spaces">               </span><span class="istickedoff">thunk &lt;- delay (evalLocalTermF cfg memoClosed memo' tf env)</span>
 <span class="lineno">  612 </span><span class="spaces">               </span><span class="istickedoff">pure (IMap.insert i thunk memo')</span>
 <span class="lineno">  613 </span><span class="spaces">    </span><span class="istickedoff">goTermF :: IntMap (Thunk l) -&gt; TermF Term -&gt; EvalM l (IntMap (Thunk l))</span>
 <span class="lineno">  614 </span><span class="spaces">    </span><span class="istickedoff">goTermF memo tf =</span>
@@ -637,123 +637,122 @@ span.spaces    { background: white }
 <span class="lineno">  618 </span><span class="spaces">                              </span><span class="istickedoff">go memo' t2</span>
 <span class="lineno">  619 </span><span class="spaces">        </span><span class="istickedoff">Lambda _ t1 _   -&gt; go memo t1</span>
 <span class="lineno">  620 </span><span class="spaces">        </span><span class="istickedoff">Pi _ t1 _       -&gt; go memo t1</span>
-<span class="lineno">  621 </span><span class="spaces">        </span><span class="istickedoff">LocalVar _      -&gt; pure memo</span>
-<span class="lineno">  622 </span><span class="spaces">        </span><span class="istickedoff">Constant{}      -&gt; pure memo</span>
-<span class="lineno">  623 </span><span class="spaces">        </span><span class="istickedoff">Variable ec     -&gt; <span class="nottickedoff">go memo (ecType ec)</span></span></span>
-<span class="lineno">  624 </span>
-<span class="lineno">  625 </span>{-# SPECIALIZE evalLocalTermF ::
-<span class="lineno">  626 </span>  Show (Extra l) =&gt;
-<span class="lineno">  627 </span>  SimulatorConfigIn Id l -&gt;
+<span class="lineno">  621 </span><span class="spaces">        </span><span class="istickedoff">Constant{}      -&gt; pure memo</span>
+<span class="lineno">  622 </span><span class="spaces">        </span><span class="istickedoff">Variable _nm tp -&gt; go memo tp</span></span>
+<span class="lineno">  623 </span>
+<span class="lineno">  624 </span>{-# SPECIALIZE evalLocalTermF ::
+<span class="lineno">  625 </span>  Show (Extra l) =&gt;
+<span class="lineno">  626 </span>  SimulatorConfigIn Id l -&gt;
+<span class="lineno">  627 </span>  IntMap (ThunkIn Id l) -&gt;
 <span class="lineno">  628 </span>  IntMap (ThunkIn Id l) -&gt;
-<span class="lineno">  629 </span>  IntMap (ThunkIn Id l) -&gt;
-<span class="lineno">  630 </span>  TermF Term -&gt;
-<span class="lineno">  631 </span>  OpenValueIn Id l #-}
-<span class="lineno">  632 </span>{-# SPECIALIZE evalLocalTermF ::
-<span class="lineno">  633 </span>  Show (Extra l) =&gt;
-<span class="lineno">  634 </span>  SimulatorConfigIn IO l -&gt;
+<span class="lineno">  629 </span>  TermF Term -&gt;
+<span class="lineno">  630 </span>  OpenValueIn Id l #-}
+<span class="lineno">  631 </span>{-# SPECIALIZE evalLocalTermF ::
+<span class="lineno">  632 </span>  Show (Extra l) =&gt;
+<span class="lineno">  633 </span>  SimulatorConfigIn IO l -&gt;
+<span class="lineno">  634 </span>  IntMap (ThunkIn IO l) -&gt;
 <span class="lineno">  635 </span>  IntMap (ThunkIn IO l) -&gt;
-<span class="lineno">  636 </span>  IntMap (ThunkIn IO l) -&gt;
-<span class="lineno">  637 </span>  TermF Term -&gt;
-<span class="lineno">  638 </span>  OpenValueIn IO l #-}
-<span class="lineno">  639 </span>-- | Evaluator for open terms, used to populate @memoLocal@.
-<span class="lineno">  640 </span>evalLocalTermF :: (VMonadLazy l, Show (Extra l)) =&gt;
-<span class="lineno">  641 </span>                   SimulatorConfig l
-<span class="lineno">  642 </span>                -&gt; IntMap (Thunk l) -&gt; IntMap (Thunk l)
-<span class="lineno">  643 </span>                -&gt; TermF Term -&gt; OpenValue l
-<span class="lineno">  644 </span><span class="decl"><span class="istickedoff">evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF <span class="nottickedoff">cfg</span> lam recEval tf0 env</span>
-<span class="lineno">  645 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  646 </span><span class="spaces">    </span><span class="istickedoff">lam = evalOpen <span class="nottickedoff">cfg</span> memoClosed</span>
-<span class="lineno">  647 </span><span class="spaces">    </span><span class="istickedoff">recEval (Unshared tf) = <span class="nottickedoff">evalTermF cfg lam recEval tf env</span></span>
-<span class="lineno">  648 </span><span class="spaces">    </span><span class="istickedoff">recEval (t@STApp{ stAppIndex = i, stAppTermF = tf }) =</span>
-<span class="lineno">  649 </span><span class="spaces">      </span><span class="istickedoff">case IMap.lookup i memo of</span>
-<span class="lineno">  650 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; force x</span>
-<span class="lineno">  651 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; evalTermF <span class="nottickedoff">cfg</span> <span class="nottickedoff">lam</span> recEval tf env</span>
-<span class="lineno">  652 </span><span class="spaces">      </span><span class="istickedoff">where memo = if termIsClosed t then memoClosed else memoLocal</span></span>
-<span class="lineno">  653 </span>
-<span class="lineno">  654 </span>{-# SPECIALIZE evalOpen ::
-<span class="lineno">  655 </span>  Show (Extra l) =&gt;
-<span class="lineno">  656 </span>  SimulatorConfigIn Id l -&gt;
-<span class="lineno">  657 </span>  IntMap (ThunkIn Id l) -&gt;
-<span class="lineno">  658 </span>  Term -&gt;
-<span class="lineno">  659 </span>  OpenValueIn Id l #-}
-<span class="lineno">  660 </span>
-<span class="lineno">  661 </span>{-# SPECIALIZE evalOpen ::
-<span class="lineno">  662 </span>  Show (Extra l) =&gt;
-<span class="lineno">  663 </span>  SimulatorConfigIn IO l -&gt;
-<span class="lineno">  664 </span>  IntMap (ThunkIn IO l) -&gt;
-<span class="lineno">  665 </span>  Term -&gt;
-<span class="lineno">  666 </span>  OpenValueIn IO l #-}
-<span class="lineno">  667 </span>
-<span class="lineno">  668 </span>-- | Evaluator for open terms; parameterized by a precomputed table @memoClosed@.
-<span class="lineno">  669 </span>evalOpen :: forall l. (VMonadLazy l, Show (Extra l)) =&gt;
-<span class="lineno">  670 </span>            SimulatorConfig l
-<span class="lineno">  671 </span>         -&gt; IntMap (Thunk l)
-<span class="lineno">  672 </span>         -&gt; Term -&gt; OpenValue l
-<span class="lineno">  673 </span><span class="decl"><span class="istickedoff">evalOpen cfg memoClosed t env = do</span>
-<span class="lineno">  674 </span><span class="spaces">  </span><span class="istickedoff">memoLocal &lt;- mkMemoLocal <span class="nottickedoff">cfg</span> memoClosed t env</span>
-<span class="lineno">  675 </span><span class="spaces">  </span><span class="istickedoff">let eval :: Term -&gt; MValue l</span>
-<span class="lineno">  676 </span><span class="spaces">      </span><span class="istickedoff">eval (Unshared tf) = <span class="nottickedoff">evalF tf</span></span>
-<span class="lineno">  677 </span><span class="spaces">      </span><span class="istickedoff">eval (t'@STApp{ stAppIndex = i, stAppTermF = tf }) =</span>
-<span class="lineno">  678 </span><span class="spaces">        </span><span class="istickedoff">case IMap.lookup i memo of</span>
-<span class="lineno">  679 </span><span class="spaces">          </span><span class="istickedoff">Just x -&gt; force x</span>
-<span class="lineno">  680 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">evalF tf</span></span>
-<span class="lineno">  681 </span><span class="spaces">        </span><span class="istickedoff">where memo = if termIsClosed t' then memoClosed else memoLocal</span>
-<span class="lineno">  682 </span><span class="spaces">      </span><span class="istickedoff">evalF :: TermF Term -&gt; MValue l</span>
-<span class="lineno">  683 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env</span></span>
-<span class="lineno">  684 </span><span class="spaces">  </span><span class="istickedoff">eval t</span></span>
+<span class="lineno">  636 </span>  TermF Term -&gt;
+<span class="lineno">  637 </span>  OpenValueIn IO l #-}
+<span class="lineno">  638 </span>-- | Evaluator for open terms, used to populate @memoLocal@.
+<span class="lineno">  639 </span>evalLocalTermF :: (VMonadLazy l, Show (Extra l)) =&gt;
+<span class="lineno">  640 </span>                   SimulatorConfig l
+<span class="lineno">  641 </span>                -&gt; IntMap (Thunk l) -&gt; IntMap (Thunk l)
+<span class="lineno">  642 </span>                -&gt; TermF Term -&gt; OpenValue l
+<span class="lineno">  643 </span><span class="decl"><span class="istickedoff">evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 env</span>
+<span class="lineno">  644 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  645 </span><span class="spaces">    </span><span class="istickedoff">lam = evalOpen cfg memoClosed</span>
+<span class="lineno">  646 </span><span class="spaces">    </span><span class="istickedoff">recEval (Unshared tf) = <span class="nottickedoff">evalTermF cfg lam recEval tf env</span></span>
+<span class="lineno">  647 </span><span class="spaces">    </span><span class="istickedoff">recEval (t@STApp{ stAppIndex = i, stAppTermF = tf }) =</span>
+<span class="lineno">  648 </span><span class="spaces">      </span><span class="istickedoff">case IMap.lookup i memo of</span>
+<span class="lineno">  649 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; force x</span>
+<span class="lineno">  650 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; evalTermF <span class="nottickedoff">cfg</span> <span class="nottickedoff">lam</span> recEval tf env</span>
+<span class="lineno">  651 </span><span class="spaces">      </span><span class="istickedoff">where memo = if closedTerm t then memoClosed else memoLocal</span></span>
+<span class="lineno">  652 </span>
+<span class="lineno">  653 </span>{-# SPECIALIZE evalOpen ::
+<span class="lineno">  654 </span>  Show (Extra l) =&gt;
+<span class="lineno">  655 </span>  SimulatorConfigIn Id l -&gt;
+<span class="lineno">  656 </span>  IntMap (ThunkIn Id l) -&gt;
+<span class="lineno">  657 </span>  Term -&gt;
+<span class="lineno">  658 </span>  OpenValueIn Id l #-}
+<span class="lineno">  659 </span>
+<span class="lineno">  660 </span>{-# SPECIALIZE evalOpen ::
+<span class="lineno">  661 </span>  Show (Extra l) =&gt;
+<span class="lineno">  662 </span>  SimulatorConfigIn IO l -&gt;
+<span class="lineno">  663 </span>  IntMap (ThunkIn IO l) -&gt;
+<span class="lineno">  664 </span>  Term -&gt;
+<span class="lineno">  665 </span>  OpenValueIn IO l #-}
+<span class="lineno">  666 </span>
+<span class="lineno">  667 </span>-- | Evaluator for open terms; parameterized by a precomputed table @memoClosed@.
+<span class="lineno">  668 </span>evalOpen :: forall l. (VMonadLazy l, Show (Extra l)) =&gt;
+<span class="lineno">  669 </span>            SimulatorConfig l
+<span class="lineno">  670 </span>         -&gt; IntMap (Thunk l)
+<span class="lineno">  671 </span>         -&gt; Term -&gt; OpenValue l
+<span class="lineno">  672 </span><span class="decl"><span class="istickedoff">evalOpen cfg memoClosed t env = do</span>
+<span class="lineno">  673 </span><span class="spaces">  </span><span class="istickedoff">memoLocal &lt;- mkMemoLocal cfg memoClosed t env</span>
+<span class="lineno">  674 </span><span class="spaces">  </span><span class="istickedoff">let eval :: Term -&gt; MValue l</span>
+<span class="lineno">  675 </span><span class="spaces">      </span><span class="istickedoff">eval (Unshared tf) = <span class="nottickedoff">evalF tf</span></span>
+<span class="lineno">  676 </span><span class="spaces">      </span><span class="istickedoff">eval (t'@STApp{ stAppIndex = i, stAppTermF = tf }) =</span>
+<span class="lineno">  677 </span><span class="spaces">        </span><span class="istickedoff">case IMap.lookup i memo of</span>
+<span class="lineno">  678 </span><span class="spaces">          </span><span class="istickedoff">Just x -&gt; force x</span>
+<span class="lineno">  679 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">evalF tf</span></span>
+<span class="lineno">  680 </span><span class="spaces">        </span><span class="istickedoff">where memo = if closedTerm t' then memoClosed else memoLocal</span>
+<span class="lineno">  681 </span><span class="spaces">      </span><span class="istickedoff">evalF :: TermF Term -&gt; MValue l</span>
+<span class="lineno">  682 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env</span></span>
+<span class="lineno">  683 </span><span class="spaces">  </span><span class="istickedoff">eval t</span></span>
+<span class="lineno">  684 </span>
 <span class="lineno">  685 </span>
-<span class="lineno">  686 </span>
-<span class="lineno">  687 </span>{-# SPECIALIZE evalPrim ::
-<span class="lineno">  688 </span>  Show (Extra l) =&gt;
-<span class="lineno">  689 </span>  (Text -&gt; EnvIn Id l -&gt; MValueIn Id l) -&gt;
-<span class="lineno">  690 </span>  PrimIn Id l -&gt;
-<span class="lineno">  691 </span>  MValueIn Id l
-<span class="lineno">  692 </span> #-}
-<span class="lineno">  693 </span>{-# SPECIALIZE evalPrim ::
-<span class="lineno">  694 </span>  Show (Extra l) =&gt;
-<span class="lineno">  695 </span>  (Text -&gt; EnvIn IO l -&gt; MValueIn IO l) -&gt;
-<span class="lineno">  696 </span>  PrimIn IO l -&gt;
-<span class="lineno">  697 </span>  MValueIn IO l
-<span class="lineno">  698 </span> #-}
-<span class="lineno">  699 </span>evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =&gt;
-<span class="lineno">  700 </span>  (Text -&gt; Env l -&gt; MValue l) -&gt;
-<span class="lineno">  701 </span>  Prims.Prim l -&gt;
-<span class="lineno">  702 </span>  MValue l
-<span class="lineno">  703 </span><span class="decl"><span class="istickedoff">evalPrim fallback = loop <span class="nottickedoff">[]</span></span>
-<span class="lineno">  704 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  705 </span><span class="spaces">    </span><span class="istickedoff">loop :: Env l -&gt; Prims.Prim l -&gt; MValue l</span>
-<span class="lineno">  706 </span><span class="spaces">    </span><span class="istickedoff">loop env (Prims.PrimFun f) =</span>
-<span class="lineno">  707 </span><span class="spaces">      </span><span class="istickedoff">pure $ VFun $ \x -&gt;</span>
-<span class="lineno">  708 </span><span class="spaces">        </span><span class="istickedoff">loop <span class="nottickedoff">(x : env)</span> (f x)</span>
-<span class="lineno">  709 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  710 </span><span class="spaces">    </span><span class="istickedoff">loop env (Prims.PrimStrict f) =</span>
-<span class="lineno">  711 </span><span class="spaces">      </span><span class="istickedoff">pure $ vStrictFun $ \x -&gt;</span>
-<span class="lineno">  712 </span><span class="spaces">        </span><span class="istickedoff">loop <span class="nottickedoff">(ready x : env)</span> (f x)</span>
-<span class="lineno">  713 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  714 </span><span class="spaces">    </span><span class="istickedoff">loop env (Prims.PrimFilterFun msg r f) =</span>
-<span class="lineno">  715 </span><span class="spaces">      </span><span class="istickedoff">pure $ vStrictFun $ \x -&gt;</span>
-<span class="lineno">  716 </span><span class="spaces">        </span><span class="istickedoff">runMaybeT (r x) &gt;&gt;= \case</span>
-<span class="lineno">  717 </span><span class="spaces">          </span><span class="istickedoff">Just v -&gt; loop <span class="nottickedoff">(ready x : env)</span> (f v)</span>
-<span class="lineno">  718 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fallback msg (ready x : env)</span></span>
-<span class="lineno">  719 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  720 </span><span class="spaces">    </span><span class="istickedoff">loop env (Prims.PrimExcept m) =</span>
-<span class="lineno">  721 </span><span class="spaces">      </span><span class="istickedoff">runExceptT m &gt;&gt;= \case</span>
-<span class="lineno">  722 </span><span class="spaces">        </span><span class="istickedoff">Right v  -&gt; pure v</span>
-<span class="lineno">  723 </span><span class="spaces">        </span><span class="istickedoff">Left msg -&gt; <span class="nottickedoff">fallback msg env</span></span>
-<span class="lineno">  724 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  725 </span><span class="spaces">    </span><span class="istickedoff">loop _env (Prims.Prim m) = m</span>
-<span class="lineno">  726 </span><span class="spaces">    </span><span class="istickedoff">loop _env (Prims.PrimValue v) = pure v</span></span>
-<span class="lineno">  727 </span>
-<span class="lineno">  728 </span>-- | A basic handler for stuck primitives.
-<span class="lineno">  729 </span>defaultPrimHandler ::
-<span class="lineno">  730 </span>  (VMonadLazy l, MonadFail (EvalM l)) =&gt;
-<span class="lineno">  731 </span>  Name -&gt; Text -&gt; Env l -&gt; MValue l
-<span class="lineno">  732 </span><span class="decl"><span class="nottickedoff">defaultPrimHandler nm msg env =</span>
-<span class="lineno">  733 </span><span class="spaces">  </span><span class="nottickedoff">fail $ unlines</span>
-<span class="lineno">  734 </span><span class="spaces">  </span><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (nameInfo nm))</span>
-<span class="lineno">  735 </span><span class="spaces">  </span><span class="nottickedoff">, &quot;On argument &quot; ++ show (length env)</span>
-<span class="lineno">  736 </span><span class="spaces">  </span><span class="nottickedoff">, Text.unpack msg</span>
-<span class="lineno">  737 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  686 </span>{-# SPECIALIZE evalPrim ::
+<span class="lineno">  687 </span>  Show (Extra l) =&gt;
+<span class="lineno">  688 </span>  (Text -&gt; [ThunkIn Id l] -&gt; MValueIn Id l) -&gt;
+<span class="lineno">  689 </span>  PrimIn Id l -&gt;
+<span class="lineno">  690 </span>  MValueIn Id l
+<span class="lineno">  691 </span> #-}
+<span class="lineno">  692 </span>{-# SPECIALIZE evalPrim ::
+<span class="lineno">  693 </span>  Show (Extra l) =&gt;
+<span class="lineno">  694 </span>  (Text -&gt; [ThunkIn IO l] -&gt; MValueIn IO l) -&gt;
+<span class="lineno">  695 </span>  PrimIn IO l -&gt;
+<span class="lineno">  696 </span>  MValueIn IO l
+<span class="lineno">  697 </span> #-}
+<span class="lineno">  698 </span>evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =&gt;
+<span class="lineno">  699 </span>  (Text -&gt; [Thunk l] -&gt; MValue l) -&gt;
+<span class="lineno">  700 </span>  Prims.Prim l -&gt;
+<span class="lineno">  701 </span>  MValue l
+<span class="lineno">  702 </span><span class="decl"><span class="istickedoff">evalPrim fallback = loop <span class="nottickedoff">[]</span></span>
+<span class="lineno">  703 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  704 </span><span class="spaces">    </span><span class="istickedoff">loop :: [Thunk l] -&gt; Prims.Prim l -&gt; MValue l</span>
+<span class="lineno">  705 </span><span class="spaces">    </span><span class="istickedoff">loop env (Prims.PrimFun f) =</span>
+<span class="lineno">  706 </span><span class="spaces">      </span><span class="istickedoff">pure $ VFun $ \x -&gt;</span>
+<span class="lineno">  707 </span><span class="spaces">        </span><span class="istickedoff">loop <span class="nottickedoff">(x : env)</span> (f x)</span>
+<span class="lineno">  708 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  709 </span><span class="spaces">    </span><span class="istickedoff">loop env (Prims.PrimStrict f) =</span>
+<span class="lineno">  710 </span><span class="spaces">      </span><span class="istickedoff">pure $ vStrictFun $ \x -&gt;</span>
+<span class="lineno">  711 </span><span class="spaces">        </span><span class="istickedoff">loop <span class="nottickedoff">(ready x : env)</span> (f x)</span>
+<span class="lineno">  712 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  713 </span><span class="spaces">    </span><span class="istickedoff">loop env (Prims.PrimFilterFun msg r f) =</span>
+<span class="lineno">  714 </span><span class="spaces">      </span><span class="istickedoff">pure $ vStrictFun $ \x -&gt;</span>
+<span class="lineno">  715 </span><span class="spaces">        </span><span class="istickedoff">runMaybeT (r x) &gt;&gt;= \case</span>
+<span class="lineno">  716 </span><span class="spaces">          </span><span class="istickedoff">Just v -&gt; loop <span class="nottickedoff">(ready x : env)</span> (f v)</span>
+<span class="lineno">  717 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fallback msg (ready x : env)</span></span>
+<span class="lineno">  718 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  719 </span><span class="spaces">    </span><span class="istickedoff">loop env (Prims.PrimExcept m) =</span>
+<span class="lineno">  720 </span><span class="spaces">      </span><span class="istickedoff">runExceptT m &gt;&gt;= \case</span>
+<span class="lineno">  721 </span><span class="spaces">        </span><span class="istickedoff">Right v  -&gt; pure v</span>
+<span class="lineno">  722 </span><span class="spaces">        </span><span class="istickedoff">Left msg -&gt; <span class="nottickedoff">fallback msg env</span></span>
+<span class="lineno">  723 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  724 </span><span class="spaces">    </span><span class="istickedoff">loop _env (Prims.Prim m) = m</span>
+<span class="lineno">  725 </span><span class="spaces">    </span><span class="istickedoff">loop _env (Prims.PrimValue v) = pure v</span></span>
+<span class="lineno">  726 </span>
+<span class="lineno">  727 </span>-- | A basic handler for stuck primitives.
+<span class="lineno">  728 </span>defaultPrimHandler ::
+<span class="lineno">  729 </span>  (VMonadLazy l, MonadFail (EvalM l)) =&gt;
+<span class="lineno">  730 </span>  Name -&gt; Text -&gt; [Thunk l] -&gt; MValue l
+<span class="lineno">  731 </span><span class="decl"><span class="nottickedoff">defaultPrimHandler nm msg env =</span>
+<span class="lineno">  732 </span><span class="spaces">  </span><span class="nottickedoff">fail $ unlines</span>
+<span class="lineno">  733 </span><span class="spaces">  </span><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (nameInfo nm))</span>
+<span class="lineno">  734 </span><span class="spaces">  </span><span class="nottickedoff">, &quot;On argument &quot; ++ show (length env)</span>
+<span class="lineno">  735 </span><span class="spaces">  </span><span class="nottickedoff">, Text.unpack msg</span>
+<span class="lineno">  736 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
 
 </pre>
 </body>

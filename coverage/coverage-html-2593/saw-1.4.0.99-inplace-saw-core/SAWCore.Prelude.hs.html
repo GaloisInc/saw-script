@@ -138,12 +138,12 @@ span.spaces    { background: white }
 <span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Just (x,y) -&gt;</span></span>
 <span class="lineno">  120 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">mkRecordEqBody (Map.toList fs) x y</span></span>
 <span class="lineno">  121 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
-<span class="lineno">  122 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; </span></span>
-<span class="lineno">  123 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do x &lt;- scLocalVar sc 1</span></span>
-<span class="lineno">  124 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">y &lt;- scLocalVar sc 0</span></span>
-<span class="lineno">  125 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">tp   &lt;- scFirstOrderType sc fot</span></span>
-<span class="lineno">  126 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">body &lt;-  mkRecordEqBody (Map.toList fs) x y</span></span>
-<span class="lineno">  127 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">scLambdaList sc [(&quot;x&quot;,tp),(&quot;y&quot;,tp)] body</span></span>
+<span class="lineno">  122 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
+<span class="lineno">  123 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do tp &lt;- scFirstOrderType sc fot</span></span>
+<span class="lineno">  124 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scFreshVariable sc &quot;x&quot; tp</span></span>
+<span class="lineno">  125 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">y &lt;- scFreshVariable sc &quot;y&quot; tp</span></span>
+<span class="lineno">  126 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">body &lt;- mkRecordEqBody (Map.toList fs) x y</span></span>
+<span class="lineno">  127 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">scAbstractTerms sc [x, y] body</span></span>
 <span class="lineno">  128 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  129 </span><span class="spaces"> </span><span class="istickedoff">where</span>
 <span class="lineno">  130 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">mkRecordEqBody [] _x _y = scBool sc True</span></span>

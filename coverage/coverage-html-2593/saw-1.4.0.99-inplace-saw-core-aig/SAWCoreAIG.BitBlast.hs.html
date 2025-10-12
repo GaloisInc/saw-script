@@ -501,7 +501,7 @@ span.spaces    { background: white }
 <span class="lineno">  482 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure ([], t)</span>
 <span class="lineno">  483 </span><span class="spaces">       </span><span class="istickedoff">Just (n, t1, t2) -&gt;</span>
 <span class="lineno">  484 </span><span class="spaces">         </span><span class="istickedoff">do (args, ret) &lt;- asPiTypes sc t2</span>
-<span class="lineno">  485 </span><span class="spaces">            </span><span class="istickedoff">pure ((<span class="nottickedoff">Text.unpack n</span>, t1) : args, ret)</span></span>
+<span class="lineno">  485 </span><span class="spaces">            </span><span class="istickedoff">pure ((<span class="nottickedoff">Text.unpack (vnName n)</span>, t1) : args, ret)</span></span>
 <span class="lineno">  486 </span>
 <span class="lineno">  487 </span>bitBlastTerm ::
 <span class="lineno">  488 </span>  AIG.IsAIG l g =&gt;

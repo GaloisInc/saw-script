@@ -1514,7 +1514,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1495 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- eval =&lt;&lt; scTypeOf sc t</span>
 <span class="lineno"> 1496 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1497 </span><span class="spaces">     </span><span class="istickedoff">-- get the names of the arguments to the function</span>
-<span class="lineno"> 1498 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">lamNames = map (Text.unpack . fst) (fst (R.asLambdaList t))</span></span>
+<span class="lineno"> 1498 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">lamNames = map (Text.unpack . vnName . fst) (fst (R.asLambdaList t))</span></span>
 <span class="lineno"> 1499 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">varNames = [ &quot;var&quot; ++ show (i :: Integer) | i &lt;- [0 ..] ]</span></span>
 <span class="lineno"> 1500 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">argNames = zipWith (++) varNames (map (&quot;_&quot; ++) lamNames ++ repeat &quot;&quot;)</span></span>
 <span class="lineno"> 1501 </span><span class="spaces"></span><span class="istickedoff"></span>

@@ -199,7 +199,7 @@ span.spaces    { background: white }
 <span class="lineno">  180 </span>import CryptolSAWCore.TypedTerm
 <span class="lineno">  181 </span>
 <span class="lineno">  182 </span>-- saw-script
-<span class="lineno">  183 </span>import SAWCentral.AST (Located(..), tMono, tTerm)
+<span class="lineno">  183 </span>import SAWCentral.AST (tMono, tTerm)
 <span class="lineno">  184 </span>import SAWCentral.Builtins (ghost_value)
 <span class="lineno">  185 </span>import SAWCentral.Proof
 <span class="lineno">  186 </span>import SAWCentral.Prover.SolverStats
@@ -505,7 +505,7 @@ span.spaces    { background: white }
 <span class="lineno">  486 </span><span class="spaces">          </span><span class="istickedoff">rw' &lt;-</span>
 <span class="lineno">  487 </span><span class="spaces">            </span><span class="istickedoff">liftIO $</span>
 <span class="lineno">  488 </span><span class="spaces">            </span><span class="istickedoff">extendEnv <span class="nottickedoff">shared_context</span></span>
-<span class="lineno">  489 </span><span class="spaces">              </span><span class="istickedoff">(Located func_name func_name <span class="nottickedoff">pos</span>)</span>
+<span class="lineno">  489 </span><span class="spaces">              </span><span class="istickedoff">func_name</span>
 <span class="lineno">  490 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">(tMono $ tTerm pos)</span></span>
 <span class="lineno">  491 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">Nothing</span>             -- FUTURE: slot for doc string, could put something here</span>
 <span class="lineno">  492 </span><span class="spaces">              </span><span class="istickedoff">(VTerm typed_extracted_func_const)</span>
