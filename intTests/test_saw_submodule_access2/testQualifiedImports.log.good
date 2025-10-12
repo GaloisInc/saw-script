@@ -2,24 +2,32 @@
  2114
  12114
  14229
- 2
 == Anticipated failure message ==
 Stack trace:
    (builtin) in (callback)
    (builtin) in fails
-   testQualifiedImports.saw:13:1-13:30 (at top level)
+   testQualifiedImports.saw:12:1-12:34 (at top level)
 Cryptol error:
-[error] at testQualifiedImports.saw:13:22--13:25
-    Value not in scope: d00
+[error] at testQualifiedImports.saw:12:23--12:29
+    Value not in scope: MyD::a
 
 == Anticipated failure message ==
 Stack trace:
    (builtin) in (callback)
    (builtin) in fails
-   testQualifiedImports.saw:14:1-14:34 (at top level)
+   testQualifiedImports.saw:13:1-13:34 (at top level)
 Cryptol error:
-[error] at testQualifiedImports.saw:14:22--14:29
+[error] at testQualifiedImports.saw:13:22--13:29
     Value not in scope: MyD::d2
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testQualifiedImports.saw:14:1-14:42 (at top level)
+Cryptol error:
+[error] at testQualifiedImports.saw:14:22--14:37
+    Value not in scope: MyD::D2::D3::d2
 
 == Anticipated failure message ==
 Stack trace:

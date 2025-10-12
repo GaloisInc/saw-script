@@ -1,9 +1,47 @@
-D <- cryptol_load "D.cry";
+////////////////////////////////////////////////
+DDD <- cryptol_load "D.cry";
 
-print (eval_int {{D::D2::d2}}); // should succeed
+print (eval_int {{DDD::D2::d2}}); // should succeed
+
+return DDD;
 
 // confirming fails of things that shouldn't be in scope:
-fails (do {return {{ d2 }};});
-fails (do {return {{ D::d2 }};});
+fails (do {return {{D::D2::d2}};});  // 'D' not in scope.
+fails (do {return {{ d2 }};});       // this requires DDD qualifier
+fails (do {return {{ DDD::d2 }};});  // missing submodule qualifier.
+
+////////////////////////////////////////////////
+// Secondary bindings
+
+print "secondary bindings:";
+
+DDD2 <- return DDD;
+let DDD3 = DDD;
+
+print (eval_int {{DDD2::D2::d2}}); // should succeed
+print (eval_int {{DDD3::D2::d2}}); // should succeed
+
+/////////////////////////////////////////////
+// NOW let's see how the prims work:
+
+let CP1 = cryptol_prims ();
+CP2 <- return (cryptol_prims ());
+
+print "";
+print "{{ CP1::trunc }}";
+print {{ CP1::trunc }};
+
+print "";
+print "{{ CP2::uext }}";
+print {{ CP2::uext }};
+
+print "";
+fails (do {return {{ uext }};});  // not (directly) in scope.
+
+print "CP1 sext:";
+do {y <- cryptol_extract CP1 "sext"; print y;};
+
+print "CP2 sgt:";
+do {y <- cryptol_extract CP2 "sgt"; print y;};
 
 print "done";
