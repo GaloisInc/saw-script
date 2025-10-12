@@ -3,8 +3,12 @@ import "UseFunctors.cry";
 print (eval_int {{ex1}});  // should succeed.
 print (eval_int {{ex2}});  // should succeed.
 
+print (eval_int {{ I::FM::z }});
+  // should succeed, as things have been instantiated.
+  // interesting that I::FM::z is not legal inside the UseFunctors.cry module.
+
 // confirming fails of things that shouldn't be in scope:
-fails (do {return {{ I::FM::z }};});
+fails (do {return {{ F::FM::z }};});
   // see comments in .cry file.
 
 print "done";

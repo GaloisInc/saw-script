@@ -3,6 +3,7 @@ import B
 import C
 import B as E1::E2     // N.B.
 
+top0 = 2114 : [32]
 top1 = 1 + E1::E2::b   // 1+12 = 13
 top2 = 1 + D3::d3      // 1+15 = 16
 top3 = 1 + D3::D4::d4  // 1+36 = 37

@@ -24,3 +24,8 @@ submodule I = submodule F where
 ex2 = I::f + 2  // This is OK because of implicit import of I
 
 // ex3 = I::FM::z  This is not OK, becase FM is not syntactically visible in I, so we can't add an implicit import
+
+  // interestingly enough we can accss {{I::FM::z}} at the CLI.
+
+// ex4 = F::FM::z This is not OK, becase we can't access a module with
+// uninstantiated parameters.
