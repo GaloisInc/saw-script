@@ -102,11 +102,42 @@ This release supports [version
   Accordingly, the second and third `String` arguments to
   `write_coq_cryptol_primitives_for_sawcore` have been removed.
 
+* The behavior of `cryptol_load` has changed, previously when we had
+  this
+
+        A <- cryptol_load "A1.cry" -- A1::** are added to {{A::**}}
+        A <- cryptol_load "A2.cry" -- A2::** are added to {{A::**}}
+
+    the `A` in 2nd line would shadow the first `A`, and for each
+    symbol `s` from "A2.cry", that symbol may shadow any duplicate
+    symbol `s` from "A1.cry" and this would also leave symbols from
+    "A1.cry" in the Cryptol environment.
+
+    The new behavior is that the same two commands now work
+    identically to the following
+
+        import "A.cry"  as A
+        import "A2.cry" as A
+
+     and as a result
+       - no shadowing occurs
+       - importing ambiguous symbols is allowed
+       - referring to ambiguous (qualified) symbols is an error.
+
 ## New Features
 
 * SAW has new commands `llvm_unint: [String] -> LLVMSetup ()` and
   and analogous commands for JVM and MIR, which can be used to declare that some
   Cryptol names should be kept opaque during symbolic simulation.
+
+* When one does `import ...` and `cryptol_load` at the SAWScript CLI,
+  you can now access submodules in the loaded modules.  Both these
+  will "import" submodules recursively and make no distinction between
+  normal and `private` variables.  As a result, SAWScript code can
+  refer to *every* definition in the loaded module.
+
+  You can reference public and private definitions in sub-modules via
+  `::` qualifiers, just as is done in Cryptol code.
 
 * The Cryptol import syntax has been extended.
   - You can now import Cryptol module names, including qualified module
