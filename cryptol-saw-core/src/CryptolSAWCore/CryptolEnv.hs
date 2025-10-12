@@ -325,6 +325,7 @@ getNamingEnv env =
                  (eImports env)
   )
 
+-- | get Naming Env for one Import.
 getNamingEnvForImport :: ME.ModuleEnv
                       -> (ImportVisibility, T.Import)
                       -> MR.NamingEnv
@@ -338,8 +339,10 @@ getNamingEnvForImport modEnv (vis, imprt) =
 
   lm = case ME.lookupModule modName modEnv of
          Just lm' -> lm'
-         Nothing  -> panic "FIXME" ["cannot lookupModule"]
+         Nothing  -> panic "getNamingEnvForImport"
+                       ["cannot lookupModule: " <> Text.pack(show modName)]
 
+-- | compute the NamingEnv based on the ImportVisibility.
 computeNamingEnv :: ME.LoadedModule -> ImportVisibility -> MR.NamingEnv
 computeNamingEnv lm vis =
   case vis of
@@ -347,58 +350,58 @@ computeNamingEnv lm vis =
     OnlyPublic       -> envPublic            -- i.e., what's exported.
 
   where
-  -- NamingEnv's --
+  -- NamingEnvs: --
 
-  -- | envTopLevels
-  --    - Does not include privates in submodules (which makes for
-  --      much of the complications of this function).
-  --    - Includes everything in scope at the toplevel of 'lm' module
-  envTopLevels :: MR.NamingEnv
-  envTopLevels = ME.lmNamingEnv lm
+    -- | envTopLevels
+    --    - Does not include privates in submodules (which makes for
+    --      much of the complications of this function).
+    --    - Includes everything in scope at the toplevel of 'lm' module
+    envTopLevels :: MR.NamingEnv
+    envTopLevels = ME.lmNamingEnv lm
 
-  -- | envPublicAndPrivate - awkward as envTopLevels excludes privates
-  envPublicAndPrivate :: MR.NamingEnv
-  envPublicAndPrivate =
-     -- nab all the names defined in module (from toplevel scope):
-     MN.filterUNames (`Set.member` nmsDefined) envTopLevels
-     <>
-     -- we must create a new NamingEnv (since the privates are not
-     -- in `envTopLevels`):
-     MN.namingEnvFromNames' MN.nameToPNameWithQualifiers nmsPrivate
+    -- | envPublicAndPrivate - awkward as envTopLevels excludes privates
+    envPublicAndPrivate :: MR.NamingEnv
+    envPublicAndPrivate =
+       -- nab all the names defined in module (from toplevel scope):
+       MN.filterUNames (`Set.member` nmsDefined) envTopLevels
+       <>
+       -- we must create a new NamingEnv (since the privates are not
+       -- in `envTopLevels`):
+       MN.namingEnvFromNames' MN.nameToPNameWithQualifiers nmsPrivate
 
-  envPublic :: MR.NamingEnv
-  envPublic = MN.filterUNames
-                (`Set.member` nmsPublic)
-                envTopLevels
+    envPublic :: MR.NamingEnv
+    envPublic = MN.filterUNames
+                  (`Set.member` nmsPublic)
+                  envTopLevels
 
-  -- name sets:
+  -- Name Sets: --
 
-  -- | names in scope at Top level of module
-  nmsTopLevels :: Set.Set MN.Name
-  nmsTopLevels = MN.namingEnvNames envTopLevels
+    -- | names in scope at Top level of module
+    nmsTopLevels :: Set.Set MN.Name
+    nmsTopLevels = MN.namingEnvNames envTopLevels
 
-  -- | names defined in module and in submodules
-  --   - this includes `PublicAndPrivate` names!
-  --   - includes submodule names, type synonyms, and nominal types
-  nmsDefined :: Set.Set MN.Name
-  nmsDefined =
-      -- definitions from all submodules:
-      ( Set.unions
-      $ map (MI.ifsDefines . T.smIface)
-      $ Map.elems
-      $ T.mSubmodules
-      $ ME.lmModule lm
-      )
-    `Set.union`
-      -- definitions at the top module:
-      (MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm)
+    -- | names defined in module and in submodules
+    --   - this includes `PublicAndPrivate` names!
+    --   - includes submodule names, type synonyms, and nominal types
+    nmsDefined :: Set.Set MN.Name
+    nmsDefined =
+        -- definitions from all submodules:
+        ( Set.unions
+        $ map (MI.ifsDefines . T.smIface)
+        $ Map.elems
+        $ T.mSubmodules
+        $ ME.lmModule lm
+        )
+      `Set.union`
+        -- definitions at the top module:
+        (MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm)
 
 
-  nmsPublic :: Set.Set MN.Name
-  nmsPublic = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
+    nmsPublic :: Set.Set MN.Name
+    nmsPublic = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
 
-  nmsPrivate :: Set.Set MN.Name
-  nmsPrivate = nmsDefined Set.\\ nmsTopLevels
+    nmsPrivate :: Set.Set MN.Name
+    nmsPrivate = nmsDefined Set.\\ nmsTopLevels
 
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
@@ -546,9 +549,14 @@ loadExtCryptolModule ::
 loadExtCryptolModule sc env path =
   do
   (m, env') <- loadAndTranslateModule sc env (Left path)
-  let s = showCryptolModule (mkCryptolModule m env')
-          -- how to show, need to compute this here.
-          -- FIXME: this only shows public names, not internal.
+  let s = "Public interface:\n" ++ showCryptolModule (mkCryptolModule m env')
+          -- How to show, need to compute this here, because the show function
+          -- (of course) has no access to the state.
+          --
+          -- FIXME: Since the complete public and private interface is
+          -- extractable, we should show the whole thing with public,
+          -- private, typesyns, constructors, submodules.
+          -- See Issue #2700
   return (ECM_LoadedModule (locatedUnknown (T.mName m)) s, env')
 
 
