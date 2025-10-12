@@ -6,14 +6,14 @@ E.g.,
   2. SAWScript manual describing imports/loads
   3. New Issue for further extending/simplifying import/load
 
-** TODO Thinking re scope; terminology
+** TODO Thoughts re scope; terminology
 
 - notions/terms
-  - scope :: the scope of variable (in terms of
+  - scope :: the scope of variable (in terms of a point in Cryptol source)
     - per four namespaces
     - what's in scope at a point in Cryptol module
       - point in SAWScript module
-  - ? :: the set of (qualified) names we add to scope with binders
+  - bindees :: the set of (qualified) names we add to scope with binders
     - let, bind, import, magic-Cryptolmodule-bind
   - context/? ::
     - ? the env at the top-level of a module
@@ -133,9 +133,6 @@ We choose alternative C, design choice A.
 
 ** Current (branch) compared to previous behavior (on master)
 
-- New :: we can access definitions in sub-modules, they are referenced
-  via =::= qualifiers, just as is done in Cryptol code.
-
 - Changes :: =cryptol_load=:
   - *Previously*
     - given this
@@ -166,30 +163,10 @@ We choose alternative C, design choice A.
     gratuitous differences.
 
 - OLD behavior
-  - import put privates in scope (as does new)
+  - import put privates in scope (as it does now)
   - private var in submodules: N/A
-  - [ ] confirm these:
-    - [ ] =cryptol_load= did not put top-level privates in scope (?)
-    - [ ] =cryptol_export= could not access privates (?)
-
-** Issues, 2025-10-06
-
-- [ ] Assume we want to immediately update semantics of =cryptol_load=
-  (i.e., that we don't try to support old code that relies on old ad
-  hoc behavior)
-  - warn on let/bind shadowing would help for this (and other errors)
-
-- [ ] private's in submodules are inaccessible
-  - ditto with private submodules
-  - bug in code, privates at top-level are accessible
-    - wrongly using Cryptol code, and Cryptol code leaves these
-      inacessible!
-  - [ ] clarify what we *really* want before implementing
-
-- [ ] print CryptolModule with submodules
-  - currently only prints top publics, due to quick implementation
-    with existing code
-  - depends on fixing last, d
+  - =cryptol_load= did not put top-level privates in scope
+  - =cryptol_export= cannot not access privates
 
 ** Future
 
