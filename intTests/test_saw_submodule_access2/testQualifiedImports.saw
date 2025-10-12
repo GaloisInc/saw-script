@@ -7,11 +7,11 @@ print (eval_int {{MyD::D2::d2}});
 print (eval_int {{MyD::D2::D3::d3}});
 
 // testing visible in MyD variables:
-print (eval_int {{MyD::a}});
 
 // confirming fails of things that shouldn't be in scope:
-fails (do {return {{ d00 }};});
-fails (do {return {{ MyD::d2 }};});
+fails (do {return {{  MyD::a }};});    // in scope at top but not defd by D
+fails (do {return {{ MyD::d2 }};});         // should be MyD::D2::d2 !
+fails (do {return {{ MyD::D2::D3::d2 }};}); // should be MyD::D2::d2 !
 fails (do {return {{ NOTINSCOPEVar }};});
 
 print "done";
