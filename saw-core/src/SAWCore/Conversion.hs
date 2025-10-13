@@ -96,8 +96,6 @@ module SAWCore.Conversion
   , bvsle_bvNat
   , bvslt_bvNat
   , slice_bvNat
-  , remove_coerce
-  , remove_unsafeCoerce
   , remove_ident_coerce
   , remove_ident_unsafeCoerce
   ) where
@@ -682,19 +680,6 @@ drop_bvNat = globalConv "Prelude.drop" Prim.drop_bv
 
 slice_bvNat :: Conversion
 slice_bvNat = globalConv "Prelude.slice" Prim.slice_bv
-
-mixfix_snd :: (a :*: b) -> b
-mixfix_snd (_ :*: y) = y
-
-remove_coerce :: Conversion
-remove_coerce = Conversion $
-  return . mixfix_snd <$>
-    (asGlobalDef "Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny)
-
-remove_unsafeCoerce :: Conversion
-remove_unsafeCoerce = Conversion $
-  return . mixfix_snd <$>
-    (asGlobalDef "Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny)
 
 remove_ident_coerce :: Conversion
 remove_ident_coerce = Conversion $ thenMatcher pat action
