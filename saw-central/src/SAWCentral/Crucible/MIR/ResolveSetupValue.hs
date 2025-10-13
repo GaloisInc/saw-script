@@ -102,15 +102,14 @@ import qualified What4.Partial as W4
 
 import CryptolSAWCore.Cryptol (importType, emptyEnv)
 import SAWCore.SharedTerm
-import qualified SAWCore.Prim as Prim
-import qualified SAWCore.Simulator.Concrete as Concrete
 import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
-import SAWCentral.Crucible.Common.ResolveSetupValue (resolveBoolTerm, checkBooleanType)
+import SAWCentral.Crucible.Common.ResolveSetupValue (resolveBoolTerm, resolveBitvectorTerm)
+import SAWCentral.Crucible.MIR.Setup.Value(mccUninterp)
 import SAWCentral.Crucible.MIR.MethodSpecIR
 import SAWCentral.Crucible.MIR.TypeShape
 import SAWCentral.Panic
@@ -986,12 +985,7 @@ resolveSAWPred ::
   MIRCrucibleContext ->
   Term ->
   IO (W4.Pred Sym)
-resolveSAWPred cc tm =
-  do let sym = cc^.mccSym
-     st <- sawCoreState sym
-     let sc = saw_ctx st
-     checkBooleanType sc tm
-     bindSAWTerm sym st W4.BaseBoolRepr tm
+resolveSAWPred cc = resolveBoolTerm (cc ^. mccSym) (cc ^. mccUninterp)
 
 resolveSAWTerm ::
   MIRCrucibleContext ->
@@ -1001,7 +995,7 @@ resolveSAWTerm ::
 resolveSAWTerm mcc tp tm =
   case tp of
     Cryptol.TVBit ->
-      do b <- resolveBoolTerm sym tm
+      do b <- resolveBoolTerm sym (mcc ^. mccUninterp) tm
          pure $ MIRVal (PrimShape Mir.TyBool W4.BaseBoolRepr) b
     Cryptol.TVInteger ->
       fail "resolveSAWTerm: unimplemented type Integer (FIXME)"
@@ -1026,7 +1020,7 @@ resolveSAWTerm mcc tp tm =
                 => Mir.BaseSize -> W4.NatRepr w -> IO MIRVal
         bv_term b n =
          MIRVal (PrimShape (Mir.TyUint b) (W4.BaseBVRepr n)) <$>
-         resolveBitvectorTerm sym n tm
+         resolveBitvectorTerm sym (mcc ^. mccUninterp) n tm
     Cryptol.TVSeq sz tp' -> do
       doIndex <- indexSeqTerm sym (sz, tp') tm
       case toMIRType tp' of
@@ -1075,27 +1069,6 @@ resolveSAWTerm mcc tp tm =
   where
     sym = mcc ^. mccSym
     col = mcc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
-
-resolveBitvectorTerm ::
-  forall w.
-  (1 W4.<= w) =>
-  Sym ->
-  W4.NatRepr w ->
-  Term ->
-  IO (W4.SymBV Sym w)
-resolveBitvectorTerm sym w tm =
-  do st <- sawCoreState sym
-     let sc = saw_ctx st
-     mx <- case getAllExts tm of
-             -- concretely evaluate if it is a closed term
-             [] ->
-               do modmap <- scGetModuleMap sc
-                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                  pure (Just (Prim.unsigned (Concrete.toWord v)))
-             _ -> return Nothing
-     case mx of
-       Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm
 
 data ToMIRTypeErr = NotYetSupported String | Impossible String
 

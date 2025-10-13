@@ -39,14 +39,12 @@ import Control.Lens ( (^.), view )
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
-import qualified Data.BitVector.Sized as BV
 import Data.Maybe (fromMaybe, fromJust)
 import Data.Void (absurd)
 
 import qualified Data.Dwarf as Dwarf
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
@@ -57,12 +55,10 @@ import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
-import qualified CryptolSAWCore.Simpset as Cryptol
 
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
 
-import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
 
 import qualified Lang.Crucible.LLVM.Bytes       as Crucible
@@ -71,25 +67,19 @@ import qualified Lang.Crucible.LLVM.MemType     as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
-import SAWCore.Rewriter
 import SAWCore.SharedTerm
-import qualified SAWCore.Prim as Prim
-import qualified SAWCore.Simulator.Concrete as Concrete
 
 import CryptolSAWCore.Cryptol (importType, emptyEnv)
-import SAWCore.Name
 import CryptolSAWCore.TypedTerm
-import SAWCoreWhat4.What4
 import SAWCoreWhat4.ReturnTrip
 import qualified Text.LLVM.DebugUtils as L
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
 import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
-import           SAWCentral.Crucible.Common.ResolveSetupValue (checkBooleanType)
+import qualified SAWCentral.Crucible.Common.ResolveSetupValue as Common
 
 import SAWCentral.Crucible.LLVM.MethodSpecIR
-import SAWCentral.Crucible.LLVM.Setup.Value (LLVMPtr)
-import qualified SAWCentral.Proof as SP
+import SAWCentral.Crucible.LLVM.Setup.Value (LLVMPtr, ccUninterp)
 
 type LLVMVal = Crucible.LLVMVal Sym
 
@@ -752,34 +742,12 @@ resolveSAWPred ::
   LLVMCrucibleContext arch ->
   Term ->
   IO (W4.Pred Sym)
-resolveSAWPred cc tm = do
-  do let sym = cc^.ccSym
-     st <- sawCoreState sym
-     let sc = saw_ctx st
-     let ss = cc^.ccBasicSS
-     (_,tm') <- rewriteSharedTerm sc ss tm
-
-     checkBooleanType sc tm'
-
-     mx <- case getAllExts tm' of
-             -- concretely evaluate if it is a closed term
-             [] -> do modmap <- scGetModuleMap sc
-                      let v = Concrete.evalSharedTerm modmap mempty mempty tm'
-                      pure (Just (Concrete.toBool v))
-             _ -> return Nothing
-     case mx of
-       Just x  -> return $ W4.backendPred sym x
-       Nothing
-         | doW4Eval ?w4EvalTactic ->
-           do cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
-              (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
-              (_,tm''') <- rewriteSharedTerm sc ss tm''
-              if all isPreludeName (Map.elems $ getConstantSet tm''') then
-                do (_names, (_mlabels, p)) <- w4Eval sym st sc mempty Set.empty tm'''
-                   return p
-              else bindSAWTerm sym st W4.BaseBoolRepr tm'
-         | otherwise ->
-           bindSAWTerm sym st W4.BaseBoolRepr tm'
+resolveSAWPred cc =
+  Common.resolveBoolTerm' (cc ^. ccSym) (cc ^. ccUninterp)
+  Common.ResolveRewrite {
+    Common.rrBasicSS = Just (cc ^. ccBasicSS),
+    Common.rrWhat4Eval = doW4Eval ?w4EvalTactic
+  }
 
 resolveSAWSymBV ::
   (?w4EvalTactic :: W4EvalTactic, 1 <= w) =>
@@ -787,40 +755,12 @@ resolveSAWSymBV ::
   NatRepr w ->
   Term ->
   IO (W4.SymBV Sym w)
-resolveSAWSymBV cc w tm =
-  do let sym = cc^.ccSym
-     st <- sawCoreState sym
-     let sc = saw_ctx st
-     mx <- case getAllExts tm of
-             -- concretely evaluate if it is a closed term
-             [] -> do modmap <- scGetModuleMap sc
-                      let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                      pure (Just (Prim.unsigned (Concrete.toWord v)))
-             _ -> return Nothing
-     case mx of
-       Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing
-         | doW4Eval ?w4EvalTactic ->
-           do let ss = cc^.ccBasicSS
-              (_,tm') <- rewriteSharedTerm sc ss tm
-              cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
-              (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
-              (_,tm''') <- rewriteSharedTerm sc ss tm''
-              if all isPreludeName (Map.elems $ getConstantSet tm''') then
-                do (_names, _, _, x) <- w4EvalAny sym st sc mempty Set.empty tm'''
-                   case valueToSymExpr x of
-                     Just (Some y)
-                       | Just Refl <- testEquality (W4.BaseBVRepr w) (W4.exprType y) ->
-                         return y
-                     _ -> fail $ "resolveSAWSymBV: unexpected w4Eval result " ++ show x
-              else bindSAWTerm sym st (W4.BaseBVRepr w) tm
-         | otherwise ->
-           bindSAWTerm sym st (W4.BaseBVRepr w) tm
-
-isPreludeName :: NameInfo -> Bool
-isPreludeName = \case
-  ModuleIdentifier ident -> identModule ident == preludeName
-  _ -> False
+resolveSAWSymBV cc w =
+  Common.resolveBitvectorTerm' (cc ^. ccSym) (cc ^. ccUninterp) w
+  Common.ResolveRewrite {
+    Common.rrBasicSS = Just (cc ^. ccBasicSS),
+    Common.rrWhat4Eval = doW4Eval ?w4EvalTactic
+  }
 
 resolveSAWTerm ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>

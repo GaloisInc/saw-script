@@ -2399,7 +2399,7 @@ primTypes = Map.fromList
 
 
 primitives :: Map SS.Name Primitive
-primitives = Map.fromList
+primitives = Map.fromList $
   [ prim "return"              "{m, a} a -> m a"
     (pureVal (\v -> VReturn atRestPos [] v))
     Current
@@ -4975,8 +4975,27 @@ primitives = Map.fromList
     (pureVal llvm_execute_func)
     Current
     [ "Legacy alternative name for `llvm_execute_func`." ]
+  ] ++
+    let unint_help =
+         [ "Keep the given Cryptol/SAWCore names opaque during symbolic simulation."
+         , "The command should be used before symbolic execution begins"
+         , "(i.e., in the pre-condition of the specification)."
+         , "This command does not affect the ProofScript---to keep names"
+         , "opaque while discharging goals, you still need to provide them"
+         , "as explicit arguments to the relevant proof tactics."
+         ]
+    in
+  [ prim "llvm_unint" "[String] -> LLVMSetup ()"
+    (pureVal llvm_unint) Current unint_help
 
-  , prim "llvm_return" "SetupValue -> LLVMSetup ()"
+  , prim "jvm_unint" "[String] -> JVMSetup ()"
+    (pureVal jvm_unint) Current unint_help
+
+  , prim "mir_unint" "[String] -> MIRSetup ()"
+    (pureVal mir_unint) Current unint_help
+  ]
+  ++
+  [ prim "llvm_return" "SetupValue -> LLVMSetup ()"
     (pureVal llvm_return)
     Current
     [ "Specify the given value as the return value of the function. A"

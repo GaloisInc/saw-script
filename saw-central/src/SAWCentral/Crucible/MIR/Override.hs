@@ -84,6 +84,7 @@ import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
 import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
 import SAWCentral.Crucible.Common.Override hiding (getSymInterface)
+import SAWCentral.Crucible.MIR.Setup.Value(mccUninterp)
 import SAWCentral.Crucible.MIR.MethodSpecIR
 import SAWCentral.Crucible.MIR.ResolveSetupValue
 import SAWCentral.Crucible.MIR.TypeShape
@@ -635,7 +636,7 @@ executePred ::
 executePred sc cc md tt =
   do s <- OM (use termSub)
      t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
-     p <- liftIO $ resolveBoolTerm (cc ^. mccSym) t
+     p <- liftIO $ resolveBoolTerm (cc ^. mccSym) (cc ^. mccUninterp) t
      addAssume p md
 
 -- | Update the simulator state based on the postconditions from the
@@ -1054,7 +1055,7 @@ learnPred ::
 learnPred sc cc md prepost t =
   do s <- OM (use termSub)
      u <- liftIO $ scInstantiateExt sc s t
-     p <- liftIO $ resolveBoolTerm (cc ^. mccSym) u
+     p <- liftIO $ resolveBoolTerm (cc ^. mccSym) (cc ^. mccUninterp) u
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
 
@@ -1436,7 +1437,7 @@ matchArg opts sc cc cs prepost md = go False []
                 addAssert pred_ md =<< notEq
             _ -> fail_
         (_, _, MS.SetupMux () c t f) -> do
-          cPred <- liftIO $ resolveBoolTerm sym (ttTerm c)
+          cPred <- liftIO $ resolveBoolTerm sym (cc ^. mccUninterp) (ttTerm c)
           withConditionalPred cPred $
             go inCast projStack actual t
           cNegPred <- liftIO $ W4.notPred sym cPred
