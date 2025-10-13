@@ -1078,8 +1078,6 @@ buildTopLevelEnv proxy opts scriptArgv =
                    ++ vecConversions
                    ++ [ tupleConversion
                       , recordConversion
-                      , remove_ident_coerce
-                      , remove_ident_unsafeCoerce
                       ]
            cryptolDefs = filter defPred $ moduleDefs cryptol_mod
            defPred d =
