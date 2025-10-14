@@ -40,7 +40,7 @@ module SAWCore.SCTypedTerm
   , scTypedString
   ) where
 
-import Control.Monad (foldM, unless)
+import Control.Monad (foldM, unless, when)
 import qualified Data.Foldable as Fold
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -157,20 +157,24 @@ scTypedApply sc f arg =
      ctx <- unifyContexts "scTypedApply" (typedCtx f) (typedCtx arg)
      pure (SCTypedTerm tm tp ctx)
 
--- possible errors: not a type, context mismatch
+-- possible errors: not a type, context mismatch, variable free in context
 scTypedLambda :: SharedContext -> VarName -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
 scTypedLambda sc x t body =
   do _s <- ensureSort sc (typedType t)
      tm <- scLambda sc x (typedVal t) (typedVal body)
+     when (any (IntSet.member (vnIndex x) . freeVars) (typedCtx body)) $
+       fail $ "Variable occurs free in context: " ++ show (vnName x)
      _ <- unifyContexts "scTypedLambda" (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)
      ctx <- unifyContexts "scTypedLambda" (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))
      tp <- scPi sc x (typedVal t) (typedType body)
      pure (SCTypedTerm tm tp ctx)
 
--- possible errors: not a type, context mismatch
+-- possible errors: not a type, context mismatch, variable free in context
 scTypedPi :: SharedContext -> VarName -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
 scTypedPi sc x t body =
   do tm <- scPi sc x (typedVal t) (typedVal body)
+     when (any (IntSet.member (vnIndex x) . freeVars) (typedCtx body)) $
+       fail $ "Variable occurs free in context: " ++ show (vnName x)
      _ <- unifyContexts "scTypedPi" (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)
      ctx <- unifyContexts "scTypedPi" (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))
      s1 <- ensureSort sc (typedType t)
