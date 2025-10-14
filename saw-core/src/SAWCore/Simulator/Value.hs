@@ -1,5 +1,6 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -209,6 +210,26 @@ instance Show Nil where
 
 ------------------------------------------------------------
 -- Basic operations on values
+
+-- | Create a 'Value' for a strict function.
+vStrictFun :: VMonad l => (Value l -> MValue l) -> Value l
+vStrictFun k = VFun $ \x -> force x >>= k
+
+-- | Create a 'Value' for a lazy multi-argument function.
+vFunList :: forall l. VMonad l => Int -> ([Thunk l] -> MValue l) -> MValue l
+vFunList n0 k = go n0 []
+  where
+    go :: Int -> [Thunk l] -> MValue l
+    go 0 args = k (reverse args)
+    go n args = pure $ VFun (\x -> go (n - 1) (x : args))
+
+-- | Create a 'Value' for a strict multi-argument function.
+vStrictFunList :: forall l. VMonad l => Int -> ([Value l] -> MValue l) -> MValue l
+vStrictFunList n0 k = go n0 []
+  where
+    go :: Int -> [Value l] -> MValue l
+    go 0 args = k (reverse args)
+    go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
 
 vTuple :: VMonad l => [Thunk l] -> Value l
 vTuple [] = VUnit

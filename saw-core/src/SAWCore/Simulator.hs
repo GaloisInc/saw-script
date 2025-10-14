@@ -310,26 +310,6 @@ evalTermF cfg lam recEval tf env =
       vStrictFunList j $ \idxs ->
       pure $ TValue $ VDataType nm params idxs
 
--- | Create a 'Value' for a strict function.
-vStrictFun :: VMonad l => (Value l -> MValue l) -> Value l
-vStrictFun k = VFun $ \x -> force x >>= k
-
--- | Create a 'Value' for a lazy multi-argument function.
-vFunList :: forall l. VMonad l => Int -> ([Thunk l] -> MValue l) -> MValue l
-vFunList n0 k = go n0 []
-  where
-    go :: Int -> [Thunk l] -> MValue l
-    go 0 args = k (reverse args)
-    go n args = pure $ VFun (\x -> go (n - 1) (x : args))
-
--- | Create a 'Value' for a strict multi-argument function.
-vStrictFunList :: forall l. VMonad l => Int -> ([Value l] -> MValue l) -> MValue l
-vStrictFunList n0 k = go n0 []
-  where
-    go :: Int -> [Value l] -> MValue l
-    go 0 args = k (reverse args)
-    go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
-
 -- | Evaluate a recursor applied to a specific data constructor.
 reduceRecursor ::
   forall l. (VMonadLazy l, Show (Extra l)) =>
