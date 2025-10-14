@@ -104,10 +104,6 @@ data SimulatorConfig l =
   -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
   -- the body of the constant should be evaluated. 'Just' indicates
   -- that the constant's definition should be overridden.
-  , simCtorApp :: Name -> TValue l -> Maybe (MValue l)
-  -- ^ Interpretation of constructor terms. 'Nothing' indicates that
-  -- the constructor is treated as normal. 'Just' replaces the
-  -- constructor with a custom implementation.
   , simModMap :: ModuleMap
   , simLazyMux :: VBool l -> MValue l -> MValue l -> MValue l
   }
@@ -425,7 +421,7 @@ evalGlobal' ::
   EvalM l (SimulatorConfig l)
 evalGlobal' modmap prims extcns constant primHandler lazymux =
   do checkPrimitives modmap prims
-     return (SimulatorConfig primitive extcns constant' ctors modmap lazymux)
+     return (SimulatorConfig primitive extcns constant' modmap lazymux)
   where
     constant' :: TermF Term -> Name -> TValue l -> Maybe (MValue l)
     constant' tf nm tv =
@@ -436,13 +432,6 @@ evalGlobal' modmap prims extcns constant primHandler lazymux =
             ModuleIdentifier ident ->
               evalPrim (primHandler nm) <$> Map.lookup ident prims
             ImportedName{} -> Nothing
-
-    ctors :: Name -> TValue l -> Maybe (MValue l)
-    ctors nm _tv =
-      case nameInfo nm of
-        ModuleIdentifier ident ->
-          evalPrim (primHandler nm) <$> Map.lookup ident prims
-        ImportedName{} -> Nothing
 
     primitive :: Name -> MValue l
     primitive nm =
