@@ -85,7 +85,6 @@ module SAWCore.SharedTerm
   , scInjectCode
     -- ** Declaring global constants
   , scDeclarePrim
-  , scInsertDef
   , scFreshConstant
   , scDefineConstant
   , scOpaqueConstant
@@ -620,12 +619,6 @@ scDeclarePrim sc ident q def_tp =
   do let nmi = ModuleIdentifier ident
      nm <- scRegisterName sc nmi
      _ <- scDeclareDef sc nm q def_tp Nothing
-     pure ()
-
--- | Insert a definition into a SAW core module
-scInsertDef :: SharedContext -> Ident -> Term -> Term -> IO ()
-scInsertDef sc ident def_tp def_tm =
-  do _ <- scDefineConstant sc (ModuleIdentifier ident) def_tm def_tp
      pure ()
 
 -- | Look up a module by name, raising an error if it is not loaded
