@@ -67,12 +67,14 @@ resolveTerm ::
 resolveTerm sym unint bt rr tm =
   do
     st       <- sawCoreState sym
-    checkType st
-    tm'      <- basicRewrite st tm
+    let sc = saw_ctx st
+    checkType sc
+    tm'      <- basicRewrite sc tm
+    canFold <- isConstFoldTerm sc unint tm'
     case () of
-      _ | isConstFoldTerm unint tm' ->
+      _ | canFold ->
           do -- Evaluate as constant
-            modmap <- scGetModuleMap (saw_ctx st)
+            modmap <- scGetModuleMap sc
             let v = Concrete.evalSharedTerm modmap mempty mempty tm'
             case bt of
               W4.BaseBoolRepr -> pure (W4.backendPred sym (Concrete.toBool v))
@@ -81,10 +83,9 @@ resolveTerm sym unint bt rr tm =
 
         | rrWhat4Eval rr ->
           do -- Try to use rewrites to simplify the term
-            let sc = saw_ctx st
             cryptol_ss <- Cryptol.mkCryptolSimpset @TheoremNonce sc
             tm''       <- snd <$> rewriteSharedTerm sc cryptol_ss tm'
-            tm'''      <- basicRewrite st tm''
+            tm'''      <- basicRewrite sc tm''
             if all isPreludeName (Map.elems (getConstantSet tm''')) then
               do
                 (_, _, _, p) <- w4EvalAny sym st sc mempty unint tm'''
@@ -101,27 +102,27 @@ resolveTerm sym unint bt rr tm =
         | otherwise -> bindSAWTerm sym st bt tm'
 
   where
-  basicRewrite st =
+  basicRewrite sc =
     case rrBasicSS rr of
       Nothing -> pure
-      Just ss -> \t -> snd <$> rewriteSharedTerm (saw_ctx st) ss t
+      Just ss -> \t -> snd <$> rewriteSharedTerm sc ss t
 
   isPreludeName nm =
     case nm of
       ModuleIdentifier ident -> identModule ident == preludeName
       _ -> False
 
-  checkType st =
+  checkType sc =
     do
-      sc <- ttType <$> mkTypedTerm (saw_ctx st) tm
-      case ttIsMono sc of
+      schema <- ttType <$> mkTypedTerm sc tm
+      case ttIsMono schema of
           Just ty
             | tIsBit ty, W4.BaseBoolRepr <- bt -> pure ()
             | Just (n,el) <- (tIsSeq ty)
             , tIsBit el, Just i <- tIsNum n, W4.BaseBVRepr w <- bt
             , intValue w == i -> pure ()
             | otherwise -> typeError (show (PP.pp ty)) :: IO ()
-          Nothing -> typeError (show (ppTypedTermType sc))
+          Nothing -> typeError (show (ppTypedTermType schema))
 
   typeError :: String -> IO a
   typeError t = fail $ unlines [

@@ -2609,8 +2609,14 @@ whenModified b f m = ChangeT $ do
 -- The parameter is a set of names which should be considered opaque---if
 -- we encounter any of these then the term is not considered to evaluate to
 -- a constant.
-isConstFoldTerm :: Set VarIndex -> Term -> Bool
-isConstFoldTerm unint t = isJust (go mempty t)
+isConstFoldTerm :: SharedContext -> Set VarIndex -> Term -> IO Bool
+isConstFoldTerm sc unint t
+  | closedTerm t =
+    do
+      mm <- scGetModuleMap sc
+      let ?mmap = mm
+      pure (isJust (go mempty t))
+  | otherwise = pure False
     where
     go !vis term =
       case term of
@@ -2620,9 +2626,10 @@ isConstFoldTerm unint t = isJust (go mempty t)
         Unshared termF -> goF vis termF
     goF vis tf =
       case tf of
-        Variable {} -> Nothing
         Constant c
           | nameIndex c `Set.member` unint -> Nothing
+          | Just (ResolvedDef d) <- lookupVarIndexInMap (nameIndex c) ?mmap
+          , Just t1 <- defBody d -> go vis t1
           | otherwise -> Just vis
         _ -> foldM go vis tf
 
