@@ -226,7 +226,7 @@ typeInferCompleteTerm (Un.Lambda p ((Un.termVarLocalName -> x, tp) : ctx) t) =
      -- so we use the unnormalized tp_trm in the return
      -- tp_whnf <- lift $ TC.typeCheckWHNF $ typedVal tp_trm
      vn <- lift $ TC.liftTCM scFreshVarName x
-     body <- withVar x (vn, typedVal tp_trm) $
+     body <- withVar x vn (typedVal tp_trm) $
        typeInferCompleteUTerm $ Un.Lambda p ctx t
      typeInferComplete (Lambda vn tp_trm body)
 typeInferCompleteTerm (Un.Pi _ [] t) = typeInferCompleteUTerm t
@@ -238,7 +238,7 @@ typeInferCompleteTerm (Un.Pi p ((Un.termVarLocalName -> x, tp) : ctx) t) =
      -- so we use the unnormalized tp_trm in the return
      tp_whnf <- lift $ TC.typeCheckWHNF $ typedVal tp_trm
      vn <- lift $ TC.liftTCM scFreshVarName x
-     body <- withVar x (vn, tp_whnf) $
+     body <- withVar x vn tp_whnf $
        typeInferCompleteUTerm $ Un.Pi p ctx t
      result <- typeInferComplete (Pi vn tp_trm body)
      pure result
@@ -353,7 +353,8 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
        withCtx ctx $
        do typed_body <- typeInferCompleteUTerm body
           lift $ TC.checkSubtype typed_body req_body_tp
-          result <- lift $ TC.liftTCM scLambdaList (map snd ctx) (typedVal typed_body)
+          let vts = map (\(_, v, t) -> (v, t)) ctx
+          result <- lift $ TC.liftTCM scLambdaList vts (typedVal typed_body)
           pure result
 
      -- Step 4: add the definition to the current module
@@ -389,8 +390,8 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   (>> processDecls rest) $ atPos p $
   -- Step 1: type-check the parameters
   typeInferCompleteInCtx param_ctx' $ \params -> do
-  let dtParams = map (\(_, vt, _) -> vt) params
-  let param_sort = maxSort (map (\(_,_,s) -> s) params)
+  let dtParams = map (\(_, v, t, _) -> (v, t)) params
+  let param_sort = maxSort (map (\(_, _, _, s) -> s) params)
   let err :: String -> CheckM a
       err msg = throwTCError $ DeclError nm msg
 
@@ -404,8 +405,8 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
       _ -> err "Wrong form for type of datatype"
   let dt_ixs' = map (\(x, t) -> (Un.termVarLocalName x, t)) dt_ixs
   dt_ixs_typed <- typeInferCompleteCtx dt_ixs'
-  let dtIndices = map (\(_, vt, _) -> vt) dt_ixs_typed
-      ixs_max_sort = maxSort (map (\(_,_,s) -> s) dt_ixs_typed)
+  let dtIndices = map (\(_, v, t, _) -> (v, t)) dt_ixs_typed
+      ixs_max_sort = maxSort (map (\(_, _, _, s) -> s) dt_ixs_typed)
 
   -- Step 3: do the necessary universe inclusion checking for any predicative
   -- (non-Prop) inductive type, which includes:
@@ -481,11 +482,11 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
 
 -- | Pattern match a nested pi-abstraction, like 'asPiList', but only match as
 -- far as the supplied list of variables, and use them as the new names
-matchPiWithNames :: [LocalName] -> Term -> Maybe ([(LocalName, (VarName, Term))], Term)
+matchPiWithNames :: [LocalName] -> Term -> Maybe ([(LocalName, VarName, Term)], Term)
 matchPiWithNames [] tp = return ([], tp)
 matchPiWithNames (var : vars) (asPi -> Just (nm, arg_tp, body_tp)) =
   do (ctx,body) <- matchPiWithNames vars body_tp
-     return ((var, (nm, arg_tp)) : ctx,body)
+     return ((var, nm, arg_tp) : ctx,body)
 matchPiWithNames _ _ = Nothing
 
 -- | Run a type-checking computation in a typing context extended with a new
@@ -495,36 +496,36 @@ matchPiWithNames _ _ = Nothing
 --
 -- NOTE: the type given for the variable should be in WHNF, so that we do not
 -- have to normalize the types of variables each time we see them.
-withVar :: LocalName -> (VarName, Term) -> CheckM a -> CheckM a
-withVar x (vn, tp) m =
+withVar :: LocalName -> VarName -> Term -> CheckM a -> CheckM a
+withVar x vn tp m =
   TC.rethrowTCError (ErrorCtx x tp) $
   TC.withEmptyTCState $
   local (\env -> env { tcLocals = Map.insert x (vn, tp) (tcLocals env) }) m
 
 -- | Run a type-checking computation in a typing context extended by a list of
 -- variables and their types. See 'withVar'.
-withCtx :: [(LocalName, (VarName, Term))] -> CheckM a -> CheckM a
-withCtx = flip (foldr (\(x,tp) -> withVar x tp))
+withCtx :: [(LocalName, VarName, Term)] -> CheckM a -> CheckM a
+withCtx = flip (foldr (\(x, vn, tp) -> withVar x vn tp))
 
 -- | Perform type inference on a context, i.e., a list of variable names and
 -- their associated types. This will give us 'Term's for each type, as
 -- well as their 'Sort's, since the type of any type is a 'Sort'.
 typeInferCompleteCtx ::
-  [(LocalName, Un.UTerm)] -> CheckM [(LocalName, (VarName, Term), Sort)]
+  [(LocalName, Un.UTerm)] -> CheckM [(LocalName, VarName, Term, Sort)]
 typeInferCompleteCtx [] = pure []
 typeInferCompleteCtx ((x, tp) : ctx) =
   do typed_tp <- typeInferCompleteUTerm tp
      s <- lift $ TC.ensureSort (typedType typed_tp)
      vn <- lift $ TC.liftTCM scFreshVarName x
-     let vt = (vn, typedVal typed_tp)
-     ((x, vt, s) :) <$> withVar x vt (typeInferCompleteCtx ctx)
+     let t' = typedVal typed_tp
+     ((x, vn, t', s) :) <$> withVar x vn t' (typeInferCompleteCtx ctx)
 
 -- | Perform type inference on a context via 'typeInferCompleteCtx', and then
 -- run a computation in that context via 'withCtx', also passing in that context
 -- to the computation
 typeInferCompleteInCtx ::
   [(LocalName, Un.UTerm)] ->
-  ([(LocalName, (VarName, Term), Sort)] -> CheckM a) -> CheckM a
+  ([(LocalName, VarName, Term, Sort)] -> CheckM a) -> CheckM a
 typeInferCompleteInCtx ctx f =
   do typed_ctx <- typeInferCompleteCtx ctx
-     withCtx (map (\(x, v, _) -> (x, v)) typed_ctx) (f typed_ctx)
+     withCtx (map (\(x, v, t, _) -> (x, v, t)) typed_ctx) (f typed_ctx)
