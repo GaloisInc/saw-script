@@ -86,8 +86,8 @@ module SAWCore.SharedTerm
     -- ** Declaring global constants
   , scDeclarePrim
   , scInsertDef
-  , scConstant
-  , scConstant'
+  , scFreshConstant
+  , scDefineConstant
   , scOpaqueConstant
   , scBeginDataType
   , scCompleteDataType
@@ -625,7 +625,7 @@ scDeclarePrim sc ident q def_tp =
 -- | Insert a definition into a SAW core module
 scInsertDef :: SharedContext -> Ident -> Term -> Term -> IO ()
 scInsertDef sc ident def_tp def_tm =
-  do _ <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
+  do _ <- scDefineConstant sc (ModuleIdentifier ident) def_tm def_tp
      pure ()
 
 -- | Look up a module by name, raising an error if it is not loaded
@@ -1742,15 +1742,16 @@ scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 -- The term for the body must not have any free variables.
 -- A globally-unique name with the specified base name will be created
 -- using 'scFreshName'.
-scConstant :: SharedContext
-           -> Text   -- ^ The name
-           -> Term   -- ^ The body
-           -> Term   -- ^ The type
-           -> IO Term
-scConstant sc name rhs ty =
+scFreshConstant ::
+  SharedContext ->
+  Text {- ^ The base name -} ->
+  Term {- ^ The body -} ->
+  Term {- ^ The type -} ->
+  IO Term
+scFreshConstant sc name rhs ty =
   do unless (closedTerm rhs) $
        fail $ unlines
-       [ "scConstant: term contains free variables"
+       [ "scFreshConstant: term contains free variables"
        , "name: " ++ Text.unpack name
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
@@ -1763,15 +1764,16 @@ scConstant sc name rhs ty =
 -- body, and type.
 -- The URI in the given 'NameInfo' must be globally unique.
 -- The term for the body must not have any free variables.
-scConstant' :: SharedContext
-            -> NameInfo -- ^ The name
-            -> Term   -- ^ The body
-            -> Term   -- ^ The type
-            -> IO Term
-scConstant' sc nmi rhs ty =
+scDefineConstant ::
+  SharedContext ->
+  NameInfo {- ^ The name -} ->
+  Term {- ^ The body -} ->
+  Term {- ^ The type -} ->
+  IO Term
+scDefineConstant sc nmi rhs ty =
   do unless (closedTerm rhs) $
        fail $ unlines
-       [ "scConstant': term contains free variables"
+       [ "scDefineConstant: term contains free variables"
        , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs

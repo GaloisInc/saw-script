@@ -794,7 +794,7 @@ importPrimitive sc primOpts env n sch
       do t <- importSchema sc env sch
          e <- importExpr sc env expr
          nmi <- importName n
-         scConstant' sc nmi e t
+         scDefineConstant sc nmi e t
 
   -- lookup primitive in the extra primitive lookup table
   | Just nm <- C.asPrim n, Just t <- Map.lookup nm (envPrims env) = return t
@@ -822,7 +822,7 @@ importConstant :: SharedContext -> Env -> C.Name -> C.Schema -> Term -> IO Term
 importConstant sc env n sch rhs = do
   nmi <- importName n
   t <- importSchema sc env sch
-  scConstant' sc nmi rhs t
+  scDefineConstant sc nmi rhs t
 
 allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 allPrims = prelPrims <> arrayPrims <> floatPrims <> suiteBPrims <> primeECPrims
@@ -1509,7 +1509,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
         rhs' <- case declOpts of
                   TopLevelDeclGroup _ ->
                     do nmi <- importName nm
-                       scConstant' sc nmi rhs t'
+                       scDefineConstant sc nmi rhs t'
                   NestedDeclGroup ->
                     return rhs
         return env0 { envE = Map.insert nm rhs' (envE env0)
@@ -1585,7 +1585,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                case declOpts of
                  TopLevelDeclGroup _ ->
                    do nmi <- importName (C.dName d)
-                      scConstant' sc nmi r t
+                      scDefineConstant sc nmi r t
                  NestedDeclGroup -> return r
       rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
