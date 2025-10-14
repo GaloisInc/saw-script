@@ -403,11 +403,21 @@ of its name.
 
 Binding a variable name that already exists will, in general, create a
 new variable for the new value; the old value is left alone and
-references to it is unchanged.
-There is an exception to this: values bound at the syntactic top level
-are updated when rebound, as if they had been assigned to.
-This is a bug and the behavior will be changed in a future release.
-See [Issue XXX](XXX).
+references to it are unchanged.
+
+There is an exception to this: global variables at the syntactic top
+level can be bound with the special variant syntax
+`let rebindable ...`.
+These variables can then be updated by a subsequent `let rebindable`;
+in effect they are mutable globals.
+Updates must be with the same type, which must be monomorphic.
+See [Issue 1646](https://github.com/GaloisInc/saw-script/issues/1646)
+for further discussion and the history of this (somewhat dubious)
+feature.
+Note that `rec rebindable` is not permitted, and variables bound with
+`<-` cannot be rebindable either.
+Rebinding a `rebindable` variable with a non-rebindable definition
+masks it with a new immutable version, but does _not_ update it.
 
 One can also write `let {{ ... }};`, in which the double-braces can
 contain not just an expression but any Cryptol declaration or
