@@ -60,6 +60,7 @@ module SAWCore.SharedTerm
   , scFreshName
   , scFreshVarName
   , scVariable
+  , scVariables
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
@@ -435,6 +436,10 @@ scConstApply sc i ts =
 scVariable :: SharedContext -> ExtCns Term -> IO Term
 scVariable sc (EC nm tp) = scTermF sc (Variable nm tp)
 
+-- | Create a list of named variables from a list of names and types.
+scVariables :: SharedContext -> [(VarName, Term)] -> IO [Term]
+scVariables sc = traverse (\(v, t) -> scVariable sc (EC v t))
+
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
 instance Show DuplicateNameException where
@@ -657,13 +662,13 @@ scRequireDef sc i =
 scBeginDataType ::
   SharedContext ->
   Ident {- ^ The name of this datatype -} ->
-  [ExtCns Term] {- ^ The context of parameters of this datatype -} ->
-  [ExtCns Term] {- ^ The context of indices of this datatype -} ->
+  [(VarName, Term)] {- ^ The context of parameters of this datatype -} ->
+  [(VarName, Term)] {- ^ The context of indices of this datatype -} ->
   Sort {- ^ The universe of this datatype -} ->
   IO Name
 scBeginDataType sc dtIdent dtParams dtIndices dtSort =
   do dtName <- scRegisterName sc (ModuleIdentifier dtIdent)
-     dtType <- scGeneralizeExts sc (dtParams ++ dtIndices) =<< scSort sc dtSort
+     dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
@@ -776,7 +781,7 @@ ctxCtorArgType ::
   IO Term
 ctxCtorArgType _ _ (ConstArg tp) = return tp
 ctxCtorArgType sc d_params (RecursiveArg zs_ctx ixs) =
-  scGeneralizeExts sc zs_ctx =<< scApplyAll sc d_params ixs
+  scPiList sc zs_ctx =<< scApplyAll sc d_params ixs
 
 -- | Internal: Convert a bindings list of 'CtorArg's to a binding list
 -- of types.
@@ -796,12 +801,12 @@ ctxCtorArgBindings sc d_params ((x, arg) : args) =
 -- datatype and its 'CtorArgStruct'
 ctxCtorType :: SharedContext -> Name -> CtorArgStruct -> IO Term
 ctxCtorType sc d (CtorArgStruct{..}) =
-  do params <- traverse (scVariable sc) ctorParams
+  do params <- scVariables sc ctorParams
      d_params <- scConstApply sc d params
      bs <- ctxCtorArgBindings sc d_params ctorArgs
      d_params_ixs <- scApplyAll sc d_params ctorIndices
      body <- scGeneralizeExts sc bs d_params_ixs
-     scGeneralizeExts sc ctorParams body
+     scPiList sc ctorParams body
 
 -- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
 -- names of the 'DataType'. Note that we cannot look up the latter information,
@@ -873,7 +878,7 @@ ctxCtorElimType ::
   CtorArgStruct ->
   IO Term
 ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
-  do params <- traverse (scVariable sc) ctorParams
+  do params <- scVariables sc ctorParams
      d_params <- scConstApply sc d params
      let helper :: [Term] -> [(VarName, CtorArg)] -> IO Term
          helper prevs ((nm, ConstArg tp) : args) =
@@ -895,14 +900,14 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
            -- where rest is the result of a recursive call
            do d_params_ts <- scApplyAll sc d_params ts
               -- Build the type of the argument arg
-              arg_tp <- scGeneralizeExts sc zs d_params_ts
+              arg_tp <- scPiList sc zs d_params_ts
               arg <- scVariable sc (EC nm arg_tp)
               -- Build the type of ih
               pret_ts <- scApplyAll sc p_ret ts
-              z_vars <- traverse (scVariable sc) zs
+              z_vars <- scVariables sc zs
               arg_zs <- scApplyAll sc arg z_vars
               ih_ret <- scApply sc pret_ts arg_zs
-              ih_tp <- scGeneralizeExts sc zs ih_ret
+              ih_tp <- scPiList sc zs ih_ret
               -- Finally, build the pi-abstraction for arg and ih around the rest
               rest <- helper (prevs ++ [arg]) args
               scGeneralizeTerms sc [arg] =<< scFun sc ih_tp rest
@@ -978,17 +983,17 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
     -- The resulting term has the form
     -- > \(z1:Z1) .. (zk:Zk) -> r ixs (x z1 .. zk)
     mk_rec_arg ::
-      [ExtCns Term] ->                -- telescope describing the zs
+      [(VarName, Term)] ->             -- telescope describing the zs
       [Term] ->                        -- actual values for the indices, shifted under zs
       Term ->                         -- actual value in recursive position
       IO Term
     mk_rec_arg zs_ctx ixs x =
       -- eta expand over the zs and apply the Recursor form
-      do zs <- traverse (scVariable sc) zs_ctx
+      do zs <- scVariables sc zs_ctx
          x_zs <- scApplyAll sc x zs
          r_ixs <- scApplyAll sc r ixs
          body <- scApply sc r_ixs x_zs
-         scAbstractExts sc zs_ctx body
+         scLambdaList sc zs_ctx body
 
 -- | Build the type of the @p_ret@ function, also known as the "motive"
 -- function, of a recursor on datatype @d@. This type has the form
@@ -999,14 +1004,14 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 -- of @d@, and @s@ is any sort supplied as an argument.
 scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
-  do param_vars <- traverse (scVariable sc) (dtParams dt)
-     ix_vars <- traverse (scVariable sc) (dtIndices dt)
+  do param_vars <- scVariables sc (dtParams dt)
+     ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
      ret <- scFun sc d =<< scSort sc s
-     p_ret <- scGeneralizeExts sc (dtIndices dt) ret
+     p_ret <- scPiList sc (dtIndices dt) ret
      -- Note that dtIndices may refer to variables from dtParams, so
      -- we can't just use params directly; the substitution is necessary.
-     let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
+     let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
      scInstantiateExt sc subst p_ret
 
 -- | Build the type of a recursor for datatype @d@ that has been
@@ -1020,14 +1025,14 @@ scRecursorRetTypeType sc dt params s =
 -- indices of @d@.
 scRecursorAppType :: SharedContext -> DataType -> [Term] -> Term -> IO Term
 scRecursorAppType sc dt params motive =
-  do param_vars <- traverse (scVariable sc) (dtParams dt)
-     ix_vars <- traverse (scVariable sc) (dtIndices dt)
+  do param_vars <- scVariables sc (dtParams dt)
+     ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
-     arg_ec <- scFreshEC sc "arg" d
-     arg_var <- scVariable sc arg_ec
+     arg_vn <- scFreshVarName sc "arg"
+     arg_var <- scVariable sc (EC arg_vn d)
      ret <- scApplyAll sc motive (ix_vars ++ [arg_var])
-     ty <- scGeneralizeExts sc (dtIndices dt ++ [arg_ec]) ret
-     let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
+     ty <- scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
+     let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
      scInstantiateExt sc subst ty
 
 -- | Build the full type of an unapplied recursor for datatype @d@
@@ -1043,21 +1048,21 @@ scRecursorType :: SharedContext -> DataType -> Sort -> IO Term
 scRecursorType sc dt s =
   do let d = dtName dt
 
-     param_vars <- traverse (scVariable sc) (dtParams dt)
+     param_vars <- scVariables sc (dtParams dt)
 
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
      motive_ty <- scRecursorRetTypeType sc dt param_vars s
-     motive_ec <- scFreshEC sc "p" motive_ty
-     motive_var <- scVariable sc motive_ec
+     motive_vn <- scFreshVarName sc "p"
+     motive_var <- scVariable sc (EC motive_vn motive_ty)
 
      -- Compute the types of the elimination functions
      elims_tps <-
        forM (dtCtors dt) $ \ctor ->
        ctxCtorElimType sc d (ctorName ctor) motive_var (ctorArgStruct ctor)
 
-     scGeneralizeExts sc (dtParams dt) =<<
-       scGeneralizeExts sc [motive_ec] =<<
+     scPiList sc (dtParams dt) =<<
+       scPi sc motive_vn motive_ty =<<
        scFunAll sc elims_tps =<<
        scRecursorAppType sc dt param_vars motive_var
 

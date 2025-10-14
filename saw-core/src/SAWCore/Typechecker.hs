@@ -389,7 +389,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   (>> processDecls rest) $ atPos p $
   -- Step 1: type-check the parameters
   typeInferCompleteInCtx param_ctx' $ \params -> do
-  let dtParams = map (\(_, (vn, tp), _) -> EC vn tp) params
+  let dtParams = map (\(_, vt, _) -> vt) params
   let param_sort = maxSort (map (\(_,_,s) -> s) params)
   let err :: String -> CheckM a
       err msg = throwTCError $ DeclError nm msg
@@ -404,7 +404,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
       _ -> err "Wrong form for type of datatype"
   let dt_ixs' = map (\(x, t) -> (Un.termVarLocalName x, t)) dt_ixs
   dt_ixs_typed <- typeInferCompleteCtx dt_ixs'
-  let dtIndices = map (\(_, (vn, tp), _) -> EC vn tp) dt_ixs_typed
+  let dtIndices = map (\(_, vt, _) -> vt) dt_ixs_typed
       ixs_max_sort = maxSort (map (\(_,_,s) -> s) dt_ixs_typed)
 
   -- Step 3: do the necessary universe inclusion checking for any predicative

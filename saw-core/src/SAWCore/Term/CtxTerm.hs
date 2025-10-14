@@ -60,21 +60,18 @@ usesDataType d t =
 -- where the @pi@ are the distinct bound variables bound in the @params@
 -- context, given as argument, and that the @xj@ have no occurrences of @d@. If
 -- the given type is of this form, return the @xj@.
-asCtorDTApp :: Name -> [ExtCns Term] ->
-               [index] ->
-               Term ->
-               Maybe [Term]
+asCtorDTApp :: Name -> [(VarName, Term)] -> [index] -> Term -> Maybe [Term]
 asCtorDTApp d params dt_ixs (ctxAsDataTypeApp d params dt_ixs ->
                                        Just (param_vars, ixs))
-  | isVarList params param_vars && not (any (usesDataType d) ixs)
+  | isVarList (map fst params) param_vars && not (any (usesDataType d) ixs)
   = Just ixs
   where
     -- Check that the given list of terms is a list of named
     -- variables, one for each parameter
-    isVarList :: [ExtCns Term] -> [Term] -> Bool
+    isVarList :: [VarName] -> [Term] -> Bool
     isVarList _ [] = True
     isVarList (p : ps) ((asVariable -> Just ec) : ts) =
-      ec == p && isVarList ps ts
+      ecName ec == p && isVarList ps ts
     isVarList _ _ = False
 asCtorDTApp _ _ _ _ = Nothing
 
@@ -82,7 +79,7 @@ asCtorDTApp _ _ _ _ = Nothing
 -- | Check that an argument for a constructor has one of the allowed forms
 asCtorArg ::
   Name ->
-  [ExtCns Term] ->
+  [(VarName, Term)] ->
   [index] ->
   Term ->
   Maybe CtorArg
@@ -94,7 +91,7 @@ asCtorArg d params dt_ixs tp =
      case asCtorDTApp d params dt_ixs ret of
        Just ixs
          | not (any (usesDataType d . snd) zs) ->
-           Just (RecursiveArg (map (uncurry EC) zs) ixs)
+           Just (RecursiveArg zs ixs)
        _ ->
          Nothing
 
@@ -102,7 +99,7 @@ asCtorArg d params dt_ixs tp =
 -- argument of one of the allowed forms described by 'CtorArg'
 asPiCtorArg ::
   Name ->
-  [ExtCns Term] ->
+  [(VarName, Term)] ->
   [index] ->
   Term ->
   Maybe (VarName, CtorArg, Term)
@@ -117,7 +114,7 @@ asPiCtorArg d params dt_ixs t =
 -- | Helper function for 'mkCtorArgStruct'
 mkCtorArgsIxs ::
   Name ->
-  [ExtCns Term] ->
+  [(VarName, Term)] ->
   [index] ->
   Term ->
   Maybe ([(VarName, CtorArg)], [Term])
@@ -138,8 +135,8 @@ mkCtorArgsIxs d params dt_ixs ty =
 -- datatype, and, if so, build a 'CtorArgStruct' for it.
 mkCtorArgStruct ::
   Name ->
-  [ExtCns Term] ->
-  [ExtCns Term] ->
+  [(VarName, Term)] ->
+  [(VarName, Term)] ->
   Term ->
   Maybe CtorArgStruct
 mkCtorArgStruct d params dt_ixs ctor_tp =

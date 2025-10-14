@@ -627,15 +627,6 @@ translateParams :: TermTranslationMonad m => [(VarName, Term)] ->
 translateParams bs m =
   translateBinders bs (m . concat . map bindTransToBinder)
 
--- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
--- return a list of explicit 'Binder's, for use representing the bound variables
--- in 'Lambda's, 'Let's, etc.
-translateParamsEC ::
-  TermTranslationMonad m => [ExtCns Term] -> ([Coq.Binder] -> m a) -> m a
-translateParamsEC bs m =
-  translateBindersEC bs (m . concatMap bindTransToBinder)
-
-
 -- | Given a list of 'VarName's and their corresponding types (as 'Term's)
 -- representing argument types and a 'Term' representing the return type,
 -- return the resulting 'Pi', with additional implicit arguments added after
