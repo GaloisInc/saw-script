@@ -1553,10 +1553,10 @@ w4EvalBasic sym st sc m addlPrims ecCons ref unintSet t =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm
                  (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
-     let uninterpreted tf nm ty
+     let uninterpreted nm ty
            | Set.member (nameIndex nm) unintSet =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
-             in Just (extcns tf (EC vn ty))
+             in Just (extcns (Constant nm) (EC vn ty))
            | otherwise                          = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
@@ -1584,7 +1584,7 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
   do let extcns tf (EC (VarName ix nm) ty) =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
-     let uninterpreted _tf nm ty =
+     let uninterpreted nm ty =
           if constantFilter nm ty then Nothing else Just (X.throwIO (NeutralTermEx (nameInfo nm)))
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)

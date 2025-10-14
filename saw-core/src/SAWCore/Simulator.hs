@@ -100,7 +100,7 @@ data SimulatorConfig l =
   -- ^ Interpretation of 'Primitive' terms.
   , simExtCns :: TermF Term -> ExtCns (TValue l) -> MValue l
   -- ^ Interpretation of 'ExtCns' terms.
-  , simConstant :: TermF Term -> Name -> TValue l -> Maybe (MValue l)
+  , simConstant :: Name -> TValue l -> Maybe (MValue l)
   -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
   -- the body of the constant should be evaluated. 'Just' indicates
   -- that the constant's definition should be overridden.
@@ -157,7 +157,7 @@ evalTermF cfg lam recEval tf env =
 
     Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
                                   ty' <- evalType (resolvedNameType r)
-                                  case simConstant cfg tf nm ty' of
+                                  case simConstant cfg nm ty' of
                                     Just override -> override
                                     Nothing ->
                                       case r of
@@ -383,14 +383,14 @@ evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               (VBool l -> MValue l -> MValue l -> MValue l) ->
               EvalM l (SimulatorConfig l)
 evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
-  evalGlobal' modmap prims (const extcns) (const uninterpreted) primHandler lazymux
+  evalGlobal' modmap prims (const extcns) uninterpreted primHandler lazymux
 
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn Id l) ->
   (TermF Term -> ExtCns (TValueIn Id l) -> MValueIn Id l) ->
-  (TermF Term -> Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
+  (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
@@ -399,7 +399,7 @@ evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
   ModuleMap ->
   Map Ident (PrimIn IO l) ->
   (TermF Term -> ExtCns (TValueIn IO l) -> MValueIn IO l) ->
-  (TermF Term -> Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
+  (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
@@ -413,7 +413,7 @@ evalGlobal' ::
   -- | Implementations of ExtCns terms
   (TermF Term -> ExtCns (TValue l) -> MValue l) ->
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
-  (TermF Term -> Name -> TValue l -> Maybe (MValue l)) ->
+  (Name -> TValue l -> Maybe (MValue l)) ->
   -- | Handler for stuck primitives
   (Name -> Text -> [Thunk l] -> MValue l) ->
   -- | Lazy mux operation
@@ -423,9 +423,9 @@ evalGlobal' modmap prims extcns constant primHandler lazymux =
   do checkPrimitives modmap prims
      return (SimulatorConfig primitive extcns constant' modmap lazymux)
   where
-    constant' :: TermF Term -> Name -> TValue l -> Maybe (MValue l)
-    constant' tf nm tv =
-      case constant tf nm tv of
+    constant' :: Name -> TValue l -> Maybe (MValue l)
+    constant' nm tv =
+      case constant nm tv of
         Just v -> Just v
         Nothing ->
           case nameInfo nm of
