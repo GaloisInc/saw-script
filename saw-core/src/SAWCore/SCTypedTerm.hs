@@ -40,7 +40,7 @@ module SAWCore.SCTypedTerm
   , scTypedString
   ) where
 
-import Control.Monad (foldM, unless)
+import Control.Monad (foldM, unless, when)
 import qualified Data.Foldable as Fold
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -157,20 +157,22 @@ scTypedApply sc f arg =
      ctx <- unifyContexts "scTypedApply" (typedCtx f) (typedCtx arg)
      pure (SCTypedTerm tm tp ctx)
 
--- possible errors: not a type, context mismatch
+-- possible errors: not a type, context mismatch, variable free in context
 scTypedLambda :: SharedContext -> VarName -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
 scTypedLambda sc x t body =
   do _s <- ensureSort sc (typedType t)
      tm <- scLambda sc x (typedVal t) (typedVal body)
+     ensureNotFreeInContext x body
      _ <- unifyContexts "scTypedLambda" (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)
      ctx <- unifyContexts "scTypedLambda" (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))
      tp <- scPi sc x (typedVal t) (typedType body)
      pure (SCTypedTerm tm tp ctx)
 
--- possible errors: not a type, context mismatch
+-- possible errors: not a type, context mismatch, variable free in context
 scTypedPi :: SharedContext -> VarName -> SCTypedTerm -> SCTypedTerm -> IO SCTypedTerm
 scTypedPi sc x t body =
   do tm <- scPi sc x (typedVal t) (typedVal body)
+     ensureNotFreeInContext x body
      _ <- unifyContexts "scTypedPi" (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)
      ctx <- unifyContexts "scTypedPi" (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))
      s1 <- ensureSort sc (typedType t)
@@ -359,7 +361,6 @@ unifyContexts msg ctx1 ctx2 =
      sequence_ (IntMap.intersectionWith check ctx1 ctx2)
      pure (IntMap.union ctx1 ctx2)
 
-
 unifyContextList :: String -> [IntMap Term] -> IO (IntMap Term)
 unifyContextList msg = foldM (unifyContexts msg) IntMap.empty
 
@@ -388,3 +389,11 @@ ensureRecordType sc tp = ensureRecognizer "RecordType" sc asRecordType tp
 
 piSort :: Sort -> Sort -> Sort
 piSort s1 s2 = if s2 == propSort then propSort else max s1 s2
+
+-- | Check whether the given 'VarName' occurs free in the type of
+-- another variable in the context of the given 'SCTypedTerm', and
+-- fail if it does.
+ensureNotFreeInContext :: VarName -> SCTypedTerm -> IO ()
+ensureNotFreeInContext x body =
+  when (any (IntSet.member (vnIndex x) . freeVars) (typedCtx body)) $
+    fail $ "Variable occurs free in context: " ++ show (vnName x)
