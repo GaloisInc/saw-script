@@ -105,8 +105,8 @@ translateDataType (DataType {..}) =
       let inductiveName = name
       (inductiveParameters, inductiveIndices) <-
         liftTermTranslationMonad $
-        TermTranslation.translateParamsEC dtParams $ \ps ->
-        TermTranslation.translateParamsEC dtIndices $ \ixs ->
+        TermTranslation.translateParams dtParams $ \ps ->
+        TermTranslation.translateParams dtIndices $ \ixs ->
         -- Translating the indices of a data type should never yield
         -- Inhabited constraints, so the result of calling
         -- `translateParams dtIndices` above should only return Binders and not
