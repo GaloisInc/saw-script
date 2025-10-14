@@ -1749,8 +1749,6 @@ scConstant :: SharedContext
            -> IO Term
 scConstant sc name rhs ty =
   do unless (closedTerm rhs) $
-       fail "scConstant: term contains loose variables"
-     unless (null (getAllExts rhs)) $
        fail $ unlines
        [ "scConstant: term contains free variables"
        , "name: " ++ Text.unpack name
@@ -1772,8 +1770,6 @@ scConstant' :: SharedContext
             -> IO Term
 scConstant' sc nmi rhs ty =
   do unless (closedTerm rhs) $
-       fail "scConstant': term contains loose variables"
-     unless (null (getAllExts rhs)) $
        fail $ unlines
        [ "scConstant': term contains free variables"
        , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
