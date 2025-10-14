@@ -70,6 +70,7 @@ import Data.IORef
 import qualified Data.Foldable as Foldable
 import qualified Data.List as List
 import Data.List.Extra (nubOrd)
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -100,7 +101,7 @@ import SAWCore.Prelude.Constants
 
 data RewriteRule a
   = RewriteRule
-    { ctxt :: [ExtCns Term]
+    { ctxt :: [(VarName, Term)]
     , lhs :: Term
     , rhs :: Term
     , permutative :: Bool
@@ -116,7 +117,7 @@ instance Eq (RewriteRule a) where
   RewriteRule c1 l1 r1 p1 s1 _a1 == RewriteRule c2 l2 r2 p2 s2 _a2 =
     c1 == c2 && l1 == l2 && r1 == r2 && p1 == p2 && s1 == s2
 
-ctxtRewriteRule :: RewriteRule a -> [ExtCns Term]
+ctxtRewriteRule :: RewriteRule a -> [(VarName, Term)]
 ctxtRewriteRule = ctxt
 
 lhsRewriteRule :: RewriteRule a -> Term
@@ -137,7 +138,7 @@ propOfRewriteRule :: SharedContext -> RewriteRule a -> IO Term
 propOfRewriteRule sc rule =
   do ty <- scTypeOf sc (lhs rule)
      eq <- scGlobalApply sc "Prelude.Eq" [ty, lhs rule, rhs rule]
-     scGeneralizeExts sc (ctxt rule) eq
+     scPiList sc (ctxt rule) eq
 
 ----------------------------------------------------------------------
 -- Matching
@@ -145,7 +146,7 @@ propOfRewriteRule sc rule =
 data MatchState =
   MatchState
   { substitution :: IntMap Term
-    -- ^ Mapping of 'ExtCns' variables, indexed by 'VarIndex'
+    -- ^ Mapping of variables, indexed by 'VarIndex'
   , constraints :: [(Term, Natural)]
   }
 
@@ -159,11 +160,11 @@ emptyMatchState = MatchState { substitution = IntMap.empty, constraints = [] }
 insertLookup :: VarIndex -> a -> IntMap a -> (Maybe a, IntMap a)
 insertLookup k x t = IntMap.insertLookupWithKey (\_ a _ -> a) k x t
 
-firstOrderMatch :: [ExtCns Term] -> Term -> Term -> Maybe (IntMap Term)
+firstOrderMatch :: [(VarName, Term)] -> Term -> Term -> Maybe (IntMap Term)
 firstOrderMatch ctxt pat term = match pat term IntMap.empty
   where
     ixs :: IntSet
-    ixs = IntSet.fromList (map ecVarIndex ctxt)
+    ixs = IntSet.fromList (map (vnIndex . fst) ctxt)
     match :: Term -> Term -> IntMap Term -> Maybe (IntMap Term)
     match x y m =
       case (unwrapTermF x, unwrapTermF y) of
@@ -223,7 +224,7 @@ asConstantNat t =
 --   is closed, then the terms in the instantiation will also be closed.
 scMatch ::
   SharedContext ->
-  [ExtCns Term] {- ^ context of unification variables in pattern -} ->
+  [(VarName, Term)] {- ^ context of unification variables in pattern -} ->
   Term {- ^ pattern -} ->
   Term {- ^ term -} ->
   IO (Maybe (IntMap Term))
@@ -236,7 +237,7 @@ scMatch sc ctxt pat term =
   where
     -- The set of VarIndexes of the unification variables
     ixs :: IntSet
-    ixs = IntSet.fromList (map ecVarIndex ctxt)
+    ixs = IntSet.fromList (map (vnIndex . fst) ctxt)
     -- Check that a constraint of the form pat = n for natural number literal n
     -- is satisfied by the supplied substitution (aka instantiation) inst
     check :: IntMap Term -> (Term, Natural) -> MaybeT IO ()
@@ -254,7 +255,7 @@ scMatch sc ctxt pat term =
     -- Check if a term is a higher-order variable pattern, i.e., a free variable
     -- (meaning one that can match anything) applied to 0 or more bound variable
     -- arguments.
-    asVarPat :: IntSet -> Term -> Maybe (VarIndex, [ExtCns Term])
+    asVarPat :: IntSet -> Term -> Maybe (VarIndex, [(VarName, Term)])
     asVarPat locals = go []
       where
         go js x =
@@ -263,7 +264,7 @@ scMatch sc ctxt pat term =
               | IntSet.member (vnIndex nm) ixs -> Just (vnIndex nm, js)
               | otherwise  -> Nothing
             App t (unwrapTermF -> Variable nm tp)
-              | IntSet.member (vnIndex nm) locals -> go (EC nm tp : js) t
+              | IntSet.member (vnIndex nm) locals -> go ((nm, tp) : js) t
             _ -> Nothing
 
     -- Test if term y matches pattern x, meaning whether there is a substitution
@@ -286,9 +287,9 @@ scMatch sc ctxt pat term =
           do -- ensure parameter variables are distinct
              guard (Set.size (Set.fromList vs) == length vs)
              -- ensure y mentions only variables that are in vs
-             let vset = IntSet.fromList (map ecVarIndex vs)
+             let vset = IntSet.fromList (map (vnIndex . fst) vs)
              guard (IntSet.disjoint (IntSet.difference locals vset) (freeVars y))
-             y2 <- lift $ scAbstractExts sc vs y
+             y2 <- lift $ scLambdaList sc vs y
              let (my3, m') = insertLookup i y2 m
              case my3 of
                Nothing -> return (MatchState m' cs)
@@ -356,14 +357,13 @@ intModEqIdent = mkIdent (mkModuleName ["Prelude"]) "intModEq"
 ruleOfTerm :: Term -> Maybe a -> RewriteRule a
 ruleOfTerm t ann =
   do let (vars, body) = R.asPiList t
-     let ecs = map (uncurry EC) vars
      case R.asGlobalApply eqIdent body of
-       Just [_, x, y] -> mkRewriteRule ecs x y False ann
+       Just [_, x, y] -> mkRewriteRule vars x y False ann
        _ -> panic "ruleOfTerm" ["Illegal argument"]
 
 -- Test whether a rewrite rule is permutative
 -- this is a rule that immediately loops whether used forwards or backwards.
-rulePermutes :: [ExtCns Term] -> Term -> Term -> Bool
+rulePermutes :: [(VarName, Term)] -> Term -> Term -> Bool
 rulePermutes ctxt lhs rhs =
     case firstOrderMatch ctxt lhs rhs of
         Nothing -> False -- rhs is not an instance of lhs
@@ -372,7 +372,7 @@ rulePermutes ctxt lhs rhs =
             Nothing -> False -- but here we have a looping rule, not good!
             Just _ -> True
 
-mkRewriteRule :: [ExtCns Term] -> Term -> Term -> Bool -> Maybe a -> RewriteRule a
+mkRewriteRule :: [(VarName, Term)] -> Term -> Term -> Bool -> Maybe a -> RewriteRule a
 mkRewriteRule c l r shallow ann =
     RewriteRule
     { ctxt = c
@@ -395,12 +395,12 @@ ruleOfProp sc term ann =
   case R.asPi term of
   Just (nm, tp, body) ->
     do rule <- ruleOfProp sc body ann
-       pure $ (\r -> r { ctxt = EC nm tp : ctxt r}) <$> rule
+       pure $ (\r -> r { ctxt = (nm, tp) : ctxt r}) <$> rule
   Nothing ->
     case R.asLambda term of
     Just (nm, tp, body) ->
       do rule <- ruleOfProp sc body ann
-         pure $ (\r -> r { ctxt = EC nm tp : ctxt r}) <$> rule
+         pure $ (\r -> r { ctxt = (nm, tp) : ctxt r}) <$> rule
     Nothing ->
       case term of
         (R.asGlobalApply ecEqIdent -> Just [_, _, x, y]) -> eqRule x y
@@ -450,7 +450,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
   case R.asLambda rhs of
   Just (nm, tp, body) ->
     do let ec = EC nm tp
-       let ctxt' = ctxt ++ [ec]
+       let ctxt' = ctxt ++ [(nm, tp)]
        var0 <- scVariable sc ec
        lhs' <- scApply sc lhs var0
        pure $ Just [mkRewriteRule ctxt' lhs' body shallow ann]
@@ -470,7 +470,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
         (elims,
          splitAt (recursorNumIxs crec) ->
          (_ixs, (R.asVariable -> Just ec) : more))))))
-      | (ctxt1, _ : ctxt2) <- break (== ec) ctxt ->
+      | (ctxt1, _ : ctxt2) <- break ((== ecName ec) . fst) ctxt ->
       do -- ti is the type of the value being scrutinized
          ti <- scWhnf sc (ecType ec)
          -- The datatype parameters are also in context @ctxt1@.
@@ -478,9 +478,9 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
          let ctorRule ctor =
                do -- Compute the argument types @argTs@.
                   ctorT <- piAppType (ctorType ctor) params1
-                  let argECs = map (uncurry EC) $ fst $ R.asPiList ctorT
+                  let argCtx = fst $ R.asPiList ctorT
                   -- Build a fully-applied constructor @c@.
-                  args <- traverse (scVariable sc) argECs
+                  args <- scVariables sc argCtx
                   c <- scConstApply sc (ctorName ctor) (params1 ++ args)
                   -- Define function to substitute the constructor @c@
                   -- in for the old local variable @ec@.
@@ -488,7 +488,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   let adjust t = scInstantiateExt sc subst t
                   -- Build the list of types of the new context.
                   ctxt2' <- traverse (traverse adjust) ctxt2
-                  let ctxt' = ctxt1 ++ argECs ++ ctxt2'
+                  let ctxt' = ctxt1 ++ argCtx ++ ctxt2'
                   -- Substitute the new constructor value to make the
                   -- new lhs and rhs in context @ctxt'@.
                   lhs' <- adjust lhs
@@ -752,7 +752,7 @@ rewriteSharedTerm sc ss t0 =
             do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
                           "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm PPS.defaultOpts lhs
                apply rules t
-          | IntMap.keysSet inst /= IntSet.fromList (map ecVarIndex ctxt) ->
+          | IntMap.keysSet inst /= IntSet.fromList (map (vnIndex . fst) ctxt) ->
             do putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
                  ++ scPrettyTerm PPS.defaultOpts lhs
                apply rules t
@@ -979,7 +979,7 @@ splitCond sc ss c t = do
    scGlobalApply sc "Prelude.ite" [ty, c, then_branch, else_branch]
 
 
-type HoistIfs s = (Term, [(Term, Set (ExtCns Term))])
+type HoistIfs s = (Term, [(Term, Map VarName Term)])
 
 
 orderTerms :: SharedContext -> [Term] -> IO [Term]
@@ -1004,8 +1004,8 @@ doHoistIfs sc ss hoistCache = go
              do (then_branch',conds1) <- go then_branch
                 (else_branch',conds2) <- go else_branch
                 t' <- scGlobalApply sc "Prelude.ite" [branch_tp, cond, then_branch', else_branch']
-                let ecs = getAllExtSet cond
-                return (t', (cond, ecs) : conds1 ++ conds2)
+                let vars = Map.fromList $ map (\(EC vn tp) -> (vn, tp)) $ getAllExts cond
+                return (t', (cond, vars) : conds1 ++ conds2)
            _ ->
              goF t tf
 
@@ -1029,9 +1029,8 @@ doHoistIfs sc ss hoistCache = go
        goF _ (Pi nm tp body) = goBinder scPi nm tp body
 
        goBinder close nm tp body =
-          do let ec = EC nm tp
-             (body'', conds) <- go body
-             let (stuck, float) = List.partition (\(_,ecs) -> Set.member ec ecs) conds
+          do (body'', conds) <- go body
+             let (stuck, float) = List.partition (Map.member nm . snd) conds
 
              stuck' <- orderTerms sc (map fst stuck)
              body''' <- splitConds sc ss stuck' body''
