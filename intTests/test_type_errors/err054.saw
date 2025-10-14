@@ -7,8 +7,18 @@
 // at some point to switch test1646 away from using test-and-diff.sh
 // for simplicity and reduced maintenance, in which case the tests
 // here should take up the load.
+//
+// Note that additional cases not supported by the parser are handled
+// in test_parse_errors.
 
 // "rebindable" is not allowed in enclosed scopes
 do { let rebindable e = 3; return (); };
 let f0 = do { let rebindable f0' = 3; return (); };
 let f1 () = do { let rebindable f1' = 3; return (); };
+
+// Polymorphic values can't be rebound.
+//
+// (currently you can bind them once and declare them rebindable,
+// but rebind attempts are rejected)
+let rebindable f2 x = return x;
+let rebindable f2 y = return y;
