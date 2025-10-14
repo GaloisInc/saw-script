@@ -153,13 +153,21 @@ scWriteExternal t0 =
             StringLit s         -> pure $ unwords ["String", show s]
 
 
--- | During parsing, we maintain two maps used for renumbering: The
--- first is for the 'Int' values that appear in the external core
--- file, and the second is for the 'VarIndex' values that appear
--- inside 'Constant' and 'Variable' constructors. We do not reuse any
--- such numbers that appear in the external file, but generate fresh
--- ones that are valid in the current 'SharedContext'.
-type ReadM = State.StateT (Map Int Term, Map VarIndex (Either Text NameInfo), Map VarIndex VarIndex) IO
+-- | During parsing, we maintain various maps used for renumbering.
+-- We do not reuse any such numbers that appear in the external file,
+-- but generate fresh ones that are valid in the current
+-- 'SharedContext'.
+data ReadState =
+  ReadState
+  { rsTerms :: Map Int Term
+    -- ^ Map 'Int' term identifiers from external core file to SAWCore terms
+  , rsNames :: Map VarIndex (Either Text NameInfo)
+    -- ^ Map 'VarIndex'es from external core file to global names
+  , rsVars :: Map VarIndex VarIndex
+    -- ^ Map 'VarIndex'es from external core file to variables
+  }
+
+type ReadM = State.StateT ReadState IO
 
 scReadExternal :: SharedContext -> String -> IO Term
 scReadExternal sc input =
@@ -168,7 +176,7 @@ scReadExternal sc input =
       case readNames nmlist of
         Nothing -> fail "scReadExternal: failed to parse name table"
         Just nms ->
-          State.evalStateT (mapM_ (go . words) rows >> readIdx final) (Map.empty, nms, Map.empty)
+          State.evalStateT (mapM_ (go . words) rows >> readIdx final) (ReadState Map.empty nms Map.empty)
 
     _ -> fail "scReadExternal: failed to parse input file"
   where
@@ -177,8 +185,7 @@ scReadExternal sc input =
       do i <- readM tok
          tf <- parse tokens
          t <- lift $ scTermF sc tf
-         (ts, nms, vs) <- State.get
-         State.put (Map.insert i t ts, nms, vs)
+         State.modify $ \s -> s { rsTerms = Map.insert i t (rsTerms s) }
     go [] = pure () -- empty lines are ignored
 
     readM :: forall a. Read a => String -> ReadM a
@@ -189,7 +196,7 @@ scReadExternal sc input =
 
     getTerm :: Int -> ReadM Term
     getTerm i =
-      do (ts,_,_) <- State.get
+      do ts <- State.gets rsTerms
          case Map.lookup i ts of
            Nothing -> fail $ "scReadExternal: invalid term index: " ++ show i
            Just t -> pure t
@@ -204,7 +211,8 @@ scReadExternal sc input =
 
     readName' :: VarIndex -> ReadM Name
     readName' vi =
-      do (ts, nms, vs) <- State.get
+      do nms <- State.gets rsNames
+         vs <- State.gets rsVars
          nmi <- case Map.lookup vi nms of
                   Just (Right nmi) -> pure nmi
                   _ -> lift $ fail $ "scReadExternal: ExtCns missing name info: " ++ show vi
@@ -220,7 +228,7 @@ scReadExternal sc input =
                  Just vi' -> pure $ Name vi' nmi
                  Nothing ->
                    do nm <- lift $ scRegisterName sc nmi
-                      State.put (ts, nms, Map.insert vi (nameIndex nm) vs)
+                      State.modify $ \s -> s { rsVars = Map.insert vi (nameIndex nm) (rsVars s) }
                       pure nm
 
     readName :: String -> ReadM Name
@@ -230,14 +238,15 @@ scReadExternal sc input =
 
     readVarName' :: VarIndex -> ReadM VarName
     readVarName' vi =
-      do (ts, nms, vs) <- State.get
+      do nms <- State.gets rsNames
+         vs <- State.gets rsVars
          case Map.lookup vi nms of
            Just (Left x) ->
              case Map.lookup vi vs of
                Just vi' -> pure (VarName vi' x)
                Nothing ->
                  do vn <- lift $ scFreshVarName sc x
-                    State.put (ts, nms, Map.insert vi (vnIndex vn) vs)
+                    State.modify $ \s -> s { rsVars = Map.insert vi (vnIndex vn) (rsVars s) }
                     pure vn
            _ -> lift $ fail $ "scReadExternal: VarName missing name: " ++ show vi
 
