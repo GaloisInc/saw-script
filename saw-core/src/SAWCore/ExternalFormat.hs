@@ -13,7 +13,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 module SAWCore.ExternalFormat (
-  scWriteExternal, scReadExternal
+  scWriteExternal, scReadExternal, scReadExternalTyped
   ) where
 
 import qualified Control.Monad.State.Strict as State
@@ -29,6 +29,7 @@ import Text.URI
 import SAWCore.Name
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
+import SAWCore.SCTypedTerm
 
 --------------------------------------------------------------------------------
 -- External text format
@@ -131,14 +132,10 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            Recursor (CompiledRecursor d s nps nixs ctorOrder) ->
+            Recursor (CompiledRecursor d s _ _ _) ->
               do stashName d
-                 mapM_ stashName ctorOrder
                  let show_s = if s == propSort then "Prop" else drop 5 (show s)
-                 pure $ unwords
-                      (["Recursor", show (nameIndex d), show_s, show nps, show nixs
-                       , show (map nameIndex ctorOrder)
-                       ])
+                 pure $ unwords ["Recursor", show (nameIndex d), show_s]
 
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
             RecordValue elems   -> pure $ unwords ["Record", show elems]
@@ -153,32 +150,41 @@ scWriteExternal t0 =
             StringLit s         -> pure $ unwords ["String", show s]
 
 
--- | During parsing, we maintain two maps used for renumbering: The
--- first is for the 'Int' values that appear in the external core
--- file, and the second is for the 'VarIndex' values that appear
--- inside 'Constant' and 'Variable' constructors. We do not reuse any
--- such numbers that appear in the external file, but generate fresh
--- ones that are valid in the current 'SharedContext'.
-type ReadM = State.StateT (Map Int Term, Map VarIndex (Either Text NameInfo), Map VarIndex VarIndex) IO
+-- | During parsing, we maintain various maps used for renumbering.
+-- We do not reuse any such numbers that appear in the external file,
+-- but generate fresh ones that are valid in the current
+-- 'SharedContext'.
+data ReadState =
+  ReadState
+  { rsTerms :: Map Int SCTypedTerm
+    -- ^ Map 'Int' term identifiers from external core file to SAWCore terms
+  , rsNames :: Map VarIndex (Either Text NameInfo)
+    -- ^ Map 'VarIndex'es from external core file to global names
+  , rsVars :: Map VarIndex VarIndex
+    -- ^ Map 'VarIndex'es from external core file to variables
+  }
+
+type ReadM = State.StateT ReadState IO
 
 scReadExternal :: SharedContext -> String -> IO Term
-scReadExternal sc input =
+scReadExternal sc input = typedVal <$> scReadExternalTyped sc input
+
+scReadExternalTyped :: SharedContext -> String -> IO SCTypedTerm
+scReadExternalTyped sc input =
   case lines input of
     ( (words -> ["SAWCoreTerm", final]) : nmlist : rows ) ->
       case readNames nmlist of
         Nothing -> fail "scReadExternal: failed to parse name table"
         Just nms ->
-          State.evalStateT (mapM_ (go . words) rows >> readIdx final) (Map.empty, nms, Map.empty)
+          State.evalStateT (mapM_ (go . words) rows >> readIdx final) (ReadState Map.empty nms Map.empty)
 
     _ -> fail "scReadExternal: failed to parse input file"
   where
     go :: [String] -> ReadM ()
     go (tok : tokens) =
       do i <- readM tok
-         tf <- parse tokens
-         t <- lift $ scTermF sc tf
-         (ts, nms, vs) <- State.get
-         State.put (Map.insert i t ts, nms, vs)
+         t <- parse tokens
+         State.modify $ \s -> s { rsTerms = Map.insert i t (rsTerms s) }
     go [] = pure () -- empty lines are ignored
 
     readM :: forall a. Read a => String -> ReadM a
@@ -187,24 +193,20 @@ scReadExternal sc input =
         Nothing -> fail $ "scReadExternal: parse error: " ++ show tok
         Just x -> pure x
 
-    getTerm :: Int -> ReadM Term
+    getTerm :: Int -> ReadM SCTypedTerm
     getTerm i =
-      do (ts,_,_) <- State.get
+      do ts <- State.gets rsTerms
          case Map.lookup i ts of
            Nothing -> fail $ "scReadExternal: invalid term index: " ++ show i
            Just t -> pure t
 
-    readIdx :: String -> ReadM Term
+    readIdx :: String -> ReadM SCTypedTerm
     readIdx tok = getTerm =<< readM tok
-
-    readCtorList :: String -> ReadM [Name]
-    readCtorList str =
-      do (ls :: [VarIndex]) <- readM str
-         mapM readName' ls
 
     readName' :: VarIndex -> ReadM Name
     readName' vi =
-      do (ts, nms, vs) <- State.get
+      do nms <- State.gets rsNames
+         vs <- State.gets rsVars
          nmi <- case Map.lookup vi nms of
                   Just (Right nmi) -> pure nmi
                   _ -> lift $ fail $ "scReadExternal: ExtCns missing name info: " ++ show vi
@@ -220,7 +222,7 @@ scReadExternal sc input =
                  Just vi' -> pure $ Name vi' nmi
                  Nothing ->
                    do nm <- lift $ scRegisterName sc nmi
-                      State.put (ts, nms, Map.insert vi (nameIndex nm) vs)
+                      State.modify $ \s -> s { rsVars = Map.insert vi (nameIndex nm) (rsVars s) }
                       pure nm
 
     readName :: String -> ReadM Name
@@ -230,14 +232,15 @@ scReadExternal sc input =
 
     readVarName' :: VarIndex -> ReadM VarName
     readVarName' vi =
-      do (ts, nms, vs) <- State.get
+      do nms <- State.gets rsNames
+         vs <- State.gets rsVars
          case Map.lookup vi nms of
            Just (Left x) ->
              case Map.lookup vi vs of
                Just vi' -> pure (VarName vi' x)
                Nothing ->
                  do vn <- lift $ scFreshVarName sc x
-                    State.put (ts, nms, Map.insert vi (vnIndex vn) vs)
+                    State.modify $ \s -> s { rsVars = Map.insert vi (vnIndex vn) (rsVars s) }
                     pure vn
            _ -> lift $ fail $ "scReadExternal: VarName missing name: " ++ show vi
 
@@ -246,39 +249,61 @@ scReadExternal sc input =
       do vi <- readM i
          readVarName' vi
 
-    parse :: [String] -> ReadM (TermF Term)
+    parse :: [String] -> ReadM SCTypedTerm
     parse tokens =
       case tokens of
-        ["App", e1, e2]     -> App <$> readIdx e1 <*> readIdx e2
-        ["Lam", s, t, e]    -> Lambda <$> readVarName s <*> readIdx t <*> readIdx e
-        ["Pi", s, t, e]     -> Pi <$> readVarName s <*> readIdx t <*> readIdx e
-        ["Constant",i]      -> Constant <$> readName i
-        ["ConstantOpaque",i]  -> Constant <$> readName i
-        ["Unit"]            -> pure $ FTermF UnitValue
-        ["UnitT"]           -> pure $ FTermF UnitType
-        ["Pair", x, y]      -> FTermF <$> (PairValue <$> readIdx x <*> readIdx y)
-        ["PairT", x, y]     -> FTermF <$> (PairType <$> readIdx x <*> readIdx y)
-        ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
-        ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
+        ["App", e1, e2]     -> do t1 <- readIdx e1
+                                  t2 <- readIdx e2
+                                  lift $ scTypedApply sc t1 t2
+        ["Lam", s, e1, e2]  -> do x <- readVarName s
+                                  t1 <- readIdx e1
+                                  t2 <- readIdx e2
+                                  lift $ scTypedLambda sc x t1 t2
+        ["Pi", s, e1, e2]   -> do x <- readVarName s
+                                  t1 <- readIdx e1
+                                  t2 <- readIdx e2
+                                  lift $ scTypedPi sc x t1 t2
+        ["Constant", i]     -> do nm <- readName i
+                                  lift $ scTypedConstant sc nm
+        ["Unit"]            -> lift $ scTypedUnitValue sc
+        ["UnitT"]           -> lift $ scTypedUnitType sc
+        ["Pair", e1, e2]    -> do t1 <- readIdx e1
+                                  t2 <- readIdx e2
+                                  lift $ scTypedPairValue sc t1 t2
+        ["PairT", e1, e2]   -> do t1 <- readIdx e1
+                                  t2 <- readIdx e2
+                                  lift $ scTypedPairType sc t1 t2
+        ["ProjL", e1]       -> do t1 <- readIdx e1
+                                  lift $ scTypedPairLeft sc t1
+        ["ProjR", e1]       -> do t1 <- readIdx e1
+                                  lift $ scTypedPairRight sc t1
 
-        ["Recursor", i, s, nps, nixs, ctorOrder] ->
-            do crec <- CompiledRecursor <$>
-                        readName i <*>
-                        (if s == "Prop" then pure propSort else mkSort <$> readM s) <*>
-                        pure (read nps) <*>
-                        pure (read nixs) <*>
-                        readCtorList ctorOrder
-               pure (FTermF (Recursor crec))
+        ["Recursor", i, s]  ->
+          do nm <- readName i
+             s' <- if s == "Prop" then pure propSort else mkSort <$> readM s
+             lift $ scTypedRecursor sc nm s'
 
-        ["RecordType", elem_tps] ->
-          FTermF <$> (RecordType <$> (traverse (traverse getTerm) =<< readM elem_tps))
-        ["Record", elems] ->
-          FTermF <$> (RecordValue <$> (traverse (traverse getTerm) =<< readM elems))
-        ["RecordProj", e, prj] -> FTermF <$> (RecordProj <$> readIdx e <*> pure (Text.pack prj))
-        ("Prop" : h)        -> FTermF <$> (Sort propSort . sortFlagsFromList <$> (mapM readM h))
-        ("Sort" : s : h)    -> FTermF <$> (Sort <$> (mkSort <$> readM s) <*> (sortFlagsFromList <$> mapM readM h))
-        ["Nat", n]          -> FTermF <$> (NatLit <$> readM n)
-        ("Array" : e : es)  -> FTermF <$> (ArrayValue <$> readIdx e <*> (V.fromList <$> traverse readIdx es))
-        ("String" : ts)     -> FTermF <$> (StringLit <$> (readM (unwords ts)))
-        ["Variable", i, t]  -> Variable <$> readVarName i <*> readIdx t
+        ["RecordType", elem_tps]
+                            -> do ts <- traverse (traverse getTerm) =<< readM elem_tps
+                                  lift $ scTypedRecordType sc ts
+        ["Record", elems]   -> do ts <- traverse (traverse getTerm) =<< readM elems
+                                  lift $ scTypedRecordValue sc ts
+        ["RecordProj", e, prj]
+                            -> do t <- readIdx e
+                                  lift $ scTypedRecordProj sc t (Text.pack prj)
+        ("Prop" : h)        -> do flags <- sortFlagsFromList <$> mapM readM h
+                                  lift $ scTypedSort' sc propSort flags
+        ("Sort" : s : h)    -> do s' <- mkSort <$> readM s
+                                  flags <- sortFlagsFromList <$> mapM readM h
+                                  lift $ scTypedSort' sc s' flags
+        ["Nat", n]          -> do n' <- readM n
+                                  lift $ scTypedNat sc n'
+        ("Array" : e : es)  -> do t <- readIdx e
+                                  ts <- traverse readIdx es
+                                  lift $ scTypedVector sc t ts
+        ("String" : ts)     -> do str <- readM (unwords ts)
+                                  lift $ scTypedString sc str
+        ["Variable", i, t]  -> do vn <- readVarName i
+                                  tp <- readIdx t
+                                  lift $ scTypedVariable sc vn tp
         _ -> fail $ "Parse error: " ++ unwords tokens
