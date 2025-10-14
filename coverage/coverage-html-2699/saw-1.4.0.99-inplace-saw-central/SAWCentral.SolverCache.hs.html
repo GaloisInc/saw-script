@@ -598,7 +598,7 @@ span.spaces    { background: white }
 <span class="lineno">  579 </span><span class="spaces">  </span><span class="istickedoff">(ks, mvs) &lt;- LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt ([], M.empty) db</span>
 <span class="lineno">  580 </span><span class="spaces">  </span><span class="istickedoff">forM_ ks $ \k -&gt; LMDB.transaction env $ LMDB.delete k db</span>
 <span class="lineno">  581 </span><span class="spaces">  </span><span class="istickedoff">let s0 = if <span class="tickonlyfalse">length ks == 1</span> then <span class="nottickedoff">&quot;&quot;</span> else &quot;s&quot;</span>
-<span class="lineno">  582 </span><span class="spaces">      </span><span class="istickedoff">s1 = if <span class="tickonlyfalse">M.size mvs == 0</span> then <span class="nottickedoff">&quot;&quot;</span> else &quot;:&quot;</span>
+<span class="lineno">  582 </span><span class="spaces">      </span><span class="istickedoff">s1 = if M.size mvs == 0 then &quot;&quot; else &quot;:&quot;</span>
 <span class="lineno">  583 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Info $</span>
 <span class="lineno">  584 </span><span class="spaces">    </span><span class="istickedoff">&quot;Removed &quot; ++ show (length ks) ++</span>
 <span class="lineno">  585 </span><span class="spaces">    </span><span class="istickedoff">&quot; cached result&quot; ++ s0 ++ &quot; with mismatched version&quot; ++ s0 ++ s1</span>
