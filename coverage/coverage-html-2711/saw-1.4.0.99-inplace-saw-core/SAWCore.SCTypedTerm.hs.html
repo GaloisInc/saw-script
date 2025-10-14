@@ -181,236 +181,241 @@ span.spaces    { background: white }
 <span class="lineno">  162 </span><span class="decl"><span class="istickedoff">scTypedLambda sc x t body =</span>
 <span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">do _s &lt;- ensureSort <span class="nottickedoff">sc</span> (typedType t)</span>
 <span class="lineno">  164 </span><span class="spaces">     </span><span class="istickedoff">tm &lt;- scLambda sc x (typedVal t) (typedVal body)</span>
-<span class="lineno">  165 </span><span class="spaces">     </span><span class="istickedoff">when (any (IntSet.member (vnIndex x) . freeVars) (typedCtx body)) $</span>
-<span class="lineno">  166 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;Variable occurs free in context: &quot; ++ show (vnName x)</span></span>
-<span class="lineno">  167 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedLambda&quot;</span> (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)</span>
-<span class="lineno">  168 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedLambda&quot;</span> (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))</span>
-<span class="lineno">  169 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scPi sc x (typedVal t) (typedType body)</span>
-<span class="lineno">  170 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  171 </span>
-<span class="lineno">  172 </span>-- possible errors: not a type, context mismatch, variable free in context
-<span class="lineno">  173 </span>scTypedPi :: SharedContext -&gt; VarName -&gt; SCTypedTerm -&gt; SCTypedTerm -&gt; IO SCTypedTerm
-<span class="lineno">  174 </span><span class="decl"><span class="istickedoff">scTypedPi sc x t body =</span>
-<span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPi sc x (typedVal t) (typedVal body)</span>
-<span class="lineno">  176 </span><span class="spaces">     </span><span class="istickedoff">when (any (IntSet.member (vnIndex x) . freeVars) (typedCtx body)) $</span>
-<span class="lineno">  177 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;Variable occurs free in context: &quot; ++ show (vnName x)</span></span>
-<span class="lineno">  178 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedPi&quot;</span> (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)</span>
-<span class="lineno">  179 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedPi&quot;</span> (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))</span>
-<span class="lineno">  180 </span><span class="spaces">     </span><span class="istickedoff">s1 &lt;- ensureSort <span class="nottickedoff">sc</span> (typedType t)</span>
-<span class="lineno">  181 </span><span class="spaces">     </span><span class="istickedoff">s2 &lt;- ensureSort <span class="nottickedoff">sc</span> (typedType body)</span>
-<span class="lineno">  182 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (piSort s1 s2)</span>
-<span class="lineno">  183 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  184 </span>
-<span class="lineno">  185 </span>-- possible errors: not a type, context mismatch
-<span class="lineno">  186 </span>scTypedFun :: SharedContext -&gt; SCTypedTerm -&gt; SCTypedTerm -&gt; IO SCTypedTerm
-<span class="lineno">  187 </span><span class="decl"><span class="nottickedoff">scTypedFun sc a b =</span>
-<span class="lineno">  188 </span><span class="spaces">  </span><span class="nottickedoff">do tm &lt;- scFun sc (typedVal a) (typedVal b)</span>
-<span class="lineno">  189 </span><span class="spaces">     </span><span class="nottickedoff">sa &lt;- ensureSort sc (typedType a)</span>
-<span class="lineno">  190 </span><span class="spaces">     </span><span class="nottickedoff">sb &lt;- ensureSort sc (typedType b)</span>
-<span class="lineno">  191 </span><span class="spaces">     </span><span class="nottickedoff">tp &lt;- scSort sc (piSort sa sb)</span>
-<span class="lineno">  192 </span><span class="spaces">     </span><span class="nottickedoff">ctx &lt;- unifyContexts &quot;scTypedFun&quot; (typedCtx a) (typedCtx b)</span>
-<span class="lineno">  193 </span><span class="spaces">     </span><span class="nottickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  194 </span>
-<span class="lineno">  195 </span>-- possible errors: constant not defined
-<span class="lineno">  196 </span>scTypedConstant :: SharedContext -&gt; Name -&gt; IO SCTypedTerm
-<span class="lineno">  197 </span><span class="decl"><span class="istickedoff">scTypedConstant sc nm =</span>
-<span class="lineno">  198 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scConst sc nm</span>
-<span class="lineno">  199 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scTypeOfName sc nm</span>
-<span class="lineno">  200 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
-<span class="lineno">  201 </span>
-<span class="lineno">  202 </span>-- possible errors: not a type
-<span class="lineno">  203 </span>scTypedVariable :: SharedContext -&gt; VarName -&gt; SCTypedTerm -&gt; IO SCTypedTerm
-<span class="lineno">  204 </span><span class="decl"><span class="istickedoff">scTypedVariable sc vn t =</span>
-<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">do let tp = typedVal t</span>
-<span class="lineno">  206 </span><span class="spaces">     </span><span class="istickedoff">tm &lt;- scVariable sc (EC vn tp)</span>
-<span class="lineno">  207 </span><span class="spaces">     </span><span class="istickedoff">let ctx = IntMap.insert (vnIndex vn) tp (typedCtx t)</span>
-<span class="lineno">  208 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  209 </span>
-<span class="lineno">  210 </span>-- possible errors: none
-<span class="lineno">  211 </span>scTypedUnitValue :: SharedContext -&gt; IO SCTypedTerm
-<span class="lineno">  212 </span><span class="decl"><span class="istickedoff">scTypedUnitValue sc =</span>
-<span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scUnitValue sc</span>
-<span class="lineno">  214 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scUnitType sc</span>
-<span class="lineno">  215 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
-<span class="lineno">  216 </span>
-<span class="lineno">  217 </span>-- possible errors: none
-<span class="lineno">  218 </span>scTypedUnitType :: SharedContext -&gt; IO SCTypedTerm
-<span class="lineno">  219 </span><span class="decl"><span class="istickedoff">scTypedUnitType sc =</span>
-<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scUnitType sc</span>
-<span class="lineno">  221 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (mkSort 0)</span>
-<span class="lineno">  222 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
-<span class="lineno">  223 </span>
-<span class="lineno">  224 </span>-- possible errors: none (could redesign to require types in sort 0)
-<span class="lineno">  225 </span>scTypedPairValue :: SharedContext -&gt; SCTypedTerm -&gt; SCTypedTerm -&gt; IO SCTypedTerm
-<span class="lineno">  226 </span><span class="decl"><span class="istickedoff">scTypedPairValue sc x y =</span>
-<span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPairValue sc (typedVal x) (typedVal y)</span>
-<span class="lineno">  228 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scPairType sc (typedType x) (typedType y)</span>
-<span class="lineno">  229 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedPairValue&quot;</span> (typedCtx x) (typedCtx y)</span>
-<span class="lineno">  230 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  231 </span>
-<span class="lineno">  232 </span>-- possible errors: not a type
-<span class="lineno">  233 </span>scTypedPairType :: SharedContext -&gt; SCTypedTerm -&gt; SCTypedTerm -&gt; IO SCTypedTerm
-<span class="lineno">  234 </span><span class="decl"><span class="istickedoff">scTypedPairType sc x y =</span>
-<span class="lineno">  235 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPairType sc (typedVal x) (typedVal y)</span>
-<span class="lineno">  236 </span><span class="spaces">     </span><span class="istickedoff">sx &lt;- ensureSort <span class="nottickedoff">sc</span> (typedType x)</span>
-<span class="lineno">  237 </span><span class="spaces">     </span><span class="istickedoff">sy &lt;- ensureSort <span class="nottickedoff">sc</span> (typedType y)</span>
-<span class="lineno">  238 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (max sx sy)</span>
-<span class="lineno">  239 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedPairType&quot;</span> (typedCtx x) (typedCtx y)</span>
-<span class="lineno">  240 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  241 </span>
-<span class="lineno">  242 </span>-- possible errors: not a pair
-<span class="lineno">  243 </span>scTypedPairLeft :: SharedContext -&gt; SCTypedTerm -&gt; IO SCTypedTerm
-<span class="lineno">  244 </span><span class="decl"><span class="istickedoff">scTypedPairLeft sc x =</span>
-<span class="lineno">  245 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPairLeft sc (typedVal x)</span>
-<span class="lineno">  246 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- fst &lt;$&gt; ensurePairType <span class="nottickedoff">sc</span> (typedType x)</span>
-<span class="lineno">  247 </span><span class="spaces">     </span><span class="istickedoff">let ctx = typedCtx x</span>
-<span class="lineno">  248 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  249 </span>
-<span class="lineno">  250 </span>-- possible errors: not a pair
-<span class="lineno">  251 </span>scTypedPairRight :: SharedContext -&gt; SCTypedTerm -&gt; IO SCTypedTerm
-<span class="lineno">  252 </span><span class="decl"><span class="istickedoff">scTypedPairRight sc x =</span>
-<span class="lineno">  253 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPairRight sc (typedVal x)</span>
-<span class="lineno">  254 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- snd &lt;$&gt; ensurePairType <span class="nottickedoff">sc</span> (typedType x)</span>
-<span class="lineno">  255 </span><span class="spaces">     </span><span class="istickedoff">let ctx = typedCtx x</span>
-<span class="lineno">  256 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  257 </span>
-<span class="lineno">  258 </span>-- possible errors: not a datatype, bad elimination sort
-<span class="lineno">  259 </span>scTypedRecursor :: SharedContext -&gt; Name -&gt; Sort -&gt; IO SCTypedTerm
-<span class="lineno">  260 </span><span class="decl"><span class="istickedoff">scTypedRecursor sc nm s =</span>
-<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">do mm &lt;- scGetModuleMap sc</span>
-<span class="lineno">  262 </span><span class="spaces">     </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span>
-<span class="lineno">  263 </span><span class="spaces">       </span><span class="istickedoff">Just (ResolvedDataType dt) -&gt;</span>
-<span class="lineno">  264 </span><span class="spaces">         </span><span class="istickedoff">do unless (allowedElimSort dt s) $ <span class="nottickedoff">fail &quot;Disallowed propositional elimination&quot;</span></span>
-<span class="lineno">  265 </span><span class="spaces">            </span><span class="istickedoff">let d = dtName dt</span>
-<span class="lineno">  266 </span><span class="spaces">            </span><span class="istickedoff">let nparams = length (dtParams dt)</span>
-<span class="lineno">  267 </span><span class="spaces">            </span><span class="istickedoff">let nixs = length (dtIndices dt)</span>
-<span class="lineno">  268 </span><span class="spaces">            </span><span class="istickedoff">let ctorOrder = map ctorName (dtCtors dt)</span>
-<span class="lineno">  269 </span><span class="spaces">            </span><span class="istickedoff">let crec = CompiledRecursor d s nparams nixs ctorOrder</span>
-<span class="lineno">  270 </span><span class="spaces">            </span><span class="istickedoff">tm &lt;- scFlatTermF sc (Recursor crec)</span>
-<span class="lineno">  271 </span><span class="spaces">            </span><span class="istickedoff">tp &lt;- scRecursorType sc dt s</span>
-<span class="lineno">  272 </span><span class="spaces">            </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span>
-<span class="lineno">  273 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  274 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">fail &quot;datatype not found&quot;</span></span></span>
-<span class="lineno">  275 </span>
-<span class="lineno">  276 </span>-- possible errors: field not a type, context mismatch
-<span class="lineno">  277 </span>scTypedRecordType :: SharedContext -&gt; [(FieldName, SCTypedTerm)] -&gt; IO SCTypedTerm
-<span class="lineno">  278 </span><span class="decl"><span class="istickedoff">scTypedRecordType sc fields =</span>
-<span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scRecordType sc (map (fmap typedVal) fields)</span>
-<span class="lineno">  280 </span><span class="spaces">     </span><span class="istickedoff">sorts &lt;- traverse (ensureSort <span class="nottickedoff">sc</span> . typedType . snd) fields</span>
-<span class="lineno">  281 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (foldl max (mkSort 0) sorts)</span>
-<span class="lineno">  282 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContextList <span class="nottickedoff">&quot;scTypedRecordType&quot;</span> (map (typedCtx . snd) fields)</span>
-<span class="lineno">  283 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  284 </span>
-<span class="lineno">  285 </span>-- possible errors: duplicate field name
-<span class="lineno">  286 </span>scTypedRecordValue :: SharedContext -&gt; [(FieldName, SCTypedTerm)] -&gt; IO SCTypedTerm
-<span class="lineno">  287 </span><span class="decl"><span class="istickedoff">scTypedRecordValue sc fields =</span>
-<span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scFlatTermF sc $ RecordValue (map (fmap typedVal) fields)</span>
-<span class="lineno">  289 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scRecordType sc (map (fmap typedType) fields)</span>
-<span class="lineno">  290 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- foldM (unifyContexts <span class="nottickedoff">&quot;scTypedRecordValue&quot;</span>) IntMap.empty (map (typedCtx . snd) fields)</span>
-<span class="lineno">  291 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp <span class="nottickedoff">ctx</span>)</span></span>
-<span class="lineno">  292 </span>
-<span class="lineno">  293 </span>-- possible errors: not a record type, field name not found
-<span class="lineno">  294 </span>scTypedRecordProj :: SharedContext -&gt; SCTypedTerm -&gt; FieldName -&gt; IO SCTypedTerm
-<span class="lineno">  295 </span><span class="decl"><span class="istickedoff">scTypedRecordProj sc t fname =</span>
-<span class="lineno">  296 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scRecordSelect sc (typedVal t) fname</span>
-<span class="lineno">  297 </span><span class="spaces">     </span><span class="istickedoff">let ctx = typedCtx t</span>
-<span class="lineno">  298 </span><span class="spaces">     </span><span class="istickedoff">tps &lt;- ensureRecordType sc (typedType t)</span>
-<span class="lineno">  299 </span><span class="spaces">     </span><span class="istickedoff">case Map.lookup fname tps of</span>
-<span class="lineno">  300 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;scTypedRecordProj: field name not found&quot;</span></span>
-<span class="lineno">  301 </span><span class="spaces">       </span><span class="istickedoff">Just tp -&gt; pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  302 </span>
-<span class="lineno">  303 </span>-- no possible errors
-<span class="lineno">  304 </span>scTypedSort :: SharedContext -&gt; Sort -&gt; IO SCTypedTerm
-<span class="lineno">  305 </span><span class="decl"><span class="nottickedoff">scTypedSort sc s = scTypedSort' sc s noFlags</span></span>
-<span class="lineno">  306 </span>
-<span class="lineno">  307 </span>-- | A variant of 'scTypedSort' that also takes a 'SortFlags' argument.
-<span class="lineno">  308 </span>-- No possible errors.
-<span class="lineno">  309 </span>scTypedSort' :: SharedContext -&gt; Sort -&gt; SortFlags -&gt; IO SCTypedTerm
-<span class="lineno">  310 </span><span class="decl"><span class="istickedoff">scTypedSort' sc s flags =</span>
-<span class="lineno">  311 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scFlatTermF sc (Sort s flags)</span>
-<span class="lineno">  312 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (sortOf s)</span>
-<span class="lineno">  313 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
-<span class="lineno">  314 </span>
-<span class="lineno">  315 </span>-- no possible errors
-<span class="lineno">  316 </span>scTypedNat :: SharedContext -&gt; Natural -&gt; IO SCTypedTerm
-<span class="lineno">  317 </span><span class="decl"><span class="istickedoff">scTypedNat sc n =</span>
-<span class="lineno">  318 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scNat sc n</span>
-<span class="lineno">  319 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scNatType sc</span>
-<span class="lineno">  320 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
-<span class="lineno">  321 </span>
-<span class="lineno">  322 </span>-- possible errors: context mismatch, element type not a type, element wrong type
-<span class="lineno">  323 </span>scTypedVector :: SharedContext -&gt; SCTypedTerm -&gt; [SCTypedTerm] -&gt; IO SCTypedTerm
-<span class="lineno">  324 </span><span class="decl"><span class="istickedoff">scTypedVector sc e xs =</span>
-<span class="lineno">  325 </span><span class="spaces">  </span><span class="istickedoff">do -- TODO: check that all xs have type e</span>
-<span class="lineno">  326 </span><span class="spaces">     </span><span class="istickedoff">tm &lt;- scVector sc (typedVal e) (map typedVal xs)</span>
-<span class="lineno">  327 </span><span class="spaces">     </span><span class="istickedoff">n &lt;- scNat sc (fromIntegral (length xs))</span>
-<span class="lineno">  328 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scVecType sc n (typedVal e)</span>
-<span class="lineno">  329 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- foldM (unifyContexts <span class="nottickedoff">&quot;scTypedVector&quot;</span>) (typedCtx e) (map typedCtx xs)</span>
-<span class="lineno">  330 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
-<span class="lineno">  331 </span>
-<span class="lineno">  332 </span>-- no possible errors
-<span class="lineno">  333 </span>scTypedString :: SharedContext -&gt; Text -&gt; IO SCTypedTerm
-<span class="lineno">  334 </span><span class="decl"><span class="istickedoff">scTypedString sc s =</span>
-<span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scString sc s</span>
-<span class="lineno">  336 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scStringType sc</span>
-<span class="lineno">  337 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
-<span class="lineno">  338 </span>
-<span class="lineno">  339 </span>--------------------------------------------------------------------------------
-<span class="lineno">  340 </span>-- * Utility functions
-<span class="lineno">  341 </span>
-<span class="lineno">  342 </span>-- | Prune a typing context by dropping indices unreachable from the
-<span class="lineno">  343 </span>-- given 'IntSet'.
-<span class="lineno">  344 </span>pruneContext :: IntSet -&gt; IntMap Term -&gt; IntMap Term
-<span class="lineno">  345 </span><span class="decl"><span class="nottickedoff">pruneContext vs0 ctx = IntMap.restrictKeys ctx (reachable mempty vs0)</span>
-<span class="lineno">  346 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  347 </span><span class="spaces">    </span><span class="nottickedoff">fvs = fmap freeVars ctx</span>
-<span class="lineno">  348 </span><span class="spaces">    </span><span class="nottickedoff">reachable old new</span>
-<span class="lineno">  349 </span><span class="spaces">      </span><span class="nottickedoff">| IntSet.null new = old</span>
-<span class="lineno">  350 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise = reachable old' new'</span>
-<span class="lineno">  351 </span><span class="spaces">          </span><span class="nottickedoff">where old' = old &lt;&gt; new</span>
-<span class="lineno">  352 </span><span class="spaces">                </span><span class="nottickedoff">new' = IntSet.difference (Fold.fold (IntMap.restrictKeys fvs new)) old'</span></span>
-<span class="lineno">  353 </span>
-<span class="lineno">  354 </span>-- | Two typing contexts are unifiable if they agree perfectly on all
-<span class="lineno">  355 </span>-- entries where they overlap.
-<span class="lineno">  356 </span>unifyContexts :: String -&gt; IntMap Term -&gt; IntMap Term -&gt; IO (IntMap Term)
-<span class="lineno">  357 </span><span class="decl"><span class="istickedoff">unifyContexts msg ctx1 ctx2 =</span>
-<span class="lineno">  358 </span><span class="spaces">  </span><span class="istickedoff">do let check t1 t2 =</span>
-<span class="lineno">  359 </span><span class="spaces">           </span><span class="istickedoff">unless (t1 == t2) $</span>
-<span class="lineno">  360 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [&quot;unifyContexts: context mismatch&quot;, msg,</span></span>
-<span class="lineno">  361 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">&quot;t1: &quot; ++ showTerm t1,</span></span>
-<span class="lineno">  362 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">&quot;t2: &quot; ++ showTerm t2]</span></span>
-<span class="lineno">  363 </span><span class="spaces">     </span><span class="istickedoff">sequence_ (IntMap.intersectionWith check ctx1 ctx2)</span>
-<span class="lineno">  364 </span><span class="spaces">     </span><span class="istickedoff">pure (IntMap.union ctx1 ctx2)</span></span>
-<span class="lineno">  365 </span>
+<span class="lineno">  165 </span><span class="spaces">     </span><span class="istickedoff">ensureNotFreeInContext x body</span>
+<span class="lineno">  166 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedLambda&quot;</span> (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)</span>
+<span class="lineno">  167 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedLambda&quot;</span> (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))</span>
+<span class="lineno">  168 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scPi sc x (typedVal t) (typedType body)</span>
+<span class="lineno">  169 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>-- possible errors: not a type, context mismatch, variable free in context
+<span class="lineno">  172 </span>scTypedPi :: SharedContext -&gt; VarName -&gt; SCTypedTerm -&gt; SCTypedTerm -&gt; IO SCTypedTerm
+<span class="lineno">  173 </span><span class="decl"><span class="istickedoff">scTypedPi sc x t body =</span>
+<span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPi sc x (typedVal t) (typedVal body)</span>
+<span class="lineno">  175 </span><span class="spaces">     </span><span class="istickedoff">ensureNotFreeInContext x body</span>
+<span class="lineno">  176 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedPi&quot;</span> (IntMap.singleton (vnIndex x) (typedVal t)) (typedCtx body)</span>
+<span class="lineno">  177 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedPi&quot;</span> (typedCtx t) (IntMap.delete (vnIndex x) (typedCtx body))</span>
+<span class="lineno">  178 </span><span class="spaces">     </span><span class="istickedoff">s1 &lt;- ensureSort <span class="nottickedoff">sc</span> (typedType t)</span>
+<span class="lineno">  179 </span><span class="spaces">     </span><span class="istickedoff">s2 &lt;- ensureSort <span class="nottickedoff">sc</span> (typedType body)</span>
+<span class="lineno">  180 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (piSort s1 s2)</span>
+<span class="lineno">  181 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>-- possible errors: not a type, context mismatch
+<span class="lineno">  184 </span>scTypedFun :: SharedContext -&gt; SCTypedTerm -&gt; SCTypedTerm -&gt; IO SCTypedTerm
+<span class="lineno">  185 </span><span class="decl"><span class="nottickedoff">scTypedFun sc a b =</span>
+<span class="lineno">  186 </span><span class="spaces">  </span><span class="nottickedoff">do tm &lt;- scFun sc (typedVal a) (typedVal b)</span>
+<span class="lineno">  187 </span><span class="spaces">     </span><span class="nottickedoff">sa &lt;- ensureSort sc (typedType a)</span>
+<span class="lineno">  188 </span><span class="spaces">     </span><span class="nottickedoff">sb &lt;- ensureSort sc (typedType b)</span>
+<span class="lineno">  189 </span><span class="spaces">     </span><span class="nottickedoff">tp &lt;- scSort sc (piSort sa sb)</span>
+<span class="lineno">  190 </span><span class="spaces">     </span><span class="nottickedoff">ctx &lt;- unifyContexts &quot;scTypedFun&quot; (typedCtx a) (typedCtx b)</span>
+<span class="lineno">  191 </span><span class="spaces">     </span><span class="nottickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  192 </span>
+<span class="lineno">  193 </span>-- possible errors: constant not defined
+<span class="lineno">  194 </span>scTypedConstant :: SharedContext -&gt; Name -&gt; IO SCTypedTerm
+<span class="lineno">  195 </span><span class="decl"><span class="istickedoff">scTypedConstant sc nm =</span>
+<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scConst sc nm</span>
+<span class="lineno">  197 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scTypeOfName sc nm</span>
+<span class="lineno">  198 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
+<span class="lineno">  199 </span>
+<span class="lineno">  200 </span>-- possible errors: not a type
+<span class="lineno">  201 </span>scTypedVariable :: SharedContext -&gt; VarName -&gt; SCTypedTerm -&gt; IO SCTypedTerm
+<span class="lineno">  202 </span><span class="decl"><span class="istickedoff">scTypedVariable sc vn t =</span>
+<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">do let tp = typedVal t</span>
+<span class="lineno">  204 </span><span class="spaces">     </span><span class="istickedoff">tm &lt;- scVariable sc (EC vn tp)</span>
+<span class="lineno">  205 </span><span class="spaces">     </span><span class="istickedoff">let ctx = IntMap.insert (vnIndex vn) tp (typedCtx t)</span>
+<span class="lineno">  206 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  207 </span>
+<span class="lineno">  208 </span>-- possible errors: none
+<span class="lineno">  209 </span>scTypedUnitValue :: SharedContext -&gt; IO SCTypedTerm
+<span class="lineno">  210 </span><span class="decl"><span class="istickedoff">scTypedUnitValue sc =</span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scUnitValue sc</span>
+<span class="lineno">  212 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scUnitType sc</span>
+<span class="lineno">  213 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
+<span class="lineno">  214 </span>
+<span class="lineno">  215 </span>-- possible errors: none
+<span class="lineno">  216 </span>scTypedUnitType :: SharedContext -&gt; IO SCTypedTerm
+<span class="lineno">  217 </span><span class="decl"><span class="istickedoff">scTypedUnitType sc =</span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scUnitType sc</span>
+<span class="lineno">  219 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (mkSort 0)</span>
+<span class="lineno">  220 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
+<span class="lineno">  221 </span>
+<span class="lineno">  222 </span>-- possible errors: none (could redesign to require types in sort 0)
+<span class="lineno">  223 </span>scTypedPairValue :: SharedContext -&gt; SCTypedTerm -&gt; SCTypedTerm -&gt; IO SCTypedTerm
+<span class="lineno">  224 </span><span class="decl"><span class="istickedoff">scTypedPairValue sc x y =</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPairValue sc (typedVal x) (typedVal y)</span>
+<span class="lineno">  226 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scPairType sc (typedType x) (typedType y)</span>
+<span class="lineno">  227 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedPairValue&quot;</span> (typedCtx x) (typedCtx y)</span>
+<span class="lineno">  228 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  229 </span>
+<span class="lineno">  230 </span>-- possible errors: not a type
+<span class="lineno">  231 </span>scTypedPairType :: SharedContext -&gt; SCTypedTerm -&gt; SCTypedTerm -&gt; IO SCTypedTerm
+<span class="lineno">  232 </span><span class="decl"><span class="istickedoff">scTypedPairType sc x y =</span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPairType sc (typedVal x) (typedVal y)</span>
+<span class="lineno">  234 </span><span class="spaces">     </span><span class="istickedoff">sx &lt;- ensureSort <span class="nottickedoff">sc</span> (typedType x)</span>
+<span class="lineno">  235 </span><span class="spaces">     </span><span class="istickedoff">sy &lt;- ensureSort <span class="nottickedoff">sc</span> (typedType y)</span>
+<span class="lineno">  236 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (max sx sy)</span>
+<span class="lineno">  237 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContexts <span class="nottickedoff">&quot;scTypedPairType&quot;</span> (typedCtx x) (typedCtx y)</span>
+<span class="lineno">  238 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  239 </span>
+<span class="lineno">  240 </span>-- possible errors: not a pair
+<span class="lineno">  241 </span>scTypedPairLeft :: SharedContext -&gt; SCTypedTerm -&gt; IO SCTypedTerm
+<span class="lineno">  242 </span><span class="decl"><span class="istickedoff">scTypedPairLeft sc x =</span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPairLeft sc (typedVal x)</span>
+<span class="lineno">  244 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- fst &lt;$&gt; ensurePairType <span class="nottickedoff">sc</span> (typedType x)</span>
+<span class="lineno">  245 </span><span class="spaces">     </span><span class="istickedoff">let ctx = typedCtx x</span>
+<span class="lineno">  246 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  247 </span>
+<span class="lineno">  248 </span>-- possible errors: not a pair
+<span class="lineno">  249 </span>scTypedPairRight :: SharedContext -&gt; SCTypedTerm -&gt; IO SCTypedTerm
+<span class="lineno">  250 </span><span class="decl"><span class="istickedoff">scTypedPairRight sc x =</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scPairRight sc (typedVal x)</span>
+<span class="lineno">  252 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- snd &lt;$&gt; ensurePairType <span class="nottickedoff">sc</span> (typedType x)</span>
+<span class="lineno">  253 </span><span class="spaces">     </span><span class="istickedoff">let ctx = typedCtx x</span>
+<span class="lineno">  254 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  255 </span>
+<span class="lineno">  256 </span>-- possible errors: not a datatype, bad elimination sort
+<span class="lineno">  257 </span>scTypedRecursor :: SharedContext -&gt; Name -&gt; Sort -&gt; IO SCTypedTerm
+<span class="lineno">  258 </span><span class="decl"><span class="istickedoff">scTypedRecursor sc nm s =</span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">do mm &lt;- scGetModuleMap sc</span>
+<span class="lineno">  260 </span><span class="spaces">     </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span>
+<span class="lineno">  261 </span><span class="spaces">       </span><span class="istickedoff">Just (ResolvedDataType dt) -&gt;</span>
+<span class="lineno">  262 </span><span class="spaces">         </span><span class="istickedoff">do unless (allowedElimSort dt s) $ <span class="nottickedoff">fail &quot;Disallowed propositional elimination&quot;</span></span>
+<span class="lineno">  263 </span><span class="spaces">            </span><span class="istickedoff">let d = dtName dt</span>
+<span class="lineno">  264 </span><span class="spaces">            </span><span class="istickedoff">let nparams = length (dtParams dt)</span>
+<span class="lineno">  265 </span><span class="spaces">            </span><span class="istickedoff">let nixs = length (dtIndices dt)</span>
+<span class="lineno">  266 </span><span class="spaces">            </span><span class="istickedoff">let ctorOrder = map ctorName (dtCtors dt)</span>
+<span class="lineno">  267 </span><span class="spaces">            </span><span class="istickedoff">let crec = CompiledRecursor d s nparams nixs ctorOrder</span>
+<span class="lineno">  268 </span><span class="spaces">            </span><span class="istickedoff">tm &lt;- scFlatTermF sc (Recursor crec)</span>
+<span class="lineno">  269 </span><span class="spaces">            </span><span class="istickedoff">tp &lt;- scRecursorType sc dt s</span>
+<span class="lineno">  270 </span><span class="spaces">            </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span>
+<span class="lineno">  271 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  272 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">fail &quot;datatype not found&quot;</span></span></span>
+<span class="lineno">  273 </span>
+<span class="lineno">  274 </span>-- possible errors: field not a type, context mismatch
+<span class="lineno">  275 </span>scTypedRecordType :: SharedContext -&gt; [(FieldName, SCTypedTerm)] -&gt; IO SCTypedTerm
+<span class="lineno">  276 </span><span class="decl"><span class="istickedoff">scTypedRecordType sc fields =</span>
+<span class="lineno">  277 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scRecordType sc (map (fmap typedVal) fields)</span>
+<span class="lineno">  278 </span><span class="spaces">     </span><span class="istickedoff">sorts &lt;- traverse (ensureSort <span class="nottickedoff">sc</span> . typedType . snd) fields</span>
+<span class="lineno">  279 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (foldl max (mkSort 0) sorts)</span>
+<span class="lineno">  280 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- unifyContextList <span class="nottickedoff">&quot;scTypedRecordType&quot;</span> (map (typedCtx . snd) fields)</span>
+<span class="lineno">  281 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  282 </span>
+<span class="lineno">  283 </span>-- possible errors: duplicate field name
+<span class="lineno">  284 </span>scTypedRecordValue :: SharedContext -&gt; [(FieldName, SCTypedTerm)] -&gt; IO SCTypedTerm
+<span class="lineno">  285 </span><span class="decl"><span class="istickedoff">scTypedRecordValue sc fields =</span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scFlatTermF sc $ RecordValue (map (fmap typedVal) fields)</span>
+<span class="lineno">  287 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scRecordType sc (map (fmap typedType) fields)</span>
+<span class="lineno">  288 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- foldM (unifyContexts <span class="nottickedoff">&quot;scTypedRecordValue&quot;</span>) IntMap.empty (map (typedCtx . snd) fields)</span>
+<span class="lineno">  289 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp <span class="nottickedoff">ctx</span>)</span></span>
+<span class="lineno">  290 </span>
+<span class="lineno">  291 </span>-- possible errors: not a record type, field name not found
+<span class="lineno">  292 </span>scTypedRecordProj :: SharedContext -&gt; SCTypedTerm -&gt; FieldName -&gt; IO SCTypedTerm
+<span class="lineno">  293 </span><span class="decl"><span class="istickedoff">scTypedRecordProj sc t fname =</span>
+<span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scRecordSelect sc (typedVal t) fname</span>
+<span class="lineno">  295 </span><span class="spaces">     </span><span class="istickedoff">let ctx = typedCtx t</span>
+<span class="lineno">  296 </span><span class="spaces">     </span><span class="istickedoff">tps &lt;- ensureRecordType sc (typedType t)</span>
+<span class="lineno">  297 </span><span class="spaces">     </span><span class="istickedoff">case Map.lookup fname tps of</span>
+<span class="lineno">  298 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;scTypedRecordProj: field name not found&quot;</span></span>
+<span class="lineno">  299 </span><span class="spaces">       </span><span class="istickedoff">Just tp -&gt; pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  300 </span>
+<span class="lineno">  301 </span>-- no possible errors
+<span class="lineno">  302 </span>scTypedSort :: SharedContext -&gt; Sort -&gt; IO SCTypedTerm
+<span class="lineno">  303 </span><span class="decl"><span class="nottickedoff">scTypedSort sc s = scTypedSort' sc s noFlags</span></span>
+<span class="lineno">  304 </span>
+<span class="lineno">  305 </span>-- | A variant of 'scTypedSort' that also takes a 'SortFlags' argument.
+<span class="lineno">  306 </span>-- No possible errors.
+<span class="lineno">  307 </span>scTypedSort' :: SharedContext -&gt; Sort -&gt; SortFlags -&gt; IO SCTypedTerm
+<span class="lineno">  308 </span><span class="decl"><span class="istickedoff">scTypedSort' sc s flags =</span>
+<span class="lineno">  309 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scFlatTermF sc (Sort s flags)</span>
+<span class="lineno">  310 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scSort sc (sortOf s)</span>
+<span class="lineno">  311 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
+<span class="lineno">  312 </span>
+<span class="lineno">  313 </span>-- no possible errors
+<span class="lineno">  314 </span>scTypedNat :: SharedContext -&gt; Natural -&gt; IO SCTypedTerm
+<span class="lineno">  315 </span><span class="decl"><span class="istickedoff">scTypedNat sc n =</span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scNat sc n</span>
+<span class="lineno">  317 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scNatType sc</span>
+<span class="lineno">  318 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
+<span class="lineno">  319 </span>
+<span class="lineno">  320 </span>-- possible errors: context mismatch, element type not a type, element wrong type
+<span class="lineno">  321 </span>scTypedVector :: SharedContext -&gt; SCTypedTerm -&gt; [SCTypedTerm] -&gt; IO SCTypedTerm
+<span class="lineno">  322 </span><span class="decl"><span class="istickedoff">scTypedVector sc e xs =</span>
+<span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">do -- TODO: check that all xs have type e</span>
+<span class="lineno">  324 </span><span class="spaces">     </span><span class="istickedoff">tm &lt;- scVector sc (typedVal e) (map typedVal xs)</span>
+<span class="lineno">  325 </span><span class="spaces">     </span><span class="istickedoff">n &lt;- scNat sc (fromIntegral (length xs))</span>
+<span class="lineno">  326 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scVecType sc n (typedVal e)</span>
+<span class="lineno">  327 </span><span class="spaces">     </span><span class="istickedoff">ctx &lt;- foldM (unifyContexts <span class="nottickedoff">&quot;scTypedVector&quot;</span>) (typedCtx e) (map typedCtx xs)</span>
+<span class="lineno">  328 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp ctx)</span></span>
+<span class="lineno">  329 </span>
+<span class="lineno">  330 </span>-- no possible errors
+<span class="lineno">  331 </span>scTypedString :: SharedContext -&gt; Text -&gt; IO SCTypedTerm
+<span class="lineno">  332 </span><span class="decl"><span class="istickedoff">scTypedString sc s =</span>
+<span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">do tm &lt;- scString sc s</span>
+<span class="lineno">  334 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- scStringType sc</span>
+<span class="lineno">  335 </span><span class="spaces">     </span><span class="istickedoff">pure (SCTypedTerm tm tp IntMap.empty)</span></span>
+<span class="lineno">  336 </span>
+<span class="lineno">  337 </span>--------------------------------------------------------------------------------
+<span class="lineno">  338 </span>-- * Utility functions
+<span class="lineno">  339 </span>
+<span class="lineno">  340 </span>-- | Prune a typing context by dropping indices unreachable from the
+<span class="lineno">  341 </span>-- given 'IntSet'.
+<span class="lineno">  342 </span>pruneContext :: IntSet -&gt; IntMap Term -&gt; IntMap Term
+<span class="lineno">  343 </span><span class="decl"><span class="nottickedoff">pruneContext vs0 ctx = IntMap.restrictKeys ctx (reachable mempty vs0)</span>
+<span class="lineno">  344 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  345 </span><span class="spaces">    </span><span class="nottickedoff">fvs = fmap freeVars ctx</span>
+<span class="lineno">  346 </span><span class="spaces">    </span><span class="nottickedoff">reachable old new</span>
+<span class="lineno">  347 </span><span class="spaces">      </span><span class="nottickedoff">| IntSet.null new = old</span>
+<span class="lineno">  348 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise = reachable old' new'</span>
+<span class="lineno">  349 </span><span class="spaces">          </span><span class="nottickedoff">where old' = old &lt;&gt; new</span>
+<span class="lineno">  350 </span><span class="spaces">                </span><span class="nottickedoff">new' = IntSet.difference (Fold.fold (IntMap.restrictKeys fvs new)) old'</span></span>
+<span class="lineno">  351 </span>
+<span class="lineno">  352 </span>-- | Two typing contexts are unifiable if they agree perfectly on all
+<span class="lineno">  353 </span>-- entries where they overlap.
+<span class="lineno">  354 </span>unifyContexts :: String -&gt; IntMap Term -&gt; IntMap Term -&gt; IO (IntMap Term)
+<span class="lineno">  355 </span><span class="decl"><span class="istickedoff">unifyContexts msg ctx1 ctx2 =</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">do let check t1 t2 =</span>
+<span class="lineno">  357 </span><span class="spaces">           </span><span class="istickedoff">unless (t1 == t2) $</span>
+<span class="lineno">  358 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [&quot;unifyContexts: context mismatch&quot;, msg,</span></span>
+<span class="lineno">  359 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">&quot;t1: &quot; ++ showTerm t1,</span></span>
+<span class="lineno">  360 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">&quot;t2: &quot; ++ showTerm t2]</span></span>
+<span class="lineno">  361 </span><span class="spaces">     </span><span class="istickedoff">sequence_ (IntMap.intersectionWith check ctx1 ctx2)</span>
+<span class="lineno">  362 </span><span class="spaces">     </span><span class="istickedoff">pure (IntMap.union ctx1 ctx2)</span></span>
+<span class="lineno">  363 </span>
+<span class="lineno">  364 </span>unifyContextList :: String -&gt; [IntMap Term] -&gt; IO (IntMap Term)
+<span class="lineno">  365 </span><span class="decl"><span class="istickedoff">unifyContextList msg = foldM (unifyContexts <span class="nottickedoff">msg</span>) IntMap.empty</span></span>
 <span class="lineno">  366 </span>
-<span class="lineno">  367 </span>unifyContextList :: String -&gt; [IntMap Term] -&gt; IO (IntMap Term)
-<span class="lineno">  368 </span><span class="decl"><span class="istickedoff">unifyContextList msg = foldM (unifyContexts <span class="nottickedoff">msg</span>) IntMap.empty</span></span>
-<span class="lineno">  369 </span>
-<span class="lineno">  370 </span>ensureRecognizer :: String -&gt; SharedContext -&gt; (Term -&gt; Maybe a) -&gt; Term -&gt; IO a
-<span class="lineno">  371 </span><span class="decl"><span class="istickedoff">ensureRecognizer s sc f trm =</span>
-<span class="lineno">  372 </span><span class="spaces">  </span><span class="istickedoff">case f trm of</span>
-<span class="lineno">  373 </span><span class="spaces">    </span><span class="istickedoff">Just a -&gt; pure a</span>
-<span class="lineno">  374 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  375 </span><span class="spaces">      </span><span class="istickedoff">do trm' &lt;- scTypeCheckWHNF sc trm</span>
-<span class="lineno">  376 </span><span class="spaces">         </span><span class="istickedoff">case f trm' of</span>
-<span class="lineno">  377 </span><span class="spaces">           </span><span class="istickedoff">Just a -&gt; pure a</span>
-<span class="lineno">  378 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  379 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;ensureRecognizer: Expected &quot; ++ s ++ &quot;, found: &quot; ++ showTerm trm'</span></span></span>
+<span class="lineno">  367 </span>ensureRecognizer :: String -&gt; SharedContext -&gt; (Term -&gt; Maybe a) -&gt; Term -&gt; IO a
+<span class="lineno">  368 </span><span class="decl"><span class="istickedoff">ensureRecognizer s sc f trm =</span>
+<span class="lineno">  369 </span><span class="spaces">  </span><span class="istickedoff">case f trm of</span>
+<span class="lineno">  370 </span><span class="spaces">    </span><span class="istickedoff">Just a -&gt; pure a</span>
+<span class="lineno">  371 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  372 </span><span class="spaces">      </span><span class="istickedoff">do trm' &lt;- scTypeCheckWHNF sc trm</span>
+<span class="lineno">  373 </span><span class="spaces">         </span><span class="istickedoff">case f trm' of</span>
+<span class="lineno">  374 </span><span class="spaces">           </span><span class="istickedoff">Just a -&gt; pure a</span>
+<span class="lineno">  375 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  376 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;ensureRecognizer: Expected &quot; ++ s ++ &quot;, found: &quot; ++ showTerm trm'</span></span></span>
+<span class="lineno">  377 </span>
+<span class="lineno">  378 </span>ensureSort :: SharedContext -&gt; Term -&gt; IO Sort
+<span class="lineno">  379 </span><span class="decl"><span class="istickedoff">ensureSort sc tp = ensureRecognizer <span class="nottickedoff">&quot;Sort&quot;</span> <span class="nottickedoff">sc</span> asSort tp</span></span>
 <span class="lineno">  380 </span>
-<span class="lineno">  381 </span>ensureSort :: SharedContext -&gt; Term -&gt; IO Sort
-<span class="lineno">  382 </span><span class="decl"><span class="istickedoff">ensureSort sc tp = ensureRecognizer <span class="nottickedoff">&quot;Sort&quot;</span> <span class="nottickedoff">sc</span> asSort tp</span></span>
+<span class="lineno">  381 </span>ensurePi :: SharedContext -&gt; Term -&gt; IO (VarName, Term, Term)
+<span class="lineno">  382 </span><span class="decl"><span class="istickedoff">ensurePi sc tp = ensureRecognizer <span class="nottickedoff">&quot;Pi&quot;</span> sc asPi tp</span></span>
 <span class="lineno">  383 </span>
-<span class="lineno">  384 </span>ensurePi :: SharedContext -&gt; Term -&gt; IO (VarName, Term, Term)
-<span class="lineno">  385 </span><span class="decl"><span class="istickedoff">ensurePi sc tp = ensureRecognizer <span class="nottickedoff">&quot;Pi&quot;</span> sc asPi tp</span></span>
+<span class="lineno">  384 </span>ensurePairType :: SharedContext -&gt; Term -&gt; IO (Term, Term)
+<span class="lineno">  385 </span><span class="decl"><span class="istickedoff">ensurePairType sc tp = ensureRecognizer <span class="nottickedoff">&quot;PairType&quot;</span> <span class="nottickedoff">sc</span> asPairType tp</span></span>
 <span class="lineno">  386 </span>
-<span class="lineno">  387 </span>ensurePairType :: SharedContext -&gt; Term -&gt; IO (Term, Term)
-<span class="lineno">  388 </span><span class="decl"><span class="istickedoff">ensurePairType sc tp = ensureRecognizer <span class="nottickedoff">&quot;PairType&quot;</span> <span class="nottickedoff">sc</span> asPairType tp</span></span>
+<span class="lineno">  387 </span>ensureRecordType :: SharedContext -&gt; Term -&gt; IO (Map FieldName Term)
+<span class="lineno">  388 </span><span class="decl"><span class="istickedoff">ensureRecordType sc tp = ensureRecognizer <span class="nottickedoff">&quot;RecordType&quot;</span> sc asRecordType tp</span></span>
 <span class="lineno">  389 </span>
-<span class="lineno">  390 </span>ensureRecordType :: SharedContext -&gt; Term -&gt; IO (Map FieldName Term)
-<span class="lineno">  391 </span><span class="decl"><span class="istickedoff">ensureRecordType sc tp = ensureRecognizer <span class="nottickedoff">&quot;RecordType&quot;</span> sc asRecordType tp</span></span>
+<span class="lineno">  390 </span>piSort :: Sort -&gt; Sort -&gt; Sort
+<span class="lineno">  391 </span><span class="decl"><span class="istickedoff">piSort s1 s2 = if s2 == propSort then propSort else max s1 s2</span></span>
 <span class="lineno">  392 </span>
-<span class="lineno">  393 </span>piSort :: Sort -&gt; Sort -&gt; Sort
-<span class="lineno">  394 </span><span class="decl"><span class="istickedoff">piSort s1 s2 = if s2 == propSort then propSort else max s1 s2</span></span>
+<span class="lineno">  393 </span>-- | Check whether the given 'VarName' occurs free in the type of
+<span class="lineno">  394 </span>-- another variable in the context of the given 'SCTypedTerm', and
+<span class="lineno">  395 </span>-- fail if it does.
+<span class="lineno">  396 </span>ensureNotFreeInContext :: VarName -&gt; SCTypedTerm -&gt; IO ()
+<span class="lineno">  397 </span><span class="decl"><span class="istickedoff">ensureNotFreeInContext x body =</span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">when (any (IntSet.member (vnIndex x) . freeVars) (typedCtx body)) $</span>
+<span class="lineno">  399 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;Variable occurs free in context: &quot; ++ show (vnName x)</span></span></span>
 
 </pre>
 </body>
