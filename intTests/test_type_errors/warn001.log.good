@@ -1,81 +1,81 @@
  Loading file "warn001.saw"
- warn001.saw:15:5-15:6: Warning: Warning: redeclaration of x
+ warn001.saw:15:5-15:6: Warning: Redeclaration of x
  warn001.saw:11:5-11:6: Warning: Previous declaration was here
- warn001.saw:16:5-16:6: Warning: Warning: redeclaration of x
+ warn001.saw:16:5-16:6: Warning: Redeclaration of x
  warn001.saw:15:5-15:6: Warning: Previous declaration was here
- warn001.saw:17:10-17:11: Warning: Warning: redeclaration of x
+ warn001.saw:17:10-17:11: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:18:14-18:15: Warning: Warning: redeclaration of x
+ warn001.saw:18:14-18:15: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:19:17-19:18: Warning: Warning: redeclaration of x
+ warn001.saw:19:17-19:18: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:20:30-20:31: Warning: Warning: redeclaration of x
+ warn001.saw:20:30-20:31: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:21:22-21:23: Warning: Warning: redeclaration of x
+ warn001.saw:21:22-21:23: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:22:9-22:10: Warning: Warning: redeclaration of x
+ warn001.saw:22:9-22:10: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:23:21-23:22: Warning: Warning: redeclaration of x
+ warn001.saw:23:21-23:22: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:24:34-24:35: Warning: Warning: redeclaration of x
+ warn001.saw:24:34-24:35: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:25:35-25:36: Warning: Warning: redeclaration of x
+ warn001.saw:25:35-25:36: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:26:28-26:29: Warning: Warning: redeclaration of x
+ warn001.saw:26:28-26:29: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:29:1-29:2: Warning: Warning: redeclaration of x
+ warn001.saw:29:1-29:2: Warning: Redeclaration of x
  warn001.saw:16:5-16:6: Warning: Previous declaration was here
- warn001.saw:30:1-30:2: Warning: Warning: redeclaration of x
+ warn001.saw:30:1-30:2: Warning: Redeclaration of x
  warn001.saw:29:1-29:2: Warning: Previous declaration was here
- warn001.saw:31:6-31:7: Warning: Warning: redeclaration of x
+ warn001.saw:31:6-31:7: Warning: Redeclaration of x
  warn001.saw:30:1-30:2: Warning: Previous declaration was here
- warn001.saw:32:19-32:20: Warning: Warning: redeclaration of x
+ warn001.saw:32:19-32:20: Warning: Redeclaration of x
  warn001.saw:30:1-30:2: Warning: Previous declaration was here
- warn001.saw:35:5-35:6: Warning: Warning: redeclaration of y
+ warn001.saw:35:5-35:6: Warning: Redeclaration of y
  warn001.saw:12:1-12:2: Warning: Previous declaration was here
- warn001.saw:36:5-36:6: Warning: Warning: redeclaration of y
+ warn001.saw:36:5-36:6: Warning: Redeclaration of y
  warn001.saw:35:5-35:6: Warning: Previous declaration was here
- warn001.saw:37:10-37:11: Warning: Warning: redeclaration of y
+ warn001.saw:37:10-37:11: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:38:15-38:16: Warning: Warning: redeclaration of y
+ warn001.saw:38:15-38:16: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:39:18-39:19: Warning: Warning: redeclaration of y
+ warn001.saw:39:18-39:19: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:40:31-40:32: Warning: Warning: redeclaration of y
+ warn001.saw:40:31-40:32: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:41:23-41:24: Warning: Warning: redeclaration of y
+ warn001.saw:41:23-41:24: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:42:10-42:11: Warning: Warning: redeclaration of y
+ warn001.saw:42:10-42:11: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:43:23-43:24: Warning: Warning: redeclaration of y
+ warn001.saw:43:23-43:24: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:44:36-44:37: Warning: Warning: redeclaration of y
+ warn001.saw:44:36-44:37: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:45:37-45:38: Warning: Warning: redeclaration of y
+ warn001.saw:45:37-45:38: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:46:30-46:31: Warning: Warning: redeclaration of y
+ warn001.saw:46:30-46:31: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:49:1-49:2: Warning: Warning: redeclaration of y
+ warn001.saw:49:1-49:2: Warning: Redeclaration of y
  warn001.saw:36:5-36:6: Warning: Previous declaration was here
- warn001.saw:50:1-50:2: Warning: Warning: redeclaration of y
+ warn001.saw:50:1-50:2: Warning: Redeclaration of y
  warn001.saw:49:1-49:2: Warning: Previous declaration was here
- warn001.saw:51:6-51:7: Warning: Warning: redeclaration of y
+ warn001.saw:51:6-51:7: Warning: Redeclaration of y
  warn001.saw:50:1-50:2: Warning: Previous declaration was here
- warn001.saw:52:20-52:21: Warning: Warning: redeclaration of y
+ warn001.saw:52:20-52:21: Warning: Redeclaration of y
  warn001.saw:50:1-50:2: Warning: Previous declaration was here
- warn001.saw:56:24-56:26: Warning: Warning: redeclaration of z0
+ warn001.saw:56:24-56:26: Warning: Redeclaration of z0
  warn001.saw:56:9-56:11: Warning: Previous declaration was here
- warn001.saw:57:37-57:39: Warning: Warning: redeclaration of z1
+ warn001.saw:57:37-57:39: Warning: Redeclaration of z1
  warn001.saw:57:9-57:11: Warning: Previous declaration was here
- warn001.saw:58:29-58:31: Warning: Warning: redeclaration of z2
+ warn001.saw:58:29-58:31: Warning: Redeclaration of z2
  warn001.saw:58:9-58:11: Warning: Previous declaration was here
- warn001.saw:59:22-59:24: Warning: Warning: redeclaration of z3
+ warn001.saw:59:22-59:24: Warning: Redeclaration of z3
  [internal:<<builtin>>]: Warning: Previous declaration was here
- warn001.saw:59:37-59:39: Warning: Warning: redeclaration of z3
+ warn001.saw:59:37-59:39: Warning: Redeclaration of z3
  warn001.saw:59:22-59:24: Warning: Previous declaration was here
- warn001.saw:60:29-60:31: Warning: Warning: redeclaration of z4
+ warn001.saw:60:29-60:31: Warning: Redeclaration of z4
  warn001.saw:60:14-60:16: Warning: Previous declaration was here
- warn001.saw:61:25-61:27: Warning: Warning: redeclaration of z6
+ warn001.saw:61:25-61:27: Warning: Redeclaration of z6
  warn001.saw:61:9-61:11: Warning: Previous declaration was here
- warn001.saw:62:30-62:32: Warning: Warning: redeclaration of z7
+ warn001.saw:62:30-62:32: Warning: Redeclaration of z7
  warn001.saw:62:14-62:16: Warning: Previous declaration was here

@@ -8,7 +8,7 @@ Stack trace:
    trace002.saw:62:21-62:26 (at top level)
 
  p2
- trace002.saw:63:17-63:18: Warning: Warning: redeclaration of _
+ trace002.saw:63:17-63:18: Warning: Redeclaration of _
  trace002.saw:62:17-62:18: Warning: Previous declaration was here
 Stack trace:
    (builtin) in print_stack
@@ -19,7 +19,7 @@ Stack trace:
    trace002.saw:63:21-63:26 (at top level)
 
  p3
- trace002.saw:64:17-64:18: Warning: Warning: redeclaration of _
+ trace002.saw:64:17-64:18: Warning: Redeclaration of _
  trace002.saw:63:17-63:18: Warning: Previous declaration was here
 Stack trace:
    (builtin) in print_stack
@@ -31,7 +31,7 @@ Stack trace:
    trace002.saw:64:21-64:26 (at top level)
 
  p22
- trace002.saw:65:18-65:19: Warning: Warning: redeclaration of _
+ trace002.saw:65:18-65:19: Warning: Redeclaration of _
  trace002.saw:64:17-64:18: Warning: Previous declaration was here
 Stack trace:
    (builtin) in print_stack

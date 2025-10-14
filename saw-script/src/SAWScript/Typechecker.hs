@@ -1280,7 +1280,7 @@ inferPattern cname rebindable pat =
                      -- the syntactic top level, and (b) have a
                      -- different warning for locals that shadow
                      -- variables from outer scopes.
-                     recordWarning xpos $ "Warning: redeclaration of " ++ Text.unpack x
+                     recordWarning xpos $ "Redeclaration of " ++ Text.unpack x
                      recordWarning prevpos $ "Previous declaration was here"
          return (t, PVar allpos xpos x (Just t))
     PTuple pos ps ->
