@@ -1299,7 +1299,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1280 </span><span class="spaces">                     </span><span class="istickedoff">-- the syntactic top level, and (b) have a</span>
 <span class="lineno"> 1281 </span><span class="spaces">                     </span><span class="istickedoff">-- different warning for locals that shadow</span>
 <span class="lineno"> 1282 </span><span class="spaces">                     </span><span class="istickedoff">-- variables from outer scopes.</span>
-<span class="lineno"> 1283 </span><span class="spaces">                     </span><span class="istickedoff">recordWarning xpos $ &quot;Warning: redeclaration of &quot; ++ Text.unpack x</span>
+<span class="lineno"> 1283 </span><span class="spaces">                     </span><span class="istickedoff">recordWarning xpos $ &quot;Redeclaration of &quot; ++ Text.unpack x</span>
 <span class="lineno"> 1284 </span><span class="spaces">                     </span><span class="istickedoff">recordWarning prevpos $ &quot;Previous declaration was here&quot;</span>
 <span class="lineno"> 1285 </span><span class="spaces">         </span><span class="istickedoff">return (t, PVar allpos xpos x (Just t))</span>
 <span class="lineno"> 1286 </span><span class="spaces">    </span><span class="istickedoff">PTuple pos ps -&gt;</span>
