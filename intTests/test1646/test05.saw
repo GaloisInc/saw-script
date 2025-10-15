@@ -1,5 +1,4 @@
 // The second f call will print x=b.
-// XXX currently it prints x=a
 
 let rebindable x = "a";
 

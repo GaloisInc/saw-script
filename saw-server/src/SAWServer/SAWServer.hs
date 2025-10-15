@@ -245,6 +245,7 @@ initialState readFileFn =
                 }
          rw = TopLevelRW
                 { rwEnviron = Environ ScopedMap.empty ScopedMap.empty
+                , rwRebindables = M.empty
                 , rwCryptol = cenv
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty

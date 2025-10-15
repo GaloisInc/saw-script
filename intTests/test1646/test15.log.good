@@ -1,5 +1,8 @@
  <stdin>:1:5-1:6: Warning: Redeclaration of y
  <stdin>:1:16-1:17: Warning: Previous declaration was here
+x : rebindable Int
+y : rebindable Int
+
 abc : ProofScript ()
 abstract_symbolic : Term -> Term
 add_cryptol_defs : [String] -> Simpset -> Simpset
@@ -345,5 +348,4 @@ write_smtlib2_w4 : String -> Term -> TopLevel ()
 yices : ProofScript ()
 z3 : ProofScript ()
 
-x : Int
 y : Int
