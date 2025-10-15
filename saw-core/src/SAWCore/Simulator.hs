@@ -98,7 +98,7 @@ data SimulatorConfig l =
   SimulatorConfig
   { simPrimitive :: Name -> MValue l
   -- ^ Interpretation of 'Primitive' terms.
-  , simVariable :: TermF Term -> VarName -> TValue l -> MValue l
+  , simVariable :: Term -> VarName -> TValue l -> MValue l
   -- ^ Interpretation of free 'Variable' terms.
   , simConstant :: Name -> TValue l -> Maybe (MValue l)
   -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
@@ -172,7 +172,7 @@ evalTermF cfg lam recEval tf env =
 
     Variable nm tp          -> do tp' <- evalType tp
                                   case IntMap.lookup (vnIndex nm) env of
-                                    Nothing -> simVariable cfg tf nm tp'
+                                    Nothing -> simVariable cfg tp nm tp'
                                     Just x -> force x
     FTermF ftf              ->
       case ftf of
@@ -389,7 +389,7 @@ evalGlobal modmap prims variable uninterpreted primHandler lazymux =
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn Id l) ->
-  (TermF Term -> VarName -> TValueIn Id l -> MValueIn Id l) ->
+  (Term -> VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
@@ -398,7 +398,7 @@ evalGlobal modmap prims variable uninterpreted primHandler lazymux =
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn IO l) ->
-  (TermF Term -> VarName -> TValueIn IO l -> MValueIn IO l) ->
+  (Term -> VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
@@ -411,7 +411,7 @@ evalGlobal' ::
   -- | Implementations of 'Primitive' terms, plus overrides for 'Constant' and 'CtorApp' terms
   Map Ident (Prims.Prim l) ->
   -- | Implementations of free 'Variable' terms
-  (TermF Term -> VarName -> TValue l -> MValue l) ->
+  (Term -> VarName -> TValue l -> MValue l) ->
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (Name -> TValue l -> Maybe (MValue l)) ->
   -- | Handler for stuck primitives

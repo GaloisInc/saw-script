@@ -1553,6 +1553,7 @@ w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm
                  (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
+     let variable' tp vn ty = variable (Variable vn tp) vn ty
      let uninterpreted nm ty
            | Set.member (nameIndex nm) unintSet =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
@@ -1560,7 +1561,7 @@ w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
            | otherwise                          = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
-     cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) variable uninterpreted primHandler mux
+     cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) variable' uninterpreted primHandler mux
      Sim.evalSharedTerm cfg t
 
 -- | Evaluate a saw-core term to a What4 value for the purposes of
@@ -1586,10 +1587,11 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
               parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
      let uninterpreted nm ty =
           if constantFilter nm ty then Nothing else Just (X.throwIO (NeutralTermEx (nameInfo nm)))
+     let variable' tp vn ty = variable (Variable vn tp) vn ty
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
      res <- X.try $ do
-              cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) variable uninterpreted primHandler mux
+              cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) variable' uninterpreted primHandler mux
               Sim.evalSharedTerm cfg t
      case res of
        Left (NeutralTermEx nmi) -> pure (Left nmi)
