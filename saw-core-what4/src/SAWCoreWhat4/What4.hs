@@ -280,6 +280,13 @@ constMap sym =
   , ("Prelude.expByNat", Prims.expByNatOp (prims sym))
   ]
 
+-- | Recursor overrides for the SAWCore simulator.
+recursor :: Sym sym => sym -> Name -> sort -> Maybe (IO (SValue sym))
+recursor sym nm _sort =
+  case nameInfo nm of
+    ModuleIdentifier "Prelude.Stream" -> Just (pure (streamRecOp sym))
+    _ -> Nothing
+
 -----------------------------------------------------------------------
 -- Implementation of constMap primitives
 
@@ -587,7 +594,10 @@ streamGetOp sym =
   Prims.tvalFun   $ \_tp ->
   Prims.strictFun $ \xs ->
   Prims.strictFun $ \ix ->
-  Prims.Prim $
+  Prims.Prim $ streamGet sym xs ix
+
+streamGet :: forall sym. Sym sym => sym -> SValue sym -> SValue sym -> IO (SValue sym)
+streamGet sym xs ix =
     case ix of
       VNat n -> lookupSStream xs n
       VBVToNat _ w ->
@@ -605,6 +615,17 @@ lookupSStream (VExtra (SStream f r)) n = do
                    return v
 lookupSStream _ _ = fail "SAWCoreWhat4.What4.lookupSStream: expected Stream"
 
+-- Stream#rec :
+--   (a : sort 0) -> (p : Stream a -> sort 0) ->
+--   ((f : Nat -> a) -> p (MkStream a f)) -> (str : Stream a) -> p str
+streamRecOp :: Sym sym => sym -> SValue sym
+streamRecOp sym =
+  VFun $ \_a -> pure $
+  VFun $ \_p -> pure $
+  vStrictFun $ \f1 -> pure $
+  vStrictFun $ \xs ->
+  do let f = vStrictFun $ \ix -> streamGet sym xs ix
+     apply f1 (ready f)
 
 muxBVal :: forall sym. Sym sym =>
   sym -> SBool sym -> SValue sym -> SValue sym -> IO (SValue sym)
@@ -885,12 +906,11 @@ w4SolveBasic sym sc addlPrims varMap ref unintSet t =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
              in Just (variable vn ty)
            | otherwise                          = Nothing
-     let recursor _ _ = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
      cfg <-
        Sim.evalGlobal m (constMap sym `Map.union` addlPrims)
-       variable uninterpreted recursor primHandler mux
+       variable uninterpreted (recursor sym) primHandler mux
      Sim.evalSharedTerm cfg t
 
 
@@ -1562,12 +1582,11 @@ w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
              in Just (variable (Constant nm) vn ty)
            | otherwise                          = Nothing
-     let recursor _ _ = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
      cfg <-
        Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
-       variable' uninterpreted recursor primHandler mux
+       variable' uninterpreted (recursor sym) primHandler mux
      Sim.evalSharedTerm cfg t
 
 -- | Evaluate a saw-core term to a What4 value for the purposes of
@@ -1594,13 +1613,12 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
      let uninterpreted nm ty =
           if constantFilter nm ty then Nothing else Just (X.throwIO (NeutralTermEx (nameInfo nm)))
      let variable' tp vn ty = variable (Variable vn tp) vn ty
-     let recursor _ _ = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
      res <- X.try $ do
               cfg <-
                 Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
-                variable' uninterpreted recursor primHandler mux
+                variable' uninterpreted (recursor sym) primHandler mux
               Sim.evalSharedTerm cfg t
      case res of
        Left (NeutralTermEx nmi) -> pure (Left nmi)
