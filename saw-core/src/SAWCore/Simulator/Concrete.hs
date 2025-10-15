@@ -48,7 +48,7 @@ evalSharedTerm m addlPrims varVals t =
   runIdentity $ do
     cfg <-
       Sim.evalGlobal m (Map.union constMap addlPrims) variable
-      (\_ _ -> Nothing) (\_ _ -> Nothing) primHandler lazymux
+      (\_ _ -> Nothing) recursor primHandler lazymux
     Sim.evalSharedTerm cfg t
   where
     lazymux = Prims.lazyMuxValue prims
@@ -56,6 +56,10 @@ evalSharedTerm m addlPrims varVals t =
       case Map.lookup (vnIndex vn) varVals of
         Just v  -> return v
         Nothing -> return $ Prim.userError $ "Unimplemented: free variable " ++ show (vnName vn)
+    recursor nm _sort =
+      case nameInfo nm of
+        ModuleIdentifier "Prelude.Stream" -> Just (pure streamRecOp)
+        _ -> Nothing
     primHandler nm msg env =
       return $ Prim.userError $ unlines
         [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
@@ -327,8 +331,25 @@ streamGetOp :: CPrim
 streamGetOp =
   Prims.constFun $
   Prims.strictFun $ \xs ->
-  Prims.strictFun $ \ix -> Prims.Prim $ case ix of
-    VNat n -> return $ IntTrie.apply (toStream xs) (toInteger n)
-    VIntToNat (VInt i) -> return $ IntTrie.apply (toStream xs) i
-    VBVToNat _ w -> return $ IntTrie.apply (toStream xs) (unsigned (toWord w))
-    n -> panic "streamGetOp" ["Expected Nat value; found " <> Text.pack (show n)]
+  Prims.strictFun $ \ix ->
+  Prims.Prim $ pure $ streamGet (toStream xs) ix
+
+streamGet :: IntTrie CValue -> CValue -> CValue
+streamGet xs ix =
+  case ix of
+    VNat n -> IntTrie.apply xs (toInteger n)
+    VIntToNat (VInt i) -> IntTrie.apply xs i
+    VBVToNat _ w -> IntTrie.apply xs (unsigned (toWord w))
+    n -> panic "streamGet" ["Expected Nat value; found " <> Text.pack (show n)]
+
+-- Stream#rec :
+--   (a : sort 0) -> (p : Stream a -> sort 0) ->
+--   ((f : Nat -> a) -> p (MkStream a f)) -> (str : Stream a) -> p str
+streamRecOp :: CValue
+streamRecOp =
+  VFun $ \_a -> pure $
+  VFun $ \_p -> pure $
+  vStrictFun $ \f1 -> pure $
+  vStrictFun $ \xs ->
+  do let f = vStrictFun $ \ix -> pure (streamGet (toStream xs) ix)
+     apply f1 (ready f)
