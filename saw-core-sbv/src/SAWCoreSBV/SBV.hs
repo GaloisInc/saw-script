@@ -225,6 +225,13 @@ constMap =
   , ("Prelude.expByNat", Prims.expByNatOp prims)
   ]
 
+-- | Recursor overrides for the SAWCore simulator.
+recursor :: Name -> sort -> Maybe (IO SValue)
+recursor nm _sort =
+  case nameInfo nm of
+    ModuleIdentifier "Prelude.Stream" -> Just (pure streamRecOp)
+    _ -> Nothing
+
 ------------------------------------------------------------
 -- Coercion functions
 --
@@ -529,13 +536,16 @@ streamGetOp =
   Prims.tvalFun   $ \_tp ->
   Prims.strictFun $ \xs ->
   Prims.strictFun $ \ix ->
-  Prims.Prim $ case ix of
+  Prims.Prim $ streamGet xs ix
+
+streamGet :: SValue -> SValue -> IO SValue
+streamGet xs ix =
+  case ix of
     VNat n -> lookupSStream xs n
     VBVToNat _ w ->
       do ilv <- toWord w
          selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
     v -> panic "streamGetOp" ["Expected Nat value; got " <> Text.pack (show v)]
-
 
 lookupSStream :: SValue -> Natural -> IO SValue
 lookupSStream (VExtra s) n = lookupSbvExtra s n
@@ -549,6 +559,18 @@ lookupSbvExtra (SStream f r) n =
        Nothing -> do v <- f n
                      writeIORef r (Map.insert n v m)
                      return v
+
+-- Stream#rec :
+--   (a : sort 0) -> (p : Stream a -> sort 0) ->
+--   ((f : Nat -> a) -> p (MkStream a f)) -> (str : Stream a) -> p str
+streamRecOp :: SValue
+streamRecOp =
+  VFun $ \_a -> pure $
+  VFun $ \_p -> pure $
+  vStrictFun $ \f1 -> pure $
+  vStrictFun $ \xs ->
+  do let f = vStrictFun $ \ix -> streamGet xs ix
+     apply f1 (ready f)
 
 ------------------------------------------------------------
 -- Misc operations
@@ -626,14 +648,14 @@ sbvSolveBasic :: SharedContext -> Map Ident SPrim -> Set VarIndex -> Term -> IO 
 sbvSolveBasic sc addlPrims unintSet t = do
   m <- scGetModuleMap sc
 
-  let extcns (EC (VarName ix nm) ty) = parseUninterpreted [] (Text.unpack nm ++ "#" ++ show ix) ty
+  let variable (VarName ix nm) ty = parseUninterpreted [] (Text.unpack nm ++ "#" ++ show ix) ty
   let uninterpreted nm ty
         | Set.member (nameIndex nm) unintSet =
-          let vn = VarName (nameIndex nm) (toShortName (nameInfo nm)) in Just (extcns (EC vn ty))
+          let vn = VarName (nameIndex nm) (toShortName (nameInfo nm)) in Just (variable vn ty)
         | otherwise                          = Nothing
   let primHandler = Sim.defaultPrimHandler
   let mux = Prims.lazyMuxValue prims
-  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted primHandler mux
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) variable uninterpreted recursor primHandler mux
   Sim.evalSharedTerm cfg t
 
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
@@ -713,10 +735,9 @@ sbvSATQuery sc addlPrims query =
 
           let mkUninterp (VarName ix nm) ty =
                 parseUninterpreted [] (Text.unpack nm ++ "#" ++ show ix) ty
-          let extcns ec
-                | Just v <- Map.lookup (ecVarIndex ec) varMap = pure v
-                | otherwise =
-                  let vn = VarName (ecVarIndex ec) (ecShortName ec) in mkUninterp vn (ecType ec)
+          let variable vn tp
+                | Just v <- Map.lookup (vnIndex vn) varMap = pure v
+                | otherwise = mkUninterp vn tp
           let uninterpreted nm ty
                 | Set.member (nameIndex nm) unintSet =
                   let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
@@ -725,7 +746,7 @@ sbvSATQuery sc addlPrims query =
           let primHandler = Sim.defaultPrimHandler
           let mux = Prims.lazyMuxValue prims
 
-          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted primHandler mux)
+          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) variable uninterpreted recursor primHandler mux)
           bval <- liftIO (Sim.evalSharedTerm cfg t)
 
           case bval of

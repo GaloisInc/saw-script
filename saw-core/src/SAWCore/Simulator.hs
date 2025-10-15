@@ -98,16 +98,16 @@ data SimulatorConfig l =
   SimulatorConfig
   { simPrimitive :: Name -> MValue l
   -- ^ Interpretation of 'Primitive' terms.
-  , simExtCns :: TermF Term -> ExtCns (TValue l) -> MValue l
-  -- ^ Interpretation of 'ExtCns' terms.
-  , simConstant :: TermF Term -> Name -> TValue l -> Maybe (MValue l)
+  , simVariable :: Term -> VarName -> TValue l -> MValue l
+  -- ^ Interpretation of free 'Variable' terms.
+  , simConstant :: Name -> TValue l -> Maybe (MValue l)
   -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
   -- the body of the constant should be evaluated. 'Just' indicates
   -- that the constant's definition should be overridden.
-  , simCtorApp :: Name -> TValue l -> Maybe (MValue l)
-  -- ^ Interpretation of constructor terms. 'Nothing' indicates that
-  -- the constructor is treated as normal. 'Just' replaces the
-  -- constructor with a custom implementation.
+  , simRecursor :: Name -> Sort -> Maybe (MValue l)
+  -- ^ Interpretation of 'Recursor' terms. 'Nothing' indicates that
+  -- the generic recursor implementation should be used, while 'Just'
+  -- indicates that the recursor should be overridden.
   , simModMap :: ModuleMap
   , simLazyMux :: VBool l -> MValue l -> MValue l -> MValue l
   }
@@ -161,7 +161,7 @@ evalTermF cfg lam recEval tf env =
 
     Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
                                   ty' <- evalType (resolvedNameType r)
-                                  case simConstant cfg tf nm ty' of
+                                  case simConstant cfg nm ty' of
                                     Just override -> override
                                     Nothing ->
                                       case r of
@@ -176,7 +176,7 @@ evalTermF cfg lam recEval tf env =
 
     Variable nm tp          -> do tp' <- evalType tp
                                   case IntMap.lookup (vnIndex nm) env of
-                                    Nothing -> simExtCns cfg tf (EC nm tp')
+                                    Nothing -> simVariable cfg tp nm tp'
                                     Just x -> force x
     FTermF ftf              ->
       case ftf of
@@ -201,16 +201,19 @@ evalTermF cfg lam recEval tf env =
                                  _ -> panic "evalTermF" ["Expected VPair"]
 
         Recursor r ->
-          do let dname = recursorDataType r
-             let nparams = recursorNumParams r
-             let nixs = recursorNumIxs r
-             let cnames = recursorCtorOrder r
-             vFunList nparams $ \_ps_thunks ->
-               pure $ VFun $ \_motive ->
-               vFunList (length cnames) $ \elim_thunks ->
-               do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
-                  let vrec = VRecursor dname nixs es
-                  vFunList nixs (\_ixs -> pure (evalRecursor vrec))
+          case simRecursor cfg (recursorDataType r) (recursorSort r) of
+            Just v -> v
+            Nothing ->
+              do let dname = recursorDataType r
+                 let nparams = recursorNumParams r
+                 let nixs = recursorNumIxs r
+                 let cnames = recursorCtorOrder r
+                 vFunList nparams $ \_ps_thunks ->
+                   pure $ VFun $ \_motive ->
+                   vFunList (length cnames) $ \elim_thunks ->
+                   do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
+                      let vrec = VRecursor dname nixs es
+                      vFunList nixs (\_ixs -> pure (evalRecursor vrec))
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse evalType) elem_tps
@@ -307,26 +310,6 @@ evalTermF cfg lam recEval tf env =
       vStrictFunList j $ \idxs ->
       pure $ TValue $ VDataType nm params idxs
 
--- | Create a 'Value' for a strict function.
-vStrictFun :: VMonad l => (Value l -> MValue l) -> Value l
-vStrictFun k = VFun $ \x -> force x >>= k
-
--- | Create a 'Value' for a lazy multi-argument function.
-vFunList :: forall l. VMonad l => Int -> ([Thunk l] -> MValue l) -> MValue l
-vFunList n0 k = go n0 []
-  where
-    go :: Int -> [Thunk l] -> MValue l
-    go 0 args = k (reverse args)
-    go n args = pure $ VFun (\x -> go (n - 1) (x : args))
-
--- | Create a 'Value' for a strict multi-argument function.
-vStrictFunList :: forall l. VMonad l => Int -> ([Value l] -> MValue l) -> MValue l
-vStrictFunList n0 k = go n0 []
-  where
-    go :: Int -> [Value l] -> MValue l
-    go 0 args = k (reverse args)
-    go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
-
 -- | Evaluate a recursor applied to a specific data constructor.
 reduceRecursor ::
   forall l. (VMonadLazy l, Show (Extra l)) =>
@@ -364,8 +347,9 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn Id l) ->
-  (ExtCns (TValueIn Id l) -> MValueIn Id l) ->
+  (VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
+  (Name -> Sort -> Maybe (MValueIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
@@ -373,28 +357,38 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn IO l) ->
-  (ExtCns (TValueIn IO l) -> MValueIn IO l) ->
+  (VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
+  (Name -> Sort -> Maybe (MValueIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
-evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
-              ModuleMap ->
-              Map Ident (Prims.Prim l) ->
-              (ExtCns (TValue l) -> MValue l) ->
-              (Name -> TValue l -> Maybe (EvalM l (Value l))) ->
-              (Name -> Text -> [Thunk l] -> MValue l) ->
-              (VBool l -> MValue l -> MValue l -> MValue l) ->
-              EvalM l (SimulatorConfig l)
-evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
-  evalGlobal' modmap prims (const extcns) (const uninterpreted) primHandler lazymux
+evalGlobal ::
+  forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
+  ModuleMap ->
+  -- | Implementations of 'Primitive' terms, plus overrides for 'Constant' and 'CtorApp' terms
+  Map Ident (Prims.Prim l) ->
+  -- | Implementations of free 'Variable' terms
+  (VarName -> TValue l -> MValue l) ->
+  -- | Overrides for Constant terms (e.g. uninterpreted functions)
+  (Name -> TValue l -> Maybe (EvalM l (Value l))) ->
+  -- | Overrides for Recursor terms
+  (Name -> Sort -> Maybe (EvalM l (Value l))) ->
+  -- | Handler for stuck primitives
+  (Name -> Text -> [Thunk l] -> MValue l) ->
+  -- | Lazy mux operation
+  (VBool l -> MValue l -> MValue l -> MValue l) ->
+  EvalM l (SimulatorConfig l)
+evalGlobal modmap prims variable uninterpreted primHandler lazymux =
+  evalGlobal' modmap prims (const variable) uninterpreted primHandler lazymux
 
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn Id l) ->
-  (TermF Term -> ExtCns (TValueIn Id l) -> MValueIn Id l) ->
-  (TermF Term -> Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
+  (Term -> VarName -> TValueIn Id l -> MValueIn Id l) ->
+  (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
+  (Name -> Sort -> Maybe (MValueIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
@@ -402,8 +396,9 @@ evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn IO l) ->
-  (TermF Term -> ExtCns (TValueIn IO l) -> MValueIn IO l) ->
-  (TermF Term -> Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
+  (Term -> VarName -> TValueIn IO l -> MValueIn IO l) ->
+  (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
+  (Name -> Sort -> Maybe (MValueIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
@@ -414,35 +409,30 @@ evalGlobal' ::
   ModuleMap ->
   -- | Implementations of 'Primitive' terms, plus overrides for 'Constant' and 'CtorApp' terms
   Map Ident (Prims.Prim l) ->
-  -- | Implementations of ExtCns terms
-  (TermF Term -> ExtCns (TValue l) -> MValue l) ->
+  -- | Implementations of free 'Variable' terms
+  (Term -> VarName -> TValue l -> MValue l) ->
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
-  (TermF Term -> Name -> TValue l -> Maybe (MValue l)) ->
+  (Name -> TValue l -> Maybe (MValue l)) ->
+  -- | Overrides for Recursor terms
+  (Name -> Sort -> Maybe (MValue l)) ->
   -- | Handler for stuck primitives
   (Name -> Text -> [Thunk l] -> MValue l) ->
   -- | Lazy mux operation
   (VBool l -> MValue l -> MValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
-evalGlobal' modmap prims extcns constant primHandler lazymux =
+evalGlobal' modmap prims variable constant recursor primHandler lazymux =
   do checkPrimitives modmap prims
-     return (SimulatorConfig primitive extcns constant' ctors modmap lazymux)
+     return (SimulatorConfig primitive variable constant' recursor modmap lazymux)
   where
-    constant' :: TermF Term -> Name -> TValue l -> Maybe (MValue l)
-    constant' tf nm tv =
-      case constant tf nm tv of
+    constant' :: Name -> TValue l -> Maybe (MValue l)
+    constant' nm tv =
+      case constant nm tv of
         Just v -> Just v
         Nothing ->
           case nameInfo nm of
             ModuleIdentifier ident ->
               evalPrim (primHandler nm) <$> Map.lookup ident prims
             ImportedName{} -> Nothing
-
-    ctors :: Name -> TValue l -> Maybe (MValue l)
-    ctors nm _tv =
-      case nameInfo nm of
-        ModuleIdentifier ident ->
-          evalPrim (primHandler nm) <$> Map.lookup ident prims
-        ImportedName{} -> Nothing
 
     primitive :: Name -> MValue l
     primitive nm =

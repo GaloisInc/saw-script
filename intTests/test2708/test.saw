@@ -1,0 +1,17 @@
+print "Testing evaluation of Stream#rec";
+
+let t = parse_core "Stream#rec Nat (\\(_ : Stream Nat) -> Bool) (\\(xs : Nat -> Nat) -> equalNat (xs 5) 5) (MkStream Nat (\\(i : Nat) -> i))";
+
+print "Testing Concrete backend...";
+print t;
+
+print "Testing RME backend...";
+prove_print rme t;
+
+print "Testing SBV backend...";
+prove_print sbv_z3 t;
+
+print "Testing What4 backend...";
+prove_print (w4_unint_z3 []) t;
+
+print "Done.";
