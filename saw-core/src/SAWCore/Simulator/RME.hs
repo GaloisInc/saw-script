@@ -58,11 +58,11 @@ evalSharedTerm :: ModuleMap -> Map Ident RPrim -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           extcns (\_ _ -> Nothing) primHandler
+           variable (\_ _ -> Nothing) primHandler
            (Prims.lazyMuxValue prims)
     Sim.evalSharedTerm cfg t
   where
-    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
+    variable vn _tp = return $ Prim.userError $ "Unimplemented: free variable " ++ show (vnName vn)
     primHandler nm msg env =
       return $ Prim.userError $ unlines
         [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
@@ -398,7 +398,7 @@ bitBlastBasic :: ModuleMap
               -> Map VarIndex RValue
               -> Term
               -> RValue
-bitBlastBasic m addlPrims ecMap t = runIdentity $ do
+bitBlastBasic m addlPrims varMap t = runIdentity $ do
   let primHandler nm msg env =
          return $ Prim.userError $ unlines
            [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
@@ -407,9 +407,9 @@ bitBlastBasic m addlPrims ecMap t = runIdentity $ do
            ]
 
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-         (\ec -> case Map.lookup (ecVarIndex ec) ecMap of
+         (\vn _ -> case Map.lookup (vnIndex vn) varMap of
                    Just v -> pure v
-                   Nothing -> error ("RME: unknown ExtCns: " ++ show (ecName ec)))
+                   Nothing -> error ("RME: unknown variable: " ++ show (vnName vn)))
          (\_ _ -> Nothing)
          primHandler
          (Prims.lazyMuxValue prims)

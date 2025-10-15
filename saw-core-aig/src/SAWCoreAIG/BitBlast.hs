@@ -456,20 +456,20 @@ bitBlastBasic :: AIG.IsAIG l g
               -> Map VarIndex (BValue (l s))
               -> Term
               -> IO (BValue (l s))
-bitBlastBasic be m addlPrims ecMap t = do
+bitBlastBasic be m addlPrims varMap t = do
   let primHandler = Sim.defaultPrimHandler
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
-         (bitBlastExtCns ecMap)
+         (bitBlastVariable varMap)
          (\_ _ -> Nothing)
          primHandler
          (Prims.lazyMuxValue (prims be))
   Sim.evalSharedTerm cfg t
 
-bitBlastExtCns ::
-  Map VarIndex (BValue (l s)) -> ExtCns (TValue (BitBlast (l s))) ->
+bitBlastVariable ::
+  Map VarIndex (BValue (l s)) -> VarName -> TValue (BitBlast (l s)) ->
   IO (BValue (l s))
-bitBlastExtCns ecMap (EC (VarName idx name) _v) =
-  case Map.lookup idx ecMap of
+bitBlastVariable varMap (VarName idx name) _v =
+  case Map.lookup idx varMap of
     Just var -> return var
     Nothing -> fail $
       "SAWCoreAIG.BitBlast: can't translate variable " ++

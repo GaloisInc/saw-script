@@ -98,8 +98,8 @@ data SimulatorConfig l =
   SimulatorConfig
   { simPrimitive :: Name -> MValue l
   -- ^ Interpretation of 'Primitive' terms.
-  , simExtCns :: TermF Term -> ExtCns (TValue l) -> MValue l
-  -- ^ Interpretation of 'ExtCns' terms.
+  , simVariable :: TermF Term -> VarName -> TValue l -> MValue l
+  -- ^ Interpretation of free 'Variable' terms.
   , simConstant :: Name -> TValue l -> Maybe (MValue l)
   -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
   -- the body of the constant should be evaluated. 'Just' indicates
@@ -172,7 +172,7 @@ evalTermF cfg lam recEval tf env =
 
     Variable nm tp          -> do tp' <- evalType tp
                                   case IntMap.lookup (vnIndex nm) env of
-                                    Nothing -> simExtCns cfg tf (EC nm tp')
+                                    Nothing -> simVariable cfg tf nm tp'
                                     Just x -> force x
     FTermF ftf              ->
       case ftf of
@@ -360,7 +360,7 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn Id l) ->
-  (ExtCns (TValueIn Id l) -> MValueIn Id l) ->
+  (VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
@@ -369,7 +369,7 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn IO l) ->
-  (ExtCns (TValueIn IO l) -> MValueIn IO l) ->
+  (VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
@@ -377,19 +377,19 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               ModuleMap ->
               Map Ident (Prims.Prim l) ->
-              (ExtCns (TValue l) -> MValue l) ->
+              (VarName -> TValue l -> MValue l) ->
               (Name -> TValue l -> Maybe (EvalM l (Value l))) ->
               (Name -> Text -> [Thunk l] -> MValue l) ->
               (VBool l -> MValue l -> MValue l -> MValue l) ->
               EvalM l (SimulatorConfig l)
-evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
-  evalGlobal' modmap prims (const extcns) uninterpreted primHandler lazymux
+evalGlobal modmap prims variable uninterpreted primHandler lazymux =
+  evalGlobal' modmap prims (const variable) uninterpreted primHandler lazymux
 
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn Id l) ->
-  (TermF Term -> ExtCns (TValueIn Id l) -> MValueIn Id l) ->
+  (TermF Term -> VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
@@ -398,7 +398,7 @@ evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (PrimIn IO l) ->
-  (TermF Term -> ExtCns (TValueIn IO l) -> MValueIn IO l) ->
+  (TermF Term -> VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
@@ -410,8 +410,8 @@ evalGlobal' ::
   ModuleMap ->
   -- | Implementations of 'Primitive' terms, plus overrides for 'Constant' and 'CtorApp' terms
   Map Ident (Prims.Prim l) ->
-  -- | Implementations of ExtCns terms
-  (TermF Term -> ExtCns (TValue l) -> MValue l) ->
+  -- | Implementations of free 'Variable' terms
+  (TermF Term -> VarName -> TValue l -> MValue l) ->
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (Name -> TValue l -> Maybe (MValue l)) ->
   -- | Handler for stuck primitives
@@ -419,9 +419,9 @@ evalGlobal' ::
   -- | Lazy mux operation
   (VBool l -> MValue l -> MValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
-evalGlobal' modmap prims extcns constant primHandler lazymux =
+evalGlobal' modmap prims variable constant primHandler lazymux =
   do checkPrimitives modmap prims
-     return (SimulatorConfig primitive extcns constant' modmap lazymux)
+     return (SimulatorConfig primitive variable constant' modmap lazymux)
   where
     constant' :: Name -> TValue l -> Maybe (MValue l)
     constant' nm tv =
