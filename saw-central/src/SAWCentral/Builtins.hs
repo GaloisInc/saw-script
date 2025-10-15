@@ -1524,7 +1524,7 @@ add_cryptol_defs = add_core_defs "Cryptol"
 rewritePrim :: SV.SAWSimpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
   sc <- getSharedContext
-  (_,t') <- io $ rewriteSharedTerm sc ss t
+  (_,t') <- io $ rewriteSharedTermTypeSafe sc ss t
   return (TypedTerm schema t')
 
 unfold_term :: [Text] -> TypedTerm -> TopLevel TypedTerm

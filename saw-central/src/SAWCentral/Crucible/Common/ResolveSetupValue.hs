@@ -31,7 +31,7 @@ import SAWCoreWhat4.ReturnTrip
 import SAWCentral.Crucible.Common
 
 import SAWCentral.Proof (TheoremNonce)
-import SAWCore.Rewriter (Simpset, rewriteSharedTerm)
+import SAWCore.Rewriter (Simpset, rewriteSharedTerm, rewriteSharedTermTypeSafe)
 import qualified CryptolSAWCore.Simpset as Cryptol
 import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
 
@@ -83,7 +83,7 @@ resolveTerm sym unint bt rr tm =
           do -- Try to use rewrites to simplify the term
             let sc = saw_ctx st
             cryptol_ss <- Cryptol.mkCryptolSimpset @TheoremNonce sc
-            tm''       <- snd <$> rewriteSharedTerm sc cryptol_ss tm'
+            tm''       <- snd <$> rewriteSharedTermTypeSafe sc cryptol_ss tm'
             tm'''      <- basicRewrite st tm''
             if all isPreludeName (Map.elems (getConstantSet tm''')) then
               do
@@ -104,7 +104,7 @@ resolveTerm sym unint bt rr tm =
   basicRewrite st =
     case rrBasicSS rr of
       Nothing -> pure
-      Just ss -> \t -> snd <$> rewriteSharedTerm (saw_ctx st) ss t
+      Just ss -> \t -> snd <$> rewriteSharedTermTypeSafe (saw_ctx st) ss t
 
   isPreludeName nm =
     case nm of

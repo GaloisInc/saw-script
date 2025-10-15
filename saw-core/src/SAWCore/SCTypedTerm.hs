@@ -87,7 +87,7 @@ typedCtx (SCTypedTerm _ _ ctx) = ctx
 -- the SAWCore type system.
 scTypeCheckWHNF :: SharedContext -> Term -> IO Term
 scTypeCheckWHNF sc t =
-  do (_, t') <- rewriteSharedTerm sc (addConvs natConversions emptySimpset :: Simpset ()) t
+  do (_, t') <- rewriteSharedTermTypeSafe sc (addConvs natConversions emptySimpset :: Simpset ()) t
      scWhnf sc t'
 
 -- | Check if two terms are "convertible for type-checking", meaning that they
