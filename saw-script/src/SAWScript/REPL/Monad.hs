@@ -492,10 +492,12 @@ getSAWScriptValueNames :: REPL [String]
 getSAWScriptValueNames = do
   rw <- getTopLevelRW
   let avail = rwPrimsAvail rw
-      visible (_, lc, _, _, _, _) = Set.member lc avail
+      visible (_, lc, _, _, _) = Set.member lc avail
       Environ valenv _tyenv _cryenv = rwEnviron rw
-  let rnames = ScopedMap.allKeys $ ScopedMap.filter visible valenv
-  return (map Text.unpack rnames)
+      rbenv = rwRebindables rw
+  let rnames1 = ScopedMap.allKeys $ ScopedMap.filter visible valenv
+      rnames2 = Map.keys rbenv
+  return (map Text.unpack (rnames1 ++ rnames2))
 
 -- | Get visible type names for Haskeline completion.
 getSAWScriptTypeNames :: REPL [String]

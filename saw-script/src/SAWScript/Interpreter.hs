@@ -509,22 +509,30 @@ interpretExpr expr =
       SS.Var pos x -> do
           avail <- gets rwPrimsAvail
           Environ varenv _tyenv _cryenv <- gets rwEnviron
-          case ScopedMap.lookup x varenv of
-            Nothing ->
-                -- This should be rejected by the typechecker, so panic
-                panic "interpretExpr" [
-                    "Read of unknown variable " <> x
-                ]
-            Just (_defpos, lc, _rebindable, _ty, v, _doc)
-              | Set.member lc avail -> do
-                   let v' = injectPositionIntoMonadicValue pos v
-                       v'' = insertRefChain pos x v'
-                   return v''
-              | otherwise ->
-                   -- This case is also rejected by the typechecker
-                   panic "interpretExpr" [
-                       "Read of inaccessible variable " <> x
-                   ]
+          rbenv <- gets rwRebindables
+          let info = case ScopedMap.lookup x varenv of
+                  Nothing ->
+                      -- Try the rebindable environment
+                      case Map.lookup x rbenv of
+                          Nothing -> Nothing
+                          Just (_defpos, _ty, v) -> Just (Current, v)
+                  Just (_defpos, lc, _ty, v, _doc) -> Just (lc, v)
+          case info of
+              Nothing ->
+                  -- This should be rejected by the typechecker; panic
+                  panic "interpretExpr" [
+                      "Read of unknown variable " <> x
+                  ]
+              Just (lc, v)
+                | Set.member lc avail -> do
+                      let v' = injectPositionIntoMonadicValue pos v
+                          v'' = insertRefChain pos x v'
+                      return v''
+                | otherwise ->
+                      -- This case is also rejected by the typechecker
+                      panic "interpretExpr" [
+                           "Read of inaccessible variable " <> x
+                      ]
       SS.Lambda _pos mname pat e -> do
           env <- gets rwEnviron
           return $ VLambda env mname pat e
@@ -908,9 +916,14 @@ interpretTopStmt printBinds stmt = do
       --    - shouldn't have to flatten the environments
       --    - shouldn't be typechecking one statement at a time regardless
       Environ varenv tyenv _cryenvs <- liftTopLevel $ gets rwEnviron
-      let varenv' = Map.map (\(pos, lc, rb, ty, _v, _doc) -> (pos, lc, rb, ty)) $ ScopedMap.flatten varenv
+      rbenv <- liftTopLevel $ gets rwRebindables
+      let varenv' = Map.map (\(pos, lc, ty, _v, _doc) -> (pos, lc, SS.ReadOnlyVar, ty)) $ ScopedMap.flatten varenv
+          rbenv' = Map.map (\(pos, ty, _v) -> (pos, SS.Current, SS.RebindableVar, ty)) rbenv
+          -- If anything appears in both, favor the real environment
+          varenv'' = Map.union varenv' rbenv'
+
       let tyenv' = ScopedMap.flatten tyenv
-      processTypeCheck $ checkStmt avail varenv' tyenv' ctx stmt
+      processTypeCheck $ checkStmt avail varenv'' tyenv' ctx stmt
 
   case stmt' of
 
@@ -997,6 +1010,7 @@ interpretMain :: TopLevel ()
 interpretMain = do
   avail <- gets rwPrimsAvail
   Environ varenv tyenv _cryenv <- gets rwEnviron
+  rbenv <- gets rwRebindables
   let pos = SS.PosInternal "entry"
       -- We need the type to be "TopLevel a", not just "TopLevel ()".
       -- There are several (old) tests in the test suite whose main
@@ -1006,11 +1020,19 @@ interpretMain = do
       tyRet = SS.TyVar pos "a"
       tyMonadic = SS.tBlock pos (SS.tContext pos SS.TopLevel) tyRet
       tyExpected = SS.Forall [(pos, "a")] tyMonadic
-  case ScopedMap.lookup "main" varenv of
+  let main = case ScopedMap.lookup "main" varenv of
+          Just (_defpos, lc, tyFound, v, _doc) -> Just (lc, tyFound, v)
+          -- Having main be rebindable doesn't make much sense, but
+          -- it's easier to have this code than to spend time
+          -- explaining that it's not allowed.
+          Nothing -> case Map.lookup "main" rbenv of
+              Nothing -> Nothing
+              Just (_defpos, tyFound, v) -> Just (Current, tyFound, v)
+  case main of
     Nothing ->
       -- Don't fail or complain if there's no main.
       return ()
-    Just (_defpos, Current, _rebindable, tyFound, v, _doc) -> case tyFound of
+    Just (Current, tyFound, v) -> case tyFound of
         SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) ->
             -- XXX shouldn't have to do this
             let tyenv' = ScopedMap.flatten tyenv in
@@ -1028,7 +1050,7 @@ interpretMain = do
             -- If the type is something entirely random, like a Term or a
             -- String or something, just ignore it.
             return ()
-    Just (_defpos, lc, _rebindable, _ty, _v, _doc) ->
+    Just (lc, _ty, _v) ->
       -- There is no way for things other than primitives to get marked
       -- experimental or deprecated, so this isn't possible. If we allow
       -- users to deprecate their own functions in the future, change
@@ -1096,6 +1118,7 @@ buildTopLevelEnv proxy opts scriptArgv =
 
        let rw0 = TopLevelRW
                    { rwEnviron = primEnviron opts bic cryenv0
+                   , rwRebindables = Map.empty
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
                    , rwProofs     = []
@@ -6453,7 +6476,7 @@ primNamedTypeEnv = fmap extract primTypes
 primValueEnv ::
    Options ->
    BuiltinContext ->
-   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Rebindable, SS.Schema, Value, Maybe [Text])
+   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
 primValueEnv opts bic = Map.mapWithKey extract primitives
   where
       header = [
@@ -6474,7 +6497,7 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           header <> tag p <> name n p <> primitiveDoc p
       extract n p =
           let pos = SS.PosInternal "<<builtin>>" in
-          (pos, primitiveLife p, SS.ReadOnlyVar, primitiveType p,
+          (pos, primitiveLife p, primitiveType p,
            (primitiveFn p) opts bic, Just $ doc n p)
 
 primEnviron :: Options -> BuiltinContext -> CryptolEnvStack -> Environ

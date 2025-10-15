@@ -759,11 +759,10 @@ evaluateTypedTerm _sc (TypedTerm tp _) =
 -- | The variable environment: a map from variable names to:
 --      - the definition position
 --      - the lifecycle setting (experimental/current/deprecated/etc)
---      - whether the binding is rebindable
 --      - the type scheme
 --      - the value
 --      - the help text if any
-type VarEnv = ScopedMap SS.Name (SS.Pos, SS.PrimitiveLifecycle, SS.Rebindable,
+type VarEnv = ScopedMap SS.Name (SS.Pos, SS.PrimitiveLifecycle,
                                  SS.Schema, Value, Maybe [Text])
 
 -- | The type environment: a map from type names to:
@@ -785,11 +784,22 @@ data CryptolEnvStack = CryptolEnvStack CEnv.CryptolEnv [CEnv.CryptolEnv]
 --   one that maps type names to types. A third handles the Cryptol
 --   domain. All three get closed in with lambdas and do-blocks at the
 --   appropriate times.
+--
+--   Note that rebindable variables are sold separately. This is so
+--   they don't get closed in; references to rebindable variables
+--   always retrieve the most recent version.
 data Environ = Environ {
     eVarEnv :: VarEnv,
     eTyEnv :: TyEnv,
     eCryptol :: CryptolEnvStack
 }
+
+-- | The extra environment for rebindable globals.
+--
+--   Note: because no builtins are rebindable, there are no lifecycle
+--   or help text fields. There is, currently at least, no way to
+--   populate those for non-builtins.
+type RebindableEnv = Map SS.Name (SS.Pos, SS.Schema, Value)
 
 -- | Enter a scope.
 pushScope :: TopLevel ()
@@ -952,6 +962,7 @@ data TopLevelRW =
   {
     -- | The variable and type naming environment.
     rwEnviron :: Environ
+  , rwRebindables :: RebindableEnv
 
     -- | The current execution position. This is only valid when the
     --   interpreter is calling out into saw-central to execute a
@@ -1270,7 +1281,22 @@ extendEnv pos name rb ty doc v = do
 
      -- Update the SAWScript environment.
      Environ varenv tyenv cryenvs <- gets rwEnviron
-     let varenv' = ScopedMap.insert name (pos, SS.Current, rb, ty, v, doc) varenv
+     rbenv <- gets rwRebindables
+     let (varenv', rbenv') = case rb of
+           SS.ReadOnlyVar ->
+             -- If we replace a rebindable variable at the top level with a
+             -- readonly one, the readonly version in varenv will hide it
+             -- ever after. We ought to remove it from rbenv; however, it's
+             -- not easy to know here whether we're at the top level or not.
+             -- FUTURE: maybe this will become easier in the long run.
+             let ve' = ScopedMap.insert name (pos, SS.Current, ty, v, doc) varenv in
+             (ve', rbenv)
+           SS.RebindableVar ->
+             -- The typechecker restricts this to happen only at the
+             -- top level and only if any existing variable is already
+             -- rebindable, so we don't have to update varenv.
+             let re' = M.insert name (pos, ty, v) rbenv in
+             (varenv, re')
 
      -- Mirror the value into the Cryptol environment if appropriate.
      let CryptolEnvStack ce ces = cryenvs
@@ -1295,7 +1321,10 @@ extendEnv pos name rb ty doc v = do
      let cryenvs' = CryptolEnvStack ce' ces
 
      -- Drop the new bits into place.
-     modify (\rw -> rw { rwEnviron = Environ varenv' tyenv cryenvs' })
+     modify (\rw -> rw {
+         rwEnviron = Environ varenv' tyenv cryenvs',
+         rwRebindables = rbenv'
+     })
 
 extendEnvMulti :: [(SS.Pos, SS.Name, SS.Rebindable, SS.Schema, Maybe [Text], Environ -> Value)] -> TopLevel ()
 extendEnvMulti bindings = do
@@ -1320,10 +1349,19 @@ extendEnvMulti bindings = do
                      VLambda{} -> v
                      _ ->
                          panic "extendEnvMulti" [
-                             "Non-lambda value: " <> Text.pack (show v)
+                             "Non-lambda value: " <> Text.pack (show v),
+                             "Source position: " <> Text.pack (show pos)
+                         ]
+                 v'' = case rb of
+                     SS.ReadOnlyVar -> v'
+                     SS.RebindableVar ->
+                         -- "rec" declarations can't be rebindable
+                         panic "extendEnvMulti" [
+                             "Rebindable variable: " <> name,
+                             "Source position: " <> Text.pack (show pos)
                          ]
              in
-             ScopedMap.insert name (pos, SS.Current, rb, ty, v', doc) tmpenv
+             ScopedMap.insert name (pos, SS.Current, ty, v'', doc) tmpenv
          varenv' = foldr insert varenv bindings
          environ' = Environ varenv' tyenv cryenv
 

@@ -44,7 +44,7 @@ import SAWScript.Token (Token)
 
 import Cryptol.Parser (ParseError())
 
-import Control.Monad (guard, void)
+import Control.Monad (guard, unless, void)
 
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
@@ -77,7 +77,7 @@ import SAWScript.Interpreter (interpretTopStmt)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression, parseSchemaPattern)
 import SAWCentral.TopLevel (TopLevelRW(..))
-import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable)
+import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable, Rebindable(..))
 
 
 -- Commands --------------------------------------------------------------------
@@ -205,12 +205,16 @@ typeOfCmd str
      rw <- getTopLevelRW
      decl' <- do
        let primsAvail = rwPrimsAvail rw
-           Environ varenv tyenv _cryenvs = rwEnviron rw
            -- XXX it should not be necessary to do this munging
-           squash (defpos, lc, rb, ty, _val, _doc) = (defpos, lc, rb, ty)
+           Environ varenv tyenv _cryenvs = rwEnviron rw
+           squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
            varenv' = Map.map squash $ ScopedMap.flatten varenv
            tyenv' = ScopedMap.flatten tyenv
-       let (errs_or_results, warns) = checkDecl primsAvail varenv' tyenv' decl
+           rbenv = rwRebindables rw
+           rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
+           rbenv' = Map.map rbsquash rbenv
+           varenv'' = Map.union varenv' rbenv'
+       let (errs_or_results, warns) = checkDecl primsAvail varenv'' tyenv' decl
        let issueWarning (msgpos, msg) =
              -- XXX the print functions should be what knows how to show positions...
              putStrLn (show msgpos ++ ": Warning: " ++ msg)
@@ -246,10 +250,14 @@ searchCmd str
      let primsAvail = rwPrimsAvail rw
          -- XXX it should not be necessary to do this munging
          Environ varenv tyenv _cryenv = rwEnviron rw
-         squash (pos, lc, rb, ty, _val, _doc) = (pos, lc, rb, ty)
+         rbenv = rwRebindables rw
+         squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)
          varenv' = Map.map squash $ ScopedMap.flatten varenv
          tyenv' = ScopedMap.flatten tyenv
-         (errs_or_results, warns) = checkSchemaPattern everythingAvailable varenv' tyenv' pat
+         rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)
+         rbenv' = Map.map rbsquash rbenv
+         varenv'' = Map.union varenv' rbenv'
+         (errs_or_results, warns) = checkSchemaPattern everythingAvailable varenv'' tyenv' pat
      let issueWarning (msgpos, msg) =
            -- XXX the print functions should be what knows how to show positions...
            putStrLn (show msgpos ++ ": Warning: " ++ msg)
@@ -346,12 +354,23 @@ envCmd :: REPL ()
 envCmd = do
   rw <- getTopLevelRW
   let Environ varenv _tyenv _cryenv = rwEnviron rw
+      rbenv = rwRebindables rw
       avail = rwPrimsAvail rw
-      say (x, (_pos, _lc, _rb, ty, _v, _doc)) = do
+
+  -- print the rebindable globals first, if any
+  unless (Map.null rbenv) $ do
+      let rbsay (x, (_pos, ty, _v)) = do
+              let ty' = PPS.pShowText ty
+              TextIO.putStrLn (x <> " : rebindable " <> ty')
+      io $ mapM_ rbsay $ Map.assocs rbenv
+      io $ TextIO.putStrLn ""
+
+  -- print the normal environment
+  let say (x, (_pos, _lc, ty, _v, _doc)) = do
           let ty' = PPS.pShowText ty
           TextIO.putStrLn (x <> " : " <> ty')
       -- Print only the visible objects
-      keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail
+      keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
       -- Insert a blank line in the output where there's a scope boundary
       printScope mItems = case mItems of
           Nothing -> TextIO.putStrLn ""
@@ -390,9 +409,9 @@ helpCmd cmd
        -- the rebindables.
        let Environ varenv _tyenv _cryenvs = rwEnviron rw
        case ScopedMap.lookup (Text.pack cmd) varenv of
-         Just (_pos, _lc, _rb, _ty, _v, Just doc) ->
+         Just (_pos, _lc, _ty, _v, Just doc) ->
            io $ mapM_ TextIO.putStrLn doc
-         Just (_pos, _lc, _rb, _ty, _v, Nothing) -> do
+         Just (_pos, _lc, _ty, _v, Nothing) -> do
            io $ putStrLn $ "// No documentation is available."
            typeOfCmd cmd
          Nothing ->

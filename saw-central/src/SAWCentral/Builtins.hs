@@ -1705,10 +1705,21 @@ envCmd = do
   opts <- getOptions
   avail <- gets rwPrimsAvail
   SV.Environ varenv _tyenv _cryenv <- gets rwEnviron
-  let printItem (x, (_pos, _lc, _rb, ty, _v, _doc)) =
+  rbenv <- gets rwRebindables
+
+  -- print rebindables first if there are any
+  unless (Map.null rbenv) $ do
+      io $ printOutLn opts Info $ "Rebindable globals:"
+      io $ printOutLn opts Info $ ""
+      let printRB (x, (_pos, ty, _v)) = do
+              let str = x <> " : rebindable " <> PPS.pShowText ty
+              printOutLn opts Info $ Text.unpack str
+      io $ mapM_ printRB $ Map.assocs rbenv
+
+  let printItem (x, (_pos, _lc, ty, _v, _doc)) =
           printOutLn opts Info $ Text.unpack (x <> " : " <> PPS.pShowText ty)
       -- Print only the visible objects
-      keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail
+      keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
       -- Insert a blank line in the output where there's a scope boundary
       printScope mItems = case mItems of
           Nothing -> printOutLn opts Info ""
