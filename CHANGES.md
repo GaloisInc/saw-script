@@ -6,6 +6,24 @@ This release supports [version
 
 ## Changes
 
+* The old behavior of SAWScript where top-level names could be
+  arbitrarily rebound, such that existing uses would see the updated
+  value, has been superseded. Among other problems, it wasn't
+  type safe.
+  Substitute functionality is now available by using the new syntax
+  `let rebindable`.
+  After `let rebindable x = 3`, `x` is mutable and a subsequent
+  `let rebindable x = 4` will change the value seen by all uses.
+  The value type must remain the same; to avoid unnecessary
+  complexity, polymorphic values cannot be rebound.
+  Participants in mutually recursive declarations defined with `rec`
+  (rather than `let`) cannot be rebound.
+  This is only allowed at the syntactic top level, and not within
+  functions, do-blocks, or expressions.
+  See issue #1646 for further information/discussion.
+
+  Note that `rebindable` is now a reserved word.
+
 * In SAWCore syntax (as used by `parse_core`, `prove_core`, and
   `read_core`) partially-applied recursors are no longer an error.
   Elimination sorts for recursors are now specified by suffix:

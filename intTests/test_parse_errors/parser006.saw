@@ -1,0 +1,3 @@
+// "rebindable" is not allowed in rec-bindings
+rec f0 () = f1 ()
+and rebindable f1 () = f0 ();

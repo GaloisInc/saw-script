@@ -1,0 +1,2 @@
+// "rebindable" is not allowed in let-expressions
+let c = do { let rebindable c' = 3 in (); return (); };

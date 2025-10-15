@@ -21,7 +21,7 @@ typedef t2 = {
 
 
 let x : t1 = { amethyst=3, moonstone=4, obsidian=5, turquoise=6 };
-let f (x: t2) = x.amethyst;
+let f (xx: t2) = xx.amethyst;
 
 let y = f x;
 

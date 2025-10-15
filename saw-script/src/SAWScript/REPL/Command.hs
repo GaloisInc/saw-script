@@ -57,10 +57,12 @@ import qualified SAWSupport.Pretty as PPS (pShowText)
 
 -- SAWScript imports
 import qualified SAWCentral.Options (Verbosity(..))
+import qualified SAWCentral.Position as SS (Pos)
 import qualified SAWCentral.AST as SS (
      Name,
      Decl(..),
      Pattern(..),
+     Rebindable,
      Schema
  )
 import SAWCentral.Exceptions
@@ -201,7 +203,8 @@ typeOfCmd str
      decl' <- do
        let primsAvail = rwPrimsAvail rw
            valueInfo = rwValueInfo rw
-           valueInfo' = Map.map (\(lc, ty, _val, _doc) -> (lc, ty)) valueInfo
+           squash (defpos, lc, rb, ty, _val, _doc) = (defpos, lc, rb, ty)
+           valueInfo' = Map.map squash valueInfo
            typeInfo = rwTypeInfo rw
        let (errs_or_results, warns) = checkDecl primsAvail valueInfo' typeInfo decl
        let issueWarning (msgpos, msg) =
@@ -238,7 +241,8 @@ searchCmd str
 
      let primsAvail = rwPrimsAvail rw
          valueInfo = rwValueInfo rw
-         valueInfo' = Map.map (\(lc, ty, _val, _doc) -> (lc, ty)) valueInfo
+         squash (pos, lc, rb, ty, _val, _doc) = (pos, lc, rb, ty)
+         valueInfo' = Map.map squash valueInfo
          typeInfo = rwTypeInfo rw
          (errs_or_results, warns) = checkSchemaPattern everythingAvailable valueInfo' typeInfo pat
      let issueWarning (msgpos, msg) =
@@ -247,20 +251,21 @@ searchCmd str
      io $ mapM_ issueWarning warns
      pat' <- either failTypecheck return $ errs_or_results
      let search = compileSearchPattern typeInfo pat'
-         allMatches = Map.filter (\(_lc, ty) -> matchSearchPattern search ty) valueInfo'
+         keep (_pos, _lc, _rb, ty) = matchSearchPattern search ty
+         allMatches = Map.filter keep valueInfo'
 
          -- Divide the results into visible, experimental-not-visible,
          -- and deprecated-not-visible.
          inspect ::
              SS.Name ->
-             (PrimitiveLifecycle, SS.Schema) ->
+             (SS.Pos, PrimitiveLifecycle, SS.Rebindable, SS.Schema) ->
              (Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
               Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
               Map.Map SS.Name (PrimitiveLifecycle, SS.Schema)) ->
              (Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
               Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
               Map.Map SS.Name (PrimitiveLifecycle, SS.Schema))
-         inspect name (lc, ty) (vis, ex, dep) =
+         inspect name (_pos, lc, _rb, ty) (vis, ex, dep) =
              if Set.member lc primsAvail then
                  (Map.insert name (lc, ty) vis, ex, dep)
              else case lc of
@@ -337,8 +342,11 @@ envCmd = do
   rw <- getValueEnvironment
   let avail = rwPrimsAvail rw
       valueInfo = rwValueInfo rw
-      valueInfo' = Map.filter (\(lc, _ty, _v, _doc) -> Set.member lc avail) valueInfo
-  io $ sequence_ [ TextIO.putStrLn (x <> " : " <> PPS.pShowText ty) | (x, (_lc, ty, _val, _doc)) <- Map.assocs valueInfo' ]
+      keep (_pos, lc, _rb, _ty, _v, _doc) = Set.member lc avail
+      valueInfo' = Map.filter keep valueInfo
+      say (x, (_pos, _lc, _rb, ty, _val, _doc)) =
+          TextIO.putStrLn (x <> " : " <> PPS.pShowText ty)
+  io $ mapM_ say $ Map.assocs valueInfo'
 
 tenvCmd :: REPL ()
 tenvCmd = do
@@ -346,7 +354,9 @@ tenvCmd = do
   let avail = rwPrimsAvail rw
       typeInfo = rwTypeInfo rw
       typeInfo' = Map.filter (\(lc, _ty) -> Set.member lc avail) typeInfo
-  io $ sequence_ [ TextIO.putStrLn (a <> " : " <> PPS.pShowText ty) | (a, (_lc, ty)) <- Map.assocs typeInfo' ]
+      say (a, (_lc, ty)) =
+          TextIO.putStrLn (a <> " : " <> PPS.pShowText ty)
+  io $ mapM_ say $ Map.assocs typeInfo'
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
@@ -354,9 +364,9 @@ helpCmd cmd
   | otherwise =
     do env <- getEnvironment
        case Map.lookup (Text.pack cmd) (rwValueInfo env) of
-         Just (_lc, _ty, _v, Just doc) ->
+         Just (_pos, _lc, _rb, _ty, _v, Just doc) ->
            io $ mapM_ TextIO.putStrLn doc
-         Just (_lc, _ty, _v, Nothing) -> do
+         Just (_pos, _lc, _rb, _ty, _v, Nothing) -> do
            io $ putStrLn $ "// No documentation is available."
            typeOfCmd cmd
          Nothing ->

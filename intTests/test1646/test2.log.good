@@ -1,5 +1,7 @@
  Loading file "test2.saw"
  x=a
+ test2.saw:8:5-8:6: Warning: Redeclaration of x
+ test2.saw:3:5-3:6: Warning: Previous declaration was here
  fromValue Text
 CallStack (from HasCallStack):
   error, called at saw-script/src/SAWScript/Interpreter.hs

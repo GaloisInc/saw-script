@@ -1,0 +1,9 @@
+// The second let will fail with a type error.
+
+let rebindable x = "a";
+
+let f () = print (str_concat "x=" x);
+f ();
+
+let rebindable x = 5;
+f();
