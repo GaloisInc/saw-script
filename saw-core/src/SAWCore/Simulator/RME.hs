@@ -58,7 +58,7 @@ evalSharedTerm :: ModuleMap -> Map Ident RPrim -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           variable (\_ _ -> Nothing) primHandler
+           variable (\_ _ -> Nothing) (\_ _ -> Nothing) primHandler
            (Prims.lazyMuxValue prims)
     Sim.evalSharedTerm cfg t
   where
@@ -410,6 +410,7 @@ bitBlastBasic m addlPrims varMap t = runIdentity $ do
          (\vn _ -> case Map.lookup (vnIndex vn) varMap of
                    Just v -> pure v
                    Nothing -> error ("RME: unknown variable: " ++ show (vnName vn)))
+         (\_ _ -> Nothing)
          (\_ _ -> Nothing)
          primHandler
          (Prims.lazyMuxValue prims)

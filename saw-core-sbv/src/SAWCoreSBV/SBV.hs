@@ -631,9 +631,10 @@ sbvSolveBasic sc addlPrims unintSet t = do
         | Set.member (nameIndex nm) unintSet =
           let vn = VarName (nameIndex nm) (toShortName (nameInfo nm)) in Just (variable vn ty)
         | otherwise                          = Nothing
+  let recursor _ _ = Nothing
   let primHandler = Sim.defaultPrimHandler
   let mux = Prims.lazyMuxValue prims
-  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) variable uninterpreted primHandler mux
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) variable uninterpreted recursor primHandler mux
   Sim.evalSharedTerm cfg t
 
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
@@ -721,10 +722,11 @@ sbvSATQuery sc addlPrims query =
                   let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
                   in Just (mkUninterp vn ty)
                 | otherwise                          = Nothing
+          let recursor _ _ = Nothing
           let primHandler = Sim.defaultPrimHandler
           let mux = Prims.lazyMuxValue prims
 
-          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) variable uninterpreted primHandler mux)
+          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) variable uninterpreted recursor primHandler mux)
           bval <- liftIO (Sim.evalSharedTerm cfg t)
 
           case bval of

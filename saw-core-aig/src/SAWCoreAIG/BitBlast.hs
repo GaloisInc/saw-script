@@ -461,6 +461,7 @@ bitBlastBasic be m addlPrims varMap t = do
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
          (bitBlastVariable varMap)
          (\_ _ -> Nothing)
+         (\_ _ -> Nothing)
          primHandler
          (Prims.lazyMuxValue (prims be))
   Sim.evalSharedTerm cfg t

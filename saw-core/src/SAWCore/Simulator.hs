@@ -104,6 +104,10 @@ data SimulatorConfig l =
   -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
   -- the body of the constant should be evaluated. 'Just' indicates
   -- that the constant's definition should be overridden.
+  , simRecursor :: Name -> Sort -> Maybe (MValue l)
+  -- ^ Interpretation of 'Recursor' terms. 'Nothing' indicates that
+  -- the generic recursor implementation should be used, while 'Just'
+  -- indicates that the recursor should be overridden.
   , simModMap :: ModuleMap
   , simLazyMux :: VBool l -> MValue l -> MValue l -> MValue l
   }
@@ -197,16 +201,19 @@ evalTermF cfg lam recEval tf env =
                                  _ -> panic "evalTermF" ["Expected VPair"]
 
         Recursor r ->
-          do let dname = recursorDataType r
-             let nparams = recursorNumParams r
-             let nixs = recursorNumIxs r
-             let cnames = recursorCtorOrder r
-             vFunList nparams $ \_ps_thunks ->
-               pure $ VFun $ \_motive ->
-               vFunList (length cnames) $ \elim_thunks ->
-               do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
-                  let vrec = VRecursor dname nixs es
-                  vFunList nixs (\_ixs -> pure (evalRecursor vrec))
+          case simRecursor cfg (recursorDataType r) (recursorSort r) of
+            Just v -> v
+            Nothing ->
+              do let dname = recursorDataType r
+                 let nparams = recursorNumParams r
+                 let nixs = recursorNumIxs r
+                 let cnames = recursorCtorOrder r
+                 vFunList nparams $ \_ps_thunks ->
+                   pure $ VFun $ \_motive ->
+                   vFunList (length cnames) $ \elim_thunks ->
+                   do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
+                      let vrec = VRecursor dname nixs es
+                      vFunList nixs (\_ixs -> pure (evalRecursor vrec))
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse evalType) elem_tps
@@ -362,6 +369,7 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Map Ident (PrimIn Id l) ->
   (VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
+  (Name -> Sort -> Maybe (MValueIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
@@ -371,17 +379,26 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Map Ident (PrimIn IO l) ->
   (VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
+  (Name -> Sort -> Maybe (MValueIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
-evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
-              ModuleMap ->
-              Map Ident (Prims.Prim l) ->
-              (VarName -> TValue l -> MValue l) ->
-              (Name -> TValue l -> Maybe (EvalM l (Value l))) ->
-              (Name -> Text -> [Thunk l] -> MValue l) ->
-              (VBool l -> MValue l -> MValue l -> MValue l) ->
-              EvalM l (SimulatorConfig l)
+evalGlobal ::
+  forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
+  ModuleMap ->
+  -- | Implementations of 'Primitive' terms, plus overrides for 'Constant' and 'CtorApp' terms
+  Map Ident (Prims.Prim l) ->
+  -- | Implementations of free 'Variable' terms
+  (VarName -> TValue l -> MValue l) ->
+  -- | Overrides for Constant terms (e.g. uninterpreted functions)
+  (Name -> TValue l -> Maybe (EvalM l (Value l))) ->
+  -- | Overrides for Recursor terms
+  (Name -> Sort -> Maybe (EvalM l (Value l))) ->
+  -- | Handler for stuck primitives
+  (Name -> Text -> [Thunk l] -> MValue l) ->
+  -- | Lazy mux operation
+  (VBool l -> MValue l -> MValue l -> MValue l) ->
+  EvalM l (SimulatorConfig l)
 evalGlobal modmap prims variable uninterpreted primHandler lazymux =
   evalGlobal' modmap prims (const variable) uninterpreted primHandler lazymux
 
@@ -391,6 +408,7 @@ evalGlobal modmap prims variable uninterpreted primHandler lazymux =
   Map Ident (PrimIn Id l) ->
   (Term -> VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
+  (Name -> Sort -> Maybe (MValueIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
@@ -400,6 +418,7 @@ evalGlobal modmap prims variable uninterpreted primHandler lazymux =
   Map Ident (PrimIn IO l) ->
   (Term -> VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
+  (Name -> Sort -> Maybe (MValueIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
@@ -414,14 +433,16 @@ evalGlobal' ::
   (Term -> VarName -> TValue l -> MValue l) ->
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (Name -> TValue l -> Maybe (MValue l)) ->
+  -- | Overrides for Recursor terms
+  (Name -> Sort -> Maybe (MValue l)) ->
   -- | Handler for stuck primitives
   (Name -> Text -> [Thunk l] -> MValue l) ->
   -- | Lazy mux operation
   (VBool l -> MValue l -> MValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
-evalGlobal' modmap prims variable constant primHandler lazymux =
+evalGlobal' modmap prims variable constant recursor primHandler lazymux =
   do checkPrimitives modmap prims
-     return (SimulatorConfig primitive variable constant' modmap lazymux)
+     return (SimulatorConfig primitive variable constant' recursor modmap lazymux)
   where
     constant' :: Name -> TValue l -> Maybe (MValue l)
     constant' nm tv =

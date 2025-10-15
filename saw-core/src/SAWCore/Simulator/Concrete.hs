@@ -46,7 +46,9 @@ import SAWCore.SharedTerm
 evalSharedTerm :: ModuleMap -> Map Ident CPrim -> Map VarIndex CValue -> Term -> CValue
 evalSharedTerm m addlPrims varVals t =
   runIdentity $ do
-    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) variable (\_ _ -> Nothing) primHandler lazymux
+    cfg <-
+      Sim.evalGlobal m (Map.union constMap addlPrims) variable
+      (\_ _ -> Nothing) (\_ _ -> Nothing) primHandler lazymux
     Sim.evalSharedTerm cfg t
   where
     lazymux = Prims.lazyMuxValue prims

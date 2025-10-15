@@ -885,9 +885,12 @@ w4SolveBasic sym sc addlPrims varMap ref unintSet t =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
              in Just (variable vn ty)
            | otherwise                          = Nothing
+     let recursor _ _ = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
-     cfg <- Sim.evalGlobal m (constMap sym `Map.union` addlPrims) variable uninterpreted primHandler mux
+     cfg <-
+       Sim.evalGlobal m (constMap sym `Map.union` addlPrims)
+       variable uninterpreted recursor primHandler mux
      Sim.evalSharedTerm cfg t
 
 
@@ -1559,9 +1562,12 @@ w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
              in Just (variable (Constant nm) vn ty)
            | otherwise                          = Nothing
+     let recursor _ _ = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
-     cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) variable' uninterpreted primHandler mux
+     cfg <-
+       Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
+       variable' uninterpreted recursor primHandler mux
      Sim.evalSharedTerm cfg t
 
 -- | Evaluate a saw-core term to a What4 value for the purposes of
@@ -1588,10 +1594,13 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
      let uninterpreted nm ty =
           if constantFilter nm ty then Nothing else Just (X.throwIO (NeutralTermEx (nameInfo nm)))
      let variable' tp vn ty = variable (Variable vn tp) vn ty
+     let recursor _ _ = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
      res <- X.try $ do
-              cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) variable' uninterpreted primHandler mux
+              cfg <-
+                Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
+                variable' uninterpreted recursor primHandler mux
               Sim.evalSharedTerm cfg t
      case res of
        Left (NeutralTermEx nmi) -> pure (Left nmi)
