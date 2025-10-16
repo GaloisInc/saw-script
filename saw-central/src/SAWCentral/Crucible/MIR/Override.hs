@@ -561,8 +561,9 @@ enforceDisjointness cc loc ss =
         , (_, Some q)      <- ps
         ]
 
--- | Generate assertions that all of the memory allocations matched by an
--- override's precondition are allocated.
+-- | Generate assertions that all of the memory regions matched by an override's
+-- precondition are allocated. Note that in safe Rust, references are always
+-- allocated and only raw pointers can be unallocated (\"dangling\").
 enforcePointerValidity ::
   MIRCrucibleContext ->
   StateSpec ->
