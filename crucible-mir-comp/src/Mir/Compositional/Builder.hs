@@ -709,14 +709,9 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
     go (TupleShape _ elems) ag = do
       svs <- accessMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
       return $ MS.SetupTuple () svs
-    go (ArrayShape _ elemTy shp) vec = do
-        svs <- case vec of
-            MirVector_Vector v -> mapM (go shp) (toList v)
-            MirVector_PartialVector v -> forM (toList v) $ \p -> do
-                let rv = readMaybeType sym "vector element" (shapeType shp) p
-                go shp rv
-            MirVector_Array _ -> error $ "regToSetup: MirVector_Array NYI"
-        return $ MS.SetupArray elemTy svs
+    go (ArrayShape _ elemTy sz len shp) ag = do
+      svs <- accessMirAggregateArray sym sz shp len ag $ \_off rv -> go shp rv
+      return $ MS.SetupArray elemTy svs
     go (StructShape tyAdt _ flds) rvs =
       case tyAdt of
         M.TyAdt adtName _ _ -> do

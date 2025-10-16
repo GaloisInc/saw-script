@@ -439,7 +439,7 @@ constructExpandedSetupValue cc sc = go
         TupleShape _ elems -> do
           flds <- mapM (goAgElem pfx) (zip [0..] elems)
           pure $ MS.SetupTuple () flds
-        ArrayShape ty elemTy elemShp ->
+        ArrayShape ty elemTy _ _ elemShp ->
           case ty of
             Mir.TyArray _ n -> do
               elems <-
@@ -1857,7 +1857,7 @@ setupArg sc cc ecRef mty0 tp0 =
               pure (Cryptol.tTuple eltCtys, scTp)
             PrimShape {} ->
               typeReprToSAWTypes sym sc (shapeType shp)
-            ArrayShape mty _ eltShp -> do
+            ArrayShape mty _ _ _ eltShp -> do
               arraySz <-
                 case mty of
                   Mir.TyArray _ arraySz -> pure arraySz
@@ -1922,27 +1922,14 @@ setupArg sc cc ecRef mty0 tp0 =
                       , Text.pack $ show $ ppTerm PPS.defaultOpts scTp
                       ]
               let tupleSz = length elems
-              let ag0 = Mir.MirAggregate (fromIntegral tupleSz) mempty
-              foldM
-                (\ag (idx, eltScTp, AgElemShape _ _ shp') -> do
-                    let oneBasedIdx :: Int
-                        oneBasedIdx = fromIntegral @Word @Int (idx+1)
-                    t' <- scTupleSelector sc t oneBasedIdx tupleSz
-                    elt <- termToMirRegValue shp' eltScTp t'
-                    -- The choice to represent fields as having size 1 is
-                    -- temporary, intended to match similar temporary behavior
-                    -- elsewhere, e.g. in union construction (see Note [union
-                    -- representation] in crucible-mir:Mir.TransTy). In the
-                    -- medium term, we'll want to update this to incorporate
-                    -- size and layout information to compute and use the
-                    -- proper sizes and offsets for each field.
-                    let fieldSize = 1
-                    Mir.mirAggregate_setIO bak idx fieldSize (shapeType shp') elt ag)
-                ag0
-                (zip3 [0..] eltScTps elems)
+              buildMirAggregate sym elems (zip [0..] eltScTps) $
+                \_off _sz shp' (idx, eltScTp) -> do
+                  let oneBasedIdx = idx + 1
+                  t' <- scTupleSelector sc t oneBasedIdx tupleSz
+                  termToMirRegValue shp' eltScTp t'
             PrimShape {} ->
               termToRegValue sym (shapeType shp) t
-            ArrayShape _ _ eltShp -> do
+            ArrayShape _ _ eltSz len eltShp -> do
               (arraySz :*: eltScTp) <-
                 case asVecType scTp of
                   Just nt -> pure nt
@@ -1953,12 +1940,12 @@ setupArg sc cc ecRef mty0 tp0 =
                       , Text.pack $ show $ ppTerm PPS.defaultOpts scTp
                       ]
               arraySzTerm <- scNat sc arraySz
-              elts <-
-                V.generateM (fromIntegral @Natural @Int arraySz) $ \idx -> do
+              let elems = arrayAgElemShapes eltSz eltShp len
+              buildMirAggregate sym elems [0..] $
+                \_off _sz shp' idx -> do
                   idxTerm <- scNat sc $ fromIntegral @Int @Natural idx
                   t' <- scAt sc arraySzTerm eltScTp t idxTerm
-                  termToMirRegValue eltShp eltScTp t'
-              pure $ Mir.MirVector_Vector elts
+                  termToMirRegValue shp' eltScTp t'
 
             StructShape {} ->
               impossibleType scTp
@@ -2156,7 +2143,7 @@ setupResultTerm sc cc mty0 tpr0 val0 =
             PrimShape {} -> do
               st <- sawCoreState sym
               toSC sym st val
-            ArrayShape _ _ eltShp -> do
+            ArrayShape _ _ eltSz len eltShp -> do
               eltTy <-
                 case mty of
                   Mir.TyArray eltTy _ -> pure eltTy
@@ -2165,19 +2152,11 @@ setupResultTerm sc cc mty0 tpr0 val0 =
                          [ "ArrayShape with non-TyArray type:"
                          , Text.pack $ show $ PP.pretty mty
                          ]
-              let eltTpr = shapeType eltShp
-              case val of
-                Mir.MirVector_Vector elts -> do
-                  shpTypeTerm <- shapeToTerm sc shp
-                  typedElts <- traverse (go eltTy eltTpr) (V.toList elts)
-                  scVectorReduced sc shpTypeTerm typedElts
-                Mir.MirVector_PartialVector elts -> do
-                  shpTypeTerm <- shapeToTerm sc shp
-                  let elts' = V.map (readMaybeType sym "vector element" eltTpr) elts
-                  typedElts <- traverse (go eltTy eltTpr) (V.toList elts')
-                  scVectorReduced sc shpTypeTerm typedElts
-                Mir.MirVector_Array {} ->
-                  fail "setupResultTerm: MirVector_Array not yet supported"
+              shpTypeTerm <- shapeToTerm sc shp
+              let elems = arrayAgElemShapes eltSz eltShp len
+              typedElts <- accessMirAggregate sym elems val $
+                  \_off _sz shp' val' -> go eltTy (shapeType shp') val'
+              scVectorReduced sc shpTypeTerm typedElts
 
             StructShape {} ->
               unsupportedType mty

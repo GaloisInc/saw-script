@@ -173,24 +173,23 @@ termToReg sym varMap term shp0 = do
         (TupleShape _ elems, _) -> do
             svs <- reverse <$> tupleToListRev (length elems) [] sv
             buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
-        (ArrayShape (M.TyArray _ n) _ shp', SAW.VVector thunks) -> do
+        (ArrayShape _ _ sz len shp', SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
-            when (length svs /= n) $ fail $
-                "termToReg: type error: expected an array of length " ++ show n ++
+            when (length svs /= fromIntegral len) $ fail $
+                "termToReg: type error: expected an array of length " ++ show len ++
                     ", but simulator returned " ++ show (length svs) ++ " elements"
-            v <- V.fromList <$> mapM (go shp') svs
-            return $ MirVector_Vector v
+            buildMirAggregateArray sym sz shp' svs $ \_ sv' -> go shp' sv'
         -- Special case: saw-core/cryptol doesn't distinguish bitvectors from
         -- vectors of booleans, so it may return `VWord` (bitvector) where an
         -- array of `bool` is expected.
-        (ArrayShape (M.TyArray _ n) _ (PrimShape _ BaseBoolRepr), SAW.VWord (W4.DBV e))
+        (ArrayShape (M.TyArray _ n) _ sz _ shp'@(PrimShape _ BaseBoolRepr), SAW.VWord (W4.DBV e))
           | Just (Some w) <- someNat n,
             Just LeqProof <- testLeq (knownNat @1) w,
             Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> do
-            v <- V.generateM n $ \i -> do
+            bits <- forM (take n [0..]) $ \i -> do
                 -- Cryptol bitvectors are MSB-first, but What4 uses LSB-first.
                 liftIO $ W4.testBitBV sym (fromIntegral $ n - i - 1) e
-            return $ MirVector_Vector v
+            buildMirAggregateArray sym sz shp' bits $ \_ b -> return b
         _ -> error $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
             ", but simulator returned " ++ show sv
 
@@ -340,8 +339,8 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
         (AdaptTuple as, TupleShape _ elems, ag) -> do
             terms <- accessMirAggregate' sym elems as ag $ \_off _sz shp' rv' a -> go a shp' rv'
             liftIO $ SAW.scTuple sc terms
-        (AdaptArray a, ArrayShape _ _ shp', vec) -> do
-            terms <- goVector a shp' vec
+        (AdaptArray a, ArrayShape _ _ sz len shp', ag) -> do
+            terms <- accessMirAggregateArray sym sz shp' len ag $ \_off rv' -> go a shp' rv'
             tyTerm <- shapeToTerm' sc a shp'
             liftIO $ SAW.scVector sc tyTerm terms
         (AdaptDerefRef col elAda, RefShape _ty elT M.Immut tpr, mirPtr) ->
@@ -378,19 +377,6 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
         _ -> fail $
             "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
 
-    goVector :: forall tp.
-        CryTermAdaptor Integer ->
-        TypeShape tp ->
-        MirVector sym tp ->
-        m [SAW.Term]
-    goVector ada shp (MirVector_Vector v) = mapM (go ada shp) $ toList v
-    goVector ada shp (MirVector_PartialVector pv) = do
-        forM (toList pv) $ \rv -> do
-            let rv' = readMaybeType sym "field" (shapeType shp) rv
-            go ada shp rv'
-    goVector _ada _shp (MirVector_Array _) = fail $
-        "regToTerm: MirVector_Array not supported"
-
 
 regToTerm :: forall sym t fs tp0 m.
     (IsSymInterface sym, sym ~ MirSym t fs, MonadIO m, MonadFail m) =>
@@ -413,21 +399,9 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
         (TupleShape _ elems, ag) -> do
             terms <- accessMirAggregate sym elems ag $ \_off _sz shp' rv' -> go shp' rv'
             liftIO $ SAW.scTuple sc terms
-        (ArrayShape _ _ shp', vec) -> do
-            terms <- goVector shp' vec
+        (ArrayShape _ _ sz len shp', ag) -> do
+            terms <- accessMirAggregateArray sym sz shp' len ag $ \_off rv' -> go shp' rv'
             tyTerm <- shapeToTerm sc shp'
             liftIO $ SAW.scVector sc tyTerm terms
         _ -> fail $
             "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
-
-    goVector :: forall tp.
-        TypeShape tp ->
-        MirVector sym tp ->
-        m [SAW.Term]
-    goVector shp (MirVector_Vector v) = mapM (go shp) $ toList v
-    goVector shp (MirVector_PartialVector pv) = do
-        forM (toList pv) $ \rv -> do
-            let rv' = readMaybeType sym "field" (shapeType shp) rv
-            go shp rv'
-    goVector _shp (MirVector_Array _) = fail $
-        "regToTerm: MirVector_Array not supported"
