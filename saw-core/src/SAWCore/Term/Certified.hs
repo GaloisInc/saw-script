@@ -18,7 +18,9 @@ module SAWCore.Term.Certified
     -- * Building certified terms
   , scApply
   , scLambda
+  , scAbstract
   , scPi
+  , scGeneralize
   , scFun
   , scConstant
   , scGlobal
@@ -170,6 +172,19 @@ scLambda sc x t body =
      tp <- Raw.scPi sc x (rawTerm t) (rawType body)
      pure (Term tm tp ctx)
 
+-- possible errors: not a variable, context mismatch, variable free in context
+scAbstract :: SharedContext -> Term -> Term -> IO Term
+scAbstract sc var body =
+  case asVariable (rawTerm var) of
+    Nothing -> fail "scAbstract: Not a variable"
+    Just (x, _) ->
+      do ensureNotFreeInContext x body
+         tm <- Raw.scLambda sc x (rawType var) (rawTerm body)
+         tp <- Raw.scPi sc x (rawType var) (rawType body)
+         ctx0 <- unifyContexts "scAbstract" (rawCtx var) (rawCtx body)
+         let ctx = IntMap.delete (vnIndex x) ctx0
+         pure (Term tm tp ctx)
+
 -- possible errors: not a type, context mismatch, variable free in context
 scPi :: SharedContext -> VarName -> Term -> Term -> IO Term
 scPi sc x t body =
@@ -181,6 +196,21 @@ scPi sc x t body =
      s2 <- ensureSort sc (rawType body)
      tp <- Raw.scSort sc (piSort s1 s2)
      pure (Term tm tp ctx)
+
+-- possible errors: not a variable, context mismatch, variable free in context
+scGeneralize :: SharedContext -> Term -> Term -> IO Term
+scGeneralize sc var body =
+  case asVariable (rawTerm var) of
+    Nothing -> fail "scGeneralize: Not a variable"
+    Just (x, _) ->
+      do ensureNotFreeInContext x body
+         tm <- Raw.scPi sc x (rawType var) (rawTerm body)
+         s1 <- ensureSort sc =<< Raw.scTypeOf' sc (rawCtx var) (rawType var)
+         s2 <- ensureSort sc (rawType body)
+         tp <- Raw.scSort sc (piSort s1 s2)
+         ctx0 <- unifyContexts "scGeneralize" (rawCtx var) (rawCtx body)
+         let ctx = IntMap.delete (vnIndex x) ctx0
+         pure (Term tm tp ctx)
 
 -- possible errors: not a type, context mismatch
 scFun :: SharedContext -> Term -> Term -> IO Term
