@@ -1,8 +1,8 @@
- Loading file "test8.saw"
+ Loading file "test08.saw"
  Type errors:
-  test8.saw:4:4-4:26: Invalid use of 'rebindable'
-  test8.saw:4:4-4:26: It is only allowed at the syntactic top level
-  test8.saw:9:4-9:26: Invalid use of 'rebindable'
-  test8.saw:9:4-9:26: It is only allowed at the syntactic top level
+  test08.saw:4:4-4:26: Invalid use of 'rebindable'
+  test08.saw:4:4-4:26: It is only allowed at the syntactic top level
+  test08.saw:9:4-9:26: Invalid use of 'rebindable'
+  test08.saw:9:4-9:26: It is only allowed at the syntactic top level
 
 FAILED
