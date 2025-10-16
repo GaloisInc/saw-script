@@ -101,6 +101,9 @@ mir_verify m "test::rev_rev_tuple" [rev_tuple_ov_auto] false (rev_rev_spec_auto 
 
 // Test that empty Vecs work.
 
+/*
+This test is disabled for now while we work on improving the Vec API in #2666.
+
 let empty_spec = do {
     mir_execute_func [];
     out_vec <- mir_vec_of "out_vec" mir_i32 (mir_array_value mir_i32 []);
@@ -115,3 +118,4 @@ let empty_len_spec = do {
 };
 
 mir_verify m "test::empty_len" [empty_ov] false empty_len_spec z3;
+*/

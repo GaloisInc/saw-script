@@ -561,6 +561,31 @@ enforceDisjointness cc loc ss =
         , (_, Some q)      <- ps
         ]
 
+-- | Generate assertions that all of the memory regions matched by an override's
+-- precondition are allocated. Note that in safe Rust, references are always
+-- allocated and only raw pointers can be unallocated (\"dangling\").
+enforcePointerValidity ::
+  MIRCrucibleContext ->
+  StateSpec ->
+  OverrideMatcher MIR w ()
+enforcePointerValidity cc ss =
+  mccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
+  sub <- OM (use setupValueSub)
+  let mems = Map.intersectionWith (,) (view MS.csAllocs ss) sub
+  F.for_ mems $ \(Some alloc, Some ptr) -> do
+    -- For now, pointer is valid iff its constructor is MirReference
+    c <- liftIO $
+      Mir.readRefMuxIO bak (cc^.mccIntrinsicTypes) Crucible.BoolRepr
+        (\case
+          Mir.MirReference{} -> pure $ W4.truePred sym
+          Mir.MirReference_Integer{} -> pure $ W4.falsePred sym)
+        (ptr^.mpRef)
+    let md = alloc^.maConditionMetadata
+    addAssert c md $
+      Crucible.SimError (MS.conditionLoc md) $
+        Crucible.AssertFailureSimError "Pointer not valid" ""
+
 -- | Perform an allocation as indicated by a 'mir_alloc'
 -- statement from the postcondition section.
 executeAllocation ::
@@ -959,6 +984,7 @@ learnCond opts sc cc cs prepost ss =
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      F.traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
+     enforcePointerValidity cc ss
      enforceDisjointness cc loc ss
      enforceCompleteSubstitution loc ss
 

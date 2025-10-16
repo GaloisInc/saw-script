@@ -1,0 +1,26 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let f_spec = do {
+    p <- mir_alloc_raw_ptr_const mir_u32;
+    mir_execute_func [p];
+    mir_return (mir_term {{ False }});
+};
+
+let g_spec = do {
+    mir_execute_func [];
+    mir_return (mir_term {{ False }});
+};
+
+f_ov <- mir_verify m "test::f" [] false f_spec z3;
+
+fails (mir_verify m "test::g" [f_ov] false g_spec z3);
+
+let h_spec = do {
+    mir_execute_func [];
+    p <- mir_alloc_raw_ptr_const mir_u32;
+    mir_return p;
+};
+
+fails (mir_verify m "test::h" [] false h_spec z3);
