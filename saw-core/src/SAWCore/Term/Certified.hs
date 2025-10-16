@@ -197,20 +197,13 @@ scPi sc x t body =
      tp <- Raw.scSort sc (piSort s1 s2)
      pure (Term tm tp ctx)
 
--- possible errors: not a variable, context mismatch, variable free in context
 scGeneralize :: SharedContext -> Term -> Term -> IO Term
 scGeneralize sc var body =
   case asVariable (rawTerm var) of
     Nothing -> fail "scGeneralize: Not a variable"
     Just (x, _) ->
-      do ensureNotFreeInContext x body
-         tm <- Raw.scPi sc x (rawType var) (rawTerm body)
-         s1 <- ensureSort sc =<< Raw.scTypeOf' sc (rawCtx var) (rawType var)
-         s2 <- ensureSort sc (rawType body)
-         tp <- Raw.scSort sc (piSort s1 s2)
-         ctx0 <- unifyContexts "scGeneralize" (rawCtx var) (rawCtx body)
-         let ctx = IntMap.delete (vnIndex x) ctx0
-         pure (Term tm tp ctx)
+      do tp <- scTypeOf sc var
+         scPi sc x tp body
 
 -- possible errors: not a type, context mismatch
 scFun :: SharedContext -> Term -> Term -> IO Term
