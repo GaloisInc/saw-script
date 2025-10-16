@@ -160,7 +160,6 @@ library saw-core
     SAWCore.Rewriter
     SAWCore.SATQuery
     SAWCore.SCTypeCheck
-    SAWCore.SCTypedTerm
     SAWCore.Simulator
     SAWCore.Simulator.Concrete
     SAWCore.Simulator.MonadLazy
@@ -168,6 +167,7 @@ library saw-core
     SAWCore.Simulator.RME
     SAWCore.Simulator.Value
     SAWCore.SharedTerm
+    SAWCore.Term.Certified
     SAWCore.Term.Functor
     SAWCore.Term.Raw
     SAWCore.Term.CtxTerm

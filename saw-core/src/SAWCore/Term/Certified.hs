@@ -1,5 +1,5 @@
 {- |
-Module      : SAWCore.SCTypedTerm
+Module      : SAWCore.Term.Certified
 Copyright   : Galois, Inc. 2025
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -7,7 +7,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module SAWCore.SCTypedTerm
+module SAWCore.Term.Certified
   ( Term -- abstract
   , rawTerm
   , rawType

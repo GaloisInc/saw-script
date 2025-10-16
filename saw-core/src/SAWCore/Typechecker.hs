@@ -60,7 +60,7 @@ import SAWCore.Term.CtxTerm
 import SAWCore.Term.Pretty (showTerm)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
-import qualified SAWCore.SCTypedTerm as SC
+import qualified SAWCore.Term.Certified as SC
 import SAWCore.SCTypeCheck (TCError(..), atPos, throwTCError)
 import qualified SAWCore.SCTypeCheck as TC
 

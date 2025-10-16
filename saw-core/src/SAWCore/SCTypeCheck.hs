@@ -72,7 +72,7 @@ import SAWCore.Module
 import SAWCore.Name
 import SAWCore.Parser.Position
 import SAWCore.Recognizer
-import qualified SAWCore.SCTypedTerm as SC
+import qualified SAWCore.Term.Certified as SC
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTermInCtx)

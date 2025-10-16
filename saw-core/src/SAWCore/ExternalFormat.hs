@@ -36,7 +36,7 @@ import SAWCore.SharedTerm
 import qualified SAWCore.SharedTerm as Raw
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw (TermIndex)
-import SAWCore.SCTypedTerm
+import SAWCore.Term.Certified
 
 --------------------------------------------------------------------------------
 -- External text format

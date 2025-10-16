@@ -95,7 +95,7 @@ import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.Term.Raw
 import SAWCore.SharedTerm
-import qualified SAWCore.SCTypedTerm as SC
+import qualified SAWCore.Term.Certified as SC
 import SAWCore.SCTypeCheck
 import SAWCore.Module
   ( ctorName
