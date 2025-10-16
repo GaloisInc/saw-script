@@ -232,7 +232,8 @@ scConstant sc nm =
 -- possible errors: not a type
 scVariable :: SharedContext -> VarName -> Term -> IO Term
 scVariable sc vn t =
-  do let tp = rawTerm t
+  do _s <- ensureSort sc (rawType t)
+     let tp = rawTerm t
      tm <- Raw.scVariable sc vn tp
      let ctx = IntMap.insert (vnIndex vn) tp (rawCtx t)
      pure (Term tm tp ctx)
