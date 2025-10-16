@@ -59,6 +59,7 @@ import SAWCore.Rewriter
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (showTerm)
+import SAWCore.Term.Raw
 
 --------------------------------------------------------------------------------
 -- * Certified typed terms

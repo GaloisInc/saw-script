@@ -169,6 +169,7 @@ library saw-core
     SAWCore.Simulator.Value
     SAWCore.SharedTerm
     SAWCore.Term.Functor
+    SAWCore.Term.Raw
     SAWCore.Term.CtxTerm
     SAWCore.OpenTerm
     SAWCore.Term.Pretty

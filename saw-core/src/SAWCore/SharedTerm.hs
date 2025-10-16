@@ -333,6 +333,7 @@ import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
+import SAWCore.Term.Raw
 import SAWCore.Unique
 
 ------------------------------------------------------------

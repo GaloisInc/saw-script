@@ -93,6 +93,7 @@ import SAWCore.Name
 import SAWCore.Panic
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
+import SAWCore.Term.Raw
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck
 import SAWCore.Module

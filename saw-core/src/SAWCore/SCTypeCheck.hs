@@ -83,6 +83,7 @@ import SAWCore.SCTypedTerm
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTermInCtx)
+import SAWCore.Term.Raw
 
 -- | The state for a type-checking computation = a memoization table
 type TCState = IntMap SCTypedTerm

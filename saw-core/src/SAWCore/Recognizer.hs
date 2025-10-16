@@ -79,8 +79,9 @@ import Data.Text (Text)
 import Numeric.Natural (Natural)
 
 import SAWCore.Name
-import SAWCore.Term.Functor
 import SAWCore.Prelude.Constants
+import SAWCore.Term.Functor
+import SAWCore.Term.Raw
 
 data a :*: b = (:*:) a b
   deriving (Eq,Ord,Show)

@@ -88,6 +88,16 @@ import qualified Data.Text as Text
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.PP as C
 
+import SAWCore.Name
+import SAWCore.SharedTerm
+import SAWCore.Term.Functor
+import SAWCore.Term.Pretty (showTerm)
+import SAWCore.Term.Raw
+import SAWCore.Recognizer
+
+import CryptolSAWCore.TypedTerm
+import qualified CryptolSAWCore.Cryptol as C
+
 import SAWCentral.BisimulationTheorem
 import SAWCentral.Builtins (unfold_term)
 import SAWCentral.Options (Verbosity(..))
@@ -95,14 +105,6 @@ import SAWCentral.Panic (panic)
 import SAWCentral.Proof
 import SAWCentral.Prover.Util (checkBooleanSchema)
 import SAWCentral.Value
-
-import qualified CryptolSAWCore.Cryptol as C
-import SAWCore.Name
-import SAWCore.SharedTerm
-import SAWCore.Term.Functor
-import SAWCore.Term.Pretty (showTerm)
-import CryptolSAWCore.TypedTerm
-import SAWCore.Recognizer
 
 -- State used to facilitate the replacement of a 'Constant' application in a
 -- 'Term' with an 'ExtCns'.  Used in 'replaceConstantTerm' and

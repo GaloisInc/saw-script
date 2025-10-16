@@ -11,7 +11,7 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Prelude.Constants where
 
-import SAWCore.Term.Functor
+import SAWCore.Name
 
 preludeModuleName :: ModuleName
 preludeModuleName = mkModuleName ["Prelude"]
