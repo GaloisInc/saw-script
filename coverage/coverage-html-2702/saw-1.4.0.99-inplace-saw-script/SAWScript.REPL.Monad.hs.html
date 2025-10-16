@@ -248,7 +248,7 @@ span.spaces    { background: white }
 <span class="lineno">  229 </span>
 <span class="lineno">  230 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">X.Exception REPLException</span></span></span></span></span></span>
 <span class="lineno">  231 </span>
-<span class="lineno">  232 </span>instance PP REPLException where
+<span class="lineno">  232 </span>instance <span class="decl"><span class="nottickedoff">PP REPLException</span></span> where
 <span class="lineno">  233 </span>  <span class="decl"><span class="nottickedoff">ppPrec _ re = case re of</span>
 <span class="lineno">  234 </span><span class="spaces">    </span><span class="nottickedoff">ParseError e         -&gt; ppError e</span>
 <span class="lineno">  235 </span><span class="spaces">    </span><span class="nottickedoff">FileNotFound path    -&gt; sep [ text &quot;File&quot;</span>
@@ -514,7 +514,7 @@ span.spaces    { background: white }
 <span class="lineno">  495 </span><span class="decl"><span class="nottickedoff">getSAWScriptValueNames = do</span>
 <span class="lineno">  496 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- getEnvironment</span>
 <span class="lineno">  497 </span><span class="spaces">  </span><span class="nottickedoff">let avail = rwPrimsAvail env</span>
-<span class="lineno">  498 </span><span class="spaces">      </span><span class="nottickedoff">visible (lc, _, _, _) = Set.member lc avail</span>
+<span class="lineno">  498 </span><span class="spaces">      </span><span class="nottickedoff">visible (_, lc, _, _, _, _) = Set.member lc avail</span>
 <span class="lineno">  499 </span><span class="spaces">  </span><span class="nottickedoff">let rnames = Map.keys $ Map.filter visible $ rwValueInfo env</span>
 <span class="lineno">  500 </span><span class="spaces">  </span><span class="nottickedoff">return (map Text.unpack rnames)</span></span>
 <span class="lineno">  501 </span>

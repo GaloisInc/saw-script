@@ -1721,9 +1721,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1702 </span><span class="spaces">  </span><span class="nottickedoff">rw &lt;- SV.getMergedEnv</span>
 <span class="lineno"> 1703 </span><span class="spaces">  </span><span class="nottickedoff">let avail = rwPrimsAvail rw</span>
 <span class="lineno"> 1704 </span><span class="spaces">      </span><span class="nottickedoff">vals = rwValueInfo rw</span>
-<span class="lineno"> 1705 </span><span class="spaces">      </span><span class="nottickedoff">keep (_x, (lc, _ty, _v, _doc)) = Set.member lc avail</span>
+<span class="lineno"> 1705 </span><span class="spaces">      </span><span class="nottickedoff">keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail</span>
 <span class="lineno"> 1706 </span><span class="spaces">      </span><span class="nottickedoff">vals' = filter keep $ Map.assocs vals</span>
-<span class="lineno"> 1707 </span><span class="spaces">      </span><span class="nottickedoff">printit (x, (_lc, ty, _v, _doc)) = x &lt;&gt; &quot; : &quot; &lt;&gt; PPS.pShowText ty</span>
+<span class="lineno"> 1707 </span><span class="spaces">      </span><span class="nottickedoff">printit (x, (_pos, _lc, _rb, ty, _v, _doc)) = x &lt;&gt; &quot; : &quot; &lt;&gt; PPS.pShowText ty</span>
 <span class="lineno"> 1708 </span><span class="spaces">  </span><span class="nottickedoff">opts &lt;- getOptions</span>
 <span class="lineno"> 1709 </span><span class="spaces">  </span><span class="nottickedoff">io $ sequence_ [ printOutLn opts Info (Text.unpack $ printit item) | item &lt;- vals' ]</span></span>
 <span class="lineno"> 1710 </span>

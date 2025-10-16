@@ -176,7 +176,7 @@ span.spaces    { background: white }
 <span class="lineno">  157 </span>import SAWCore.Recognizer
 <span class="lineno">  158 </span>import SAWCore.Rewriter
 <span class="lineno">  159 </span>import SAWCore.SATQuery
-<span class="lineno">  160 </span>import SAWCore.Name (DisplayNameEnv, VarName(..), ecShortName)
+<span class="lineno">  160 </span>import SAWCore.Name (DisplayNameEnv, VarName(..))
 <span class="lineno">  161 </span>import SAWCore.SharedTerm
 <span class="lineno">  162 </span>import SAWCore.Term.Functor
 <span class="lineno">  163 </span>import CryptolSAWCore.TypedTerm
@@ -2031,21 +2031,21 @@ span.spaces    { background: white }
 <span class="lineno"> 2012 </span>  IO (Maybe [Either Term Prop])
 <span class="lineno"> 2013 </span><span class="decl"><span class="istickedoff">propApply sc rule goal = applyFirst (asPiLists (unProp rule))</span>
 <span class="lineno"> 2014 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2015 </span><span class="spaces">    </span><span class="istickedoff">applyFirst :: [([ExtCns Term], Term)] -&gt; IO (Maybe [Either Term Prop])</span>
+<span class="lineno"> 2015 </span><span class="spaces">    </span><span class="istickedoff">applyFirst :: [([(VarName, Term)], Term)] -&gt; IO (Maybe [Either Term Prop])</span>
 <span class="lineno"> 2016 </span><span class="spaces">    </span><span class="istickedoff">applyFirst [] = <span class="nottickedoff">pure Nothing</span></span>
 <span class="lineno"> 2017 </span><span class="spaces">    </span><span class="istickedoff">applyFirst ((ruleArgs, ruleConcl) : rest) =</span>
 <span class="lineno"> 2018 </span><span class="spaces">      </span><span class="istickedoff">do result &lt;- scMatch <span class="nottickedoff">sc</span> ruleArgs ruleConcl (unProp goal)</span>
 <span class="lineno"> 2019 </span><span class="spaces">         </span><span class="istickedoff">case result of</span>
 <span class="lineno"> 2020 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">applyFirst rest</span></span>
 <span class="lineno"> 2021 </span><span class="spaces">           </span><span class="istickedoff">Just inst -&gt;</span>
-<span class="lineno"> 2022 </span><span class="spaces">             </span><span class="istickedoff">do let mkNewGoal :: ExtCns Term -&gt; IO (Either Term Prop)</span>
-<span class="lineno"> 2023 </span><span class="spaces">                    </span><span class="istickedoff">mkNewGoal ec =</span>
-<span class="lineno"> 2024 </span><span class="spaces">                      </span><span class="istickedoff">case IntMap.lookup (ecVarIndex ec) inst of</span>
+<span class="lineno"> 2022 </span><span class="spaces">             </span><span class="istickedoff">do let mkNewGoal :: (VarName, Term) -&gt; IO (Either Term Prop)</span>
+<span class="lineno"> 2023 </span><span class="spaces">                    </span><span class="istickedoff">mkNewGoal (vn, tp) =</span>
+<span class="lineno"> 2024 </span><span class="spaces">                      </span><span class="istickedoff">case IntMap.lookup (vnIndex vn) inst of</span>
 <span class="lineno"> 2025 </span><span class="spaces">                        </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 2026 </span><span class="spaces">                          </span><span class="istickedoff">-- this argument not solved by unification, so make it a goal</span>
-<span class="lineno"> 2027 </span><span class="spaces">                          </span><span class="istickedoff">do c0 &lt;- scInstantiateExt sc inst (ecType ec)</span>
+<span class="lineno"> 2027 </span><span class="spaces">                          </span><span class="istickedoff">do c0 &lt;- scInstantiateExt sc inst tp</span>
 <span class="lineno"> 2028 </span><span class="spaces">                             </span><span class="istickedoff">mp &lt;- termToMaybeProp sc c0</span>
-<span class="lineno"> 2029 </span><span class="spaces">                             </span><span class="istickedoff">let <span class="nottickedoff">nm = ecShortName ec</span></span>
+<span class="lineno"> 2029 </span><span class="spaces">                             </span><span class="istickedoff">let <span class="nottickedoff">nm = vnName vn</span></span>
 <span class="lineno"> 2030 </span><span class="spaces">                             </span><span class="istickedoff">case mp of</span>
 <span class="lineno"> 2031 </span><span class="spaces">                               </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 2032 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;goal_apply: could not find instantiation for &quot; ++ show nm)</span></span>
@@ -2054,12 +2054,12 @@ span.spaces    { background: white }
 <span class="lineno"> 2035 </span><span class="spaces">                          </span><span class="istickedoff">pure (Left tm)</span>
 <span class="lineno"> 2036 </span><span class="spaces">                </span><span class="istickedoff">Just &lt;$&gt; traverse mkNewGoal ruleArgs</span>
 <span class="lineno"> 2037 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2038 </span><span class="spaces">    </span><span class="istickedoff">asPiLists :: Term -&gt; [([ExtCns Term], Term)]</span>
+<span class="lineno"> 2038 </span><span class="spaces">    </span><span class="istickedoff">asPiLists :: Term -&gt; [([(VarName, Term)], Term)]</span>
 <span class="lineno"> 2039 </span><span class="spaces">    </span><span class="istickedoff">asPiLists t =</span>
 <span class="lineno"> 2040 </span><span class="spaces">      </span><span class="istickedoff">case asPi t of</span>
 <span class="lineno"> 2041 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; [([], t)]</span>
 <span class="lineno"> 2042 </span><span class="spaces">        </span><span class="istickedoff">Just (nm, tp, body) -&gt;</span>
-<span class="lineno"> 2043 </span><span class="spaces">          </span><span class="istickedoff">[ (EC nm tp : args, concl) | (args, concl) &lt;- asPiLists body ] ++ <span class="nottickedoff">[([], t)]</span></span></span>
+<span class="lineno"> 2043 </span><span class="spaces">          </span><span class="istickedoff">[ ((nm, tp) : args, concl) | (args, concl) &lt;- asPiLists body ] ++ <span class="nottickedoff">[([], t)]</span></span></span>
 <span class="lineno"> 2044 </span>
 <span class="lineno"> 2045 </span>
 <span class="lineno"> 2046 </span>-- | Attempt to prove a universally quantified goal by introducing a fresh variable
