@@ -175,8 +175,8 @@ scPi :: SharedContext -> VarName -> Term -> Term -> IO Term
 scPi sc x t body =
   do tm <- Raw.scPi sc x (rawTerm t) (rawTerm body)
      ensureNotFreeInContext x body
-     _ <- unifyContexts "scTypedPi" (IntMap.singleton (vnIndex x) (rawTerm t)) (rawCtx body)
-     ctx <- unifyContexts "scTypedPi" (rawCtx t) (IntMap.delete (vnIndex x) (rawCtx body))
+     _ <- unifyContexts "scPi" (IntMap.singleton (vnIndex x) (rawTerm t)) (rawCtx body)
+     ctx <- unifyContexts "scPi" (rawCtx t) (IntMap.delete (vnIndex x) (rawCtx body))
      s1 <- ensureSort sc (rawType t)
      s2 <- ensureSort sc (rawType body)
      tp <- Raw.scSort sc (piSort s1 s2)
