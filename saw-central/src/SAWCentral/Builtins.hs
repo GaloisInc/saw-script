@@ -739,15 +739,14 @@ build_congruence sc tm =
  where
   loop ((nm,tp):pis) vars =
     if closedTerm tp then
-      do l <- scFreshEC sc (vnName nm <> "_1") tp
-         r <- scFreshEC sc (vnName nm <> "_2") tp
+      do l <- scFreshVariable sc (vnName nm <> "_1") tp
+         r <- scFreshVariable sc (vnName nm <> "_2") tp
          loop pis ((l,r):vars)
      else
        fail "congruence_for: cannot build congruence for dependent functions"
 
   loop [] vars =
-    do lvars <- mapM (scVariable sc . fst) (reverse vars)
-       rvars <- mapM (scVariable sc . snd) (reverse vars)
+    do let (lvars, rvars) = unzip (reverse vars)
        let allVars = concat [ [l,r] | (l,r) <- reverse vars ]
 
        basel <- scApplyAll sc tm lvars
@@ -755,13 +754,11 @@ build_congruence sc tm =
        baseeq <- scEqTrue sc =<< scEq sc basel baser
 
        let f x (l,r) =
-             do l' <- scVariable sc l
-                r' <- scVariable sc r
-                eq <- scEqTrue sc =<< scEq sc l' r'
+             do eq <- scEqTrue sc =<< scEq sc l r
                 scFun sc eq x
        finalEq <- foldM f baseeq vars
 
-       scGeneralizeExts sc allVars finalEq
+       scGeneralizeTerms sc allVars finalEq
 
 
 filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
