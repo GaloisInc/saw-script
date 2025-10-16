@@ -96,6 +96,7 @@ import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTerm)
+import SAWCore.Term.Raw
 import qualified SAWCore.TermNet as Net
 import SAWCore.Prelude.Constants
 

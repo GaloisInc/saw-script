@@ -160,7 +160,7 @@ import SAWCore.SATQuery
 import SAWCore.Name (DisplayNameEnv, VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import CryptolSAWCore.TypedTerm
+import SAWCore.Term.Raw
 import SAWCore.FiniteValue (FirstOrderValue)
 import SAWCore.Term.Pretty
   (ppTermWithNames, ppTermContainerWithNames, showTerm, scPrettyTerm)
@@ -168,6 +168,8 @@ import qualified SAWCore.SCTypeCheck as TC
 
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
+
+import CryptolSAWCore.TypedTerm
 
 import What4.ProgramLoc (ProgramLoc)
 

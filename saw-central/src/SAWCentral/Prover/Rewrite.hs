@@ -14,7 +14,7 @@ import SAWCore.Rewriter
          , scEqsRewriteRules, scDefRewriteRules
          , addConvs
          )
-import SAWCore.Term.Functor(preludeName, mkIdent, Ident, mkModuleName)
+import SAWCore.Name(preludeName, mkIdent, Ident, mkModuleName)
 import SAWCore.Conversion
 import SAWCore.SharedTerm(SharedContext,scFindDef)
 

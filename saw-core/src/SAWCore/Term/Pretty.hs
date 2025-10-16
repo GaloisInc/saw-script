@@ -56,8 +56,9 @@ import qualified SAWSupport.Pretty as PPS (
 
 import SAWCore.Panic (panic)
 import SAWCore.Name
-import SAWCore.Term.Functor
 import SAWCore.Recognizer
+import SAWCore.Term.Functor
+import SAWCore.Term.Raw
 
 
 -- | Test if a depth is "allowed", meaning not greater than the max depth

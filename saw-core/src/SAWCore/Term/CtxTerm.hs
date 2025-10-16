@@ -27,6 +27,7 @@ import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
+import SAWCore.Term.Raw
 
 -- | Test if a 'Term' is an application of a specific datatype with the
 -- supplied context of parameters and indices

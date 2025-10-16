@@ -11,13 +11,15 @@ import qualified Data.Map                           as Map
 import           Cryptol.ModuleSystem.Name          (Name, nameIdent)
 import           Cryptol.Utils.Ident                (unpackIdent)
 import qualified Language.Coq.AST                   as Coq
-import           SAWCore.Term.Functor          (Term)
+
+import           SAWCore.Term.Raw              (Term)
 import           SAWCore.SharedTerm            (SharedContext, scGetModuleMap)
-import           SAWCoreCoq.Monad
-import qualified SAWCoreCoq.Term  as TermTranslation
+
 import           CryptolSAWCore.TypedTerm
 import           CryptolSAWCore.Cryptol (Env)
 
+import           SAWCoreCoq.Monad
+import qualified SAWCoreCoq.Term  as TermTranslation
 
 -- | Translate a list of named terms with their types to a Coq definitions
 translateTypedTermMap ::

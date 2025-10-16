@@ -71,7 +71,7 @@ import SAWCore.FiniteValue
   , FirstOrderValue(..)
   , scFirstOrderValue
   )
-import SAWCore.Name (VarName(..), ecShortName)
+import SAWCore.Name (ModuleName, VarName(..), ecShortName, mkModuleName)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
@@ -80,6 +80,7 @@ import SAWCore.SharedTerm
 import SAWCore.Typechecker (tcInsertModule, inferCompleteTermCtx)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
+import SAWCore.Term.Raw
 import CryptolSAWCore.TypedTerm
 
 import qualified SAWCore.Simulator.Concrete as Concrete

@@ -53,12 +53,15 @@ import qualified Data.BitVector.Sized                          as BV
 import qualified Data.Vector                                   as Vector (toList)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
+
 import           SAWCore.Module (Def(..), ModuleMap, ResolvedName(..), requireNameInMap, resolvedNameType)
-import           SAWCore.Name (Name(..), VarName(..))
+import           SAWCore.Name
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Pretty
 import           SAWCore.Term.Functor
+import           SAWCore.Term.Raw
+
 import           SAWCoreCoq.Monad
 import           SAWCoreCoq.SpecialTreatment
 

@@ -79,6 +79,7 @@ import SAWCore.Prelude.Constants
 
 import SAWCore.Simulator.Value
 import SAWCore.Term.Functor
+import SAWCore.Term.Raw
 import qualified SAWCore.Simulator.Prims as Prims
 
 type Id = Identity

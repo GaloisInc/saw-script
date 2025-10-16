@@ -92,6 +92,7 @@ import Prelude hiding (all, foldr, sum)
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Term.Functor
+import SAWCore.Term.Raw
 
 
 -- Definitions -----------------------------------------------------------------
