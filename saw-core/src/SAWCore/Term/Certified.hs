@@ -83,7 +83,7 @@ rawType (Term _ typ _) = typ
 -- | The typing context of a 'Term', keyed by the 'VarIndex' of each
 -- 'VarName' in the term.
 rawCtx :: Term -> IntMap Raw.Term
-rawCtx (Term _ _ scx) = scx
+rawCtx (Term _ _ ctx) = ctx
 
 -- | Reduce the given 'Raw.Term' to WHNF, using all reductions allowed by
 -- the SAWCore type system.
@@ -126,17 +126,17 @@ scSubtype sc t1 t2
 
 -- | Compute the type of a 'Term'.
 scTypeOf :: SharedContext -> Term -> IO Term
-scTypeOf sc (Term _tm tp scx) =
-  do tp_tp <- Raw.scTypeOf' sc scx tp
+scTypeOf sc (Term _tm tp ctx) =
+  do tp_tp <- Raw.scTypeOf' sc ctx tp
      -- Shrink typing context if possible
-     let scx' = pruneContext (freeVars tp_tp) scx
-     pure (Term tp tp_tp scx')
+     let ctx' = pruneContext (freeVars tp_tp) ctx
+     pure (Term tp tp_tp ctx')
 
 -- | Reduce a 'Cterm' to WHNF (see also 'scTypeCheckWHNF').
 scWHNF :: SharedContext -> Term -> IO Term
-scWHNF sc (Term tm tp scx) =
+scWHNF sc (Term tm tp ctx) =
   do tm' <- scTypeCheckWHNF sc tm
-     pure (Term tm' tp scx)
+     pure (Term tm' tp ctx)
 
 scGlobal :: SharedContext -> Ident -> IO Term
 scGlobal sc ident =
@@ -154,10 +154,10 @@ scApply sc f arg =
      (vnIndex -> i, t1, t2) <- ensurePi sc (rawType f)
      ok <- scSubtype sc (rawType arg) t1
      unless ok $ fail $ unlines $
-       ["Not a subtype", "expesced: " ++ showTerm t1, "got: " ++ showTerm (rawType arg)]
+       ["Not a subtype", "expected: " ++ showTerm t1, "got: " ++ showTerm (rawType arg)]
      tp <- Raw.scInstantiateExt sc (IntMap.singleton i (rawTerm arg)) t2
-     scx <- unifyContexts "scApply" (rawCtx f) (rawCtx arg)
-     pure (Term tm tp scx)
+     ctx <- unifyContexts "scApply" (rawCtx f) (rawCtx arg)
+     pure (Term tm tp ctx)
 
 -- possible errors: not a type, context mismatch, variable free in context
 scLambda :: SharedContext -> VarName -> Term -> Term -> IO Term
@@ -166,9 +166,9 @@ scLambda sc x t body =
      tm <- Raw.scLambda sc x (rawTerm t) (rawTerm body)
      ensureNotFreeInContext x body
      _ <- unifyContexts "scLambda" (IntMap.singleton (vnIndex x) (rawTerm t)) (rawCtx body)
-     scx <- unifyContexts "scLambda" (rawCtx t) (IntMap.delete (vnIndex x) (rawCtx body))
+     ctx <- unifyContexts "scLambda" (rawCtx t) (IntMap.delete (vnIndex x) (rawCtx body))
      tp <- Raw.scPi sc x (rawTerm t) (rawType body)
-     pure (Term tm tp scx)
+     pure (Term tm tp ctx)
 
 -- possible errors: not a type, context mismatch, variable free in context
 scPi :: SharedContext -> VarName -> Term -> Term -> IO Term
@@ -176,11 +176,11 @@ scPi sc x t body =
   do tm <- Raw.scPi sc x (rawTerm t) (rawTerm body)
      ensureNotFreeInContext x body
      _ <- unifyContexts "scTypedPi" (IntMap.singleton (vnIndex x) (rawTerm t)) (rawCtx body)
-     scx <- unifyContexts "scTypedPi" (rawCtx t) (IntMap.delete (vnIndex x) (rawCtx body))
+     ctx <- unifyContexts "scTypedPi" (rawCtx t) (IntMap.delete (vnIndex x) (rawCtx body))
      s1 <- ensureSort sc (rawType t)
      s2 <- ensureSort sc (rawType body)
      tp <- Raw.scSort sc (piSort s1 s2)
-     pure (Term tm tp scx)
+     pure (Term tm tp ctx)
 
 -- possible errors: not a type, context mismatch
 scFun :: SharedContext -> Term -> Term -> IO Term
@@ -189,8 +189,8 @@ scFun sc a b =
      sa <- ensureSort sc (rawType a)
      sb <- ensureSort sc (rawType b)
      tp <- Raw.scSort sc (piSort sa sb)
-     scx <- unifyContexts "scFun" (rawCtx a) (rawCtx b)
-     pure (Term tm tp scx)
+     ctx <- unifyContexts "scFun" (rawCtx a) (rawCtx b)
+     pure (Term tm tp ctx)
 
 -- possible errors: constant not defined
 scConstant :: SharedContext -> Name -> IO Term
@@ -204,8 +204,8 @@ scVariable :: SharedContext -> VarName -> Term -> IO Term
 scVariable sc vn t =
   do let tp = rawTerm t
      tm <- Raw.scVariable sc vn tp
-     let scx = IntMap.insert (vnIndex vn) tp (rawCtx t)
-     pure (Term tm tp scx)
+     let ctx = IntMap.insert (vnIndex vn) tp (rawCtx t)
+     pure (Term tm tp ctx)
 
 -- possible errors: none
 scUnitValue :: SharedContext -> IO Term
@@ -226,8 +226,8 @@ scPairValue :: SharedContext -> Term -> Term -> IO Term
 scPairValue sc x y =
   do tm <- Raw.scPairValue sc (rawTerm x) (rawTerm y)
      tp <- Raw.scPairType sc (rawType x) (rawType y)
-     scx <- unifyContexts "scPairValue" (rawCtx x) (rawCtx y)
-     pure (Term tm tp scx)
+     ctx <- unifyContexts "scPairValue" (rawCtx x) (rawCtx y)
+     pure (Term tm tp ctx)
 
 -- possible errors: not a type
 scPairType :: SharedContext -> Term -> Term -> IO Term
@@ -236,24 +236,24 @@ scPairType sc x y =
      sx <- ensureSort sc (rawType x)
      sy <- ensureSort sc (rawType y)
      tp <- Raw.scSort sc (max sx sy)
-     scx <- unifyContexts "scPairType" (rawCtx x) (rawCtx y)
-     pure (Term tm tp scx)
+     ctx <- unifyContexts "scPairType" (rawCtx x) (rawCtx y)
+     pure (Term tm tp ctx)
 
 -- possible errors: not a pair
 scPairLeft :: SharedContext -> Term -> IO Term
 scPairLeft sc x =
   do tm <- Raw.scPairLeft sc (rawTerm x)
      tp <- fst <$> ensurePairType sc (rawType x)
-     let scx = rawCtx x
-     pure (Term tm tp scx)
+     let ctx = rawCtx x
+     pure (Term tm tp ctx)
 
 -- possible errors: not a pair
 scPairRight :: SharedContext -> Term -> IO Term
 scPairRight sc x =
   do tm <- Raw.scPairRight sc (rawTerm x)
      tp <- snd <$> ensurePairType sc (rawType x)
-     let scx = rawCtx x
-     pure (Term tm tp scx)
+     let ctx = rawCtx x
+     pure (Term tm tp ctx)
 
 -- possible errors: not a datatype, bad elimination sort
 scRecursor :: SharedContext -> Name -> Sort -> IO Term
@@ -279,26 +279,26 @@ scRecordType sc fields =
   do tm <- Raw.scRecordType sc (map (fmap rawTerm) fields)
      sorts <- traverse (ensureSort sc . rawType . snd) fields
      tp <- Raw.scSort sc (foldl max (mkSort 0) sorts)
-     scx <- unifyContextList "scRecordType" (map (rawCtx . snd) fields)
-     pure (Term tm tp scx)
+     ctx <- unifyContextList "scRecordType" (map (rawCtx . snd) fields)
+     pure (Term tm tp ctx)
 
 -- possible errors: duplicate field name
 scRecordValue :: SharedContext -> [(FieldName, Term)] -> IO Term
 scRecordValue sc fields =
   do tm <- Raw.scFlatTermF sc $ RecordValue (map (fmap rawTerm) fields)
      tp <- Raw.scRecordType sc (map (fmap rawType) fields)
-     scx <- foldM (unifyContexts "scRecordValue") IntMap.empty (map (rawCtx . snd) fields)
-     pure (Term tm tp scx)
+     ctx <- foldM (unifyContexts "scRecordValue") IntMap.empty (map (rawCtx . snd) fields)
+     pure (Term tm tp ctx)
 
 -- possible errors: not a record type, field name not found
 scRecordProj :: SharedContext -> Term -> FieldName -> IO Term
 scRecordProj sc t fname =
   do tm <- Raw.scRecordSelect sc (rawTerm t) fname
-     let scx = rawCtx t
+     let ctx = rawCtx t
      tps <- ensureRecordType sc (rawType t)
      case Map.lookup fname tps of
        Nothing -> fail "scRecordProj: field name not found"
-       Just tp -> pure (Term tm tp scx)
+       Just tp -> pure (Term tm tp ctx)
 
 -- no possible errors
 scSort :: SharedContext -> Sort -> IO Term
@@ -326,8 +326,8 @@ scVector sc e xs =
      tm <- Raw.scVector sc (rawTerm e) (map rawTerm xs)
      n <- Raw.scNat sc (fromIntegral (length xs))
      tp <- Raw.scVecType sc n (rawTerm e)
-     scx <- foldM (unifyContexts "scVector") (rawCtx e) (map rawCtx xs)
-     pure (Term tm tp scx)
+     ctx <- foldM (unifyContexts "scVector") (rawCtx e) (map rawCtx xs)
+     pure (Term tm tp ctx)
 
 -- no possible errors
 scString :: SharedContext -> Text -> IO Term
@@ -337,7 +337,7 @@ scString sc s =
      pure (Term tm tp IntMap.empty)
 
 --------------------------------------------------------------------------------
--- * Utility funscions
+-- * Utility functions
 
 -- | Prune a typing context by dropping indices unreachable from the
 -- given 'IntSet'.
@@ -351,7 +351,7 @@ pruneContext vs0 ctx = IntMap.restrictKeys ctx (reachable mempty vs0)
           where old' = old <> new
                 new' = IntSet.difference (Fold.fold (IntMap.restrictKeys fvs new)) old'
 
--- | Two typing contexts are unifiable if they agree perfescly on all
+-- | Two typing contexts are unifiable if they agree perfectly on all
 -- entries where they overlap.
 unifyContexts :: String -> IntMap Raw.Term -> IntMap Raw.Term -> IO (IntMap Raw.Term)
 unifyContexts msg ctx1 ctx2 =
