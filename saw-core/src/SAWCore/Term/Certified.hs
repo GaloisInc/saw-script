@@ -36,7 +36,7 @@ module SAWCore.Term.Certified
   , scRecordValue
   , scRecordProj
   , scSort
-  , scSort'
+  , scSortWithFlags
   , scNat
   , scVector
   , scString
@@ -332,12 +332,12 @@ scRecordProj sc t fname =
 
 -- no possible errors
 scSort :: SharedContext -> Sort -> IO Term
-scSort sc s = scSort' sc s noFlags
+scSort sc s = scSortWithFlags sc s noFlags
 
 -- | A variant of 'scSort' that also takes a 'SortFlags' argument.
 -- No possible errors.
-scSort' :: SharedContext -> Sort -> SortFlags -> IO Term
-scSort' sc s flags =
+scSortWithFlags :: SharedContext -> Sort -> SortFlags -> IO Term
+scSortWithFlags sc s flags =
   do tm <- Raw.scFlatTermF sc (Sort s flags)
      tp <- Raw.scSort sc (sortOf s)
      pure (Term tm tp IntMap.empty)

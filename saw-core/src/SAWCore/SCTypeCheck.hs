@@ -487,7 +487,7 @@ inferFlatTermF ftf =
            throwTCError $ BadRecordField fld (SC.rawType t)
          liftTCM SC.scRecordProj t fld
     Sort s flags ->
-      liftTCM SC.scSort' s flags
+      liftTCM SC.scSortWithFlags s flags
     NatLit n ->
       liftTCM SC.scNat n
     ArrayValue tp vs ->
