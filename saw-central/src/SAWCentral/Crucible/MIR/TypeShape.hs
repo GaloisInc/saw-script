@@ -35,6 +35,11 @@ module SAWCentral.Crucible.MIR.TypeShape
   , accessMirAggregate
   , accessMirAggregate'
   , zipMirAggregates
+  , arrayAgElemShapes
+  , buildMirAggregateArray
+  , traverseMirAggregateArray
+  , accessMirAggregateArray
+  , accessMirAggregateArray'
   -- Misc helpers
   , readMaybeType
   , readPartExprMaybe
@@ -87,7 +92,7 @@ data TypeShape (tp :: CrucibleType) where
     UnitShape :: M.Ty -> TypeShape UnitType
     PrimShape :: M.Ty -> BaseTypeRepr btp -> TypeShape (BaseToType btp)
     TupleShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
-    ArrayShape :: M.Ty -> M.Ty -> TypeShape tp -> TypeShape (MirVectorType tp)
+    ArrayShape :: M.Ty -> M.Ty -> Word -> Word -> TypeShape tp -> TypeShape MirAggregateType
     StructShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape (StructType ctx)
     TransparentShape :: M.Ty -> TypeShape tp -> TypeShape tp
     -- | Note that RefShape contains only a TypeRepr for the pointee type, not
@@ -218,7 +223,9 @@ tyToShape col = go
         M.TyTuple tys -> goTuple ty tys
         M.TyClosure tys -> goTuple ty tys
         M.TyFnDef _ -> goUnit ty
-        M.TyArray ty' _ | Some shp <- go ty' -> Some $ ArrayShape ty ty' shp
+        M.TyArray ty' len | Some shp <- go ty' ->
+          let elemSz = 1 in   -- TODO: hardcoded size=1
+          Some $ ArrayShape ty ty' elemSz (fromIntegral len) shp
         M.TyAdt nm _ _ -> case Map.lookup nm (col ^. M.adts) of
             Just adt | Just ty' <- reprTransparentFieldTy col adt ->
                 mapSome (TransparentShape ty) $ go ty'
@@ -343,7 +350,7 @@ shapeType = go
     go (UnitShape _) = UnitRepr
     go (PrimShape _ btpr) = baseToType btpr
     go (TupleShape _ _) = MirAggregateRepr
-    go (ArrayShape _ _ shp) = MirVectorRepr $ shapeType shp
+    go (ArrayShape _ _ _ _ _) = MirAggregateRepr
     go (StructShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds
     go (EnumShape _ _ variantTys _ discrShp) =
       RustEnumRepr (shapeType discrShp) (fmapFC variantShapeType variantTys)
@@ -364,7 +371,7 @@ shapeMirTy :: TypeShape tp -> M.Ty
 shapeMirTy (UnitShape ty) = ty
 shapeMirTy (PrimShape ty _) = ty
 shapeMirTy (TupleShape ty _) = ty
-shapeMirTy (ArrayShape ty _ _) = ty
+shapeMirTy (ArrayShape ty _ _ _ _) = ty
 shapeMirTy (StructShape ty _ _) = ty
 shapeMirTy (EnumShape ty _ _ _ _) = ty
 shapeMirTy (TransparentShape ty _) = ty
@@ -390,9 +397,9 @@ shapeToTerm sc = go
     go (TupleShape _ elems) = do
         tys <- mapM goAgElem elems
         liftIO $ SAW.scTupleType sc tys
-    go (ArrayShape (M.TyArray _ n) _ shp) = do
+    go (ArrayShape _ _ _ len shp) = do
         ty <- go shp
-        n' <- liftIO $ SAW.scNat sc (fromIntegral n)
+        n' <- liftIO $ SAW.scNat sc (fromIntegral len)
         liftIO $ SAW.scVecType sc n' ty
     go shp = fail $ "shapeToTerm: unsupported type " ++ show (shapeType shp)
 
@@ -565,6 +572,7 @@ accessMirAggregate sym elems ag f =
   accessMirAggregate' sym elems [() | _ <- elems] ag $
     \off sz shp val () -> f off sz shp val
 
+
 -- | Extract values from a `MirAggregate`, one for each entry.  This is like
 -- `accessMirAggregate`, but the callback also gets the value from the input
 -- list @xs@ that corresponds to the current entry.
@@ -638,6 +646,83 @@ zipMirAggregates sym elems (MirAggregate _totalSize1 m1) (MirAggregate _totalSiz
     let rv1 = readMaybeType sym "elem" tpr1 rvPart1
     let rv2 = readMaybeType sym "elem" tpr2 rvPart2
     f off sz shp rv1 rv2
+
+
+-- | Generate a list of `AgElemShape`s corresponding to positions within an
+-- array.  The resulting list can then be used with `buildMirAggregate` and
+-- similar functions to manipulate array aggregates.
+arrayAgElemShapes :: Word -> TypeShape tp -> Word -> [AgElemShape]
+arrayAgElemShapes elemSz elemShp len
+  | len == 0 = []
+  | otherwise = [AgElemShape (i * elemSz) elemSz elemShp | i <- [0 .. len - 1]]
+
+buildMirAggregateArray ::
+  (IsSymInterface sym, Monad m, MonadFail m) =>
+  sym ->
+  Word ->
+  TypeShape tp ->
+  [a] ->
+  (Word -> a -> m (RegValue sym tp)) ->
+  m (MirAggregate sym)
+buildMirAggregateArray sym elemSz elemShp xs f = do
+  let elems = arrayAgElemShapes elemSz elemShp (fromIntegral $ length xs)
+  buildMirAggregate sym elems xs $
+    \off _sz shp x -> do
+      Refl <- case testEquality (shapeType shp) (shapeType elemShp) of
+        Just pf -> return pf
+        Nothing -> fail $ "impossible: arrayAgElemShapes always uses the input TypeShape"
+      f off x
+
+traverseMirAggregateArray ::
+  forall sym m tp.
+  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  sym ->
+  Word ->
+  TypeShape tp ->
+  Word ->
+  MirAggregate sym ->
+  (Word -> RegValue sym tp -> m (RegValue sym tp)) ->
+  m (MirAggregate sym)
+traverseMirAggregateArray sym elemSz elemShp len ag f = do
+  let elems = arrayAgElemShapes elemSz elemShp len
+  traverseMirAggregate sym elems ag $
+    \off _sz shp rv -> do
+      Refl <- case testEquality (shapeType shp) (shapeType elemShp) of
+        Just pf -> return pf
+        Nothing -> fail $ "impossible: arrayAgElemShapes always uses the input TypeShape"
+      f off rv
+
+accessMirAggregateArray ::
+  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  sym ->
+  Word ->
+  TypeShape tp ->
+  Word ->
+  MirAggregate sym ->
+  (Word -> RegValue sym tp -> m b) ->
+  m [b]
+accessMirAggregateArray sym elemSz elemShp len ag f = do
+  let xs = replicate (fromIntegral len) ()
+  accessMirAggregateArray' sym elemSz elemShp xs ag $
+    \off val () -> f off val
+
+accessMirAggregateArray' ::
+  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  sym ->
+  Word ->
+  TypeShape tp ->
+  [a] ->
+  MirAggregate sym ->
+  (Word -> RegValue sym tp -> a -> m b) ->
+  m [b]
+accessMirAggregateArray' sym elemSz elemShp xs ag f = do
+  let elems = arrayAgElemShapes elemSz elemShp (fromIntegral $ length xs)
+  accessMirAggregate' sym elems xs ag $
+    \off _sz shp rv x -> do
+      Refl <- case testEquality (shapeType shp) (shapeType elemShp) of
+        Just pf -> return pf
+        Nothing -> fail $ "impossible: arrayAgElemShapes always uses the input TypeShape"
+      f off rv x
 
 
 -- Misc helpers

@@ -329,14 +329,8 @@ munge sym shp0 rv0 = do
         go shp@(PrimShape _ _) expr = eval expr >>= uneval shp
         go (TupleShape _ elems) ag =
             traverseMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
-        go (ArrayShape _ _ shp) vec = case vec of
-            MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
-            MirVector_PartialVector pv -> do
-                pv' <- forM pv $ \p -> do
-                    let rv = readMaybeType sym "vector element" (shapeType shp) p
-                    W4.justPartExpr sym <$> go shp rv
-                return $ MirVector_PartialVector pv'
-            MirVector_Array _ -> error $ "munge: MirVector_Array NYI"
+        go (ArrayShape _ _ sz len shp) ag =
+            traverseMirAggregateArray sym sz shp len ag $ \_off rv -> go shp rv
         go (StructShape _ _ flds) rvs = goFields flds rvs
         go (TransparentShape _ shp) rv = go shp rv
         go (EnumShape _ _ _ _ _) _ =
@@ -407,7 +401,7 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
               goOne desc shp' ty'
           | otherwise -> typeErr desc shp ty $
             "tuple size " ++ show n ++ " does not match " ++ show (length elems)
-        (ArrayShape (M.TyArray _ n) _ shp',
+        (ArrayShape (M.TyArray _ n) _ _ _ shp',
             Cry.TCon (Cry.TC Cry.TCSeq) [
                 Cry.tNoUser -> Cry.TCon (Cry.TC (Cry.TCNum n')) [],
                 ty'])

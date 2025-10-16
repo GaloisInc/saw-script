@@ -30,7 +30,7 @@ module SAWCentral.Crucible.MIR.Override
 import qualified Control.Applicative as Applicative
 import qualified Control.Exception as X
 import Control.Lens
-import Control.Monad (filterM, forM, forM_, unless, void, zipWithM)
+import Control.Monad (filterM, foldM, forM, forM_, unless, void, zipWithM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT(..))
 import qualified Data.BitVector.Sized as BV
@@ -52,7 +52,6 @@ import qualified Data.Parameterized.TraversableFC as FC
 import Data.Proxy (Proxy(..))
 import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Data.Vector as V
 import Data.Void (absurd)
 import qualified Prettyprinter as PP
 
@@ -1023,13 +1022,24 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
            -- mir_points_to_multi should check that the RHS type is TyArray, so
            -- this case should always match.
            Mir.TyArray _ len -> do
-             vs <- liftIO $ V.generateM len $ \i -> do
-               i_sym <- usizeBvLit sym i
-               referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
-               Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
+             let elemSz = 1      -- TODO: hardcoded size=1
+             len_sym <- liftIO $ usizeBvLit sym len
+             ag <- liftIO $ Mir.mirAggregate_uninitIO bak len_sym
+             ag' <- liftIO $ foldM
+               (\ag' i -> do
+                 i_sym <- usizeBvLit sym i
+                 referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
+                 val' <- Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
+                 let off = fromIntegral i * elemSz
+                 Mir.mirAggregate_setIO bak off elemSz referenceInnerTpr val' ag')
+               ag [0 .. len - 1]
+             let arrShp = ArrayShape referentArrayMirTy
+                                     referenceInnerMirTy
+                                     elemSz
+                                     (fromIntegral len)
+                                     innerShp
              matchArg opts sc cc spec prepost md
-               (MIRVal (ArrayShape referentArrayMirTy referenceInnerMirTy innerShp)
-                       (Mir.MirVector_Vector vs))
+               (MIRVal arrShp ag')
                referentArray
            _ ->
              panic "learnPointsTo"
@@ -1185,19 +1195,11 @@ matchArg opts sc cc cs prepost md = go False []
             -- match arrays point-wise
             [] ->
               case actual of
-                MIRVal (ArrayShape _ _ elemShp) xs
-                  | Mir.MirVector_Vector xs' <- xs
-                  , V.length xs' == length zs ->
-                    sequence_
-                      [ go inCast [] (MIRVal elemShp x) z
-                      | (x, z) <- zip (V.toList xs') zs ]
-
-                  | Mir.MirVector_PartialVector xs' <- xs
-                  , V.length xs' == length zs ->
-                    do let xs'' = V.map (readMaybeType sym "vector element" (shapeType elemShp)) xs'
-                       sequence_
-                         [ go inCast [] (MIRVal elemShp x) z
-                         | (x, z) <- zip (V.toList xs'') zs ]
+                MIRVal (ArrayShape _ _ elemSz len elemShp) ag
+                  | fromIntegral len == length zs ->
+                    let elems = arrayAgElemShapes elemSz elemShp len in
+                    void $ accessMirAggregate' sym elems zs ag $
+                      \_off _sz shp rv z -> go inCast [] (MIRVal shp rv) z
 
                 _ -> fail_
 
@@ -1897,23 +1899,13 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -> do terms <- accessMirAggregate' sym elems tys val $
               \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val') 
             liftIO (scTupleReduced sc terms)
-    (Cryptol.TVSeq n cryty, ArrayShape _ _ arrShp)
-      |  Mir.MirVector_Vector vals <- val
-      ,  toInteger (V.length vals) == n
-      -> do terms <- V.toList <$>
-              traverse (\v -> valueToSC sym fail_ cryty (MIRVal arrShp v)) vals
-            t <- shapeToTerm sc arrShp
+    (Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz len elemShp)
+      | toInteger len == n
+      -> do let elems = arrayAgElemShapes elemSz elemShp len
+            terms <- accessMirAggregate sym elems val $
+              \_off _sz shp' val' -> valueToSC sym fail_ cryty (MIRVal shp' val')
+            t <- shapeToTerm sc elemShp
             liftIO (scVectorReduced sc t terms)
-      |  Mir.MirVector_PartialVector vals <- val
-      ,  toInteger (V.length vals) == n
-      -> do let vals' = V.toList $
-                        V.map (readMaybeType sym "vector element" (shapeType arrShp)) vals
-            terms <-
-              traverse (\v -> valueToSC sym fail_ cryty (MIRVal arrShp v)) vals'
-            t <- shapeToTerm sc arrShp
-            liftIO (scVectorReduced sc t terms)
-      |  Mir.MirVector_Array{} <- val
-      -> fail "valueToSC: Symbolic arrays not supported"
     _ ->
       fail_
   where
@@ -1951,8 +1943,8 @@ applyProjToMIRVal ::
 applyProjToMIRVal _ [] mv = pure mv
 applyProjToMIRVal sym (MatchIndex i : projStack) (MIRVal shp vec) =
   case shp of
-    ArrayShape _ _ elemShp ->
-      applyProjToMIRVal sym projStack =<< indexMirVector sym i elemShp vec
+    ArrayShape _ _ elemSz _ elemShp ->
+      applyProjToMIRVal sym projStack =<< indexMirArray sym i elemSz elemShp vec
     _ ->
       Applicative.empty
 
