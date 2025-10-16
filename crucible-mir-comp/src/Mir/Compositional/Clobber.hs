@@ -12,7 +12,6 @@ import Control.Monad (forM_)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Vector as V
 import GHC.Stack (HasCallStack)
 
 import qualified What4.Expr.Builder as W4
@@ -57,11 +56,9 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
     go (UnitShape _) () = return ()
     go (PrimShape _ _) rv = return rv
-    go (ArrayShape _ _ shp) mirVec = case mirVec of
-        MirVector_Vector v -> MirVector_Vector <$> mapM (f shp) v
-        MirVector_PartialVector pv ->
-            MirVector_PartialVector <$> mapM (mapM (f shp)) pv
-        MirVector_Array _ -> die "MirVector_Array is unsupported"
+    go (ArrayShape _ _ sz len shp) ag = do
+        let elems = arrayAgElemShapes sz shp len
+        traverseMirAggregate sym elems ag $ \_off _sz shp' rv -> f shp' rv
     go (TupleShape _ elems) ag =
         traverseMirAggregate sym elems ag $ \_off _sz shp rv -> f shp rv
     go (StructShape _ _ flds) rvs =
@@ -186,8 +183,10 @@ freshSymbolic sym loc nameStr shp0 = go shp0
         ovrWithBackend $ \bak ->
           liftIO $ addAssumptions bak (singleEvent ev)
         return expr
-    go (ArrayShape (M.TyArray _ len) _ shp) =
-        MirVector_Vector <$> V.replicateM len (go shp)
+    go (ArrayShape _ _ sz len shp) = do
+        let elems = arrayAgElemShapes sz shp len
+        buildMirAggregate sym elems [() | _ <- elems] $
+            \_off _sz shp' () -> go shp'
     go (FnPtrShape _ _ _) = die "Function pointers not currently supported in overrides"
     go shp = die $ show (shapeType shp) ++ " NYI"
 
