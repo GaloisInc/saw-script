@@ -360,8 +360,8 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
 
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
-     let ident = mkIdent mnm nm
-     lift $ TC.liftTCM scInsertDef ident def_tp def_tm) >>
+     let nmi = ModuleIdentifier (mkIdent mnm nm)
+     void $ lift $ TC.liftTCM scDefineConstant nmi def_tm def_tp) >>
   processDecls rest
 
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =

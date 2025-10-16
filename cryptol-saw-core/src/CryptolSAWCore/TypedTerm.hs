@@ -136,7 +136,7 @@ applyTypedTerms sc (TypedTerm _ fn) args =
 defineTypedTerm :: SharedContext -> Text -> TypedTerm -> IO TypedTerm
 defineTypedTerm sc name (TypedTerm schema t) =
   do ty <- scTypeOf sc t
-     TypedTerm schema <$> scConstant sc name t ty
+     TypedTerm schema <$> scFreshConstant sc name t ty
 
 -- | Make a tuple value from a list of 'TypedTerm's. This operation
 -- fails if any 'TypedTerm' in the list has a polymorphic type.

@@ -85,9 +85,8 @@ module SAWCore.SharedTerm
   , scInjectCode
     -- ** Declaring global constants
   , scDeclarePrim
-  , scInsertDef
-  , scConstant
-  , scConstant'
+  , scFreshConstant
+  , scDefineConstant
   , scOpaqueConstant
   , scBeginDataType
   , scCompleteDataType
@@ -620,12 +619,6 @@ scDeclarePrim sc ident q def_tp =
   do let nmi = ModuleIdentifier ident
      nm <- scRegisterName sc nmi
      _ <- scDeclareDef sc nm q def_tp Nothing
-     pure ()
-
--- | Insert a definition into a SAW core module
-scInsertDef :: SharedContext -> Ident -> Term -> Term -> IO ()
-scInsertDef sc ident def_tp def_tm =
-  do _ <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
      pure ()
 
 -- | Look up a module by name, raising an error if it is not loaded
@@ -1690,9 +1683,10 @@ scFunAll :: SharedContext
          -> IO Term
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
--- | Create a lambda term from a parameter name (as a 'LocalName'), parameter type
--- (as a 'Term'), and a body. Regarding deBruijn indices, in the body of the
--- function, an index of 0 refers to the bound parameter.
+-- | Create a lambda term from a parameter name (as a 'VarName'),
+-- parameter type (as a 'Term'), and a body.
+-- All free variables with the same 'VarName' in the body become
+-- bound.
 scLambda :: SharedContext
          -> VarName -- ^ The parameter name
          -> Term   -- ^ The parameter type
@@ -1701,10 +1695,10 @@ scLambda :: SharedContext
 scLambda sc varname ty body = scTermF sc (Lambda varname ty body)
 
 -- | Create a lambda term of multiple arguments (curried) from a list
--- associating parameter names to types (as 'Term's) and a body. As for
--- 'scLambda', there is a convention for deBruijn indices: 0 refers to the last
--- parameter in the list, and n-1 (where n is the list length) refers to the
--- first.
+-- associating parameter names to types (as 'Term's) and a body.
+-- The parameters are listed outermost first.
+-- Variable names in the parameter list are in scope for all parameter
+-- types occurring later in the list.
 scLambdaList :: SharedContext
              -> [(VarName, Term)] -- ^ List of parameter / parameter type pairs
              -> Term -- ^ The body
@@ -1715,6 +1709,8 @@ scLambdaList sc ((nm,tp):r) rhs =
 
 -- | Create a (possibly dependent) function given a parameter name, parameter
 -- type (as a 'Term'), and a body.
+-- All free variables with the same 'VarName' in the body become
+-- bound.
 scPi :: SharedContext
      -> VarName -- ^ The parameter name
      -> Term   -- ^ The parameter type
@@ -1725,6 +1721,8 @@ scPi sc nm tp body = scTermF sc (Pi nm tp body)
 
 -- | Create a (possibly dependent) function of multiple arguments (curried)
 -- from a list associating parameter names to types (as 'Term's) and a body.
+-- Variable names in the parameter list are in scope for all parameter
+-- types occurring later in the list.
 scPiList :: SharedContext
          -> [(VarName, Term)] -- ^ List of parameter / parameter type pairs
          -> Term -- ^ The body
@@ -1732,21 +1730,21 @@ scPiList :: SharedContext
 scPiList _ [] rhs = return rhs
 scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 
--- | Create an abstract constant with the specified name, body, and
--- type. The term for the body must not have any loose de Bruijn
--- indices. If the body contains any ExtCns variables, they will be
--- abstracted over and reapplied to the resulting constant.
-scConstant :: SharedContext
-           -> Text   -- ^ The name
-           -> Term   -- ^ The body
-           -> Term   -- ^ The type
-           -> IO Term
-scConstant sc name rhs ty =
+-- | Define a global constant with the specified base name (as
+-- 'Text'), body, and type.
+-- The term for the body must not have any free variables.
+-- A globally-unique name with the specified base name will be created
+-- using 'scFreshName'.
+scFreshConstant ::
+  SharedContext ->
+  Text {- ^ The base name -} ->
+  Term {- ^ The body -} ->
+  Term {- ^ The type -} ->
+  IO Term
+scFreshConstant sc name rhs ty =
   do unless (closedTerm rhs) $
-       fail "scConstant: term contains loose variables"
-     unless (null (getAllExts rhs)) $
        fail $ unlines
-       [ "scConstant: term contains free variables"
+       [ "scFreshConstant: term contains free variables"
        , "name: " ++ Text.unpack name
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
@@ -1755,27 +1753,20 @@ scConstant sc name rhs ty =
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
 
--- FIXME: Regarding comments,
---  - PROBLEM: the previous and the next function have the same
---    exact documentation but slightly different types and
---    implementations.
---  - SOLUTION: rewrite doc to distinguish the two.
-
--- | Create an abstract constant with the specified name, body, and
--- type. The term for the body must not have any loose de Bruijn
--- indices. If the body contains any ExtCns variables, they will be
--- abstracted over and reapplied to the resulting constant.
-scConstant' :: SharedContext
-            -> NameInfo -- ^ The name
-            -> Term   -- ^ The body
-            -> Term   -- ^ The type
-            -> IO Term
-scConstant' sc nmi rhs ty =
+-- | Define a global constant with the specified name (as 'NameInfo'),
+-- body, and type.
+-- The URI in the given 'NameInfo' must be globally unique.
+-- The term for the body must not have any free variables.
+scDefineConstant ::
+  SharedContext ->
+  NameInfo {- ^ The name -} ->
+  Term {- ^ The body -} ->
+  Term {- ^ The type -} ->
+  IO Term
+scDefineConstant sc nmi rhs ty =
   do unless (closedTerm rhs) $
-       fail "scConstant': term contains loose variables"
-     unless (null (getAllExts rhs)) $
        fail $ unlines
-       [ "scConstant': term contains free variables"
+       [ "scDefineConstant: term contains free variables"
        , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
@@ -1785,9 +1776,11 @@ scConstant' sc nmi rhs ty =
      scDeclareDef sc nm NoQualifier ty (Just rhs)
 
 
--- | Create an abstract and opaque constant with the specified name and type.
---   Such a constant has no definition and, unlike an @ExtCns@, is not subject
---   to substitution.
+-- | Declare a global opaque constant with the specified name (as
+-- 'NameInfo') and type.
+-- Such a constant has no definition, but unlike a variable it may be
+-- used in other constant definitions and is not subject to
+-- lambda-binding or substitution.
 scOpaqueConstant ::
   SharedContext ->
   NameInfo ->
