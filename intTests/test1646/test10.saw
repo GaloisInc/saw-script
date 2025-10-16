@@ -1,0 +1,11 @@
+// This should print a. Binding x in a nested scope creates a new
+// variable and should have no effect on the rebindable one.
+
+let rebindable x = "a";
+
+do {
+   let x = 3;
+   return ();
+};
+
+print x;

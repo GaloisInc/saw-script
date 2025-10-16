@@ -1,0 +1,13 @@
+// The second f call should print x=b. So should the third.
+// XXX: currently the third prints x=c.
+
+let rebindable x = "a";
+
+let f () = print (str_concat "x=" x);
+f ();
+
+let rebindable x = "b";
+f ();
+
+let x = "c";
+f ();

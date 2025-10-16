@@ -1,0 +1,13 @@
+// This should print 3 then b.
+
+let rebindable x = "a";
+
+do {
+   let x = 3;
+   print x;
+   return ();
+};
+
+let x = "b";
+print x;
+
