@@ -71,7 +71,7 @@ import SAWCore.FiniteValue
   , FirstOrderValue(..)
   , scFirstOrderValue
   )
-import SAWCore.Name (ModuleName, VarName(..), ecShortName, mkModuleName)
+import SAWCore.Name (ModuleName, VarName(..), mkModuleName)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
@@ -1264,10 +1264,10 @@ proveByBVInduction script t =
          do wt  <- io $ scNat sc w
             natty <- io $ scNatType sc
             toNat <- io $ scGlobalDef sc "Prelude.bvToNat"
-            vars  <- io $ mapM (scVariable sc) pis
+            vars  <- io $ scVariables sc pis
             innerVars <-
               io $ sequence $
-              [ scFreshVariable sc ("i_" <> ecShortName ec) (ecType ec) | ec <- pis ]
+              [ scFreshVariable sc ("i_" <> vnName vn) tp | (vn, tp) <- pis ]
             t1    <- io $ scApplyAllBeta sc (ttTerm t) vars
             tsz   <- io $ scTupleSelector sc t1 1 2 -- left element
             tbody <- io $ scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
@@ -1278,7 +1278,7 @@ proveByBVInduction script t =
             --
             --   (x : Vec w Bool) -> p x
             thmResult <- io $
-                do t3   <- scGeneralizeExts sc pis tbody
+                do t3   <- scPiList sc pis tbody
                    _    <- scTypeCheckError sc t3 -- sanity check
                    return t3
 
@@ -1295,7 +1295,7 @@ proveByBVInduction script t =
                    thyp   <- scGeneralizeTerms sc innerVars tinner
 
                    touter <- scFun sc thyp tbody
-                   scGeneralizeExts sc pis touter
+                   scPiList sc pis touter
 
             -- The "motive" we will pass to the 'Nat_complete_induction' principle.
             --
@@ -1394,7 +1394,7 @@ proveByBVInduction script t =
   checkInductionScheme sc opts pis ty =
     do ty' <- scWhnf sc ty
        case asPi ty' of
-         Just (nm, tp, body) -> checkInductionScheme sc opts (EC nm tp : pis) body
+         Just (nm, tp, body) -> checkInductionScheme sc opts ((nm, tp) : pis) body
          Nothing ->
            case asTupleType ty' of
              Just [bv, bool] ->
