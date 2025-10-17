@@ -1208,17 +1208,16 @@ matchArg opts sc cc cs prepost md = go False []
             -- containing vector
             MirIndexIntoRef ->
               case actual of
-                MIRVal (RefShape elemRefTy elemTy elemMutbl elemTpr) elemRef -> do
+                MIRVal (RefShape elemRefTy elemTy elemMutbl _elemTpr) elemRef -> do
                   arrRefTy <- typeOfSetupValue cc tyenv nameEnv z
                   case tyToShape col arrRefTy of
                     Some arrRefShp@(RefShape _
                                              (Mir.TyArray elemTy' _)
                                              arrMutbl
-                                             (Mir.MirVectorRepr elemTpr'))
+                                             Mir.MirAggregateRepr)
                       | tyToPtrKind elemRefTy == tyToPtrKind arrRefTy
                       , checkCompatibleTys elemTy elemTy'
-                      , elemMutbl == arrMutbl
-                      , Just Refl <- W4.testEquality elemTpr elemTpr' -> do
+                      , elemMutbl == arrMutbl -> do
                         -- get the reference to the containing vector and the
                         -- index of the current reference within it
                         Ctx.Empty Ctx.:> Crucible.RV arrRef
@@ -1344,7 +1343,7 @@ matchArg opts sc cc cs prepost md = go False []
 
         -- See Note [Matching slices in overrides]
         ([],
-         MIRVal (SliceShape actualSliceRefTy@(Mir.TyRef _ _) actualElemTy actualMutbl actualElemTpr)
+         MIRVal (SliceShape actualSliceRefTy@(Mir.TyRef _ _) actualElemTy actualMutbl _actualElemTpr)
                 (Ctx.Empty Ctx.:> Crucible.RV actualSliceRef Ctx.:> Crucible.RV actualSliceLenSym),
          MS.SetupSlice slice)
            | -- Currently, all slice lengths must be concrete, so the case below
@@ -1369,7 +1368,7 @@ matchArg opts sc cc cs prepost md = go False []
                    Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> _ <-
                      liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef
                    let actualArrTy = Mir.TyArray actualElemTy arrLen
-                   let actualArrTpr = Mir.MirVectorRepr actualElemTpr
+                   let actualArrTpr = Mir.MirAggregateRepr
                    let actualArrRefTy = Mir.TyRef actualArrTy actualMutbl
                    let actualArrRefShp = RefShape actualArrRefTy actualArrTy actualMutbl actualArrTpr
                    go inCast []
