@@ -178,18 +178,18 @@ termToReg sym varMap term shp0 = do
             when (length svs /= fromIntegral len) $ fail $
                 "termToReg: type error: expected an array of length " ++ show len ++
                     ", but simulator returned " ++ show (length svs) ++ " elements"
-            buildMirAggregateArray sym sz shp' svs $ \_ sv' -> go shp' sv'
+            buildMirAggregateArray sym sz shp' len svs $ \_ sv' -> go shp' sv'
         -- Special case: saw-core/cryptol doesn't distinguish bitvectors from
         -- vectors of booleans, so it may return `VWord` (bitvector) where an
         -- array of `bool` is expected.
-        (ArrayShape (M.TyArray _ n) _ sz _ shp'@(PrimShape _ BaseBoolRepr), SAW.VWord (W4.DBV e))
-          | Just (Some w) <- someNat n,
+        (ArrayShape (M.TyArray _ _) _ sz len shp'@(PrimShape _ BaseBoolRepr), SAW.VWord (W4.DBV e))
+          | Just (Some w) <- someNat len,
             Just LeqProof <- testLeq (knownNat @1) w,
             Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> do
-            bits <- forM (take n [0..]) $ \i -> do
+            bits <- forM (map pred [1 .. len]) $ \i -> do
                 -- Cryptol bitvectors are MSB-first, but What4 uses LSB-first.
-                liftIO $ W4.testBitBV sym (fromIntegral $ n - i - 1) e
-            buildMirAggregateArray sym sz shp' bits $ \_ b -> return b
+                liftIO $ W4.testBitBV sym (fromIntegral $ len - i - 1) e
+            buildMirAggregateArray sym sz shp' len bits $ \_ b -> return b
         _ -> error $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
             ", but simulator returned " ++ show sv
 

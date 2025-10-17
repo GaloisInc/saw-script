@@ -728,16 +728,24 @@ arrayAgElemShapes elemSz elemShp len
   | len == 0 = []
   | otherwise = [AgElemShape (i * elemSz) elemSz elemShp | i <- [0 .. len - 1]]
 
+agArrayCheckLengthsEq :: Monad m => Text -> Word -> [a] -> m ()
+agArrayCheckLengthsEq loc len xs =
+  when (fromIntegral len /= length xs) $
+    panic loc
+      [Text.pack $ "got len = " ++ show len ++ ", but " ++ show (length xs) ++ " xs"]
+
 buildMirAggregateArray ::
   (IsSymInterface sym, Monad m, MonadFail m) =>
   sym ->
   Word ->
   TypeShape tp ->
+  Word ->
   [a] ->
   (Word -> a -> m (RegValue sym tp)) ->
   m (MirAggregate sym)
-buildMirAggregateArray sym elemSz elemShp xs f = do
-  let elems = arrayAgElemShapes elemSz elemShp (fromIntegral $ length xs)
+buildMirAggregateArray sym elemSz elemShp len xs f = do
+  agArrayCheckLengthsEq "buildMirAggregateArray" len xs
+  let elems = arrayAgElemShapes elemSz elemShp len
   buildMirAggregate sym elems xs $
     \off _sz shp x -> do
       Refl <- case testEquality (shapeType shp) (shapeType elemShp) of
@@ -775,7 +783,7 @@ accessMirAggregateArray ::
   m [b]
 accessMirAggregateArray sym elemSz elemShp len ag f = do
   let xs = replicate (fromIntegral len) ()
-  accessMirAggregateArray' sym elemSz elemShp xs ag $
+  accessMirAggregateArray' sym elemSz elemShp len xs ag $
     \off val () -> f off val
 
 accessMirAggregateArray' ::
@@ -783,11 +791,13 @@ accessMirAggregateArray' ::
   sym ->
   Word ->
   TypeShape tp ->
+  Word ->
   [a] ->
   MirAggregate sym ->
   (Word -> RegValue sym tp -> a -> m b) ->
   m [b]
-accessMirAggregateArray' sym elemSz elemShp xs ag f = do
+accessMirAggregateArray' sym elemSz elemShp len xs ag f = do
+  agArrayCheckLengthsEq "accessMirAggregateArray'" len xs
   let elems = arrayAgElemShapes elemSz elemShp (fromIntegral $ length xs)
   accessMirAggregate' sym elems xs ag $
     \off _sz shp rv x -> do

@@ -183,7 +183,7 @@ freshSymbolic sym loc nameStr shp0 = go shp0
           liftIO $ addAssumptions bak (singleEvent ev)
         return expr
     go (ArrayShape _ _ sz len shp) = do
-        buildMirAggregateArray sym sz shp [() | _ <- [1 .. len]] $
+        buildMirAggregateArray sym sz shp len [() | _ <- [1 .. len]] $
             \_off () -> go shp
     go (FnPtrShape _ _ _) = die "Function pointers not currently supported in overrides"
     go shp = die $ show (shapeType shp) ++ " NYI"
