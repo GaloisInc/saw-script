@@ -74,6 +74,8 @@ import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -98,7 +100,8 @@ import SAWCore.SAWCore (SharedContext)
 import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
-import SAWCentral.Value (AIGProxy(..), ProofScript(..), showsProofResult, Environ(..))
+import SAWCentral.Value (AIGProxy(..), ProofScript(..), showsProofResult, Environ(..),
+                         CryptolScopeStack(..))
 
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
@@ -453,11 +456,21 @@ getModuleEnv  = eModuleEnv `fmap` getCryptolEnv
 setModuleEnv :: M.ModuleEnv -> REPL ()
 setModuleEnv me = modifyCryptolEnv (\ce -> ce { eModuleEnv = me })
 
+-- XXX this currently needs to be pasted from the interpreter's getCryptolEnv
+-- and that's not super desirable
 getCryptolEnv :: REPL CryptolEnv
-getCryptolEnv = rwCryptol `fmap` getTopLevelRW
+getCryptolEnv = do
+    rw <- getTopLevelRW
+    let CryptolScopeStack (cenv :| _) = rwCryptol rw
+    return cenv
 
 modifyCryptolEnv :: (CryptolEnv -> CryptolEnv) -> REPL ()
-modifyCryptolEnv f = modifyTopLevelRW (\rw -> rw { rwCryptol = f (rwCryptol rw) })
+modifyCryptolEnv f =
+    modifyTopLevelRW (\rw ->
+        let CryptolScopeStack (cenv :| cenvs) = rwCryptol rw
+            cenv' = f cenv
+        in
+        rw { rwCryptol = CryptolScopeStack (cenv' :| cenvs) })
 
 setCryptolEnv :: CryptolEnv -> REPL ()
 setCryptolEnv x = modifyCryptolEnv (const x)

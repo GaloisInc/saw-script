@@ -13,6 +13,8 @@ module SAWServer.Eval
 import Control.Exception ( throw )
 import Control.Lens ( view )
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import Data.Aeson
     ( (.:),
       withObject,
@@ -80,7 +82,7 @@ eval ::
 eval f params = do
   state <- Argo.getState
   fileReader <- Argo.getFileReader
-  let cenv = SV.rwCryptol (view sawTopLevelRW state)
+  let SV.CryptolScopeStack (cenv :| _) = SV.rwCryptol (view sawTopLevelRW state)
       bic = view sawBIC state
   cexp <- getCryptolExpr $ evalExpr params
   (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv cexp

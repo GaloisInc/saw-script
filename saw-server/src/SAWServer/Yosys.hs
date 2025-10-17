@@ -12,6 +12,8 @@ import Control.Exception (throw)
 
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.Text (Text)
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import qualified Data.Map as Map
 
 import Cryptol.Utils.Ident (mkIdent)
@@ -30,7 +32,7 @@ import SAWServer.OK (OK, ok)
 import SAWServer.ProofScript (ProofScript, interpretProofScript)
 import SAWServer.TopLevel (tl)
 
-import SAWCentral.Value (getSharedContext, getTopLevelRW, rwCryptol)
+import SAWCentral.Value (getSharedContext, getTopLevelRW, rwCryptol, CryptolScopeStack(..))
 import SAWCentral.Yosys (loadYosysIR, yosysIRToTypedTerms, yosys_verify, yosys_import_sequential, yosys_extract_sequential)
 import SAWCentral.Yosys.Theorem (YosysImport(..))
 
@@ -121,7 +123,7 @@ yosysVerify params = do
       l <- tl $ do
         rw <- getTopLevelRW
         sc <- getSharedContext
-        let cenv = rwCryptol rw
+        let CryptolScopeStack (cenv :| _) = rwCryptol rw
         preconds <- forM precondExprs $ \pc -> do
           (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader sc cenv pc
           case eterm of
@@ -205,7 +207,13 @@ yosysExtractSequential params = do
       m <- getYosysSequential $ yosysExtractSequentialModule params
       s <- tl $ yosys_extract_sequential m (yosysExtractSequentialCycles params)
       let sn@(ServerName n) = yosysExtractSequentialServerName params
-      sawTopLevelRW %= \rw -> rw { rwCryptol = CEnv.bindTypedTerm (mkIdent n, s) $ rwCryptol rw }
+      sawTopLevelRW %= \rw ->
+          let CryptolScopeStack (cenv :| cenvs) = rwCryptol rw
+              cenv' = CEnv.bindTypedTerm (mkIdent n, s) cenv
+          in
+          rw {
+              rwCryptol = CryptolScopeStack (cenv' :| cenvs)
+          }
       setServerVal sn s
       ok
 

@@ -23,6 +23,8 @@ import Data.Aeson
       FromJSON(parseJSON),
       KeyValue((.=)),
       ToJSON(toJSON) )
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import Data.Maybe ( fromMaybe )
 import Data.Text (Text, pack)
 import Data.Typeable (Proxy(..), typeRep)
@@ -259,7 +261,7 @@ prove :: ProveParams Expression -> Argo.Command SAWState ProveResult
 prove params = do
   state <- Argo.getState
   fileReader <- Argo.getFileReader
-  let cenv = SV.rwCryptol (view sawTopLevelRW state)
+  let SV.CryptolScopeStack (cenv :| _) = SV.rwCryptol (view sawTopLevelRW state)
       bic = view sawBIC state
   cexp <- getCryptolExpr (ppGoal params)
   (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv cexp

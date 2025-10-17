@@ -46,13 +46,15 @@ module SAWScript.ValueOps (
 import Prelude hiding (fail)
 
 import Control.Monad.Catch (MonadThrow(..), try)
-import Control.Monad.State (get, gets, modify, put)
+import Control.Monad.State (get, gets, modify, put, zipWithM)
 import qualified Control.Exception as X
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (local)
 
 import Data.Text (Text)
 import qualified Data.Text as Text (pack, unpack)
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 --import Data.Map ( Map )
 import qualified Data.Map as M
 --import Data.Set ( Set )
@@ -126,9 +128,15 @@ bracketTopLevel acquire release action =
 
 combineRW :: TopLevelCheckpoint -> TopLevelRW -> IO TopLevelRW
 combineRW (TopLevelCheckpoint chk scc) rw =
-  do cenv' <- CEnv.combineCryptolEnv (rwCryptol chk) (rwCryptol rw)
+  do let CryptolScopeStack (chk'cenv :| chk'cenvs) = rwCryptol chk
+         CryptolScopeStack (rw'cenv :| rw'cenvs) = rwCryptol rw
+     -- Caution: this merge may have unexpected results if the
+     -- number of scopes doesn't match. But, it doesn't make sense
+     -- to do that in the first place. Caveat emptor...
+     cenv' <- CEnv.combineCryptolEnv chk'cenv rw'cenv
+     cenvs' <- zipWithM CEnv.combineCryptolEnv chk'cenvs rw'cenvs
      sc' <- restoreSharedContext scc (rwSharedContext rw)
-     return chk{ rwCryptol = cenv'
+     return chk{ rwCryptol = CryptolScopeStack (cenv' :| cenvs')
                , rwSharedContext = sc'
                }
 

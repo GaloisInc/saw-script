@@ -58,7 +58,9 @@ module SAWCentral.Value (
     Environ(..),
     -- used by SAWScript.Interpretere
     pushScope, popScope,
-    -- used by SAWCentral.Crucible.LLVM.FFI
+    -- used by SAWCentral.Builtins
+    CryptolScopeStack(..),
+    -- used by SAWCentral.Crucible.LLVM.FFI, SAWCentral.Builtins, SAWScript.Interpreter
     getCryptolEnv,
     -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
     --    SAWServer.SAWServer
@@ -201,6 +203,8 @@ import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.List.Extra ( dropEnd )
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
@@ -764,6 +768,12 @@ data Environ = Environ {
     eTyEnv :: TyEnv
 }
 
+-- | The Cryptol environment. We maintain a stack of Cryptol
+--   environments and push/pop them as we enter and leave scopes;
+--   otherwise the Cryptol environment doesn't track SAWScript scopes
+--   and horribly confusing wrong things happen.
+newtype CryptolScopeStack = CryptolScopeStack (NonEmpty CEnv.CryptolEnv)
+
 -- | The extra environment for rebindable globals.
 --
 --   Note: because no builtins are rebindable, there are no lifecycle
@@ -775,24 +785,41 @@ type RebindableEnv = Map SS.Name (SS.Pos, SS.Schema, Value)
 pushScope :: TopLevel ()
 pushScope = do
     Environ varenv tyenv <- gets rwEnviron
+    cryenv <- gets rwCryptol
     let varenv' = ScopedMap.push varenv
         tyenv' = ScopedMap.push tyenv
-    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv' })
+        cryenv' = cryptolPush cryenv
+    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv', rwCryptol = cryenv' })
 
 -- | Leave a scope. This will panic if you try to leave the last scope;
 --   pushes and pops should be matched.
 popScope  :: TopLevel ()
 popScope = do
     Environ varenv tyenv <- gets rwEnviron
+    cryenv <- gets rwCryptol
     let varenv' = ScopedMap.pop varenv
         tyenv' = ScopedMap.pop tyenv
-    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv' })
+        cryenv' = cryptolPop cryenv
+    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv', rwCryptol = cryenv' })
 
 
--- XXX remove this, it's confusing for it to exist if it's not different from just gets
 getCryptolEnv :: TopLevel CEnv.CryptolEnv
-getCryptolEnv =
-    gets rwCryptol
+getCryptolEnv = do
+    CryptolScopeStack (e :| _) <- gets rwCryptol
+    return e
+
+cryptolPush :: CryptolScopeStack -> CryptolScopeStack
+cryptolPush (CryptolScopeStack (e :| es)) =
+    -- Each entry is the whole environment, so duplicate the top entry
+    CryptolScopeStack (e :| e : es)
+
+cryptolPop :: CryptolScopeStack -> CryptolScopeStack
+cryptolPop (CryptolScopeStack (_ :| es)) =
+    -- Discard the top
+    case es of
+        [] -> panic "cryptolPop" ["Cryptol environment scope stack ran out"]
+        e : es' -> CryptolScopeStack (e :| es')
+
 
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
@@ -831,7 +858,7 @@ data TopLevelRW =
   , rwRebindables :: RebindableEnv
 
     -- | The Cryptol naming environment.
-  , rwCryptol    :: CEnv.CryptolEnv
+  , rwCryptol    :: CryptolScopeStack
 
     -- | The current execution position. This is only valid when the
     --   interpreter is calling out into saw-central to execute a
@@ -1168,7 +1195,7 @@ extendEnv pos name rb ty doc v = do
              (varenv, re')
 
      -- Mirror the value into the Cryptol environment if appropriate.
-     ce <- gets rwCryptol
+     CryptolScopeStack (ce :| ces) <- gets rwCryptol
      ce' <-
        case v of
          VTerm t ->
@@ -1190,7 +1217,7 @@ extendEnv pos name rb ty doc v = do
 
      -- Drop the new bits into place.
      modify (\rw -> rw {
-         rwCryptol = ce',
+         rwCryptol = CryptolScopeStack (ce' :| ces),
          rwEnviron = Environ varenv' tyenv,
          rwRebindables = rbenv'
      })

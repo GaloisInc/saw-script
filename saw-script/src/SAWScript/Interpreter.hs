@@ -36,6 +36,8 @@ import Control.Monad.State (gets, modify)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.List (genericLength)
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import Data.Sequence (Seq( (:|>) ))
@@ -476,14 +478,14 @@ interpretExpr expr =
           return $ VInteger z
       SS.Code pos str -> do
           sc <- getSharedContext
-          cenv <- gets rwCryptol
+          cenv <- getCryptolEnv
           --io $ putStrLn $ "Parsing code: " ++ show str
           --showCryptolEnv' cenv
           let str' = toInputText pos str
           t <- io $ CEnv.parseTypedTerm sc cenv str'
           return (VTerm t)
       SS.CType pos str -> do
-          cenv <- gets rwCryptol
+          cenv <- getCryptolEnv
           let str' = toInputText pos str
           s <- io $ CEnv.parseSchema cenv str'
           return (VType s)
@@ -767,14 +769,13 @@ interpretDoStmt stmt =
       SS.StmtCode _ spos str -> do
           liftTopLevel $ do
             sc <- getSharedContext
-            ce <- getCryptolEnv
+            CryptolScopeStack (ce :| ces) <- gets rwCryptol
             let str' = toInputText spos str
             ce' <- io $ CEnv.parseDecls sc ce str'
-            -- XXX: Local bindings get saved into the global Cryptol
-            -- environment here. We should change parseDecls to return
-            -- only the new bindings instead, and then have scopes for
-            -- the Cryptol environment. Or something.
-            modify (\rw -> rw { rwCryptol = ce' })
+            -- XXX: the scope stack now handles scoping for these...
+            -- but it's a pretty ugly way of doing that and should be
+            -- changed out for something less abusive someday.
+            modify (\rw -> rw { rwCryptol = CryptolScopeStack (ce' :| ces) })
       SS.StmtImport _ _ ->
           fail "block-level import unimplemented"
       SS.StmtTypedef _ _ name ty -> do
@@ -943,23 +944,23 @@ interpretTopStmt printBinds stmt = do
     SS.StmtCode _ spos str ->
       liftTopLevel $ do
          sc <- getSharedContext
-         cenv <- gets rwCryptol
+         CryptolScopeStack (cenv :| cenvs) <- gets rwCryptol
          --io $ putStrLn $ "Processing toplevel code: " ++ show str
          --showCryptolEnv
          cenv' <- io $ CEnv.parseDecls sc cenv $ toInputText spos str
-         modify (\rw -> rw { rwCryptol = cenv' })
+         modify (\rw -> rw { rwCryptol = CryptolScopeStack (cenv' :| cenvs) })
          --showCryptolEnv
 
     SS.StmtImport _ imp ->
       liftTopLevel $ do
          sc <- getSharedContext
-         cenv <- gets rwCryptol
+         CryptolScopeStack (cenv :| cenvs) <- gets rwCryptol
          --showCryptolEnv
          let mLoc = iModule imp
              qual = iAs imp
              spec = iSpec imp
          cenv' <- io $ CEnv.importModule sc cenv mLoc qual CEnv.PublicAndPrivate spec
-         modify (\rw -> rw { rwCryptol = cenv' })
+         modify (\rw -> rw { rwCryptol = CryptolScopeStack (cenv' :| cenvs) })
          --showCryptolEnv
 
     SS.StmtTypedef _ _ name ty ->
@@ -1122,7 +1123,7 @@ buildTopLevelEnv proxy opts scriptArgv =
        let rw0 = TopLevelRW
                    { rwEnviron = primEnviron opts bic
                    , rwRebindables = Map.empty
-                   , rwCryptol    = ce0
+                   , rwCryptol    = CryptolScopeStack (ce0 :| [])
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
                    , rwProofs     = []
@@ -2123,7 +2124,7 @@ print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
-  cenv <- fmap rwCryptol getTopLevelRW
+  cenv <- getCryptolEnv
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"

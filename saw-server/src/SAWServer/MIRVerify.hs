@@ -9,11 +9,13 @@ module SAWServer.MIRVerify
 
 import Prelude hiding (mod)
 import Control.Lens
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import qualified Data.Map as Map
 
 import SAWCentral.Crucible.MIR.Builtins
     ( mir_unsafe_assume_spec, mir_verify )
-import SAWCentral.Value (rwCryptol)
+import SAWCentral.Value (rwCryptol, CryptolScopeStack(..))
 
 import qualified Argo
 import qualified Argo.Doc as Doc
@@ -52,7 +54,7 @@ mirVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scri
             state <- Argo.getState
             rm <- getMIRModule modName
             let bic = view sawBIC state
-                cenv = rwCryptol (view sawTopLevelRW state)
+                CryptolScopeStack (cenv :| _) = rwCryptol (view sawTopLevelRW state)
                 sawenv = view sawEnv state
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts

@@ -15,10 +15,12 @@ import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Control.Lens ( view, over )
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import qualified Data.Text as T
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (textToModName)
-import SAWCentral.Value (biSharedContext, rwCryptol)
+import SAWCentral.Value (biSharedContext, rwCryptol, CryptolScopeStack(..) )
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 import qualified Argo
@@ -36,7 +38,7 @@ cryptolLoadModuleDescr =
 cryptolLoadModule :: CryptolLoadModuleParams -> Argo.Command SAWState OK
 cryptolLoadModule (CryptolLoadModuleParams modName) =
   do sc <- biSharedContext . view sawBIC <$> Argo.getState
-     cenv <- rwCryptol . view sawTopLevelRW <$> Argo.getState
+     CryptolScopeStack (cenv :| cenvs) <- rwCryptol . view sawTopLevelRW <$> Argo.getState
      let qual = Nothing -- TODO add field to params
      let importSpec = Nothing -- TODO add field to params
      fileReader <- Argo.getFileReader
@@ -45,7 +47,9 @@ cryptolLoadModule (CryptolLoadModuleParams modName) =
      case cenv' of
        Left (ex :: SomeException) -> Argo.raise $ cryptolError (show ex)
        Right cenv'' ->
-         do Argo.modifyState $ over sawTopLevelRW $ \rw -> rw { rwCryptol = cenv'' }
+         do Argo.modifyState $ over sawTopLevelRW $ \rw -> rw {
+                rwCryptol = CryptolScopeStack (cenv'' :| cenvs)
+            }
             ok
 
 newtype CryptolLoadModuleParams =
@@ -71,7 +75,7 @@ cryptolLoadFileDescr =
 cryptolLoadFile :: CryptolLoadFileParams -> Argo.Command SAWState OK
 cryptolLoadFile (CryptolLoadFileParams fileName) =
   do sc <- biSharedContext . view sawBIC <$> Argo.getState
-     cenv <- rwCryptol . view sawTopLevelRW <$> Argo.getState
+     CryptolScopeStack (cenv :| cenvs) <- rwCryptol . view sawTopLevelRW <$> Argo.getState
      let qual = Nothing -- TODO add field to params
      let importSpec = Nothing -- TODO add field to params
      fileReader <- Argo.getFileReader
@@ -80,7 +84,9 @@ cryptolLoadFile (CryptolLoadFileParams fileName) =
      case cenv' of
        Left (ex :: SomeException) -> Argo.raise $ cryptolError (show ex)
        Right cenv'' ->
-         do Argo.modifyState $ over sawTopLevelRW $ \rw -> rw { rwCryptol = cenv'' }
+         do Argo.modifyState $ over sawTopLevelRW $ \rw -> rw {
+                rwCryptol = CryptolScopeStack (cenv'' :| cenvs)
+            }
             ok
 
 newtype CryptolLoadFileParams =
