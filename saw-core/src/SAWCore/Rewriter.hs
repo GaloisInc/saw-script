@@ -479,7 +479,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
          let ctorRule ctor =
                do -- Compute the argument types @argTs@.
                   ctorT <- piAppType (ctorType ctor) params1
-                  let argCtx = fst $ R.asPiList ctorT
+                  argCtx <- fst <$> asFreshPiList sc ctorT
                   -- Build a fully-applied constructor @c@.
                   args <- scVariables sc argCtx
                   c <- scConstApply sc (ctorName ctor) (params1 ++ args)
@@ -530,6 +530,18 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                Nothing -> scApply sc f' arg
                Just (vn, _, body) ->
                  scInstantiateExt sc (IntMap.singleton (vnIndex vn) arg) body
+
+-- | Like 'R.asPiList', but freshen all variables in the context.
+asFreshPiList :: SharedContext -> Term -> IO ([(VarName, Term)], Term)
+asFreshPiList sc t =
+  case R.asPi t of
+    Nothing -> pure ([], t)
+    Just (x, t1, t2) ->
+      do x' <- scFreshVarName sc (vnName x)
+         var <- scVariable sc (EC x' t1)
+         t2' <- scInstantiateExt sc (IntMap.singleton (vnIndex x) var) t2
+         (ctx, body) <- asFreshPiList sc t2'
+         pure ((x', t1) : ctx, body)
 
 -- | Repeatedly apply the rule transformations in 'scExpandRewriteRule'.
 scExpandRewriteRules :: SharedContext -> [RewriteRule a] -> IO [RewriteRule a]
