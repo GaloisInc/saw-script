@@ -56,7 +56,7 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
     go (UnitShape _) () = return ()
     go (PrimShape _ _) rv = return rv
-    go (ArrayShape _ _ sz len shp) ag = do
+    go (ArrayShape _ _ sz shp len) ag = do
         traverseMirAggregateArray sym sz shp len ag $ \_off rv -> f shp rv
     go (TupleShape _ elems) ag =
         traverseMirAggregate sym elems ag $ \_off _sz shp rv -> f shp rv
@@ -182,7 +182,7 @@ freshSymbolic sym loc nameStr shp0 = go shp0
         ovrWithBackend $ \bak ->
           liftIO $ addAssumptions bak (singleEvent ev)
         return expr
-    go (ArrayShape _ _ sz len shp) = do
+    go (ArrayShape _ _ sz shp len) = do
         buildMirAggregateArray sym sz shp len [() | _ <- [1 .. len]] $
             \_off () -> go shp
     go (FnPtrShape _ _ _) = die "Function pointers not currently supported in overrides"

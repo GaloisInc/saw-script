@@ -403,7 +403,7 @@ constructExpandedSetupValue cc sc = go
         TupleShape _ elems -> do
           flds <- mapM (goAgElem pfx) (zip [0..] elems)
           pure $ MS.SetupTuple () flds
-        ArrayShape ty elemTy _ _ elemShp ->
+        ArrayShape ty elemTy _ elemShp _ ->
           case ty of
             Mir.TyArray _ n -> do
               elems <-

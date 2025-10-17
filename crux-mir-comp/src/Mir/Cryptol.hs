@@ -329,7 +329,7 @@ munge sym shp0 rv0 = do
         go shp@(PrimShape _ _) expr = eval expr >>= uneval shp
         go (TupleShape _ elems) ag =
             traverseMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
-        go (ArrayShape _ _ sz len shp) ag =
+        go (ArrayShape _ _ sz shp len) ag =
             traverseMirAggregateArray sym sz shp len ag $ \_off rv -> go shp rv
         go (StructShape _ _ flds) rvs = goFields flds rvs
         go (TransparentShape _ shp) rv = go shp rv
@@ -401,7 +401,7 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
               goOne desc shp' ty'
           | otherwise -> typeErr desc shp ty $
             "tuple size " ++ show n ++ " does not match " ++ show (length elems)
-        (ArrayShape (M.TyArray _ n) _ _ _ shp',
+        (ArrayShape (M.TyArray _ n) _ _ shp' _,
             Cry.TCon (Cry.TC Cry.TCSeq) [
                 Cry.tNoUser -> Cry.TCon (Cry.TC (Cry.TCNum n')) [],
                 ty'])

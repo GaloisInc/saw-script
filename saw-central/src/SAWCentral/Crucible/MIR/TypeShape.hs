@@ -92,7 +92,7 @@ data TypeShape (tp :: CrucibleType) where
     UnitShape :: M.Ty -> TypeShape UnitType
     PrimShape :: M.Ty -> BaseTypeRepr btp -> TypeShape (BaseToType btp)
     TupleShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
-    ArrayShape :: M.Ty -> M.Ty -> Word -> Word -> TypeShape tp -> TypeShape MirAggregateType
+    ArrayShape :: M.Ty -> M.Ty -> Word -> TypeShape tp -> Word -> TypeShape MirAggregateType
     StructShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape (StructType ctx)
     TransparentShape :: M.Ty -> TypeShape tp -> TypeShape tp
     -- | Note that RefShape contains only a TypeRepr for the pointee type, not
@@ -225,7 +225,7 @@ tyToShape col = go
         M.TyFnDef _ -> goUnit ty
         M.TyArray ty' len | Some shp <- go ty' ->
           let elemSz = 1 in   -- TODO: hardcoded size=1
-          Some $ ArrayShape ty ty' elemSz (fromIntegral len) shp
+          Some $ ArrayShape ty ty' elemSz shp (fromIntegral len)
         M.TyAdt nm _ _ -> case Map.lookup nm (col ^. M.adts) of
             Just adt | Just ty' <- reprTransparentFieldTy col adt ->
                 mapSome (TransparentShape ty) $ go ty'
@@ -397,7 +397,7 @@ shapeToTerm sc = go
     go (TupleShape _ elems) = do
         tys <- mapM goAgElem elems
         liftIO $ SAW.scTupleType sc tys
-    go (ArrayShape _ _ _ len shp) = do
+    go (ArrayShape _ _ _ shp len) = do
         ty <- go shp
         n' <- liftIO $ SAW.scNat sc (fromIntegral len)
         liftIO $ SAW.scVecType sc n' ty

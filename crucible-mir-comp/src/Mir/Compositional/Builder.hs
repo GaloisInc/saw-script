@@ -708,7 +708,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
     go (TupleShape _ elems) ag = do
       svs <- accessMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
       return $ MS.SetupTuple () svs
-    go (ArrayShape _ elemTy sz len shp) ag = do
+    go (ArrayShape _ elemTy sz shp len) ag = do
       svs <- accessMirAggregateArray sym sz shp len ag $ \_off rv -> go shp rv
       return $ MS.SetupArray elemTy svs
     go (StructShape tyAdt _ flds) rvs =

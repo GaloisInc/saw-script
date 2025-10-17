@@ -135,7 +135,7 @@ ppMIRVal sym (MIRVal shp val) =
     PrimShape _ _ ->
       W4.printSymExpr val
     TupleShape _ elems -> prettyAggregate elems val
-    ArrayShape _ _ elemSz len shp' ->
+    ArrayShape _ _ elemSz shp' len ->
       let is = take (fromIntegral len) [0..] in
       prettyAggregate [AgElemShape (i * elemSz) elemSz shp' | i <- is] val
     StructShape _ _ fldShp ->
@@ -754,13 +754,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
 
       ag <- buildMirAggregateArrayWithVal sym elemSz shp (fromIntegral len) vals $
         \_off rv -> return rv
-      let arrShp = ArrayShape (Mir.TyArray elemTy len) elemTy elemSz (fromIntegral len) shp
+      let arrShp = ArrayShape (Mir.TyArray elemTy len) elemTy elemSz shp (fromIntegral len)
       return $ MIRVal arrShp ag
     MS.SetupElem ixMode xs i -> do
       MIRVal xsShp xsVal <- resolveSetupVal mcc env tyenv nameEnv xs
       case ixMode of
         MirIndexIntoVal
-          | ArrayShape arrTy@(Mir.TyArray _ _) _ elemSz len elemShp <- xsShp -> do
+          | ArrayShape arrTy@(Mir.TyArray _ _) _ elemSz elemShp len <- xsShp -> do
             if i >= 0 && i < fromIntegral len
               then do
                 res <- runMaybeT $ indexMirArray sym i elemSz elemShp xsVal
@@ -1056,7 +1056,7 @@ resolveSAWTerm mcc tp tm =
             [AgElemShape (fromInteger i * elemSz) elemSz shp | i <- [0 .. sz - 1]]
             vals
             (\_ _ _ rv -> return rv)
-          let arrShp = ArrayShape (Mir.TyArray mirTy sz') mirTy elemSz (fromIntegral sz) shp
+          let arrShp = ArrayShape (Mir.TyArray mirTy sz') mirTy elemSz shp (fromIntegral sz)
           pure $ MIRVal arrShp ag
     Cryptol.TVStream _tp' ->
       fail "resolveSAWTerm: unsupported infinite stream type"
@@ -1255,7 +1255,7 @@ equalValsPred cc mv1 mv2 =
       liftIO $ W4.isEq sym v1 v2
     goTy (TupleShape _ elems) ag1 ag2 =
       goAg elems ag1 ag2
-    goTy (ArrayShape _ _ elemSz len shp) ag1 ag2 =
+    goTy (ArrayShape _ _ elemSz shp len) ag1 ag2 =
       let elems = [AgElemShape (i * elemSz) elemSz shp | i <- map (subtract 1) [1 .. len]] in
       goAg elems ag1 ag2
     goTy (StructShape _ _ fldShp) fldAssn1 fldAssn2 =
@@ -1673,7 +1673,7 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
         case referentArrShp of
           -- mir_points_to_multi should check that the RHS type is TyArray, so
           -- this case should always match.
-          ArrayShape _ _ _ _ referentElemShp -> do
+          ArrayShape _ _ _ referentElemShp _ -> do
             Refl <- testReferentShp referentElemShp
             let write globals' i referentVal = do
                   i_sym <- usizeBvLit sym i
