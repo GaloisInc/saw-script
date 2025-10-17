@@ -57,8 +57,7 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
     go (UnitShape _) () = return ()
     go (PrimShape _ _) rv = return rv
     go (ArrayShape _ _ sz len shp) ag = do
-        let elems = arrayAgElemShapes sz shp len
-        traverseMirAggregate sym elems ag $ \_off _sz shp' rv -> f shp' rv
+        traverseMirAggregateArray sym sz shp len ag $ \_off rv -> f shp rv
     go (TupleShape _ elems) ag =
         traverseMirAggregate sym elems ag $ \_off _sz shp rv -> f shp rv
     go (StructShape _ _ flds) rvs =
@@ -184,9 +183,8 @@ freshSymbolic sym loc nameStr shp0 = go shp0
           liftIO $ addAssumptions bak (singleEvent ev)
         return expr
     go (ArrayShape _ _ sz len shp) = do
-        let elems = arrayAgElemShapes sz shp len
-        buildMirAggregate sym elems [() | _ <- elems] $
-            \_off _sz shp' () -> go shp'
+        buildMirAggregateArray sym sz shp [() | _ <- [1 .. len]] $
+            \_off () -> go shp
     go (FnPtrShape _ _ _) = die "Function pointers not currently supported in overrides"
     go shp = die $ show (shapeType shp) ++ " NYI"
 
