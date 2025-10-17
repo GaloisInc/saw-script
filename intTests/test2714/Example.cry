@@ -1,0 +1,10 @@
+module Example where
+
+f: [8] -> [8]
+f x = g x
+
+g: [8] -> [8]
+g x = h x
+
+h: [8] -> [8]
+h x = (\y -> y) x

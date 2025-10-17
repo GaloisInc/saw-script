@@ -1,0 +1,25 @@
+m <- llvm_load_module "example.bc";
+import "Example.cry";
+
+thm_id <- llvm_verify
+  m "c_id" [] false
+  do {
+    X <- llvm_fresh_var "X" (llvm_int 8);
+    llvm_execute_func [llvm_term X];
+    llvm_return (llvm_term {{ f X }} );
+  }
+  rme;
+
+
+// This should fail becuse `h` is uninterpreted
+fails (llvm_verify
+  m "c_id2" [thm_id] false
+  do {
+    llvm_unint ["h"];
+    llvm_execute_func [llvm_term {{ 0x01 }}];
+    llvm_return (llvm_term {{ 0x01 }} );
+  }
+  do {
+    print_goal;
+    w4_unint_rme ["h"];
+  });
