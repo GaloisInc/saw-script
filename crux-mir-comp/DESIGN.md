@@ -201,6 +201,7 @@ rules:
     of basic Rust numeric types (e.g., `usize`)
   * Symbolic expressions may *not* be used as arguments corresponding to
     numeric type parameters.
+  * References in function arguments are transparently dereferenced.
   * The remaining parameters to the Rust function should correspond to the
     parameters in the Cryptol type as follows:
       * Cryptol's `Bit` is represented as Rust's `bool`

@@ -343,6 +343,10 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
             terms <- goVector a shp' vec
             tyTerm <- shapeToTerm' sc a shp'
             liftIO $ SAW.scVector sc tyTerm terms
+        (AdaptDerefRef col elAda, RefShape _ty elT M.Immut tpr, mirPtr) ->
+             do r <- readMirRefSim tpr mirPtr
+                let elShp = tyToShapeEq col elT tpr
+                go elAda elShp r
         (AdaptDerefSlice col n elAda, SliceShape _ty elT M.Immut tpr, Ctx.Empty Ctx.:> RV mirPtr Ctx.:> RV lenExpr) ->
           case BV.asUnsigned <$> W4.asBV lenExpr of
             Nothing ->
