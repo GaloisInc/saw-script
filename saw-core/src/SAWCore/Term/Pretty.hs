@@ -31,6 +31,7 @@ module SAWCore.Term.Pretty
   ) where
 
 import Data.Char (intToDigit, isDigit)
+import Data.List ((\\))
 import Data.Maybe (isJust)
 import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
 import Control.Monad.State.Strict (MonadState(..), State, evalState, execState, get, modify)
@@ -282,6 +283,8 @@ withVarName vn =
 
 -- | Run a pretty-printing computation in a context with multiple
 -- additional declared 'VarName's.
+-- Names are reserved in left-to-right order, so names near the head
+-- of the list take priority in case of duplicate base names.
 withVarNames :: [VarName] -> PPM a -> PPM a
 withVarNames vs m = foldr withVarName m vs
 
@@ -650,8 +653,10 @@ ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv
 ppTermInCtx :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
 ppTermInCtx opts ctx trm =
   runPPM opts emptyDisplayNameEnv $
-  withVarNames (Set.toList (termVarNames trm)) $
-  flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
+  -- reserve names from ctx first, so that they get priority naming
+  withVarNames (reverse ctx) $
+  -- reserve other free variables next, so they are disambiguated
+  withVarNames (Set.toList (termVarNames trm) \\ ctx) $
   ppTermWithMemoTable PrecTerm True trm
 
 -- | Pretty-print a term and render it to a string, using the given options
@@ -665,8 +670,10 @@ scPrettyTermInCtx :: PPS.Opts -> [VarName] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   PPS.render opts $
   runPPM opts emptyDisplayNameEnv $
-  withVarNames (Set.toList (termVarNames trm)) $
-  flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
+  -- reserve names from ctx first, so that they get priority naming
+  withVarNames (reverse ctx) $
+  -- reserve other free variables next, so they are disambiguated
+  withVarNames (Set.toList (termVarNames trm) \\ ctx) $
   ppTermWithMemoTable PrecTerm False trm
 
 
