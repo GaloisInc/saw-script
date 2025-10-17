@@ -1940,7 +1940,7 @@ setupArg sc cc ecRef mty0 tp0 =
                       , Text.pack $ show $ ppTerm PPS.defaultOpts scTp
                       ]
               arraySzTerm <- scNat sc arraySz
-              buildMirAggregateArray sym eltSz eltShp (map pred [1..len]) $
+              buildMirAggregateArray sym eltSz eltShp len (map pred [1..len]) $
                 \_off idx -> do
                   idxTerm <- scNat sc $ fromIntegral @Word @Natural idx
                   t' <- scAt sc arraySzTerm eltScTp t idxTerm

@@ -418,8 +418,8 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go (TupleShape _ elems) ag (MS.SetupTuple () svs) =
       void $ accessMirAggregate' sym elems svs ag $
         \_off _sz shp rv sv -> go shp rv sv
-    go (ArrayShape _ _ sz _ shp) ag (MS.SetupArray _ svs) =
-      void $ accessMirAggregateArray' sym sz shp svs ag $
+    go (ArrayShape _ _ sz len shp) ag (MS.SetupArray _ svs) =
+      void $ accessMirAggregateArray' sym sz shp len svs ag $
         \_off rv sv -> go shp rv sv
     go (StructShape _ _ flds) rvs (MS.SetupStruct _ svs) = goFields flds rvs svs
     go (TransparentShape _ shp) rv sv = go shp rv sv
@@ -548,8 +548,8 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
         return expr
     go (TupleShape _ elems) (MS.SetupTuple _ svs) =
         buildMirAggregate sym elems svs $ \_off _sz shp sv -> go shp sv
-    go (ArrayShape _ _ sz _ shp) (MS.SetupArray _ svs) = do
-        buildMirAggregateArray sym sz shp svs $ \_off sv -> go shp sv
+    go (ArrayShape _ _ sz len shp) (MS.SetupArray _ svs) = do
+        buildMirAggregateArray sym sz shp len svs $ \_off sv -> go shp sv
     go (StructShape _ _ flds) (MS.SetupStruct _ svs) =
         goFields flds svs
     go (TransparentShape _ shp) sv = go shp sv
