@@ -439,7 +439,7 @@ constructExpandedSetupValue cc sc = go
         TupleShape _ elems -> do
           flds <- mapM (goAgElem pfx) (zip [0..] elems)
           pure $ MS.SetupTuple () flds
-        ArrayShape ty elemTy _ _ elemShp ->
+        ArrayShape ty elemTy _ elemShp _ ->
           case ty of
             Mir.TyArray _ n -> do
               elems <-
@@ -1857,7 +1857,7 @@ setupArg sc cc ecRef mty0 tp0 =
               pure (Cryptol.tTuple eltCtys, scTp)
             PrimShape {} ->
               typeReprToSAWTypes sym sc (shapeType shp)
-            ArrayShape mty _ _ _ eltShp -> do
+            ArrayShape mty _ _ eltShp _ -> do
               arraySz <-
                 case mty of
                   Mir.TyArray _ arraySz -> pure arraySz
@@ -1929,7 +1929,7 @@ setupArg sc cc ecRef mty0 tp0 =
                   termToMirRegValue shp' eltScTp t'
             PrimShape {} ->
               termToRegValue sym (shapeType shp) t
-            ArrayShape _ _ eltSz len eltShp -> do
+            ArrayShape _ _ eltSz eltShp len -> do
               (arraySz :*: eltScTp) <-
                 case asVecType scTp of
                   Just nt -> pure nt
@@ -2142,7 +2142,7 @@ setupResultTerm sc cc mty0 tpr0 val0 =
             PrimShape {} -> do
               st <- sawCoreState sym
               toSC sym st val
-            ArrayShape _ _ eltSz len eltShp -> do
+            ArrayShape _ _ eltSz eltShp len -> do
               eltTy <-
                 case mty of
                   Mir.TyArray eltTy _ -> pure eltTy
