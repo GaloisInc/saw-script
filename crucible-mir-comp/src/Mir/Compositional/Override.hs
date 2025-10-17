@@ -297,15 +297,16 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     let postAllocDefs = filter (\(k,_v) -> not $ Map.member k preAllocMap) $
             Map.toList $ ms ^. MS.csPostState . MS.csAllocs
     postAllocMap <- liftM Map.fromList $ forM postAllocDefs $ \(alloc, Some allocSpec) -> do
-        -- Allocate a MirVector for multiple elements.
+        -- Allocate a MirAggregate for multiple elements.
         -- See Note [Allocating multiple MIR values] in
         -- SAWCentral.Crucible.MIR.ResolveSetupValue for more info.
-        let vecRepr = MirVectorRepr (allocSpec ^. maType)
-        vecRef <- newMirRefSim vecRepr
-        writeMirRefSim vecRepr vecRef $
-            MirVector_PartialVector $ V.replicate (allocSpec ^. maLen) W4.Unassigned
+        agRef <- newMirRefSim MirAggregateRepr
+        -- TODO: hardcoded size=1 (implied in conversion of `maLen` to `sz`
+        let sz = fromIntegral $ allocSpec ^. maLen
+        ag <- liftIO $ mirAggregate_uninitIO bak sz
+        writeMirRefSim MirAggregateRepr agRef ag
         zero <- liftIO $ W4.bvLit sym knownRepr $ BV.zero knownRepr
-        ref <- subindexMirRefSim (allocSpec ^. maType) vecRef zero
+        ref <- subindexMirRefSim (allocSpec ^. maType) agRef zero
         return ( alloc
                , Some $ MirPointer (allocSpec ^. maType)
                                    (allocSpec ^. maPtrKind)
