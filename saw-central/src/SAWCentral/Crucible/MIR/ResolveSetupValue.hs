@@ -249,6 +249,22 @@ buildMirAggregateWithVal sym elems vals f =
         Nothing -> fail $ "buildMirAggregateWithVal: type mismatch at offset "
           ++ show off ++ ": expected " ++ show shp ++ ", but the MIRVal contained " ++ show shp'
 
+buildMirAggregateArrayWithVal ::
+  (Monad m, MonadFail m) =>
+  Sym ->
+  Word ->
+  TypeShape tp ->
+  [MIRVal] ->
+  (Word -> RegValue Sym tp -> m (RegValue Sym tp)) ->
+  m (Mir.MirAggregate Sym)
+buildMirAggregateArrayWithVal sym elemSz elemShp vals f =
+  buildMirAggregateArray sym elemSz elemShp vals $
+    \off (MIRVal shp rv) ->
+      case W4.testEquality elemShp shp of
+        Just Refl -> f off rv
+        Nothing -> fail $ "buildMirAggregateArrayWithVal: type mismatch at offset "
+          ++ show off ++ ": expected " ++ show elemShp ++ ", but the MIRVal contained " ++ show shp
+
 
 type SetupValue = MS.SetupValue MIR
 
@@ -727,29 +743,17 @@ resolveSetupVal mcc env tyenv nameEnv val =
           lenVal <- usizeBvLit sym $ end - start
           pure $ MIRVal sliceShp (Ctx.Empty Ctx.:> RV refVal1 Ctx.:> RV lenVal)
     MS.SetupArray elemTy vs -> do
-      vals <- V.mapM (resolveSetupVal mcc env tyenv nameEnv) (V.fromList vs)
+      vals <- mapM (resolveSetupVal mcc env tyenv nameEnv) vs
 
       Some (shp :: TypeShape tp) <-
         pure $ tyToShape col elemTy
 
       let elemSz = 1      -- TODO: hardcoded size=1
-      let len = V.length vals
+      let len = length vals
 
-      totalSize_sym <- usizeBvLit sym (fromIntegral elemSz * len)
-      ag <- Mir.mirAggregate_uninitIO bak totalSize_sym
-      ag' <- foldM
-        (\ag' (i, MIRVal shp' val') -> do
-          case W4.testEquality shp shp' of
-            Just Refl ->
-              Mir.mirAggregate_setIO bak (elemSz * i) elemSz (shapeType shp) val' ag'
-            Nothing -> error $ unlines
-              [ "resolveSetupVal: internal error"
-              , show shp
-              , show shp'
-              ])
-        ag (zip [0 :: Word ..] (V.toList vals))
+      ag <- buildMirAggregateArrayWithVal sym elemSz shp vals $ \_off rv -> return rv
       let arrShp = ArrayShape (Mir.TyArray elemTy len) elemTy elemSz (fromIntegral len) shp
-      return $ MIRVal arrShp ag'
+      return $ MIRVal arrShp ag
     MS.SetupElem ixMode xs i -> do
       MIRVal xsShp xsVal <- resolveSetupVal mcc env tyenv nameEnv xs
       case ixMode of
