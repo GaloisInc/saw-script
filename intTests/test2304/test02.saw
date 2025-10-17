@@ -1,0 +1,8 @@
+do {
+   let {{ x = 3 : [8] }};
+   do {
+      let {{ x = 4 : Integer }};
+      return ();
+   };
+   print {{ x == (3 : [8]) }};
+};

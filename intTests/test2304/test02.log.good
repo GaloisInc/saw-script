@@ -1,0 +1,11 @@
+ Loading file "test02.saw"
+ Stack trace:
+   (builtin) (at top level)
+Cryptol error:
+[error] at test02.saw:7:19--7:26:
+  Type mismatch:
+    Expected type: Integer
+    Inferred type: [8]
+    When checking type of function argument
+
+FAILED

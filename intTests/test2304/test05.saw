@@ -1,0 +1,12 @@
+let f (x: Integer) (y: Integer) = {{ `x }};
+let g (x: Integer) (y: Integer) = return {{ `x }};
+let h (x: Integer) (y: Integer) = do { return {{ `x }}; };
+
+let a = f 3 6;
+print ("a", a);
+
+b <- g 4 7;
+print ("b", b);
+
+c <- h 5 8;
+print ("c", c);
