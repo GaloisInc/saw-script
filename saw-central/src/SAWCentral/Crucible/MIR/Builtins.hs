@@ -1940,12 +1940,11 @@ setupArg sc cc ecRef mty0 tp0 =
                       , Text.pack $ show $ ppTerm PPS.defaultOpts scTp
                       ]
               arraySzTerm <- scNat sc arraySz
-              let elems = arrayAgElemShapes eltSz eltShp len
-              buildMirAggregate sym elems [0..] $
-                \_off _sz shp' idx -> do
-                  idxTerm <- scNat sc $ fromIntegral @Int @Natural idx
+              buildMirAggregateArray sym eltSz eltShp (map pred [1..len]) $
+                \_off idx -> do
+                  idxTerm <- scNat sc $ fromIntegral @Word @Natural idx
                   t' <- scAt sc arraySzTerm eltScTp t idxTerm
-                  termToMirRegValue shp' eltScTp t'
+                  termToMirRegValue eltShp eltScTp t'
 
             StructShape {} ->
               impossibleType scTp
@@ -2153,9 +2152,8 @@ setupResultTerm sc cc mty0 tpr0 val0 =
                          , Text.pack $ show $ PP.pretty mty
                          ]
               shpTypeTerm <- shapeToTerm sc shp
-              let elems = arrayAgElemShapes eltSz eltShp len
-              typedElts <- accessMirAggregate sym elems val $
-                  \_off _sz shp' val' -> go eltTy (shapeType shp') val'
+              typedElts <- accessMirAggregateArray sym eltSz eltShp len val $
+                  \_off val' -> go eltTy (shapeType eltShp) val'
               scVectorReduced sc shpTypeTerm typedElts
 
             StructShape {} ->
