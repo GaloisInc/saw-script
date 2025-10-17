@@ -254,11 +254,12 @@ buildMirAggregateArrayWithVal ::
   Sym ->
   Word ->
   TypeShape tp ->
+  Word ->
   [MIRVal] ->
   (Word -> RegValue Sym tp -> m (RegValue Sym tp)) ->
   m (Mir.MirAggregate Sym)
-buildMirAggregateArrayWithVal sym elemSz elemShp vals f =
-  buildMirAggregateArray sym elemSz elemShp vals $
+buildMirAggregateArrayWithVal sym elemSz elemShp len vals f =
+  buildMirAggregateArray sym elemSz elemShp len vals $
     \off (MIRVal shp rv) ->
       case W4.testEquality elemShp shp of
         Just Refl -> f off rv
@@ -751,7 +752,8 @@ resolveSetupVal mcc env tyenv nameEnv val =
       let elemSz = 1      -- TODO: hardcoded size=1
       let len = length vals
 
-      ag <- buildMirAggregateArrayWithVal sym elemSz shp vals $ \_off rv -> return rv
+      ag <- buildMirAggregateArrayWithVal sym elemSz shp (fromIntegral len) vals $
+        \_off rv -> return rv
       let arrShp = ArrayShape (Mir.TyArray elemTy len) elemTy elemSz (fromIntegral len) shp
       return $ MIRVal arrShp ag
     MS.SetupElem ixMode xs i -> do

@@ -1023,7 +1023,8 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
            -- this case should always match.
            Mir.TyArray _ len -> do
              let elemSz = 1      -- TODO: hardcoded size=1
-             ag <- liftIO $ buildMirAggregateArray sym elemSz innerShp [0 .. len - 1] $
+             let lenWord = fromIntegral len :: Word
+             ag <- liftIO $ buildMirAggregateArray sym elemSz innerShp lenWord [0 .. len - 1] $
                \_off i -> do
                  i_sym <- usizeBvLit sym i
                  referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
@@ -1190,7 +1191,7 @@ matchArg opts sc cc cs prepost md = go False []
               case actual of
                 MIRVal (ArrayShape _ _ elemSz len elemShp) ag
                   | fromIntegral len == length zs ->
-                    void $ accessMirAggregateArray' sym elemSz elemShp zs ag $
+                    void $ accessMirAggregateArray' sym elemSz elemShp len zs ag $
                       \_off rv z -> go inCast [] (MIRVal elemShp rv) z
 
                 _ -> fail_
