@@ -1132,7 +1132,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1113 </span><span class="spaces">                </span><span class="istickedoff">where</span>
 <span class="lineno"> 1114 </span><span class="spaces">                </span><span class="istickedoff">uniqueU8Ptr =</span>
 <span class="lineno"> 1115 </span><span class="spaces">                  </span><span class="istickedoff">MS.SetupStruct uniqueU8Adt</span>
-<span class="lineno"> 1116 </span><span class="spaces">                                 </span><span class="istickedoff">[nonNullU8Ptr, phantomDataU8]</span>
+<span class="lineno"> 1116 </span><span class="spaces">                                 </span><span class="istickedoff">[nonNullU8Ptr, <span class="nottickedoff">phantomDataU8</span>]</span>
 <span class="lineno"> 1117 </span><span class="spaces">                  </span><span class="istickedoff">where</span>
 <span class="lineno"> 1118 </span><span class="spaces">                  </span><span class="istickedoff">nonNullU8Ptr =</span>
 <span class="lineno"> 1119 </span><span class="spaces">                    </span><span class="istickedoff">MS.SetupStruct nonNullU8Adt</span>
@@ -1147,7 +1147,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1128 </span><span class="spaces">                                 </span><span class="istickedoff">[phantomDataT]</span>
 <span class="lineno"> 1129 </span><span class="spaces">              </span><span class="istickedoff">globalAlloc = MS.SetupStruct globalAllocAdt []</span>
 <span class="lineno"> 1130 </span><span class="spaces">            </span><span class="istickedoff">phantomDataT = MS.SetupStruct phantomDataTAdt []</span>
-<span class="lineno"> 1131 </span><span class="spaces">            </span><span class="istickedoff">phantomDataU8 = MS.SetupStruct <span class="nottickedoff">phantomDataU8Adt</span> []</span>
+<span class="lineno"> 1131 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">phantomDataU8 = MS.SetupStruct phantomDataU8Adt []</span></span>
 <span class="lineno"> 1132 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1133 </span><span class="spaces">      </span><span class="istickedoff">pure vec</span>
 <span class="lineno"> 1134 </span><span class="spaces"></span><span class="istickedoff"></span>
