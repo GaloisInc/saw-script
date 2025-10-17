@@ -60,6 +60,7 @@ module SAWCore.SharedTerm
   , scFreshName
   , scFreshVarName
   , scVariable
+  , scVariables
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
@@ -84,9 +85,8 @@ module SAWCore.SharedTerm
   , scInjectCode
     -- ** Declaring global constants
   , scDeclarePrim
-  , scInsertDef
-  , scConstant
-  , scConstant'
+  , scFreshConstant
+  , scDefineConstant
   , scOpaqueConstant
   , scBeginDataType
   , scCompleteDataType
@@ -332,6 +332,7 @@ import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
+import SAWCore.Term.Raw
 import SAWCore.Unique
 
 ------------------------------------------------------------
@@ -434,6 +435,10 @@ scConstApply sc i ts =
 -- | Create a named variable 'Term' from an 'ExtCns'.
 scVariable :: SharedContext -> ExtCns Term -> IO Term
 scVariable sc (EC nm tp) = scTermF sc (Variable nm tp)
+
+-- | Create a list of named variables from a list of names and types.
+scVariables :: SharedContext -> [(VarName, Term)] -> IO [Term]
+scVariables sc = traverse (\(v, t) -> scVariable sc (EC v t))
 
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
@@ -616,12 +621,6 @@ scDeclarePrim sc ident q def_tp =
      _ <- scDeclareDef sc nm q def_tp Nothing
      pure ()
 
--- | Insert a definition into a SAW core module
-scInsertDef :: SharedContext -> Ident -> Term -> Term -> IO ()
-scInsertDef sc ident def_tp def_tm =
-  do _ <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
-     pure ()
-
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module
 scFindModule sc name =
@@ -657,13 +656,13 @@ scRequireDef sc i =
 scBeginDataType ::
   SharedContext ->
   Ident {- ^ The name of this datatype -} ->
-  [ExtCns Term] {- ^ The context of parameters of this datatype -} ->
-  [ExtCns Term] {- ^ The context of indices of this datatype -} ->
+  [(VarName, Term)] {- ^ The context of parameters of this datatype -} ->
+  [(VarName, Term)] {- ^ The context of indices of this datatype -} ->
   Sort {- ^ The universe of this datatype -} ->
   IO Name
 scBeginDataType sc dtIdent dtParams dtIndices dtSort =
   do dtName <- scRegisterName sc (ModuleIdentifier dtIdent)
-     dtType <- scGeneralizeExts sc (dtParams ++ dtIndices) =<< scSort sc dtSort
+     dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
@@ -776,7 +775,7 @@ ctxCtorArgType ::
   IO Term
 ctxCtorArgType _ _ (ConstArg tp) = return tp
 ctxCtorArgType sc d_params (RecursiveArg zs_ctx ixs) =
-  scGeneralizeExts sc zs_ctx =<< scApplyAll sc d_params ixs
+  scPiList sc zs_ctx =<< scApplyAll sc d_params ixs
 
 -- | Internal: Convert a bindings list of 'CtorArg's to a binding list
 -- of types.
@@ -796,12 +795,12 @@ ctxCtorArgBindings sc d_params ((x, arg) : args) =
 -- datatype and its 'CtorArgStruct'
 ctxCtorType :: SharedContext -> Name -> CtorArgStruct -> IO Term
 ctxCtorType sc d (CtorArgStruct{..}) =
-  do params <- traverse (scVariable sc) ctorParams
+  do params <- scVariables sc ctorParams
      d_params <- scConstApply sc d params
      bs <- ctxCtorArgBindings sc d_params ctorArgs
      d_params_ixs <- scApplyAll sc d_params ctorIndices
      body <- scGeneralizeExts sc bs d_params_ixs
-     scGeneralizeExts sc ctorParams body
+     scPiList sc ctorParams body
 
 -- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
 -- names of the 'DataType'. Note that we cannot look up the latter information,
@@ -873,7 +872,7 @@ ctxCtorElimType ::
   CtorArgStruct ->
   IO Term
 ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
-  do params <- traverse (scVariable sc) ctorParams
+  do params <- scVariables sc ctorParams
      d_params <- scConstApply sc d params
      let helper :: [Term] -> [(VarName, CtorArg)] -> IO Term
          helper prevs ((nm, ConstArg tp) : args) =
@@ -895,14 +894,14 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
            -- where rest is the result of a recursive call
            do d_params_ts <- scApplyAll sc d_params ts
               -- Build the type of the argument arg
-              arg_tp <- scGeneralizeExts sc zs d_params_ts
+              arg_tp <- scPiList sc zs d_params_ts
               arg <- scVariable sc (EC nm arg_tp)
               -- Build the type of ih
               pret_ts <- scApplyAll sc p_ret ts
-              z_vars <- traverse (scVariable sc) zs
+              z_vars <- scVariables sc zs
               arg_zs <- scApplyAll sc arg z_vars
               ih_ret <- scApply sc pret_ts arg_zs
-              ih_tp <- scGeneralizeExts sc zs ih_ret
+              ih_tp <- scPiList sc zs ih_ret
               -- Finally, build the pi-abstraction for arg and ih around the rest
               rest <- helper (prevs ++ [arg]) args
               scGeneralizeTerms sc [arg] =<< scFun sc ih_tp rest
@@ -978,17 +977,17 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
     -- The resulting term has the form
     -- > \(z1:Z1) .. (zk:Zk) -> r ixs (x z1 .. zk)
     mk_rec_arg ::
-      [ExtCns Term] ->                -- telescope describing the zs
+      [(VarName, Term)] ->             -- telescope describing the zs
       [Term] ->                        -- actual values for the indices, shifted under zs
       Term ->                         -- actual value in recursive position
       IO Term
     mk_rec_arg zs_ctx ixs x =
       -- eta expand over the zs and apply the Recursor form
-      do zs <- traverse (scVariable sc) zs_ctx
+      do zs <- scVariables sc zs_ctx
          x_zs <- scApplyAll sc x zs
          r_ixs <- scApplyAll sc r ixs
          body <- scApply sc r_ixs x_zs
-         scAbstractExts sc zs_ctx body
+         scLambdaList sc zs_ctx body
 
 -- | Build the type of the @p_ret@ function, also known as the "motive"
 -- function, of a recursor on datatype @d@. This type has the form
@@ -999,14 +998,14 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 -- of @d@, and @s@ is any sort supplied as an argument.
 scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
-  do param_vars <- traverse (scVariable sc) (dtParams dt)
-     ix_vars <- traverse (scVariable sc) (dtIndices dt)
+  do param_vars <- scVariables sc (dtParams dt)
+     ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
      ret <- scFun sc d =<< scSort sc s
-     p_ret <- scGeneralizeExts sc (dtIndices dt) ret
+     p_ret <- scPiList sc (dtIndices dt) ret
      -- Note that dtIndices may refer to variables from dtParams, so
      -- we can't just use params directly; the substitution is necessary.
-     let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
+     let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
      scInstantiateExt sc subst p_ret
 
 -- | Build the type of a recursor for datatype @d@ that has been
@@ -1020,14 +1019,14 @@ scRecursorRetTypeType sc dt params s =
 -- indices of @d@.
 scRecursorAppType :: SharedContext -> DataType -> [Term] -> Term -> IO Term
 scRecursorAppType sc dt params motive =
-  do param_vars <- traverse (scVariable sc) (dtParams dt)
-     ix_vars <- traverse (scVariable sc) (dtIndices dt)
+  do param_vars <- scVariables sc (dtParams dt)
+     ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
-     arg_ec <- scFreshEC sc "arg" d
-     arg_var <- scVariable sc arg_ec
+     arg_vn <- scFreshVarName sc "arg"
+     arg_var <- scVariable sc (EC arg_vn d)
      ret <- scApplyAll sc motive (ix_vars ++ [arg_var])
-     ty <- scGeneralizeExts sc (dtIndices dt ++ [arg_ec]) ret
-     let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
+     ty <- scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
+     let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
      scInstantiateExt sc subst ty
 
 -- | Build the full type of an unapplied recursor for datatype @d@
@@ -1043,21 +1042,21 @@ scRecursorType :: SharedContext -> DataType -> Sort -> IO Term
 scRecursorType sc dt s =
   do let d = dtName dt
 
-     param_vars <- traverse (scVariable sc) (dtParams dt)
+     param_vars <- scVariables sc (dtParams dt)
 
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
      motive_ty <- scRecursorRetTypeType sc dt param_vars s
-     motive_ec <- scFreshEC sc "p" motive_ty
-     motive_var <- scVariable sc motive_ec
+     motive_vn <- scFreshVarName sc "p"
+     motive_var <- scVariable sc (EC motive_vn motive_ty)
 
      -- Compute the types of the elimination functions
      elims_tps <-
        forM (dtCtors dt) $ \ctor ->
        ctxCtorElimType sc d (ctorName ctor) motive_var (ctorArgStruct ctor)
 
-     scGeneralizeExts sc (dtParams dt) =<<
-       scGeneralizeExts sc [motive_ec] =<<
+     scPiList sc (dtParams dt) =<<
+       scPi sc motive_vn motive_ty =<<
        scFunAll sc elims_tps =<<
        scRecursorAppType sc dt param_vars motive_var
 
@@ -1684,9 +1683,10 @@ scFunAll :: SharedContext
          -> IO Term
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
--- | Create a lambda term from a parameter name (as a 'LocalName'), parameter type
--- (as a 'Term'), and a body. Regarding deBruijn indices, in the body of the
--- function, an index of 0 refers to the bound parameter.
+-- | Create a lambda term from a parameter name (as a 'VarName'),
+-- parameter type (as a 'Term'), and a body.
+-- All free variables with the same 'VarName' in the body become
+-- bound.
 scLambda :: SharedContext
          -> VarName -- ^ The parameter name
          -> Term   -- ^ The parameter type
@@ -1695,10 +1695,10 @@ scLambda :: SharedContext
 scLambda sc varname ty body = scTermF sc (Lambda varname ty body)
 
 -- | Create a lambda term of multiple arguments (curried) from a list
--- associating parameter names to types (as 'Term's) and a body. As for
--- 'scLambda', there is a convention for deBruijn indices: 0 refers to the last
--- parameter in the list, and n-1 (where n is the list length) refers to the
--- first.
+-- associating parameter names to types (as 'Term's) and a body.
+-- The parameters are listed outermost first.
+-- Variable names in the parameter list are in scope for all parameter
+-- types occurring later in the list.
 scLambdaList :: SharedContext
              -> [(VarName, Term)] -- ^ List of parameter / parameter type pairs
              -> Term -- ^ The body
@@ -1709,6 +1709,8 @@ scLambdaList sc ((nm,tp):r) rhs =
 
 -- | Create a (possibly dependent) function given a parameter name, parameter
 -- type (as a 'Term'), and a body.
+-- All free variables with the same 'VarName' in the body become
+-- bound.
 scPi :: SharedContext
      -> VarName -- ^ The parameter name
      -> Term   -- ^ The parameter type
@@ -1719,6 +1721,8 @@ scPi sc nm tp body = scTermF sc (Pi nm tp body)
 
 -- | Create a (possibly dependent) function of multiple arguments (curried)
 -- from a list associating parameter names to types (as 'Term's) and a body.
+-- Variable names in the parameter list are in scope for all parameter
+-- types occurring later in the list.
 scPiList :: SharedContext
          -> [(VarName, Term)] -- ^ List of parameter / parameter type pairs
          -> Term -- ^ The body
@@ -1726,21 +1730,21 @@ scPiList :: SharedContext
 scPiList _ [] rhs = return rhs
 scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 
--- | Create an abstract constant with the specified name, body, and
--- type. The term for the body must not have any loose de Bruijn
--- indices. If the body contains any ExtCns variables, they will be
--- abstracted over and reapplied to the resulting constant.
-scConstant :: SharedContext
-           -> Text   -- ^ The name
-           -> Term   -- ^ The body
-           -> Term   -- ^ The type
-           -> IO Term
-scConstant sc name rhs ty =
+-- | Define a global constant with the specified base name (as
+-- 'Text'), body, and type.
+-- The term for the body must not have any free variables.
+-- A globally-unique name with the specified base name will be created
+-- using 'scFreshName'.
+scFreshConstant ::
+  SharedContext ->
+  Text {- ^ The base name -} ->
+  Term {- ^ The body -} ->
+  Term {- ^ The type -} ->
+  IO Term
+scFreshConstant sc name rhs ty =
   do unless (closedTerm rhs) $
-       fail "scConstant: term contains loose variables"
-     unless (null (getAllExts rhs)) $
        fail $ unlines
-       [ "scConstant: term contains free variables"
+       [ "scFreshConstant: term contains free variables"
        , "name: " ++ Text.unpack name
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
@@ -1749,27 +1753,20 @@ scConstant sc name rhs ty =
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
 
--- FIXME: Regarding comments,
---  - PROBLEM: the previous and the next function have the same
---    exact documentation but slightly different types and
---    implementations.
---  - SOLUTION: rewrite doc to distinguish the two.
-
--- | Create an abstract constant with the specified name, body, and
--- type. The term for the body must not have any loose de Bruijn
--- indices. If the body contains any ExtCns variables, they will be
--- abstracted over and reapplied to the resulting constant.
-scConstant' :: SharedContext
-            -> NameInfo -- ^ The name
-            -> Term   -- ^ The body
-            -> Term   -- ^ The type
-            -> IO Term
-scConstant' sc nmi rhs ty =
+-- | Define a global constant with the specified name (as 'NameInfo'),
+-- body, and type.
+-- The URI in the given 'NameInfo' must be globally unique.
+-- The term for the body must not have any free variables.
+scDefineConstant ::
+  SharedContext ->
+  NameInfo {- ^ The name -} ->
+  Term {- ^ The body -} ->
+  Term {- ^ The type -} ->
+  IO Term
+scDefineConstant sc nmi rhs ty =
   do unless (closedTerm rhs) $
-       fail "scConstant': term contains loose variables"
-     unless (null (getAllExts rhs)) $
        fail $ unlines
-       [ "scConstant': term contains free variables"
+       [ "scDefineConstant: term contains free variables"
        , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
@@ -1779,9 +1776,11 @@ scConstant' sc nmi rhs ty =
      scDeclareDef sc nm NoQualifier ty (Just rhs)
 
 
--- | Create an abstract and opaque constant with the specified name and type.
---   Such a constant has no definition and, unlike an @ExtCns@, is not subject
---   to substitution.
+-- | Declare a global opaque constant with the specified name (as
+-- 'NameInfo') and type.
+-- Such a constant has no definition, but unlike a variable it may be
+-- used in other constant definitions and is not subject to
+-- lambda-binding or substitution.
 scOpaqueConstant ::
   SharedContext ->
   NameInfo ->

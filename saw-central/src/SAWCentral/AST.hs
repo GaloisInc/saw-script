@@ -22,6 +22,7 @@ module SAWCentral.AST
        , Expr(..)
        , Pattern(..)
        , Stmt(..)
+       , Rebindable(..)
        , DeclGroup(..)
        , Decl(..)
        , Context(..)
@@ -177,28 +178,42 @@ instance Positioned Pattern where
 --   the position of the name.
 data Stmt
   = StmtBind     Pos Pattern Expr
-  | StmtLet      Pos DeclGroup
+  | StmtLet      Pos Rebindable DeclGroup
   | StmtCode     Pos Pos Text
   | StmtImport   Pos Import
   | StmtTypedef  Pos Pos Text Type
   deriving Show
 
+-- | Tracking/state type for the @let rebindable@ behavior.
+data Rebindable
+    = RebindableVar -- ^ produced by @let rebindable@
+    | ReadOnlyVar   -- ^ produced by ordinary @let@ and by @rec@
+  deriving (Eq, Show)
+
 instance Positioned Stmt where
   getPos (StmtBind pos _ _)  = pos
-  getPos (StmtLet pos _)       = pos
+  getPos (StmtLet pos _ _)       = pos
   getPos (StmtCode allpos _spos _str) = allpos
   getPos (StmtImport pos _)    = pos
   getPos (StmtTypedef allpos _apos _a _ty) = allpos
 
+-- | Systems of mutually recursive declarations.
+--
+--   Note that `Recursive` declarations never use `RebindableVar`.
 data DeclGroup
-  = Recursive [Decl]
-  | NonRecursive Decl
+  = Recursive [Decl]   -- ^ produced by @rec ... and ...@
+  | NonRecursive Decl  -- ^ produced by @let ...@
   deriving Show
 
 instance Positioned DeclGroup where
   getPos (Recursive ds) = maxSpan ds
   getPos (NonRecursive d) = getPos d
 
+-- | Single declaration.
+--
+--   These appear in let expressions and statements; but _not_ in
+--   monad-bind position; those have only patterns and can't be
+--   polymorphic.
 data Decl
   = Decl { dPos :: Pos, dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
   deriving Show
@@ -362,9 +377,13 @@ instance Pretty Stmt where
          PP.pretty expr
       StmtBind _ pat expr ->
          PP.pretty pat PP.<+> "<-" PP.<+> PP.align (PP.pretty expr)
-      StmtLet _ (NonRecursive decl) ->
-         "let" PP.<+> prettyDef decl
-      StmtLet _ (Recursive decls) ->
+      StmtLet _ rebindable (NonRecursive decl) ->
+         let header = case rebindable of
+               RebindableVar -> "let rebindable"
+               ReadOnlyVar -> "let"
+         in
+         header PP.<+> prettyDef decl
+      StmtLet _ _ (Recursive decls) ->
          "rec" PP.<+>
          PP.cat (PP.punctuate
             (PP.fillSep [PP.emptyDoc, "and" PP.<> PP.space])

@@ -50,8 +50,8 @@ import qualified SAWCentral.Trace as Trace (empty)
 
 --import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
 import SAWCore.Module (emptyModule)
+import SAWCore.Name (mkModuleName)
 import SAWCore.SharedTerm (mkSharedContext, scLoadModule)
-import SAWCore.Term.Functor (mkModuleName)
 import CryptolSAWCore.TypedTerm (TypedTerm, CryptolModule)
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)

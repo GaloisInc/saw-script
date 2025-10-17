@@ -18,6 +18,7 @@ import Test.Tasty.HUnit
 
 import SAWCore.Name
 import SAWCore.Term.Functor
+import SAWCore.Term.Raw
 
 
 -- There are three properties of Term/TermF/FlatTermF that the

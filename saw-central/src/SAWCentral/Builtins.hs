@@ -71,7 +71,7 @@ import SAWCore.FiniteValue
   , FirstOrderValue(..)
   , scFirstOrderValue
   )
-import SAWCore.Name (VarName(..), ecShortName)
+import SAWCore.Name (ModuleName, VarName(..), ecShortName, mkModuleName)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
@@ -80,6 +80,7 @@ import SAWCore.SharedTerm
 import SAWCore.Typechecker (tcInsertModule, inferCompleteTermCtx)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
+import SAWCore.Term.Raw
 import CryptolSAWCore.TypedTerm
 
 import qualified SAWCore.Simulator.Concrete as Concrete
@@ -155,7 +156,7 @@ definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
   do sc <- getSharedContext
      ty <- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema
-     t <- io $ scConstant sc name rhs ty
+     t <- io $ scFreshConstant sc name rhs ty
      return $ TypedTerm (TypedTermSchema schema) t
 definePrim _name (TypedTerm tp _) =
   fail $ unlines
@@ -1702,9 +1703,9 @@ envCmd = do
   rw <- SV.getMergedEnv
   let avail = rwPrimsAvail rw
       vals = rwValueInfo rw
-      keep (_x, (lc, _ty, _v, _doc)) = Set.member lc avail
+      keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail
       vals' = filter keep $ Map.assocs vals
-      printit (x, (_lc, ty, _v, _doc)) = x <> " : " <> PPS.pShowText ty
+      printit (x, (_pos, _lc, _rb, ty, _v, _doc)) = x <> " : " <> PPS.pShowText ty
   opts <- getOptions
   io $ sequence_ [ printOutLn opts Info (Text.unpack $ printit item) | item <- vals' ]
 

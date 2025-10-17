@@ -53,12 +53,15 @@ import qualified Data.BitVector.Sized                          as BV
 import qualified Data.Vector                                   as Vector (toList)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
+
 import           SAWCore.Module (Def(..), ModuleMap, ResolvedName(..), requireNameInMap, resolvedNameType)
-import           SAWCore.Name (Name(..), VarName(..))
+import           SAWCore.Name
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Pretty
 import           SAWCore.Term.Functor
+import           SAWCore.Term.Raw
+
 import           SAWCoreCoq.Monad
 import           SAWCoreCoq.SpecialTreatment
 
@@ -626,15 +629,6 @@ translateParams :: TermTranslationMonad m => [(VarName, Term)] ->
                    ([Coq.Binder] -> m a) -> m a
 translateParams bs m =
   translateBinders bs (m . concat . map bindTransToBinder)
-
--- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
--- return a list of explicit 'Binder's, for use representing the bound variables
--- in 'Lambda's, 'Let's, etc.
-translateParamsEC ::
-  TermTranslationMonad m => [ExtCns Term] -> ([Coq.Binder] -> m a) -> m a
-translateParamsEC bs m =
-  translateBindersEC bs (m . concatMap bindTransToBinder)
-
 
 -- | Given a list of 'VarName's and their corresponding types (as 'Term's)
 -- representing argument types and a 'Term' representing the return type,

@@ -93,7 +93,9 @@ import SAWCore.Name
 import SAWCore.Panic
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
+import SAWCore.Term.Raw
 import SAWCore.SharedTerm
+import qualified SAWCore.Term.Certified as SC
 import SAWCore.SCTypeCheck
 import SAWCore.Module
   ( ctorName
@@ -103,20 +105,20 @@ import SAWCore.Module
 
 -- | An open term is represented as a type-checking computation that computes a
 -- SAW core term and its type
-newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SCTypedTerm }
+newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SC.Term }
 
 -- | \"Complete\" an 'OpenTerm' to a closed term or 'fail' on type-checking
 -- error
 completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
 completeOpenTerm sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (typedVal <$> termM) sc mempty
+  runTCM (SC.rawTerm <$> termM) sc mempty
 
 -- | \"Complete\" an 'OpenTerm' to a closed term for its type
 completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
 completeOpenTermType sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (typedType <$> termM) sc mempty
+  runTCM (SC.rawType <$> termM) sc mempty
 
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm
@@ -148,7 +150,7 @@ bindTCMOpenTerm m f = OpenTerm (m >>= unOpenTerm . f)
 bindPPOpenTerm :: OpenTerm -> (String -> OpenTerm) -> OpenTerm
 bindPPOpenTerm (OpenTerm m) f =
   OpenTerm $
-  do t <- typedVal <$> m
+  do t <- SC.rawTerm <$> m
      -- XXX: this could use scPrettyTermInCtx (which builds in the call to
      -- PPS.render) except that it's slightly different under the covers
      -- (in its use of the "global" flag, and it isn't entirely clear what
@@ -160,7 +162,7 @@ bindPPOpenTerm (OpenTerm m) f =
 openTermType :: OpenTerm -> OpenTerm
 openTermType (OpenTerm m) =
   OpenTerm $ do t <- m
-                liftTCM scTypeOfTypedTerm t
+                liftTCM SC.scTypeOf t
 
 -- | Build an 'OpenTerm' from a 'FlatTermF'
 flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
@@ -327,13 +329,13 @@ dataTypeOpenTerm d all_args = applyOpenTermMulti dt_open_term all_args
 -- | Build an 'OpenTerm' for a global name with a definition
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
-  OpenTerm (liftTCM scGlobalTypedTerm ident)
+  OpenTerm (liftTCM SC.scGlobal ident)
 
 -- | Build an 'OpenTerm' for an 'Ident', which can either refer to a definition,
 -- a constructor, or a datatype
 identOpenTerm :: Ident -> OpenTerm
 identOpenTerm ident =
-  OpenTerm (liftTCM scGlobalTypedTerm ident)
+  OpenTerm (liftTCM SC.scGlobal ident)
 
 -- | Build an 'OpenTerm' for a named variable.
 variableOpenTerm :: ExtCns Term -> OpenTerm
@@ -360,7 +362,7 @@ applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
   OpenTerm $
   do f <- m_f
      arg <- m_arg
-     ret <- applyPiTyped (NotFuncTypeInApp f arg) (typedVal f) arg
+     ret <- applyPiTyped (NotFuncTypeInApp f arg) (SC.rawTerm f) arg
      typeInferComplete ret
 
 -- | Get the argument type of a function type, 'fail'ing if the input term is
@@ -368,10 +370,10 @@ applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
 piArgOpenTerm :: OpenTerm -> OpenTerm
 piArgOpenTerm (OpenTerm m) =
   OpenTerm $ m >>= \case
-  (unwrapTermF . typedVal -> Pi _ tp _) -> typeInferComplete tp
+  (unwrapTermF . SC.rawTerm -> Pi _ tp _) -> typeInferComplete tp
   t ->
     fail ("piArgOpenTerm: not a pi type: " ++
-          scPrettyTermInCtx PPS.defaultOpts [] (typedVal t))
+          scPrettyTermInCtx PPS.defaultOpts [] (SC.rawTerm t))
 
 -- | Build a lambda abstraction as an 'OpenTerm'
 lambdaOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm

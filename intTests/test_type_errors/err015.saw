@@ -54,11 +54,11 @@ typedef t2 = {
 
 let x : t1 = { amethyst = 3, moonstone = 3, obsidian = 3, turquoise = 3 };
 
-let f1a (x: t1a) = x.amethyst;
-let f1b (x: t1b) = x.amethyst;
-let f1c (x: t1c) = x.amethyst;
-let f1d (x: t1d) = x.amethyst;
-let f2 (x: t2) = x.anise;
+let f1a (xx: t1a) = xx.amethyst;
+let f1b (xx: t1b) = xx.amethyst;
+let f1c (xx: t1c) = xx.amethyst;
+let f1d (xx: t1d) = xx.amethyst;
+let f2 (xx: t2) = xx.anise;
 
 // produce a tuple so we get all the messages at once
 // (otherwise the interpreter apparently bails after one failed let)

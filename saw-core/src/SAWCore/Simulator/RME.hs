@@ -58,11 +58,11 @@ evalSharedTerm :: ModuleMap -> Map Ident RPrim -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           extcns (\_ _ -> Nothing) primHandler
+           variable (\_ _ -> Nothing) recursor primHandler
            (Prims.lazyMuxValue prims)
     Sim.evalSharedTerm cfg t
   where
-    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
+    variable vn _tp = return $ Prim.userError $ "Unimplemented: free variable " ++ show (vnName vn)
     primHandler nm msg env =
       return $ Prim.userError $ unlines
         [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
@@ -266,6 +266,13 @@ constMap =
   , ("Prelude.expByNat", Prims.expByNatOp prims)
   ]
 
+-- | Recursor overrides for the SAWCore simulator.
+recursor :: Name -> sort -> Maybe (Identity RValue)
+recursor nm _sort =
+  case nameInfo nm of
+    ModuleIdentifier "Prelude.Stream" -> Just (pure streamRecOp)
+    _ -> Nothing
+
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
 bvToIntOp :: RPrim
 bvToIntOp = unsupportedRMEPrimitive "bvToIntOp"
@@ -354,7 +361,11 @@ streamGetOp :: RPrim
 streamGetOp =
   Prims.tvalFun   $ \_tp ->
   Prims.strictFun $ \xs ->
-  Prims.strictFun $ \ix -> Prims.Prim $ case ix of
+  Prims.strictFun $ \ix -> Prims.Prim $ streamGet xs ix
+
+streamGet :: RValue -> RValue -> Identity RValue
+streamGet xs ix =
+  case ix of
     VNat n -> pure $ IntTrie.apply (toStream xs) (toInteger n)
     VIntToNat _i -> error "RME.streamGetOp : symbolic integer TODO"
     VBVToNat _sz bv ->
@@ -374,6 +385,17 @@ streamGetOp =
 
     _ -> panic "streamGetOp" ["Expected Nat value; found " <> Text.pack (show ix)]
 
+-- Stream#rec :
+--   (a : sort 0) -> (p : Stream a -> sort 0) ->
+--   ((f : Nat -> a) -> p (MkStream a f)) -> (str : Stream a) -> p str
+streamRecOp :: RValue
+streamRecOp =
+  VFun $ \_a -> pure $
+  VFun $ \_p -> pure $
+  vStrictFun $ \f1 -> pure $
+  vStrictFun $ \xs ->
+  do let f = vStrictFun $ \ix -> streamGet xs ix
+     apply f1 (ready f)
 
 ------------------------------------------------------------
 -- Generating variables for arguments
@@ -398,19 +420,19 @@ bitBlastBasic :: ModuleMap
               -> Map VarIndex RValue
               -> Term
               -> RValue
-bitBlastBasic m addlPrims ecMap t = runIdentity $ do
+bitBlastBasic m addlPrims varMap t = runIdentity $ do
   let primHandler nm msg env =
          return $ Prim.userError $ unlines
            [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
            , "On argument " ++ show (length env)
            , Text.unpack msg
            ]
-
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-         (\ec -> case Map.lookup (ecVarIndex ec) ecMap of
+         (\vn _ -> case Map.lookup (vnIndex vn) varMap of
                    Just v -> pure v
-                   Nothing -> error ("RME: unknown ExtCns: " ++ show (ecName ec)))
+                   Nothing -> error ("RME: unknown variable: " ++ show (vnName vn)))
          (\_ _ -> Nothing)
+         recursor
          primHandler
          (Prims.lazyMuxValue prims)
   Sim.evalSharedTerm cfg t

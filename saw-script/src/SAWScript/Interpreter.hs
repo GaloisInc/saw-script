@@ -288,8 +288,10 @@ propagateRefChain chain1 v =
 --
 -- XXX: at some point clean this up further.
 --
-bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
-bindPatternLocal pat ms v env =
+bindPatternLocal ::
+    SS.Rebindable -> SS.Pattern -> Maybe SS.Schema -> Value ->
+    LocalEnv -> LocalEnv
+bindPatternLocal rb pat ms v env =
   case pat of
     SS.PWild _pos _ ->
       env
@@ -299,12 +301,12 @@ bindPatternLocal pat ms v env =
           "Source position: " <> Text.pack (show allpos),
           "Pattern: " <> Text.pack (show pat)
       ]
-    SS.PVar _allpos _xpos x (Just ty) ->
+    SS.PVar _allpos xpos x (Just ty) ->
       let s = fromMaybe (SS.tMono ty) ms in
-      extendLocal x s Nothing v env
+      extendLocal xpos x rb s Nothing v env
     SS.PTuple _pos ps ->
       case v of
-        VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
+        VTuple vs -> foldr ($) env (zipWith3 (bindPatternLocal rb) ps mss vs)
           where mss = case ms of
                   Nothing ->
                       repeat Nothing
@@ -331,10 +333,10 @@ bindPatternEnv pat ms v env =
             "Source position: " <> Text.pack (show allpos),
             "Pattern: " <> Text.pack (show pat)
         ]
-    SS.PVar _allpos _xpos x (Just ty) -> do
+    SS.PVar _allpos xpos x (Just ty) -> do
         sc <- getSharedContext
         let s = fromMaybe (SS.tMono ty) ms
-        liftIO $ extendEnv sc x s Nothing v env
+        liftIO $ extendEnv sc xpos x SS.ReadOnlyVar s Nothing v env
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
@@ -439,7 +441,7 @@ applyValue pos v1info v1 v2 =
     VLambda env mname pat e -> do
         let name = fromMaybe "(lambda)" mname
         enter name
-        r <- withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
+        r <- withLocalEnv (bindPatternLocal SS.ReadOnlyVar pat Nothing v2 env) (interpretExpr e)
         leave
         return $ insertRefChain pos name r
     VBuiltin name args wf -> case wf of
@@ -526,7 +528,7 @@ interpretExpr expr =
                 panic "interpretExpr" [
                     "Read of unknown variable " <> x
                 ]
-            Just (lc, _ty, v, _doc)
+            Just (_defpos, lc, _rebindable, _ty, v, _doc)
               | Set.member lc (rwPrimsAvail rw) -> do
                    let v' = injectPositionIntoMonadicValue pos v
                        v'' = insertRefChain pos x v'
@@ -546,7 +548,7 @@ interpretExpr expr =
           let v2' = injectPositionIntoMonadicValue (SS.getPos e2) v2
           applyValue pos v1info v1 v2'
       SS.Let _ dg e -> do
-          env' <- interpretDeclGroup dg
+          env' <- interpretDeclGroup SS.ReadOnlyVar dg
           withLocalEnv env' (interpretExpr e)
       SS.TSig _ e _ ->
           interpretExpr e
@@ -565,10 +567,10 @@ interpretExpr expr =
 
 -- Eval a "decl", which is the RHS of a let-binding.
 -- Evaluates the body expression purely.
-interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
-interpretDecl env (SS.Decl _ pat mt expr) = do
+interpretDecl :: SS.Rebindable -> LocalEnv -> SS.Decl -> TopLevel LocalEnv
+interpretDecl rebindable env (SS.Decl _ pat mt expr) = do
     v <- interpretExpr expr
-    return (bindPatternLocal pat mt v env)
+    return (bindPatternLocal rebindable pat mt v env)
 
 -- Eval the RHS of a single let-binding in a mutually recursive group.
 -- These are required to be functions; that's enforced by the
@@ -586,14 +588,14 @@ interpretFunction env expr =
 
 -- Eval a "decl group", which is a let-binding or group of mutually
 -- recursive let-bindings.
-interpretDeclGroup :: SS.DeclGroup -> TopLevel LocalEnv
-interpretDeclGroup (SS.NonRecursive d) = do
+interpretDeclGroup :: SS.Rebindable -> SS.DeclGroup -> TopLevel LocalEnv
+interpretDeclGroup rebindable (SS.NonRecursive d) = do
     env <- getLocalEnv
-    interpretDecl env d
-interpretDeclGroup (SS.Recursive ds) = do
+    interpretDecl rebindable env d
+interpretDeclGroup rebindable (SS.Recursive ds) = do
     env <- getLocalEnv
     let addDecl (SS.Decl _ pat mty e) =
-            bindPatternLocal pat mty (interpretFunction env' e)
+            bindPatternLocal rebindable pat mty (interpretFunction env' e)
         env' = foldr addDecl env ds
     return env'
 
@@ -723,10 +725,10 @@ interpretDoStmt stmt =
           result :: Value <- bindMonadAction pos baseVal
           -- Bind (in the name-binding, not monad-binding sense) the
           -- result to the pattern.
-          return $ bindPatternLocal pat Nothing result env
-      SS.StmtLet _pos dg -> do
+          return $ bindPatternLocal SS.ReadOnlyVar pat Nothing result env
+      SS.StmtLet _pos rebindable dg -> do
           -- Process the declarations
-          liftTopLevel $ interpretDeclGroup dg
+          liftTopLevel $ interpretDeclGroup rebindable dg
       SS.StmtCode _ spos str -> do
           liftTopLevel $ do
             sc <- getSharedContext
@@ -882,7 +884,7 @@ interpretTopStmt printBinds stmt = do
   ctx <- getMonadContext
   rw <- liftTopLevel getMergedEnv
   let valueInfo = rwValueInfo rw
-      valueInfo' = Map.map (\(lc, ty, _v, _doc) -> (lc, ty)) valueInfo
+      valueInfo' = Map.map (\(pos, lc, rb, ty, _v, _doc) -> (pos, lc, rb, ty)) valueInfo
   stmt' <- processTypeCheck $ checkStmt (rwPrimsAvail rw) valueInfo' (rwTypeInfo rw) ctx stmt
 
   case stmt' of
@@ -893,9 +895,9 @@ interpretTopStmt printBinds stmt = do
       -- be ProofScript, and then things come unstuck. See #2494.
       processStmtBind printBinds pos pat expr
 
-    SS.StmtLet _pos dg ->
+    SS.StmtLet _pos rebindable dg ->
       liftTopLevel $ do
-         env <- interpretDeclGroup dg
+         env <- interpretDeclGroup rebindable dg
          rw' <- getMergedEnv' env
          putTopLevelRW rw'
 
@@ -977,11 +979,13 @@ interpretMain = do
     Nothing ->
       -- Don't fail or complain if there's no main.
       return ()
-    Just (Current, tyFound, v, _doc) -> case tyFound of
+    Just (_defpos, Current, _rebindable, tyFound, v, _doc) -> case tyFound of
         SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) ->
             -- It looks like a monadic value, so check more carefully.
             case typesMatch avail tyenv tyFound tyExpected of
               False ->
+                  -- While we accept any TopLevel a, don't encourage people
+                  -- to do that.
                   fail "There is a 'main' defined but its type is not TopLevel ()"
               True -> do
                   let v' = injectPositionIntoMonadicValue pos v
@@ -991,7 +995,7 @@ interpretMain = do
             -- If the type is something entirely random, like a Term or a
             -- String or something, just ignore it.
             return ()
-    Just (lc, _ty, _v, _doc) ->
+    Just (_defpos, lc, _rebindable, _ty, _v, _doc) ->
       -- There is no way for things other than primitives to get marked
       -- experimental or deprecated, so this isn't possible. If we allow
       -- users to deprecate their own functions in the future, change
@@ -6417,7 +6421,10 @@ primNamedTypeEnv = fmap extract primTypes
 --   consider simplifying so `primitives` uses the same type as the
 --   interpreter environment this function seeds, instead of its own.
 --
-primValueEnv :: Options -> BuiltinContext -> Map SS.Name (PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
+primValueEnv ::
+   Options ->
+   BuiltinContext ->
+   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Rebindable, SS.Schema, Value, Maybe [Text])
 primValueEnv opts bic = Map.mapWithKey extract primitives
   where
       header = [
@@ -6437,4 +6444,6 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
       doc n p =
           header <> tag p <> name n p <> primitiveDoc p
       extract n p =
-          (primitiveLife p, primitiveType p, (primitiveFn p) opts bic, Just $ doc n p)
+          let pos = SS.PosInternal "<<builtin>>" in
+          (pos, primitiveLife p, SS.ReadOnlyVar, primitiveType p,
+           (primitiveFn p) opts bic, Just $ doc n p)

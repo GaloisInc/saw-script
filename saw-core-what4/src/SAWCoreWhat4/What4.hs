@@ -280,6 +280,13 @@ constMap sym =
   , ("Prelude.expByNat", Prims.expByNatOp (prims sym))
   ]
 
+-- | Recursor overrides for the SAWCore simulator.
+recursor :: Sym sym => sym -> Name -> sort -> Maybe (IO (SValue sym))
+recursor sym nm _sort =
+  case nameInfo nm of
+    ModuleIdentifier "Prelude.Stream" -> Just (pure (streamRecOp sym))
+    _ -> Nothing
+
 -----------------------------------------------------------------------
 -- Implementation of constMap primitives
 
@@ -587,7 +594,10 @@ streamGetOp sym =
   Prims.tvalFun   $ \_tp ->
   Prims.strictFun $ \xs ->
   Prims.strictFun $ \ix ->
-  Prims.Prim $
+  Prims.Prim $ streamGet sym xs ix
+
+streamGet :: forall sym. Sym sym => sym -> SValue sym -> SValue sym -> IO (SValue sym)
+streamGet sym xs ix =
     case ix of
       VNat n -> lookupSStream xs n
       VBVToNat _ w ->
@@ -605,6 +615,17 @@ lookupSStream (VExtra (SStream f r)) n = do
                    return v
 lookupSStream _ _ = fail "SAWCoreWhat4.What4.lookupSStream: expected Stream"
 
+-- Stream#rec :
+--   (a : sort 0) -> (p : Stream a -> sort 0) ->
+--   ((f : Nat -> a) -> p (MkStream a f)) -> (str : Stream a) -> p str
+streamRecOp :: Sym sym => sym -> SValue sym
+streamRecOp sym =
+  VFun $ \_a -> pure $
+  VFun $ \_p -> pure $
+  vStrictFun $ \f1 -> pure $
+  vStrictFun $ \xs ->
+  do let f = vStrictFun $ \ix -> streamGet sym xs ix
+     apply f1 (ready f)
 
 muxBVal :: forall sym. Sym sym =>
   sym -> SBool sym -> SValue sym -> SValue sym -> IO (SValue sym)
@@ -870,24 +891,26 @@ w4SolveBasic ::
   sym ->
   SharedContext ->
   Map Ident (SPrim sym) {- ^ additional primitives -} ->
-  Map VarIndex (SValue sym) {- ^ bindings for ExtCns values -} ->
+  Map VarIndex (SValue sym) {- ^ bindings for free variables -} ->
   IORef (SymFnCache sym) {- ^ cache for uninterpreted function symbols -} ->
   Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
   IO (SValue sym)
-w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
+w4SolveBasic sym sc addlPrims varMap ref unintSet t =
   do m <- scGetModuleMap sc
-     let extcns (EC (VarName ix x) ty)
-            | Just v <- Map.lookup ix ecMap = return v
+     let variable (VarName ix x) ty
+            | Just v <- Map.lookup ix varMap = return v
             | otherwise = parseUninterpreted sym ref (mkUnintApp (Text.unpack x ++ "_" ++ show ix)) ty
      let uninterpreted nm ty
            | Set.member (nameIndex nm) unintSet =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
-             in Just (extcns (EC vn ty))
+             in Just (variable vn ty)
            | otherwise                          = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
-     cfg <- Sim.evalGlobal m (constMap sym `Map.union` addlPrims) extcns uninterpreted primHandler mux
+     cfg <-
+       Sim.evalGlobal m (constMap sym `Map.union` addlPrims)
+       variable uninterpreted (recursor sym) primHandler mux
      Sim.evalSharedTerm cfg t
 
 
@@ -1101,7 +1124,7 @@ w4SolveAssert :: forall sym.
   IsSymExprBuilder sym =>
   sym ->
   SharedContext ->
-  Map VarIndex (SValue sym) {- ^ bindings for ExtCns values -} ->
+  Map VarIndex (SValue sym) {- ^ bindings for free variables -} ->
   IORef (SymFnCache sym) {- ^ cache for uninterpreted function symbols -} ->
   Set VarIndex {- ^ variables to hold uninterpreted -} ->
   SATAssert ->
@@ -1541,32 +1564,35 @@ w4EvalBasic ::
   SharedContext ->
   ModuleMap ->
   Map Ident (SPrim (B.ExprBuilder n st fs)) {- ^ additional primitives -} ->
-  Map VarIndex (SValue (B.ExprBuilder n st fs)) {- ^ bindings for ExtCns values -} ->
+  Map VarIndex (SValue (B.ExprBuilder n st fs)) {- ^ bindings for free variables -} ->
   IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ cache for uninterpreted function symbols -} ->
   Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
   IO (SValue (B.ExprBuilder n st fs))
-w4EvalBasic sym st sc m addlPrims ecCons ref unintSet t =
-  do let extcns tf (EC (VarName ix nm) ty)
-           | Just v <- Map.lookup ix ecCons = pure v
+w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
+  do let variable tf (VarName ix nm) ty
+           | Just v <- Map.lookup ix varCons = pure v
            | otherwise =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm
                  (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
-     let uninterpreted tf nm ty
+     let variable' tp vn ty = variable (Variable vn tp) vn ty
+     let uninterpreted nm ty
            | Set.member (nameIndex nm) unintSet =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
-             in Just (extcns tf (EC vn ty))
+             in Just (variable (Constant nm) vn ty)
            | otherwise                          = Nothing
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
-     cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted primHandler mux
+     cfg <-
+       Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
+       variable' uninterpreted (recursor sym) primHandler mux
      Sim.evalSharedTerm cfg t
 
 -- | Evaluate a saw-core term to a What4 value for the purposes of
 --   using it as an input for symbolic simulation.  This will evaluate
 --   primitives, but will cancel evaluation and return the associated
---   'NameInfo' if it encounters a constant value with an 'ExtCns'
+--   'NameInfo' if it encounters a constant value with a 'Name'
 --   that is not accepted by the filter.
 w4SimulatorEval ::
   forall n st fs.
@@ -1581,15 +1607,18 @@ w4SimulatorEval ::
   Term {- ^ term to simulate -} ->
   IO (Either NameInfo (SValue (B.ExprBuilder n st fs)))
 w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
-  do let extcns tf (EC (VarName ix nm) ty) =
+  do let variable tf (VarName ix nm) ty =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
-     let uninterpreted _tf nm ty =
+     let uninterpreted nm ty =
           if constantFilter nm ty then Nothing else Just (X.throwIO (NeutralTermEx (nameInfo nm)))
+     let variable' tp vn ty = variable (Variable vn tp) vn ty
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
      res <- X.try $ do
-              cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted primHandler mux
+              cfg <-
+                Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
+                variable' uninterpreted (recursor sym) primHandler mux
               Sim.evalSharedTerm cfg t
      case res of
        Left (NeutralTermEx nmi) -> pure (Left nmi)

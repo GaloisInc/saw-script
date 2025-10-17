@@ -92,6 +92,7 @@ import Prelude hiding (all, foldr, sum)
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Term.Functor
+import SAWCore.Term.Raw
 
 
 -- Definitions -----------------------------------------------------------------
@@ -135,13 +136,13 @@ data CtorArg
   -- context (the first argument to 'RecursiveArgType'), the @pi@ are the
   -- parameters of @d@ (not given here), and the @ei@ are the type indices of
   -- @d@.
-  | RecursiveArg [ExtCns Term] [Term]
+  | RecursiveArg [(VarName, Term)] [Term]
 
 -- | A structure that defines the parameters, arguments, and return type indices
 -- of a constructor.
 data CtorArgStruct =
   CtorArgStruct
-  { ctorParams :: [ExtCns Term],
+  { ctorParams :: [(VarName, Term)],
     -- ^ earlier ctorParams are in scope
     ctorArgs :: [(VarName, CtorArg)],
     -- ^ ctorParams and earlier ctorArgs are in scope
@@ -212,9 +213,9 @@ data DataType =
   DataType
   { dtName :: Name
     -- ^ The name of this datatype
-  , dtParams :: [ExtCns Term]
+  , dtParams :: [(VarName, Term)]
     -- ^ The context of parameters of this datatype
-  , dtIndices :: [ExtCns Term]
+  , dtIndices :: [(VarName, Term)]
     -- ^ The context of indices of this datatype
   , dtSort :: Sort
     -- ^ The universe of this datatype

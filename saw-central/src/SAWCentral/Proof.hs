@@ -157,10 +157,10 @@ import SAWCore.Prelude (scApplyPrelude_False)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
-import SAWCore.Name (DisplayNameEnv, VarName(..), ecShortName)
+import SAWCore.Name (DisplayNameEnv, VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import CryptolSAWCore.TypedTerm
+import SAWCore.Term.Raw
 import SAWCore.FiniteValue (FirstOrderValue)
 import SAWCore.Term.Pretty
   (ppTermWithNames, ppTermContainerWithNames, showTerm, scPrettyTerm)
@@ -168,6 +168,8 @@ import qualified SAWCore.SCTypeCheck as TC
 
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
+
+import CryptolSAWCore.TypedTerm
 
 import What4.ProgramLoc (ProgramLoc)
 
@@ -2012,21 +2014,21 @@ propApply ::
   IO (Maybe [Either Term Prop])
 propApply sc rule goal = applyFirst (asPiLists (unProp rule))
   where
-    applyFirst :: [([ExtCns Term], Term)] -> IO (Maybe [Either Term Prop])
+    applyFirst :: [([(VarName, Term)], Term)] -> IO (Maybe [Either Term Prop])
     applyFirst [] = pure Nothing
     applyFirst ((ruleArgs, ruleConcl) : rest) =
       do result <- scMatch sc ruleArgs ruleConcl (unProp goal)
          case result of
            Nothing -> applyFirst rest
            Just inst ->
-             do let mkNewGoal :: ExtCns Term -> IO (Either Term Prop)
-                    mkNewGoal ec =
-                      case IntMap.lookup (ecVarIndex ec) inst of
+             do let mkNewGoal :: (VarName, Term) -> IO (Either Term Prop)
+                    mkNewGoal (vn, tp) =
+                      case IntMap.lookup (vnIndex vn) inst of
                         Nothing ->
                           -- this argument not solved by unification, so make it a goal
-                          do c0 <- scInstantiateExt sc inst (ecType ec)
+                          do c0 <- scInstantiateExt sc inst tp
                              mp <- termToMaybeProp sc c0
-                             let nm = ecShortName ec
+                             let nm = vnName vn
                              case mp of
                                Nothing ->
                                  fail ("goal_apply: could not find instantiation for " ++ show nm)
@@ -2035,12 +2037,12 @@ propApply sc rule goal = applyFirst (asPiLists (unProp rule))
                           pure (Left tm)
                 Just <$> traverse mkNewGoal ruleArgs
 
-    asPiLists :: Term -> [([ExtCns Term], Term)]
+    asPiLists :: Term -> [([(VarName, Term)], Term)]
     asPiLists t =
       case asPi t of
         Nothing -> [([], t)]
         Just (nm, tp, body) ->
-          [ (EC nm tp : args, concl) | (args, concl) <- asPiLists body ] ++ [([], t)]
+          [ ((nm, tp) : args, concl) | (args, concl) <- asPiLists body ] ++ [([], t)]
 
 
 -- | Attempt to prove a universally quantified goal by introducing a fresh variable

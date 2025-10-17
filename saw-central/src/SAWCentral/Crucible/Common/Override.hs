@@ -111,8 +111,8 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 import           SAWCore.Name (VarName(..), ecShortName)
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
-import           SAWCore.Term.Functor (unwrapTermF)
 import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
+import           SAWCore.Term.Raw (unwrapTermF)
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 
 import qualified Cryptol.Utils.PP as Cryptol (pp)

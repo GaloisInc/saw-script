@@ -181,7 +181,7 @@ import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
 
 -- saw-script
-import SAWCentral.AST (tMono, tTerm)
+import SAWCentral.AST (tMono, tTerm, Rebindable(ReadOnlyVar))
 import SAWCentral.Builtins (ghost_value)
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
@@ -446,7 +446,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           let nmi = llvmNameInfo func_name
 
           extracted_func_const <-
-            io $ scConstant' shared_context nmi extracted_func
+            io $ scDefineConstant shared_context nmi extracted_func
             =<< scTypeOf shared_context extracted_func
           input_terms <- io $ traverse (scVariable shared_context) input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
@@ -488,7 +488,9 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           rw' <-
             liftIO $
             extendEnv shared_context
+              pos
               func_name
+              ReadOnlyVar
               (tMono $ tTerm pos)
               Nothing             -- FUTURE: slot for doc string, could put something here
               (VTerm typed_extracted_func_const)

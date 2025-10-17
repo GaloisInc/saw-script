@@ -1,5 +1,5 @@
 // Trigger the message we get by unifying tuples of mismatched arity.
 
 let x = (1, 2, 3);
-let f (x: (Int, Int, Int, Int)) = x.0;
+let f (xx: (Int, Int, Int, Int)) = xx.0;
 let y = f x;

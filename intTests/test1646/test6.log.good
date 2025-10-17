@@ -1,0 +1,13 @@
+ Loading file "test6.saw"
+ x=a
+ test6.saw:8:16-8:17: Type mismatch.
+    Mismatch of type constructors. Expected: Int but got String
+    test6.saw:8:20-8:21: The type Int arises from the type of this term
+    test6.saw:3:20-3:23: The type String arises from the type of this term
+
+    Expected: Int
+    Found:    String
+
+    within "x" (test6.saw:8:16-8:17)
+
+FAILED

@@ -794,7 +794,7 @@ importPrimitive sc primOpts env n sch
       do t <- importSchema sc env sch
          e <- importExpr sc env expr
          nmi <- importName n
-         scConstant' sc nmi e t
+         scDefineConstant sc nmi e t
 
   -- lookup primitive in the extra primitive lookup table
   | Just nm <- C.asPrim n, Just t <- Map.lookup nm (envPrims env) = return t
@@ -822,7 +822,7 @@ importConstant :: SharedContext -> Env -> C.Name -> C.Schema -> Term -> IO Term
 importConstant sc env n sch rhs = do
   nmi <- importName n
   t <- importSchema sc env sch
-  scConstant' sc nmi rhs t
+  scDefineConstant sc nmi rhs t
 
 allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 allPrims = prelPrims <> arrayPrims <> floatPrims <> suiteBPrims <> primeECPrims
@@ -1509,7 +1509,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
         rhs' <- case declOpts of
                   TopLevelDeclGroup _ ->
                     do nmi <- importName nm
-                       scConstant' sc nmi rhs t'
+                       scDefineConstant sc nmi rhs t'
                   NestedDeclGroup ->
                     return rhs
         return env0 { envE = Map.insert nm rhs' (envE env0)
@@ -1585,7 +1585,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                case declOpts of
                  TopLevelDeclGroup _ ->
                    do nmi <- importName (C.dName d)
-                      scConstant' sc nmi r t
+                      scDefineConstant sc nmi r t
                  NestedDeclGroup -> return r
       rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
@@ -2315,7 +2315,7 @@ genCodeForEnum sc env nt ctors =
 
   tl_rhs   <- addTypeAbstractions =<< scMakeListSort represType_eachCtor
   tl_type  <- scFunAll sc tyParamsKinds scListSort
-  scInsertDef sc tl_ident tl_type tl_rhs
+  tl_tm    <- scDefineConstant sc (ModuleIdentifier tl_ident) tl_rhs tl_type
 
   -------------------------------------------------------------
   -- Create the definition for the SAWCore sum (to which we map the
@@ -2326,12 +2326,11 @@ genCodeForEnum sc env nt ctors =
   --
 
   -- the Typelist(tl) applied to the type parameters.
-  tl_applied <- scGlobalApply sc tl_ident tyParamsVars
+  tl_applied <- scApplyAll sc tl_tm tyParamsVars
 
   sumTy_type <- scFunAll sc tyParamsKinds sort0
   sumTy_rhs  <- addTypeAbstractions =<< scEithersV tl_applied
-
-  scInsertDef sc sumTy_ident sumTy_type sumTy_rhs
+  sumTy_tm   <- scDefineConstant sc (ModuleIdentifier sumTy_ident) sumTy_rhs sumTy_type
 
   -------------------------------------------------------------
   -- Create a `case` function specialized to the enum type.
@@ -2353,7 +2352,7 @@ genCodeForEnum sc env nt ctors =
   --
   -- Using the same syntax cheats we did above.
 
-  sumTy_applied <- scGlobalApply sc sumTy_ident tyParamsVars
+  sumTy_applied <- scApplyAll sc sumTy_tm tyParamsVars
 
   let mkAltFuncTypes b = mapM (\ts->scFunAll sc ts b) argTypes_eachCtor
   case_type <-
@@ -2393,7 +2392,7 @@ genCodeForEnum sc env nt ctors =
         =<< sc_eithersV b
         =<< scMakeFunsTo b (zip represType_eachCtor funcDefs)
 
-  scInsertDef sc case_ident case_type case_rhs
+  _ <- scDefineConstant sc (ModuleIdentifier case_ident) case_rhs case_type
 
   assertSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
 
