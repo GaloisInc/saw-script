@@ -1190,9 +1190,8 @@ matchArg opts sc cc cs prepost md = go False []
               case actual of
                 MIRVal (ArrayShape _ _ elemSz len elemShp) ag
                   | fromIntegral len == length zs ->
-                    let elems = arrayAgElemShapes elemSz elemShp len in
-                    void $ accessMirAggregate' sym elems zs ag $
-                      \_off _sz shp rv z -> go inCast [] (MIRVal shp rv) z
+                    void $ accessMirAggregateArray' sym elemSz elemShp zs ag $
+                      \_off rv z -> go inCast [] (MIRVal elemShp rv) z
 
                 _ -> fail_
 
@@ -1894,9 +1893,8 @@ valueToSC sym fail_ tval (MIRVal shp val) =
             liftIO (scTupleReduced sc terms)
     (Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz len elemShp)
       | toInteger len == n
-      -> do let elems = arrayAgElemShapes elemSz elemShp len
-            terms <- accessMirAggregate sym elems val $
-              \_off _sz shp' val' -> valueToSC sym fail_ cryty (MIRVal shp' val')
+      -> do terms <- accessMirAggregateArray sym elemSz elemShp len val $
+              \_off val' -> valueToSC sym fail_ cryty (MIRVal elemShp val')
             t <- shapeToTerm sc elemShp
             liftIO (scVectorReduced sc t terms)
     _ ->
