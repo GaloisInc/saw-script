@@ -773,11 +773,14 @@ resolveSetupVal mcc env tyenv nameEnv val =
           | RefShape ptrTy
                      (Mir.TyArray elemTy len)
                      mutbl
-                     (Mir.MirVectorRepr elemTpr)
+                     Mir.MirAggregateRepr
               <- xsShp ->
             if i >= 0 && i < len
               then do
                 let elemPtrTy = ptrKindToTy (tyToPtrKind ptrTy) elemTy mutbl
+                Some elemTpr <- case Mir.tyToRepr col elemTy of
+                  Left err -> panic "resolveSetupValue" ["Unsupported type", Text.pack err]
+                  Right x -> return x
                 i_sym <- usizeBvLit sym i
                 MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
                   Mir.subindexMirRefIO bak iTypes elemTpr xsVal i_sym
@@ -921,8 +924,11 @@ resolveSetupVal mcc env tyenv nameEnv val =
       let sym = backendGetSym bak
       MIRVal arrRefShp arrRefVal <- resolveSetupVal mcc env tyenv nameEnv arrRef
       case arrRefShp of
-        RefShape _ arrTy mut (Mir.MirVectorRepr elemTpr) -> do
+        RefShape _ arrTy mut Mir.MirAggregateRepr -> do
           (sliceTy, elemTy, len) <- arrayToSliceTys sliceInfo mut arrTy
+          Some elemTpr <- case Mir.tyToRepr col elemTy of
+            Left err -> panic "resolveSetupSliceFromArrayRef" ["Unsupported type", Text.pack err]
+            Right x -> return x
           zeroBV <- usizeBvLit sym 0
           refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
@@ -1179,7 +1185,7 @@ indexMirArray sym i elemSz elemShp (Mir.MirAggregate _totalSize m) = MaybeT $ pu
   return $ MIRVal elemShp rv
 
 -- | Create a symbolic @usize@ from an 'Int'.
-usizeBvLit :: Sym -> Int -> IO (W4.SymBV Sym Mir.SizeBits)
+usizeBvLit :: W4.IsSymExprBuilder sym => sym -> Int -> IO (W4.SymBV sym Mir.SizeBits)
 usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger
 
 -- | Check if two 'MIRVal's are equal.
@@ -1556,15 +1562,16 @@ doAlloc cc globals (Some ma) =
        Left err -> panic "doAlloc" ["Unsupported type", Text.pack err]
        Right x -> return x
 
-     -- Create an uninitialized `MirVector_PartialVector` of the allocation's
+     -- Create an uninitialized `MirAggregate` of the allocation's
      -- length and return a pointer to its first element.
      -- See Note [Allocating multiple MIR values] for more details.
-     let vecRepr = Mir.MirVectorRepr tpr
-     ref <- Mir.newMirRefIO sym halloc vecRepr
+     ref <- Mir.newMirRefIO sym halloc Mir.MirAggregateRepr
 
      len_sym <- usizeBvLit sym (ma^.maLen)
-     vec <- Mir.mirVector_uninitIO bak len_sym
-     globals' <- Mir.writeMirRefIO bak globals iTypes vecRepr ref vec
+     -- TODO: hardcoded size=1 (implied in conversion of `len_sym` to `sz_sym`
+     let sz_sym = len_sym
+     ag <- Mir.mirAggregate_uninitIO bak sz_sym
+     globals' <- Mir.writeMirRefIO bak globals iTypes Mir.MirAggregateRepr ref ag
 
      zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
      ptr <- Mir.subindexMirRefIO bak iTypes tpr ref zero
@@ -1585,8 +1592,8 @@ MIR allocations have a type and a length. The length is the number of values of
 that type to allocate contiguously. The `newMirRef` family of functions in
 crucible-mir allocates and returns a reference to the space for a *single* value
 of the given type. So when we need to potentially allocate multiple values, we
-instead call `newMirRef` to allocate a single `MirVector`, which itself contains
-space for many elements. All elements of the vector start out as uninitialized
+instead call `newMirRef` to allocate a single `MirAggregate`, which itself contains
+space for many elements. All elements of the aggregate start out as uninitialized
 because the memory is uninitialized. Then we get the reference to the first
 element, and return that. This is the same way that crucible's custom allocator
 works, in Mir.TransCustom.allocate.
