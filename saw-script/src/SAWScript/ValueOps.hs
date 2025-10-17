@@ -45,8 +45,9 @@ module SAWScript.ValueOps (
 
 import Prelude hiding (fail)
 
+import Control.Monad (zipWithM)
 import Control.Monad.Catch (MonadThrow(..), try)
-import Control.Monad.State (get, gets, modify, put, zipWithM)
+import Control.Monad.State (get, gets, modify, put)
 import qualified Control.Exception as X
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (local)
