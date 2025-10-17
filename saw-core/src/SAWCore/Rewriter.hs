@@ -537,7 +537,9 @@ asFreshPiList sc t =
   case R.asPi t of
     Nothing -> pure ([], t)
     Just (x, t1, t2) ->
-      do x' <- scFreshVarName sc (vnName x)
+      do -- never use "_" as the base name
+         let basename = if vnName x == "_" then "_x" else vnName x
+         x' <- scFreshVarName sc basename
          var <- scVariable sc (EC x' t1)
          t2' <- scInstantiateExt sc (IntMap.singleton (vnIndex x) var) t2
          (ctx, body) <- asFreshPiList sc t2'
