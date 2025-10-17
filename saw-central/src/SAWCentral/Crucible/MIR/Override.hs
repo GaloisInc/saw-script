@@ -30,7 +30,7 @@ module SAWCentral.Crucible.MIR.Override
 import qualified Control.Applicative as Applicative
 import qualified Control.Exception as X
 import Control.Lens
-import Control.Monad (filterM, foldM, forM, forM_, unless, void, zipWithM)
+import Control.Monad (filterM, forM, forM_, unless, void, zipWithM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT(..))
 import qualified Data.BitVector.Sized as BV
@@ -1054,24 +1054,17 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
            -- this case should always match.
            Mir.TyArray _ len -> do
              let elemSz = 1      -- TODO: hardcoded size=1
-             len_sym <- liftIO $ usizeBvLit sym len
-             ag <- liftIO $ Mir.mirAggregate_uninitIO bak len_sym
-             ag' <- liftIO $ foldM
-               (\ag' i -> do
+             ag <- liftIO $ buildMirAggregateArray sym elemSz innerShp [0 .. len - 1] $
+               \_off i -> do
                  i_sym <- usizeBvLit sym i
                  referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
-                 val' <- Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
-                 let off = fromIntegral i * elemSz
-                 Mir.mirAggregate_setIO bak off elemSz referenceInnerTpr val' ag')
-               ag [0 .. len - 1]
+                 Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
              let arrShp = ArrayShape referentArrayMirTy
                                      referenceInnerMirTy
                                      elemSz
                                      (fromIntegral len)
                                      innerShp
-             matchArg opts sc cc spec prepost md
-               (MIRVal arrShp ag')
-               referentArray
+             matchArg opts sc cc spec prepost md (MIRVal arrShp ag) referentArray
            _ ->
              panic "learnPointsTo"
                [ "Unexpected non-array SetupValue as MirPointsToMultiTarget:"
