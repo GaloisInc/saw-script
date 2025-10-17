@@ -253,7 +253,7 @@ import SAWCentral.Yosys.State (YosysSequential)
 import SAWCore.Name (ecShortName, DisplayNameEnv, emptyDisplayNameEnv)
 import CryptolSAWCore.CryptolEnv as CEnv
 import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
-import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
+import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, ctxtRewriteRule, listRules)
 import SAWCore.SharedTerm
 import qualified SAWCore.Term.Pretty as SAWCorePP
 import CryptolSAWCore.TypedTerm
@@ -630,9 +630,11 @@ showSimpset opts ss =
     ppRule r =
       PP.pretty '*' PP.<+>
       (PP.nest 2 $ PP.fillSep
-       [ ppTerm (lhsRewriteRule r)
-       , PP.pretty '=' PP.<+> ppTerm (rhsRewriteRule r) ])
-    ppTerm t = SAWCorePP.ppTerm opts t
+       [ ppTerm vars (lhsRewriteRule r)
+       , PP.pretty '=' PP.<+> ppTerm vars (rhsRewriteRule r) ])
+      -- ppTermInCtx expects innermost variable first, so reverse
+      where vars = reverse (map fst (ctxtRewriteRule r))
+    ppTerm vars t = SAWCorePP.ppTermInCtx opts vars t
 
 -- XXX the precedence in here needs to be cleaned up
 showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
