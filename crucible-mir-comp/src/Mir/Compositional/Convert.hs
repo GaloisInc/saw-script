@@ -173,7 +173,7 @@ termToReg sym varMap term shp0 = do
         (TupleShape _ elems, _) -> do
             svs <- reverse <$> tupleToListRev (length elems) [] sv
             buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
-        (ArrayShape _ _ sz len shp', SAW.VVector thunks) -> do
+        (ArrayShape _ _ sz shp' len, SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
             when (length svs /= fromIntegral len) $ fail $
                 "termToReg: type error: expected an array of length " ++ show len ++
@@ -182,7 +182,7 @@ termToReg sym varMap term shp0 = do
         -- Special case: saw-core/cryptol doesn't distinguish bitvectors from
         -- vectors of booleans, so it may return `VWord` (bitvector) where an
         -- array of `bool` is expected.
-        (ArrayShape (M.TyArray _ _) _ sz len shp'@(PrimShape _ BaseBoolRepr), SAW.VWord (W4.DBV e))
+        (ArrayShape (M.TyArray _ _) _ sz shp'@(PrimShape _ BaseBoolRepr) len, SAW.VWord (W4.DBV e))
           | Just (Some w) <- someNat len,
             Just LeqProof <- testLeq (knownNat @1) w,
             Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> do
@@ -339,7 +339,7 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
         (AdaptTuple as, TupleShape _ elems, ag) -> do
             terms <- accessMirAggregate' sym elems as ag $ \_off _sz shp' rv' a -> go a shp' rv'
             liftIO $ SAW.scTuple sc terms
-        (AdaptArray a, ArrayShape _ _ sz len shp', ag) -> do
+        (AdaptArray a, ArrayShape _ _ sz shp' len, ag) -> do
             terms <- accessMirAggregateArray sym sz shp' len ag $ \_off rv' -> go a shp' rv'
             tyTerm <- shapeToTerm' sc a shp'
             liftIO $ SAW.scVector sc tyTerm terms
@@ -399,7 +399,7 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
         (TupleShape _ elems, ag) -> do
             terms <- accessMirAggregate sym elems ag $ \_off _sz shp' rv' -> go shp' rv'
             liftIO $ SAW.scTuple sc terms
-        (ArrayShape _ _ sz len shp', ag) -> do
+        (ArrayShape _ _ sz shp' len, ag) -> do
             terms <- accessMirAggregateArray sym sz shp' len ag $ \_off rv' -> go shp' rv'
             tyTerm <- shapeToTerm sc shp'
             liftIO $ SAW.scVector sc tyTerm terms

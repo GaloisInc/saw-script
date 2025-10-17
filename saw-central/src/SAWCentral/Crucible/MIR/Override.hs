@@ -1063,8 +1063,8 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
              let arrShp = ArrayShape referentArrayMirTy
                                      referenceInnerMirTy
                                      elemSz
-                                     (fromIntegral len)
                                      innerShp
+                                     (fromIntegral len)
              matchArg opts sc cc spec prepost md (MIRVal arrShp ag) referentArray
            _ ->
              panic "learnPointsTo"
@@ -1220,7 +1220,7 @@ matchArg opts sc cc cs prepost md = go False []
             -- match arrays point-wise
             [] ->
               case actual of
-                MIRVal (ArrayShape _ _ elemSz len elemShp) ag
+                MIRVal (ArrayShape _ _ elemSz elemShp len) ag
                   | fromIntegral len == length zs ->
                     void $ accessMirAggregateArray' sym elemSz elemShp len zs ag $
                       \_off rv z -> go inCast [] (MIRVal elemShp rv) z
@@ -1923,7 +1923,7 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -> do terms <- accessMirAggregate' sym elems tys val $
               \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val')
             liftIO (scTupleReduced sc terms)
-    (Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz len elemShp)
+    (Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz elemShp len)
       | toInteger len == n
       -> do terms <- accessMirAggregateArray sym elemSz elemShp len val $
               \_off val' -> valueToSC sym fail_ cryty (MIRVal elemShp val')
@@ -1966,7 +1966,7 @@ applyProjToMIRVal ::
 applyProjToMIRVal _ [] mv = pure mv
 applyProjToMIRVal sym (MatchIndex i : projStack) (MIRVal shp vec) =
   case shp of
-    ArrayShape _ _ elemSz _ elemShp ->
+    ArrayShape _ _ elemSz elemShp _ ->
       applyProjToMIRVal sym projStack =<< indexMirArray sym i elemSz elemShp vec
     _ ->
       Applicative.empty
