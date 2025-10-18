@@ -667,13 +667,13 @@ span.spaces    { background: white }
 <span class="lineno">  648 </span>ppTerm :: PPS.Opts -&gt; Term -&gt; PPS.Doc
 <span class="lineno">  649 </span><span class="decl"><span class="istickedoff">ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv</span></span>
 <span class="lineno">  650 </span>
-<span class="lineno">  651 </span>-- | Like 'ppTerm', but also supply a context of bound names, where the most
-<span class="lineno">  652 </span>-- recently-bound variable is listed first in the context
+<span class="lineno">  651 </span>-- | Like 'ppTerm', but also supply a context of bound names, where
+<span class="lineno">  652 </span>-- the earliest-bound variable is listed first in the context.
 <span class="lineno">  653 </span>ppTermInCtx :: PPS.Opts -&gt; [VarName] -&gt; Term -&gt; PPS.Doc
 <span class="lineno">  654 </span><span class="decl"><span class="nottickedoff">ppTermInCtx opts ctx trm =</span>
 <span class="lineno">  655 </span><span class="spaces">  </span><span class="nottickedoff">runPPM opts emptyDisplayNameEnv $</span>
 <span class="lineno">  656 </span><span class="spaces">  </span><span class="nottickedoff">-- reserve names from ctx first, so that they get priority naming</span>
-<span class="lineno">  657 </span><span class="spaces">  </span><span class="nottickedoff">withVarNames (reverse ctx) $</span>
+<span class="lineno">  657 </span><span class="spaces">  </span><span class="nottickedoff">withVarNames ctx $</span>
 <span class="lineno">  658 </span><span class="spaces">  </span><span class="nottickedoff">-- reserve other free variables next, so they are disambiguated</span>
 <span class="lineno">  659 </span><span class="spaces">  </span><span class="nottickedoff">withVarNames (Set.toList (termVarNames trm) \\ ctx) $</span>
 <span class="lineno">  660 </span><span class="spaces">  </span><span class="nottickedoff">ppTermWithMemoTable PrecTerm True trm</span></span>
@@ -683,14 +683,14 @@ span.spaces    { background: white }
 <span class="lineno">  664 </span><span class="decl"><span class="istickedoff">scPrettyTerm opts t =</span>
 <span class="lineno">  665 </span><span class="spaces">  </span><span class="istickedoff">PPS.render opts $ ppTerm opts t</span></span>
 <span class="lineno">  666 </span>
-<span class="lineno">  667 </span>-- | Like 'scPrettyTerm', but also supply a context of bound names, where the
-<span class="lineno">  668 </span>-- most recently-bound variable is listed first in the context
+<span class="lineno">  667 </span>-- | Like 'scPrettyTerm', but also supply a context of bound names,
+<span class="lineno">  668 </span>-- where the earliest-bound variable is listed first in the context.
 <span class="lineno">  669 </span>scPrettyTermInCtx :: PPS.Opts -&gt; [VarName] -&gt; Term -&gt; String
 <span class="lineno">  670 </span><span class="decl"><span class="istickedoff">scPrettyTermInCtx opts ctx trm =</span>
 <span class="lineno">  671 </span><span class="spaces">  </span><span class="istickedoff">PPS.render opts $</span>
 <span class="lineno">  672 </span><span class="spaces">  </span><span class="istickedoff">runPPM opts emptyDisplayNameEnv $</span>
 <span class="lineno">  673 </span><span class="spaces">  </span><span class="istickedoff">-- reserve names from ctx first, so that they get priority naming</span>
-<span class="lineno">  674 </span><span class="spaces">  </span><span class="istickedoff">withVarNames (reverse ctx) $</span>
+<span class="lineno">  674 </span><span class="spaces">  </span><span class="istickedoff">withVarNames ctx $</span>
 <span class="lineno">  675 </span><span class="spaces">  </span><span class="istickedoff">-- reserve other free variables next, so they are disambiguated</span>
 <span class="lineno">  676 </span><span class="spaces">  </span><span class="istickedoff">withVarNames (Set.toList (termVarNames trm) \\ ctx) $</span>
 <span class="lineno">  677 </span><span class="spaces">  </span><span class="istickedoff">ppTermWithMemoTable PrecTerm False trm</span></span>
