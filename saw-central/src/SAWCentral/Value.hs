@@ -632,8 +632,7 @@ showSimpset opts ss =
       (PP.nest 2 $ PP.fillSep
        [ ppTerm vars (lhsRewriteRule r)
        , PP.pretty '=' PP.<+> ppTerm vars (rhsRewriteRule r) ])
-      -- ppTermInCtx expects innermost variable first, so reverse
-      where vars = reverse (map fst (ctxtRewriteRule r))
+      where vars = map fst (ctxtRewriteRule r)
     ppTerm vars t = SAWCorePP.ppTermInCtx opts vars t
 
 -- XXX the precedence in here needs to be cleaned up

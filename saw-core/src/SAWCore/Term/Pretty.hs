@@ -648,13 +648,13 @@ ppTermInBinder prec (VarName i basename) trm =
 ppTerm :: PPS.Opts -> Term -> PPS.Doc
 ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv
 
--- | Like 'ppTerm', but also supply a context of bound names, where the most
--- recently-bound variable is listed first in the context
+-- | Like 'ppTerm', but also supply a context of bound names, where
+-- the earliest-bound variable is listed first in the context.
 ppTermInCtx :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
 ppTermInCtx opts ctx trm =
   runPPM opts emptyDisplayNameEnv $
   -- reserve names from ctx first, so that they get priority naming
-  withVarNames (reverse ctx) $
+  withVarNames ctx $
   -- reserve other free variables next, so they are disambiguated
   withVarNames (Set.toList (termVarNames trm) \\ ctx) $
   ppTermWithMemoTable PrecTerm True trm
@@ -664,14 +664,14 @@ scPrettyTerm :: PPS.Opts -> Term -> String
 scPrettyTerm opts t =
   PPS.render opts $ ppTerm opts t
 
--- | Like 'scPrettyTerm', but also supply a context of bound names, where the
--- most recently-bound variable is listed first in the context
+-- | Like 'scPrettyTerm', but also supply a context of bound names,
+-- where the earliest-bound variable is listed first in the context.
 scPrettyTermInCtx :: PPS.Opts -> [VarName] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   PPS.render opts $
   runPPM opts emptyDisplayNameEnv $
   -- reserve names from ctx first, so that they get priority naming
-  withVarNames (reverse ctx) $
+  withVarNames ctx $
   -- reserve other free variables next, so they are disambiguated
   withVarNames (Set.toList (termVarNames trm) \\ ctx) $
   ppTermWithMemoTable PrecTerm False trm
