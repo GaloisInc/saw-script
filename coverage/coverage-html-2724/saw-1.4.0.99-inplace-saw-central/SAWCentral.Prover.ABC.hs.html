@@ -163,16 +163,16 @@ span.spaces    { background: white }
 <span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">[cex] -&gt;</span>
 <span class="lineno">  145 </span><span class="spaces">      </span><span class="istickedoff">case words cex of</span>
 <span class="lineno">  146 </span><span class="spaces">        </span><span class="istickedoff">-- Queries with no variables will result in a blank line of output.</span>
-<span class="lineno">  147 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; pure $ liftCexBB tys []</span>
+<span class="lineno">  147 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">pure $ liftCexBB tys []</span></span>
 <span class="lineno">  148 </span><span class="spaces">        </span><span class="istickedoff">[bits] -&gt; liftCexBB tys &lt;$&gt; mapM bitToBool bits</span>
 <span class="lineno">  149 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;invalid counterexample line: &quot; ++ cex</span></span>
 <span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">-- Output from `write_aiger_cex`</span>
 <span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">[_, cex] -&gt;</span>
-<span class="lineno">  152 </span><span class="spaces">      </span><span class="istickedoff">case words cex of</span>
-<span class="lineno">  153 </span><span class="spaces">        </span><span class="istickedoff">-- Queries with no variables will result in an empty vector of output.</span>
-<span class="lineno">  154 </span><span class="spaces">        </span><span class="istickedoff">[_] -&gt; pure $ liftCexBB tys []</span>
-<span class="lineno">  155 </span><span class="spaces">        </span><span class="istickedoff">[bits, _] -&gt; <span class="nottickedoff">liftLECexBB tys &lt;$&gt; mapM bitToBool bits</span></span>
-<span class="lineno">  156 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;invalid counterexample line: &quot; ++ cex</span></span>
+<span class="lineno">  152 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case words cex of</span></span>
+<span class="lineno">  153 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- Queries with no variables will result in an empty vector of output.</span></span>
+<span class="lineno">  154 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[_] -&gt; pure $ liftCexBB tys []</span></span>
+<span class="lineno">  155 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[bits, _] -&gt; liftLECexBB tys &lt;$&gt; mapM bitToBool bits</span></span>
+<span class="lineno">  156 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; fail $ &quot;invalid counterexample line: &quot; ++ cex</span></span>
 <span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;invalid counterexample text: &quot; ++ text</span></span>
 <span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff">bitToBool '0' = return False</span>

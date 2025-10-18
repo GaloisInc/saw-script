@@ -467,7 +467,7 @@ span.spaces    { background: white }
 <span class="lineno">  448 </span><span class="spaces">      </span><span class="istickedoff">ppRecord True &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; ppTerm' <span class="nottickedoff">PrecTerm</span> t) alist</span>
 <span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">RecordValue alist -&gt;</span>
 <span class="lineno">  450 </span><span class="spaces">      </span><span class="istickedoff">ppRecord False &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; ppTerm' <span class="nottickedoff">PrecTerm</span> t) alist</span>
-<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">RecordProj e fld -&gt; ppProj fld &lt;$&gt; ppTerm' PrecArg e</span>
+<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">RecordProj e fld -&gt; ppProj fld &lt;$&gt; ppTerm' <span class="nottickedoff">PrecArg</span> e</span>
 <span class="lineno">  452 </span><span class="spaces">    </span><span class="istickedoff">Sort s h -&gt; return (viaShow h &lt;&gt; viaShow s)</span>
 <span class="lineno">  453 </span><span class="spaces">    </span><span class="istickedoff">NatLit i -&gt; prettyNat &lt;$&gt; (ppOpts &lt;$&gt; ask) &lt;*&gt; return (toInteger i)</span>
 <span class="lineno">  454 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue (asBoolType -&gt; Just _) args</span>

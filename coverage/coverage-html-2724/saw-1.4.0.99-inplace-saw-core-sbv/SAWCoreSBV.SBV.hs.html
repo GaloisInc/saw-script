@@ -193,7 +193,7 @@ span.spaces    { background: white }
 <span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntSub = pure2 svMinus</span>
 <span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMul = pure2 svTimes</span>
 <span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntDiv = pure2 svIntDiv</span>
-<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMod = pure2 svIntMod</span>
+<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMod = <span class="nottickedoff">pure2 svIntMod</span></span>
 <span class="lineno">  178 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntNeg = pure1 svUNeg</span>
 <span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntAbs = <span class="nottickedoff">pure1 svAbs</span></span>
 <span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntEq  = pure2 svEqual</span>
@@ -639,10 +639,10 @@ span.spaces    { background: white }
 <span class="lineno">  620 </span>-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
 <span class="lineno">  621 </span>-- do some work to get the desired semantics.
 <span class="lineno">  622 </span>svIntMod :: SVal -&gt; SVal -&gt; SVal
-<span class="lineno">  623 </span><span class="decl"><span class="istickedoff">svIntMod a b = svSymbolicMerge <span class="nottickedoff">KUnbounded</span> <span class="nottickedoff">True</span> p (svRem a b) (svUNeg (svRem (svUNeg a) (svUNeg b)))</span>
-<span class="lineno">  624 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  625 </span><span class="spaces">    </span><span class="istickedoff">z = svInteger KUnbounded 0</span>
-<span class="lineno">  626 </span><span class="spaces">    </span><span class="istickedoff">p = svLessThan z b</span></span>
+<span class="lineno">  623 </span><span class="decl"><span class="nottickedoff">svIntMod a b = svSymbolicMerge KUnbounded True p (svRem a b) (svUNeg (svRem (svUNeg a) (svUNeg b)))</span>
+<span class="lineno">  624 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  625 </span><span class="spaces">    </span><span class="nottickedoff">z = svInteger KUnbounded 0</span>
+<span class="lineno">  626 </span><span class="spaces">    </span><span class="nottickedoff">p = svLessThan z b</span></span>
 <span class="lineno">  627 </span>
 <span class="lineno">  628 </span>------------------------------------------------------------
 <span class="lineno">  629 </span>-- Ite ops
