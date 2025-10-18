@@ -57,8 +57,8 @@ replBody mbBatch begin =
 
   enableSubshell m =
     REPL $ \refs ->
-      do let ro' = (eTopLevelRO refs){ roSubshell = subshell (runInputT replSettings (withInterrupt loop)) }
-         unREPL m refs{ eTopLevelRO = ro' }
+      do let ro' = (rTopLevelRO refs){ roSubshell = subshell (runInputT replSettings (withInterrupt loop)) }
+         unREPL m refs{ rTopLevelRO = ro' }
 
   loop = do
     prompt <- MTL.lift getPrompt

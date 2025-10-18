@@ -18,6 +18,8 @@ import Control.Lens ( Lens', view, lens, over )
 import Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import Data.ByteString (ByteString)
 import Data.Kind (Type)
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Parameterized.Pair ( Pair(..) )
@@ -44,6 +46,7 @@ import Mir.Generator (RustModule)
 import Mir.Intrinsics (MIR)
 import Mir.Mir (Adt)
 
+import qualified SAWSupport.ScopedMap as ScopedMap
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import qualified SAWCentral.Trace as Trace (empty)
@@ -63,7 +66,7 @@ import SAWCentral.Options (processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), SAWSimpset,JavaCodebase(..))
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset,JavaCodebase(..), CryptolScopeStack(..))
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
@@ -243,12 +246,11 @@ initialState readFileFn =
                 , roProofSubshell = fail "SAW server does not support subshells."
                 }
          rw = TopLevelRW
-                { rwValueInfo = mempty
-                , rwTypeInfo = mempty
-                , rwCryptol = cenv
+                { rwEnviron = Environ ScopedMap.empty ScopedMap.empty
+                , rwRebindables = M.empty
+                , rwCryptol = CryptolScopeStack (cenv :| [])
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty
-                , rwLocalEnv = []
                 , rwPPOpts = PPS.defaultOpts
                 , rwSolverCache = mb_cache
                 , rwTheoremDB = emptyTheoremDB
@@ -458,7 +460,10 @@ getServerValEither (SAWEnv serverEnv) n =
 bindCryptolVar :: Text -> TypedTerm -> Argo.Command SAWState ()
 bindCryptolVar x t =
   do Argo.modifyState $ over sawTopLevelRW $ \rw ->
-       rw { rwCryptol = bindTypedTerm (Cryptol.mkIdent x, t) (rwCryptol rw) }
+       let CryptolScopeStack (cenv :| cenvs) = rwCryptol rw
+           cenv' = bindTypedTerm (Cryptol.mkIdent x, t) cenv
+       in
+       rw { rwCryptol = CryptolScopeStack (cenv' :| cenvs) }
 
 getJVMClass :: ServerName -> Argo.Command SAWState JSS.Class
 getJVMClass n =

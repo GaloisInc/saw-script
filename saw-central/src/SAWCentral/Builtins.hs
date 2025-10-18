@@ -31,7 +31,9 @@ import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.IntMap as IntMap
-import Data.List (isPrefixOf, isInfixOf, sort)
+import Data.List (isPrefixOf, isInfixOf, sort, intersperse)
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import qualified Data.Map as Map
 import Data.Parameterized.Classes (KnownRepr(..))
 import Data.Set (Set)
@@ -60,6 +62,8 @@ import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
 
 -- saw-support
+import qualified SAWSupport.ScopedMap as ScopedMap
+--import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText)
 
 -- saw-core
@@ -558,7 +562,7 @@ resolveNameIO sc cenv nm =
 -- exception is thrown.
 resolveName :: SharedContext -> Text -> TopLevel [VarIndex]
 resolveName sc nm =
-  do cenv <- rwCryptol <$> getTopLevelRW
+  do cenv <- SV.getCryptolEnv
      scnms <- io (resolveNameIO sc cenv nm)
      case scnms of
        [] -> fail $ Text.unpack $ "Could not resolve name: " <> nm
@@ -1590,7 +1594,7 @@ check_term :: TypedTerm -> TopLevel ()
 check_term tt = do
   sc <- getSharedContext
   opts <- getTopLevelPPOpts
-  cenv <- rwCryptol <$> getTopLevelRW
+  cenv <- SV.getCryptolEnv
   let t = ttTerm tt
   ty <- io $ scTypeCheckError sc t
   expectedTy <-
@@ -1700,14 +1704,32 @@ cexEvalFn sc args tm = do
 
 envCmd :: TopLevel ()
 envCmd = do
-  rw <- SV.getMergedEnv
-  let avail = rwPrimsAvail rw
-      vals = rwValueInfo rw
-      keep (_x, (_pos, lc, _rb, _ty, _v, _doc)) = Set.member lc avail
-      vals' = filter keep $ Map.assocs vals
-      printit (x, (_pos, _lc, _rb, ty, _v, _doc)) = x <> " : " <> PPS.pShowText ty
   opts <- getOptions
-  io $ sequence_ [ printOutLn opts Info (Text.unpack $ printit item) | item <- vals' ]
+  avail <- gets rwPrimsAvail
+  SV.Environ varenv _tyenv <- gets rwEnviron
+  rbenv <- gets rwRebindables
+
+  -- print rebindables first if there are any
+  unless (Map.null rbenv) $ do
+      io $ printOutLn opts Info $ "Rebindable globals:"
+      io $ printOutLn opts Info $ ""
+      let printRB (x, (_pos, ty, _v)) = do
+              let str = x <> " : rebindable " <> PPS.pShowText ty
+              printOutLn opts Info $ Text.unpack str
+      io $ mapM_ printRB $ Map.assocs rbenv
+
+  let printItem (x, (_pos, _lc, ty, _v, _doc)) =
+          printOutLn opts Info $ Text.unpack (x <> " : " <> PPS.pShowText ty)
+      -- Print only the visible objects
+      keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
+      -- Insert a blank line in the output where there's a scope boundary
+      printScope mItems = case mItems of
+          Nothing -> printOutLn opts Info ""
+          Just items -> mapM_ printItem $ filter keep items
+      -- Reverse the list of scopes so the innermost prints last,
+      -- because that's what people will expect to see.
+      itemses = reverse $ ScopedMap.scopedAssocs varenv
+  io $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
 exitPrim :: Integer -> IO ()
 exitPrim code = Exit.exitWith exitCode
@@ -1766,7 +1788,7 @@ eval_bool t = do
 eval_int :: TypedTerm -> TopLevel Integer
 eval_int t = do
   sc <- getSharedContext
-  cenv <- fmap rwCryptol getTopLevelRW
+  cenv <- SV.getCryptolEnv
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
@@ -1825,7 +1847,7 @@ term_theories unints t = do
 default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do
   sc <- getSharedContext
-  cenv <- fmap rwCryptol getTopLevelRW
+  cenv <- SV.getCryptolEnv
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   opts <- getOptions
   io $ defaultTypedTerm opts sc cfg tt
@@ -2072,55 +2094,65 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
     parsePrim (n, i, s) = do
       sc <- getSharedContext
       rw <- getTopLevelRW
-      let cenv = rwCryptol rw
+      let SV.CryptolScopeStack (cenv :| cenvs) = rwCryptol rw
+      unless (null cenvs) $ do
+          fail "cryptol_prims is an import operation and may not be done in a nested block"
       let mname = C.packModName ["Prims"]
       let ?fileReader = StrictBS.readFile
       (n', cenv') <- io $ CEnv.declareName cenv mname n
       s' <- io $ CEnv.parseSchema cenv' (noLoc s)
       t' <- io $ scGlobalDef sc i
-      putTopLevelRW $ rw { rwCryptol = cenv' }
+      putTopLevelRW $ rw { rwCryptol = SV.CryptolScopeStack (cenv' :| cenvs) }
       return (n', TypedTerm (TypedTermSchema s') t')
 
 cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CryptolModule
 cryptol_load fileReader path = do
   sc <- getSharedContext
   rw <- getTopLevelRW
-  let ce = rwCryptol rw
+  let SV.CryptolScopeStack (ce :| ces) = rwCryptol rw
+  unless (null ces) $ do
+      fail "cryptol_load is an import operation and is not permitted in nested blocks"
   let ?fileReader = fileReader
   (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
-  putTopLevelRW $ rw { rwCryptol = ce' }
+  putTopLevelRW $ rw { rwCryptol = SV.CryptolScopeStack (ce' :| ces) }
   return m
 
+-- XXX: This is kind of a top-level style operation; should it be
+-- prohibited in nested scopes? (Note that while we could update the
+-- whole stack of Cryptol environments here, so the operation escapes
+-- the current scope, we won't be able to hunt down and update copies
+-- of the environment closed in with lambdas and do-blocks, so that's
+-- probably a bad idea.)
 cryptol_add_path :: FilePath -> TopLevel ()
 cryptol_add_path path =
   do rw <- getTopLevelRW
-     let ce = rwCryptol rw
+     let SV.CryptolScopeStack (ce :| ces) = rwCryptol rw
      let me = CEnv.eModuleEnv ce
      let me' = me { C.meSearchPath = path : C.meSearchPath me }
      let ce' = ce { CEnv.eModuleEnv = me' }
-     let rw' = rw { rwCryptol = ce' }
+     let rw' = rw { rwCryptol = SV.CryptolScopeStack (ce' :| ces) }
      putTopLevelRW rw'
 
 cryptol_add_prim :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim mnm nm trm =
   do rw <- getTopLevelRW
-     let env = rwCryptol rw
+     let SV.CryptolScopeStack (env :| envs) = rwCryptol rw
      let prim_name =
            C.PrimIdent (C.textToModName mnm) nm
      let env' =
            env { CEnv.ePrims =
                    Map.insert prim_name (ttTerm trm) (CEnv.ePrims env) }
-     putTopLevelRW (rw { rwCryptol = env' })
+     putTopLevelRW (rw { rwCryptol = SV.CryptolScopeStack (env' :| envs) })
 
 cryptol_add_prim_type :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim_type mnm nm tp =
   do rw <- getTopLevelRW
-     let env = rwCryptol rw
+     let SV.CryptolScopeStack (env :| envs) = rwCryptol rw
      let prim_name =
            C.PrimIdent (C.textToModName mnm) nm
      let env' = env { CEnv.ePrimTypes =
                         Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes env) }
-     putTopLevelRW (rw { rwCryptol = env' })
+     putTopLevelRW (rw { rwCryptol = SV.CryptolScopeStack (env' :| envs) })
 
 -- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
 importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->

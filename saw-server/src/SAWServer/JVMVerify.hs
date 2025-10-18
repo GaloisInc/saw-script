@@ -9,12 +9,14 @@ module SAWServer.JVMVerify
 
 import Prelude hiding (mod)
 import Control.Lens
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import qualified Data.Map as Map
 
 import SAWCentral.Crucible.JVM.Builtins
     ( jvm_unsafe_assume_spec, jvm_verify )
 import SAWCentral.JavaExpr (JavaType(..))
-import SAWCentral.Value (rwCryptol)
+import SAWCentral.Value (rwCryptol, CryptolScopeStack(..))
 
 import qualified Argo
 import qualified Argo.Doc as Doc
@@ -51,7 +53,7 @@ jvmVerifyAssume mode (VerifyParams className fun lemmaNames checkSat contract sc
             state <- Argo.getState
             cls <- getJVMClass className
             let bic = view sawBIC state
-                cenv = rwCryptol (view sawTopLevelRW state)
+                CryptolScopeStack (cenv :| _) = rwCryptol (view sawTopLevelRW state)
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts
             setup <- compileJVMContract fileReader bic ghostEnv cenv <$> traverse getCryptolExpr contract

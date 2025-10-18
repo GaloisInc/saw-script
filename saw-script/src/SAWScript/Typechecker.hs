@@ -41,7 +41,7 @@ import SAWSupport.Pretty (pShow)
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCentral.AST
-import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), isDeprecated)
+import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars'(..), isDeprecated)
 import SAWScript.Panic (panic)
 import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
@@ -416,11 +416,11 @@ applyCurrentSubst t = do
 --
 -- The type t has already been checked, so it's ok to panic if it refers
 -- to something in the typedef collection that's not visible.
-resolveCurrentTypedefs :: SubstituteTyVars t => t -> TI t
+resolveCurrentTypedefs :: SubstituteTyVars' t => t -> TI t
 resolveCurrentTypedefs t = do
     avail <- asks primsAvail
     s <- gets tyEnv
-    return $ substituteTyVars avail s t
+    return $ substituteTyVars' avail s t
 
 -- Get the unification vars that are used in the current variable typing
 -- and named type environments.
@@ -1156,7 +1156,7 @@ inferExpr (ln, expr) = case expr of
                 at <- getFreshTyVar apos
                 return (a, (Current, ConcreteType at))
           substs <- mapM once as
-          let t' = substituteTyVars avail (M.fromList substs) t
+          let t' = substituteTyVars' avail (M.fromList substs) t
           return (Var pos x, t')
          | otherwise -> do
           recordError pos $ "Inaccessible variable: " ++ show x ++ " (" ++ show pos ++ ")"
@@ -1307,7 +1307,7 @@ addTypedef :: Name -> Type -> TI ()
 addTypedef a ty = do
     avail <- asks primsAvail
     env <- gets tyEnv
-    let ty' = substituteTyVars avail env ty
+    let ty' = substituteTyVars' avail env ty
         env' = M.insert a (Current, ConcreteType ty') env
     modify (\rw -> rw { tyEnv = env' })
 
@@ -1997,7 +1997,7 @@ typesMatch avail tenv schema'found schema'expected =
               return (a, (Current, ConcreteType ty'a))
         substs <- mapM generate as
         -- Substitute them into the type
-        let ty' = substituteTyVars avail (M.fromList substs) ty
+        let ty' = substituteTyVars' avail (M.fromList substs) ty
         return ty'
       match = do
         -- Unpack the schemas and check if they match

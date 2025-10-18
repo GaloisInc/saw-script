@@ -13,6 +13,8 @@ import Control.Exception (Exception)
 import Control.Lens ( view )
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import qualified Data.ByteString as B
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 
@@ -30,7 +32,7 @@ import Cryptol.TypeCheck.Solver.SMT (withSolver)
 import Cryptol.Utils.Ident (interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP ( defaultPPOpts, pp )
-import SAWCentral.Value (biSharedContext, TopLevelRW(..))
+import SAWCentral.Value (biSharedContext, TopLevelRW(..), CryptolScopeStack(..))
 import CryptolSAWCore.CryptolEnv
     ( getAllIfaceDecls,
       getNamingEnv,
@@ -49,7 +51,7 @@ import SAWServer.SAWServer
 
 getTypedTerm :: Expression -> Argo.Command SAWState TypedTerm
 getTypedTerm inputExpr =
-  do cenv <- rwCryptol . view sawTopLevelRW <$> Argo.getState
+  do CryptolScopeStack (cenv :| _) <- rwCryptol . view sawTopLevelRW <$> Argo.getState
      fileReader <- Argo.getFileReader
      expr <- getCryptolExpr inputExpr
      sc <- biSharedContext . view sawBIC <$> Argo.getState

@@ -51,17 +51,16 @@ module SAWCentral.Value (
     showsPrecValue,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
     evaluateTypedTerm,
-    -- used by SAWScript.Interpreter (and in LocalEnv)
-    LocalBinding(..),
-    -- used by SAWScript.Interpreter, and appears in TopLevelRO
-    LocalEnv,
-    -- used by SAWScript.Interpreter, and in mergeLocalEnv
-    addTypedef,
-    -- used by SAWScript.REPL.Monad, and by getMergedEnv
-    mergeLocalEnv,
-    -- used by SAWCentral.Builtins, SAWScript.Interpreter, and by getCryptolEnv
-    getMergedEnv, getMergedEnv',
-    -- used by SAWCentral.Crucible.LLVM.FFI
+    -- used by SAWScript.Search, SAWScript.Typechecker
+    TyEnv, VarEnv,
+    -- used by SAWCentral.Builtins, SAWScript.ValueOps, SAWScript.Interpreter,
+    -- SAWScript.REPL.Command, SAWScript.REPL.Monad, SAWServer.SAWServer
+    Environ(..),
+    -- used by SAWScript.Interpretere
+    pushScope, popScope,
+    -- used by SAWCentral.Builtins
+    CryptolScopeStack(..),
+    -- used by SAWCentral.Crucible.LLVM.FFI, SAWCentral.Builtins, SAWScript.Interpreter
     getCryptolEnv,
     -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
     --    SAWServer.SAWServer
@@ -85,8 +84,6 @@ module SAWCentral.Value (
     pushTraceFrames, popTraceFrames,
     -- used by SAWScript.Interpreter
     RefChain,
-    -- used by SAWScript.Interpreter plus appears in getMergedEnv
-    getLocalEnv,
     -- used in various places in SAWCentral, and in selected builtins in
     -- SAWScript.Interpreter
     getPosition,
@@ -133,8 +130,10 @@ module SAWCentral.Value (
     -- used by SAWCentral.Crucible.LLVM.Builtins, SAWScript.Interpreter
     --    ... the use in LLVM is the abusive insertion done by llvm_compositional_extract
     --    XXX: we're going to need to clean that up
-    --    (also appears in mergeLocalEnv)
     extendEnv,
+    extendEnvMulti,
+    -- used by SAWScript.Interpreter
+    addTypedef,
     -- used by various places in SAWCentral.Crucible, SAWCentral.Builtins
     --    XXX: it wraps TopLevel rather than being part of it; is that necessary?
     CrucibleSetup,
@@ -203,8 +202,9 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
-import Data.Foldable(foldrM)
 import Data.List.Extra ( dropEnd )
+--import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty( (:|) ))
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
@@ -218,8 +218,11 @@ import System.FilePath((</>))
 
 import qualified Data.AIG as AIG
 
+import qualified SAWSupport.ScopedMap as ScopedMap
+import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
 
+import SAWCentral.Panic (panic)
 import SAWCentral.Trace (Trace)
 import qualified SAWCentral.Trace as Trace
 
@@ -499,7 +502,7 @@ data Value
   | VArray [Value]
   | VTuple [Value]
   | VRecord (Map SS.Name Value)
-  | VLambda LocalEnv (Maybe SS.Name) SS.Pattern SS.Expr
+  | VLambda Environ (Maybe SS.Name) SS.Pattern SS.Expr
     -- | Function-shaped value that's a Haskell-level function. This
     --   is how builtins appear. Includes the name of the builtin and
     --   the list of arguments applied so far, as a Seq to allow
@@ -513,7 +516,7 @@ data Value
     -- | Returned value in unspecified monad.
   | VReturn SS.Pos RefChain Value
     -- | Not-yet-executed do-block in unspecified monad.
-  | VDo RefChain LocalEnv ([SS.Stmt], SS.Expr)
+  | VDo RefChain Environ ([SS.Stmt], SS.Expr)
     -- | Single monadic bind in unspecified monad.
     --
     --   This exists only to support the "for" builtin; see notes there
@@ -735,60 +738,88 @@ evaluateTypedTerm _sc (TypedTerm tp _) =
 
 -- TopLevel Monad --------------------------------------------------------------
 
--- | Entry in the interpreter's local (as opposed to global) variable
---   environment.
+-- | The variable environment: a map from variable names to:
+--      - the definition position
+--      - the lifecycle setting (experimental/current/deprecated/etc)
+--      - the type scheme
+--      - the value
+--      - the help text if any
+type VarEnv = ScopedMap SS.Name (SS.Pos, SS.PrimitiveLifecycle,
+                                 SS.Schema, Value, Maybe [Text])
+
+-- | The type environment: a map from type names to:
+--      - the lifecycle setting (experimental/current/deprecated/etc)
+--      - the expansion, which might be another type (this is how
+--        typedefs/type aliases appear) or "abstract" (this is how
+--        builtin types that aren't special cases in the AST appear)
+type TyEnv = ScopedMap SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
+
+-- | Type for the ordinary interpreter environment.
 --
---   The Maybe [Text] field is the help text for the value, if any.
---   Note that currently there's no way I know of to actually provide
---   help text for a local variable, nor is there any way to get at
---   one with the REPL :help command to print it, but the interpreter's
---   plumbing demands that the field exist...
+--   There's one environment that maps variable names to values, and
+--   one that maps type names to types. Both get closed in with
+--   lambdas and do-blocks at the appropriate times.
 --
-data LocalBinding
-  = LocalLet SS.Pos SS.Name SS.Rebindable SS.Schema (Maybe [Text]) Value
-  | LocalTypedef SS.Name SS.Type
- deriving (Show)
+--   Note that rebindable variables are sold separately. This is so
+--   they don't get closed in; references to rebindable variables
+--   always retrieve the most recent version.
+data Environ = Environ {
+    eVarEnv :: VarEnv,
+    eTyEnv :: TyEnv
+}
 
-type LocalEnv = [LocalBinding]
+-- | The Cryptol environment. We maintain a stack of Cryptol
+--   environments and push/pop them as we enter and leave scopes;
+--   otherwise the Cryptol environment doesn't track SAWScript scopes
+--   and horribly confusing wrong things happen.
+newtype CryptolScopeStack = CryptolScopeStack (NonEmpty CEnv.CryptolEnv)
 
--- Note that the expansion type should have already been through the
--- typechecker, so it's ok to panic if it turns out to be broken.
-addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
-addTypedef name ty rw =
-  let primsAvail = rwPrimsAvail rw
-      typeInfo = rwTypeInfo rw
-      ty' = SS.substituteTyVars primsAvail typeInfo ty
-      typeInfo' = M.insert name (SS.Current, SS.ConcreteType ty') typeInfo
-  in
-  rw { rwTypeInfo = typeInfo' }
+-- | The extra environment for rebindable globals.
+--
+--   Note: because no builtins are rebindable, there are no lifecycle
+--   or help text fields. There is, currently at least, no way to
+--   populate those for non-builtins.
+type RebindableEnv = Map SS.Name (SS.Pos, SS.Schema, Value)
 
-mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
-mergeLocalEnv sc env rw = foldrM addBinding rw env
-  where addBinding (LocalLet pos x rb ty md v) = extendEnv sc pos x rb ty md v
-        addBinding (LocalTypedef n ty) = pure . addTypedef n ty
+-- | Enter a scope.
+pushScope :: TopLevel ()
+pushScope = do
+    Environ varenv tyenv <- gets rwEnviron
+    cryenv <- gets rwCryptol
+    let varenv' = ScopedMap.push varenv
+        tyenv' = ScopedMap.push tyenv
+        cryenv' = cryptolPush cryenv
+    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv', rwCryptol = cryenv' })
 
--- XXX: it is not sane to both be in the TopLevel monad and return a TopLevelRW
--- (especially since the one returned is specifically not the same as the one
--- in the monad state)
-getMergedEnv :: TopLevel TopLevelRW
-getMergedEnv =
-  do sc <- getSharedContext
-     env <- getLocalEnv
-     rw <- getTopLevelRW
-     liftIO $ mergeLocalEnv sc env rw
+-- | Leave a scope. This will panic if you try to leave the last scope;
+--   pushes and pops should be matched.
+popScope  :: TopLevel ()
+popScope = do
+    Environ varenv tyenv <- gets rwEnviron
+    cryenv <- gets rwCryptol
+    let varenv' = ScopedMap.pop varenv
+        tyenv' = ScopedMap.pop tyenv
+        cryenv' = cryptolPop cryenv
+    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv', rwCryptol = cryenv' })
 
--- Variant of getMergedEnv that takes an explicit local part
--- (this avoids trying to use it with withLocalEnv, which doesn't work)
-getMergedEnv' :: LocalEnv -> TopLevel TopLevelRW
-getMergedEnv' env = do
-    sc <- getSharedContext
-    rw <- getTopLevelRW
-    liftIO $ mergeLocalEnv sc env rw
 
 getCryptolEnv :: TopLevel CEnv.CryptolEnv
 getCryptolEnv = do
-  env <- getMergedEnv
-  return $ rwCryptol env
+    CryptolScopeStack (e :| _) <- gets rwCryptol
+    return e
+
+cryptolPush :: CryptolScopeStack -> CryptolScopeStack
+cryptolPush (CryptolScopeStack (e :| es)) =
+    -- Each entry is the whole environment, so duplicate the top entry
+    CryptolScopeStack (e :| e : es)
+
+cryptolPop :: CryptolScopeStack -> CryptolScopeStack
+cryptolPop (CryptolScopeStack (_ :| es)) =
+    -- Discard the top
+    case es of
+        [] -> panic "cryptolPop" ["Cryptol environment scope stack ran out"]
+        e : es' -> CryptolScopeStack (e :| es')
+
 
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
@@ -822,25 +853,12 @@ data JavaCodebase =
 data TopLevelRW =
   TopLevelRW
   {
-    -- | The variable environment: a map from variable names to:
-    --      - the definition position
-    --      - the lifecycle setting (experimental/current/deprecated/etc)
-    --      - whether the binding is rebindable
-    --      - the type scheme
-    --      - the value
-    --      - the help text if any
-    rwValueInfo  :: Map SS.Name (SS.Pos, SS.PrimitiveLifecycle, SS.Rebindable,
-                                 SS.Schema, Value, Maybe [Text])
-
-    -- | The type environment: a map from type names to:
-    --      - the lifecycle setting (experimental/current/deprecated/etc)
-    --      - the expansion, which might be another type (this is how
-    --        typedefs/type aliases appear) or "abstract" (this is how
-    --        builtin types that aren't special cases in the AST appear)
-  , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
+    -- | The variable and type naming environment.
+    rwEnviron :: Environ
+  , rwRebindables :: RebindableEnv
 
     -- | The Cryptol naming environment.
-  , rwCryptol    :: CEnv.CryptolEnv
+  , rwCryptol    :: CryptolScopeStack
 
     -- | The current execution position. This is only valid when the
     --   interpreter is calling out into saw-central to execute a
@@ -851,8 +869,6 @@ data TopLevelRW =
 
     -- | The current stack trace. The most recent frame is at the front.
   , rwStackTrace :: Trace
-
-  , rwLocalEnv   :: LocalEnv
 
   , rwJavaCodebase  :: JavaCodebase -- ^ Current state of Java sub-system.
 
@@ -997,10 +1013,6 @@ popTraceFrame =
 popTraceFrames :: [a] -> TopLevel ()
 popTraceFrames frames =
   mapM_ (\_ -> popTraceFrame) frames
-
-getLocalEnv :: TopLevel LocalEnv
-getLocalEnv =
-  gets rwLocalEnv
 
 -- | Get the current execution position.
 getPosition :: TopLevel SS.Pos
@@ -1157,12 +1169,34 @@ addJVMTrans trans = do
   let jvmt = rwJVMTrans rw
   putTopLevelRW ( rw { rwJVMTrans = trans <> jvmt })
 
-extendEnv ::
-  SharedContext ->
-  SS.Pos -> SS.Name -> SS.Rebindable -> SS.Schema -> Maybe [Text] -> Value ->
-  TopLevelRW -> IO TopLevelRW
-extendEnv sc pos name rb ty doc v rw =
-  do ce' <-
+extendEnv :: SS.Pos -> SS.Name -> SS.Rebindable -> SS.Schema -> Maybe [Text] -> Value -> TopLevel ()
+extendEnv pos name rb ty doc v = do
+     sc <- gets rwSharedContext
+     let ident = T.mkIdent name
+         modname = T.packModName [name]
+
+     -- Update the SAWScript environment.
+     Environ varenv tyenv <- gets rwEnviron
+     rbenv <- gets rwRebindables
+     let (varenv', rbenv') = case rb of
+           SS.ReadOnlyVar ->
+             -- If we replace a rebindable variable at the top level with a
+             -- readonly one, the readonly version in varenv will hide it
+             -- ever after. We ought to remove it from rbenv; however, it's
+             -- not easy to know here whether we're at the top level or not.
+             -- FUTURE: maybe this will become easier in the long run.
+             let ve' = ScopedMap.insert name (pos, SS.Current, ty, v, doc) varenv in
+             (ve', rbenv)
+           SS.RebindableVar ->
+             -- The typechecker restricts this to happen only at the
+             -- top level and only if any existing variable is already
+             -- rebindable, so we don't have to update varenv.
+             let re' = M.insert name (pos, ty, v) rbenv in
+             (varenv, re')
+
+     -- Mirror the value into the Cryptol environment if appropriate.
+     CryptolScopeStack (ce :| ces) <- gets rwCryptol
+     ce' <-
        case v of
          VTerm t ->
            pure $ CEnv.bindTypedTerm (ident, t) ce
@@ -1173,20 +1207,72 @@ extendEnv sc pos name rb ty doc v rw =
          VCryptolModule m ->
            pure $ CEnv.bindCryptolModule (modname, m) ce
          VString s ->
-           do tt <- typedTermOfString sc (Text.unpack s)
+           do tt <- io $ typedTermOfString sc (Text.unpack s)
               pure $ CEnv.bindTypedTerm (ident, tt) ce
          VBool b ->
-           do tt <- typedTermOfBool sc b
+           do tt <- io $ typedTermOfBool sc b
               pure $ CEnv.bindTypedTerm (ident, tt) ce
          _ ->
            pure ce
-     let valenv = rwValueInfo rw
-         valenv' = M.insert name (pos, SS.Current, rb, ty, v, doc) valenv
-     pure $ rw { rwValueInfo = valenv', rwCryptol = ce' }
-  where
-    ident = T.mkIdent name
-    modname = T.packModName [name]
-    ce = rwCryptol rw
+
+     -- Drop the new bits into place.
+     modify (\rw -> rw {
+         rwCryptol = CryptolScopeStack (ce' :| ces),
+         rwEnviron = Environ varenv' tyenv,
+         rwRebindables = rbenv'
+     })
+
+extendEnvMulti :: [(SS.Pos, SS.Name, SS.Rebindable, SS.Schema, Maybe [Text], Environ -> Value)] -> TopLevel ()
+extendEnvMulti bindings = do
+
+     -- Update the SAWScript environment.
+     Environ varenv tyenv <- gets rwEnviron
+
+     -- Insert all the bindings at once, and feed the final resulting
+     -- interpreter environment into each value. This circular
+     -- definition only works because of laziness and it's only legal
+     -- when the pieces are in a single let-block.
+     --
+     -- Only allow lambda values because that's the only use case
+     -- (functions in mutually recursive "rec" sets) and it lets us
+     -- ignore the Cryptol environment.
+     --
+     -- Be sure to insert v' (rather than v) so the panic check is
+     -- actually performed.
+     let insert (pos, name, rb, ty, doc, fv) tmpenv =
+             let v = fv environ'
+                 v' = case v of
+                     VLambda{} -> v
+                     _ ->
+                         panic "extendEnvMulti" [
+                             "Non-lambda value: " <> Text.pack (show v),
+                             "Source position: " <> Text.pack (show pos)
+                         ]
+                 v'' = case rb of
+                     SS.ReadOnlyVar -> v'
+                     SS.RebindableVar ->
+                         -- "rec" declarations can't be rebindable
+                         panic "extendEnvMulti" [
+                             "Rebindable variable: " <> name,
+                             "Source position: " <> Text.pack (show pos)
+                         ]
+             in
+             ScopedMap.insert name (pos, SS.Current, ty, v'', doc) tmpenv
+         varenv' = foldr insert varenv bindings
+         environ' = Environ varenv' tyenv
+
+     -- Drop the new bits into place.
+     modify (\rw -> rw { rwEnviron = environ' })
+
+-- Note that the expansion type should have already been through the
+-- typechecker, so it's ok to panic if it turns out to be broken.
+addTypedef :: SS.Name -> SS.Type -> TopLevel ()
+addTypedef name ty = do
+    avail <- gets rwPrimsAvail
+    Environ varenv tyenv <- gets rwEnviron
+    let ty' = SS.substituteTyVars avail tyenv ty
+        tyenv' = ScopedMap.insert name (SS.Current, SS.ConcreteType ty') tyenv
+    modify (\rw -> rw { rwEnviron = Environ varenv tyenv' })
 
 typedTermOfString :: SharedContext -> String -> IO TypedTerm
 typedTermOfString sc str =
