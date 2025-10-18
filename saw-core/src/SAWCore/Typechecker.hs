@@ -28,11 +28,13 @@ module SAWCore.Typechecker
   , tcInsertModule
   ) where
 
-import Control.Monad (forM, forM_, void, unless)
+import Control.Monad (forM, forM_, mzero, void, unless)
+import Control.Monad.Trans.Maybe
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), asks, lift, local)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -58,6 +60,7 @@ import SAWCore.Parser.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
 import SAWCore.Term.Pretty (showTerm)
+import SAWCore.Term.Raw (freeVars)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import qualified SAWCore.Term.Certified as SC
@@ -339,8 +342,10 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      -- Step 2: assign types to the bound variables of the definition, by
      -- peeling off the pi-abstraction variables in the type annotation. Any
      -- remaining body of the pi-type is the required type for the def body.
+     matchResult <-
+       runMaybeT $ matchPiWithNames (map Un.termVarLocalName vars) def_tp_whnf
      (ctx, req_body_tp) <-
-       case matchPiWithNames (map Un.termVarLocalName vars) def_tp_whnf of
+       case matchResult of
          Just x -> return x
          Nothing ->
              throwTCError $
@@ -483,12 +488,21 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
 
 -- | Pattern match a nested pi-abstraction, like 'asPiList', but only match as
 -- far as the supplied list of variables, and use them as the new names
-matchPiWithNames :: [LocalName] -> Term -> Maybe ([(LocalName, VarName, Term)], Term)
-matchPiWithNames [] tp = return ([], tp)
-matchPiWithNames (var : vars) (asPi -> Just (nm, arg_tp, body_tp)) =
-  do (ctx,body) <- matchPiWithNames vars body_tp
-     return ((var, nm, arg_tp) : ctx,body)
-matchPiWithNames _ _ = Nothing
+matchPiWithNames ::
+  [LocalName] -> Term -> MaybeT CheckM ([(LocalName, VarName, Term)], Term)
+matchPiWithNames [] tp = pure ([], tp)
+matchPiWithNames (var : vars) tp =
+  case asPi tp of
+    Nothing -> mzero
+    Just (x, arg_tp, body_tp) ->
+      do vn <-
+           if IntSet.member (vnIndex x) (freeVars body_tp)
+           then -- dependent function type: use name from Pi type
+             pure x
+           else -- non-dependent function: use 'var' as base name
+             lift $ lift $ TC.liftTCM scFreshVarName var
+         (ctx, body) <- matchPiWithNames vars body_tp
+         pure ((var, vn, arg_tp) : ctx, body)
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given type. This throws away the memoization table while
