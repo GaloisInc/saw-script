@@ -241,7 +241,7 @@ initCryptolEnv sc = do
   let refPrims = Map.fromList
                   [ (prelPrim (identText (MN.nameIdent nm)), T.EWhere (T.EVar nm) refDecls)
                   | nm <- nms ]
-  let cryEnv0 = C.emptyEnv{ C.envRefPrims = refPrims }
+  let cryEnv0 = C.emptyEnv { C.envRefPrims = refPrims }
 
   -- Generate SAWCore translations for all values in scope
   termEnv <- genTermEnv sc modEnv3 cryEnv0
@@ -479,10 +479,10 @@ translateDeclGroups sc env dgs =
      let names = map T.dName decls
      let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
-     return env{ eExtraNames = foldr addName (eExtraNames env) names
-               , eExtraTypes = Map.union (eExtraTypes env) newTypes
-               , eTermEnv    = C.envE cryEnv'
-               }
+     return env { eExtraNames = foldr addName (eExtraNames env) names
+                , eExtraTypes = Map.union (eExtraTypes env) newTypes
+                , eTermEnv    = C.envE cryEnv'
+                }
 
 ---- Misc Exports --------------------------------------------------------------
 
@@ -490,8 +490,8 @@ combineCryptolEnv :: CryptolEnv -> CryptolEnv -> IO CryptolEnv
 combineCryptolEnv chkEnv newEnv =
   do let newMEnv = eModuleEnv newEnv
      let chkMEnv = eModuleEnv chkEnv
-     let menv' = chkMEnv{ ME.meNameSeeds = ME.meNameSeeds newMEnv }
-     return chkEnv{ eModuleEnv = menv' }
+     let menv' = chkMEnv { ME.meNameSeeds = ME.meNameSeeds newMEnv }
+     return chkEnv { eModuleEnv = menv' }
 
 
 ---- Types and functions for CryptolModule & ExtCryptolModule ------------------
@@ -660,9 +660,9 @@ bindExtCryptolModule (modName, ecm) =
 bindLoadedModule ::
   (P.ModName, P.Located C.ModName) -> CryptolEnv -> CryptolEnv
 bindLoadedModule (asName, origName) env =
-  env{eImports = mkImport PublicAndPrivate origName (Just asName) Nothing
-               : eImports env
-     }
+  env {eImports = mkImport PublicAndPrivate origName (Just asName) Nothing
+                : eImports env
+      }
 
 -- | bindCryptolModule - when we have a `cryptol_prims ()` created
 --   object, add the `CryptolModule` to the relevant maps in the
@@ -780,10 +780,10 @@ loadAndTranslateModule sc env src =
           return (C.envE newCryEnv)
 
      return ( m
-            , env{ eModuleEnv = modEnv'
-                 , eTermEnv   = newTermEnv
-                 , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
-                 }
+            , env { eModuleEnv = modEnv'
+                  , eTermEnv   = newTermEnv
+                  , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
+                  }
             )
 
 checkNotParameterized :: T.Module -> IO ()
@@ -839,7 +839,7 @@ importCryptolModule sc env src as vis imps =
   do
   (mod', env') <- loadAndTranslateModule sc env src
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
-  return $ env' {eImports= import' : eImports env }
+  return $ env' {eImports = import' : eImports env }
 
 mkImport :: ImportVisibility
          -> P.Located C.ModName
