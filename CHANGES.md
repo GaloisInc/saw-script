@@ -102,7 +102,7 @@ This release supports [version
   Accordingly, the second and third `String` arguments to
   `write_coq_cryptol_primitives_for_sawcore` have been removed.
 
-* The behavior of `cryptol_load` has changed, previously when we had
+* The behavior of `cryptol_load` has changed; previously when we had
   this
 
         A <- cryptol_load "A1.cry" -- A1::** are added to {{A::**}}

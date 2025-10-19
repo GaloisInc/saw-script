@@ -7,9 +7,9 @@ Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE LambdaCase #-}
 
 module CryptolSAWCore.CryptolEnv
   ( ImportVisibility(..)
@@ -331,7 +331,7 @@ getNamingEnvForImport modEnv (vis, imprt) =
   $ computeNamingEnv lm vis
 
   where
-  modName ::C.ModName
+  modName :: C.ModName
   modName = P.thing $ T.iModule imprt
 
   lm = case ME.lookupModule modName modEnv of
@@ -501,18 +501,30 @@ combineCryptolEnv chkEnv newEnv =
 --   whether this module came directly from a constructed
 --   `CryptolModule` or whether it came from parsing a Cryptol module
 --   from filesystem (in which case it is loaded).
+--
+--
 data ExtCryptolModule =
     -- | source is parsed/loaded
     ECM_LoadedModule
-        { ecm_name :: P.Located C.ModName
-        , ecm_show :: String -- ^ how we show this on SAWScript CLI,
-                             --   We can't look at state to compute show,
-                             --   thus this (albeit adhoc).
-        }
+        (P.Located C.ModName)
+        String      -- ^ how we show this on SAWScript CLI.
 
     -- | source is internal/constructed (e.g., via cryptol_prims)
-  | ECM_CryptolModule {ecm_cm :: CryptolModule}
+  | ECM_CryptolModule  CryptolModule
 
+-- | create the string needed for display in the CLI.
+--
+--  - FIXME: This function, with the ECM_LoadedModule constructor, are
+--    a bit ad hoc!  Currently `ExtCrytpolModule` is exposed to the
+--    CLI *and* requires a way to show this type to the user (as
+--    implemented here) to support the user interface.  As the state
+--    isn't available when we want to display this value, we compute
+--    the "display" String when we construct `ExtCryptolModule` values.
+--
+--    The best solution is to implement Issue #2680 (Add `:cbrowse`) in
+--    order to both improve the user interface and remove this awkward code.
+--    Implementing #2680 will also address Issue #2700.
+--
 showExtCryptolModule :: ExtCryptolModule -> String
 showExtCryptolModule =
   \case
@@ -607,15 +619,35 @@ mkCryptolModule m env =
              (eTermEnv env)
         )
 
--- | bindExtCryptolModule - ad hoc function/hook that allows for
---   extending the Cryptol environment with the names in a Cryptol
---   module, represented here by a `ExtCryptolModule`.
+-- | bindExtCryptolModule - add extra bindings to the Cryptol
+--     environment {{-}}, this happens when an `ExtCryptolModule` is
+--     bound in the SAWScript code.  (This may be referred to as a
+--     "magic bind").
 --
---   NOTE RE CALLS TO THIS: Three command line variants get us here:
+--   NOTE RE CALLS TO THIS: Three SAWScript variants get us here:
 --      > D <- cryptol_load "PATH"
+--
+--    which results in a call to `bindLoadedModule`.
+--    And each of these
+--
 --      > x <- return (cryptol_prims ())
 --      > let x = cryptol_prims ()
 --
+--    will result in calling `bindCryptolModule`.
+--
+-- NOTE:
+--  - The `ExtCryptolModule` datatype and these functions are a bit
+--    adhoc.
+--  - Ideally thse would go away with further improvements to the
+--    external interface and corresponding implementation changes.
+--    - See #2569.
+--    - Re `bindCryptolModule` below
+--      - It is more general than what is needed.
+--      - It is somewhat duplicating functionality that we already have with
+--        `importCryptolModule`, this could go away in the future.
+--
+--  - See also the discusion of `cryptol_load` in CHANGES.md.
+
 bindExtCryptolModule ::
   (P.ModName, ExtCryptolModule) -> CryptolEnv -> CryptolEnv
 bindExtCryptolModule (modName, ecm) =
@@ -623,21 +655,18 @@ bindExtCryptolModule (modName, ecm) =
     ECM_CryptolModule cm   -> bindCryptolModule (modName, cm)
     ECM_LoadedModule  nm _ -> bindLoadedModule  (modName, nm)
 
+-- | bindLoadedModule - when we have a `cryptol_load` created object,
+-- add the module into the import list.
 bindLoadedModule ::
   (P.ModName, P.Located C.ModName) -> CryptolEnv -> CryptolEnv
 bindLoadedModule (asName, origName) env =
-  env{eImports= mkImport PublicAndPrivate origName (Just asName) Nothing
-              : eImports env
+  env{eImports = mkImport PublicAndPrivate origName (Just asName) Nothing
+               : eImports env
      }
 
--- | bindCryptolModule - binding when we have the ECM_CryptolModule side.
---
--- NOTE:
---  - this code is duplicating functionality that we already have with
---    `importCryptolModule`.  We would like to have just one piece of
---    code that computes the names (i.e., have just "one source of
---    truth" here).
---
+-- | bindCryptolModule - when we have a `cryptol_prims ()` created
+--   object, add the `CryptolModule` to the relevant maps in the
+--   `CryptolEnv` See `bindExtCryptolModule` above.
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
   env { eExtraNames = flip (foldr addName) (Map.keys tm') $
@@ -817,13 +846,15 @@ mkImport :: ImportVisibility
          -> Maybe C.ModName
          -> Maybe T.ImportSpec
          -> (ImportVisibility, T.Import)
-mkImport vis nm as imps = (vis, P.Import { T.iModule= nm
-                                         , T.iAs    = as
-                                         , T.iSpec  = imps
-                                         , T.iInst  = Nothing
-                                         , T.iDoc   = Nothing
-                                         }
-                          )
+mkImport vis nm as imps =
+    let im = P.Import { T.iModule = nm
+                      , T.iAs     = as
+                      , T.iSpec   = imps
+                      , T.iInst   = Nothing
+                      , T.iDoc    = Nothing
+                      }
+    in
+    (vis, im)
 
 
 ---- Binding -------------------------------------------------------------------
