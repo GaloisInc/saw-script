@@ -2,18 +2,18 @@ module D where
 import B
 import C
 
-d00 = 2000 + b + c
+d00 = 2000 + b + c  // 2000 + 12 + 102 = 2114
 d01 = 5 + D2::d2
 
 type DTySy = [32]
 
 submodule D2 where
-  d2 = d00 + 10000
+  d2 = d00 + 10000  // 12114
 
   type D2TySy = [32]
 
   submodule D3 where
-  d3 = d00 + d2 + 1
+  d3 = d00 + d2 + 1  // 14229
 
   type D3TySy = [32]
 

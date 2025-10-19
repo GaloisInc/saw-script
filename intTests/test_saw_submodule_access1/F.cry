@@ -1,21 +1,54 @@
 module F where
 import B
 import C
+import B as E1::E2     // N.B.
 
-top0  = 2000 + b + c
-topd2 = 5  + D3::d2
-topd3 = 10 + D3::D4::d3
+top0 = 2114 : [32]
+top1 = 1 + E1::E2::b   // 1+12 = 13
+top2 = 1 + D3::d3      // 1+15 = 16
+top3 = 1 + D3::D4::d4  // 1+36 = 37
 
 d00 : [32]
-d00 = 1 // let's conflict with D.cry
+d00 = 1   // let's conflict with D.cry (for other tests)
+
+type TopU64 = [64]
+
+enum TestEnum0 = A0 | B0
+
+private
+  top_pri : [32]
+  top_pri = 5
+
+  e1 = A0 : TestEnum0
 
 submodule D3 where
-  d2   = 10000 + top0
-  d3D2 =     1 + D4::d3
-  d2'  =     1 + d3P
+  d3   = 2 + top1          // = 15
+  d3a  = 2 + d3_pri        // = 33
+  d3b  = 2 + D4::d4        // = 38
+
+  type D3U64 = [64]
+  enum TestEnum3 = A3 | B3
 
   private
-    d3P = 1 + d2
+    d3_pri : [32]
+    d3_pri = 1 + d3 + D3::d3  // 1 + 2*15 = 31
 
   submodule D4 where
-    d3 = 20000 + top0 + d2
+    d4  = 3 + top1 + d3 + d4_pri       // 3 + 13 + 15 + 5 = 36
+    d4b = d4_pri + D4::d4 + D3::D4::d4 // 5 + 36 + 36 = 77
+
+    enum TestEnum4 = A4 | B4
+
+    private
+      d4_pri : D4U32
+      d4_pri = 5
+
+    type D4U32 = [32]
+
+/*
+  submodule E1::E2 where
+      e1 : [32]
+      e1 = 5
+  // this not allowed, but you can import qualified these
+  //   "multi-chunk" module names
+*/

@@ -917,7 +917,7 @@ interpretTopStmt printBinds stmt = do
          let mLoc = iModule imp
              qual = iAs imp
              spec = iSpec imp
-         cenv' <- io $ CEnv.importModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec
+         cenv' <- io $ CEnv.importCryptolModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec
          putTopLevelRW $ rw { rwCryptol = cenv' }
          --showCryptolEnv
 
@@ -1580,10 +1580,10 @@ instance FromValue MIR.Ty where
     fromValue _ (VMIRType t) = t
     fromValue _ _ = error "fromValue MIRType"
 
-instance IsValue CryptolModule where
+instance IsValue CEnv.ExtCryptolModule where
     toValue _name m = VCryptolModule m
 
-instance FromValue CryptolModule where
+instance FromValue CEnv.ExtCryptolModule where
     fromValue _ (VCryptolModule m) = m
     fromValue _ _ = error "fromValue CryptolModule"
 
@@ -2202,7 +2202,7 @@ do_offline_w4_unint_yices :: [Text] -> Text -> ProofScript ()
 do_offline_w4_unint_yices unints path =
   offline_w4_unint_yices unints (Text.unpack path)
 
-do_cryptol_load :: (FilePath -> IO BS.ByteString) -> Text -> TopLevel CryptolModule
+do_cryptol_load :: (FilePath -> IO BS.ByteString) -> Text -> TopLevel CEnv.ExtCryptolModule
 do_cryptol_load loader path =
   cryptol_load loader (Text.unpack path)
 
@@ -4123,7 +4123,7 @@ primitives = Map.fromList $
     [ "Load the given file as a Cryptol module." ]
 
   , prim "cryptol_extract"     "CryptolModule -> String -> TopLevel Term"
-    (pureVal CEnv.extractDefFromCryptolModule)
+    (pureVal cryptol_extract)
     Current
     [ "Load a single definition from a Cryptol module and translate it into"
     , "a 'Term'."

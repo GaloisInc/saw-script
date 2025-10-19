@@ -559,7 +559,7 @@ data Value
   | VJavaType JavaType
   | VLLVMType LLVM.Type
   | VMIRType MIR.Ty
-  | VCryptolModule CryptolModule
+  | VCryptolModule CEnv.ExtCryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule (Some CMSLLVM.LLVMModule)
   | VMIRModule RustModule
@@ -693,7 +693,7 @@ showsPrecValue opts nenv p v =
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (Crucible.LLVM.ppType t))
     VMIRType t -> showString (show (PP.pretty t))
-    VCryptolModule m -> showString (showCryptolModule m)
+    VCryptolModule m -> showString (CEnv.showExtCryptolModule m)
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
     VMIRModule m -> shows (PP.pretty (m^.rmCS^.collection))
     VMIRAdt adt -> shows (PP.pretty adt)
@@ -1171,7 +1171,7 @@ extendEnv sc pos name rb ty doc v rw =
          VInteger n ->
            pure $ CEnv.bindInteger (ident, n) ce
          VCryptolModule m ->
-           pure $ CEnv.bindCryptolModule (modname, m) ce
+           pure $ CEnv.bindExtCryptolModule (modname, m) ce
          VString s ->
            do tt <- typedTermOfString sc (Text.unpack s)
               pure $ CEnv.bindTypedTerm (ident, tt) ce

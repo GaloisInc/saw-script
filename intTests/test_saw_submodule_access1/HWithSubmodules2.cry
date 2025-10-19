@@ -1,0 +1,19 @@
+module H where
+
+a : [32]
+a = 4
+
+
+private
+  b : [32]
+  b = 5
+
+submodule H2 where
+
+  c : [32]
+  c = 6
+
+  private
+
+    a : [32]
+    a = 7

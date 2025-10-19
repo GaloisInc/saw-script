@@ -1,0 +1,27 @@
+////////////////////////////////////////////////
+DDD <- cryptol_load "D.cry";
+
+print (eval_int {{DDD::D2::d2}});
+
+print DDD;
+
+//// cryptol_extract ///////////////////////////
+
+do { y <- cryptol_extract DDD "D2::d2"; print y;};
+do { y <- cryptol_extract DDD "D2::d2"; print y;};
+fails (do {y <- cryptol_extract DDD "notinscope"; print y;});
+
+print DDD;
+
+
+//// cryptol_prims ////////////////////////////
+
+let PRIMS = cryptol_prims ();
+
+do {y <- cryptol_extract PRIMS "sext"; print y;};
+
+fails (do {y <- cryptol_extract PRIMS "notinscope"; print y;});
+
+print PRIMS;
+
+print "done";
