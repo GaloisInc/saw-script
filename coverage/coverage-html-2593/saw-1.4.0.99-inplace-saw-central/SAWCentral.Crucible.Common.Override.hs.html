@@ -130,8 +130,8 @@ span.spaces    { background: white }
 <span class="lineno">  111 </span>import           SAWCore.Name (VarName(..), ecShortName)
 <span class="lineno">  112 </span>import           SAWCore.Prelude as SAWVerifier (scEq)
 <span class="lineno">  113 </span>import           SAWCore.SharedTerm as SAWVerifier
-<span class="lineno">  114 </span>import           SAWCore.Term.Functor (unwrapTermF)
-<span class="lineno">  115 </span>import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
+<span class="lineno">  114 </span>import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
+<span class="lineno">  115 </span>import           SAWCore.Term.Raw (unwrapTermF)
 <span class="lineno">  116 </span>import           CryptolSAWCore.TypedTerm as SAWVerifier
 <span class="lineno">  117 </span>
 <span class="lineno">  118 </span>import qualified Cryptol.Utils.PP as Cryptol (pp)
@@ -206,7 +206,7 @@ span.spaces    { background: white }
 <span class="lineno">  187 </span>
 <span class="lineno">  188 </span>type OverrideState = OverrideState' Sym
 <span class="lineno">  189 </span>
-<span class="lineno">  190 </span><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''OverrideState'</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  190 </span><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''OverrideState'</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
 <span class="lineno">  191 </span>
 <span class="lineno">  192 </span>-- | The initial override matching state starts with an empty substitution
 <span class="lineno">  193 </span>-- and no assertions or assumptions.

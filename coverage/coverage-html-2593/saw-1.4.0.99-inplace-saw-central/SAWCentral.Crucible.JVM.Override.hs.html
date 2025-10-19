@@ -130,7 +130,7 @@ span.spaces    { background: white }
 <span class="lineno">  111 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 <span class="lineno">  112 </span>import           SAWCentral.Crucible.JVM.MethodSpecIR
 <span class="lineno">  113 </span>import           SAWCentral.Crucible.JVM.ResolveSetupValue
-<span class="lineno">  114 </span>import           SAWCentral.Crucible.JVM.Setup.Value ()
+<span class="lineno">  114 </span>import           SAWCentral.Crucible.JVM.Setup.Value (jccUninterp)
 <span class="lineno">  115 </span>import           SAWCentral.Options
 <span class="lineno">  116 </span>import           SAWCentral.Panic
 <span class="lineno">  117 </span>import           SAWCentral.Utils (handleException)
@@ -749,7 +749,7 @@ span.spaces    { background: white }
 <span class="lineno">  730 </span><span class="decl"><span class="nottickedoff">learnPred sc cc md prepost t =</span>
 <span class="lineno">  731 </span><span class="spaces">  </span><span class="nottickedoff">do s &lt;- OM (use termSub)</span>
 <span class="lineno">  732 </span><span class="spaces">     </span><span class="nottickedoff">u &lt;- liftIO $ scInstantiateExt sc s t</span>
-<span class="lineno">  733 </span><span class="spaces">     </span><span class="nottickedoff">p &lt;- liftIO $ resolveBoolTerm (cc ^. jccSym) u</span>
+<span class="lineno">  733 </span><span class="spaces">     </span><span class="nottickedoff">p &lt;- liftIO $ resolveBoolTerm (cc ^. jccSym) (cc ^. jccUninterp) u</span>
 <span class="lineno">  734 </span><span class="spaces">     </span><span class="nottickedoff">let loc = MS.conditionLoc md</span>
 <span class="lineno">  735 </span><span class="spaces">     </span><span class="nottickedoff">addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) &quot;&quot;))</span></span>
 <span class="lineno">  736 </span>
@@ -937,7 +937,7 @@ span.spaces    { background: white }
 <span class="lineno">  918 </span><span class="decl"><span class="nottickedoff">executePred sc cc md tt =</span>
 <span class="lineno">  919 </span><span class="spaces">  </span><span class="nottickedoff">do s &lt;- OM (use termSub)</span>
 <span class="lineno">  920 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- liftIO $ scInstantiateExt sc s (ttTerm tt)</span>
-<span class="lineno">  921 </span><span class="spaces">     </span><span class="nottickedoff">p &lt;- liftIO $ resolveBoolTerm (cc ^. jccSym) t</span>
+<span class="lineno">  921 </span><span class="spaces">     </span><span class="nottickedoff">p &lt;- liftIO $ resolveBoolTerm (cc ^. jccSym) (cc ^. jccUninterp) t</span>
 <span class="lineno">  922 </span><span class="spaces">     </span><span class="nottickedoff">addAssume p md</span></span>
 <span class="lineno">  923 </span>
 <span class="lineno">  924 </span>------------------------------------------------------------------------

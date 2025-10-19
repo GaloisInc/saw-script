@@ -77,11 +77,11 @@ span.spaces    { background: white }
 <span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">evalSharedTerm m addlPrims t =</span>
 <span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">runIdentity $ do</span>
 <span class="lineno">   60 </span><span class="spaces">    </span><span class="nottickedoff">cfg &lt;- Sim.evalGlobal m (Map.union constMap addlPrims)</span>
-<span class="lineno">   61 </span><span class="spaces">           </span><span class="nottickedoff">extcns (\_ _ -&gt; Nothing) primHandler</span>
+<span class="lineno">   61 </span><span class="spaces">           </span><span class="nottickedoff">variable (\_ _ -&gt; Nothing) recursor primHandler</span>
 <span class="lineno">   62 </span><span class="spaces">           </span><span class="nottickedoff">(Prims.lazyMuxValue prims)</span>
 <span class="lineno">   63 </span><span class="spaces">    </span><span class="nottickedoff">Sim.evalSharedTerm cfg t</span>
 <span class="lineno">   64 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">   65 </span><span class="spaces">    </span><span class="nottickedoff">extcns ec = return $ Prim.userError $ &quot;Unimplemented: external constant &quot; ++ show (ecName ec)</span>
+<span class="lineno">   65 </span><span class="spaces">    </span><span class="nottickedoff">variable vn _tp = return $ Prim.userError $ &quot;Unimplemented: free variable &quot; ++ show (vnName vn)</span>
 <span class="lineno">   66 </span><span class="spaces">    </span><span class="nottickedoff">primHandler nm msg env =</span>
 <span class="lineno">   67 </span><span class="spaces">      </span><span class="nottickedoff">return $ Prim.userError $ unlines</span>
 <span class="lineno">   68 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (nameInfo nm))</span>
@@ -285,182 +285,204 @@ span.spaces    { background: white }
 <span class="lineno">  266 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.expByNat&quot;, Prims.expByNatOp prims)</span>
 <span class="lineno">  267 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
 <span class="lineno">  268 </span>
-<span class="lineno">  269 </span>-- primitive bvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
-<span class="lineno">  270 </span>bvToIntOp :: RPrim
-<span class="lineno">  271 </span><span class="decl"><span class="nottickedoff">bvToIntOp = unsupportedRMEPrimitive &quot;bvToIntOp&quot;</span></span>
-<span class="lineno">  272 </span>
-<span class="lineno">  273 </span>-- primitive sbvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
-<span class="lineno">  274 </span>sbvToIntOp :: RPrim
-<span class="lineno">  275 </span><span class="decl"><span class="nottickedoff">sbvToIntOp = unsupportedRMEPrimitive &quot;sbvToIntOp&quot;</span></span>
-<span class="lineno">  276 </span>
-<span class="lineno">  277 </span>-- primitive intToBv : (n : Nat) -&gt; Integer -&gt; Vec n Bool;
-<span class="lineno">  278 </span>intToBvOp :: RPrim
-<span class="lineno">  279 </span><span class="decl"><span class="nottickedoff">intToBvOp =</span>
-<span class="lineno">  280 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
-<span class="lineno">  281 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intFun $ \x -&gt; Prims.PrimValue $</span>
-<span class="lineno">  282 </span><span class="spaces">    </span><span class="nottickedoff">VWord (V.reverse (V.generate (fromIntegral n) (RME.constant . testBit x)))</span></span>
+<span class="lineno">  269 </span>-- | Recursor overrides for the SAWCore simulator.
+<span class="lineno">  270 </span>recursor :: Name -&gt; sort -&gt; Maybe (Identity RValue)
+<span class="lineno">  271 </span><span class="decl"><span class="nottickedoff">recursor nm _sort =</span>
+<span class="lineno">  272 </span><span class="spaces">  </span><span class="nottickedoff">case nameInfo nm of</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="nottickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; Just (pure streamRecOp)</span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  275 </span>
+<span class="lineno">  276 </span>-- primitive bvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
+<span class="lineno">  277 </span>bvToIntOp :: RPrim
+<span class="lineno">  278 </span><span class="decl"><span class="nottickedoff">bvToIntOp = unsupportedRMEPrimitive &quot;bvToIntOp&quot;</span></span>
+<span class="lineno">  279 </span>
+<span class="lineno">  280 </span>-- primitive sbvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
+<span class="lineno">  281 </span>sbvToIntOp :: RPrim
+<span class="lineno">  282 </span><span class="decl"><span class="nottickedoff">sbvToIntOp = unsupportedRMEPrimitive &quot;sbvToIntOp&quot;</span></span>
 <span class="lineno">  283 </span>
-<span class="lineno">  284 </span>muxRMEV :: RME -&gt; Vector RME -&gt; Vector RME -&gt; Vector RME
-<span class="lineno">  285 </span><span class="decl"><span class="nottickedoff">muxRMEV b = V.zipWith (RME.mux b)</span></span>
-<span class="lineno">  286 </span>
-<span class="lineno">  287 </span>muxInt :: RME -&gt; Integer -&gt; Integer -&gt; Integer
-<span class="lineno">  288 </span><span class="decl"><span class="nottickedoff">muxInt b x y =</span>
-<span class="lineno">  289 </span><span class="spaces">  </span><span class="nottickedoff">case RME.isBool b of</span>
-<span class="lineno">  290 </span><span class="spaces">    </span><span class="nottickedoff">Just c -&gt; if c then x else y</span>
-<span class="lineno">  291 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; if x == y then x else error $ &quot;muxRValue: VInt &quot; ++ show (x, y)</span></span>
-<span class="lineno">  292 </span>
-<span class="lineno">  293 </span>muxExtra :: RME -&gt; RExtra -&gt; RExtra -&gt; RExtra
-<span class="lineno">  294 </span><span class="decl"><span class="nottickedoff">muxExtra b (AStream xs) (AStream ys) =</span>
-<span class="lineno">  295 </span><span class="spaces">  </span><span class="nottickedoff">AStream (muxRValue b &lt;$&gt; xs &lt;*&gt; ys)</span></span>
-<span class="lineno">  296 </span>
-<span class="lineno">  297 </span>muxRValue :: RME -&gt; RValue -&gt; RValue -&gt; RValue
-<span class="lineno">  298 </span><span class="decl"><span class="nottickedoff">muxRValue b x y = runIdentity $ Prims.muxValue prims b x y</span></span>
+<span class="lineno">  284 </span>-- primitive intToBv : (n : Nat) -&gt; Integer -&gt; Vec n Bool;
+<span class="lineno">  285 </span>intToBvOp :: RPrim
+<span class="lineno">  286 </span><span class="decl"><span class="nottickedoff">intToBvOp =</span>
+<span class="lineno">  287 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  288 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intFun $ \x -&gt; Prims.PrimValue $</span>
+<span class="lineno">  289 </span><span class="spaces">    </span><span class="nottickedoff">VWord (V.reverse (V.generate (fromIntegral n) (RME.constant . testBit x)))</span></span>
+<span class="lineno">  290 </span>
+<span class="lineno">  291 </span>muxRMEV :: RME -&gt; Vector RME -&gt; Vector RME -&gt; Vector RME
+<span class="lineno">  292 </span><span class="decl"><span class="nottickedoff">muxRMEV b = V.zipWith (RME.mux b)</span></span>
+<span class="lineno">  293 </span>
+<span class="lineno">  294 </span>muxInt :: RME -&gt; Integer -&gt; Integer -&gt; Integer
+<span class="lineno">  295 </span><span class="decl"><span class="nottickedoff">muxInt b x y =</span>
+<span class="lineno">  296 </span><span class="spaces">  </span><span class="nottickedoff">case RME.isBool b of</span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="nottickedoff">Just c -&gt; if c then x else y</span>
+<span class="lineno">  298 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; if x == y then x else error $ &quot;muxRValue: VInt &quot; ++ show (x, y)</span></span>
 <span class="lineno">  299 </span>
-<span class="lineno">  300 </span>-- | Signed shift right simply copies the high order bit
-<span class="lineno">  301 </span>--   into the shifted places.  We special case the zero
-<span class="lineno">  302 </span>--   length vector to avoid a possible out-of-bounds error.
-<span class="lineno">  303 </span>vSignedShiftR :: V.Vector a -&gt; Integer -&gt; V.Vector a
-<span class="lineno">  304 </span><span class="decl"><span class="nottickedoff">vSignedShiftR xs i</span>
-<span class="lineno">  305 </span><span class="spaces">  </span><span class="nottickedoff">| V.length xs &gt; 0 = Prims.vShiftR x xs i</span>
-<span class="lineno">  306 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise       = xs</span>
-<span class="lineno">  307 </span><span class="spaces"> </span><span class="nottickedoff">where x = xs V.! 0</span></span>
-<span class="lineno">  308 </span>
-<span class="lineno">  309 </span>------------------------------------------------------------
-<span class="lineno">  310 </span>
-<span class="lineno">  311 </span>toIntModOp :: RPrim
-<span class="lineno">  312 </span><span class="decl"><span class="nottickedoff">toIntModOp =</span>
-<span class="lineno">  313 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
-<span class="lineno">  314 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intFun $ \x -&gt;</span>
-<span class="lineno">  315 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VIntMod n (x `mod` toInteger n))</span></span>
-<span class="lineno">  316 </span>
-<span class="lineno">  317 </span>fromIntModOp :: RPrim
-<span class="lineno">  318 </span><span class="decl"><span class="nottickedoff">fromIntModOp =</span>
-<span class="lineno">  319 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
-<span class="lineno">  320 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
-<span class="lineno">  321 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VInt x)</span></span>
-<span class="lineno">  322 </span>
-<span class="lineno">  323 </span>intModEqOp :: RPrim
-<span class="lineno">  324 </span><span class="decl"><span class="nottickedoff">intModEqOp =</span>
-<span class="lineno">  325 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
-<span class="lineno">  326 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
-<span class="lineno">  327 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \y -&gt;</span>
-<span class="lineno">  328 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VBool (RME.constant (x == y)))</span></span>
+<span class="lineno">  300 </span>muxExtra :: RME -&gt; RExtra -&gt; RExtra -&gt; RExtra
+<span class="lineno">  301 </span><span class="decl"><span class="nottickedoff">muxExtra b (AStream xs) (AStream ys) =</span>
+<span class="lineno">  302 </span><span class="spaces">  </span><span class="nottickedoff">AStream (muxRValue b &lt;$&gt; xs &lt;*&gt; ys)</span></span>
+<span class="lineno">  303 </span>
+<span class="lineno">  304 </span>muxRValue :: RME -&gt; RValue -&gt; RValue -&gt; RValue
+<span class="lineno">  305 </span><span class="decl"><span class="nottickedoff">muxRValue b x y = runIdentity $ Prims.muxValue prims b x y</span></span>
+<span class="lineno">  306 </span>
+<span class="lineno">  307 </span>-- | Signed shift right simply copies the high order bit
+<span class="lineno">  308 </span>--   into the shifted places.  We special case the zero
+<span class="lineno">  309 </span>--   length vector to avoid a possible out-of-bounds error.
+<span class="lineno">  310 </span>vSignedShiftR :: V.Vector a -&gt; Integer -&gt; V.Vector a
+<span class="lineno">  311 </span><span class="decl"><span class="nottickedoff">vSignedShiftR xs i</span>
+<span class="lineno">  312 </span><span class="spaces">  </span><span class="nottickedoff">| V.length xs &gt; 0 = Prims.vShiftR x xs i</span>
+<span class="lineno">  313 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise       = xs</span>
+<span class="lineno">  314 </span><span class="spaces"> </span><span class="nottickedoff">where x = xs V.! 0</span></span>
+<span class="lineno">  315 </span>
+<span class="lineno">  316 </span>------------------------------------------------------------
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>toIntModOp :: RPrim
+<span class="lineno">  319 </span><span class="decl"><span class="nottickedoff">toIntModOp =</span>
+<span class="lineno">  320 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  321 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intFun $ \x -&gt;</span>
+<span class="lineno">  322 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VIntMod n (x `mod` toInteger n))</span></span>
+<span class="lineno">  323 </span>
+<span class="lineno">  324 </span>fromIntModOp :: RPrim
+<span class="lineno">  325 </span><span class="decl"><span class="nottickedoff">fromIntModOp =</span>
+<span class="lineno">  326 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
+<span class="lineno">  327 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
+<span class="lineno">  328 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VInt x)</span></span>
 <span class="lineno">  329 </span>
-<span class="lineno">  330 </span>intModBinOp :: (Integer -&gt; Integer -&gt; Integer) -&gt; RPrim
-<span class="lineno">  331 </span><span class="decl"><span class="nottickedoff">intModBinOp f =</span>
-<span class="lineno">  332 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  330 </span>intModEqOp :: RPrim
+<span class="lineno">  331 </span><span class="decl"><span class="nottickedoff">intModEqOp =</span>
+<span class="lineno">  332 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
 <span class="lineno">  333 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
 <span class="lineno">  334 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \y -&gt;</span>
-<span class="lineno">  335 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VIntMod n (f x y `mod` toInteger n))</span></span>
+<span class="lineno">  335 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VBool (RME.constant (x == y)))</span></span>
 <span class="lineno">  336 </span>
-<span class="lineno">  337 </span>intModUnOp :: (Integer -&gt; Integer) -&gt; RPrim
-<span class="lineno">  338 </span><span class="decl"><span class="nottickedoff">intModUnOp f =</span>
+<span class="lineno">  337 </span>intModBinOp :: (Integer -&gt; Integer -&gt; Integer) -&gt; RPrim
+<span class="lineno">  338 </span><span class="decl"><span class="nottickedoff">intModBinOp f =</span>
 <span class="lineno">  339 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
 <span class="lineno">  340 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
-<span class="lineno">  341 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VIntMod n (f x `mod` toInteger n))</span></span>
-<span class="lineno">  342 </span>
-<span class="lineno">  343 </span>----------------------------------------
-<span class="lineno">  344 </span>
-<span class="lineno">  345 </span>-- MkStream :: (a :: sort 0) -&gt; (Nat -&gt; a) -&gt; Stream a;
-<span class="lineno">  346 </span>mkStreamOp :: RPrim
-<span class="lineno">  347 </span><span class="decl"><span class="nottickedoff">mkStreamOp =</span>
-<span class="lineno">  348 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \f -&gt;</span>
-<span class="lineno">  350 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (vStream (fmap (\n -&gt; runIdentity (apply f (ready (VNat n)))) IntTrie.identity))</span></span>
+<span class="lineno">  341 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \y -&gt;</span>
+<span class="lineno">  342 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VIntMod n (f x y `mod` toInteger n))</span></span>
+<span class="lineno">  343 </span>
+<span class="lineno">  344 </span>intModUnOp :: (Integer -&gt; Integer) -&gt; RPrim
+<span class="lineno">  345 </span><span class="decl"><span class="nottickedoff">intModUnOp f =</span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  347 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
+<span class="lineno">  348 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VIntMod n (f x `mod` toInteger n))</span></span>
+<span class="lineno">  349 </span>
+<span class="lineno">  350 </span>----------------------------------------
 <span class="lineno">  351 </span>
-<span class="lineno">  352 </span>-- streamGet :: (a :: sort 0) -&gt; Stream a -&gt; Nat -&gt; a;
-<span class="lineno">  353 </span>streamGetOp :: RPrim
-<span class="lineno">  354 </span><span class="decl"><span class="nottickedoff">streamGetOp =</span>
-<span class="lineno">  355 </span><span class="spaces">  </span><span class="nottickedoff">Prims.tvalFun   $ \_tp -&gt;</span>
-<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \xs -&gt;</span>
-<span class="lineno">  357 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \ix -&gt; Prims.Prim $ case ix of</span>
-<span class="lineno">  358 </span><span class="spaces">    </span><span class="nottickedoff">VNat n -&gt; pure $ IntTrie.apply (toStream xs) (toInteger n)</span>
-<span class="lineno">  359 </span><span class="spaces">    </span><span class="nottickedoff">VIntToNat _i -&gt; error &quot;RME.streamGetOp : symbolic integer TODO&quot;</span>
-<span class="lineno">  360 </span><span class="spaces">    </span><span class="nottickedoff">VBVToNat _sz bv -&gt;</span>
-<span class="lineno">  361 </span><span class="spaces">      </span><span class="nottickedoff">do let trie = toStream xs</span>
-<span class="lineno">  362 </span><span class="spaces">             </span><span class="nottickedoff">loop k [] = IntTrie.apply trie k</span>
-<span class="lineno">  363 </span><span class="spaces">             </span><span class="nottickedoff">loop k (b:bs)</span>
-<span class="lineno">  364 </span><span class="spaces">               </span><span class="nottickedoff">| Just True &lt;- RME.isBool b</span>
-<span class="lineno">  365 </span><span class="spaces">               </span><span class="nottickedoff">= loop k1 bs</span>
-<span class="lineno">  366 </span><span class="spaces">               </span><span class="nottickedoff">| Just False &lt;- RME.isBool b</span>
-<span class="lineno">  367 </span><span class="spaces">               </span><span class="nottickedoff">= loop k0 bs</span>
-<span class="lineno">  368 </span><span class="spaces">               </span><span class="nottickedoff">| otherwise</span>
-<span class="lineno">  369 </span><span class="spaces">               </span><span class="nottickedoff">= muxRValue b (loop k1 bs) (loop k0 bs)</span>
-<span class="lineno">  370 </span><span class="spaces">              </span><span class="nottickedoff">where</span>
-<span class="lineno">  371 </span><span class="spaces">               </span><span class="nottickedoff">k0 = k `shiftL` 1</span>
-<span class="lineno">  372 </span><span class="spaces">               </span><span class="nottickedoff">k1 = k0 + 1</span>
-<span class="lineno">  373 </span><span class="spaces">         </span><span class="nottickedoff">pure $ loop (0::Integer) (V.toList (toWord bv))</span>
-<span class="lineno">  374 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  375 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; panic &quot;streamGetOp&quot; [&quot;Expected Nat value; found &quot; &lt;&gt; Text.pack (show ix)]</span></span>
-<span class="lineno">  376 </span>
-<span class="lineno">  377 </span>
-<span class="lineno">  378 </span>------------------------------------------------------------
-<span class="lineno">  379 </span>-- Generating variables for arguments
-<span class="lineno">  380 </span>
-<span class="lineno">  381 </span>newVars :: FiniteType -&gt; State Int RValue
-<span class="lineno">  382 </span><span class="decl"><span class="nottickedoff">newVars FTBit = do</span>
-<span class="lineno">  383 </span><span class="spaces">  </span><span class="nottickedoff">i &lt;- get</span>
-<span class="lineno">  384 </span><span class="spaces">  </span><span class="nottickedoff">put (i + 1)</span>
-<span class="lineno">  385 </span><span class="spaces">  </span><span class="nottickedoff">return (vBool (RME.lit i))</span>
-<span class="lineno">  386 </span><span class="spaces"></span><span class="nottickedoff">newVars (FTVec n t) = VVector &lt;$&gt; V.replicateM (fromIntegral n) (newVars' t)</span>
-<span class="lineno">  387 </span><span class="spaces"></span><span class="nottickedoff">newVars (FTTuple ts) = vTuple &lt;$&gt; traverse newVars' ts</span>
-<span class="lineno">  388 </span><span class="spaces"></span><span class="nottickedoff">newVars (FTRec tm) = vRecord &lt;$&gt; traverse newVars' tm</span></span>
-<span class="lineno">  389 </span>
-<span class="lineno">  390 </span>newVars' :: FiniteType -&gt; State Int RThunk
-<span class="lineno">  391 </span><span class="decl"><span class="nottickedoff">newVars' shape = ready &lt;$&gt; newVars shape</span></span>
-<span class="lineno">  392 </span>
-<span class="lineno">  393 </span>------------------------------------------------------------
-<span class="lineno">  394 </span>-- Bit-blasting primitives.
-<span class="lineno">  395 </span>
-<span class="lineno">  396 </span>bitBlastBasic :: ModuleMap
-<span class="lineno">  397 </span>              -&gt; Map Ident RPrim
-<span class="lineno">  398 </span>              -&gt; Map VarIndex RValue
-<span class="lineno">  399 </span>              -&gt; Term
-<span class="lineno">  400 </span>              -&gt; RValue
-<span class="lineno">  401 </span><span class="decl"><span class="nottickedoff">bitBlastBasic m addlPrims ecMap t = runIdentity $ do</span>
-<span class="lineno">  402 </span><span class="spaces">  </span><span class="nottickedoff">let primHandler nm msg env =</span>
-<span class="lineno">  403 </span><span class="spaces">         </span><span class="nottickedoff">return $ Prim.userError $ unlines</span>
-<span class="lineno">  404 </span><span class="spaces">           </span><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (nameInfo nm))</span>
-<span class="lineno">  405 </span><span class="spaces">           </span><span class="nottickedoff">, &quot;On argument &quot; ++ show (length env)</span>
-<span class="lineno">  406 </span><span class="spaces">           </span><span class="nottickedoff">, Text.unpack msg</span>
-<span class="lineno">  407 </span><span class="spaces">           </span><span class="nottickedoff">]</span>
-<span class="lineno">  408 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  409 </span><span class="spaces">  </span><span class="nottickedoff">cfg &lt;- Sim.evalGlobal m (Map.union constMap addlPrims)</span>
-<span class="lineno">  410 </span><span class="spaces">         </span><span class="nottickedoff">(\ec -&gt; case Map.lookup (ecVarIndex ec) ecMap of</span>
-<span class="lineno">  411 </span><span class="spaces">                   </span><span class="nottickedoff">Just v -&gt; pure v</span>
-<span class="lineno">  412 </span><span class="spaces">                   </span><span class="nottickedoff">Nothing -&gt; error (&quot;RME: unknown ExtCns: &quot; ++ show (ecName ec)))</span>
-<span class="lineno">  413 </span><span class="spaces">         </span><span class="nottickedoff">(\_ _ -&gt; Nothing)</span>
-<span class="lineno">  414 </span><span class="spaces">         </span><span class="nottickedoff">primHandler</span>
-<span class="lineno">  415 </span><span class="spaces">         </span><span class="nottickedoff">(Prims.lazyMuxValue prims)</span>
-<span class="lineno">  416 </span><span class="spaces">  </span><span class="nottickedoff">Sim.evalSharedTerm cfg t</span></span>
+<span class="lineno">  352 </span>-- MkStream :: (a :: sort 0) -&gt; (Nat -&gt; a) -&gt; Stream a;
+<span class="lineno">  353 </span>mkStreamOp :: RPrim
+<span class="lineno">  354 </span><span class="decl"><span class="nottickedoff">mkStreamOp =</span>
+<span class="lineno">  355 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \f -&gt;</span>
+<span class="lineno">  357 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (vStream (fmap (\n -&gt; runIdentity (apply f (ready (VNat n)))) IntTrie.identity))</span></span>
+<span class="lineno">  358 </span>
+<span class="lineno">  359 </span>-- streamGet :: (a :: sort 0) -&gt; Stream a -&gt; Nat -&gt; a;
+<span class="lineno">  360 </span>streamGetOp :: RPrim
+<span class="lineno">  361 </span><span class="decl"><span class="nottickedoff">streamGetOp =</span>
+<span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">Prims.tvalFun   $ \_tp -&gt;</span>
+<span class="lineno">  363 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \xs -&gt;</span>
+<span class="lineno">  364 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \ix -&gt; Prims.Prim $ streamGet xs ix</span></span>
+<span class="lineno">  365 </span>
+<span class="lineno">  366 </span>streamGet :: RValue -&gt; RValue -&gt; Identity RValue
+<span class="lineno">  367 </span><span class="decl"><span class="nottickedoff">streamGet xs ix =</span>
+<span class="lineno">  368 </span><span class="spaces">  </span><span class="nottickedoff">case ix of</span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="nottickedoff">VNat n -&gt; pure $ IntTrie.apply (toStream xs) (toInteger n)</span>
+<span class="lineno">  370 </span><span class="spaces">    </span><span class="nottickedoff">VIntToNat _i -&gt; error &quot;RME.streamGetOp : symbolic integer TODO&quot;</span>
+<span class="lineno">  371 </span><span class="spaces">    </span><span class="nottickedoff">VBVToNat _sz bv -&gt;</span>
+<span class="lineno">  372 </span><span class="spaces">      </span><span class="nottickedoff">do let trie = toStream xs</span>
+<span class="lineno">  373 </span><span class="spaces">             </span><span class="nottickedoff">loop k [] = IntTrie.apply trie k</span>
+<span class="lineno">  374 </span><span class="spaces">             </span><span class="nottickedoff">loop k (b:bs)</span>
+<span class="lineno">  375 </span><span class="spaces">               </span><span class="nottickedoff">| Just True &lt;- RME.isBool b</span>
+<span class="lineno">  376 </span><span class="spaces">               </span><span class="nottickedoff">= loop k1 bs</span>
+<span class="lineno">  377 </span><span class="spaces">               </span><span class="nottickedoff">| Just False &lt;- RME.isBool b</span>
+<span class="lineno">  378 </span><span class="spaces">               </span><span class="nottickedoff">= loop k0 bs</span>
+<span class="lineno">  379 </span><span class="spaces">               </span><span class="nottickedoff">| otherwise</span>
+<span class="lineno">  380 </span><span class="spaces">               </span><span class="nottickedoff">= muxRValue b (loop k1 bs) (loop k0 bs)</span>
+<span class="lineno">  381 </span><span class="spaces">              </span><span class="nottickedoff">where</span>
+<span class="lineno">  382 </span><span class="spaces">               </span><span class="nottickedoff">k0 = k `shiftL` 1</span>
+<span class="lineno">  383 </span><span class="spaces">               </span><span class="nottickedoff">k1 = k0 + 1</span>
+<span class="lineno">  384 </span><span class="spaces">         </span><span class="nottickedoff">pure $ loop (0::Integer) (V.toList (toWord bv))</span>
+<span class="lineno">  385 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  386 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; panic &quot;streamGetOp&quot; [&quot;Expected Nat value; found &quot; &lt;&gt; Text.pack (show ix)]</span></span>
+<span class="lineno">  387 </span>
+<span class="lineno">  388 </span>-- Stream#rec :
+<span class="lineno">  389 </span>--   (a : sort 0) -&gt; (p : Stream a -&gt; sort 0) -&gt;
+<span class="lineno">  390 </span>--   ((f : Nat -&gt; a) -&gt; p (MkStream a f)) -&gt; (str : Stream a) -&gt; p str
+<span class="lineno">  391 </span>streamRecOp :: RValue
+<span class="lineno">  392 </span><span class="decl"><span class="nottickedoff">streamRecOp =</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="nottickedoff">VFun $ \_a -&gt; pure $</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">VFun $ \_p -&gt; pure $</span>
+<span class="lineno">  395 </span><span class="spaces">  </span><span class="nottickedoff">vStrictFun $ \f1 -&gt; pure $</span>
+<span class="lineno">  396 </span><span class="spaces">  </span><span class="nottickedoff">vStrictFun $ \xs -&gt;</span>
+<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">do let f = vStrictFun $ \ix -&gt; streamGet xs ix</span>
+<span class="lineno">  398 </span><span class="spaces">     </span><span class="nottickedoff">apply f1 (ready f)</span></span>
+<span class="lineno">  399 </span>
+<span class="lineno">  400 </span>------------------------------------------------------------
+<span class="lineno">  401 </span>-- Generating variables for arguments
+<span class="lineno">  402 </span>
+<span class="lineno">  403 </span>newVars :: FiniteType -&gt; State Int RValue
+<span class="lineno">  404 </span><span class="decl"><span class="nottickedoff">newVars FTBit = do</span>
+<span class="lineno">  405 </span><span class="spaces">  </span><span class="nottickedoff">i &lt;- get</span>
+<span class="lineno">  406 </span><span class="spaces">  </span><span class="nottickedoff">put (i + 1)</span>
+<span class="lineno">  407 </span><span class="spaces">  </span><span class="nottickedoff">return (vBool (RME.lit i))</span>
+<span class="lineno">  408 </span><span class="spaces"></span><span class="nottickedoff">newVars (FTVec n t) = VVector &lt;$&gt; V.replicateM (fromIntegral n) (newVars' t)</span>
+<span class="lineno">  409 </span><span class="spaces"></span><span class="nottickedoff">newVars (FTTuple ts) = vTuple &lt;$&gt; traverse newVars' ts</span>
+<span class="lineno">  410 </span><span class="spaces"></span><span class="nottickedoff">newVars (FTRec tm) = vRecord &lt;$&gt; traverse newVars' tm</span></span>
+<span class="lineno">  411 </span>
+<span class="lineno">  412 </span>newVars' :: FiniteType -&gt; State Int RThunk
+<span class="lineno">  413 </span><span class="decl"><span class="nottickedoff">newVars' shape = ready &lt;$&gt; newVars shape</span></span>
+<span class="lineno">  414 </span>
+<span class="lineno">  415 </span>------------------------------------------------------------
+<span class="lineno">  416 </span>-- Bit-blasting primitives.
 <span class="lineno">  417 </span>
-<span class="lineno">  418 </span>
-<span class="lineno">  419 </span>processVar ::
-<span class="lineno">  420 </span>  (ExtCns Term, FirstOrderType) -&gt;
-<span class="lineno">  421 </span>  IO (ExtCns Term, FiniteType)
-<span class="lineno">  422 </span><span class="decl"><span class="nottickedoff">processVar (ec, fot) =</span>
-<span class="lineno">  423 </span><span class="spaces">  </span><span class="nottickedoff">case toFiniteType fot of</span>
-<span class="lineno">  424 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail (&quot;RME solver does not support variables of type &quot; ++ show fot)</span>
-<span class="lineno">  425 </span><span class="spaces">    </span><span class="nottickedoff">Just ft -&gt; pure (ec, ft)</span></span>
-<span class="lineno">  426 </span>
-<span class="lineno">  427 </span>withBitBlastedSATQuery ::
-<span class="lineno">  428 </span>  SharedContext -&gt;
-<span class="lineno">  429 </span>  Map Ident RPrim -&gt;
-<span class="lineno">  430 </span>  SATQuery -&gt;
-<span class="lineno">  431 </span>  (RME -&gt; [(ExtCns Term, FiniteType)] -&gt; IO a) -&gt;
-<span class="lineno">  432 </span>  IO a
-<span class="lineno">  433 </span><span class="decl"><span class="nottickedoff">withBitBlastedSATQuery sc addlPrims satq cont =</span>
-<span class="lineno">  434 </span><span class="spaces">  </span><span class="nottickedoff">do unless (Set.null (satUninterp satq)) $ fail</span>
-<span class="lineno">  435 </span><span class="spaces">        </span><span class="nottickedoff">&quot;RME prover does not support uninterpreted symbols&quot;</span>
-<span class="lineno">  436 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- satQueryAsTerm sc satq</span>
-<span class="lineno">  437 </span><span class="spaces">     </span><span class="nottickedoff">varShapes &lt;- mapM processVar (Map.toList (satVariables satq))</span>
-<span class="lineno">  438 </span><span class="spaces">     </span><span class="nottickedoff">modmap &lt;- scGetModuleMap sc</span>
-<span class="lineno">  439 </span><span class="spaces">     </span><span class="nottickedoff">let vars = evalState (traverse (traverse newVars) varShapes) 0</span>
-<span class="lineno">  440 </span><span class="spaces">     </span><span class="nottickedoff">let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) &lt;- vars ]</span>
-<span class="lineno">  441 </span><span class="spaces">     </span><span class="nottickedoff">let bval = bitBlastBasic modmap addlPrims varMap t</span>
-<span class="lineno">  442 </span><span class="spaces">     </span><span class="nottickedoff">case bval of</span>
-<span class="lineno">  443 </span><span class="spaces">       </span><span class="nottickedoff">VBool anf -&gt; cont anf varShapes</span>
-<span class="lineno">  444 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; panic &quot;withBitBlastedSATQuery&quot; [&quot;Non-boolean result type &quot; &lt;&gt; Text.pack (show bval)]</span></span>
+<span class="lineno">  418 </span>bitBlastBasic :: ModuleMap
+<span class="lineno">  419 </span>              -&gt; Map Ident RPrim
+<span class="lineno">  420 </span>              -&gt; Map VarIndex RValue
+<span class="lineno">  421 </span>              -&gt; Term
+<span class="lineno">  422 </span>              -&gt; RValue
+<span class="lineno">  423 </span><span class="decl"><span class="nottickedoff">bitBlastBasic m addlPrims varMap t = runIdentity $ do</span>
+<span class="lineno">  424 </span><span class="spaces">  </span><span class="nottickedoff">let primHandler nm msg env =</span>
+<span class="lineno">  425 </span><span class="spaces">         </span><span class="nottickedoff">return $ Prim.userError $ unlines</span>
+<span class="lineno">  426 </span><span class="spaces">           </span><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (nameInfo nm))</span>
+<span class="lineno">  427 </span><span class="spaces">           </span><span class="nottickedoff">, &quot;On argument &quot; ++ show (length env)</span>
+<span class="lineno">  428 </span><span class="spaces">           </span><span class="nottickedoff">, Text.unpack msg</span>
+<span class="lineno">  429 </span><span class="spaces">           </span><span class="nottickedoff">]</span>
+<span class="lineno">  430 </span><span class="spaces">  </span><span class="nottickedoff">cfg &lt;- Sim.evalGlobal m (Map.union constMap addlPrims)</span>
+<span class="lineno">  431 </span><span class="spaces">         </span><span class="nottickedoff">(\vn _ -&gt; case Map.lookup (vnIndex vn) varMap of</span>
+<span class="lineno">  432 </span><span class="spaces">                   </span><span class="nottickedoff">Just v -&gt; pure v</span>
+<span class="lineno">  433 </span><span class="spaces">                   </span><span class="nottickedoff">Nothing -&gt; error (&quot;RME: unknown variable: &quot; ++ show (vnName vn)))</span>
+<span class="lineno">  434 </span><span class="spaces">         </span><span class="nottickedoff">(\_ _ -&gt; Nothing)</span>
+<span class="lineno">  435 </span><span class="spaces">         </span><span class="nottickedoff">recursor</span>
+<span class="lineno">  436 </span><span class="spaces">         </span><span class="nottickedoff">primHandler</span>
+<span class="lineno">  437 </span><span class="spaces">         </span><span class="nottickedoff">(Prims.lazyMuxValue prims)</span>
+<span class="lineno">  438 </span><span class="spaces">  </span><span class="nottickedoff">Sim.evalSharedTerm cfg t</span></span>
+<span class="lineno">  439 </span>
+<span class="lineno">  440 </span>
+<span class="lineno">  441 </span>processVar ::
+<span class="lineno">  442 </span>  (ExtCns Term, FirstOrderType) -&gt;
+<span class="lineno">  443 </span>  IO (ExtCns Term, FiniteType)
+<span class="lineno">  444 </span><span class="decl"><span class="nottickedoff">processVar (ec, fot) =</span>
+<span class="lineno">  445 </span><span class="spaces">  </span><span class="nottickedoff">case toFiniteType fot of</span>
+<span class="lineno">  446 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail (&quot;RME solver does not support variables of type &quot; ++ show fot)</span>
+<span class="lineno">  447 </span><span class="spaces">    </span><span class="nottickedoff">Just ft -&gt; pure (ec, ft)</span></span>
+<span class="lineno">  448 </span>
+<span class="lineno">  449 </span>withBitBlastedSATQuery ::
+<span class="lineno">  450 </span>  SharedContext -&gt;
+<span class="lineno">  451 </span>  Map Ident RPrim -&gt;
+<span class="lineno">  452 </span>  SATQuery -&gt;
+<span class="lineno">  453 </span>  (RME -&gt; [(ExtCns Term, FiniteType)] -&gt; IO a) -&gt;
+<span class="lineno">  454 </span>  IO a
+<span class="lineno">  455 </span><span class="decl"><span class="nottickedoff">withBitBlastedSATQuery sc addlPrims satq cont =</span>
+<span class="lineno">  456 </span><span class="spaces">  </span><span class="nottickedoff">do unless (Set.null (satUninterp satq)) $ fail</span>
+<span class="lineno">  457 </span><span class="spaces">        </span><span class="nottickedoff">&quot;RME prover does not support uninterpreted symbols&quot;</span>
+<span class="lineno">  458 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- satQueryAsTerm sc satq</span>
+<span class="lineno">  459 </span><span class="spaces">     </span><span class="nottickedoff">varShapes &lt;- mapM processVar (Map.toList (satVariables satq))</span>
+<span class="lineno">  460 </span><span class="spaces">     </span><span class="nottickedoff">modmap &lt;- scGetModuleMap sc</span>
+<span class="lineno">  461 </span><span class="spaces">     </span><span class="nottickedoff">let vars = evalState (traverse (traverse newVars) varShapes) 0</span>
+<span class="lineno">  462 </span><span class="spaces">     </span><span class="nottickedoff">let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) &lt;- vars ]</span>
+<span class="lineno">  463 </span><span class="spaces">     </span><span class="nottickedoff">let bval = bitBlastBasic modmap addlPrims varMap t</span>
+<span class="lineno">  464 </span><span class="spaces">     </span><span class="nottickedoff">case bval of</span>
+<span class="lineno">  465 </span><span class="spaces">       </span><span class="nottickedoff">VBool anf -&gt; cont anf varShapes</span>
+<span class="lineno">  466 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; panic &quot;withBitBlastedSATQuery&quot; [&quot;Non-boolean result type &quot; &lt;&gt; Text.pack (show bval)]</span></span>
 
 </pre>
 </body>

@@ -514,7 +514,7 @@ span.spaces    { background: white }
 <span class="lineno">  495 </span><span class="decl"><span class="nottickedoff">getSAWScriptValueNames = do</span>
 <span class="lineno">  496 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- getEnvironment</span>
 <span class="lineno">  497 </span><span class="spaces">  </span><span class="nottickedoff">let avail = rwPrimsAvail env</span>
-<span class="lineno">  498 </span><span class="spaces">      </span><span class="nottickedoff">visible (lc, _, _, _) = Set.member lc avail</span>
+<span class="lineno">  498 </span><span class="spaces">      </span><span class="nottickedoff">visible (_, lc, _, _, _, _) = Set.member lc avail</span>
 <span class="lineno">  499 </span><span class="spaces">  </span><span class="nottickedoff">let rnames = Map.keys $ Map.filter visible $ rwValueInfo env</span>
 <span class="lineno">  500 </span><span class="spaces">  </span><span class="nottickedoff">return (map Text.unpack rnames)</span></span>
 <span class="lineno">  501 </span>
