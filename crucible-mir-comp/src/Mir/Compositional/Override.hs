@@ -139,7 +139,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
 
     loc <- liftIO $ W4.getCurrentProgramLoc sym
     let freeVars = Set.fromList $
-            ms ^.. MS.csPreState . MS.csFreshVars . each . to SAW.tecExt . to SAW.ecVarIndex
+            ms ^.. MS.csPreState . MS.csFreshVars . each . to SAW.tvName . to SAW.vnIndex
 
     sc <- liftIO $ SAW.mkSharedContext
     liftIO $ SAW.scLoadPreludeModule sc
@@ -165,16 +165,16 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     -- so we don't need to split up our `runOverrideMatcher` call into multiple
     -- blocks.
     let postFresh = ms ^. MS.csPostState . MS.csFreshVars
-    postFreshTermSub <- liftM IntMap.fromList $ forM postFresh $ \tec -> do
-        let ec = SAW.tecExt tec
-        let nameStr = Text.unpack $ SAW.ecShortName ec
+    postFreshTermSub <- liftM IntMap.fromList $ forM postFresh $ \tv -> do
+        let vn = SAW.tvName tv
+        let nameStr = Text.unpack $ SAW.vnName vn
         let nameSymbol = W4.safeSymbol nameStr
-        Some btpr <- liftIO $ termToType sym (SAW.ecType ec)
+        Some btpr <- liftIO $ termToType sym (SAW.tvType tv)
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
         let ev = CreateVariableEvent loc nameStr btpr expr
         liftIO $ addAssumptions bak (singleEvent ev)
         term <- liftIO $ eval expr
-        return (SAW.ecVarIndex ec, term)
+        return (SAW.vnIndex vn, term)
 
     -- Accesses to globals should go through the underlying OverrideSim monad,
     -- rather than using OverrideMatcher's `readGlobal`/`writeGlobal` methods.
@@ -236,11 +236,11 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         termSub <- use MS.termSub
         let allFresh = ms ^. MS.csPreState . MS.csFreshVars ++
                 ms ^. MS.csPostState . MS.csFreshVars
-        forM_ allFresh $ \tec -> do
-            let var = SAW.ecVarIndex $ SAW.tecExt tec
+        forM_ allFresh $ \tv -> do
+            let var = SAW.vnIndex $ SAW.tvName tv
             when (not $ IntMap.member var termSub) $ do
                 error $ "argument matching failed to produce a binding for " ++
-                    show (SAW.ppTypedExtCns tec)
+                    show (SAW.ppTypedVariable tv)
 
         -- All pre-state allocs must be bound.
         allocSub <- use MS.setupValueSub

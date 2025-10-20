@@ -1422,10 +1422,10 @@ verifyPoststate cc mspec env0 globals ret mdMap =
      let ecs0 = IntMap.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
-           , let ec = tecExt tt ]
+           , let ec = EC (tvName tt) (tvType tt) ]
      terms0 <- io $ traverse (scVariable sc) ecs0
 
-     let initialFree = Set.fromList (map (ecVarIndex . tecExt)
+     let initialFree = Set.fromList (map (vnIndex . tvName)
                                     (view (MS.csPostState . MS.csFreshVars) mspec))
      matchPost <- io $
           runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
@@ -1704,7 +1704,7 @@ extractFromMirCFG opts sc cc argTys retTy (Crucible.AnyCFG cfg) =
                     ]
             term <- setupResultTerm sc cc retTy rt rv
             let tt = TypedTerm (TypedTermSchema (Cryptol.tMono cty)) term
-            tt' <- abstractTypedExts sc (toList ecs) tt
+            tt' <- abstractTypedVars sc (toList ecs) tt
             pure tt'
        Crucible.AbortedResult _ ar ->
          do let resultDoc = ppMIRAbortedResult ar
@@ -1814,7 +1814,7 @@ setupArg ::
   forall tp.
   SharedContext ->
   MIRCrucibleContext ->
-  IORef (Seq TypedExtCns) ->
+  IORef (Seq TypedVariable) ->
   -- | The argument's MIR type.
   Mir.Ty ->
   -- | The argument's corresponding Crucible type.
@@ -1977,10 +1977,10 @@ setupArg sc cc ecRef mty0 tp0 =
     (cty, scTp) <- typeShapeToSAWTypes shp
 
     ecs <- readIORef ecRef
-    ec <- scFreshEC sc ("arg_" <> Text.pack (show (length ecs))) scTp
-    writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
+    vn <- scFreshVarName sc ("arg_" <> Text.pack (show (length ecs)))
+    writeIORef ecRef (ecs Seq.|> TypedVariable cty vn scTp)
 
-    t <- scVariable sc ec
+    t <- scVariable sc (EC vn scTp)
     Crucible.RegEntry tp0 <$> termToMirRegValue shp scTp t
 
 -- | Create fresh argument variables of the appropriate types, suitable for use
@@ -1993,7 +1993,7 @@ setupArgs ::
   -- 'Crucible.FnHandle'.
   [Mir.Ty] ->
   Crucible.FnHandle init ret ->
-  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
+  IO (Seq TypedVariable, Crucible.RegMap Sym init)
 setupArgs sc cc mirArgTys fn =
   do ecRef  <- newIORef Seq.empty
      let fnArgTys = Crucible.handleArgTypes fn

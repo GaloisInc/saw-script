@@ -1498,9 +1498,9 @@ assertPost path func env premem preregs mdMap = do
     initialECs = IntMap.fromList
       [ (ecVarIndex ec, ec)
       | tt <- ms ^. MS.csPreState . MS.csFreshVars
-      , let ec = tecExt tt
+      , let ec = EC (tvName tt) (tvType tt)
       ]
-    initialFree = Set.fromList . fmap (ecVarIndex . tecExt) $ ms ^. MS.csPostState . MS.csFreshVars
+    initialFree = Set.fromList . fmap (vnIndex . tvName) $ ms ^. MS.csPostState . MS.csFreshVars
 
   initialTerms <- liftIO $ traverse (scVariable sc) initialECs
 

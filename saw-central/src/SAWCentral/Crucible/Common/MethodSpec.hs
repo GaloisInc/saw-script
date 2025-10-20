@@ -406,7 +406,7 @@ data StateSpec ext = StateSpec
     -- ^ points-to statements
   , _csConditions    :: [SetupCondition ext]
     -- ^ equality, propositions, and ghost-variable conditions
-  , _csFreshVars     :: [TypedExtCns]
+  , _csFreshVars     :: [TypedVariable]
     -- ^ fresh variables created in this state
   , _csVarTypeNames  :: !(Map AllocIndex (TypeName ext))
     -- ^ names for types of variables, for diagnostics

@@ -121,6 +121,7 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.BitVector.Sized as BV
 
+import           SAWCore.Name (VarName(..))
 import           SAWCore.SCTypeCheck (scTypeCheckWHNF)
 import           SAWCore.SharedTerm
 import           SAWCore.Recognizer
@@ -334,7 +335,7 @@ methodSpecHandler opts sc cc mdMap css h =
   prestates <-
     do g0 <- Crucible.readGlobals
        forM css $ \cs -> liftIO $
-         let initialFree = Set.fromList (map (ecVarIndex . tecExt)
+         let initialFree = Set.fromList (map (vnIndex . tvName)
                                            (view (MS.csPreState . MS.csFreshVars) cs))
           in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)
                       (do methodSpecHandler_prestate opts sc cc args cs
