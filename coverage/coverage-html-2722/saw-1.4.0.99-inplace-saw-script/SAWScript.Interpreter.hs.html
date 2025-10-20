@@ -936,7 +936,7 @@ span.spaces    { background: white }
 <span class="lineno">  917 </span><span class="spaces">         </span><span class="istickedoff">let mLoc = iModule imp</span>
 <span class="lineno">  918 </span><span class="spaces">             </span><span class="istickedoff">qual = iAs imp</span>
 <span class="lineno">  919 </span><span class="spaces">             </span><span class="istickedoff">spec = iSpec imp</span>
-<span class="lineno">  920 </span><span class="spaces">         </span><span class="istickedoff">cenv' &lt;- io $ CEnv.importModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec</span>
+<span class="lineno">  920 </span><span class="spaces">         </span><span class="istickedoff">cenv' &lt;- io $ CEnv.importCryptolModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec</span>
 <span class="lineno">  921 </span><span class="spaces">         </span><span class="istickedoff">putTopLevelRW $ rw { rwCryptol = cenv' }</span>
 <span class="lineno">  922 </span><span class="spaces">         </span><span class="istickedoff">--showCryptolEnv</span>
 <span class="lineno">  923 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1599,12 +1599,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1580 </span>    <span class="decl"><span class="istickedoff">fromValue _ (VMIRType t) = t</span>
 <span class="lineno"> 1581 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ _ = <span class="nottickedoff">error &quot;fromValue MIRType&quot;</span></span></span>
 <span class="lineno"> 1582 </span>
-<span class="lineno"> 1583 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue CryptolModule</span></span></span></span> where
+<span class="lineno"> 1583 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue CEnv.ExtCryptolModule</span></span></span></span> where
 <span class="lineno"> 1584 </span>    <span class="decl"><span class="istickedoff">toValue _name m = VCryptolModule m</span></span>
 <span class="lineno"> 1585 </span>
-<span class="lineno"> 1586 </span>instance FromValue CryptolModule where
-<span class="lineno"> 1587 </span>    <span class="decl"><span class="nottickedoff">fromValue _ (VCryptolModule m) = m</span>
-<span class="lineno"> 1588 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ _ = error &quot;fromValue CryptolModule&quot;</span></span>
+<span class="lineno"> 1586 </span>instance FromValue CEnv.ExtCryptolModule where
+<span class="lineno"> 1587 </span>    <span class="decl"><span class="istickedoff">fromValue _ (VCryptolModule m) = m</span>
+<span class="lineno"> 1588 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ _ = <span class="nottickedoff">error &quot;fromValue CryptolModule&quot;</span></span></span>
 <span class="lineno"> 1589 </span>
 <span class="lineno"> 1590 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue JSS.Class</span></span></span></span> where
 <span class="lineno"> 1591 </span>    <span class="decl"><span class="istickedoff">toValue _name c = VJavaClass c</span></span>
@@ -2221,7 +2221,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2202 </span><span class="decl"><span class="nottickedoff">do_offline_w4_unint_yices unints path =</span>
 <span class="lineno"> 2203 </span><span class="spaces">  </span><span class="nottickedoff">offline_w4_unint_yices unints (Text.unpack path)</span></span>
 <span class="lineno"> 2204 </span>
-<span class="lineno"> 2205 </span>do_cryptol_load :: (FilePath -&gt; IO BS.ByteString) -&gt; Text -&gt; TopLevel CryptolModule
+<span class="lineno"> 2205 </span>do_cryptol_load :: (FilePath -&gt; IO BS.ByteString) -&gt; Text -&gt; TopLevel CEnv.ExtCryptolModule
 <span class="lineno"> 2206 </span><span class="decl"><span class="istickedoff">do_cryptol_load loader path =</span>
 <span class="lineno"> 2207 </span><span class="spaces">  </span><span class="istickedoff">cryptol_load loader (Text.unpack path)</span></span>
 <span class="lineno"> 2208 </span>
@@ -4142,15 +4142,15 @@ span.spaces    { background: white }
 <span class="lineno"> 4123 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Load the given file as a Cryptol module.&quot; ]</span></span>
 <span class="lineno"> 4124 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 4125 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;cryptol_extract&quot;     &quot;CryptolModule -&gt; String -&gt; TopLevel Term&quot;</span>
-<span class="lineno"> 4126 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal CEnv.extractDefFromCryptolModule)</span></span>
-<span class="lineno"> 4127 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 4126 </span><span class="spaces">    </span><span class="istickedoff">(pureVal cryptol_extract)</span>
+<span class="lineno"> 4127 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 4128 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Load a single definition from a Cryptol module and translate it into&quot;</span></span>
 <span class="lineno"> 4129 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;a 'Term'.&quot;</span></span>
 <span class="lineno"> 4130 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 4131 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 4132 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;cryptol_prims&quot;       &quot;() -&gt; CryptolModule&quot;</span>
-<span class="lineno"> 4133 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal1 (\() -&gt; cryptol_prims))</span></span>
-<span class="lineno"> 4134 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 4133 </span><span class="spaces">    </span><span class="istickedoff">(funVal1 (\() -&gt; cryptol_prims))</span>
+<span class="lineno"> 4134 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 4135 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return a Cryptol module containing extra primitive operations,&quot;</span></span>
 <span class="lineno"> 4136 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;including array updates, truncate/extend, and signed comparisons.&quot;</span></span>
 <span class="lineno"> 4137 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
