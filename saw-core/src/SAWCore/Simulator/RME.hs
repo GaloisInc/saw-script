@@ -439,18 +439,18 @@ bitBlastBasic m addlPrims varMap t = runIdentity $ do
 
 
 processVar ::
-  (ExtCns Term, FirstOrderType) ->
-  IO (ExtCns Term, FiniteType)
-processVar (ec, fot) =
+  (VarName, FirstOrderType) ->
+  IO (VarName, FiniteType)
+processVar (vn, fot) =
   case toFiniteType fot of
     Nothing -> fail ("RME solver does not support variables of type " ++ show fot)
-    Just ft -> pure (ec, ft)
+    Just ft -> pure (vn, ft)
 
 withBitBlastedSATQuery ::
   SharedContext ->
   Map Ident RPrim ->
   SATQuery ->
-  (RME -> [(ExtCns Term, FiniteType)] -> IO a) ->
+  (RME -> [(VarName, FiniteType)] -> IO a) ->
   IO a
 withBitBlastedSATQuery sc addlPrims satq cont =
   do unless (Set.null (satUninterp satq)) $ fail
@@ -459,7 +459,7 @@ withBitBlastedSATQuery sc addlPrims satq cont =
      varShapes <- mapM processVar (Map.toList (satVariables satq))
      modmap <- scGetModuleMap sc
      let vars = evalState (traverse (traverse newVars) varShapes) 0
-     let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) <- vars ]
+     let varMap = Map.fromList [ (vnIndex x, v) | (x, v) <- vars ]
      let bval = bitBlastBasic modmap addlPrims varMap t
      case bval of
        VBool anf -> cont anf varShapes

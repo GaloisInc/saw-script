@@ -250,7 +250,7 @@ import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
 
-import SAWCore.Name (ecShortName, DisplayNameEnv, emptyDisplayNameEnv)
+import SAWCore.Name (VarName(..), DisplayNameEnv, emptyDisplayNameEnv)
 import CryptolSAWCore.CryptolEnv as CEnv
 import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, ctxtRewriteRule, listRules)
@@ -592,7 +592,7 @@ data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
 
 data SatResult
   = Unsat SolverStats
-  | Sat SolverStats [(ExtCns Term, FirstOrderValue)]
+  | Sat SolverStats [(VarName, FirstOrderValue)]
   | SatUnknown
     deriving (Show)
 
@@ -604,8 +604,8 @@ showsProofResult opts r =
     UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining"
   where
     showVal t = shows (ppFirstOrderValue opts t)
-    showEqn (x, t) = showEC x . showString " = " . showVal t
-    showEC ec = showString (Text.unpack (ecShortName ec))
+    showEqn (x, t) = showVarName x . showString " = " . showVal t
+    showVarName vn = showString (Text.unpack (vnName vn))
 
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
@@ -618,8 +618,8 @@ showsSatResult opts r =
     SatUnknown  -> showString "Unknown"
   where
     showVal t = shows (ppFirstOrderValue opts t)
-    showEC ec = showString (Text.unpack (ecShortName ec))
-    showEqn (x, t) = showEC x . showString " = " . showVal t
+    showVarName vn = showString (Text.unpack (vnName vn))
+    showEqn (x, t) = showVarName x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 

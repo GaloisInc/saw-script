@@ -21,7 +21,7 @@ import SAWCore.SharedTerm
 --   and a collection of @VarIndex@ values identifying
 --   subterms that should be considered uninterpreted.
 --
---   All the @ExtCns@ values in the query should
+--   All the free variables in the query should
 --   appear either in @satVariables@ or @satUninterp@.
 --   Constant values for which definitions are provided
 --   may also appear in @satUninterp@, in which case
@@ -32,11 +32,10 @@ import SAWCore.SharedTerm
 --   and will fail if presented a query that requests them.
 data SATQuery =
   SATQuery
-  { satVariables :: Map (ExtCns Term) FirstOrderType
+  { satVariables :: Map VarName FirstOrderType
       -- ^ The variables in the query, for which we
       --   expect the solver to find values in satisfiable
-      --   cases.  INVARIANT: The type of the @ExtCns@ keys
-      --   should correspond to the @FirstOrderType@ values.
+      --   cases.
 
   , satUninterp  :: Set VarIndex
       -- ^ A set indicating which variables and constant

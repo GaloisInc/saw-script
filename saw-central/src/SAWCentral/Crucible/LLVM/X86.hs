@@ -73,7 +73,7 @@ import Data.Parameterized.Context hiding (view, zipWithM)
 import CryptolSAWCore.CryptolEnv
 import SAWCore.FiniteValue
 import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
-import SAWCore.Name (Name(..), ecShortName)
+import SAWCore.Name (Name(..), VarName(..))
 import SAWCore.Prelude
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
@@ -1630,9 +1630,9 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
         ppOpts <- rwPPOpts <$> getTopLevelRW
         case vals of
           [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
-          _ -> let showEC ec = Text.unpack (ecShortName ec) in
-               let showAssignment (ec, val) =
-                     mconcat [ " ", showEC ec, ": ", show $ ppFirstOrderValue ppOpts val ]
+          _ -> let showVar x = Text.unpack (vnName x) in
+               let showAssignment (x, val) =
+                     mconcat [ " ", showVar x, ": ", show $ ppFirstOrderValue ppOpts val ]
                in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
         printOutLnTop OnlyCounterExamples "----------------------------------"
         throwTopLevel "Proof failed."

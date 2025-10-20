@@ -76,7 +76,7 @@ import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptol
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
 import SAWCore.Module (emptyModule, moduleDecls)
-import SAWCore.Name (mkModuleName, ecShortName)
+import SAWCore.Name (VarName(..), mkModuleName)
 import SAWCore.Prelude (preludeModule)
 import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
@@ -139,7 +139,7 @@ proveWithPropExporter exporter path goal =
 writeAIG_SAT ::
   FilePath ->
   SATQuery ->
-  TopLevel [(ExtCns Term, FiniteType)]
+  TopLevel [(VarName, FiniteType)]
 writeAIG_SAT f satq =
   do AIGProxy proxy <- getProxy
      sc <- getSharedContext
@@ -330,7 +330,7 @@ writeCore path t = io $ writeFile path (scWriteExternal t)
 write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 write_verilog sc path t = io $ writeVerilog sc path t
 
-writeVerilogSAT :: FilePath -> SATQuery -> TopLevel [(ExtCns Term, FiniteType)]
+writeVerilogSAT :: FilePath -> SATQuery -> TopLevel [(VarName, FiniteType)]
 writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
   do sym <- newSAWCoreExprBuilder sc False
      -- For SAT checking, we don't care what order the variables are in,
@@ -345,7 +345,7 @@ writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
                    Nothing -> fail $ "writeVerilogSAT: Unsupported argument type " ++ show fot
                    Just ft -> return ft
      let argSValues = map (snd . snd) vars
-     let argSValueNames = zip argSValues (map ecShortName argNames)
+     let argSValueNames = zip argSValues (map vnName argNames)
      argTys' <- traverse f argTys
      let mkInput (v, nm) = map (,nm) <$> flattenSValue sym v
      ins <- concat <$> mapM mkInput argSValueNames
