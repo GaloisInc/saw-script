@@ -2221,7 +2221,7 @@ genCodeForEnum sc env nt ctors =
 
   -------------------------------------------------------------
   -- Common code to handle type parameters of the nominal type:
-  --  - ExtCns are used to capture each of the type variables.
+  --  - `Variable`s are used to capture each of the type variables.
 
   -- The type parameters (`ts` in the example above)
   let tyParamsInfo  = C.ntParams nt
@@ -2230,7 +2230,7 @@ genCodeForEnum sc env nt ctors =
   -- tyParamsKinds <- forM tyParamsInfo $ \tpi ->
   --                   importKind sc (C.tpKind tpi)
   -- | create variables for the type Params:
-  -- tyParamsVars  <- mapM (scExtCns sc) tyParamsECs
+  -- tyParamsVars  <- mapM (scVariable sc) tyParamsECs
 
   (envWithTParams,tks) <-
     mapAccumLM

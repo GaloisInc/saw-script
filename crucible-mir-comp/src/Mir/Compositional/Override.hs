@@ -149,14 +149,14 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     -- convert them to SAWCore terms for use in the OverrideMatcher macro.
     -- Later, we need to convert some SAWCore terms back to what4, so during
     -- this conversion, we also build up a mapping from SAWCore variables
-    -- (`SAW.ExtCns`) to what4 ones (`W4.ExprBoundVar`).
+    -- (`SAW.VarName`) to what4 ones (`W4.ExprBoundVar`).
     w4VarMapRef <- liftIO $ newIORef Map.empty
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval x = exprToTerm sym sc w4VarMapRef x
 
     -- Generate fresh variables for use in postconditions and result.  The
     -- result, `postFreshTermSub`, maps MethodSpec `VarIndex`es to `Term`s
-    -- (really just `ExtCns`s).  Those `Term`s are produced by `eval`
+    -- (really just `Variable`s).  Those `Term`s are produced by `eval`
     -- (conversion from what4 to SAW), just like everything else that we put on
     -- the RHS of the OverrideMatcher's `termSub`.
     --

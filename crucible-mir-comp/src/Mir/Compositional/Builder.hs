@@ -575,7 +575,7 @@ finish msb =
         tt <- eval (W4.BoundVarExpr var) >>= SAW.mkTypedTerm sc
         case SAW.asTypedVariable tt of
             Just x -> return x
-            Nothing -> error $ "BoundVarExpr translated to non-ExtCns term? " ++ show tt
+            Nothing -> error $ "BoundVarExpr translated to non-Variable term? " ++ show tt
 
 
 buildSubstMap ::
