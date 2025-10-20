@@ -437,7 +437,7 @@ scVariable :: SharedContext -> ExtCns Term -> IO Term
 scVariable sc (EC nm tp) = scTermF sc (Variable nm tp)
 
 -- | Create a list of named variables from a list of names and types.
-scVariables :: SharedContext -> [(VarName, Term)] -> IO [Term]
+scVariables :: Traversable t => SharedContext -> t (VarName, Term) -> IO (t Term)
 scVariables sc = traverse (\(v, t) -> scVariable sc (EC v t))
 
 data DuplicateNameException = DuplicateNameException URI
