@@ -1495,14 +1495,14 @@ assertPost path func env premem preregs mdMap = do
         $ ms ^. MS.csPostState . MS.csConditions
 
   let
-    initialECs = IntMap.fromList
-      [ (ecVarIndex ec, ec)
+    initialVars = IntMap.fromList
+      [ (vnIndex vn, (vn, tvType tt))
       | tt <- ms ^. MS.csPreState . MS.csFreshVars
-      , let ec = EC (tvName tt) (tvType tt)
+      , let vn = tvName tt
       ]
     initialFree = Set.fromList . fmap (vnIndex . tvName) $ ms ^. MS.csPostState . MS.csFreshVars
 
-  initialTerms <- liftIO $ traverse (scVariable sc) initialECs
+  initialTerms <- liftIO $ scVariables sc initialVars
 
   result <- liftIO
     . O.runOverrideMatcher sym globals env initialTerms initialFree (ms ^. MS.csLoc)

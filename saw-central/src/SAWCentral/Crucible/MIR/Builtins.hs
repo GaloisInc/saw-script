@@ -1419,11 +1419,11 @@ verifyPoststate cc mspec env0 globals ret mdMap =
      skipSafetyProofs <- gets rwSkipSafetyProofs
      when skipSafetyProofs (io (Crucible.clearProofObligations bak))
 
-     let ecs0 = IntMap.fromList
-           [ (ecVarIndex ec, ec)
+     let vars0 = IntMap.fromList
+           [ (vnIndex vn, (vn, tvType tt))
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
-           , let ec = EC (tvName tt) (tvType tt) ]
-     terms0 <- io $ traverse (scVariable sc) ecs0
+           , let vn = tvName tt ]
+     terms0 <- io $ scVariables sc vars0
 
      let initialFree = Set.fromList (map (vnIndex . tvName)
                                     (view (MS.csPostState . MS.csFreshVars) mspec))
