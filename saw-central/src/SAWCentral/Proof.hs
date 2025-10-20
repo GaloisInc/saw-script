@@ -1833,7 +1833,7 @@ finishProof sc db conclProp
          pure (UnfinishedProof ps, db)
 
 -- | A type describing counterexamples.
-type CEX = [(ExtCns Term, FirstOrderValue)]
+type CEX = [(VarName, FirstOrderValue)]
 
 -- | The results that can occur after a proof attempt.
 data ProofResult
@@ -1890,7 +1890,7 @@ predicateToSATQuery sc unintSet tm0 =
     filterFirstOrderVars mmap fovars absvars (e:es) =
       case evalFOT mmap (ecType e) of
         Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
-        Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
+        Just fot -> filterFirstOrderVars mmap (Map.insert (ecName e) fot fovars) absvars es
 
     processTerm mmap vars tm =
       case asLambda tm of
@@ -1898,7 +1898,7 @@ predicateToSATQuery sc unintSet tm0 =
           case evalFOT mmap tp of
             Nothing -> fail ("predicateToSATQuery: expected first order type: " ++ showTerm tp)
             Just fot ->
-              processTerm mmap (Map.insert (EC nm tp) fot vars) body
+              processTerm mmap (Map.insert nm fot vars) body
 
           -- TODO: check that the type is a boolean
         Nothing ->
@@ -1942,7 +1942,7 @@ sequentToSATQuery sc unintSet sqt =
     filterFirstOrderVars mmap fovars absvars (e:es) =
       case evalFOT mmap (ecType e) of
          Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
-         Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
+         Just fot -> filterFirstOrderVars mmap (Map.insert (ecName e) fot fovars) absvars es
 
     processAssert mmap tp =
       case asEqTrue tp of
@@ -1989,9 +1989,9 @@ sequentToSATQuery sc unintSet sqt =
                 let tp' = tp
                 case evalFOT mmap tp' of
                   Just fot ->
-                    processConcl mmap (Map.insert (EC nm tp) fot vars, xs) body
+                    processConcl mmap (Map.insert nm fot vars, xs) body
                   Nothing
-                    | IntSet.null (foldr IntSet.delete (freeVars body) (map ecVarIndex (Map.keys vars))) ->
+                    | IntSet.null (foldr IntSet.delete (freeVars body) (map vnIndex (Map.keys vars))) ->
                         do asrt <- processAssert mmap tp
                            processConcl mmap (vars, asrt : xs) body
                     | otherwise ->

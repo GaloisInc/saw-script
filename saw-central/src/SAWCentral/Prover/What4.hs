@@ -18,6 +18,7 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import           System.IO
 
+import SAWCore.Name (VarName)
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue
 import SAWCore.SATQuery (SATQuery(..))
@@ -184,7 +185,7 @@ setupWhat4_solver :: forall st t ff.
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
   SharedContext      {- ^ Context for working with terms -} ->
   SATQuery           {- ^ The query to be proved/checked. -} ->
-  IO ( [ExtCns Term]
+  IO ( [VarName]
      , [W.Labeler (B.ExprBuilder t st ff)]
      , [Pred (B.ExprBuilder t st ff)]
      , Text)

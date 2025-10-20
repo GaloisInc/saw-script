@@ -1109,11 +1109,11 @@ w4Solve :: forall sym.
   sym ->
   SharedContext ->
   SATQuery ->
-  IO ([(ExtCns Term, (Labeler sym, SValue sym))], [SBool sym])
+  IO ([(VarName, (Labeler sym, SValue sym))], [SBool sym])
 w4Solve sym sc satq =
   do let varList  = Map.toList (satVariables satq)
      vars <- evalStateT (traverse (traverse (newVarFOT sym)) varList) 0
-     let varMap   = Map.fromList [ (ecVarIndex ec, v) | (ec, (_,v)) <- vars ]
+     let varMap   = Map.fromList [ (vnIndex x, v) | (x, (_,v)) <- vars ]
      ref <- newIORef Map.empty
 
      bvals <- mapM (w4SolveAssert sym sc varMap ref (satUninterp satq)) (satAsserts satq)

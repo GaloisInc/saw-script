@@ -111,7 +111,7 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 
 import SAWCore.FiniteValue (ppFirstOrderValue)
-import SAWCore.Name (ecShortName)
+import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import CryptolSAWCore.TypedTerm
 
@@ -348,8 +348,8 @@ verifyObligations cc mspec tactic assumes asserts =
            printOutLnTop Info (show stats)
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
            opts <- rwPPOpts <$> getTopLevelRW
-           let showEC ec = Text.unpack (ecShortName ec)
-           let showAssignment (name, val) = "  " ++ showEC name ++ ": " ++ show (ppFirstOrderValue opts val)
+           let showVar x = Text.unpack (vnName x)
+           let showAssignment (name, val) = "  " ++ showVar name ++ ": " ++ show (ppFirstOrderValue opts val)
            mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
            io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
          UnfinishedProof pst ->

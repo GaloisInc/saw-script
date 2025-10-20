@@ -301,7 +301,9 @@ mkSolverCacheKey :: SharedContext -> SolverBackendVersions ->
                     [SolverBackendOption] -> SATQuery -> IO SolverCacheKey
 mkSolverCacheKey sc vs opts satq = do
   body <- satQueryAsPropTerm sc satq
-  let ecs = M.keys (satVariables satq) ++
+  let satEC vn fot = EC vn <$> scFirstOrderType sc fot
+  satECs <- M.traverseWithKey satEC (satVariables satq)
+  let ecs = M.elems satECs ++
             filter (\ec -> ecVarIndex ec `elem` satUninterp satq)
                    (getAllExts body)
   tm <- scGeneralizeExts sc ecs body
@@ -364,10 +366,10 @@ toSolverCacheValue :: SolverBackendVersions -> [SolverBackendOption] ->
                       SATQuery -> (Maybe CEX, Text) ->
                       IO (Maybe SolverCacheValue)
 toSolverCacheValue vs opts satq (cexs, solver_name) = do
-  getCurrentTime <&> \t -> case firstsMaybeM (`elemIndex` ecs) cexs of
+  getCurrentTime <&> \t -> case firstsMaybeM (`elemIndex` vns) cexs of
     Just cexs' -> Just $ SolverCacheValue vs opts solver_name cexs' t
     Nothing -> Nothing
-  where ecs = M.keys $ satVariables satq
+  where vns = M.keys $ satVariables satq
         firstsMaybeM :: Monad m => (a -> m b) ->
                         Maybe [(a, c)] -> m (Maybe [(b, c)])
         firstsMaybeM = mapM . mapM . firstM
@@ -376,8 +378,8 @@ toSolverCacheValue vs opts satq (cexs, solver_name) = do
 -- result of a solver call on the given 'SATQuery'
 fromSolverCacheValue :: SATQuery -> SolverCacheValue -> (Maybe CEX, Text)
 fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs _) =
-  (firstsMaybe (ecs !!) cexs, solver_name)
-  where ecs = M.keys $ satVariables satq
+  (firstsMaybe (vns !!) cexs, solver_name)
+  where vns = M.keys $ satVariables satq
         firstsMaybe :: (a -> b) -> Maybe [(a, c)] -> Maybe [(b, c)]
         firstsMaybe = fmap . fmap . first
 

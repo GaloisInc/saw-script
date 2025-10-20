@@ -19,11 +19,11 @@ import SAWCore.FiniteValue
   ( FirstOrderType(..), FirstOrderValue(..), scFirstOrderValue )
 
 import SAWCore.Module (ModuleMap)
-import SAWCore.Name (ecVarIndex)
+import SAWCore.Name (VarName(..))
 import SAWCore.SATQuery
 import SAWCore.SharedTerm
   ( scGetModuleMap, SharedContext, Term
-  , ExtCns(..), scInstantiateExt
+  , scInstantiateExt
   )
 import SAWCore.Simulator.Concrete (evalSharedTerm) -- , CValue)
 import SAWCore.Simulator.Value (Value(..)) -- , TValue(..))
@@ -67,14 +67,14 @@ execTest ::
   (F.MonadFail m, MonadRandom m, MonadIO m) =>
   SharedContext ->
   ModuleMap ->
-  Map.Map (ExtCns Term) (m FirstOrderValue) ->
+  Map.Map VarName (m FirstOrderValue) ->
   Term ->
-  m (Maybe [(ExtCns Term, FirstOrderValue)])
+  m (Maybe [(VarName, FirstOrderValue)])
 execTest sc mmap vars tm =
   do testVec <- sequence vars
      tm' <- liftIO $
              do argMap0 <- traverse (scFirstOrderValue sc) testVec
-                let argMap = IntMap.fromList [ (ecVarIndex ec, v) | (ec,v) <- Map.toList argMap0 ]
+                let argMap = IntMap.fromList [ (vnIndex x, v) | (x, v) <- Map.toList argMap0 ]
                 scInstantiateExt sc argMap tm
      case evalSharedTerm mmap Map.empty Map.empty tm' of
        -- satisfaible, return counterexample
@@ -87,7 +87,7 @@ prepareSATQuery ::
   (MonadRandom m, F.MonadFail m, MonadIO m) =>
   SharedContext ->
   SATQuery ->
-  IO (m (Maybe [(ExtCns Term, FirstOrderValue)]))
+  IO (m (Maybe [(VarName, FirstOrderValue)]))
 prepareSATQuery sc satq
   | Set.null (satUninterp satq) =
        do varmap <- traverse prepareVar (satVariables satq)
@@ -103,9 +103,9 @@ prepareSATQuery sc satq
        _ -> fail ("Cannot randomly test argument of type: " ++ show fot)
 
 runManyTests ::
-  RandT TFGen IO (Maybe [(ExtCns Term, FirstOrderValue)]) ->
+  RandT TFGen IO (Maybe [(VarName, FirstOrderValue)]) ->
   Integer ->
-  IO (Maybe [(ExtCns Term, FirstOrderValue)])
+  IO (Maybe [(VarName, FirstOrderValue)])
 runManyTests m numtests = evalRandT (loop numtests) =<< newTFGen
   where
     loop n

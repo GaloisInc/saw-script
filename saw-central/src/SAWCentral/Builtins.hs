@@ -527,7 +527,7 @@ resolveNames nms =
      Set.fromList . mconcat <$> mapM (resolveName sc) nms
 
 -- | Given a user-provided name, resolve it to (potentially several)
--- 'ExtCns' that each represent an unfoldable 'Constant' value or a
+-- 'VarIndex'es that each represent an unfoldable 'Constant' value or a
 -- fresh uninterpreted constant.
 -- The given name is searched for in both the local Cryptol environment
 -- and the SAWCore naming environment.
@@ -551,7 +551,7 @@ resolveNameIO sc cenv nm =
        Nothing -> pure scnms
 
 -- | Given a user-provided name, resolve it to (potentially several)
--- 'ExtCns' that each represent an unfoldable 'Constant' value or a
+-- 'VarIndex'es that each represent an unfoldable 'Constant' value or a
 -- fresh uninterpreted constant.
 -- The given name is searched for in both the local Cryptol environment
 -- and the SAWCore naming environment. If it is found in neither, an
@@ -1478,7 +1478,7 @@ quickCheckPrintPrim sc opts numTests tt =
      runManyTests testGen numTests >>= \case
         Nothing -> printOutLn opts Info $ "All " ++ show numTests ++ " tests passed!"
         Just cex ->
-          do let cex' = [ (Text.unpack (ecShortName ec), v) | (ec,v) <- cex ]
+          do let cex' = [ (Text.unpack (vnName x), v) | (x, v) <- cex ]
              printOutLn opts OnlyCounterExamples $
                "----------Counterexample----------\n" ++
                showList cex' ""
