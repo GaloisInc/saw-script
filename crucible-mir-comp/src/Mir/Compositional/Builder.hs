@@ -83,7 +83,7 @@ data MethodSpecBuilder sym t = MethodSpecBuilder
     -- performance.  Variables that appear on the LHS of an entry here will be
     -- removed from the `MethodSpec`'s fresh variable lists.  Substitutions are
     -- applied in the order listed.
-    , _msbSubsts :: [(SAW.ExtCns SAW.Term, SAW.Term)]
+    , _msbSubsts :: [(SAW.VarName, SAW.Term)]
     }
 
 data StateExtra sym t = StateExtra
@@ -403,11 +403,11 @@ gatherAsserts msb =
         gatherSubsts postOnlyVars vars [] [] asserts'
     substTerms <- forM substs $ \(Pair var expr) -> do
         varTerm <- liftIO $ eval $ W4.BoundVarExpr var
-        varEc <- case SAW.asVariable varTerm of
-            Just (x, tp) -> pure (SAW.EC x tp)
-            Nothing -> error $ "eval of BoundVarExpr produced non-ExtCns ?" ++ show varTerm
+        varName <- case SAW.asVariable varTerm of
+            Just (vn, _) -> pure vn
+            Nothing -> error $ "eval of BoundVarExpr produced non-Variable ?" ++ show varTerm
         exprTerm <- liftIO $ eval expr
-        return (varEc, exprTerm)
+        return (varName, exprTerm)
 
     let loc = msb ^. msbSpec . MS.csLoc
     assertConds <- liftIO $ forM asserts'' $ \pred_ -> do
@@ -580,17 +580,17 @@ finish msb =
 
 buildSubstMap ::
     SAW.SharedContext ->
-    [(SAW.ExtCns SAW.Term, SAW.Term)] ->
+    [(SAW.VarName, SAW.Term)] ->
     IO (IntMap SAW.Term)
 buildSubstMap sc substs0 = go IntMap.empty substs0
   where
     go sm [] = return sm
-    go sm ((ec, term) : substs) = do
+    go sm ((vn, term) : substs) = do
         -- Rewrite the RHSs of previous substitutions using the current one.
-        let sm1 = IntMap.singleton (SAW.ecVarIndex ec) term
+        let sm1 = IntMap.singleton (SAW.vnIndex vn) term
         sm' <- mapM (SAW.scInstantiateExt sc sm1) sm
         -- Add the current subst and continue.
-        go (IntMap.insert (SAW.ecVarIndex ec) term sm') substs
+        go (IntMap.insert (SAW.vnIndex vn) term sm') substs
 
 substMethodSpec ::
     SAW.SharedContext ->
