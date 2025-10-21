@@ -1959,9 +1959,9 @@ sequentToSATQuery sc unintSet sqt =
                 let tp' = tp
                 case evalFOT mmap tp' of
                   Just fot ->
-                    processUnivAssert mmap ((EC nm tp, fot) : vars) xs body
+                    processUnivAssert mmap ((nm, fot) : vars) xs body
                   Nothing
-                    | IntSet.null (foldr IntSet.delete (freeVars body) (map (ecVarIndex . fst) vars)) ->
+                    | IntSet.null (foldr IntSet.delete (freeVars body) (map (vnIndex . fst) vars)) ->
                       case asEqTrue tp' of
                         Just x  -> processUnivAssert mmap vars (x:xs) body
                         Nothing ->

@@ -56,16 +56,16 @@ data SATQuery =
 --   some of the solvers will accept them without errors.
 data SATAssert
    = BoolAssert Term -- ^ A boolean term to be asserted
-   | UniversalAssert [(ExtCns Term, FirstOrderType)] [Term] Term
+   | UniversalAssert [(VarName, FirstOrderType)] [Term] Term
           -- ^ A universally-quantified assertion, consisting of a
           --   collection of first-order variables, a sequence
           --   of boolean hypotheses, and a boolean conclusion
 
 -- | The result of a sat query. In the event a model is found,
---   return a mapping from the @ExtCns@ variables to values.
+--   return a mapping from variable names to values.
 data SATResult
   = Unsatisfiable
-  | Satisfiable (ExtCns Term -> IO FirstOrderValue)
+  | Satisfiable (VarName -> IO FirstOrderValue)
   | Unknown
 
 -- | Compute the conjunction of all the assertions
@@ -95,6 +95,7 @@ satQueryAsPropTerm :: SharedContext -> SATQuery -> IO Term
 satQueryAsPropTerm sc satq =
   scTupleType sc =<< mapM assertAsPropTerm (satAsserts satq)
   where assertAsPropTerm (BoolAssert b) = scEqTrue sc b
-        assertAsPropTerm (UniversalAssert ecs hs g) =
-          scGeneralizeExts sc (map fst ecs) =<< 
-          scEqTrue sc =<< foldrM (scImplies sc) g hs
+        assertAsPropTerm (UniversalAssert vars hs g) =
+          do vars' <- traverse (traverse (scFirstOrderType sc)) vars
+             scPiList sc vars' =<<
+               scEqTrue sc =<< foldrM (scImplies sc) g hs
