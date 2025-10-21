@@ -172,7 +172,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
   let stateNames = TraversableFC.fmapFC (Const . W4.safeSymbol . Text.unpack . view sequentialFieldName) $ stateFields ^. sequentialFields
   let lookupBinding nm bindings =
         case Map.lookup nm bindings of
-          Just (ec, _) -> SC.scVariable sc ec
+          Just (ec, _) -> SC.scVariable sc (SC.ecName ec) (SC.ecType ec)
           Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
   let ts = W4.TransitionSystem
         { W4.inputReprs = inputReprs
@@ -212,7 +212,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             inps <- fmap Map.fromList . forM (Map.assocs $ sequential ^. yosysSequentialInputWidths) $ \(nm, _) ->
               let bindings = if Set.member nm fixedInputs then curFixedInputBindings else inputBindings
               in (nm,) <$> lookupBinding nm bindings
-            states <- forM curBindings $ \(ec, _) -> SC.scVariable sc ec
+            states <- forM curBindings $ \(ec, _) -> SC.scVariable sc (SC.ecName ec) (SC.ecType ec)
             inpst <- cryptolRecord sc states
             domainRec <- cryptolRecord sc $ Map.insert "__state__" inpst inps
             codomainRec <- liftIO $ SC.scApply sc (sequential ^. yosysSequentialTerm . SC.ttTermLens) domainRec

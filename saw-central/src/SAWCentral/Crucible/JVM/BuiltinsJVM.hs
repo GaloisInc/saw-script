@@ -72,7 +72,7 @@ import qualified What4.Solver.Yices as Yices
 
 -- saw-core
 import SAWCore.SharedTerm
-  ( ExtCns(..), Term, SharedContext, mkSharedContext, scFreshVarName, scImplies, scVariable )
+  ( Term, SharedContext, mkSharedContext, scFreshVarName, scImplies, scVariable )
 
 -- cryptol-saw-core
 import CryptolSAWCore.TypedTerm
@@ -216,7 +216,7 @@ setupArg sc sym ecRef tp = do
   ecs <- readIORef ecRef
   vn <- scFreshVarName sc ("arg_" <> Text.pack (show (length ecs)))
   writeIORef ecRef (ecs Seq.|> TypedVariable cty vn scTp)
-  t <- scVariable sc (EC vn scTp)
+  t <- scVariable sc vn scTp
   Crucible.RegEntry tp <$> termToRegValue sym tp t
 
 -- | Create fresh argument variables of the appropriate types, suitable for use

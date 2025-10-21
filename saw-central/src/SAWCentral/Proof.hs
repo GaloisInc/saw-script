@@ -1330,7 +1330,7 @@ predicateToProp sc quant = loop
                        Universal -> scEqTrue sc t0
                        Existential -> scEqTrue sc =<< scNot sc t0
                toPi ((x, xT) : tys) t1 =
-                 do t2 <- scApply sc t1 =<< scVariable sc (EC x xT)
+                 do t2 <- scApply sc t1 =<< scVariable sc x xT
                     t3 <- toPi tys t2
                     scPi sc x xT t3
            Prop <$> toPi argTs t
@@ -1749,7 +1749,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                      , showTerm ty'
                      , showTerm ty
                      ]
-                   x' <- scVariable sc x
+                   x' <- scVariable sc (ecName x) (ecType x)
                    body' <- scInstantiateExt sc (IntMap.singleton (vnIndex nm) x') body
                    check nenv e' (mkSqt (Prop body'))
 
@@ -2058,8 +2058,9 @@ tacticIntro sc usernm = Tactic \goal ->
         Just (vn, tp, body) ->
           do let nm = vnName vn
              let name = if Text.null usernm then nm else usernm
-             xv <- liftIO $ scFreshEC sc name tp
-             x  <- liftIO $ scVariable sc xv
+             vn' <- liftIO $ scFreshVarName sc name
+             let xv = EC vn' tp
+             x  <- liftIO $ scVariable sc vn' tp
              tt <- liftIO $ mkTypedTerm sc x
              body' <- liftIO $ scInstantiateExt sc (IntMap.singleton (vnIndex vn) x) body
              let goal' = goal { goalSequent = mkSqt (Prop body') }

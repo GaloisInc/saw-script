@@ -432,13 +432,13 @@ scConstApply sc i ts =
   do c <- scConst sc i
      scApplyAll sc c ts
 
--- | Create a named variable 'Term' from an 'ExtCns'.
-scVariable :: SharedContext -> ExtCns Term -> IO Term
-scVariable sc (EC nm tp) = scTermF sc (Variable nm tp)
+-- | Create a named variable 'Term' from a 'VarName' and a type.
+scVariable :: SharedContext -> VarName -> Term -> IO Term
+scVariable sc nm tp = scTermF sc (Variable nm tp)
 
 -- | Create a list of named variables from a list of names and types.
 scVariables :: Traversable t => SharedContext -> t (VarName, Term) -> IO (t Term)
-scVariables sc = traverse (\(v, t) -> scVariable sc (EC v t))
+scVariables sc = traverse (\(v, t) -> scVariable sc v t)
 
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
@@ -508,7 +508,9 @@ scFreshEC sc x tp =
 
 -- | Create a fresh variable with the given identifier (which may be "_") and type.
 scFreshVariable :: SharedContext -> Text -> Term -> IO Term
-scFreshVariable sc x tp = scVariable sc =<< scFreshEC sc x tp
+scFreshVariable sc x tp =
+  do nm <- scFreshVarName sc x
+     scVariable sc nm tp
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -877,7 +879,7 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
      let helper :: [Term] -> [(VarName, CtorArg)] -> IO Term
          helper prevs ((nm, ConstArg tp) : args) =
            -- For a constant argument type, just abstract it and continue
-           do arg <- scVariable sc (EC nm tp)
+           do arg <- scVariable sc nm tp
               rest <- helper (prevs ++ [arg]) args
               scGeneralizeTerms sc [arg] rest
          helper prevs ((nm, RecursiveArg zs ts) : args) =
@@ -895,7 +897,7 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
            do d_params_ts <- scApplyAll sc d_params ts
               -- Build the type of the argument arg
               arg_tp <- scPiList sc zs d_params_ts
-              arg <- scVariable sc (EC nm arg_tp)
+              arg <- scVariable sc nm arg_tp
               -- Build the type of ih
               pret_ts <- scApplyAll sc p_ret ts
               z_vars <- scVariables sc zs
@@ -1023,7 +1025,7 @@ scRecursorAppType sc dt params motive =
      ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
      arg_vn <- scFreshVarName sc "arg"
-     arg_var <- scVariable sc (EC arg_vn d)
+     arg_var <- scVariable sc arg_vn d
      ret <- scApplyAll sc motive (ix_vars ++ [arg_var])
      ty <- scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
      let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
@@ -1048,7 +1050,7 @@ scRecursorType sc dt s =
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
      motive_ty <- scRecursorRetTypeType sc dt param_vars s
      motive_vn <- scFreshVarName sc "p"
-     motive_var <- scVariable sc (EC motive_vn motive_ty)
+     motive_var <- scVariable sc motive_vn motive_ty
 
      -- Compute the types of the elimination functions
      elims_tps <-
@@ -2714,13 +2716,13 @@ scInstantiateExt sc vmap t0 =
                Variable nm tp ->
                  case IntMap.lookup (vnIndex nm) vmap of
                    Just t' -> pure t'
-                   Nothing -> scVariable sc =<< traverse memo (EC nm tp)
+                   Nothing -> scVariable sc nm =<< memo tp
          goBinder :: VarName -> Term -> Term -> IO (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
                -- Possibility of capture; rename bound variable.
                do x' <- scFreshVarName sc (vnName x)
-                  var <- scVariable sc (EC x' t)
+                  var <- scVariable sc x' t
                   let vmap' = IntMap.insert i var vmap
                   body' <- scInstantiateExt sc vmap' body
                   pure (x', body')

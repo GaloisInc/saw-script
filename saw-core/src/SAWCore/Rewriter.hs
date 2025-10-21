@@ -450,9 +450,8 @@ scExpandRewriteRule :: SharedContext -> RewriteRule a -> IO (Maybe [RewriteRule 
 scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
   case R.asLambda rhs of
   Just (nm, tp, body) ->
-    do let ec = EC nm tp
-       let ctxt' = ctxt ++ [(nm, tp)]
-       var0 <- scVariable sc ec
+    do let ctxt' = ctxt ++ [(nm, tp)]
+       var0 <- scVariable sc nm tp
        lhs' <- scApply sc lhs var0
        pure $ Just [mkRewriteRule ctxt' lhs' body shallow ann]
   Nothing ->
@@ -540,7 +539,7 @@ asFreshPiList sc t =
       do -- never use "_" as the base name
          let basename = if vnName x == "_" then "_x" else vnName x
          x' <- scFreshVarName sc basename
-         var <- scVariable sc (EC x' t1)
+         var <- scVariable sc x' t1
          t2' <- scInstantiateExt sc (IntMap.singleton (vnIndex x) var) t2
          (ctx, body) <- asFreshPiList sc t2'
          pure ((x', t1) : ctx, body)

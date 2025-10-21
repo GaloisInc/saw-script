@@ -1980,7 +1980,7 @@ setupArg sc cc ecRef mty0 tp0 =
     vn <- scFreshVarName sc ("arg_" <> Text.pack (show (length ecs)))
     writeIORef ecRef (ecs Seq.|> TypedVariable cty vn scTp)
 
-    t <- scVariable sc (EC vn scTp)
+    t <- scVariable sc vn scTp
     Crucible.RegEntry tp0 <$> termToMirRegValue shp scTp t
 
 -- | Create fresh argument variables of the appropriate types, suitable for use

@@ -41,6 +41,7 @@ import qualified What4.Interface as W4
 import qualified What4.Partial as W4
 import qualified What4.SWord as W4 (SWord(..))
 
+import qualified SAWCore.Name as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCore.Simulator.MonadLazy as SAW
 import qualified SAWCore.Simulator.Value as SAW
@@ -303,9 +304,9 @@ exprToTerm :: forall sym t fs tp m.
     m SAW.Term
 exprToTerm sym sc w4VarMapRef val = liftIO $ do
     ty <- SAW.baseSCType sym sc (W4.exprType val)
-    ec <- SAW.scFreshEC sc "w4expr" ty
-    modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some val)
-    term <- SAW.scVariable sc ec
+    vn <- SAW.scFreshVarName sc "w4expr"
+    modifyIORef w4VarMapRef $ Map.insert (SAW.vnIndex vn) (Some val)
+    term <- SAW.scVariable sc vn ty
     return term
 
 

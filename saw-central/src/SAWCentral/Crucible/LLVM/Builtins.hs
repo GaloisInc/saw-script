@@ -1846,7 +1846,7 @@ setupArg sc sym ecRef tp = do
   vn <- scFreshVarName sc ("arg_" <> Text.pack (show (length ecs)))
   writeIORef ecRef (ecs Seq.|> TypedVariable cty vn scTp)
 
-  t <- scVariable sc (EC vn scTp)
+  t <- scVariable sc vn scTp
   elt <-
     case tp of
       Crucible.LLVMPointerRepr w -> do

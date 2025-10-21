@@ -339,7 +339,7 @@ identOpenTerm ident =
 
 -- | Build an 'OpenTerm' for a named variable.
 variableOpenTerm :: ExtCns Term -> OpenTerm
-variableOpenTerm ec = OpenTerm (liftTCM scVariable ec >>= typeInferComplete)
+variableOpenTerm (EC x t) = OpenTerm (liftTCM scVariable x t >>= typeInferComplete)
 
 -- | Apply an 'OpenTerm' to another
 applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm

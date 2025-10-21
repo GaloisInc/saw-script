@@ -552,7 +552,7 @@ refreshTerms sc ss =
   where
     freshenTerm (TypedVariable _cty vn ty) =
       do vn' <- liftIO $ scFreshVarName sc (vnName vn)
-         new <- liftIO $ scVariable sc (EC vn' ty)
+         new <- liftIO $ scVariable sc vn' ty
          return (vnIndex vn, new)
 
 -- | An override packaged together with its preconditions, labeled with some
