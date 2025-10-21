@@ -81,7 +81,7 @@ span.spaces    { background: white }
 <span class="lineno">   62 </span>          --   of boolean hypotheses, and a boolean conclusion
 <span class="lineno">   63 </span>
 <span class="lineno">   64 </span>-- | The result of a sat query. In the event a model is found,
-<span class="lineno">   65 </span>--   return a mapping from the @ExtCns@ variables to values.
+<span class="lineno">   65 </span>--   return a mapping from variable names to values.
 <span class="lineno">   66 </span>data SATResult
 <span class="lineno">   67 </span>  = Unsatisfiable
 <span class="lineno">   68 </span>  | Satisfiable (VarName -&gt; IO FirstOrderValue)
