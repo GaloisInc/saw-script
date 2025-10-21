@@ -186,10 +186,9 @@ termToReg sym varMap term shp0 = do
           | Just (Some w) <- someNat len,
             Just LeqProof <- testLeq (knownNat @1) w,
             Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> do
-            bits <- forM (map pred [1 .. len]) $ \i -> do
-                -- Cryptol bitvectors are MSB-first, but What4 uses LSB-first.
-                liftIO $ W4.testBitBV sym (fromIntegral $ len - i - 1) e
-            buildMirAggregateArray sym sz shp' len bits $ \_ b -> return b
+            generateMirAggregateArray sym sz shp' len $ \i ->
+              -- Cryptol bitvectors are MSB-first, but What4 uses LSB-first.
+              liftIO $ W4.testBitBV sym (fromIntegral $ len - i - 1) e
         _ -> error $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
             ", but simulator returned " ++ show sv
 
