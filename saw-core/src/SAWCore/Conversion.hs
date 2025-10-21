@@ -280,7 +280,7 @@ asAnyVecLit :: Matcher (Term, V.Vector Term)
 asAnyVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
 
 -- | Match any named variable.
-asVariable :: Matcher (ExtCns Term)
+asVariable :: Matcher (VarName, Term)
 asVariable = asVar R.asVariable
 
 ----------------------------------------------------------------------

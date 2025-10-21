@@ -204,8 +204,8 @@ data TypedVariable =
 asTypedVariable :: TypedTerm -> Maybe TypedVariable
 asTypedVariable (TypedTerm tp t) =
   do cty <- ttIsMono tp
-     ec <- asVariable t
-     pure $ TypedVariable cty (ecName ec) (ecType ec)
+     (x, ty) <- asVariable t
+     pure $ TypedVariable cty x ty
 
 -- | Make a 'TypedTerm' from a 'TypedVariable'.
 typedTermOfVariable :: SharedContext -> TypedVariable -> IO TypedTerm

@@ -470,10 +470,10 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
        (splitAt (length (recursorCtorOrder crec)) ->
         (elims,
          splitAt (recursorNumIxs crec) ->
-         (_ixs, (R.asVariable -> Just ec) : more))))))
-      | (ctxt1, _ : ctxt2) <- break ((== ecName ec) . fst) ctxt ->
+         (_ixs, (R.asVariable -> Just (x, xt)) : more))))))
+      | (ctxt1, _ : ctxt2) <- break ((== x) . fst) ctxt ->
       do -- ti is the type of the value being scrutinized
-         ti <- scWhnf sc (ecType ec)
+         ti <- scWhnf sc xt
          -- The datatype parameters are also in context @ctxt1@.
          let (_d, (params1, _ixs)) = fmap (splitAt (recursorNumParams crec)) (R.asApplyAll ti)
          let ctorRule ctor =
@@ -484,8 +484,8 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   args <- scVariables sc argCtx
                   c <- scConstApply sc (ctorName ctor) (params1 ++ args)
                   -- Define function to substitute the constructor @c@
-                  -- in for the old local variable @ec@.
-                  let subst = IntMap.singleton (ecVarIndex ec) c
+                  -- in for the old local variable @x@.
+                  let subst = IntMap.singleton (vnIndex x) c
                   let adjust t = scInstantiateExt sc subst t
                   -- Build the list of types of the new context.
                   ctxt2' <- traverse (traverse adjust) ctxt2

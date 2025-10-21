@@ -404,7 +404,7 @@ gatherAsserts msb =
     substTerms <- forM substs $ \(Pair var expr) -> do
         varTerm <- liftIO $ eval $ W4.BoundVarExpr var
         varEc <- case SAW.asVariable varTerm of
-            Just ec -> return ec
+            Just (x, tp) -> pure (SAW.EC x tp)
             Nothing -> error $ "eval of BoundVarExpr produced non-ExtCns ?" ++ show varTerm
         exprTerm <- liftIO $ eval expr
         return (varEc, exprTerm)

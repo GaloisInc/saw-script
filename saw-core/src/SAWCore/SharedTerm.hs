@@ -2749,14 +2749,14 @@ scAbstractExts sc (ec : ecs) x =
 -- 'scVariable' or 'scFreshVariable').
 scAbstractTerms :: SharedContext -> [Term] -> Term -> IO Term
 scAbstractTerms sc args body =
-  do vars <- mapM toEC args
-     scAbstractExts sc vars body
+  do vars <- mapM toVar args
+     scLambdaList sc vars body
   where
-    toEC :: Term -> IO (ExtCns Term)
-    toEC t =
+    toVar :: Term -> IO (VarName, Term)
+    toVar t =
       case asVariable t of
-        Just ec -> pure ec
-        Nothing -> fail "scAbstractTerms: expected ExtCns"
+        Just var -> pure var
+        Nothing -> fail "scAbstractTerms: expected Variable"
 
 -- | Abstract over the given list of external constants by wrapping
 --   the given term with lambdas and replacing the external constant
@@ -2772,8 +2772,8 @@ scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
     -- the final variable to abstract is applied to the
     -- term, and does not appear elsewhere in the term,
     -- so we can eta-collapse.
-    loop (ec:exts) (asApp -> Just (f, asVariable -> Just ec'))
-      | ec == ec', not (IntSet.member (ecVarIndex ec) (freeVars f))
+    loop (EC x _ : exts) (asApp -> Just (f, asVariable -> Just (x', _)))
+      | x == x', not (IntSet.member (vnIndex x) (freeVars f))
       = loop exts f
 
     -- cannot eta-collapse, do abstraction as usual
@@ -2794,14 +2794,14 @@ scGeneralizeExts sc (ec : ecs) x =
 -- 'scFreshVariable').
 scGeneralizeTerms :: SharedContext -> [Term] -> Term -> IO Term
 scGeneralizeTerms sc args body =
-  do vars <- mapM toEC args
-     scGeneralizeExts sc vars body
+  do vars <- mapM toVar args
+     scPiList sc vars body
   where
-    toEC :: Term -> IO (ExtCns Term)
-    toEC t =
+    toVar :: Term -> IO (VarName, Term)
+    toVar t =
       case asVariable t of
-        Just ec -> pure ec
-        Nothing -> fail "scGeneralizeTerms: expected ExtCns"
+        Just var -> pure var
+        Nothing -> fail "scGeneralizeTerms: expected Variable"
 
 scUnfoldConstants :: SharedContext -> [VarIndex] -> Term -> IO Term
 scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0
