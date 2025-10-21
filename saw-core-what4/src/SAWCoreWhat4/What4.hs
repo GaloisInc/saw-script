@@ -90,7 +90,7 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import SAWCore.Module (ModuleMap, ResolvedName(..), ctorName, lookupVarIndexInMap)
-import SAWCore.Name (Name(..), VarName(..), ecShortName, toAbsoluteName, toShortName)
+import SAWCore.Name (Name(..), VarName(..), toAbsoluteName, toShortName)
 import SAWCore.Term.Functor (FieldName)
 
 -- what4
@@ -1141,7 +1141,7 @@ w4SolveAssert sym sc varMap ref uninterp (UniversalAssert vars hyps concl) =
             _  -> do h <- scAndList sc hyps
                      scImplies sc h concl
      (svals,bndvars) <- boundFOTs sym vars
-     let varMap' = foldl (\m ((ec,_fot), sval) -> Map.insert (ecVarIndex ec) sval m)
+     let varMap' = foldl (\m ((vn,_fot), sval) -> Map.insert (vnIndex vn) sval m)
                          varMap
                          (zip vars svals) -- NB, boundFOTs will construct these lists to be the same length
      bval <- w4SolveBasic sym sc mempty varMap' ref uninterp g
@@ -1152,63 +1152,64 @@ w4SolveAssert sym sc varMap ref uninterp (UniversalAssert vars hyps concl) =
 
        _ -> fail $ "w4SolveAssert: non-boolean result type. " ++ show bval
 
--- | Given a list of external constants with first-order types,
---   descend in to the structure of those types (as needed) and construct
---   corresponding What4 bound variables so we can bind them using
---   a forall quantifier. At the same time construct @SValue@s containing
---   those variables suitable for passing to the term evaluator as substituions
---   for the given @ExtCns@ values. The length of the @SValue@ list returned
---   will match the list of the input @ExtCns@ list, but the list of What4
---   @BoundVar@s might not.
+-- | Given a list of variable names with first-order types, descend
+-- into the structure of those types (as needed) and construct
+-- corresponding What4 bound variables so we can bind them using a
+-- forall quantifier.
+-- At the same time construct @SValue@s containing those variables
+-- suitable for passing to the term evaluator as substitutions for the
+-- given variables.
+-- The length of the @SValue@ list returned will match the list of the
+-- input variable list, but the list of What4 @BoundVar@s might not.
 --
---   This procedure it capable of handling most first-order types, execpt
---   that Array types must have base types as index and result types rather
---   than more general first-order types. (TODO? should we actually restrict the
---   @FirstOrderType@ in the same way?)
+-- This procedure is capable of handling most first-order types,
+-- except that Array types must have base types as index and result
+-- types rather than more general first-order types. (TODO? should we
+-- actually restrict the @FirstOrderType@ in the same way?)
 boundFOTs :: forall sym.
   IsSymExprBuilder sym =>
   sym ->
-  [(ExtCns Term, FirstOrderType)] ->
+  [(VarName, FirstOrderType)] ->
   IO ([SValue sym], [Some (BoundVar sym)])
 boundFOTs sym vars =
   do (svals,(bndvars,_)) <- runStateT (mapM (uncurry handleVar) vars) ([], 0)
      return (svals, bndvars)
 
  where
-   freshBnd :: ExtCns Term -> W.BaseTypeRepr tp -> StateT ([Some (BoundVar sym)],Integer) IO (SymExpr sym tp)
-   freshBnd ec tpr =
+   freshBnd :: VarName -> W.BaseTypeRepr tp -> StateT ([Some (BoundVar sym)],Integer) IO (SymExpr sym tp)
+   freshBnd vn tpr =
      do (vs,n) <- get
-        let nm = Text.unpack (ecShortName ec) ++ "." ++ show n
+        let nm = Text.unpack (vnName vn) ++ "." ++ show n
         bvar <- lift (W.freshBoundVar sym (W.safeSymbol nm) tpr)
         put (Some bvar : vs, n+1)
         return (W.varExpr sym bvar)
 
-   handleVar :: ExtCns Term -> FirstOrderType -> StateT ([Some (BoundVar sym)], Integer) IO (SValue sym)
-   handleVar ec fot =
+   handleVar :: VarName -> FirstOrderType -> StateT ([Some (BoundVar sym)], Integer) IO (SValue sym)
+   handleVar x fot =
      case fot of
-       FOTBit -> VBool <$> freshBnd ec BaseBoolRepr
-       FOTInt -> VInt  <$> freshBnd ec BaseIntegerRepr
-       FOTIntMod m -> VIntMod m <$> freshBnd ec BaseIntegerRepr
+       FOTBit -> VBool <$> freshBnd x BaseBoolRepr
+       FOTInt -> VInt  <$> freshBnd x BaseIntegerRepr
+       FOTIntMod m -> VIntMod m <$> freshBnd x BaseIntegerRepr
 
        FOTVec n FOTBit ->
          case somePosNat n of
            Nothing -> -- n == 0
              return (VWord ZBV)
            Just (Some (PosNat nr)) ->
-             VWord . DBV <$> freshBnd ec (BaseBVRepr nr)
+             VWord . DBV <$> freshBnd x (BaseBVRepr nr)
 
        FOTVec n tp -> -- NB, not Bit
-         do vs  <- V.replicateM (fromIntegral n) (handleVar ec tp)
+         do vs  <- V.replicateM (fromIntegral n) (handleVar x tp)
             vs' <- traverse (return . ready) vs
             return (VVector vs')
 
        FOTRec tm ->
-         do vs  <- traverse (handleVar ec) tm
+         do vs  <- traverse (handleVar x) tm
             vs' <- traverse (return . ready) vs
             return (vRecord vs')
 
        FOTTuple ts ->
-         do vs  <- traverse (handleVar ec) ts
+         do vs  <- traverse (handleVar x) ts
             vs' <- traverse (return . ready) vs
             return (vTuple vs')
 
@@ -1216,7 +1217,7 @@ boundFOTs sym vars =
          | Just (Some idx_repr) <- fotToBaseType idx
          , Just (Some res_repr) <- fotToBaseType res
 
-         -> VArray . SArray <$> freshBnd ec (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) res_repr)
+         -> VArray . SArray <$> freshBnd x (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) res_repr)
 
          | otherwise -> fail ("boundFOTs: cannot handle " ++ show fot)
 
