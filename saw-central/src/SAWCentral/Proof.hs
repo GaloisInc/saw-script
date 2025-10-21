@@ -221,14 +221,14 @@ termToMaybeProp sc tm =
 -- | Turn a boolean-valued saw-core term into a proposition by asserting
 --   that it is equal to the true boolean value.  Generalize the proposition
 --   by universally quantifying over the variables given in the list.
-boolToProp :: SharedContext -> [ExtCns Term] -> Term -> IO Prop
+boolToProp :: SharedContext -> [(VarName, Term)] -> Term -> IO Prop
 boolToProp sc vars tm =
   do mmap <- scGetModuleMap sc
      ty <- scTypeOf sc tm
      case evalSharedTerm mmap mempty mempty ty of
        TValue VBoolType ->
          do p0 <- scEqTrue sc tm
-            Prop <$> scGeneralizeExts sc vars p0
+            Prop <$> scPiList sc vars p0
        _ -> fail $ unlines [ "boolToProp: Term is not a boolean", showTerm tm, showTerm ty ]
 
 -- | Return the saw-core term that represents this proposition.
