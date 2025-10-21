@@ -92,7 +92,17 @@ data TypeShape (tp :: CrucibleType) where
     UnitShape :: M.Ty -> TypeShape UnitType
     PrimShape :: M.Ty -> BaseTypeRepr btp -> TypeShape (BaseToType btp)
     TupleShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
-    ArrayShape :: M.Ty -> M.Ty -> Word -> TypeShape tp -> Word -> TypeShape MirAggregateType
+    ArrayShape :: M.Ty
+               -- ^ The array type
+               -> M.Ty
+               -- ^ The array element type
+               -> Word
+               -- ^ Size of the array element type, in bytes
+               -> TypeShape tp
+               -- ^ `TypeShape` of the array element type
+               -> Word
+               -- ^ Length of the array
+               -> TypeShape MirAggregateType
     StructShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape (StructType ctx)
     TransparentShape :: M.Ty -> TypeShape tp -> TypeShape tp
     -- | Note that RefShape contains only a TypeRepr for the pointee type, not
@@ -651,7 +661,14 @@ zipMirAggregates sym elems (MirAggregate _totalSize1 m1) (MirAggregate _totalSiz
 -- | Generate a list of `AgElemShape`s corresponding to positions within an
 -- array.  The resulting list can then be used with `buildMirAggregate` and
 -- similar functions to manipulate array aggregates.
-arrayAgElemShapes :: Word -> TypeShape tp -> Word -> [AgElemShape]
+arrayAgElemShapes ::
+  -- | Size of array element type
+  Word ->
+  -- | `TypeShape` of array element type
+  TypeShape tp ->
+  -- | Array length
+  Word ->
+  [AgElemShape]
 arrayAgElemShapes elemSz elemShp len
   | len == 0 = []
   | otherwise = [AgElemShape (i * elemSz) elemSz elemShp | i <- [0 .. len - 1]]
@@ -665,8 +682,11 @@ agArrayCheckLengthsEq loc len xs =
 buildMirAggregateArray ::
   (IsSymInterface sym, Monad m, MonadFail m) =>
   sym ->
+  -- | Size of array element type
   Word ->
+  -- | `TypeShape` of array element type
   TypeShape tp ->
+  -- | Array length
   Word ->
   [a] ->
   (Word -> a -> m (RegValue sym tp)) ->
@@ -685,8 +705,11 @@ traverseMirAggregateArray ::
   forall sym m tp.
   (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
   sym ->
+  -- | Size of array element type
   Word ->
+  -- | `TypeShape` of array element type
   TypeShape tp ->
+  -- | Array length
   Word ->
   MirAggregate sym ->
   (Word -> RegValue sym tp -> m (RegValue sym tp)) ->
@@ -703,8 +726,11 @@ traverseMirAggregateArray sym elemSz elemShp len ag f = do
 accessMirAggregateArray ::
   (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
   sym ->
+  -- | Size of array element type
   Word ->
+  -- | `TypeShape` of array element type
   TypeShape tp ->
+  -- | Array length
   Word ->
   MirAggregate sym ->
   (Word -> RegValue sym tp -> m b) ->
@@ -717,8 +743,11 @@ accessMirAggregateArray sym elemSz elemShp len ag f = do
 accessMirAggregateArray' ::
   (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
   sym ->
+  -- | Size of array element type
   Word ->
+  -- | `TypeShape` of array element type
   TypeShape tp ->
+  -- | Array length
   Word ->
   [a] ->
   MirAggregate sym ->
