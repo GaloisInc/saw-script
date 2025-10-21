@@ -135,9 +135,7 @@ ppMIRVal sym (MIRVal shp val) =
     PrimShape _ _ ->
       W4.printSymExpr val
     TupleShape _ elems -> prettyAggregate elems val
-    ArrayShape _ _ elemSz shp' len ->
-      let is = take (fromIntegral len) [0..] in
-      prettyAggregate [AgElemShape (i * elemSz) elemSz shp' | i <- is] val
+    ArrayShape _ _ elemSz shp' len -> prettyAggregateArray elemSz shp' len val
     StructShape _ _ fldShp ->
       PP.braces $ prettyAdtOrTuple fldShp val
     EnumShape _ _ variantShps _ _
@@ -214,20 +212,36 @@ ppMIRVal sym (MIRVal shp val) =
     prettyAggregate elems (Mir.MirAggregate _sz m) =
       PP.braces $ commaList (map (prettyAgElem m) elems)
 
+    prettyAggregateArray ::
+      Word ->
+      TypeShape tp ->
+      Word ->
+      Mir.MirAggregate Sym ->
+      PP.Doc ann
+    prettyAggregateArray elemSz elemShp len (Mir.MirAggregate _sz m) =
+      let elems = arrayAgElemShapes elemSz elemShp len in
+      PP.brackets $ commaList (map (prettyAgElem m) elems)
+
     prettyAgElem ::
       IntMap (Mir.MirAggregateEntry Sym) ->
       AgElemShape ->
       PP.Doc ann
-    prettyAgElem m (AgElemShape off _sz shp') =
-      let valDoc = case IntMap.lookup (fromIntegral off) m of
-            Just (Mir.MirAggregateEntry _sz tpr rv)
-              | Just Refl <- W4.testEquality tpr (shapeType shp') ->
-                  ppMIRVal sym $ MIRVal shp' $
-                  readMaybeType sym "elem" tpr rv
-              | otherwise -> "<type mismatch>"
-            Nothing -> "<unset>"
-      in
+    prettyAgElem m e@(AgElemShape off _sz _shp') =
+      let valDoc = prettyAgElemValue m e in
       PP.viaShow off PP.<+> "->" PP.<+> valDoc
+
+    prettyAgElemValue ::
+      IntMap (Mir.MirAggregateEntry Sym) ->
+      AgElemShape ->
+      PP.Doc ann
+    prettyAgElemValue m (AgElemShape off _sz shp') =
+      case IntMap.lookup (fromIntegral off) m of
+        Just (Mir.MirAggregateEntry _sz tpr rv)
+          | Just Refl <- W4.testEquality tpr (shapeType shp') ->
+              ppMIRVal sym $ MIRVal shp' $
+              readMaybeType sym "elem" tpr rv
+          | otherwise -> "<type mismatch>"
+        Nothing -> "<unset>"
 
 
 -- | Wrapper around `buildMirAggregate` for the case where the additional
