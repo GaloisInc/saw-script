@@ -553,41 +553,6 @@ translateBinder vn ty@(asPiList -> (args, pi_body)) f =
                 helper n' rest (g . ((nh,nhty) :))
          helper n' ((False,_):rest) g = helper n' rest g
 
--- | Given an 'ExtCns' with its type (as a 'Term'), translate the 'ExtCns'
--- to a Coq identifier, translate the type to a Coq term, and generate zero or
--- more additional 'Ident's and 'Type's representing additonal implicit
--- typeclass arguments, added if the given type is @isort@, etc. Pass all of
--- this information to the supplied computation, in which the SAW core variable
--- is bound to its Coq identifier.
-translateBinderEC ::
-  forall m a. TermTranslationMonad m => ExtCns Term -> (BindTrans -> m a) -> m a
-translateBinderEC ec f =
-  do ty' <- translateTerm ty
-     let mb_sort = asSortWithFlags pi_body
-         -- NOTE: sortFlagsToList always returns a 2-element list
-         flagValues = sortFlagsToList $ maybe noFlags snd mb_sort
-         flagLocalNames = [("Inh", "SAWCoreScaffolding.Inhabited"),
-                           ("QT", "QuantType")]
-     withSAWVar nm $ \n' ->
-       helper n' (zip flagValues flagLocalNames) (\imps ->
-                                                   f $ BindTrans n' ty' imps)
-       where
-         ty = ecType ec
-         (args, pi_body) = asPiList ty
-         nm = ecName ec
-         n = vnName nm
-         helper ::
-           Coq.Ident ->
-           [(Bool, (LocalName, Coq.Ident))] ->
-           ([(Coq.Ident, Coq.Term)] -> m a) ->
-           m a
-         helper _ [] g = g []
-         helper n' ((True,(prefix,tc)):rest) g =
-           do nhty <- translateImplicitHyp (Coq.Var tc) args (Coq.Var n')
-              withFreshIdent (prefix <> "_" <> n) $ \nh ->
-                helper n' rest (g . ((nh,nhty) :))
-         helper n' ((False,_):rest) g = helper n' rest g
-
 -- | Call 'translateBinder' on a list of SAW core bindings
 translateBinders :: TermTranslationMonad m => [(VarName,Term)] ->
                     ([BindTrans] -> m a) -> m a
@@ -595,14 +560,6 @@ translateBinders [] f = f []
 translateBinders ((n,ty):ns_tys) f =
   translateBinder n ty $ \bnd ->
   translateBinders ns_tys $ \bnds -> f (bnd : bnds)
-
--- | Call 'translateBinder' on a list of SAW core bindings
-translateBindersEC ::
-  TermTranslationMonad m => [ExtCns Term] -> ([BindTrans] -> m a) -> m a
-translateBindersEC [] f = f []
-translateBindersEC (ec : ecs) f =
-  translateBinderEC ec $ \bnd ->
-  translateBindersEC ecs $ \bnds -> f (bnd : bnds)
 
 -- | Given a typeclass (as a Coq term), a list of 'LocalName's and their
 -- corresponding types (as 'Term's), and a type-level function with argument
