@@ -264,8 +264,11 @@ buildMirAggregateWithVal sym elems vals f =
 buildMirAggregateArrayWithVal ::
   (Monad m, MonadFail m) =>
   Sym ->
+  -- | Size of array element type
   Word ->
+  -- | `TypeShape` of array element type
   TypeShape tp ->
+  -- | Array length
   Word ->
   [MIRVal] ->
   (Word -> RegValue Sym tp -> m (RegValue Sym tp)) ->
