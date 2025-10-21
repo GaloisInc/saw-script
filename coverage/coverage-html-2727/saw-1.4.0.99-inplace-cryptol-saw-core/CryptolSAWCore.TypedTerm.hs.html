@@ -224,7 +224,7 @@ span.spaces    { background: white }
 <span class="lineno">  205 </span><span class="decl"><span class="istickedoff">asTypedVariable (TypedTerm tp t) =</span>
 <span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">do cty &lt;- ttIsMono tp</span>
 <span class="lineno">  207 </span><span class="spaces">     </span><span class="istickedoff">ec &lt;- asVariable t</span>
-<span class="lineno">  208 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedVariable cty (ecName ec) t</span></span>
+<span class="lineno">  208 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedVariable cty (ecName ec) (ecType ec)</span></span>
 <span class="lineno">  209 </span>
 <span class="lineno">  210 </span>-- | Make a 'TypedTerm' from a 'TypedVariable'.
 <span class="lineno">  211 </span>typedTermOfVariable :: SharedContext -&gt; TypedVariable -&gt; IO TypedTerm
