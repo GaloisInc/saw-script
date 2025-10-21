@@ -1019,9 +1019,9 @@ data Evidence
   | ApplyHypEvidence Integer ![Either Term Evidence]
 
     -- | This type of evidence is used to prove a universally-quantified conclusion.
-    --   The included ExtCns should be a fresh variable used to instantiate the
+    --   The included 'VarName' should be a fresh variable used to instantiate the
     --   quantified proposition.
-  | IntroEvidence !(ExtCns Term) !Evidence
+  | IntroEvidence !VarName !Term !Evidence
 
     -- | This type of evidence is used to apply the "cut rule" of sequent calculus.
     --   The given proposition is added to the hypothesis list in the first
@@ -1126,9 +1126,9 @@ splitEvidence :: [Evidence] -> IO Evidence
 splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
 splitEvidence _ = fail "splitEvidence: expected two evidence values"
 
-introEvidence :: ExtCns Term -> [Evidence] -> IO Evidence
-introEvidence x [e] = pure (IntroEvidence x e)
-introEvidence _ _ = fail "introEvidence: expected one evidence value"
+introEvidence :: VarName -> Term -> [Evidence] -> IO Evidence
+introEvidence x t [e] = pure (IntroEvidence x t e)
+introEvidence _ _ _ = fail "introEvidence: expected one evidence value"
 
 cutEvidence :: Prop -> [Evidence] -> IO Evidence
 cutEvidence p [e1,e2] = pure (CutEvidence p e1 e2)
@@ -1714,8 +1714,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
            d2 <- check nenv egl  (addNewFocusedConcl p sqt)
            return (d1 <> d2)
 
-      IntroEvidence x e' ->
-        -- TODO! Check that the given ExtCns is fresh for the sequent.
+      IntroEvidence x xty e' ->
+        -- TODO! Check that the given VarName is fresh for the sequent.
         --
         --   On soundness: I am concerned that just checking that 'x' is fresh for 'sqt'
         --   isn't enough, as 'x' may nonetheless appear in other values in the ambient
@@ -1734,14 +1734,13 @@ checkEvidence sc what4PushMuxOps = \e p -> do
             case asPi ptm of
               Nothing -> fail $ unlines ["Intro evidence expected function prop", showTerm ptm]
               Just (nm, ty, body) ->
-                do let ty' = ecType x
-                   ok <- scConvertible sc False ty ty'
+                do ok <- scConvertible sc False ty xty
                    unless ok $ fail $ unlines
                      ["Intro evidence types do not match"
-                     , showTerm ty'
+                     , showTerm xty
                      , showTerm ty
                      ]
-                   x' <- scVariable sc (ecName x) (ecType x)
+                   x' <- scVariable sc x xty
                    body' <- scInstantiateExt sc (IntMap.singleton (vnIndex nm) x') body
                    check nenv e' (mkSqt (Prop body'))
 
@@ -2051,12 +2050,11 @@ tacticIntro sc usernm = Tactic \goal ->
           do let nm = vnName vn
              let name = if Text.null usernm then nm else usernm
              vn' <- liftIO $ scFreshVarName sc name
-             let xv = EC vn' tp
              x  <- liftIO $ scVariable sc vn' tp
              tt <- liftIO $ mkTypedTerm sc x
              body' <- liftIO $ scInstantiateExt sc (IntMap.singleton (vnIndex vn) x) body
              let goal' = goal { goalSequent = mkSqt (Prop body') }
-             return (tt, mempty, [goal'], introEvidence xv)
+             return (tt, mempty, [goal'], introEvidence vn' tp)
 
         _ -> fail "intro tactic failed: not a function"
 
