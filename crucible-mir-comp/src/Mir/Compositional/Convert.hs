@@ -182,7 +182,7 @@ termToReg sym varMap term shp0 = do
         -- Special case: saw-core/cryptol doesn't distinguish bitvectors from
         -- vectors of booleans, so it may return `VWord` (bitvector) where an
         -- array of `bool` is expected.
-        (ArrayShape (M.TyArray _ _) _ sz shp'@(PrimShape _ BaseBoolRepr) len, SAW.VWord (W4.DBV e))
+        (ArrayShape _ _ sz shp'@(PrimShape _ BaseBoolRepr) len, SAW.VWord (W4.DBV e))
           | Just (Some w) <- someNat len,
             Just LeqProof <- testLeq (knownNat @1) w,
             Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> do
