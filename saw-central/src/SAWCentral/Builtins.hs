@@ -1633,7 +1633,7 @@ abstractSymbolicPrim (TypedTerm _ t) = do
   io (mkTypedTerm sc =<< bindAllExts sc t)
 
 bindAllExts :: SharedContext -> Term -> IO Term
-bindAllExts sc body = scAbstractExts sc (getAllExts body) body
+bindAllExts sc body = scLambdaList sc (getAllVars body) body
 
 term_apply :: TypedTerm -> [TypedTerm] -> TopLevel TypedTerm
 term_apply fn args =
@@ -1758,7 +1758,7 @@ eval_bool t = do
   case ttType t of
     TypedTermSchema (C.Forall [] [] (C.tIsBit -> True)) -> return ()
     _ -> fail "eval_bool: not type Bit"
-  unless (null (getAllExts (ttTerm t))) $
+  unless (closedTerm (ttTerm t)) $
     fail "eval_bool: term contains symbolic variables"
   v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t
   return (C.fromVBit v)
@@ -1768,7 +1768,7 @@ eval_int t = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
-  unless (null (getAllExts (ttTerm t))) $
+  unless (closedTerm (ttTerm t)) $
     fail "term contains symbolic variables"
   opts <- getOptions
   t' <- io $ defaultTypedTerm opts sc cfg t

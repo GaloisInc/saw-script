@@ -1019,7 +1019,7 @@ doHoistIfs sc ss hoistCache = go
              do (then_branch',conds1) <- go then_branch
                 (else_branch',conds2) <- go else_branch
                 t' <- scGlobalApply sc "Prelude.ite" [branch_tp, cond, then_branch', else_branch']
-                let vars = Map.fromList $ map (\(EC vn tp) -> (vn, tp)) $ getAllExts cond
+                let vars = getAllVarsMap cond
                 return (t', (cond, vars) : conds1 ++ conds2)
            _ ->
              goF t tf

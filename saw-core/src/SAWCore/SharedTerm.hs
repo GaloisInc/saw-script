@@ -236,8 +236,8 @@ module SAWCore.SharedTerm
     -- ** Variable substitution
   , betaNormalize
   , isConstFoldTerm
-  , getAllExts
-  , getAllExtSet
+  , getAllVars
+  , getAllVarsMap
   , getConstantSet
   , scInstantiateExt
   , scAbstractExts
@@ -1748,7 +1748,7 @@ scFreshConstant sc name rhs ty =
        , "name: " ++ Text.unpack name
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
-       , "frees: " ++ unwords (map (Text.unpack . vnName . ecName) (getAllExts rhs))
+       , "frees: " ++ unwords (map (Text.unpack . vnName . fst) (getAllVars rhs))
        ]
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
@@ -1770,7 +1770,7 @@ scDefineConstant sc nmi rhs ty =
        , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
-       , "frees: " ++ unwords (map (Text.unpack . vnName . ecName) (getAllExts rhs))
+       , "frees: " ++ unwords (map (Text.unpack . vnName . fst) (getAllVars rhs))
        ]
      nm <- scRegisterName sc nmi
      scDeclareDef sc nm NoQualifier ty (Just rhs)
@@ -2632,40 +2632,40 @@ isConstFoldTerm sc unint t
           | otherwise -> Just vis
         _ -> foldM go vis tf
 
--- | Return a list of all ExtCns subterms in the given term, sorted by
--- index. Does not traverse the unfoldings of @Constant@ terms.
-getAllExts :: Term -> [ExtCns Term]
-getAllExts t = Set.toList (getAllExtSet t)
+-- | Return a list of all free variables in the given term along with
+-- their types, sorted by index.
+getAllVars :: Term -> [(VarName, Term)]
+getAllVars t = Map.toList (getAllVarsMap t)
 
--- | Return a set of all ExtCns subterms in the given term.
---   Does not traverse the unfoldings of @Constant@ terms.
-getAllExtSet :: Term -> Set.Set (ExtCns Term)
-getAllExtSet t = State.evalState (go t) IntMap.empty
+-- | Return a map of all free variables in the given term with their
+-- types.
+getAllVarsMap :: Term -> Map VarName Term
+getAllVarsMap t = State.evalState (go t) IntMap.empty
   where
-    go :: Term -> State.State (IntMap (Set.Set (ExtCns Term))) (Set.Set (ExtCns Term))
+    go :: Term -> State.State (IntMap (Map VarName Term)) (Map VarName Term)
     go (Unshared tf) = termf tf
     go STApp{ stAppIndex = i, stAppTermF = tf, stAppFreeVars = fvs }
-      | IntSet.null fvs = pure Set.empty
+      | IntSet.null fvs = pure Map.empty
       | otherwise =
         do memo <- State.get
            case IntMap.lookup i memo of
-             Just ecs -> pure ecs
+             Just vars -> pure vars
              Nothing ->
-               do ecs <- termf tf
-                  State.modify' (IntMap.insert i ecs)
-                  pure ecs
-    termf :: TermF Term -> State.State (IntMap (Set.Set (ExtCns Term))) (Set.Set (ExtCns Term))
+               do vars <- termf tf
+                  State.modify' (IntMap.insert i vars)
+                  pure vars
+    termf :: TermF Term -> State.State (IntMap (Map VarName Term)) (Map VarName Term)
     termf tf =
       case tf of
-        Variable x tp -> pure (Set.singleton (EC x tp))
+        Variable x tp -> pure (Map.singleton x tp)
         Lambda x t1 t2 ->
-          do ecs1 <- go t1
-             ecs2 <- go t2
-             pure (ecs1 <> Set.delete (EC x t1) ecs2)
+          do vars1 <- go t1
+             vars2 <- go t2
+             pure (vars1 <> Map.delete x vars2)
         Pi x t1 t2 ->
-          do ecs1 <- go t1
-             ecs2 <- go t2
-             pure (ecs1 <> Set.delete (EC x t1) ecs2)
+          do vars1 <- go t1
+             vars2 <- go t2
+             pure (vars1 <> Map.delete x vars2)
         _ -> Fold.fold <$> traverse go tf
 
 getConstantSet :: Term -> Map VarIndex NameInfo
@@ -2773,7 +2773,7 @@ scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
     -- term, and does not appear elsewhere in the term,
     -- so we can eta-collapse.
     loop (ec:exts) (asApp -> Just (f, asVariable -> Just ec'))
-      | ec == ec', not (Set.member ec (getAllExtSet f))
+      | ec == ec', not (IntSet.member (ecVarIndex ec) (freeVars f))
       = loop exts f
 
     -- cannot eta-collapse, do abstraction as usual

@@ -114,6 +114,7 @@ import qualified Database.LMDB.Simple.Extra as LMDB
 import qualified Data.SBV.Dynamic as SBV
 
 import SAWCore.FiniteValue
+import SAWCore.Name (VarName(..))
 import SAWCore.SATQuery
 import SAWCore.ExternalFormat
 import SAWCore.SharedTerm
@@ -301,12 +302,11 @@ mkSolverCacheKey :: SharedContext -> SolverBackendVersions ->
                     [SolverBackendOption] -> SATQuery -> IO SolverCacheKey
 mkSolverCacheKey sc vs opts satq = do
   body <- satQueryAsPropTerm sc satq
-  let satEC vn fot = EC vn <$> scFirstOrderType sc fot
-  satECs <- M.traverseWithKey satEC (satVariables satq)
-  let ecs = M.elems satECs ++
-            filter (\ec -> ecVarIndex ec `elem` satUninterp satq)
-                   (getAllExts body)
-  tm <- scGeneralizeExts sc ecs body
+  satVars <- traverse (scFirstOrderType sc) (satVariables satq)
+  let vars = M.toList satVars ++
+             filter (\(x, _) -> vnIndex x `elem` satUninterp satq)
+                    (getAllVars body)
+  tm <- scPiList sc vars body
   let str_prefix = [ showBackendVersionsWithOptions "\n" vs opts
                    , "satVariables " ++ show (M.size (satVariables satq))
                    , "satUninterp "  ++ show (length (satUninterp  satq)) ]

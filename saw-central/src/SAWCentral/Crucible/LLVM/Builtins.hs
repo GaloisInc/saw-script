@@ -174,6 +174,7 @@ import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import SAWCore.Term.Pretty (showTerm)
+import SAWCore.Term.Raw (closedTerm)
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -440,7 +441,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           extracted_func <-
             io $ scAbstractExts shared_context input_parameters
             =<< scTuple shared_context output_values
-          when ([] /= getAllExts extracted_func) $
+          when (not (closedTerm extracted_func)) $
             fail "Non-functional simulation summary."
 
           let nmi = llvmNameInfo func_name

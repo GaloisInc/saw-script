@@ -1875,7 +1875,7 @@ withFirstGoal (Tactic f) (ProofState goals concl stats timeout evidenceCont star
 predicateToSATQuery :: SharedContext -> Set VarIndex -> Term -> IO SATQuery
 predicateToSATQuery sc unintSet tm0 =
     do mmap <- scGetModuleMap sc
-       (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (getAllExts tm0)
+       (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (getAllVars tm0)
        (finalVars, tm') <- processTerm mmap initVars tm0
        return SATQuery
               { satVariables = finalVars
@@ -1887,10 +1887,10 @@ predicateToSATQuery sc unintSet tm0 =
       asFirstOrderTypeValue (evalSharedTerm mmap mempty mempty t)
 
     filterFirstOrderVars _ fovars absvars [] = pure (fovars, absvars)
-    filterFirstOrderVars mmap fovars absvars (e:es) =
-      case evalFOT mmap (ecType e) of
-        Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
-        Just fot -> filterFirstOrderVars mmap (Map.insert (ecName e) fot fovars) absvars es
+    filterFirstOrderVars mmap fovars absvars ((x, t) : es) =
+      case evalFOT mmap t of
+        Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (vnIndex x) absvars) es
+        Just fot -> filterFirstOrderVars mmap (Map.insert x fot fovars) absvars es
 
     processTerm mmap vars tm =
       case asLambda tm of
@@ -1922,8 +1922,8 @@ sequentToSATQuery :: SharedContext -> Set VarIndex -> Sequent -> IO SATQuery
 sequentToSATQuery sc unintSet sqt =
     do let RawSequent hs gs = sequentToRawSequent sqt
        mmap <- scGetModuleMap sc
-       let exts = foldMap getAllExtSet (map unProp (hs ++ gs))
-       (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (Set.toList exts)
+       let frees = foldMap getAllVarsMap (map unProp (hs ++ gs))
+       (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (Map.toList frees)
        -- NB, the following reversals make the order of assertions more closely match the input sequent,
        -- but should otherwise not be semantically relevant
        hypAsserts <- mapM (processAssert mmap) (reverse (map unProp hs))
@@ -1939,10 +1939,10 @@ sequentToSATQuery sc unintSet sqt =
       asFirstOrderTypeValue (evalSharedTerm mmap mempty mempty t)
 
     filterFirstOrderVars _ fovars absvars [] = pure (fovars, absvars)
-    filterFirstOrderVars mmap fovars absvars (e:es) =
-      case evalFOT mmap (ecType e) of
-         Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
-         Just fot -> filterFirstOrderVars mmap (Map.insert (ecName e) fot fovars) absvars es
+    filterFirstOrderVars mmap fovars absvars ((x, t) : es) =
+      case evalFOT mmap t of
+         Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (vnIndex x) absvars) es
+         Just fot -> filterFirstOrderVars mmap (Map.insert x fot fovars) absvars es
 
     processAssert mmap tp =
       case asEqTrue tp of
