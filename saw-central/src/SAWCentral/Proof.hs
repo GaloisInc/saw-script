@@ -436,31 +436,23 @@ simplifySequent sc ss (HypFocusedSequent (FB hs1 h hs2) gs) =
 
 
 hoistIfsInProp :: SharedContext -> Prop -> IO Prop
-hoistIfsInProp sc p = do
-  (ecs, body) <- unbindAndFreshenProp sc p
+hoistIfsInProp sc (Prop p) = do
+  let (vars, body) = asPiList p
   body' <-
     case asEqTrue body of
       Just t -> pure t
       Nothing -> fail "hoistIfsInProp: expected EqTrue"
   t1 <- hoistIfs sc body'
   t2 <- scEqTrue sc t1
-  t3 <- scGeneralizeExts sc ecs t2
+  t3 <- scPiList sc vars t2
   return (Prop t3)
-
--- | Turn any leading Pi binders in the given prop into
---   fresh ExtCns values, being careful to ensure that
---   dependent types are properly substituted.
-unbindAndFreshenProp :: SharedContext -> Prop -> IO ([ExtCns Term], Term)
-unbindAndFreshenProp _sc (Prop p0) =
-  do let (vars, body) = asPiList p0
-     pure (map (uncurry EC) vars, body)
 
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
 --   perform a variety of simplifications and rewrites.
 evalProp :: SharedContext -> Bool -> Set VarIndex -> Prop -> IO Prop
 evalProp sc what4PushMuxOps unints p =
-  do (ecs, body) <- unbindAndFreshenProp sc p
+  do let (vars, body) = asPiList (unProp p)
      body' <-
        case asEqTrue body of
          Just t -> pure t
@@ -472,7 +464,7 @@ evalProp sc what4PushMuxOps unints p =
      t1 <- W4Sim.toSC sym st p'
      t2 <- scEqTrue sc t1
      -- turn the free variables we generated back into pi-bound variables
-     t3 <- scGeneralizeExts sc ecs t2
+     t3 <- scPiList sc vars t2
      return (Prop t3)
 
 -- | Perform beta normalization on the given proposition.
