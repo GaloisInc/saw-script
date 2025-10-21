@@ -68,8 +68,6 @@ import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.FiniteValue
   ( FiniteType(..), readFiniteValue
-  , FirstOrderValue(..)
-  , scFirstOrderValue
   )
 import SAWCore.Name (ModuleName, VarName(..), mkModuleName)
 import SAWCore.SATQuery
@@ -83,7 +81,6 @@ import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import SAWCore.Term.Raw
 import CryptolSAWCore.TypedTerm
 
-import qualified SAWCore.Simulator.Concrete as Concrete
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter
 import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
@@ -1673,27 +1670,6 @@ generalize_term vars tt =
       case asTypedVariable v of
         Just tv -> pure tv
         Nothing -> fail "generalize_term: argument not a valid symbolic variable"
-
--- | Apply the given Term to the given values, and evaluate to a
--- final value.
-cexEvalFn :: SharedContext -> [(ExtCns Term, FirstOrderValue)] -> Term
-          -> IO Concrete.CValue
-cexEvalFn sc args tm = do
-  -- NB: there may be more args than exts, and this is ok. One side of
-  -- an equality may have more free variables than the other,
-  -- particularly in the case where there is a counter-example.
-  let exts = map fst args
-  args' <- mapM (scFirstOrderValue sc . snd) args
-  let is = map ecVarIndex exts
-      argMap = IntMap.fromList (zip is args')
-
-  -- TODO, instead of instantiating and then evaluating, we should
-  -- evaluate in the context of an EC map instead.  argMap is almost
-  -- what we need, but the values syould be @Concrete.CValue@ instead.
-
-  tm' <- scInstantiateExt sc argMap tm
-  modmap <- scGetModuleMap sc
-  return $ Concrete.evalSharedTerm modmap mempty mempty tm'
 
 envCmd :: TopLevel ()
 envCmd = do
