@@ -90,16 +90,20 @@ printSpec ::
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = do
     let str = show $ MS.ppMethodSpec (ms ^. msSpec)
+    let pre = ms ^. msSpec . MS.csPreState
+    let post = ms ^. msSpec . MS.csPostState
+    -- The formatting here is not very readable, but it includes most of the
+    -- info that's useful for debugging.
     let str2 = unlines
           [ str
-          , "pre allocs = " ++ show (ms ^. msSpec . MS.csPreState . MS.csAllocs)
-          , "pre pointsto = " ++ show (ms ^. msSpec . MS.csPreState . MS.csPointsTos)
-          , "pre conds = " ++ show (ms ^. msSpec . MS.csPreState . MS.csConditions)
-          , "pre vars = " ++ show (ms ^. msSpec . MS.csPreState . MS.csFreshVars)
-          , "post allocs = " ++ show (ms ^. msSpec . MS.csPostState . MS.csAllocs)
-          , "post pointsto = " ++ show (ms ^. msSpec . MS.csPostState . MS.csPointsTos)
-          , "post conds = " ++ show (ms ^. msSpec . MS.csPostState . MS.csConditions)
-          , "post vars = " ++ show (ms ^. msSpec . MS.csPostState . MS.csFreshVars)
+          , "pre allocs = " ++ show (pre ^. MS.csAllocs)
+          , "pre pointsto = " ++ show (pre ^. MS.csPointsTos)
+          , "pre conds = " ++ show (pre ^. MS.csConditions)
+          , "pre vars = " ++ show (pre ^. MS.csFreshVars)
+          , "post allocs = " ++ show (post ^. MS.csAllocs)
+          , "post pointsto = " ++ show (post ^. MS.csPointsTos)
+          , "post conds = " ++ show (post ^. MS.csConditions)
+          , "post vars = " ++ show (post ^. MS.csFreshVars)
           ]
     let bytes = Text.encodeUtf8 $ Text.pack str2
 
