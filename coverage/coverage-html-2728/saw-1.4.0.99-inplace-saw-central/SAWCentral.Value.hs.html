@@ -1,0 +1,1380 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Value
+<span class="lineno">    3 </span>Description : Value datatype for SAW-Script interpreter.
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : huffman
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">    9 </span>{-# LANGUAGE DeriveFunctor #-}
+<span class="lineno">   10 </span>{-# LANGUAGE DeriveGeneric #-}
+<span class="lineno">   11 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">   12 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">   13 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">   14 </span>{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+<span class="lineno">   15 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">   16 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   17 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">   18 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   19 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">   20 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   21 </span>{-# LANGUAGE StandaloneDeriving #-}
+<span class="lineno">   22 </span>{-# LANGUAGE TupleSections #-}
+<span class="lineno">   23 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">   24 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">   25 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   26 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>module SAWCentral.Value (
+<span class="lineno">   29 </span>    BuiltinWrapper(..),
+<span class="lineno">   30 </span>    Value(..),
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>    -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWServer.SAWServer
+<span class="lineno">   33 </span>    SAWSimpset,
+<span class="lineno">   34 </span>    -- used by SAWCentral.Builtins
+<span class="lineno">   35 </span>    AIGNetwork(..),
+<span class="lineno">   36 </span>    -- used by SAWCentral.Prover.Exporter, SAWCentral.Builtins,
+<span class="lineno">   37 </span>    --    SAWScript.Interpreter and more, SAWServer.SAWServer
+<span class="lineno">   38 </span>    AIGProxy(..),
+<span class="lineno">   39 </span>    -- used by SAWCentral.Crucible.LLVM.Builtins
+<span class="lineno">   40 </span>    SAW_CFG(..),
+<span class="lineno">   41 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   42 </span>    --    SAWServer.SAWServer, SAWServer.*CrucibleSetup
+<span class="lineno">   43 </span>    BuiltinContext(..),
+<span class="lineno">   44 </span>    -- used by SAWCentral.Builtins.hs, and appears in the Value type and showsSatResult
+<span class="lineno">   45 </span>    SatResult(..),
+<span class="lineno">   46 </span>    -- used by SAWCentral.Bisimulation, SAWCentral.Builtins, SAWScript.REPL.Monad
+<span class="lineno">   47 </span>    showsProofResult,
+<span class="lineno">   48 </span>    -- used by SAWCentral.Builtins
+<span class="lineno">   49 </span>    showsSatResult,
+<span class="lineno">   50 </span>    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+<span class="lineno">   51 </span>    showsPrecValue,
+<span class="lineno">   52 </span>    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+<span class="lineno">   53 </span>    evaluateTypedTerm,
+<span class="lineno">   54 </span>    -- used by SAWScript.Interpreter (and in LocalEnv)
+<span class="lineno">   55 </span>    LocalBinding(..),
+<span class="lineno">   56 </span>    -- used by SAWScript.Interpreter, and appears in TopLevelRO
+<span class="lineno">   57 </span>    LocalEnv,
+<span class="lineno">   58 </span>    -- used by SAWScript.Interpreter, and in mergeLocalEnv
+<span class="lineno">   59 </span>    addTypedef,
+<span class="lineno">   60 </span>    -- used by SAWScript.REPL.Monad, and by getMergedEnv
+<span class="lineno">   61 </span>    mergeLocalEnv,
+<span class="lineno">   62 </span>    -- used by SAWCentral.Builtins, SAWScript.Interpreter, and by getCryptolEnv
+<span class="lineno">   63 </span>    getMergedEnv, getMergedEnv',
+<span class="lineno">   64 </span>    -- used by SAWCentral.Crucible.LLVM.FFI
+<span class="lineno">   65 </span>    getCryptolEnv,
+<span class="lineno">   66 </span>    -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
+<span class="lineno">   67 </span>    --    SAWServer.SAWServer
+<span class="lineno">   68 </span>    TopLevelRO(..),
+<span class="lineno">   69 </span>    -- used by ... a lot of places, let's not try to make a list just yet
+<span class="lineno">   70 </span>    TopLevelRW(..),
+<span class="lineno">   71 </span>    -- used by ... a lot of places, let's not try to make a list just yet
+<span class="lineno">   72 </span>    TopLevel(..),
+<span class="lineno">   73 </span>    -- used by SAWCentral.Builtins, SAWScript.REPL.Monad, SAWScript.Interpreter,
+<span class="lineno">   74 </span>    --    SAWServer.TopLevel
+<span class="lineno">   75 </span>    runTopLevel,
+<span class="lineno">   76 </span>    -- used by ... a lot of places, let's not try to make a list just yet
+<span class="lineno">   77 </span>    io,
+<span class="lineno">   78 </span>    -- used in various places in SAWCentral
+<span class="lineno">   79 </span>    throwTopLevel,
+<span class="lineno">   80 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   81 </span>    setPosition,
+<span class="lineno">   82 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   83 </span>    getStackTrace,
+<span class="lineno">   84 </span>    pushTraceFrame, popTraceFrame,
+<span class="lineno">   85 </span>    pushTraceFrames, popTraceFrames,
+<span class="lineno">   86 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   87 </span>    RefChain,
+<span class="lineno">   88 </span>    -- used by SAWScript.Interpreter plus appears in getMergedEnv
+<span class="lineno">   89 </span>    getLocalEnv,
+<span class="lineno">   90 </span>    -- used in various places in SAWCentral, and in selected builtins in
+<span class="lineno">   91 </span>    -- SAWScript.Interpreter
+<span class="lineno">   92 </span>    getPosition,
+<span class="lineno">   93 </span>    -- used all over the place
+<span class="lineno">   94 </span>    getSharedContext,
+<span class="lineno">   95 </span>    -- used in SAWCentral.Crucible.JVM.Builtins{,JVM} and SAWScript.AutoMatch
+<span class="lineno">   96 </span>    getJavaCodebase,
+<span class="lineno">   97 </span>    -- used in SAWCentral.Builtins
+<span class="lineno">   98 </span>    getTheoremDB,
+<span class="lineno">   99 </span>    -- used in SAWCentral.Builtins
+<span class="lineno">  100 </span>    putTheoremDB,
+<span class="lineno">  101 </span>    -- used in various places in SAWCentral, plus SAWScript.Interpreter
+<span class="lineno">  102 </span>    getOptions,
+<span class="lineno">  103 </span>    -- used in SAWCentral.Prover.Exporter, SAWCentral.Builtins
+<span class="lineno">  104 </span>    getProxy,
+<span class="lineno">  105 </span>    -- used in SAWCentral.Crucible.LLVM.{X86,Builtins}
+<span class="lineno">  106 </span>    getBasicSS,
+<span class="lineno">  107 </span>    -- used in various places in SAWCentral, plus SAWScript.Interpreter
+<span class="lineno">  108 </span>    printOutLnTop,
+<span class="lineno">  109 </span>    -- used in SAWCentral.Crucible.*, SAWCentral.Builtins,
+<span class="lineno">  110 </span>    --    SAWServer.SAWServer, SAWServer.Ghost, SAWServer.LLVMCrucibleSetup
+<span class="lineno">  111 </span>    getHandleAlloc,
+<span class="lineno">  112 </span>    -- used in SAWCentral.Builtins SAWScript.REPL.Monad, SAWScript.AutoMatch
+<span class="lineno">  113 </span>    -- also accessible via SAWCentral.TopLevel
+<span class="lineno">  114 </span>    getTopLevelRO,
+<span class="lineno">  115 </span>    -- used in SAWCentral.Crucible.*.Builtins.hs, SAWCentral.Crucible.X86,
+<span class="lineno">  116 </span>    --    SAWCentral.Bisimulation, SAWCentral.Builtins,
+<span class="lineno">  117 </span>    --    SAWScript.Interpreter, SAWScript.AutoMatch,
+<span class="lineno">  118 </span>    --    SAWServer.Yosys
+<span class="lineno">  119 </span>    getTopLevelRW,
+<span class="lineno">  120 </span>    -- used in SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.LLVM.Builtins,
+<span class="lineno">  121 </span>    --    SAWCentral.Builtins, SAWScript.Interpreter
+<span class="lineno">  122 </span>    putTopLevelRW,
+<span class="lineno">  123 </span>    -- used in various places in SAWCentral
+<span class="lineno">  124 </span>    recordTheoremProof, returnTheoremProof, returnLLVMProof, returnJVMProof, returnMIRProof,
+<span class="lineno">  125 </span>    -- used in SAWCentral.Builtins, SAWScript.Interpreter
+<span class="lineno">  126 </span>    onSolverCache,
+<span class="lineno">  127 </span>    -- used by SAWCentral.Crucible.JVM.Builtins*
+<span class="lineno">  128 </span>    getJVMTrans,
+<span class="lineno">  129 </span>    -- used by SAWCentral.Crucible.JVM.Builtins*
+<span class="lineno">  130 </span>    putJVMTrans,
+<span class="lineno">  131 </span>    -- XXX: apparently unused
+<span class="lineno">  132 </span>    addJVMTrans,
+<span class="lineno">  133 </span>    -- used by SAWCentral.Crucible.LLVM.Builtins, SAWScript.Interpreter
+<span class="lineno">  134 </span>    --    ... the use in LLVM is the abusive insertion done by llvm_compositional_extract
+<span class="lineno">  135 </span>    --    XXX: we're going to need to clean that up
+<span class="lineno">  136 </span>    --    (also appears in mergeLocalEnv)
+<span class="lineno">  137 </span>    extendEnv,
+<span class="lineno">  138 </span>    -- used by various places in SAWCentral.Crucible, SAWCentral.Builtins
+<span class="lineno">  139 </span>    --    XXX: it wraps TopLevel rather than being part of it; is that necessary?
+<span class="lineno">  140 </span>    CrucibleSetup,
+<span class="lineno">  141 </span>    -- used in SAWCentral.Crucible.LLVM.*,
+<span class="lineno">  142 </span>    --    SAWServer.SAWServer, SAWServer.LLVMCrucibleSetup
+<span class="lineno">  143 </span>    LLVMCrucibleSetupM(..),
+<span class="lineno">  144 </span>    -- used in SAWCentral.Crucible.*.Builtins
+<span class="lineno">  145 </span>    throwCrucibleSetup,
+<span class="lineno">  146 </span>    -- used in SAWCentral.Crucible.LLVM.Skeleton.Builtins,
+<span class="lineno">  147 </span>    --    SAWCentral.Crucible.LLVM.FFI
+<span class="lineno">  148 </span>    throwLLVMFun,
+<span class="lineno">  149 </span>    -- used in SAWCentral.Crucible.*.Builtins, SAWCentral.Builtins
+<span class="lineno">  150 </span>    getW4Position,
+<span class="lineno">  151 </span>    -- used by SAWServer.SAWServer, SAWServer.JVMVerify, SAWScript.Interpreter
+<span class="lineno">  152 </span>    JVMSetup,
+<span class="lineno">  153 </span>    -- used by SAWCentral.Crucible.JVM.Builtins,
+<span class="lineno">  154 </span>    --    SAWServer.SAWServer, SAWServer.JVMCrucibleSetup
+<span class="lineno">  155 </span>    JVMSetupM(..),
+<span class="lineno">  156 </span>    -- used by SAWCentral.Crucible.MIR.ResolveSetupValue,
+<span class="lineno">  157 </span>    --    SAWServer.SAWServer, SAWServer.MIRVerify, SAWScript.Interpreter
+<span class="lineno">  158 </span>    JavaCodebase(..),
+<span class="lineno">  159 </span>    -- Used to initialize things; probably only need `JavaUninitialized`.
+<span class="lineno">  160 </span>    MIRSetup,
+<span class="lineno">  161 </span>    -- used by SAWCentral.Crucible.MIR.Builtins, SAWServer.MIRCrucibleSetup
+<span class="lineno">  162 </span>    MIRSetupM(..),
+<span class="lineno">  163 </span>    -- used in SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.*.Builtins,
+<span class="lineno">  164 </span>    --    SAWCentral.Crucible.Common.Vacuity,
+<span class="lineno">  165 </span>    --    SAWCentral.Bisimulation, SAWCentral.Yosys, SAWCentral.Builtins
+<span class="lineno">  166 </span>    --    SAWScript.REPL.Monad, SAWScript.Typechecker, SAWScript.Interpreter,
+<span class="lineno">  167 </span>    --    SAWServer.SAWServer, SAWServer.ProofScript, SAWServer.*Verify,
+<span class="lineno">  168 </span>    --    SAWServer.VerifyCommon, SAWServer.Yosys, saw-remote-api Main
+<span class="lineno">  169 </span>    ProofScript(..),
+<span class="lineno">  170 </span>    -- used by SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.*.Builtins,
+<span class="lineno">  171 </span>    --    SAWCentral.Crucible.Common.Vacuity,
+<span class="lineno">  172 </span>    --    SAWCentral.Bisimulation, SAWCentral.Builtins
+<span class="lineno">  173 </span>    runProofScript,
+<span class="lineno">  174 </span>    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+<span class="lineno">  175 </span>    scriptTopLevel,
+<span class="lineno">  176 </span>    llvmTopLevel,
+<span class="lineno">  177 </span>    jvmTopLevel,
+<span class="lineno">  178 </span>    mirTopLevel,
+<span class="lineno">  179 </span>    crucibleSetupTopLevel,
+<span class="lineno">  180 </span>    -- used in SAWScript.Interpreter
+<span class="lineno">  181 </span>    -- XXX: probably belongs in SAWSupport
+<span class="lineno">  182 </span>    underStateT,
+<span class="lineno">  183 </span>    -- used in SAWScript.ValueOps
+<span class="lineno">  184 </span>    -- XXX: probably belongs in SAWSupport
+<span class="lineno">  185 </span>    underReaderT,
+<span class="lineno">  186 </span>    -- used in SAWScript.Interpreter
+<span class="lineno">  187 </span>    -- XXX: probably belongs in SAWSupport
+<span class="lineno">  188 </span>    underExceptT,
+<span class="lineno">  189 </span>    -- used by SAWCentral.Crucible.LLVM.Skeleton.Builtins
+<span class="lineno">  190 </span>    SkeletonState(..), skelArgs
+<span class="lineno">  191 </span> ) where
+<span class="lineno">  192 </span>
+<span class="lineno">  193 </span>import Prelude hiding (fail)
+<span class="lineno">  194 </span>
+<span class="lineno">  195 </span>import Control.Lens
+<span class="lineno">  196 </span>import Control.Monad.Fail (MonadFail(..))
+<span class="lineno">  197 </span>import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), catches, Handler(..))
+<span class="lineno">  198 </span>import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
+<span class="lineno">  199 </span>import Control.Monad.Reader (MonadReader)
+<span class="lineno">  200 </span>import qualified Control.Exception as X
+<span class="lineno">  201 </span>import qualified System.IO.Error as IOError
+<span class="lineno">  202 </span>import Control.Monad.IO.Class (MonadIO, liftIO)
+<span class="lineno">  203 </span>import Control.Monad.Reader (ReaderT(..), ask, asks)
+<span class="lineno">  204 </span>import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
+<span class="lineno">  205 </span>import Control.Monad.Trans.Class (MonadTrans(lift))
+<span class="lineno">  206 </span>import Data.Foldable(foldrM)
+<span class="lineno">  207 </span>import Data.List.Extra ( dropEnd )
+<span class="lineno">  208 </span>import qualified Data.Map as M
+<span class="lineno">  209 </span>import Data.Map ( Map )
+<span class="lineno">  210 </span>import Data.Set ( Set )
+<span class="lineno">  211 </span>import Data.Text (Text)
+<span class="lineno">  212 </span>import qualified Data.Text as Text
+<span class="lineno">  213 </span>import Data.Parameterized.Some
+<span class="lineno">  214 </span>import Data.Sequence (Seq)
+<span class="lineno">  215 </span>import Data.Typeable
+<span class="lineno">  216 </span>import qualified Prettyprinter as PP
+<span class="lineno">  217 </span>import System.FilePath((&lt;/&gt;))
+<span class="lineno">  218 </span>
+<span class="lineno">  219 </span>import qualified Data.AIG as AIG
+<span class="lineno">  220 </span>
+<span class="lineno">  221 </span>import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
+<span class="lineno">  222 </span>
+<span class="lineno">  223 </span>import SAWCentral.Trace (Trace)
+<span class="lineno">  224 </span>import qualified SAWCentral.Trace as Trace
+<span class="lineno">  225 </span>
+<span class="lineno">  226 </span>import qualified SAWCentral.AST as SS
+<span class="lineno">  227 </span>import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
+<span class="lineno">  228 </span>import SAWCentral.BisimulationTheorem (BisimTheorem)
+<span class="lineno">  229 </span>import qualified SAWCentral.Exceptions as SS
+<span class="lineno">  230 </span>import qualified SAWCentral.Position as SS
+<span class="lineno">  231 </span>import qualified SAWCentral.Crucible.Common as Common
+<span class="lineno">  232 </span>import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+<span class="lineno">  233 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as CMS
+<span class="lineno">  234 </span>import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMSLLVM
+<span class="lineno">  235 </span>import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
+<span class="lineno">  236 </span>import qualified SAWCentral.Crucible.JVM.MethodSpecIR ()
+<span class="lineno">  237 </span>import qualified SAWCentral.Crucible.MIR.MethodSpecIR ()
+<span class="lineno">  238 </span>import qualified Lang.JVM.Codebase as JSS
+<span class="lineno">  239 </span>import qualified Text.LLVM.AST as LLVM (Type)
+<span class="lineno">  240 </span>import SAWCentral.JavaExpr (JavaType(..))
+<span class="lineno">  241 </span>import SAWCentral.JavaPretty (prettyClass)
+<span class="lineno">  242 </span>import SAWCentral.Options (Options, printOutLn, Verbosity(..))
+<span class="lineno">  243 </span>import qualified SAWCentral.Options as Opt
+<span class="lineno">  244 </span>import SAWCentral.Proof
+<span class="lineno">  245 </span>import SAWCentral.Prover.SolverStats
+<span class="lineno">  246 </span>import SAWCentral.SolverCache
+<span class="lineno">  247 </span>import SAWCentral.Crucible.LLVM.Skeleton
+<span class="lineno">  248 </span>import SAWCentral.X86 (X86Unsupported(..), X86Error(..))
+<span class="lineno">  249 </span>import SAWCentral.Yosys.IR
+<span class="lineno">  250 </span>import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
+<span class="lineno">  251 </span>import SAWCentral.Yosys.State (YosysSequential)
+<span class="lineno">  252 </span>
+<span class="lineno">  253 </span>import SAWCore.Name (VarName(..), DisplayNameEnv, emptyDisplayNameEnv)
+<span class="lineno">  254 </span>import CryptolSAWCore.CryptolEnv as CEnv
+<span class="lineno">  255 </span>import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
+<span class="lineno">  256 </span>import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, ctxtRewriteRule, listRules)
+<span class="lineno">  257 </span>import SAWCore.SharedTerm
+<span class="lineno">  258 </span>import qualified SAWCore.Term.Pretty as SAWCorePP
+<span class="lineno">  259 </span>import CryptolSAWCore.TypedTerm
+<span class="lineno">  260 </span>
+<span class="lineno">  261 </span>import qualified SAWCore.Simulator.Concrete as Concrete
+<span class="lineno">  262 </span>import qualified Cryptol.Eval as C
+<span class="lineno">  263 </span>import qualified Cryptol.Eval.Concrete as C
+<span class="lineno">  264 </span>import CryptolSAWCore.Cryptol (exportValueWithSchema)
+<span class="lineno">  265 </span>import qualified Cryptol.TypeCheck.AST as Cryptol
+<span class="lineno">  266 </span>import qualified Cryptol.Utils.Ident as T (mkIdent, packModName)
+<span class="lineno">  267 </span>import Cryptol.Utils.PP (pretty)
+<span class="lineno">  268 </span>
+<span class="lineno">  269 </span>import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
+<span class="lineno">  270 </span>import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+<span class="lineno">  271 </span>
+<span class="lineno">  272 </span>import           Lang.Crucible.JVM (JVM)
+<span class="lineno">  273 </span>import qualified Lang.Crucible.JVM as CJ
+<span class="lineno">  274 </span>import qualified Lang.JVM.JavaTools as CJ
+<span class="lineno">  275 </span>
+<span class="lineno">  276 </span>import           Lang.Crucible.LLVM.ArraySizeProfile
+<span class="lineno">  277 </span>import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
+<span class="lineno">  278 </span>
+<span class="lineno">  279 </span>import           Mir.Generator
+<span class="lineno">  280 </span>import           Mir.Intrinsics (MIR)
+<span class="lineno">  281 </span>import qualified Mir.Mir as MIR
+<span class="lineno">  282 </span>
+<span class="lineno">  283 </span>import           What4.ProgramLoc (ProgramLoc(..))
+<span class="lineno">  284 </span>
+<span class="lineno">  285 </span>-- Values ----------------------------------------------------------------------
+<span class="lineno">  286 </span>
+<span class="lineno">  287 </span>data BuiltinWrapper
+<span class="lineno">  288 </span>  = OneMoreArg (Value -&gt; TopLevel Value)
+<span class="lineno">  289 </span>  | ManyMoreArgs (Value -&gt; TopLevel BuiltinWrapper)
+<span class="lineno">  290 </span>
+<span class="lineno">  291 </span>-- | A type to hold the chain of references to a value that arise
+<span class="lineno">  292 </span>--   during execution. This appears in the monadic value types
+<span class="lineno">  293 </span>--   (VTopLevel, VProofScript, etc.) in order to trace let-bindings of
+<span class="lineno">  294 </span>--   monadic objects and treat them as part of the call chain.
+<span class="lineno">  295 </span>--
+<span class="lineno">  296 </span>--   It starts empty for builtins in the builtins table, and gets an
+<span class="lineno">  297 </span>--   entry consed onto it each time a value is either read out of the
+<span class="lineno">  298 </span>--   environment (for plain values) or created by function
+<span class="lineno">  299 </span>--   application.
+<span class="lineno">  300 </span>--
+<span class="lineno">  301 </span>--   Each reference is a position and a name (the position of the
+<span class="lineno">  302 </span>--   reference and the name that was used to refer to the value) and
+<span class="lineno">  303 </span>--   is used as a call site when handling stack traces.
+<span class="lineno">  304 </span>--
+<span class="lineno">  305 </span>--   For example,
+<span class="lineno">  306 </span>--      1: let x = print_stack;
+<span class="lineno">  307 </span>--      2: let y = x;
+<span class="lineno">  308 </span>--      3: y;
+<span class="lineno">  309 </span>--
+<span class="lineno">  310 </span>--   will flow as follows:
+<span class="lineno">  311 </span>--      (a) We load print_stack from the global environment and add an
+<span class="lineno">  312 </span>--          entry containing the reference position (line 1, columns
+<span class="lineno">  313 </span>--          9-20) and the name &quot;print_stack&quot;. The resulting value is
+<span class="lineno">  314 </span>--          saved as &quot;x&quot;.
+<span class="lineno">  315 </span>--      (b) We load &quot;x&quot; from the environment, and add an entry with
+<span class="lineno">  316 </span>--          the reference position (line 2, columns 9-10) and the name
+<span class="lineno">  317 </span>--          &quot;x&quot;. The value already contains the entry from (a), so now
+<span class="lineno">  318 </span>--          there are two, and the one from &quot;x&quot; is on the front of the
+<span class="lineno">  319 </span>--          list.
+<span class="lineno">  320 </span>--      (c) We load &quot;y&quot; from the environment, and add a similar entry
+<span class="lineno">  321 </span>--          with &quot;y&quot;.
+<span class="lineno">  322 </span>--      (d) Then we bind y to execute it, and that loads the sequence
+<span class="lineno">  323 </span>--          y -&gt; x -&gt; print_stack onto the call stack.
+<span class="lineno">  324 </span>--      (e) The resulting trace printed by print_stack will look like:
+<span class="lineno">  325 </span>--             (builtin) in print_stack
+<span class="lineno">  326 </span>--             foo.saw:1:9-20 in x
+<span class="lineno">  327 </span>--             foo.saw:2:9-10 in y
+<span class="lineno">  328 </span>--             foo.saw:3:1-2 at top level
+<span class="lineno">  329 </span>--
+<span class="lineno">  330 </span>type RefChain = [(SS.Pos, SS.Name)]
+<span class="lineno">  331 </span>
+<span class="lineno">  332 </span>-- | The SAWScript interpreter's base value type.
+<span class="lineno">  333 </span>--
+<span class="lineno">  334 </span>--   The interpreter executes from AST elements (expressions,
+<span class="lineno">  335 </span>--   statements) to values. Unfortunately, for the time being, values
+<span class="lineno">  336 </span>--   are a (considerable) superset of what the AST can represent, so
+<span class="lineno">  337 </span>--   values can't be injected back into unexecuted AST elements.
+<span class="lineno">  338 </span>--   FUTURE: this should be fixed, but not until it can be done
+<span class="lineno">  339 </span>--   without tying a gigantic knot in the module dependencies.
+<span class="lineno">  340 </span>--
+<span class="lineno">  341 </span>--   Because monadic values are irreducible until executed (they're
+<span class="lineno">  342 </span>--   effectively lambdas) but we also want to be able to know what
+<span class="lineno">  343 </span>--   they are when we execute them (for stack traces and error
+<span class="lineno">  344 </span>--   reporting) we carry around a bunch of metadata with each one.
+<span class="lineno">  345 </span>--
+<span class="lineno">  346 </span>--   Values that can have monadic type are:
+<span class="lineno">  347 </span>--      - the compound monadic values, that reduce to plain ones
+<span class="lineno">  348 </span>--        by executing in the interpreter:
+<span class="lineno">  349 </span>--           VReturn
+<span class="lineno">  350 </span>--           VDo
+<span class="lineno">  351 </span>--           VBindOnce
+<span class="lineno">  352 </span>--      - the plain monadic values, which contain Haskell-level
+<span class="lineno">  353 </span>--        monadic actions:
+<span class="lineno">  354 </span>--           VTopLevel
+<span class="lineno">  355 </span>--           VProofScript
+<span class="lineno">  356 </span>--           VLLVMCrucibleSetup
+<span class="lineno">  357 </span>--           VJVMSetup
+<span class="lineno">  358 </span>--           VMIRSetup
+<span class="lineno">  359 </span>--
+<span class="lineno">  360 </span>--   Furthermore, VLambda and VBuiltin can produce monadic values
+<span class="lineno">  361 </span>--   after application of an argument, and need to carry certain
+<span class="lineno">  362 </span>--   metadata of their own to populate their results.
+<span class="lineno">  363 </span>--
+<span class="lineno">  364 </span>--   In general, monadic values carry the following metadata until
+<span class="lineno">  365 </span>--   executed:
+<span class="lineno">  366 </span>--      - Position of last reference
+<span class="lineno">  367 </span>--      - a RefChain (q.v.)
+<span class="lineno">  368 </span>--
+<span class="lineno">  369 </span>--   Function-class values that might produce monadic values when an
+<span class="lineno">  370 </span>--   argument is applied (VLambda and VBuiltin) carry the following
+<span class="lineno">  371 </span>--   metadata:
+<span class="lineno">  372 </span>--      - a name
+<span class="lineno">  373 </span>--      - an argument list
+<span class="lineno">  374 </span>--
+<span class="lineno">  375 </span>--   The position of last reference is kept for VReturn and the plain
+<span class="lineno">  376 </span>--   monadic values. For plain monadic values, the position is loaded
+<span class="lineno">  377 </span>--   into the interpreter's last position state before the
+<span class="lineno">  378 </span>--   Haskell-level monadic action is executed.
+<span class="lineno">  379 </span>--
+<span class="lineno">  380 </span>--   For VReturn, it propagates to the result. (Whether this is
+<span class="lineno">  381 </span>--   necessary, useful, or even desirable isn't entirely clear -- it
+<span class="lineno">  382 </span>--   has no effect if you return a scalar, obviously, and if you
+<span class="lineno">  383 </span>--   return out a monadic value, that should already have its own
+<span class="lineno">  384 </span>--   reference position and it's not clear that updating it with the
+<span class="lineno">  385 </span>--   return's position is helpful. FUTURE: investigate.)
+<span class="lineno">  386 </span>--
+<span class="lineno">  387 </span>--   VBindOnce contains a position; however, it's the position of the
+<span class="lineno">  388 </span>--   bind operation (comparable to the position in a StmtBind) and not
+<span class="lineno">  389 </span>--   relevant to this discussion.
+<span class="lineno">  390 </span>--
+<span class="lineno">  391 </span>--   The RefChain is kept for plain monadic values, and for VReturn
+<span class="lineno">  392 </span>--   for propagation purposes. (Again, that may or may not be the best
+<span class="lineno">  393 </span>--   way. FUTURE.) VDo (and VBindOnce) also have a RefChain, which
+<span class="lineno">  394 </span>--   propagates to the resultant plain monadic value when the do-block
+<span class="lineno">  395 </span>--   is executed in the interpreter. The do-block RefChain tracks the
+<span class="lineno">  396 </span>--   names the do-block gets passed around under before it gets
+<span class="lineno">  397 </span>--   evaluated. (And then the chain in the resulting value could
+<span class="lineno">  398 </span>--   theoretically accumulate more entries as it gets passed around,
+<span class="lineno">  399 </span>--   except that there's no way to do that: we always execute the
+<span class="lineno">  400 </span>--   resultant Haskell-level action immediately after interpreting any
+<span class="lineno">  401 </span>--   do-block.)
+<span class="lineno">  402 </span>--
+<span class="lineno">  403 </span>--   We could in principle also carry a RefChain in VLambda so if
+<span class="lineno">  404 </span>--   you pass a lambda around it gets traced the same way a monadic
+<span class="lineno">  405 </span>--   value does. There's not as much call for it, but it might be
+<span class="lineno">  406 </span>--   useful. FUTURE.
+<span class="lineno">  407 </span>--
+<span class="lineno">  408 </span>--   VLambda and VBuiltin carry their names. When the last argument is
+<span class="lineno">  409 </span>--   applied, and the resulting value is monadic, the name is used to
+<span class="lineno">  410 </span>--   seed its RefChain. The RefChain then tracks the whole sequence of
+<span class="lineno">  411 </span>--   names used to refer to that value, in order; this is why plain
+<span class="lineno">  412 </span>--   monadic values don't specifically carry their &quot;own&quot; names. Note
+<span class="lineno">  413 </span>--   that for VLambda the name is optional, because lambdas don't
+<span class="lineno">  414 </span>--   necessarily have names. There's no such thing as an anonymous
+<span class="lineno">  415 </span>--   builtin though.
+<span class="lineno">  416 </span>--
+<span class="lineno">  417 </span>--   VBuiltin also carries a list of values (it is actually a
+<span class="lineno">  418 </span>--   snoc-list manifested as a `Seq`) that are the arguments already
+<span class="lineno">  419 </span>--   applied to the builtin. This is purely for printing in stack
+<span class="lineno">  420 </span>--   traces. FUTURE: VLambda should have this as well, but it doesn't
+<span class="lineno">  421 </span>--   make sense to make such a list separate from the variable
+<span class="lineno">  422 </span>--   environment handling, and that needs a through mucking-out of its
+<span class="lineno">  423 </span>--   own first.
+<span class="lineno">  424 </span>--
+<span class="lineno">  425 </span>--   The flow for the position of last reference is as follows:
+<span class="lineno">  426 </span>--      (a) Builtins in the global environment are initialized with
+<span class="lineno">  427 </span>--          `atRestPos`. This should never be seen by a user because
+<span class="lineno">  428 </span>--          stuff in the environment should not be seen without being
+<span class="lineno">  429 </span>--          referenced somehow.
+<span class="lineno">  430 </span>--      (b) When a variable is looked up in the environment, the
+<span class="lineno">  431 </span>--          value returned has its last reference position updated
+<span class="lineno">  432 </span>--          with the position of the variable name.
+<span class="lineno">  433 </span>--      (c) Before an argument is applied to a function (or lambda)
+<span class="lineno">  434 </span>--          the _argument's_ last reference position is updated with
+<span class="lineno">  435 </span>--          the position of the argument expression. For arguments
+<span class="lineno">  436 </span>--          to builtins that are monadic value callbacks, this
+<span class="lineno">  437 </span>--          causes the last reference position to be the point where
+<span class="lineno">  438 </span>--          the value was passed to the builtin. Alas, I no longer
+<span class="lineno">  439 </span>--          remember what special case this was needed to handle,
+<span class="lineno">  440 </span>--          and it's possible it's no longer necessary.
+<span class="lineno">  441 </span>--      (d) Somewhat similarly, the first argument of VBindOnce is
+<span class="lineno">  442 </span>--          updated before it is executed, using the position in
+<span class="lineno">  443 </span>--          the VBindOnce.
+<span class="lineno">  444 </span>--      (e) The same goes for statements in do-blocks, using the
+<span class="lineno">  445 </span>--          position of the BindStmt, or for the last expression in a
+<span class="lineno">  446 </span>--          do-block, the position of the expression.
+<span class="lineno">  447 </span>--      (f) When the Haskell-level monadic action in a plan monadic
+<span class="lineno">  448 </span>--          value is extracted with fromValue, we use the position to
+<span class="lineno">  449 </span>--          call setPosition to update the interpreter's last
+<span class="lineno">  450 </span>--          execution position.
+<span class="lineno">  451 </span>--      (g) The idea is that anytime we leave the interpreter to
+<span class="lineno">  452 </span>--          execute a builtin, there's a setPosition call that sets
+<span class="lineno">  453 </span>--          the last execution position to something that makes sense
+<span class="lineno">  454 </span>--          to report to the user if the builtin errors out.
+<span class="lineno">  455 </span>--      (h) FUTURE: consider clearing a value's position (setting it
+<span class="lineno">  456 </span>--          to `atRestPos`) when added to the environment, so the
+<span class="lineno">  457 </span>--          position of last reference for everything in the
+<span class="lineno">  458 </span>--          environment is the same.
+<span class="lineno">  459 </span>--
+<span class="lineno">  460 </span>--   The flow for names is as follows:
+<span class="lineno">  461 </span>--      (a) toValue is given a name to insert. This allows the
+<span class="lineno">  462 </span>--          typeclass-based construction process for builtins to
+<span class="lineno">  463 </span>--          propagate the name to every VBuiltin. (The name itself is
+<span class="lineno">  464 </span>--          provided from the builtins table.)
+<span class="lineno">  465 </span>--      (b) The names of lambdas are applied by the parser in
+<span class="lineno">  466 </span>--          `buildFunction`. Every let-binding that's written with a
+<span class="lineno">  467 </span>--          function head is converted to a chain of lambdas there,
+<span class="lineno">  468 </span>--          and that conversion inserts the name from the let-binding.
+<span class="lineno">  469 </span>--          Other lambdas are by definition anonymous and get Nothing.
+<span class="lineno">  470 </span>--      (c) As mentioned above, when the last argument is applied to a
+<span class="lineno">  471 </span>--          function, the name is used to seed the RefChain of the
+<span class="lineno">  472 </span>--          resulting value, if there is one. At this time we'll also
+<span class="lineno">  473 </span>--          be generating a stack trace frame while the function
+<span class="lineno">  474 </span>--          executes, using that name.
+<span class="lineno">  475 </span>--
+<span class="lineno">  476 </span>--   See above for notes on the flow for RefChains.
+<span class="lineno">  477 </span>--
+<span class="lineno">  478 </span>--   In principle the position of last reference should be the same as
+<span class="lineno">  479 </span>--   the position at the top of the RefChain, and we should not get
+<span class="lineno">  480 </span>--   empty RefChains (same as we should never see the default position
+<span class="lineno">  481 </span>--   that appears in the builtins table) so it may be sufficient to
+<span class="lineno">  482 </span>--   use the RefChain to call setPosition. However, not all the places
+<span class="lineno">  483 </span>--   that update the position of last reference add to the RefChain
+<span class="lineno">  484 </span>--   (they were tried and found to produce unwanted or incorrect stack
+<span class="lineno">  485 </span>--   traces) so this may not be true and/or those position updates may
+<span class="lineno">  486 </span>--   not be needed, all of which should probably be investigated
+<span class="lineno">  487 </span>--   further in the FUTURE.
+<span class="lineno">  488 </span>--
+<span class="lineno">  489 </span>--   Also note that because the bits of metadata aren't quite the same
+<span class="lineno">  490 </span>--   in each case and don't update in exactly the same places, it
+<span class="lineno">  491 </span>--   currently doesn't work very well to try to wrap them together in
+<span class="lineno">  492 </span>--   their own type. If things become more regular, it might be worth
+<span class="lineno">  493 </span>--   revisiting that proposition.
+<span class="lineno">  494 </span>--
+<span class="lineno">  495 </span>data Value
+<span class="lineno">  496 </span>  = VBool Bool
+<span class="lineno">  497 </span>  | VString Text
+<span class="lineno">  498 </span>  | VInteger Integer
+<span class="lineno">  499 </span>  | VArray [Value]
+<span class="lineno">  500 </span>  | VTuple [Value]
+<span class="lineno">  501 </span>  | VRecord (Map SS.Name Value)
+<span class="lineno">  502 </span>  | VLambda LocalEnv (Maybe SS.Name) SS.Pattern SS.Expr
+<span class="lineno">  503 </span>    -- | Function-shaped value that's a Haskell-level function. This
+<span class="lineno">  504 </span>    --   is how builtins appear. Includes the name of the builtin and
+<span class="lineno">  505 </span>    --   the list of arguments applied so far, as a Seq to allow
+<span class="lineno">  506 </span>    --   appending to the end reasonably.
+<span class="lineno">  507 </span>  | VBuiltin SS.Name (Seq Value) BuiltinWrapper
+<span class="lineno">  508 </span>    -- XXX: This should go away. Fortunately, it's only used by the
+<span class="lineno">  509 </span>    -- closures that implement stack traces, which are scheduled for
+<span class="lineno">  510 </span>    -- removal soon.
+<span class="lineno">  511 </span>  | VTerm TypedTerm
+<span class="lineno">  512 </span>  | VType Cryptol.Schema
+<span class="lineno">  513 </span>    -- | Returned value in unspecified monad.
+<span class="lineno">  514 </span>  | VReturn SS.Pos RefChain Value
+<span class="lineno">  515 </span>    -- | Not-yet-executed do-block in unspecified monad.
+<span class="lineno">  516 </span>  | VDo RefChain LocalEnv ([SS.Stmt], SS.Expr)
+<span class="lineno">  517 </span>    -- | Single monadic bind in unspecified monad.
+<span class="lineno">  518 </span>    --
+<span class="lineno">  519 </span>    --   This exists only to support the &quot;for&quot; builtin; see notes there
+<span class="lineno">  520 </span>    --   for why this is so. XXX: remove it once that's no longer needed.
+<span class="lineno">  521 </span>    --   A sequence of these is effectively equivalent to a do-block.
+<span class="lineno">  522 </span>    --
+<span class="lineno">  523 </span>    --   The position is the position of the bind operation,
+<span class="lineno">  524 </span>    --   comparable to the position in a StmtBind.
+<span class="lineno">  525 </span>  | VBindOnce SS.Pos RefChain Value Value
+<span class="lineno">  526 </span>    -- | A plain value containing a Haskell-level action in TopLevel
+<span class="lineno">  527 </span>    --   (that itself yields a Value).
+<span class="lineno">  528 </span>  | VTopLevel SS.Pos RefChain (TopLevel Value)
+<span class="lineno">  529 </span>    -- | A plain value containing a Haskell-level action in ProofScript.
+<span class="lineno">  530 </span>    --   Like a VTopLevel, except in the other monad.
+<span class="lineno">  531 </span>  | VProofScript SS.Pos RefChain (ProofScript Value)
+<span class="lineno">  532 </span>  | VSimpset SAWSimpset
+<span class="lineno">  533 </span>  | VTheorem Theorem
+<span class="lineno">  534 </span>  | VBisimTheorem BisimTheorem
+<span class="lineno">  535 </span>  -----
+<span class="lineno">  536 </span>    -- | A plain value containing a Haskell-level action in LLVMSetup.
+<span class="lineno">  537 </span>    --   Like a VTopLevel, except in the other monad.
+<span class="lineno">  538 </span>  | VLLVMCrucibleSetup SS.Pos RefChain !(LLVMCrucibleSetupM Value)
+<span class="lineno">  539 </span>  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
+<span class="lineno">  540 </span>  | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
+<span class="lineno">  541 </span>  -----
+<span class="lineno">  542 </span>    -- | A plain value containing a Haskell-level action in JVMSetup.
+<span class="lineno">  543 </span>    --   Like a VTopLevel, except in the other monad.
+<span class="lineno">  544 </span>  | VJVMSetup SS.Pos RefChain !(JVMSetupM Value)
+<span class="lineno">  545 </span>  | VJVMMethodSpec !(CMS.ProvedSpec CJ.JVM)
+<span class="lineno">  546 </span>  | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
+<span class="lineno">  547 </span>  -----
+<span class="lineno">  548 </span>    -- | A plain value containing a Haskell-level action in MIRSetup.
+<span class="lineno">  549 </span>    --   Like a VTopLevel, except in the other monad.
+<span class="lineno">  550 </span>  | VMIRSetup SS.Pos RefChain !(MIRSetupM Value)
+<span class="lineno">  551 </span>  | VMIRMethodSpec !(CMS.ProvedSpec MIR)
+<span class="lineno">  552 </span>  | VMIRSetupValue !(CMS.SetupValue MIR)
+<span class="lineno">  553 </span>  -----
+<span class="lineno">  554 </span>  | VLLVMModuleSkeleton ModuleSkeleton
+<span class="lineno">  555 </span>  | VLLVMFunctionSkeleton FunctionSkeleton
+<span class="lineno">  556 </span>  | VLLVMSkeletonState SkeletonState
+<span class="lineno">  557 </span>  | VLLVMFunctionProfile FunctionProfile
+<span class="lineno">  558 </span>  -----
+<span class="lineno">  559 </span>  | VJavaType JavaType
+<span class="lineno">  560 </span>  | VLLVMType LLVM.Type
+<span class="lineno">  561 </span>  | VMIRType MIR.Ty
+<span class="lineno">  562 </span>  | VCryptolModule CEnv.ExtCryptolModule
+<span class="lineno">  563 </span>  | VJavaClass JSS.Class
+<span class="lineno">  564 </span>  | VLLVMModule (Some CMSLLVM.LLVMModule)
+<span class="lineno">  565 </span>  | VMIRModule RustModule
+<span class="lineno">  566 </span>  | VMIRAdt MIR.Adt
+<span class="lineno">  567 </span>  | VSatResult SatResult
+<span class="lineno">  568 </span>  | VProofResult ProofResult
+<span class="lineno">  569 </span>  | VAIG AIGNetwork
+<span class="lineno">  570 </span>  | VCFG SAW_CFG
+<span class="lineno">  571 </span>  | VGhostVar CMS.GhostGlobal
+<span class="lineno">  572 </span>  | VYosysModule YosysIR
+<span class="lineno">  573 </span>  | VYosysImport YosysImport
+<span class="lineno">  574 </span>  | VYosysSequential YosysSequential
+<span class="lineno">  575 </span>  | VYosysTheorem YosysTheorem
+<span class="lineno">  576 </span>
+<span class="lineno">  577 </span>type SAWSimpset = Simpset TheoremNonce
+<span class="lineno">  578 </span>
+<span class="lineno">  579 </span>data AIGNetwork where
+<span class="lineno">  580 </span>  AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) =&gt; AIG.Network l g -&gt; AIGNetwork
+<span class="lineno">  581 </span>
+<span class="lineno">  582 </span>data AIGProxy where
+<span class="lineno">  583 </span>  AIGProxy :: (Typeable l, Typeable g, AIG.IsAIG l g) =&gt; AIG.Proxy l g -&gt; AIGProxy
+<span class="lineno">  584 </span>
+<span class="lineno">  585 </span>data SAW_CFG where
+<span class="lineno">  586 </span>  LLVM_CFG :: Crucible.AnyCFG Crucible.LLVM -&gt; SAW_CFG
+<span class="lineno">  587 </span>  JVM_CFG :: Crucible.AnyCFG JVM -&gt; SAW_CFG
+<span class="lineno">  588 </span>
+<span class="lineno">  589 </span>data BuiltinContext = BuiltinContext { <span class="istickedoff"><span class="decl"><span class="istickedoff">biSharedContext</span></span></span> :: SharedContext
+<span class="lineno">  590 </span>                                     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">biBasicSS</span></span></span>       :: SAWSimpset
+<span class="lineno">  591 </span>                                     }
+<span class="lineno">  592 </span>
+<span class="lineno">  593 </span>data SatResult
+<span class="lineno">  594 </span>  = Unsat SolverStats
+<span class="lineno">  595 </span>  | Sat SolverStats [(VarName, FirstOrderValue)]
+<span class="lineno">  596 </span>  | SatUnknown
+<span class="lineno">  597 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  598 </span>
+<span class="lineno">  599 </span>showsProofResult :: PPS.Opts -&gt; ProofResult -&gt; ShowS
+<span class="lineno">  600 </span><span class="decl"><span class="istickedoff">showsProofResult opts r =</span>
+<span class="lineno">  601 </span><span class="spaces">  </span><span class="istickedoff">case r of</span>
+<span class="lineno">  602 </span><span class="spaces">    </span><span class="istickedoff">ValidProof _ _ -&gt; showString &quot;Valid&quot;</span>
+<span class="lineno">  603 </span><span class="spaces">    </span><span class="istickedoff">InvalidProof _ ts _ -&gt; showString &quot;Invalid: [&quot; . showMulti &quot;&quot; ts</span>
+<span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">UnfinishedProof st  -&gt; showString &quot;Unfinished: &quot; . shows (length (psGoals st)) . showString &quot; goals remaining&quot;</span>
+<span class="lineno">  605 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  606 </span><span class="spaces">    </span><span class="istickedoff">showVal t = shows (ppFirstOrderValue opts t)</span>
+<span class="lineno">  607 </span><span class="spaces">    </span><span class="istickedoff">showEqn (x, t) = showVarName x . showString &quot; = &quot; . showVal t</span>
+<span class="lineno">  608 </span><span class="spaces">    </span><span class="istickedoff">showVarName vn = showString (Text.unpack (vnName vn))</span>
+<span class="lineno">  609 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  610 </span><span class="spaces">    </span><span class="istickedoff">showMulti _ [] = showString &quot;]&quot;</span>
+<span class="lineno">  611 </span><span class="spaces">    </span><span class="istickedoff">showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti &quot;, &quot; eqns</span></span>
+<span class="lineno">  612 </span>
+<span class="lineno">  613 </span>showsSatResult :: PPS.Opts -&gt; SatResult -&gt; ShowS
+<span class="lineno">  614 </span><span class="decl"><span class="istickedoff">showsSatResult opts r =</span>
+<span class="lineno">  615 </span><span class="spaces">  </span><span class="istickedoff">case r of</span>
+<span class="lineno">  616 </span><span class="spaces">    </span><span class="istickedoff">Unsat _ -&gt; <span class="nottickedoff">showString &quot;Unsat&quot;</span></span>
+<span class="lineno">  617 </span><span class="spaces">    </span><span class="istickedoff">Sat _ ts -&gt; showString &quot;Sat: [&quot; . showMulti &quot;&quot; ts</span>
+<span class="lineno">  618 </span><span class="spaces">    </span><span class="istickedoff">SatUnknown  -&gt; <span class="nottickedoff">showString &quot;Unknown&quot;</span></span>
+<span class="lineno">  619 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  620 </span><span class="spaces">    </span><span class="istickedoff">showVal t = shows (ppFirstOrderValue opts t)</span>
+<span class="lineno">  621 </span><span class="spaces">    </span><span class="istickedoff">showVarName vn = showString (Text.unpack (vnName vn))</span>
+<span class="lineno">  622 </span><span class="spaces">    </span><span class="istickedoff">showEqn (x, t) = showVarName x . showString &quot; = &quot; . showVal t</span>
+<span class="lineno">  623 </span><span class="spaces">    </span><span class="istickedoff">showMulti _ [] = showString &quot;]&quot;</span>
+<span class="lineno">  624 </span><span class="spaces">    </span><span class="istickedoff">showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti &quot;, &quot; eqns</span></span>
+<span class="lineno">  625 </span>
+<span class="lineno">  626 </span>showSimpset :: PPS.Opts -&gt; Simpset a -&gt; String
+<span class="lineno">  627 </span><span class="decl"><span class="nottickedoff">showSimpset opts ss =</span>
+<span class="lineno">  628 </span><span class="spaces">  </span><span class="nottickedoff">unlines (&quot;Rewrite Rules&quot; : &quot;=============&quot; : map (show . ppRule) (listRules ss))</span>
+<span class="lineno">  629 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  630 </span><span class="spaces">    </span><span class="nottickedoff">ppRule r =</span>
+<span class="lineno">  631 </span><span class="spaces">      </span><span class="nottickedoff">PP.pretty '*' PP.&lt;+&gt;</span>
+<span class="lineno">  632 </span><span class="spaces">      </span><span class="nottickedoff">(PP.nest 2 $ PP.fillSep</span>
+<span class="lineno">  633 </span><span class="spaces">       </span><span class="nottickedoff">[ ppTerm vars (lhsRewriteRule r)</span>
+<span class="lineno">  634 </span><span class="spaces">       </span><span class="nottickedoff">, PP.pretty '=' PP.&lt;+&gt; ppTerm vars (rhsRewriteRule r) ])</span>
+<span class="lineno">  635 </span><span class="spaces">      </span><span class="nottickedoff">where vars = map fst (ctxtRewriteRule r)</span>
+<span class="lineno">  636 </span><span class="spaces">    </span><span class="nottickedoff">ppTerm vars t = SAWCorePP.ppTermInCtx opts vars t</span></span>
+<span class="lineno">  637 </span>
+<span class="lineno">  638 </span>-- XXX the precedence in here needs to be cleaned up
+<span class="lineno">  639 </span>showsPrecValue :: PPS.Opts -&gt; DisplayNameEnv -&gt; Int -&gt; Value -&gt; ShowS
+<span class="lineno">  640 </span><span class="decl"><span class="istickedoff">showsPrecValue opts nenv p v =</span>
+<span class="lineno">  641 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  642 </span><span class="spaces">    </span><span class="istickedoff">VBool True -&gt; showString &quot;true&quot;</span>
+<span class="lineno">  643 </span><span class="spaces">    </span><span class="istickedoff">VBool False -&gt; showString &quot;false&quot;</span>
+<span class="lineno">  644 </span><span class="spaces">    </span><span class="istickedoff">VString s -&gt; shows s</span>
+<span class="lineno">  645 </span><span class="spaces">    </span><span class="istickedoff">VInteger n -&gt; shows n</span>
+<span class="lineno">  646 </span><span class="spaces">    </span><span class="istickedoff">VArray vs -&gt; PPS.showBrackets $ PPS.showCommaSep $ map (showsPrecValue opts nenv <span class="nottickedoff">0</span>) vs</span>
+<span class="lineno">  647 </span><span class="spaces">    </span><span class="istickedoff">VTuple vs -&gt; showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv <span class="nottickedoff">0</span>) vs</span>
+<span class="lineno">  648 </span><span class="spaces">    </span><span class="istickedoff">VRecord m -&gt;</span>
+<span class="lineno">  649 </span><span class="spaces">      </span><span class="istickedoff">PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)</span>
+<span class="lineno">  650 </span><span class="spaces">        </span><span class="istickedoff">where</span>
+<span class="lineno">  651 </span><span class="spaces">          </span><span class="istickedoff">showFld (n, fv) =</span>
+<span class="lineno">  652 </span><span class="spaces">            </span><span class="istickedoff">showString (Text.unpack n) . showString &quot;=&quot; . showsPrecValue <span class="nottickedoff">opts</span> <span class="nottickedoff">nenv</span> <span class="nottickedoff">0</span> fv</span>
+<span class="lineno">  653 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  654 </span><span class="spaces">    </span><span class="istickedoff">VLambda _env _mname pat e -&gt;</span>
+<span class="lineno">  655 </span><span class="spaces">      </span><span class="istickedoff">let pat' = PP.pretty pat</span>
+<span class="lineno">  656 </span><span class="spaces">          </span><span class="istickedoff">e' = PP.pretty e</span>
+<span class="lineno">  657 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  658 </span><span class="spaces">      </span><span class="istickedoff">shows $ PP.sep [&quot;\\&quot;, pat', &quot;-&gt;&quot;, e']</span>
+<span class="lineno">  659 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  660 </span><span class="spaces">    </span><span class="istickedoff">VBuiltin name _args _wrapper -&gt;</span>
+<span class="lineno">  661 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let name' = PP.pretty name in</span></span>
+<span class="lineno">  662 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">shows $ PP.sep [&quot;&lt;&lt;&quot;, &quot;builtin&quot;, name', &quot;&gt;&gt;&quot;]</span></span>
+<span class="lineno">  663 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  664 </span><span class="spaces">    </span><span class="istickedoff">VTerm t -&gt; showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))</span>
+<span class="lineno">  665 </span><span class="spaces">    </span><span class="istickedoff">VType sig -&gt; showString (pretty sig)</span>
+<span class="lineno">  666 </span><span class="spaces">    </span><span class="istickedoff">VReturn _pos _chain v' -&gt;</span>
+<span class="lineno">  667 </span><span class="spaces">      </span><span class="istickedoff">showString &quot;return &quot; . showsPrecValue <span class="nottickedoff">opts</span> <span class="nottickedoff">nenv</span> <span class="nottickedoff">(p + 1)</span> v'</span>
+<span class="lineno">  668 </span><span class="spaces">    </span><span class="istickedoff">VDo _chain _env body -&gt;</span>
+<span class="lineno">  669 </span><span class="spaces">      </span><span class="istickedoff">-- The printer for expressions doesn't print positions, so we can</span>
+<span class="lineno">  670 </span><span class="spaces">      </span><span class="istickedoff">-- feed in a dummy.</span>
+<span class="lineno">  671 </span><span class="spaces">      </span><span class="istickedoff">let <span class="nottickedoff">pos = SS.PosInternal &quot;&lt;&lt;do-block&gt;&gt;&quot;</span></span>
+<span class="lineno">  672 </span><span class="spaces">          </span><span class="istickedoff">e = SS.Block <span class="nottickedoff">pos</span> body</span>
+<span class="lineno">  673 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  674 </span><span class="spaces">      </span><span class="istickedoff">shows (PP.pretty e)</span>
+<span class="lineno">  675 </span><span class="spaces">    </span><span class="istickedoff">VBindOnce _pos _chain v1 v2 -&gt;</span>
+<span class="lineno">  676 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let v1' = showsPrecValue opts nenv 0 v1</span></span>
+<span class="lineno">  677 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">v2' = showsPrecValue opts nenv 0 v2</span></span>
+<span class="lineno">  678 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  679 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">v1' . showString &quot; &gt;&gt;= &quot; . v2'</span></span>
+<span class="lineno">  680 </span><span class="spaces">    </span><span class="istickedoff">VTopLevel {} -&gt; showString &quot;&lt;&lt;TopLevel&gt;&gt;&quot;</span>
+<span class="lineno">  681 </span><span class="spaces">    </span><span class="istickedoff">VSimpset ss -&gt; <span class="nottickedoff">showString (showSimpset opts ss)</span></span>
+<span class="lineno">  682 </span><span class="spaces">    </span><span class="istickedoff">VProofScript {} -&gt; showString &quot;&lt;&lt;proof script&gt;&gt;&quot;</span>
+<span class="lineno">  683 </span><span class="spaces">    </span><span class="istickedoff">VTheorem thm -&gt;</span>
+<span class="lineno">  684 </span><span class="spaces">      </span><span class="istickedoff">showString &quot;Theorem &quot; .</span>
+<span class="lineno">  685 </span><span class="spaces">      </span><span class="istickedoff">showParen True (showString (prettyProp opts nenv (thmProp thm)))</span>
+<span class="lineno">  686 </span><span class="spaces">    </span><span class="istickedoff">VBisimTheorem _ -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Bisimulation theorem&gt;&gt;&quot;</span></span>
+<span class="lineno">  687 </span><span class="spaces">    </span><span class="istickedoff">VLLVMCrucibleSetup{} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Crucible Setup&gt;&gt;&quot;</span></span>
+<span class="lineno">  688 </span><span class="spaces">    </span><span class="istickedoff">VLLVMCrucibleSetupValue{} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Crucible SetupValue&gt;&gt;&quot;</span></span>
+<span class="lineno">  689 </span><span class="spaces">    </span><span class="istickedoff">VLLVMCrucibleMethodSpec{} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Crucible MethodSpec&gt;&gt;&quot;</span></span>
+<span class="lineno">  690 </span><span class="spaces">    </span><span class="istickedoff">VLLVMModuleSkeleton s -&gt; <span class="nottickedoff">shows s</span></span>
+<span class="lineno">  691 </span><span class="spaces">    </span><span class="istickedoff">VLLVMFunctionSkeleton s -&gt; <span class="nottickedoff">shows s</span></span>
+<span class="lineno">  692 </span><span class="spaces">    </span><span class="istickedoff">VLLVMSkeletonState _ -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Skeleton state&gt;&gt;&quot;</span></span>
+<span class="lineno">  693 </span><span class="spaces">    </span><span class="istickedoff">VLLVMFunctionProfile _ -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Array sizes for function&gt;&gt;&quot;</span></span>
+<span class="lineno">  694 </span><span class="spaces">    </span><span class="istickedoff">VJavaType {} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Java type&gt;&gt;&quot;</span></span>
+<span class="lineno">  695 </span><span class="spaces">    </span><span class="istickedoff">VLLVMType t -&gt; <span class="nottickedoff">showString (show (Crucible.LLVM.ppType t))</span></span>
+<span class="lineno">  696 </span><span class="spaces">    </span><span class="istickedoff">VMIRType t -&gt; <span class="nottickedoff">showString (show (PP.pretty t))</span></span>
+<span class="lineno">  697 </span><span class="spaces">    </span><span class="istickedoff">VCryptolModule m -&gt; showString (CEnv.showExtCryptolModule m)</span>
+<span class="lineno">  698 </span><span class="spaces">    </span><span class="istickedoff">VLLVMModule (Some m) -&gt; <span class="nottickedoff">showString (CMSLLVM.showLLVMModule m)</span></span>
+<span class="lineno">  699 </span><span class="spaces">    </span><span class="istickedoff">VMIRModule m -&gt; shows (PP.pretty (m^.rmCS^.collection))</span>
+<span class="lineno">  700 </span><span class="spaces">    </span><span class="istickedoff">VMIRAdt adt -&gt; <span class="nottickedoff">shows (PP.pretty adt)</span></span>
+<span class="lineno">  701 </span><span class="spaces">    </span><span class="istickedoff">VJavaClass c -&gt; shows (prettyClass c)</span>
+<span class="lineno">  702 </span><span class="spaces">    </span><span class="istickedoff">VProofResult r -&gt; showsProofResult opts r</span>
+<span class="lineno">  703 </span><span class="spaces">    </span><span class="istickedoff">VSatResult r -&gt; showsSatResult opts r</span>
+<span class="lineno">  704 </span><span class="spaces">    </span><span class="istickedoff">VAIG _ -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;AIG&gt;&gt;&quot;</span></span>
+<span class="lineno">  705 </span><span class="spaces">    </span><span class="istickedoff">VCFG (LLVM_CFG g) -&gt; <span class="nottickedoff">showString (show g)</span></span>
+<span class="lineno">  706 </span><span class="spaces">    </span><span class="istickedoff">VCFG (JVM_CFG g) -&gt; <span class="nottickedoff">showString (show g)</span></span>
+<span class="lineno">  707 </span><span class="spaces">    </span><span class="istickedoff">VGhostVar x -&gt; <span class="nottickedoff">showParen (p &gt; 10)</span></span>
+<span class="lineno">  708 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">$ showString &quot;Ghost &quot; . showsPrec 11 x</span></span>
+<span class="lineno">  709 </span><span class="spaces">    </span><span class="istickedoff">VYosysModule _ -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Yosys module&gt;&gt;&quot;</span></span>
+<span class="lineno">  710 </span><span class="spaces">    </span><span class="istickedoff">VYosysImport _ -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Yosys import&gt;&gt;&quot;</span></span>
+<span class="lineno">  711 </span><span class="spaces">    </span><span class="istickedoff">VYosysSequential _ -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Yosys sequential&gt;&gt;&quot;</span></span>
+<span class="lineno">  712 </span><span class="spaces">    </span><span class="istickedoff">VYosysTheorem _ -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Yosys theorem&gt;&gt;&quot;</span></span>
+<span class="lineno">  713 </span><span class="spaces">    </span><span class="istickedoff">VJVMSetup{}      -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;JVM Setup&gt;&gt;&quot;</span></span>
+<span class="lineno">  714 </span><span class="spaces">    </span><span class="istickedoff">VJVMMethodSpec _ -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;JVM MethodSpec&gt;&gt;&quot;</span></span>
+<span class="lineno">  715 </span><span class="spaces">    </span><span class="istickedoff">VJVMSetupValue x -&gt; <span class="nottickedoff">shows x</span></span>
+<span class="lineno">  716 </span><span class="spaces">    </span><span class="istickedoff">VMIRSetup{} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;MIR Setup&gt;&gt;&quot;</span></span>
+<span class="lineno">  717 </span><span class="spaces">    </span><span class="istickedoff">VMIRMethodSpec{} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;MIR MethodSpec&gt;&gt;&quot;</span></span>
+<span class="lineno">  718 </span><span class="spaces">    </span><span class="istickedoff">VMIRSetupValue x -&gt; <span class="nottickedoff">shows x</span></span></span>
+<span class="lineno">  719 </span>
+<span class="lineno">  720 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Value</span></span></span></span> where
+<span class="lineno">  721 </span>    <span class="decl"><span class="nottickedoff">showsPrec p v = showsPrecValue PPS.defaultOpts emptyDisplayNameEnv p v</span></span>
+<span class="lineno">  722 </span>
+<span class="lineno">  723 </span>evaluateTerm:: SharedContext -&gt; Term -&gt; IO Concrete.CValue
+<span class="lineno">  724 </span><span class="decl"><span class="istickedoff">evaluateTerm sc t =</span>
+<span class="lineno">  725 </span><span class="spaces">  </span><span class="istickedoff">(\modmap -&gt; Concrete.evalSharedTerm modmap mempty <span class="nottickedoff">mempty</span> t) &lt;$&gt;</span>
+<span class="lineno">  726 </span><span class="spaces">  </span><span class="istickedoff">scGetModuleMap sc</span></span>
+<span class="lineno">  727 </span>
+<span class="lineno">  728 </span>evaluateTypedTerm :: SharedContext -&gt; TypedTerm -&gt; IO C.Value
+<span class="lineno">  729 </span><span class="decl"><span class="istickedoff">evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =</span>
+<span class="lineno">  730 </span><span class="spaces">  </span><span class="istickedoff">C.runEval <span class="nottickedoff">mempty</span> . exportValueWithSchema schema =&lt;&lt; evaluateTerm sc trm</span>
+<span class="lineno">  731 </span><span class="spaces"></span><span class="istickedoff">evaluateTypedTerm _sc (TypedTerm tp _) =</span>
+<span class="lineno">  732 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [ &quot;Could not evaluate term with type&quot;</span></span>
+<span class="lineno">  733 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">, show (ppTypedTermType tp)</span></span>
+<span class="lineno">  734 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  735 </span>
+<span class="lineno">  736 </span>
+<span class="lineno">  737 </span>-- TopLevel Monad --------------------------------------------------------------
+<span class="lineno">  738 </span>
+<span class="lineno">  739 </span>-- | Entry in the interpreter's local (as opposed to global) variable
+<span class="lineno">  740 </span>--   environment.
+<span class="lineno">  741 </span>--
+<span class="lineno">  742 </span>--   The Maybe [Text] field is the help text for the value, if any.
+<span class="lineno">  743 </span>--   Note that currently there's no way I know of to actually provide
+<span class="lineno">  744 </span>--   help text for a local variable, nor is there any way to get at
+<span class="lineno">  745 </span>--   one with the REPL :help command to print it, but the interpreter's
+<span class="lineno">  746 </span>--   plumbing demands that the field exist...
+<span class="lineno">  747 </span>--
+<span class="lineno">  748 </span>data LocalBinding
+<span class="lineno">  749 </span>  = LocalLet SS.Pos SS.Name SS.Rebindable SS.Schema (Maybe [Text]) Value
+<span class="lineno">  750 </span>  | LocalTypedef SS.Name SS.Type
+<span class="lineno">  751 </span> deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  752 </span>
+<span class="lineno">  753 </span>type LocalEnv = [LocalBinding]
+<span class="lineno">  754 </span>
+<span class="lineno">  755 </span>-- Note that the expansion type should have already been through the
+<span class="lineno">  756 </span>-- typechecker, so it's ok to panic if it turns out to be broken.
+<span class="lineno">  757 </span>addTypedef :: SS.Name -&gt; SS.Type -&gt; TopLevelRW -&gt; TopLevelRW
+<span class="lineno">  758 </span><span class="decl"><span class="istickedoff">addTypedef name ty rw =</span>
+<span class="lineno">  759 </span><span class="spaces">  </span><span class="istickedoff">let primsAvail = rwPrimsAvail rw</span>
+<span class="lineno">  760 </span><span class="spaces">      </span><span class="istickedoff">typeInfo = rwTypeInfo rw</span>
+<span class="lineno">  761 </span><span class="spaces">      </span><span class="istickedoff">ty' = SS.substituteTyVars primsAvail typeInfo ty</span>
+<span class="lineno">  762 </span><span class="spaces">      </span><span class="istickedoff">typeInfo' = M.insert name (SS.Current, SS.ConcreteType ty') typeInfo</span>
+<span class="lineno">  763 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  764 </span><span class="spaces">  </span><span class="istickedoff">rw { rwTypeInfo = typeInfo' }</span></span>
+<span class="lineno">  765 </span>
+<span class="lineno">  766 </span>mergeLocalEnv :: SharedContext -&gt; LocalEnv -&gt; TopLevelRW -&gt; IO TopLevelRW
+<span class="lineno">  767 </span><span class="decl"><span class="istickedoff">mergeLocalEnv sc env rw = foldrM addBinding rw env</span>
+<span class="lineno">  768 </span><span class="spaces">  </span><span class="istickedoff">where addBinding (LocalLet pos x rb ty md v) = extendEnv sc pos x rb ty <span class="nottickedoff">md</span> v</span>
+<span class="lineno">  769 </span><span class="spaces">        </span><span class="istickedoff">addBinding (LocalTypedef n ty) = <span class="nottickedoff">pure . addTypedef n ty</span></span></span>
+<span class="lineno">  770 </span>
+<span class="lineno">  771 </span>-- XXX: it is not sane to both be in the TopLevel monad and return a TopLevelRW
+<span class="lineno">  772 </span>-- (especially since the one returned is specifically not the same as the one
+<span class="lineno">  773 </span>-- in the monad state)
+<span class="lineno">  774 </span>getMergedEnv :: TopLevel TopLevelRW
+<span class="lineno">  775 </span><span class="decl"><span class="istickedoff">getMergedEnv =</span>
+<span class="lineno">  776 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  777 </span><span class="spaces">     </span><span class="istickedoff">env &lt;- getLocalEnv</span>
+<span class="lineno">  778 </span><span class="spaces">     </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">  779 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ mergeLocalEnv sc env rw</span></span>
+<span class="lineno">  780 </span>
+<span class="lineno">  781 </span>-- Variant of getMergedEnv that takes an explicit local part
+<span class="lineno">  782 </span>-- (this avoids trying to use it with withLocalEnv, which doesn't work)
+<span class="lineno">  783 </span>getMergedEnv' :: LocalEnv -&gt; TopLevel TopLevelRW
+<span class="lineno">  784 </span><span class="decl"><span class="istickedoff">getMergedEnv' env = do</span>
+<span class="lineno">  785 </span><span class="spaces">    </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  786 </span><span class="spaces">    </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">  787 </span><span class="spaces">    </span><span class="istickedoff">liftIO $ mergeLocalEnv sc env rw</span></span>
+<span class="lineno">  788 </span>
+<span class="lineno">  789 </span>getCryptolEnv :: TopLevel CEnv.CryptolEnv
+<span class="lineno">  790 </span><span class="decl"><span class="istickedoff">getCryptolEnv = do</span>
+<span class="lineno">  791 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- getMergedEnv</span>
+<span class="lineno">  792 </span><span class="spaces">  </span><span class="istickedoff">return $ rwCryptol env</span></span>
+<span class="lineno">  793 </span>
+<span class="lineno">  794 </span>-- | TopLevel Read-Only Environment.
+<span class="lineno">  795 </span>data TopLevelRO =
+<span class="lineno">  796 </span>  TopLevelRO
+<span class="lineno">  797 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">roOptions</span></span></span>       :: Options
+<span class="lineno">  798 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">roArgv</span></span></span>          :: [Text]
+<span class="lineno">  799 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">roHandleAlloc</span></span></span>   :: Crucible.HandleAllocator
+<span class="lineno">  800 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">roProxy</span></span></span>         :: AIGProxy
+<span class="lineno">  801 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">roInitWorkDir</span></span></span>   :: FilePath
+<span class="lineno">  802 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">roBasicSS</span></span></span>       :: SAWSimpset
+<span class="lineno">  803 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">roSubshell</span></span></span>      :: TopLevel ()
+<span class="lineno">  804 </span>    -- ^ An action for entering a subshell.  This
+<span class="lineno">  805 </span>    --   may raise an error if the current execution
+<span class="lineno">  806 </span>    --   mode doesn't support subshells (e.g., the remote API)
+<span class="lineno">  807 </span>
+<span class="lineno">  808 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">roProofSubshell</span></span></span> :: ProofScript ()
+<span class="lineno">  809 </span>    -- ^ An action for entering a subshell in proof mode.  This
+<span class="lineno">  810 </span>    --   may raise an error if the current execution
+<span class="lineno">  811 </span>    --   mode doesn't support subshells (e.g., the remote API)
+<span class="lineno">  812 </span>
+<span class="lineno">  813 </span>  }
+<span class="lineno">  814 </span>
+<span class="lineno">  815 </span>-- | Current state of the Java sub-system.
+<span class="lineno">  816 </span>data JavaCodebase =
+<span class="lineno">  817 </span>    JavaUninitialized
+<span class="lineno">  818 </span>    -- ^ No Java-related commands have been invoked yet.
+<span class="lineno">  819 </span>  | JavaInitialized JSS.Codebase
+<span class="lineno">  820 </span>    -- ^ At least one Java-related command has been invoked successfully.
+<span class="lineno">  821 </span>    -- We cache the resulting 'JSS.Codebase' for subsequent commands.
+<span class="lineno">  822 </span>
+<span class="lineno">  823 </span>data TopLevelRW =
+<span class="lineno">  824 </span>  TopLevelRW
+<span class="lineno">  825 </span>  {
+<span class="lineno">  826 </span>    -- | The variable environment: a map from variable names to:
+<span class="lineno">  827 </span>    --      - the definition position
+<span class="lineno">  828 </span>    --      - the lifecycle setting (experimental/current/deprecated/etc)
+<span class="lineno">  829 </span>    --      - whether the binding is rebindable
+<span class="lineno">  830 </span>    --      - the type scheme
+<span class="lineno">  831 </span>    --      - the value
+<span class="lineno">  832 </span>    --      - the help text if any
+<span class="lineno">  833 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">rwValueInfo</span></span></span>  :: Map SS.Name (SS.Pos, SS.PrimitiveLifecycle, SS.Rebindable,
+<span class="lineno">  834 </span>                                 SS.Schema, Value, Maybe [Text])
+<span class="lineno">  835 </span>
+<span class="lineno">  836 </span>    -- | The type environment: a map from type names to:
+<span class="lineno">  837 </span>    --      - the lifecycle setting (experimental/current/deprecated/etc)
+<span class="lineno">  838 </span>    --      - the expansion, which might be another type (this is how
+<span class="lineno">  839 </span>    --        typedefs/type aliases appear) or &quot;abstract&quot; (this is how
+<span class="lineno">  840 </span>    --        builtin types that aren't special cases in the AST appear)
+<span class="lineno">  841 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwTypeInfo</span></span></span>   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
+<span class="lineno">  842 </span>
+<span class="lineno">  843 </span>    -- | The Cryptol naming environment.
+<span class="lineno">  844 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwCryptol</span></span></span>    :: CEnv.CryptolEnv
+<span class="lineno">  845 </span>
+<span class="lineno">  846 </span>    -- | The current execution position. This is only valid when the
+<span class="lineno">  847 </span>    --   interpreter is calling out into saw-central to execute a
+<span class="lineno">  848 </span>    --   builtin. Within the interpreter, the current position is
+<span class="lineno">  849 </span>    --   either passed around or the position in the current AST
+<span class="lineno">  850 </span>    --   element, and those positions should be used instead.
+<span class="lineno">  851 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwPosition</span></span></span> :: SS.Pos
+<span class="lineno">  852 </span>
+<span class="lineno">  853 </span>    -- | The current stack trace. The most recent frame is at the front.
+<span class="lineno">  854 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwStackTrace</span></span></span> :: Trace
+<span class="lineno">  855 </span>
+<span class="lineno">  856 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwLocalEnv</span></span></span>   :: LocalEnv
+<span class="lineno">  857 </span>
+<span class="lineno">  858 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwJavaCodebase</span></span></span>  :: JavaCodebase -- ^ Current state of Java sub-system.
+<span class="lineno">  859 </span>
+<span class="lineno">  860 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwProofs</span></span></span>  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
+<span class="lineno">  861 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwPPOpts</span></span></span>  :: PPS.Opts
+<span class="lineno">  862 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwSharedContext</span></span></span> :: SharedContext
+<span class="lineno">  863 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwSolverCache</span></span></span> :: Maybe SolverCache
+<span class="lineno">  864 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwTheoremDB</span></span></span> :: TheoremDB
+<span class="lineno">  865 </span>
+<span class="lineno">  866 </span>  -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
+<span class="lineno">  867 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwJVMTrans</span></span></span> :: CJ.JVMContext
+<span class="lineno">  868 </span>  -- ^ crucible-jvm: Handles and info for classes that have already been translated
+<span class="lineno">  869 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwPrimsAvail</span></span></span> :: Set SS.PrimitiveLifecycle
+<span class="lineno">  870 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwSMTArrayMemoryModel</span></span></span> :: Bool
+<span class="lineno">  871 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwCrucibleAssertThenAssume</span></span></span> :: Bool
+<span class="lineno">  872 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwProfilingFile</span></span></span> :: Maybe FilePath
+<span class="lineno">  873 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwLaxArith</span></span></span> :: Bool
+<span class="lineno">  874 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwLaxLoadsAndStores</span></span></span> :: Bool
+<span class="lineno">  875 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwLaxPointerOrdering</span></span></span> :: Bool
+<span class="lineno">  876 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwDebugIntrinsics</span></span></span> :: Bool
+<span class="lineno">  877 </span>
+<span class="lineno">  878 </span>  -- FIXME: These might be better split into &quot;simulator hash-consing&quot; and &quot;tactic hash-consing&quot;
+<span class="lineno">  879 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwWhat4HashConsing</span></span></span> :: Bool
+<span class="lineno">  880 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwWhat4HashConsingX86</span></span></span> :: Bool
+<span class="lineno">  881 </span>
+<span class="lineno">  882 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwWhat4Eval</span></span></span> :: Bool
+<span class="lineno">  883 </span>
+<span class="lineno">  884 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwPreservedRegs</span></span></span> :: [Text]
+<span class="lineno">  885 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwStackBaseAlign</span></span></span> :: Integer
+<span class="lineno">  886 </span>
+<span class="lineno">  887 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwAllocSymInitCheck</span></span></span> :: Bool
+<span class="lineno">  888 </span>
+<span class="lineno">  889 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwWhat4PushMuxOps</span></span></span> :: Bool
+<span class="lineno">  890 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwNoSatisfyingWriteFreshConstant</span></span></span> :: Bool
+<span class="lineno">  891 </span>
+<span class="lineno">  892 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwCrucibleTimeout</span></span></span> :: Integer
+<span class="lineno">  893 </span>
+<span class="lineno">  894 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwPathSatSolver</span></span></span> :: Common.PathSatSolver
+<span class="lineno">  895 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwSkipSafetyProofs</span></span></span> :: Bool
+<span class="lineno">  896 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwSingleOverrideSpecialCase</span></span></span> :: Bool
+<span class="lineno">  897 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwSequentGoals</span></span></span> :: Bool
+<span class="lineno">  898 </span>  }
+<span class="lineno">  899 </span>
+<span class="lineno">  900 </span>newtype TopLevel a =
+<span class="lineno">  901 </span>  TopLevel_ (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
+<span class="lineno">  902 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff">MonadThrow</span></span>, <span class="decl"><span class="istickedoff">MonadCatch</span></span>)
+<span class="lineno">  903 </span>
+<span class="lineno">  904 </span><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">deriving instance MonadReader TopLevelRO TopLevel</span></span></span></span></span></span>
+<span class="lineno">  905 </span><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">deriving instance MonadState TopLevelRW TopLevel</span></span></span></span></span></span>
+<span class="lineno">  906 </span>
+<span class="lineno">  907 </span>instance MonadFail TopLevel where
+<span class="lineno">  908 </span>  <span class="decl"><span class="istickedoff">fail = throwTopLevel</span></span>
+<span class="lineno">  909 </span>
+<span class="lineno">  910 </span>runTopLevel :: TopLevel a -&gt; TopLevelRO -&gt; TopLevelRW -&gt; IO (a, TopLevelRW)
+<span class="lineno">  911 </span><span class="decl"><span class="istickedoff">runTopLevel (TopLevel_ m) ro rw =</span>
+<span class="lineno">  912 </span><span class="spaces">  </span><span class="istickedoff">runStateT (runReaderT m ro) rw</span></span>
+<span class="lineno">  913 </span>
+<span class="lineno">  914 </span>instance MonadIO TopLevel where
+<span class="lineno">  915 </span>  <span class="decl"><span class="istickedoff">liftIO = io</span></span>
+<span class="lineno">  916 </span>
+<span class="lineno">  917 </span>io :: IO a -&gt; TopLevel a
+<span class="lineno">  918 </span><span class="decl"><span class="istickedoff">io f = (TopLevel_ (liftIO f))</span>
+<span class="lineno">  919 </span><span class="spaces">       </span><span class="istickedoff">`catches`</span>
+<span class="lineno">  920 </span><span class="spaces">       </span><span class="istickedoff">[ Handler <span class="nottickedoff">(\(ex :: X86Unsupported) -&gt; handleX86Unsupported ex)</span></span>
+<span class="lineno">  921 </span><span class="spaces">       </span><span class="istickedoff">, Handler <span class="nottickedoff">(\(ex :: X86Error) -&gt; handleX86Error ex)</span></span>
+<span class="lineno">  922 </span><span class="spaces">       </span><span class="istickedoff">, Handler handleTopLevel</span>
+<span class="lineno">  923 </span><span class="spaces">       </span><span class="istickedoff">, Handler handleIO</span>
+<span class="lineno">  924 </span><span class="spaces">       </span><span class="istickedoff">]</span>
+<span class="lineno">  925 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  926 </span><span class="spaces">    </span><span class="istickedoff">rethrow :: X.Exception ex =&gt; ex -&gt; TopLevel a</span>
+<span class="lineno">  927 </span><span class="spaces">    </span><span class="istickedoff">rethrow ex =</span>
+<span class="lineno">  928 </span><span class="spaces">      </span><span class="istickedoff">do stk &lt;- getStackTrace</span>
+<span class="lineno">  929 </span><span class="spaces">         </span><span class="istickedoff">-- XXX: assumes the exception came from inside a builtin somewhere,</span>
+<span class="lineno">  930 </span><span class="spaces">         </span><span class="istickedoff">-- and hardwires PosInsideBuiltin. This is not going to always be</span>
+<span class="lineno">  931 </span><span class="spaces">         </span><span class="istickedoff">-- true and this logic should be reworked when we're doing the error</span>
+<span class="lineno">  932 </span><span class="spaces">         </span><span class="istickedoff">-- printing cleanup.</span>
+<span class="lineno">  933 </span><span class="spaces">         </span><span class="istickedoff">throwM (SS.TraceException stk SS.PosInsideBuiltin (X.SomeException ex))</span>
+<span class="lineno">  934 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  935 </span><span class="spaces">    </span><span class="istickedoff">handleTopLevel :: SS.TopLevelException -&gt; TopLevel a</span>
+<span class="lineno">  936 </span><span class="spaces">    </span><span class="istickedoff">handleTopLevel e = rethrow e</span>
+<span class="lineno">  937 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  938 </span><span class="spaces">    </span><span class="istickedoff">handleIO :: X.IOException -&gt; TopLevel a</span>
+<span class="lineno">  939 </span><span class="spaces">    </span><span class="istickedoff">handleIO e</span>
+<span class="lineno">  940 </span><span class="spaces">      </span><span class="istickedoff">| IOError.isUserError e =</span>
+<span class="lineno">  941 </span><span class="spaces">          </span><span class="istickedoff">do pos &lt;- getPosition</span>
+<span class="lineno">  942 </span><span class="spaces">             </span><span class="istickedoff">rethrow (SS.TopLevelException <span class="nottickedoff">pos</span> (dropEnd 1 . drop 12 $ show e))</span>
+<span class="lineno">  943 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = rethrow e</span>
+<span class="lineno">  944 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  945 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">handleX86Unsupported (X86Unsupported path s) =</span></span>
+<span class="lineno">  946 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let pos = SS.FileOnlyPos path</span></span>
+<span class="lineno">  947 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">rethrow (SS.TopLevelException pos (&quot;Unsupported x86 feature: &quot; ++ s))</span></span>
+<span class="lineno">  948 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  949 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">handleX86Error (X86Error path optfunc s) =</span></span>
+<span class="lineno">  950 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let pos = case optfunc of</span></span>
+<span class="lineno">  951 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; SS.FileOnlyPos path</span></span>
+<span class="lineno">  952 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Just func -&gt; SS.FileAndFunctionPos path (Text.unpack func)</span></span>
+<span class="lineno">  953 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">rethrow (SS.TopLevelException pos (&quot;Error in x86 code: &quot; ++ Text.unpack s))</span></span></span>
+<span class="lineno">  954 </span>
+<span class="lineno">  955 </span>throwTopLevel :: String -&gt; TopLevel a
+<span class="lineno">  956 </span><span class="decl"><span class="istickedoff">throwTopLevel msg = do</span>
+<span class="lineno">  957 </span><span class="spaces">  </span><span class="istickedoff">stk &lt;- getStackTrace</span>
+<span class="lineno">  958 </span><span class="spaces">  </span><span class="istickedoff">-- All current uses of throwTopLevel are inside builtins.</span>
+<span class="lineno">  959 </span><span class="spaces">  </span><span class="istickedoff">let pos = SS.PosInsideBuiltin</span>
+<span class="lineno">  960 </span><span class="spaces">  </span><span class="istickedoff">throwM (SS.TraceException stk pos (X.SomeException (SS.TopLevelException <span class="nottickedoff">pos</span> msg)))</span></span>
+<span class="lineno">  961 </span>
+<span class="lineno">  962 </span>-- | Set the current execution position.
+<span class="lineno">  963 </span>setPosition :: SS.Pos -&gt; TopLevel ()
+<span class="lineno">  964 </span><span class="decl"><span class="istickedoff">setPosition newpos = do</span>
+<span class="lineno">  965 </span><span class="spaces">  </span><span class="istickedoff">modifyTopLevelRW (\rw -&gt; rw { rwPosition = newpos })</span></span>
+<span class="lineno">  966 </span>
+<span class="lineno">  967 </span>-- | Add a stack trace frame. Takes the call site position and the
+<span class="lineno">  968 </span>--   function name.
+<span class="lineno">  969 </span>pushTraceFrame :: SS.Pos -&gt; Text -&gt; TopLevel ()
+<span class="lineno">  970 </span><span class="decl"><span class="istickedoff">pushTraceFrame pos func =</span>
+<span class="lineno">  971 </span><span class="spaces">  </span><span class="istickedoff">modifyTopLevelRW (\rw -&gt; rw { rwStackTrace = Trace.push pos func (rwStackTrace rw) })</span></span>
+<span class="lineno">  972 </span>
+<span class="lineno">  973 </span>-- | Add multiple stack trace frames. Takes a list of call site and
+<span class="lineno">  974 </span>--   function name pairs.
+<span class="lineno">  975 </span>--
+<span class="lineno">  976 </span>--   The topmost entry in the argument list goes onto the stack first
+<span class="lineno">  977 </span>--   and becomes the deepest entry and thus the caller of the rest.
+<span class="lineno">  978 </span>--
+<span class="lineno">  979 </span>--   This is backwards from what one might expect if the list were
+<span class="lineno">  980 </span>--   itself a call stack. However, the use case we have produces
+<span class="lineno">  981 </span>--   entries in that order naturally (it is a chain of references to /
+<span class="lineno">  982 </span>--   assignments of monadic values, with the most recent and therefore
+<span class="lineno">  983 </span>--   first/deepest when run at the top of the list), so I'm not
+<span class="lineno">  984 </span>--   inclined to reverse the list both here and in the caller to match
+<span class="lineno">  985 </span>--   a rather vague expectation.
+<span class="lineno">  986 </span>--
+<span class="lineno">  987 </span>pushTraceFrames :: [(SS.Pos, Text)] -&gt; TopLevel ()
+<span class="lineno">  988 </span><span class="decl"><span class="istickedoff">pushTraceFrames frames =</span>
+<span class="lineno">  989 </span><span class="spaces">  </span><span class="istickedoff">mapM_ (\(pos, name) -&gt; pushTraceFrame pos name) frames</span></span>
+<span class="lineno">  990 </span>
+<span class="lineno">  991 </span>-- | Drop a stack trace frame.
+<span class="lineno">  992 </span>popTraceFrame :: TopLevel ()
+<span class="lineno">  993 </span><span class="decl"><span class="istickedoff">popTraceFrame =</span>
+<span class="lineno">  994 </span><span class="spaces">  </span><span class="istickedoff">modifyTopLevelRW (\rw -&gt; rw { rwStackTrace = Trace.pop (rwStackTrace rw) })</span></span>
+<span class="lineno">  995 </span>
+<span class="lineno">  996 </span>-- | Drop multiple stack trace frames. Takes a list of the corresponding
+<span class="lineno">  997 </span>--   length for caller convenience.
+<span class="lineno">  998 </span>popTraceFrames :: [a] -&gt; TopLevel ()
+<span class="lineno">  999 </span><span class="decl"><span class="istickedoff">popTraceFrames frames =</span>
+<span class="lineno"> 1000 </span><span class="spaces">  </span><span class="istickedoff">mapM_ (\_ -&gt; popTraceFrame) frames</span></span>
+<span class="lineno"> 1001 </span>
+<span class="lineno"> 1002 </span>getLocalEnv :: TopLevel LocalEnv
+<span class="lineno"> 1003 </span><span class="decl"><span class="istickedoff">getLocalEnv =</span>
+<span class="lineno"> 1004 </span><span class="spaces">  </span><span class="istickedoff">gets rwLocalEnv</span></span>
+<span class="lineno"> 1005 </span>
+<span class="lineno"> 1006 </span>-- | Get the current execution position.
+<span class="lineno"> 1007 </span>getPosition :: TopLevel SS.Pos
+<span class="lineno"> 1008 </span><span class="decl"><span class="istickedoff">getPosition =</span>
+<span class="lineno"> 1009 </span><span class="spaces">  </span><span class="istickedoff">gets rwPosition</span></span>
+<span class="lineno"> 1010 </span>
+<span class="lineno"> 1011 </span>-- | Get the current stack trace.
+<span class="lineno"> 1012 </span>getStackTrace :: TopLevel Trace
+<span class="lineno"> 1013 </span><span class="decl"><span class="istickedoff">getStackTrace = gets rwStackTrace</span></span>
+<span class="lineno"> 1014 </span>
+<span class="lineno"> 1015 </span>getSharedContext :: TopLevel SharedContext
+<span class="lineno"> 1016 </span><span class="decl"><span class="istickedoff">getSharedContext = TopLevel_ (rwSharedContext &lt;$&gt; get)</span></span>
+<span class="lineno"> 1017 </span>
+<span class="lineno"> 1018 </span>getJavaCodebase :: TopLevel JSS.Codebase
+<span class="lineno"> 1019 </span><span class="decl"><span class="istickedoff">getJavaCodebase =</span>
+<span class="lineno"> 1020 </span><span class="spaces">  </span><span class="istickedoff">do</span>
+<span class="lineno"> 1021 </span><span class="spaces">    </span><span class="istickedoff">status &lt;- gets rwJavaCodebase</span>
+<span class="lineno"> 1022 </span><span class="spaces">    </span><span class="istickedoff">case status of</span>
+<span class="lineno"> 1023 </span><span class="spaces">      </span><span class="istickedoff">JavaInitialized s -&gt; pure s</span>
+<span class="lineno"> 1024 </span><span class="spaces">      </span><span class="istickedoff">JavaUninitialized   -&gt;</span>
+<span class="lineno"> 1025 </span><span class="spaces">        </span><span class="istickedoff">do</span>
+<span class="lineno"> 1026 </span><span class="spaces">          </span><span class="istickedoff">opts &lt;- getOptions</span>
+<span class="lineno"> 1027 </span><span class="spaces">          </span><span class="istickedoff">mb   &lt;- liftIO (X.try (initJava opts))</span>
+<span class="lineno"> 1028 </span><span class="spaces">          </span><span class="istickedoff">case mb of</span>
+<span class="lineno"> 1029 </span><span class="spaces">            </span><span class="istickedoff">Right jcb -&gt;</span>
+<span class="lineno"> 1030 </span><span class="spaces">              </span><span class="istickedoff">modifyTopLevelRW (\s -&gt; s { rwJavaCodebase = JavaInitialized jcb }) &gt;&gt;</span>
+<span class="lineno"> 1031 </span><span class="spaces">              </span><span class="istickedoff">pure jcb</span>
+<span class="lineno"> 1032 </span><span class="spaces">            </span><span class="istickedoff">Left err -&gt;</span>
+<span class="lineno"> 1033 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines $</span></span>
+<span class="lineno"> 1034 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Error: failed to initialize Java.&quot; :</span></span>
+<span class="lineno"> 1035 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;  &quot; ++ l | l &lt;- lines (X.displayException (err :: X.SomeException)) ]</span></span>
+<span class="lineno"> 1036 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1037 </span><span class="spaces">  </span><span class="istickedoff">-- If a Java executable's path is specified (either by way of</span>
+<span class="lineno"> 1038 </span><span class="spaces">  </span><span class="istickedoff">-- --java-bin-dirs or PATH, see the Haddocks for findJavaIn), then use that</span>
+<span class="lineno"> 1039 </span><span class="spaces">  </span><span class="istickedoff">-- to detect the path to Java's standard rt.jar file and add it to the</span>
+<span class="lineno"> 1040 </span><span class="spaces">  </span><span class="istickedoff">-- jarList on Java 8 or earlier. (Later versions of Java do not use</span>
+<span class="lineno"> 1041 </span><span class="spaces">  </span><span class="istickedoff">-- rt.jar—see Note [Loading classes from JIMAGE files] in</span>
+<span class="lineno"> 1042 </span><span class="spaces">  </span><span class="istickedoff">-- Lang.JVM.Codebase in crucible-jvm.)</span>
+<span class="lineno"> 1043 </span><span class="spaces">  </span><span class="istickedoff">-- If Java's path is not specified, return the Options unchanged.</span>
+<span class="lineno"> 1044 </span><span class="spaces">  </span><span class="istickedoff">initJava opts =</span>
+<span class="lineno"> 1045 </span><span class="spaces">    </span><span class="istickedoff">do</span>
+<span class="lineno"> 1046 </span><span class="spaces">      </span><span class="istickedoff">mbJavaPath &lt;- CJ.findJavaIn (Opt.javaBinDirs opts)</span>
+<span class="lineno"> 1047 </span><span class="spaces">      </span><span class="istickedoff">javaPath &lt;-</span>
+<span class="lineno"> 1048 </span><span class="spaces">        </span><span class="istickedoff">case mbJavaPath of</span>
+<span class="lineno"> 1049 </span><span class="spaces">          </span><span class="istickedoff">Nothing   -&gt; <span class="nottickedoff">fail &quot;Failed to find a `java` executable.&quot;</span></span>
+<span class="lineno"> 1050 </span><span class="spaces">          </span><span class="istickedoff">Just path -&gt; pure path</span>
+<span class="lineno"> 1051 </span><span class="spaces">      </span><span class="istickedoff">version &lt;- CJ.findJavaMajorVersion javaPath</span>
+<span class="lineno"> 1052 </span><span class="spaces">      </span><span class="istickedoff">jars &lt;-</span>
+<span class="lineno"> 1053 </span><span class="spaces">        </span><span class="istickedoff">-- rt.jar lives in a standard location relative to @java.home@. At least,</span>
+<span class="lineno"> 1054 </span><span class="spaces">        </span><span class="istickedoff">-- this is the case on every operating system I've tested.</span>
+<span class="lineno"> 1055 </span><span class="spaces">        </span><span class="istickedoff">if <span class="tickonlytrue">version &lt; 9</span> then</span>
+<span class="lineno"> 1056 </span><span class="spaces">          </span><span class="istickedoff">do</span>
+<span class="lineno"> 1057 </span><span class="spaces">            </span><span class="istickedoff">mbJavaHome &lt;- CJ.findJavaProperty javaPath &quot;java.home&quot;</span>
+<span class="lineno"> 1058 </span><span class="spaces">            </span><span class="istickedoff">case mbJavaHome of</span>
+<span class="lineno"> 1059 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1060 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;Could not find where rt.jar lives for &quot; ++ javaPath)</span></span>
+<span class="lineno"> 1061 </span><span class="spaces">              </span><span class="istickedoff">Just javaHome -&gt;</span>
+<span class="lineno"> 1062 </span><span class="spaces">                </span><span class="istickedoff">let jar = javaHome &lt;/&gt; &quot;lib&quot; &lt;/&gt; &quot;rt.jar&quot;</span>
+<span class="lineno"> 1063 </span><span class="spaces">                </span><span class="istickedoff">in pure (jar : Opt.jarList opts)</span>
+<span class="lineno"> 1064 </span><span class="spaces">        </span><span class="istickedoff">else <span class="nottickedoff">pure (Opt.jarList opts)</span></span>
+<span class="lineno"> 1065 </span><span class="spaces">      </span><span class="istickedoff">JSS.loadCodebase jars (Opt.classPath opts) (Opt.javaBinDirs opts)</span></span>
+<span class="lineno"> 1066 </span>
+<span class="lineno"> 1067 </span>          
+<span class="lineno"> 1068 </span>
+<span class="lineno"> 1069 </span>
+<span class="lineno"> 1070 </span>getTheoremDB :: TopLevel TheoremDB
+<span class="lineno"> 1071 </span><span class="decl"><span class="istickedoff">getTheoremDB = gets rwTheoremDB</span></span>
+<span class="lineno"> 1072 </span>
+<span class="lineno"> 1073 </span>putTheoremDB :: TheoremDB -&gt; TopLevel ()
+<span class="lineno"> 1074 </span><span class="decl"><span class="istickedoff">putTheoremDB db = modifyTopLevelRW (\tl -&gt; tl { rwTheoremDB = db })</span></span>
+<span class="lineno"> 1075 </span>
+<span class="lineno"> 1076 </span>getOptions :: TopLevel Options
+<span class="lineno"> 1077 </span><span class="decl"><span class="istickedoff">getOptions = TopLevel_ (asks roOptions)</span></span>
+<span class="lineno"> 1078 </span>
+<span class="lineno"> 1079 </span>getProxy :: TopLevel AIGProxy
+<span class="lineno"> 1080 </span><span class="decl"><span class="istickedoff">getProxy = TopLevel_ (asks roProxy)</span></span>
+<span class="lineno"> 1081 </span>
+<span class="lineno"> 1082 </span>getBasicSS :: TopLevel SAWSimpset
+<span class="lineno"> 1083 </span><span class="decl"><span class="istickedoff">getBasicSS = TopLevel_ (asks roBasicSS)</span></span>
+<span class="lineno"> 1084 </span>
+<span class="lineno"> 1085 </span>printOutLnTop :: Verbosity -&gt; String -&gt; TopLevel ()
+<span class="lineno"> 1086 </span><span class="decl"><span class="istickedoff">printOutLnTop v s =</span>
+<span class="lineno"> 1087 </span><span class="spaces">    </span><span class="istickedoff">do opts &lt;- getOptions</span>
+<span class="lineno"> 1088 </span><span class="spaces">       </span><span class="istickedoff">io $ printOutLn opts v s</span></span>
+<span class="lineno"> 1089 </span>
+<span class="lineno"> 1090 </span>getHandleAlloc :: TopLevel Crucible.HandleAllocator
+<span class="lineno"> 1091 </span><span class="decl"><span class="istickedoff">getHandleAlloc = TopLevel_ (asks roHandleAlloc)</span></span>
+<span class="lineno"> 1092 </span>
+<span class="lineno"> 1093 </span>getTopLevelRO :: TopLevel TopLevelRO
+<span class="lineno"> 1094 </span><span class="decl"><span class="istickedoff">getTopLevelRO = TopLevel_ ask</span></span>
+<span class="lineno"> 1095 </span>
+<span class="lineno"> 1096 </span>getTopLevelRW :: TopLevel TopLevelRW
+<span class="lineno"> 1097 </span><span class="decl"><span class="istickedoff">getTopLevelRW = get</span></span>
+<span class="lineno"> 1098 </span>
+<span class="lineno"> 1099 </span>putTopLevelRW :: TopLevelRW -&gt; TopLevel ()
+<span class="lineno"> 1100 </span><span class="decl"><span class="istickedoff">putTopLevelRW rw = put rw</span></span>
+<span class="lineno"> 1101 </span>
+<span class="lineno"> 1102 </span>modifyTopLevelRW :: (TopLevelRW -&gt; TopLevelRW) -&gt; TopLevel ()
+<span class="lineno"> 1103 </span><span class="decl"><span class="istickedoff">modifyTopLevelRW = modify</span></span>
+<span class="lineno"> 1104 </span>
+<span class="lineno"> 1105 </span>-- FUTURE: maybe change these back to using IsValue when things are less tangly
+<span class="lineno"> 1106 </span>--
+<span class="lineno"> 1107 </span>-- Note that the &quot;return&quot; variants record the proof as well as just returning it.
+<span class="lineno"> 1108 </span>
+<span class="lineno"> 1109 </span>recordProof :: Value -&gt; TopLevel ()
+<span class="lineno"> 1110 </span><span class="decl"><span class="istickedoff">recordProof v =</span>
+<span class="lineno"> 1111 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno"> 1112 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw { rwProofs = v : rwProofs rw }</span></span>
+<span class="lineno"> 1113 </span>
+<span class="lineno"> 1114 </span>returnTheoremProof :: Theorem -&gt; TopLevel Theorem
+<span class="lineno"> 1115 </span><span class="decl"><span class="istickedoff">returnTheoremProof thm = recordProof (VTheorem thm) &gt;&gt; return thm</span></span>
+<span class="lineno"> 1116 </span>
+<span class="lineno"> 1117 </span>recordTheoremProof :: Theorem -&gt; TopLevel ()
+<span class="lineno"> 1118 </span><span class="decl"><span class="istickedoff">recordTheoremProof thm = recordProof <span class="nottickedoff">(VTheorem thm)</span></span></span>
+<span class="lineno"> 1119 </span>
+<span class="lineno"> 1120 </span>returnLLVMProof :: CMSLLVM.SomeLLVM CMS.ProvedSpec -&gt; TopLevel (CMSLLVM.SomeLLVM CMS.ProvedSpec)
+<span class="lineno"> 1121 </span><span class="decl"><span class="istickedoff">returnLLVMProof ms = recordProof <span class="nottickedoff">(VLLVMCrucibleMethodSpec ms)</span> &gt;&gt; return ms</span></span>
+<span class="lineno"> 1122 </span>
+<span class="lineno"> 1123 </span>returnJVMProof :: CMS.ProvedSpec CJ.JVM -&gt; TopLevel (CMS.ProvedSpec CJ.JVM)
+<span class="lineno"> 1124 </span><span class="decl"><span class="istickedoff">returnJVMProof ms = recordProof <span class="nottickedoff">(VJVMMethodSpec ms)</span> &gt;&gt; return ms</span></span>
+<span class="lineno"> 1125 </span>
+<span class="lineno"> 1126 </span>returnMIRProof :: CMS.ProvedSpec MIR -&gt; TopLevel (CMS.ProvedSpec MIR)
+<span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">returnMIRProof ms = recordProof <span class="nottickedoff">(VMIRMethodSpec ms)</span> &gt;&gt; return ms</span></span>
+<span class="lineno"> 1128 </span>
+<span class="lineno"> 1129 </span>-- | Perform an operation on the 'SolverCache', returning a default value or
+<span class="lineno"> 1130 </span>-- failing (depending on the first element of the 'SolverCacheOp') if there
+<span class="lineno"> 1131 </span>-- is no enabled 'SolverCache'
+<span class="lineno"> 1132 </span>onSolverCache :: SolverCacheOp a -&gt; TopLevel a
+<span class="lineno"> 1133 </span><span class="decl"><span class="istickedoff">onSolverCache cacheOp =</span>
+<span class="lineno"> 1134 </span><span class="spaces">  </span><span class="istickedoff">do opts &lt;- getOptions</span>
+<span class="lineno"> 1135 </span><span class="spaces">     </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno"> 1136 </span><span class="spaces">     </span><span class="istickedoff">case rwSolverCache rw of</span>
+<span class="lineno"> 1137 </span><span class="spaces">       </span><span class="istickedoff">Just cache -&gt; do (a, cache') &lt;- io $ solverCacheOp cacheOp opts cache</span>
+<span class="lineno"> 1138 </span><span class="spaces">                        </span><span class="istickedoff">putTopLevelRW rw { rwSolverCache = Just cache' }</span>
+<span class="lineno"> 1139 </span><span class="spaces">                        </span><span class="istickedoff">return a</span>
+<span class="lineno"> 1140 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case solverCacheOpDefault cacheOp of</span></span>
+<span class="lineno"> 1141 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just a -&gt; return a</span></span>
+<span class="lineno"> 1142 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; fail &quot;Solver result cache not enabled!&quot;</span></span></span>
+<span class="lineno"> 1143 </span>
+<span class="lineno"> 1144 </span>-- | Access the current state of Java Class translation
+<span class="lineno"> 1145 </span>getJVMTrans :: TopLevel CJ.JVMContext
+<span class="lineno"> 1146 </span><span class="decl"><span class="istickedoff">getJVMTrans = gets rwJVMTrans</span></span>
+<span class="lineno"> 1147 </span>
+<span class="lineno"> 1148 </span>-- | Access the current state of Java Class translation
+<span class="lineno"> 1149 </span>putJVMTrans :: CJ.JVMContext -&gt; TopLevel ()
+<span class="lineno"> 1150 </span><span class="decl"><span class="istickedoff">putJVMTrans jc =</span>
+<span class="lineno"> 1151 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno"> 1152 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw { rwJVMTrans = jc }</span></span>
+<span class="lineno"> 1153 </span>
+<span class="lineno"> 1154 </span>-- | Add a newly translated class to the translation
+<span class="lineno"> 1155 </span>addJVMTrans :: CJ.JVMContext -&gt; TopLevel ()
+<span class="lineno"> 1156 </span><span class="decl"><span class="nottickedoff">addJVMTrans trans = do</span>
+<span class="lineno"> 1157 </span><span class="spaces">  </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno"> 1158 </span><span class="spaces">  </span><span class="nottickedoff">let jvmt = rwJVMTrans rw</span>
+<span class="lineno"> 1159 </span><span class="spaces">  </span><span class="nottickedoff">putTopLevelRW ( rw { rwJVMTrans = trans &lt;&gt; jvmt })</span></span>
+<span class="lineno"> 1160 </span>
+<span class="lineno"> 1161 </span>extendEnv ::
+<span class="lineno"> 1162 </span>  SharedContext -&gt;
+<span class="lineno"> 1163 </span>  SS.Pos -&gt; SS.Name -&gt; SS.Rebindable -&gt; SS.Schema -&gt; Maybe [Text] -&gt; Value -&gt;
+<span class="lineno"> 1164 </span>  TopLevelRW -&gt; IO TopLevelRW
+<span class="lineno"> 1165 </span><span class="decl"><span class="istickedoff">extendEnv sc pos name rb ty doc v rw =</span>
+<span class="lineno"> 1166 </span><span class="spaces">  </span><span class="istickedoff">do ce' &lt;-</span>
+<span class="lineno"> 1167 </span><span class="spaces">       </span><span class="istickedoff">case v of</span>
+<span class="lineno"> 1168 </span><span class="spaces">         </span><span class="istickedoff">VTerm t -&gt;</span>
+<span class="lineno"> 1169 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, t) ce</span>
+<span class="lineno"> 1170 </span><span class="spaces">         </span><span class="istickedoff">VType s -&gt;</span>
+<span class="lineno"> 1171 </span><span class="spaces">           </span><span class="istickedoff">pure $ <span class="nottickedoff">CEnv.bindType (ident, s) ce</span></span>
+<span class="lineno"> 1172 </span><span class="spaces">         </span><span class="istickedoff">VInteger n -&gt;</span>
+<span class="lineno"> 1173 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindInteger (ident, n) ce</span>
+<span class="lineno"> 1174 </span><span class="spaces">         </span><span class="istickedoff">VCryptolModule m -&gt;</span>
+<span class="lineno"> 1175 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindExtCryptolModule (modname, m) ce</span>
+<span class="lineno"> 1176 </span><span class="spaces">         </span><span class="istickedoff">VString s -&gt;</span>
+<span class="lineno"> 1177 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- typedTermOfString sc (Text.unpack s)</span>
+<span class="lineno"> 1178 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>
+<span class="lineno"> 1179 </span><span class="spaces">         </span><span class="istickedoff">VBool b -&gt;</span>
+<span class="lineno"> 1180 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- typedTermOfBool sc b</span>
+<span class="lineno"> 1181 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>
+<span class="lineno"> 1182 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 1183 </span><span class="spaces">           </span><span class="istickedoff">pure ce</span>
+<span class="lineno"> 1184 </span><span class="spaces">     </span><span class="istickedoff">let valenv = rwValueInfo rw</span>
+<span class="lineno"> 1185 </span><span class="spaces">         </span><span class="istickedoff">valenv' = M.insert name (pos, SS.Current, rb, ty, v, <span class="nottickedoff">doc</span>) valenv</span>
+<span class="lineno"> 1186 </span><span class="spaces">     </span><span class="istickedoff">pure $ rw { rwValueInfo = valenv', rwCryptol = ce' }</span>
+<span class="lineno"> 1187 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1188 </span><span class="spaces">    </span><span class="istickedoff">ident = T.mkIdent name</span>
+<span class="lineno"> 1189 </span><span class="spaces">    </span><span class="istickedoff">modname = T.packModName [name]</span>
+<span class="lineno"> 1190 </span><span class="spaces">    </span><span class="istickedoff">ce = rwCryptol rw</span></span>
+<span class="lineno"> 1191 </span>
+<span class="lineno"> 1192 </span>typedTermOfString :: SharedContext -&gt; String -&gt; IO TypedTerm
+<span class="lineno"> 1193 </span><span class="decl"><span class="istickedoff">typedTermOfString sc str =</span>
+<span class="lineno"> 1194 </span><span class="spaces">  </span><span class="istickedoff">do let <span class="nottickedoff">schema = Cryptol.tMono (Cryptol.tString (length str))</span></span>
+<span class="lineno"> 1195 </span><span class="spaces">     </span><span class="istickedoff">bvNat &lt;- scGlobalDef sc &quot;Prelude.bvNat&quot;</span>
+<span class="lineno"> 1196 </span><span class="spaces">     </span><span class="istickedoff">bvNat8 &lt;- scApply sc bvNat =&lt;&lt; scNat sc 8</span>
+<span class="lineno"> 1197 </span><span class="spaces">     </span><span class="istickedoff">byteT &lt;- scBitvector sc 8</span>
+<span class="lineno"> 1198 </span><span class="spaces">     </span><span class="istickedoff">let scChar c = scApply sc bvNat8 =&lt;&lt; scNat sc (fromIntegral (fromEnum c))</span>
+<span class="lineno"> 1199 </span><span class="spaces">     </span><span class="istickedoff">ts &lt;- traverse scChar str</span>
+<span class="lineno"> 1200 </span><span class="spaces">     </span><span class="istickedoff">trm &lt;- scVector sc byteT ts</span>
+<span class="lineno"> 1201 </span><span class="spaces">     </span><span class="istickedoff">pure (TypedTerm (TypedTermSchema <span class="nottickedoff">schema</span>) <span class="nottickedoff">trm</span>)</span></span>
+<span class="lineno"> 1202 </span>
+<span class="lineno"> 1203 </span>typedTermOfBool :: SharedContext -&gt; Bool -&gt; IO TypedTerm
+<span class="lineno"> 1204 </span><span class="decl"><span class="istickedoff">typedTermOfBool sc b =</span>
+<span class="lineno"> 1205 </span><span class="spaces">  </span><span class="istickedoff">do let schema = Cryptol.tMono Cryptol.tBit</span>
+<span class="lineno"> 1206 </span><span class="spaces">     </span><span class="istickedoff">trm &lt;- scBool sc b</span>
+<span class="lineno"> 1207 </span><span class="spaces">     </span><span class="istickedoff">pure (TypedTerm (TypedTermSchema schema) trm)</span></span>
+<span class="lineno"> 1208 </span>
+<span class="lineno"> 1209 </span>
+<span class="lineno"> 1210 </span>-- Other SAWScript Monads ------------------------------------------------------
+<span class="lineno"> 1211 </span>
+<span class="lineno"> 1212 </span>type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
+<span class="lineno"> 1213 </span>
+<span class="lineno"> 1214 </span>-- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
+<span class="lineno"> 1215 </span>--   specifications should be polymorphic in the underlying architecture
+<span class="lineno"> 1216 </span>-- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
+<span class="lineno"> 1217 </span>
+<span class="lineno"> 1218 </span>newtype LLVMCrucibleSetupM a =
+<span class="lineno"> 1219 </span>  LLVMCrucibleSetupM
+<span class="lineno"> 1220 </span>    { <span class="istickedoff"><span class="decl"><span class="istickedoff">runLLVMCrucibleSetupM</span></span></span> ::
+<span class="lineno"> 1221 </span>        forall arch.
+<span class="lineno"> 1222 </span>        (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno"> 1223 </span>        CrucibleSetup (CMSLLVM.LLVM arch) a
+<span class="lineno"> 1224 </span>    }
+<span class="lineno"> 1225 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Functor</span></span></span></span>
+<span class="lineno"> 1226 </span>
+<span class="lineno"> 1227 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Applicative LLVMCrucibleSetupM</span></span></span></span></span></span> where
+<span class="lineno"> 1228 </span>  <span class="decl"><span class="istickedoff">pure x = LLVMCrucibleSetupM (pure x)</span></span>
+<span class="lineno"> 1229 </span>  <span class="decl"><span class="istickedoff">LLVMCrucibleSetupM f &lt;*&gt; LLVMCrucibleSetupM m = LLVMCrucibleSetupM (f &lt;*&gt; m)</span></span>
+<span class="lineno"> 1230 </span>
+<span class="lineno"> 1231 </span>instance <span class="decl"><span class="istickedoff">Monad LLVMCrucibleSetupM</span></span> where
+<span class="lineno"> 1232 </span>  <span class="decl"><span class="istickedoff">return = pure</span></span>
+<span class="lineno"> 1233 </span>  <span class="decl"><span class="istickedoff">LLVMCrucibleSetupM m &gt;&gt;= f =</span>
+<span class="lineno"> 1234 </span><span class="spaces">    </span><span class="istickedoff">LLVMCrucibleSetupM (m &gt;&gt;= \x -&gt; runLLVMCrucibleSetupM (f x))</span></span>
+<span class="lineno"> 1235 </span>
+<span class="lineno"> 1236 </span>-- XXX this is required for the moment in the interpreter, and should
+<span class="lineno"> 1237 </span>-- be removed when we clean out error handling.
+<span class="lineno"> 1238 </span>instance MonadFail LLVMCrucibleSetupM where
+<span class="lineno"> 1239 </span>   <span class="decl"><span class="nottickedoff">fail msg = LLVMCrucibleSetupM $ lift $ lift $ fail msg</span></span>
+<span class="lineno"> 1240 </span>
+<span class="lineno"> 1241 </span>throwCrucibleSetup :: ProgramLoc -&gt; String -&gt; CrucibleSetup ext a
+<span class="lineno"> 1242 </span><span class="decl"><span class="istickedoff">throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException <span class="nottickedoff">loc</span> msg</span></span>
+<span class="lineno"> 1243 </span>
+<span class="lineno"> 1244 </span>throwLLVM :: ProgramLoc -&gt; String -&gt; LLVMCrucibleSetupM a
+<span class="lineno"> 1245 </span><span class="decl"><span class="nottickedoff">throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg</span></span>
+<span class="lineno"> 1246 </span>
+<span class="lineno"> 1247 </span>throwLLVMFun :: Text -&gt; String -&gt; LLVMCrucibleSetupM a
+<span class="lineno"> 1248 </span><span class="decl"><span class="nottickedoff">throwLLVMFun nm msg = do</span>
+<span class="lineno"> 1249 </span><span class="spaces">  </span><span class="nottickedoff">loc &lt;- LLVMCrucibleSetupM $ getW4Position nm</span>
+<span class="lineno"> 1250 </span><span class="spaces">  </span><span class="nottickedoff">throwLLVM loc msg</span></span>
+<span class="lineno"> 1251 </span>
+<span class="lineno"> 1252 </span>-- | Get the current interpreter position and convert to a What4 position.
+<span class="lineno"> 1253 </span>getW4Position :: Text -&gt; CrucibleSetup arch ProgramLoc
+<span class="lineno"> 1254 </span><span class="decl"><span class="istickedoff">getW4Position s = do</span>
+<span class="lineno"> 1255 </span><span class="spaces">  </span><span class="istickedoff">pos &lt;- lift $ lift $ getPosition</span>
+<span class="lineno"> 1256 </span><span class="spaces">  </span><span class="istickedoff">return $ SS.toW4Loc s pos</span></span>
+<span class="lineno"> 1257 </span>
+<span class="lineno"> 1258 </span>--
+<span class="lineno"> 1259 </span>
+<span class="lineno"> 1260 </span>type JVMSetup = CrucibleSetup CJ.JVM
+<span class="lineno"> 1261 </span>
+<span class="lineno"> 1262 </span>newtype JVMSetupM a = JVMSetupM { <span class="istickedoff"><span class="decl"><span class="istickedoff">runJVMSetupM</span></span></span> :: JVMSetup a }
+<span class="lineno"> 1263 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>)
+<span class="lineno"> 1264 </span>
+<span class="lineno"> 1265 </span>-- XXX this is required for the moment in the interpreter, and should
+<span class="lineno"> 1266 </span>-- be removed when we clean out error handling.
+<span class="lineno"> 1267 </span>instance MonadFail JVMSetupM where
+<span class="lineno"> 1268 </span>   <span class="decl"><span class="nottickedoff">fail msg = JVMSetupM $ lift $ lift $ fail msg</span></span>
+<span class="lineno"> 1269 </span>
+<span class="lineno"> 1270 </span>--
+<span class="lineno"> 1271 </span>
+<span class="lineno"> 1272 </span>type MIRSetup = CrucibleSetup MIR
+<span class="lineno"> 1273 </span>
+<span class="lineno"> 1274 </span>newtype MIRSetupM a = MIRSetupM { <span class="istickedoff"><span class="decl"><span class="istickedoff">runMIRSetupM</span></span></span> :: MIRSetup a }
+<span class="lineno"> 1275 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>)
+<span class="lineno"> 1276 </span>
+<span class="lineno"> 1277 </span>-- XXX this is required for the moment in the interpreter, and should
+<span class="lineno"> 1278 </span>-- be removed when we clean out error handling.
+<span class="lineno"> 1279 </span>instance MonadFail MIRSetupM where
+<span class="lineno"> 1280 </span>   <span class="decl"><span class="nottickedoff">fail msg = MIRSetupM $ lift $ lift $ fail msg</span></span>
+<span class="lineno"> 1281 </span>
+<span class="lineno"> 1282 </span>--
+<span class="lineno"> 1283 </span>newtype ProofScript a = ProofScript { <span class="istickedoff"><span class="decl"><span class="istickedoff">unProofScript</span></span></span> :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
+<span class="lineno"> 1284 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>)
+<span class="lineno"> 1285 </span>
+<span class="lineno"> 1286 </span>-- TODO: remove the &quot;reason&quot; parameter and compute it from the
+<span class="lineno"> 1287 </span>--       initial proof goal instead
+<span class="lineno"> 1288 </span>runProofScript ::
+<span class="lineno"> 1289 </span>  ProofScript a -&gt;
+<span class="lineno"> 1290 </span>  Prop -&gt;
+<span class="lineno"> 1291 </span>  ProofGoal -&gt;
+<span class="lineno"> 1292 </span>  Maybe ProgramLoc -&gt;
+<span class="lineno"> 1293 </span>  Text -&gt;
+<span class="lineno"> 1294 </span>  Bool {- ^ record the theorem in the database? -} -&gt;
+<span class="lineno"> 1295 </span>  Bool {- ^ do we need to normalize the sequent goal? -} -&gt;
+<span class="lineno"> 1296 </span>  TopLevel ProofResult
+<span class="lineno"> 1297 </span><span class="decl"><span class="istickedoff">runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =</span>
+<span class="lineno"> 1298 </span><span class="spaces">  </span><span class="istickedoff">do pos &lt;- getPosition</span>
+<span class="lineno"> 1299 </span><span class="spaces">     </span><span class="istickedoff">ps &lt;- io (startProof gl <span class="nottickedoff">pos</span> <span class="nottickedoff">ploc</span> <span class="nottickedoff">rsn</span>)</span>
+<span class="lineno"> 1300 </span><span class="spaces">     </span><span class="istickedoff">(r,pstate) &lt;- runStateT (runExceptT m) ps</span>
+<span class="lineno"> 1301 </span><span class="spaces">     </span><span class="istickedoff">case r of</span>
+<span class="lineno"> 1302 </span><span class="spaces">       </span><span class="istickedoff">Left (stats,cex) -&gt; return (SAWCentral.Proof.InvalidProof stats cex pstate)</span>
+<span class="lineno"> 1303 </span><span class="spaces">       </span><span class="istickedoff">Right _ -&gt;</span>
+<span class="lineno"> 1304 </span><span class="spaces">         </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno"> 1305 </span><span class="spaces">            </span><span class="istickedoff">db &lt;- getTheoremDB</span>
+<span class="lineno"> 1306 </span><span class="spaces">            </span><span class="istickedoff">what4PushMuxOps &lt;- gets rwWhat4PushMuxOps</span>
+<span class="lineno"> 1307 </span><span class="spaces">            </span><span class="istickedoff">(thmResult, db') &lt;- io (finishProof sc db concl pstate recordThm useSequentGoals what4PushMuxOps)</span>
+<span class="lineno"> 1308 </span><span class="spaces">            </span><span class="istickedoff">putTheoremDB db'</span>
+<span class="lineno"> 1309 </span><span class="spaces">            </span><span class="istickedoff">pure thmResult</span></span>
+<span class="lineno"> 1310 </span>
+<span class="lineno"> 1311 </span>
+<span class="lineno"> 1312 </span>crucibleSetupTopLevel :: TopLevel a -&gt; CrucibleSetup ext a
+<span class="lineno"> 1313 </span><span class="decl"><span class="istickedoff">crucibleSetupTopLevel m = lift (lift m)</span></span>
+<span class="lineno"> 1314 </span>
+<span class="lineno"> 1315 </span>scriptTopLevel :: TopLevel a -&gt; ProofScript a
+<span class="lineno"> 1316 </span><span class="decl"><span class="istickedoff">scriptTopLevel m = ProofScript (lift (lift m))</span></span>
+<span class="lineno"> 1317 </span>
+<span class="lineno"> 1318 </span>llvmTopLevel :: TopLevel a -&gt; LLVMCrucibleSetupM a
+<span class="lineno"> 1319 </span><span class="decl"><span class="istickedoff">llvmTopLevel m = LLVMCrucibleSetupM (crucibleSetupTopLevel m)</span></span>
+<span class="lineno"> 1320 </span>
+<span class="lineno"> 1321 </span>jvmTopLevel :: TopLevel a -&gt; JVMSetupM a
+<span class="lineno"> 1322 </span><span class="decl"><span class="istickedoff">jvmTopLevel m = JVMSetupM (crucibleSetupTopLevel m)</span></span>
+<span class="lineno"> 1323 </span>
+<span class="lineno"> 1324 </span>mirTopLevel :: TopLevel a -&gt; MIRSetupM a
+<span class="lineno"> 1325 </span><span class="decl"><span class="istickedoff">mirTopLevel m = MIRSetupM (crucibleSetupTopLevel m)</span></span>
+<span class="lineno"> 1326 </span>
+<span class="lineno"> 1327 </span>instance MonadIO ProofScript where
+<span class="lineno"> 1328 </span>  <span class="decl"><span class="nottickedoff">liftIO m = ProofScript (liftIO m)</span></span>
+<span class="lineno"> 1329 </span>
+<span class="lineno"> 1330 </span>instance MonadFail ProofScript where
+<span class="lineno"> 1331 </span>  <span class="decl"><span class="nottickedoff">fail msg = ProofScript (fail msg)</span></span>
+<span class="lineno"> 1332 </span>
+<span class="lineno"> 1333 </span>instance <span class="decl"><span class="nottickedoff">MonadState ProofState ProofScript</span></span> where
+<span class="lineno"> 1334 </span>  <span class="decl"><span class="istickedoff">get = ProofScript get</span></span>
+<span class="lineno"> 1335 </span>  <span class="decl"><span class="istickedoff">put x = ProofScript (put x)</span></span>
+<span class="lineno"> 1336 </span>
+<span class="lineno"> 1337 </span>instance MonadError (SolverStats, CEX) ProofScript where
+<span class="lineno"> 1338 </span>  <span class="decl"><span class="istickedoff">throwError cex = ProofScript (throwError cex)</span></span>
+<span class="lineno"> 1339 </span>  <span class="decl"><span class="nottickedoff">catchError (ProofScript m) f = ProofScript (catchError m (unProofScript . f))</span></span>
+<span class="lineno"> 1340 </span>
+<span class="lineno"> 1341 </span>
+<span class="lineno"> 1342 </span>-- Error handling --------------------------------------------------------------
+<span class="lineno"> 1343 </span>
+<span class="lineno"> 1344 </span>underStateT :: (forall b. m b -&gt; m b) -&gt; StateT s m a -&gt; StateT s m a
+<span class="lineno"> 1345 </span><span class="decl"><span class="istickedoff">underStateT doUnder action = StateT $ \s -&gt; doUnder (runStateT action s)</span></span>
+<span class="lineno"> 1346 </span>
+<span class="lineno"> 1347 </span>underReaderT :: (forall b. m b -&gt; m b) -&gt; ReaderT s m a -&gt; ReaderT s m a
+<span class="lineno"> 1348 </span><span class="decl"><span class="istickedoff">underReaderT doUnder action = ReaderT $ \env -&gt; doUnder (runReaderT action env)</span></span>
+<span class="lineno"> 1349 </span>
+<span class="lineno"> 1350 </span>underExceptT :: (forall b. m b -&gt; m b) -&gt; ExceptT s m a -&gt; ExceptT s m a
+<span class="lineno"> 1351 </span><span class="decl"><span class="istickedoff">underExceptT doUnder action = ExceptT $ doUnder (runExceptT action)</span></span>
+<span class="lineno"> 1352 </span>
+<span class="lineno"> 1353 </span>
+<span class="lineno"> 1354 </span>data SkeletonState = SkeletonState
+<span class="lineno"> 1355 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_skelArgs</span></span></span> :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]
+<span class="lineno"> 1356 </span>  }
+<span class="lineno"> 1357 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''SkeletonState</span></span></span>
+
+</pre>
+</body>
+</html>
