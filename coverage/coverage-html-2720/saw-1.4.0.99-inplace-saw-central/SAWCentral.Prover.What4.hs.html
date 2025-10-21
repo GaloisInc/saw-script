@@ -79,7 +79,7 @@ span.spaces    { background: white }
 <span class="lineno">   60 </span><span class="spaces">     </span><span class="istickedoff">cacheTermsSetting &lt;- getOptionSetting B.cacheTerms cfg</span>
 <span class="lineno">   61 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- setOpt cacheTermsSetting hashConsing</span>
 <span class="lineno">   62 </span><span class="spaces">     </span><span class="istickedoff">pushMuxOpsSetting &lt;- getOptionSetting B.pushMuxOpsOption cfg</span>
-<span class="lineno">   63 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- setOpt pushMuxOpsSetting what4PushMuxOps</span>
+<span class="lineno">   63 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- setOpt pushMuxOpsSetting <span class="nottickedoff">what4PushMuxOps</span></span>
 <span class="lineno">   64 </span><span class="spaces">     </span><span class="istickedoff">return sym</span></span>
 <span class="lineno">   65 </span>
 <span class="lineno">   66 </span>what4Theories ::
@@ -120,9 +120,9 @@ span.spaces    { background: white }
 <span class="lineno">  101 </span>  TopLevel (Maybe CEX, Text)
 <span class="lineno">  102 </span><span class="decl"><span class="istickedoff">proveWhat4_sym solver hashConsing satq = do</span>
 <span class="lineno">  103 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  104 </span><span class="spaces">  </span><span class="istickedoff">what4PushMuxOps &lt;- gets rwWhat4PushMuxOps</span>
+<span class="lineno">  104 </span><span class="spaces">  </span><span class="istickedoff">what4PushMuxOps &lt;- gets <span class="nottickedoff">rwWhat4PushMuxOps</span></span>
 <span class="lineno">  105 </span><span class="spaces">  </span><span class="istickedoff">io $ do</span>
-<span class="lineno">  106 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- setupWhat4_sym hashConsing what4PushMuxOps</span>
+<span class="lineno">  106 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- setupWhat4_sym hashConsing <span class="nottickedoff">what4PushMuxOps</span></span>
 <span class="lineno">  107 </span><span class="spaces">     </span><span class="istickedoff">proveWhat4_solver solver sym sc satq (return <span class="nottickedoff">()</span>)</span></span>
 <span class="lineno">  108 </span>
 <span class="lineno">  109 </span>proveExportWhat4_sym ::

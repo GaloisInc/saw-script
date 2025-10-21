@@ -1978,9 +1978,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1959 </span><span class="spaces">                </span><span class="istickedoff">let tp' = tp</span>
 <span class="lineno"> 1960 </span><span class="spaces">                </span><span class="istickedoff">case evalFOT mmap tp' of</span>
 <span class="lineno"> 1961 </span><span class="spaces">                  </span><span class="istickedoff">Just fot -&gt;</span>
-<span class="lineno"> 1962 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((EC nm tp, <span class="nottickedoff">fot</span>) : vars) xs body</span>
+<span class="lineno"> 1962 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((nm, fot) : vars) xs body</span>
 <span class="lineno"> 1963 </span><span class="spaces">                  </span><span class="istickedoff">Nothing</span>
-<span class="lineno"> 1964 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">IntSet.null (foldr IntSet.delete (freeVars body) (map (ecVarIndex . fst) vars))</span> -&gt;</span>
+<span class="lineno"> 1964 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">IntSet.null (foldr IntSet.delete (freeVars body) (map (vnIndex . fst) vars))</span> -&gt;</span>
 <span class="lineno"> 1965 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">case asEqTrue tp' of</span></span>
 <span class="lineno"> 1966 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">Just x  -&gt; processUnivAssert mmap vars (x:xs) body</span></span>
 <span class="lineno"> 1967 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>

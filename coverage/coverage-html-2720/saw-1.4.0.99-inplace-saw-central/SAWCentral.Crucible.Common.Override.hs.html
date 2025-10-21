@@ -127,7 +127,7 @@ span.spaces    { background: white }
 <span class="lineno">  108 </span>
 <span class="lineno">  109 </span>import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 <span class="lineno">  110 </span>
-<span class="lineno">  111 </span>import           SAWCore.Name (VarName(..), ecShortName)
+<span class="lineno">  111 </span>import           SAWCore.Name (VarName(..))
 <span class="lineno">  112 </span>import           SAWCore.Prelude as SAWVerifier (scEq)
 <span class="lineno">  113 </span>import           SAWCore.SharedTerm as SAWVerifier
 <span class="lineno">  114 </span>import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
@@ -305,7 +305,7 @@ span.spaces    { background: white }
 <span class="lineno">  286 </span>
 <span class="lineno">  287 </span>data OverrideFailureReason ext
 <span class="lineno">  288 </span>  = AmbiguousPointsTos [MS.PointsTo ext]
-<span class="lineno">  289 </span>  | AmbiguousVars [TypedExtCns]
+<span class="lineno">  289 </span>  | AmbiguousVars [TypedVariable]
 <span class="lineno">  290 </span>  | BadTermMatch Term Term -- ^ simulated and specified terms did not match
 <span class="lineno">  291 </span>  | BadPointerCast -- ^ Pointer required to process points-to
 <span class="lineno">  292 </span>  | BadReturnSpecification (Some Crucible.TypeRepr)
@@ -344,7 +344,7 @@ span.spaces    { background: white }
 <span class="lineno">  325 </span><span class="spaces">  </span><span class="istickedoff">AmbiguousVars vs -&gt;</span>
 <span class="lineno">  326 </span><span class="spaces">    </span><span class="istickedoff">PP.vcat</span>
 <span class="lineno">  327 </span><span class="spaces">    </span><span class="istickedoff">[ PP.pretty &quot;Fresh variable(s) not reachable via points-tos from function inputs/outputs:&quot;</span>
-<span class="lineno">  328 </span><span class="spaces">    </span><span class="istickedoff">, PP.indent 2 $ PP.vcat (map ppTypedExtCns vs)</span>
+<span class="lineno">  328 </span><span class="spaces">    </span><span class="istickedoff">, PP.indent 2 $ PP.vcat (map ppTypedVariable vs)</span>
 <span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff">]</span>
 <span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">BadTermMatch x y -&gt;</span>
 <span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">PP.vcat</span></span>
@@ -552,7 +552,7 @@ span.spaces    { background: white }
 <span class="lineno">  533 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  534 </span><span class="spaces">     </span><span class="istickedoff">let -- predicate matches terms that are not covered by the computed</span>
 <span class="lineno">  535 </span><span class="spaces">         </span><span class="istickedoff">-- term substitution</span>
-<span class="lineno">  536 </span><span class="spaces">         </span><span class="istickedoff">isMissing tt = ecVarIndex (tecExt tt) `IntMap.notMember` sub</span>
+<span class="lineno">  536 </span><span class="spaces">         </span><span class="istickedoff">isMissing tt = vnIndex (tvName tt) `IntMap.notMember` sub</span>
 <span class="lineno">  537 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  538 </span><span class="spaces">         </span><span class="istickedoff">-- list of all terms not covered by substitution</span>
 <span class="lineno">  539 </span><span class="spaces">         </span><span class="istickedoff">missing = filter isMissing (view MS.csFreshVars ss)</span>
@@ -569,10 +569,10 @@ span.spaces    { background: white }
 <span class="lineno">  550 </span><span class="spaces">  </span><span class="istickedoff">do extension &lt;- IntMap.fromList &lt;$&gt; traverse freshenTerm (view MS.csFreshVars ss)</span>
 <span class="lineno">  551 </span><span class="spaces">     </span><span class="istickedoff">OM (termSub %= IntMap.union extension)</span>
 <span class="lineno">  552 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  553 </span><span class="spaces">    </span><span class="istickedoff">freshenTerm (TypedExtCns _cty ec) =</span>
-<span class="lineno">  554 </span><span class="spaces">      </span><span class="istickedoff">do ec' &lt;- liftIO $ scFreshEC sc (ecShortName ec) (ecType ec)</span>
-<span class="lineno">  555 </span><span class="spaces">         </span><span class="istickedoff">new &lt;- liftIO $ scVariable sc ec'</span>
-<span class="lineno">  556 </span><span class="spaces">         </span><span class="istickedoff">return (ecVarIndex ec, new)</span></span>
+<span class="lineno">  553 </span><span class="spaces">    </span><span class="istickedoff">freshenTerm (TypedVariable _cty vn ty) =</span>
+<span class="lineno">  554 </span><span class="spaces">      </span><span class="istickedoff">do vn' &lt;- liftIO $ scFreshVarName sc (vnName vn)</span>
+<span class="lineno">  555 </span><span class="spaces">         </span><span class="istickedoff">new &lt;- liftIO $ scVariable sc (EC vn' ty)</span>
+<span class="lineno">  556 </span><span class="spaces">         </span><span class="istickedoff">return (vnIndex vn, new)</span></span>
 <span class="lineno">  557 </span>
 <span class="lineno">  558 </span>-- | An override packaged together with its preconditions, labeled with some
 <span class="lineno">  559 </span>--   human-readable info about each condition.

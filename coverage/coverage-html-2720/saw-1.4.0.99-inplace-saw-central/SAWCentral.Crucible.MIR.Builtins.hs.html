@@ -1441,10 +1441,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1422 </span><span class="spaces">     </span><span class="istickedoff">let ecs0 = IntMap.fromList</span>
 <span class="lineno"> 1423 </span><span class="spaces">           </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
 <span class="lineno"> 1424 </span><span class="spaces">           </span><span class="istickedoff">| tt &lt;- mspec ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno"> 1425 </span><span class="spaces">           </span><span class="istickedoff">, let ec = tecExt tt ]</span>
+<span class="lineno"> 1425 </span><span class="spaces">           </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt) ]</span>
 <span class="lineno"> 1426 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ traverse (scVariable sc) ecs0</span>
 <span class="lineno"> 1427 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1428 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map (ecVarIndex . tecExt)</span>
+<span class="lineno"> 1428 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map (vnIndex . tvName)</span>
 <span class="lineno"> 1429 </span><span class="spaces">                                    </span><span class="istickedoff">(view (MS.csPostState . MS.csFreshVars) mspec))</span>
 <span class="lineno"> 1430 </span><span class="spaces">     </span><span class="istickedoff">matchPost &lt;- io $</span>
 <span class="lineno"> 1431 </span><span class="spaces">          </span><span class="istickedoff">runOverrideMatcher sym globals env0 terms0 initialFree <span class="nottickedoff">poststateLoc</span> $</span>
@@ -1723,7 +1723,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1704 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 1705 </span><span class="spaces">            </span><span class="istickedoff">term &lt;- setupResultTerm sc cc retTy rt rv</span>
 <span class="lineno"> 1706 </span><span class="spaces">            </span><span class="istickedoff">let tt = TypedTerm (TypedTermSchema (Cryptol.tMono cty)) term</span>
-<span class="lineno"> 1707 </span><span class="spaces">            </span><span class="istickedoff">tt' &lt;- abstractTypedExts sc (toList ecs) tt</span>
+<span class="lineno"> 1707 </span><span class="spaces">            </span><span class="istickedoff">tt' &lt;- abstractTypedVars sc (toList ecs) tt</span>
 <span class="lineno"> 1708 </span><span class="spaces">            </span><span class="istickedoff">pure tt'</span>
 <span class="lineno"> 1709 </span><span class="spaces">       </span><span class="istickedoff">Crucible.AbortedResult _ ar -&gt;</span>
 <span class="lineno"> 1710 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do let resultDoc = ppMIRAbortedResult ar</span></span>
@@ -1833,7 +1833,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1814 </span>  forall tp.
 <span class="lineno"> 1815 </span>  SharedContext -&gt;
 <span class="lineno"> 1816 </span>  MIRCrucibleContext -&gt;
-<span class="lineno"> 1817 </span>  IORef (Seq TypedExtCns) -&gt;
+<span class="lineno"> 1817 </span>  IORef (Seq TypedVariable) -&gt;
 <span class="lineno"> 1818 </span>  -- | The argument's MIR type.
 <span class="lineno"> 1819 </span>  Mir.Ty -&gt;
 <span class="lineno"> 1820 </span>  -- | The argument's corresponding Crucible type.
@@ -1996,10 +1996,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1977 </span><span class="spaces">    </span><span class="istickedoff">(cty, scTp) &lt;- typeShapeToSAWTypes shp</span>
 <span class="lineno"> 1978 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1979 </span><span class="spaces">    </span><span class="istickedoff">ecs &lt;- readIORef ecRef</span>
-<span class="lineno"> 1980 </span><span class="spaces">    </span><span class="istickedoff">ec &lt;- scFreshEC sc (&quot;arg_&quot; &lt;&gt; Text.pack (show (length ecs))) scTp</span>
-<span class="lineno"> 1981 </span><span class="spaces">    </span><span class="istickedoff">writeIORef ecRef (ecs Seq.|&gt; TypedExtCns cty ec)</span>
+<span class="lineno"> 1980 </span><span class="spaces">    </span><span class="istickedoff">vn &lt;- scFreshVarName sc (&quot;arg_&quot; &lt;&gt; Text.pack (show (length ecs)))</span>
+<span class="lineno"> 1981 </span><span class="spaces">    </span><span class="istickedoff">writeIORef ecRef (ecs Seq.|&gt; TypedVariable cty vn scTp)</span>
 <span class="lineno"> 1982 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1983 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- scVariable sc ec</span>
+<span class="lineno"> 1983 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- scVariable sc (EC vn scTp)</span>
 <span class="lineno"> 1984 </span><span class="spaces">    </span><span class="istickedoff">Crucible.RegEntry tp0 &lt;$&gt; termToMirRegValue shp scTp t</span></span>
 <span class="lineno"> 1985 </span>
 <span class="lineno"> 1986 </span>-- | Create fresh argument variables of the appropriate types, suitable for use
@@ -2012,7 +2012,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1993 </span>  -- 'Crucible.FnHandle'.
 <span class="lineno"> 1994 </span>  [Mir.Ty] -&gt;
 <span class="lineno"> 1995 </span>  Crucible.FnHandle init ret -&gt;
-<span class="lineno"> 1996 </span>  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
+<span class="lineno"> 1996 </span>  IO (Seq TypedVariable, Crucible.RegMap Sym init)
 <span class="lineno"> 1997 </span><span class="decl"><span class="istickedoff">setupArgs sc cc mirArgTys fn =</span>
 <span class="lineno"> 1998 </span><span class="spaces">  </span><span class="istickedoff">do ecRef  &lt;- newIORef Seq.empty</span>
 <span class="lineno"> 1999 </span><span class="spaces">     </span><span class="istickedoff">let fnArgTys = Crucible.handleArgTypes fn</span>

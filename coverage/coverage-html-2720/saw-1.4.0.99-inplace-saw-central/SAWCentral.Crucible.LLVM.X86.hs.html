@@ -1517,9 +1517,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1498 </span><span class="spaces">    </span><span class="istickedoff">initialECs = IntMap.fromList</span>
 <span class="lineno"> 1499 </span><span class="spaces">      </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
 <span class="lineno"> 1500 </span><span class="spaces">      </span><span class="istickedoff">| tt &lt;- ms ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno"> 1501 </span><span class="spaces">      </span><span class="istickedoff">, let ec = tecExt tt</span>
+<span class="lineno"> 1501 </span><span class="spaces">      </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt)</span>
 <span class="lineno"> 1502 </span><span class="spaces">      </span><span class="istickedoff">]</span>
-<span class="lineno"> 1503 </span><span class="spaces">    </span><span class="istickedoff">initialFree = Set.fromList . fmap (ecVarIndex . tecExt) $ ms ^. MS.csPostState . MS.csFreshVars</span>
+<span class="lineno"> 1503 </span><span class="spaces">    </span><span class="istickedoff">initialFree = Set.fromList . fmap (vnIndex . tvName) $ ms ^. MS.csPostState . MS.csFreshVars</span>
 <span class="lineno"> 1504 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1505 </span><span class="spaces">  </span><span class="istickedoff">initialTerms &lt;- liftIO $ traverse (scVariable sc) initialECs</span>
 <span class="lineno"> 1506 </span><span class="spaces"></span><span class="istickedoff"></span>

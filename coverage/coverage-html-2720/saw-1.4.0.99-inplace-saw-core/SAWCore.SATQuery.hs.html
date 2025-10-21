@@ -75,16 +75,16 @@ span.spaces    { background: white }
 <span class="lineno">   56 </span>--   some of the solvers will accept them without errors.
 <span class="lineno">   57 </span>data SATAssert
 <span class="lineno">   58 </span>   = BoolAssert Term -- ^ A boolean term to be asserted
-<span class="lineno">   59 </span>   | UniversalAssert [(ExtCns Term, FirstOrderType)] [Term] Term
+<span class="lineno">   59 </span>   | UniversalAssert [(VarName, FirstOrderType)] [Term] Term
 <span class="lineno">   60 </span>          -- ^ A universally-quantified assertion, consisting of a
 <span class="lineno">   61 </span>          --   collection of first-order variables, a sequence
 <span class="lineno">   62 </span>          --   of boolean hypotheses, and a boolean conclusion
 <span class="lineno">   63 </span>
 <span class="lineno">   64 </span>-- | The result of a sat query. In the event a model is found,
-<span class="lineno">   65 </span>--   return a mapping from the @ExtCns@ variables to values.
+<span class="lineno">   65 </span>--   return a mapping from variable names to values.
 <span class="lineno">   66 </span>data SATResult
 <span class="lineno">   67 </span>  = Unsatisfiable
-<span class="lineno">   68 </span>  | Satisfiable (ExtCns Term -&gt; IO FirstOrderValue)
+<span class="lineno">   68 </span>  | Satisfiable (VarName -&gt; IO FirstOrderValue)
 <span class="lineno">   69 </span>  | Unknown
 <span class="lineno">   70 </span>
 <span class="lineno">   71 </span>-- | Compute the conjunction of all the assertions
@@ -114,9 +114,10 @@ span.spaces    { background: white }
 <span class="lineno">   95 </span><span class="decl"><span class="istickedoff">satQueryAsPropTerm sc satq =</span>
 <span class="lineno">   96 </span><span class="spaces">  </span><span class="istickedoff">scTupleType sc =&lt;&lt; mapM assertAsPropTerm (satAsserts satq)</span>
 <span class="lineno">   97 </span><span class="spaces">  </span><span class="istickedoff">where assertAsPropTerm (BoolAssert b) = scEqTrue sc b</span>
-<span class="lineno">   98 </span><span class="spaces">        </span><span class="istickedoff">assertAsPropTerm (UniversalAssert ecs hs g) =</span>
-<span class="lineno">   99 </span><span class="spaces">          </span><span class="istickedoff">scGeneralizeExts sc (map fst ecs) =&lt;&lt; </span>
-<span class="lineno">  100 </span><span class="spaces">          </span><span class="istickedoff">scEqTrue sc =&lt;&lt; foldrM <span class="nottickedoff">(scImplies sc)</span> g hs</span></span>
+<span class="lineno">   98 </span><span class="spaces">        </span><span class="istickedoff">assertAsPropTerm (UniversalAssert vars hs g) =</span>
+<span class="lineno">   99 </span><span class="spaces">          </span><span class="istickedoff">do vars' &lt;- traverse (traverse (scFirstOrderType sc)) vars</span>
+<span class="lineno">  100 </span><span class="spaces">             </span><span class="istickedoff">scPiList sc vars' =&lt;&lt;</span>
+<span class="lineno">  101 </span><span class="spaces">               </span><span class="istickedoff">scEqTrue sc =&lt;&lt; foldrM <span class="nottickedoff">(scImplies sc)</span> g hs</span></span>
 
 </pre>
 </body>

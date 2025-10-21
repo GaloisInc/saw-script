@@ -805,10 +805,10 @@ span.spaces    { background: white }
 <span class="lineno">  786 </span><span class="spaces">     </span><span class="istickedoff">let ecs0 = IntMap.fromList</span>
 <span class="lineno">  787 </span><span class="spaces">           </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
 <span class="lineno">  788 </span><span class="spaces">           </span><span class="istickedoff">| tt &lt;- mspec ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno">  789 </span><span class="spaces">           </span><span class="istickedoff">, let ec = tecExt tt ]</span>
+<span class="lineno">  789 </span><span class="spaces">           </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt) ]</span>
 <span class="lineno">  790 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ traverse (scVariable sc) ecs0</span>
 <span class="lineno">  791 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  792 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map <span class="nottickedoff">(ecVarIndex . tecExt)</span></span>
+<span class="lineno">  792 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map <span class="nottickedoff">(vnIndex . tvName)</span></span>
 <span class="lineno">  793 </span><span class="spaces">                                    </span><span class="istickedoff">(view (MS.csPostState . MS.csFreshVars) mspec))</span>
 <span class="lineno">  794 </span><span class="spaces">     </span><span class="istickedoff">matchPost &lt;- io $</span>
 <span class="lineno">  795 </span><span class="spaces">          </span><span class="istickedoff">runOverrideMatcher sym globals env0 terms0 initialFree <span class="nottickedoff">poststateLoc</span> $</span>
