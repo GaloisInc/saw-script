@@ -72,11 +72,11 @@ import qualified What4.Solver.Yices as Yices
 
 -- saw-core
 import SAWCore.SharedTerm
-  ( Term, SharedContext, mkSharedContext, scFreshEC, scImplies, scVariable )
+  ( ExtCns(..), Term, SharedContext, mkSharedContext, scFreshVarName, scImplies, scVariable )
 
 -- cryptol-saw-core
 import CryptolSAWCore.TypedTerm
-    ( TypedExtCns(..), TypedTerm(..), abstractTypedExts, TypedTermType(..) )
+    ( TypedVariable(..), TypedTerm(..), abstractTypedVars, TypedTermType(..) )
 
 -- saw-core-what4
 import SAWCoreWhat4.ReturnTrip
@@ -196,7 +196,7 @@ jvm_extract c mname = do
                       Nothing -> failure
                       Just cty -> return cty
               let tt = TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t
-              abstractTypedExts sc (toList ecs) tt
+              abstractTypedVars sc (toList ecs) tt
             Crucible.AbortedResult _ _ar -> do
               fail $ unlines [ "Symbolic execution failed." ]
             Crucible.TimeoutResult _cxt -> do
@@ -208,15 +208,15 @@ setupArg ::
   SharedContext ->
   Sym ->
   -- | The function arguments extracted so far.
-  IORef (Seq TypedExtCns) ->
+  IORef (Seq TypedVariable) ->
   Crucible.TypeRepr tp ->
   IO (Crucible.RegEntry Sym tp)
 setupArg sc sym ecRef tp = do
   (cty, scTp) <- typeReprToSAWTypes sym sc tp
   ecs <- readIORef ecRef
-  ec <- scFreshEC sc ("arg_" <> Text.pack (show (length ecs))) scTp
-  writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
-  t <- scVariable sc ec
+  vn <- scFreshVarName sc ("arg_" <> Text.pack (show (length ecs)))
+  writeIORef ecRef (ecs Seq.|> TypedVariable cty vn scTp)
+  t <- scVariable sc (EC vn scTp)
   Crucible.RegEntry tp <$> termToRegValue sym tp t
 
 -- | Create fresh argument variables of the appropriate types, suitable for use
@@ -225,7 +225,7 @@ setupArgs ::
   SharedContext ->
   Sym ->
   Crucible.FnHandle init ret ->
-  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
+  IO (Seq TypedVariable, Crucible.RegMap Sym init)
 setupArgs sc sym fn =
   do ecRef  <- newIORef Seq.empty
      regmap <- Crucible.RegMap <$> FC.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)

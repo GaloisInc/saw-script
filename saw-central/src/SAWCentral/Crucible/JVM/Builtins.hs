@@ -786,10 +786,10 @@ verifyPoststate cc mspec env0 globals ret mdMap =
      let ecs0 = IntMap.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
-           , let ec = tecExt tt ]
+           , let ec = EC (tvName tt) (tvType tt) ]
      terms0 <- io $ traverse (scVariable sc) ecs0
 
-     let initialFree = Set.fromList (map (ecVarIndex . tecExt)
+     let initialFree = Set.fromList (map (vnIndex . tvName)
                                     (view (MS.csPostState . MS.csFreshVars) mspec))
      matchPost <- io $
           runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $

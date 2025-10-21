@@ -108,7 +108,7 @@ import           Data.Parameterized.TraversableFC (toListFC)
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 
-import           SAWCore.Name (VarName(..), ecShortName)
+import           SAWCore.Name (VarName(..))
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
@@ -286,7 +286,7 @@ ultimately the cause of #1945.)
 
 data OverrideFailureReason ext
   = AmbiguousPointsTos [MS.PointsTo ext]
-  | AmbiguousVars [TypedExtCns]
+  | AmbiguousVars [TypedVariable]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
   | BadReturnSpecification (Some Crucible.TypeRepr)
@@ -325,7 +325,7 @@ ppOverrideFailureReason rsn = case rsn of
   AmbiguousVars vs ->
     PP.vcat
     [ PP.pretty "Fresh variable(s) not reachable via points-tos from function inputs/outputs:"
-    , PP.indent 2 $ PP.vcat (map ppTypedExtCns vs)
+    , PP.indent 2 $ PP.vcat (map ppTypedVariable vs)
     ]
   BadTermMatch x y ->
     PP.vcat
@@ -533,7 +533,7 @@ enforceCompleteSubstitution loc ss =
 
      let -- predicate matches terms that are not covered by the computed
          -- term substitution
-         isMissing tt = ecVarIndex (tecExt tt) `IntMap.notMember` sub
+         isMissing tt = vnIndex (tvName tt) `IntMap.notMember` sub
 
          -- list of all terms not covered by substitution
          missing = filter isMissing (view MS.csFreshVars ss)
@@ -550,10 +550,10 @@ refreshTerms sc ss =
   do extension <- IntMap.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
      OM (termSub %= IntMap.union extension)
   where
-    freshenTerm (TypedExtCns _cty ec) =
-      do ec' <- liftIO $ scFreshEC sc (ecShortName ec) (ecType ec)
-         new <- liftIO $ scVariable sc ec'
-         return (ecVarIndex ec, new)
+    freshenTerm (TypedVariable _cty vn ty) =
+      do vn' <- liftIO $ scFreshVarName sc (vnName vn)
+         new <- liftIO $ scVariable sc (EC vn' ty)
+         return (vnIndex vn, new)
 
 -- | An override packaged together with its preconditions, labeled with some
 --   human-readable info about each condition.

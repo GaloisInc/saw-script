@@ -31,7 +31,7 @@ module SAWCentral.Crucible.Common.Setup.Type
   , addPointsTo
   , addAllocGlobal
   , addCondition
-  , freshTypedExtCns
+  , freshTypedVariable
   , freshVariable
   , setupWithTag
   ) where
@@ -47,8 +47,8 @@ import qualified Data.Set as Set
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
 import qualified CryptolSAWCore.Cryptol as Cryptol (importType, emptyEnv)
-import           CryptolSAWCore.TypedTerm (TypedTerm, TypedExtCns(..), typedTermOfExtCns)
-import           SAWCore.SharedTerm (SharedContext, scFreshEC)
+import           CryptolSAWCore.TypedTerm (TypedTerm, TypedVariable(..), typedTermOfVariable)
+import           SAWCore.SharedTerm (SharedContext, scFreshVarName)
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 
@@ -121,18 +121,18 @@ addAllocGlobal ag = csMethodSpec . MS.csGlobalAllocs %= (ag : )
 addCondition :: Monad m => MS.SetupCondition ext -> CrucibleSetupT ext m ()
 addCondition cond = currentState . MS.csConditions %= (cond : )
 
--- | Allocate a fresh variable in the form of a 'TypedExtCns' and
+-- | Allocate a fresh variable in the form of a 'TypedVariable' and
 -- record this allocation in the setup state.
-freshTypedExtCns ::
+freshTypedVariable ::
   MonadIO m =>
   SharedContext {- ^ shared context -} ->
   Text          {- ^ variable name  -} ->
   Cryptol.Type  {- ^ variable type  -} ->
-  CrucibleSetupT arch m TypedExtCns
-freshTypedExtCns sc name cty =
+  CrucibleSetupT arch m TypedVariable
+freshTypedVariable sc name cty =
   do ty <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv cty
-     ec <- liftIO $ scFreshEC sc name ty
-     let tt = TypedExtCns cty ec
+     vn <- liftIO $ scFreshVarName sc name
+     let tt = TypedVariable cty vn ty
      currentState . MS.csFreshVars %= cons tt
      return tt
 
@@ -145,8 +145,8 @@ freshVariable ::
   Cryptol.Type  {- ^ variable type  -} ->
   CrucibleSetupT arch m TypedTerm
 freshVariable sc name cty =
-  do tec <- freshTypedExtCns sc name cty
-     liftIO $ typedTermOfExtCns sc tec
+  do tec <- freshTypedVariable sc name cty
+     liftIO $ typedTermOfVariable sc tec
 
 setupWithTag :: Text -> CrucibleSetupT arch m a -> CrucibleSetupT arch m a
 setupWithTag tag m =

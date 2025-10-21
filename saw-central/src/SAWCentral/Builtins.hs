@@ -1647,10 +1647,10 @@ lambdas :: [TypedTerm] -> TypedTerm -> TopLevel TypedTerm
 lambdas vars tt =
   do tecs <- traverse checkVar vars
      sc <- getSharedContext
-     io $ abstractTypedExts sc tecs tt
+     io $ abstractTypedVars sc tecs tt
   where
     checkVar v =
-      case asTypedExtCns v of
+      case asTypedVariable v of
         Just tec -> pure tec
         Nothing -> fail "lambda: argument not a valid symbolic variable"
 
@@ -1665,16 +1665,16 @@ implies_term x y =
 
 generalize_term :: [TypedTerm] -> TypedTerm -> TopLevel TypedTerm
 generalize_term vars tt =
-  do tecs <- traverse checkVar vars
+  do tvs <- traverse checkVar vars
      sc <- getSharedContext
-     tm <- io $ scGeneralizeExts sc (map tecExt tecs) (ttTerm tt)
+     tm <- io $ scPiList sc (map (\tv -> (tvName tv, tvType tv)) tvs) (ttTerm tt)
      _tp <- io $ scTypeCheckError sc tm -- sanity check the term
      io $ mkTypedTerm sc tm
 
   where
     checkVar v =
-      case asTypedExtCns v of
-        Just tec -> pure tec
+      case asTypedVariable v of
+        Just tv -> pure tv
         Nothing -> fail "generalize_term: argument not a valid symbolic variable"
 
 -- | Apply the given Term to the given values, and evaluate to a

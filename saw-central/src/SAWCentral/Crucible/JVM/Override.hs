@@ -95,6 +95,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some(Some))
 
 -- saw-core
+import           SAWCore.Name (VarName(..))
 import           SAWCore.SharedTerm
 import           CryptolSAWCore.TypedTerm
 
@@ -204,7 +205,7 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
     do g0 <- Crucible.readGlobals
        forM css $ \cs -> liftIO $
          let initialFree =
-               Set.fromList (cs ^.. MS.csPreState. MS.csFreshVars . each . to tecExt . to ecVarIndex)
+               Set.fromList (cs ^.. MS.csPreState. MS.csFreshVars . each . to tvName . to vnIndex)
           in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)
                       (do methodSpecHandler_prestate opts sc cc args cs
                           return cs)

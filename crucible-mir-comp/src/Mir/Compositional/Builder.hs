@@ -45,6 +45,7 @@ import Lang.Crucible.Backend
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
+import qualified SAWCore.Name as SAW (VarName(..))
 import qualified SAWCore.Recognizer as SAW (asVariable)
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCoreWhat4.ReturnTrip as SAW
@@ -569,10 +570,10 @@ finish msb =
     eval = msb ^. msbEval
 
     evalVar :: forall tp.
-        W4.ExprBoundVar t tp -> IO SAW.TypedExtCns
+        W4.ExprBoundVar t tp -> IO SAW.TypedVariable
     evalVar var = do
         tt <- eval (W4.BoundVarExpr var) >>= SAW.mkTypedTerm sc
-        case SAW.asTypedExtCns tt of
+        case SAW.asTypedVariable tt of
             Just x -> return x
             Nothing -> error $ "BoundVarExpr translated to non-ExtCns term? " ++ show tt
 
@@ -612,7 +613,7 @@ substMethodSpec sc sm ms = do
         pointsTos' <- mapM goPointsTo $ ss ^. MS.csPointsTos
         conditions' <- mapM goSetupCondition $ ss ^. MS.csConditions
         let freshVars' =
-                filter (\tec -> not $ IntMap.member (SAW.ecVarIndex $ SAW.tecExt tec) sm) $
+                filter (\tv -> not $ IntMap.member (SAW.vnIndex $ SAW.tvName tv) sm) $
                     ss ^. MS.csFreshVars
         return $ ss
             & MS.csPointsTos .~ pointsTos'

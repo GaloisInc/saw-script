@@ -9,7 +9,7 @@ Stability   : provisional
 module CryptolSAWCore.TypedTerm
  -- ppTypedTerm,
  -- ppTypedTermType,
- -- ppTypedExtCns,
+ -- ppTypedVariable,
  where
 
 import Control.Monad (foldM)
@@ -29,7 +29,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
 import SAWCore.FiniteValue
-import SAWCore.Name (ecShortName)
+import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer (asVariable)
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck (scTypeCheckError)
@@ -73,11 +73,11 @@ ppTypedTermType (TypedTermKind k) =
 ppTypedTermType (TypedTermOther tp) =
   PP.unAnnotate (ppTerm PPS.defaultOpts tp)
 
-ppTypedExtCns :: TypedExtCns -> PP.Doc ann
-ppTypedExtCns (TypedExtCns tp ec) =
-  PP.unAnnotate (PP.pretty (ecShortName ec))
+ppTypedVariable :: TypedVariable -> PP.Doc ann
+ppTypedVariable (TypedVariable ctp vn _tp) =
+  PP.unAnnotate (PP.pretty (vnName vn))
   PP.<+> PP.pretty ":" PP.<+>
-  PP.viaShow (C.ppPrec 0 tp)
+  PP.viaShow (C.ppPrec 0 ctp)
 
 
 -- | Convert the 'ttType' field of a 'TypedTerm' to a SAW core term
@@ -190,41 +190,42 @@ typedTermOfFirstOrderValue sc fov =
      t <- scFirstOrderValue sc fov
      pure $ TypedTerm (TypedTermSchema (C.tMono cty)) t
 
--- Typed named variables -------------------------------------------------------
+-- Typed variables -------------------------------------------------------------
 
-data TypedExtCns =
-  TypedExtCns
-  { tecType :: C.Type
-  , tecExt :: ExtCns Term
+data TypedVariable =
+  TypedVariable
+  { tvCType :: C.Type
+  , tvName :: VarName
+  , tvType :: Term
   }
   deriving Show
 
--- | Recognize 'TypedTerm's that are named variables.
-asTypedExtCns :: TypedTerm -> Maybe TypedExtCns
-asTypedExtCns (TypedTerm tp t) =
+-- | Recognize 'TypedTerm's that are variables.
+asTypedVariable :: TypedTerm -> Maybe TypedVariable
+asTypedVariable (TypedTerm tp t) =
   do cty <- ttIsMono tp
      ec <- asVariable t
-     pure $ TypedExtCns cty ec
+     pure $ TypedVariable cty (ecName ec) (ecType ec)
 
--- | Make a 'TypedTerm' from a 'TypedExtCns'.
-typedTermOfExtCns :: SharedContext -> TypedExtCns -> IO TypedTerm
-typedTermOfExtCns sc (TypedExtCns cty ec) =
-  TypedTerm (TypedTermSchema (C.tMono cty)) <$> scVariable sc ec
+-- | Make a 'TypedTerm' from a 'TypedVariable'.
+typedTermOfVariable :: SharedContext -> TypedVariable -> IO TypedTerm
+typedTermOfVariable sc (TypedVariable cty vn ty) =
+  TypedTerm (TypedTermSchema (C.tMono cty)) <$> scVariable sc (EC vn ty)
 
-abstractTypedExts :: SharedContext -> [TypedExtCns] -> TypedTerm -> IO TypedTerm
-abstractTypedExts sc tecs (TypedTerm (TypedTermSchema (C.Forall params props ty)) trm) =
-  do let tys = map tecType tecs
-     let exts = map tecExt tecs
+abstractTypedVars :: SharedContext -> [TypedVariable] -> TypedTerm -> IO TypedTerm
+abstractTypedVars sc tvars (TypedTerm (TypedTermSchema (C.Forall params props ty)) trm) =
+  do let tys = map tvCType tvars
+     let vars = map (\(TypedVariable _ vn tp) -> (vn, tp)) tvars
      let ty' = foldr C.tFun ty tys
-     trm' <- scAbstractExts sc exts trm
+     trm' <- scLambdaList sc vars trm
      pure $ TypedTerm (TypedTermSchema (C.Forall params props ty')) trm'
-abstractTypedExts sc tecs (TypedTerm (TypedTermKind k) trm) =
-  do let exts = map tecExt tecs
-     trm' <- scAbstractExts sc exts trm
+abstractTypedVars sc tvars (TypedTerm (TypedTermKind k) trm) =
+  do let vars = map (\(TypedVariable _ vn tp) -> (vn, tp)) tvars
+     trm' <- scLambdaList sc vars trm
      pure $ TypedTerm (TypedTermKind k) trm'
-abstractTypedExts sc tecs (TypedTerm (TypedTermOther _tp) trm) =
-  do let exts = map tecExt tecs
-     trm' <- scAbstractExts sc exts trm
+abstractTypedVars sc tvars (TypedTerm (TypedTermOther _tp) trm) =
+  do let vars = map (\(TypedVariable _ vn tp) -> (vn, tp)) tvars
+     trm' <- scLambdaList sc vars trm
      tp'  <- scTypeOf sc trm'
      pure $ TypedTerm (TypedTermOther tp') trm'
 

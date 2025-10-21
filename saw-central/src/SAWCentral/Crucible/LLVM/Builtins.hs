@@ -393,7 +393,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                 (method_spec ^. MS.csPreState ^. MS.csPointsTos)
           let input_parameters = nub $ value_input_parameters ++ reference_input_parameters
           let pre_free_variables = Map.fromList $
-                map (\x -> (tecExt x, x)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars
+                map (\x -> (EC (tvName x) (tvType x), x)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars
           let unsupported_input_parameters = Set.difference
                 (Map.keysSet pre_free_variables)
                 (Set.fromList input_parameters)
@@ -419,7 +419,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                 maybeToList return_output_parameter ++ reference_output_parameters
           let post_free_variables =
                 Map.fromList $
-                map (\x -> (tecExt x, x)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars
+                map (\x -> (EC (tvName x) (tvType x), x)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars
           let unsupported_output_parameters =
                 Set.difference (Map.keysSet post_free_variables) (Set.fromList output_parameters)
           when (not $ Set.null unsupported_output_parameters) $
@@ -1591,12 +1591,12 @@ verifyPoststate cc mspec env0 globals ret mdMap invSubst =
      let ecs0 = IntMap.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
-           , let ec = tecExt tt ]
+           , let ec = EC (tvName tt) (tvType tt) ]
      terms0 <- io $ traverse (scVariable sc) ecs0
 
      let initialFree =
            Set.fromList
-           (map (ecVarIndex . tecExt) (view (MS.csPostState . MS.csFreshVars) mspec))
+           (map (vnIndex . tvName) (view (MS.csPostState . MS.csFreshVars) mspec))
      matchPost <-
        io $
        runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
@@ -1829,7 +1829,7 @@ saw_assert_override =
 setupArg ::
   SharedContext ->
   Sym ->
-  IORef (Seq TypedExtCns) ->
+  IORef (Seq TypedVariable) ->
   Crucible.TypeRepr tp ->
   IO (Crucible.RegEntry Sym tp)
 setupArg sc sym ecRef tp = do
@@ -1842,10 +1842,10 @@ setupArg sc sym ecRef tp = do
       _ -> Common.typeReprToSAWTypes sym sc tp
 
   ecs <- readIORef ecRef
-  ec <- scFreshEC sc ("arg_" <> Text.pack (show (length ecs))) scTp
-  writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
+  vn <- scFreshVarName sc ("arg_" <> Text.pack (show (length ecs)))
+  writeIORef ecRef (ecs Seq.|> TypedVariable cty vn scTp)
 
-  t <- scVariable sc ec
+  t <- scVariable sc (EC vn scTp)
   elt <-
     case tp of
       Crucible.LLVMPointerRepr w -> do
@@ -1861,7 +1861,7 @@ setupArgs ::
   SharedContext ->
   Sym ->
   Crucible.FnHandle init ret ->
-  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
+  IO (Seq TypedVariable, Crucible.RegMap Sym init)
 setupArgs sc sym fn =
   do ecRef  <- newIORef Seq.empty
      regmap <- Crucible.RegMap <$> FC.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
@@ -1900,7 +1900,7 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
                      let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
                      pure $ TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t
                 _ -> fail $ unwords ["Unexpected return type:", show rt]
-            tt' <- abstractTypedExts sc (toList ecs) tt
+            tt' <- abstractTypedVars sc (toList ecs) tt
             pure tt'
        Crucible.AbortedResult _ ar ->
          do let resultDoc = ppAbortedResult cc ar

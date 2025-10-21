@@ -75,6 +75,7 @@ import qualified What4.LabeledPred as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
+import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip (saw_ctx, toSC)
 import CryptolSAWCore.TypedTerm
@@ -1699,7 +1700,7 @@ methodSpecHandler opts sc cc mdMap css h =
   prestates <-
     do g0 <- Crucible.readGlobals
        forM css $ \cs -> liftIO $
-         let initialFree = Set.fromList (map (ecVarIndex . tecExt)
+         let initialFree = Set.fromList (map (vnIndex . tvName)
                                            (view (MS.csPreState . MS.csFreshVars) cs))
           in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)
                       (do methodSpecHandler_prestate opts sc cc args cs
