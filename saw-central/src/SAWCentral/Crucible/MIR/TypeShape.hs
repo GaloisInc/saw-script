@@ -698,7 +698,8 @@ buildMirAggregateArray sym elemSz elemShp len xs f = do
     \off _sz shp x -> do
       Refl <- case testEquality (shapeType shp) (shapeType elemShp) of
         Just pf -> return pf
-        Nothing -> fail $ "impossible: arrayAgElemShapes always uses the input TypeShape"
+        Nothing -> panic "buildMirAggregateArray"
+          ["impossible: arrayAgElemShapes always uses the input TypeShape"]
       f off x
 
 traverseMirAggregateArray ::
@@ -720,7 +721,8 @@ traverseMirAggregateArray sym elemSz elemShp len ag f = do
     \off _sz shp rv -> do
       Refl <- case testEquality (shapeType shp) (shapeType elemShp) of
         Just pf -> return pf
-        Nothing -> fail $ "impossible: arrayAgElemShapes always uses the input TypeShape"
+        Nothing -> panic "traverseMirAggregateArray"
+          ["impossible: arrayAgElemShapes always uses the input TypeShape"]
       f off rv
 
 accessMirAggregateArray ::
@@ -760,7 +762,8 @@ accessMirAggregateArray' sym elemSz elemShp len xs ag f = do
     \off _sz shp rv x -> do
       Refl <- case testEquality (shapeType shp) (shapeType elemShp) of
         Just pf -> return pf
-        Nothing -> fail $ "impossible: arrayAgElemShapes always uses the input TypeShape"
+        Nothing -> panic "accessMirAggregateArray'"
+          ["impossible: arrayAgElemShapes always uses the input TypeShape"]
       f off rv x
 
 
