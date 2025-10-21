@@ -1852,7 +1852,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1833 </span><span class="spaces">         </span><span class="istickedoff">pure (UnfinishedProof ps, <span class="nottickedoff">db</span>)</span></span>
 <span class="lineno"> 1834 </span>
 <span class="lineno"> 1835 </span>-- | A type describing counterexamples.
-<span class="lineno"> 1836 </span>type CEX = [(ExtCns Term, FirstOrderValue)]
+<span class="lineno"> 1836 </span>type CEX = [(VarName, FirstOrderValue)]
 <span class="lineno"> 1837 </span>
 <span class="lineno"> 1838 </span>-- | The results that can occur after a proof attempt.
 <span class="lineno"> 1839 </span>data ProofResult
@@ -1909,7 +1909,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1890 </span><span class="spaces">    </span><span class="istickedoff">filterFirstOrderVars mmap fovars absvars (e:es) =</span>
 <span class="lineno"> 1891 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case evalFOT mmap (ecType e) of</span></span>
 <span class="lineno"> 1892 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing  -&gt; filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es</span></span>
-<span class="lineno"> 1893 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es</span></span>
+<span class="lineno"> 1893 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert (ecName e) fot fovars) absvars es</span></span>
 <span class="lineno"> 1894 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1895 </span><span class="spaces">    </span><span class="istickedoff">processTerm mmap vars tm =</span>
 <span class="lineno"> 1896 </span><span class="spaces">      </span><span class="istickedoff">case asLambda tm of</span>
@@ -1917,7 +1917,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1898 </span><span class="spaces">          </span><span class="istickedoff">case evalFOT mmap tp of</span>
 <span class="lineno"> 1899 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail (&quot;predicateToSATQuery: expected first order type: &quot; ++ showTerm tp)</span></span>
 <span class="lineno"> 1900 </span><span class="spaces">            </span><span class="istickedoff">Just fot -&gt;</span>
-<span class="lineno"> 1901 </span><span class="spaces">              </span><span class="istickedoff">processTerm mmap (Map.insert (EC nm tp) fot vars) body</span>
+<span class="lineno"> 1901 </span><span class="spaces">              </span><span class="istickedoff">processTerm mmap (Map.insert nm fot vars) body</span>
 <span class="lineno"> 1902 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1903 </span><span class="spaces">          </span><span class="istickedoff">-- TODO: check that the type is a boolean</span>
 <span class="lineno"> 1904 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
@@ -1961,7 +1961,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1942 </span><span class="spaces">    </span><span class="istickedoff">filterFirstOrderVars mmap fovars absvars (e:es) =</span>
 <span class="lineno"> 1943 </span><span class="spaces">      </span><span class="istickedoff">case evalFOT mmap (ecType e) of</span>
 <span class="lineno"> 1944 </span><span class="spaces">         </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es</span></span>
-<span class="lineno"> 1945 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert e <span class="nottickedoff">fot</span> fovars) absvars es</span>
+<span class="lineno"> 1945 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert (ecName e) fot fovars) absvars es</span>
 <span class="lineno"> 1946 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1947 </span><span class="spaces">    </span><span class="istickedoff">processAssert mmap tp =</span>
 <span class="lineno"> 1948 </span><span class="spaces">      </span><span class="istickedoff">case asEqTrue tp of</span>
@@ -1978,9 +1978,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1959 </span><span class="spaces">                </span><span class="istickedoff">let tp' = tp</span>
 <span class="lineno"> 1960 </span><span class="spaces">                </span><span class="istickedoff">case evalFOT mmap tp' of</span>
 <span class="lineno"> 1961 </span><span class="spaces">                  </span><span class="istickedoff">Just fot -&gt;</span>
-<span class="lineno"> 1962 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((EC nm tp, <span class="nottickedoff">fot</span>) : vars) xs body</span>
+<span class="lineno"> 1962 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((nm, fot) : vars) xs body</span>
 <span class="lineno"> 1963 </span><span class="spaces">                  </span><span class="istickedoff">Nothing</span>
-<span class="lineno"> 1964 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">IntSet.null (foldr IntSet.delete (freeVars body) (map (ecVarIndex . fst) vars))</span> -&gt;</span>
+<span class="lineno"> 1964 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">IntSet.null (foldr IntSet.delete (freeVars body) (map (vnIndex . fst) vars))</span> -&gt;</span>
 <span class="lineno"> 1965 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">case asEqTrue tp' of</span></span>
 <span class="lineno"> 1966 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">Just x  -&gt; processUnivAssert mmap vars (x:xs) body</span></span>
 <span class="lineno"> 1967 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
@@ -2008,9 +2008,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1989 </span><span class="spaces">                </span><span class="istickedoff">let tp' = tp</span>
 <span class="lineno"> 1990 </span><span class="spaces">                </span><span class="istickedoff">case evalFOT mmap tp' of</span>
 <span class="lineno"> 1991 </span><span class="spaces">                  </span><span class="istickedoff">Just fot -&gt;</span>
-<span class="lineno"> 1992 </span><span class="spaces">                    </span><span class="istickedoff">processConcl mmap (Map.insert (EC nm tp) fot vars, xs) body</span>
+<span class="lineno"> 1992 </span><span class="spaces">                    </span><span class="istickedoff">processConcl mmap (Map.insert nm fot vars, xs) body</span>
 <span class="lineno"> 1993 </span><span class="spaces">                  </span><span class="istickedoff">Nothing</span>
-<span class="lineno"> 1994 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="tickonlytrue">IntSet.null (foldr IntSet.delete (freeVars body) (map ecVarIndex (Map.keys vars)))</span> -&gt;</span>
+<span class="lineno"> 1994 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="tickonlytrue">IntSet.null (foldr IntSet.delete (freeVars body) (map vnIndex (Map.keys vars)))</span> -&gt;</span>
 <span class="lineno"> 1995 </span><span class="spaces">                        </span><span class="istickedoff">do asrt &lt;- processAssert <span class="nottickedoff">mmap</span> tp</span>
 <span class="lineno"> 1996 </span><span class="spaces">                           </span><span class="istickedoff">processConcl mmap (vars, asrt : xs) body</span>
 <span class="lineno"> 1997 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>

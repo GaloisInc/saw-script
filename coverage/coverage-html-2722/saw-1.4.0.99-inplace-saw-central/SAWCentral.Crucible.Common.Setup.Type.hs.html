@@ -50,7 +50,7 @@ span.spaces    { background: white }
 <span class="lineno">   31 </span>  , addPointsTo
 <span class="lineno">   32 </span>  , addAllocGlobal
 <span class="lineno">   33 </span>  , addCondition
-<span class="lineno">   34 </span>  , freshTypedExtCns
+<span class="lineno">   34 </span>  , freshTypedVariable
 <span class="lineno">   35 </span>  , freshVariable
 <span class="lineno">   36 </span>  , setupWithTag
 <span class="lineno">   37 </span>  ) where
@@ -66,8 +66,8 @@ span.spaces    { background: white }
 <span class="lineno">   47 </span>
 <span class="lineno">   48 </span>import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
 <span class="lineno">   49 </span>import qualified CryptolSAWCore.Cryptol as Cryptol (importType, emptyEnv)
-<span class="lineno">   50 </span>import           CryptolSAWCore.TypedTerm (TypedTerm, TypedExtCns(..), typedTermOfExtCns)
-<span class="lineno">   51 </span>import           SAWCore.SharedTerm (SharedContext, scFreshEC)
+<span class="lineno">   50 </span>import           CryptolSAWCore.TypedTerm (TypedTerm, TypedVariable(..), typedTermOfVariable)
+<span class="lineno">   51 </span>import           SAWCore.SharedTerm (SharedContext, scFreshVarName)
 <span class="lineno">   52 </span>
 <span class="lineno">   53 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 <span class="lineno">   54 </span>
@@ -140,18 +140,18 @@ span.spaces    { background: white }
 <span class="lineno">  121 </span>addCondition :: Monad m =&gt; MS.SetupCondition ext -&gt; CrucibleSetupT ext m ()
 <span class="lineno">  122 </span><span class="decl"><span class="istickedoff">addCondition cond = currentState . MS.csConditions %= (cond : )</span></span>
 <span class="lineno">  123 </span>
-<span class="lineno">  124 </span>-- | Allocate a fresh variable in the form of a 'TypedExtCns' and
+<span class="lineno">  124 </span>-- | Allocate a fresh variable in the form of a 'TypedVariable' and
 <span class="lineno">  125 </span>-- record this allocation in the setup state.
-<span class="lineno">  126 </span>freshTypedExtCns ::
+<span class="lineno">  126 </span>freshTypedVariable ::
 <span class="lineno">  127 </span>  MonadIO m =&gt;
 <span class="lineno">  128 </span>  SharedContext {- ^ shared context -} -&gt;
 <span class="lineno">  129 </span>  Text          {- ^ variable name  -} -&gt;
 <span class="lineno">  130 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
-<span class="lineno">  131 </span>  CrucibleSetupT arch m TypedExtCns
-<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">freshTypedExtCns sc name cty =</span>
+<span class="lineno">  131 </span>  CrucibleSetupT arch m TypedVariable
+<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">freshTypedVariable sc name cty =</span>
 <span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- liftIO $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> cty</span>
-<span class="lineno">  134 </span><span class="spaces">     </span><span class="istickedoff">ec &lt;- liftIO $ scFreshEC sc name ty</span>
-<span class="lineno">  135 </span><span class="spaces">     </span><span class="istickedoff">let tt = TypedExtCns cty ec</span>
+<span class="lineno">  134 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftIO $ scFreshVarName sc name</span>
+<span class="lineno">  135 </span><span class="spaces">     </span><span class="istickedoff">let tt = TypedVariable cty vn ty</span>
 <span class="lineno">  136 </span><span class="spaces">     </span><span class="istickedoff">currentState . MS.csFreshVars %= cons tt</span>
 <span class="lineno">  137 </span><span class="spaces">     </span><span class="istickedoff">return tt</span></span>
 <span class="lineno">  138 </span>
@@ -164,8 +164,8 @@ span.spaces    { background: white }
 <span class="lineno">  145 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
 <span class="lineno">  146 </span>  CrucibleSetupT arch m TypedTerm
 <span class="lineno">  147 </span><span class="decl"><span class="istickedoff">freshVariable sc name cty =</span>
-<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">do tec &lt;- freshTypedExtCns sc name cty</span>
-<span class="lineno">  149 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ typedTermOfExtCns sc tec</span></span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">do tec &lt;- freshTypedVariable sc name cty</span>
+<span class="lineno">  149 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ typedTermOfVariable sc tec</span></span>
 <span class="lineno">  150 </span>
 <span class="lineno">  151 </span>setupWithTag :: Text -&gt; CrucibleSetupT arch m a -&gt; CrucibleSetupT arch m a
 <span class="lineno">  152 </span><span class="decl"><span class="istickedoff">setupWithTag tag m =</span>

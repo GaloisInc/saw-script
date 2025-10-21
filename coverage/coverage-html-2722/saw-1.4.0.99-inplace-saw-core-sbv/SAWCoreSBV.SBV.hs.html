@@ -80,7 +80,7 @@ span.spaces    { background: white }
 <span class="lineno">   61 </span>import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 <span class="lineno">   62 </span>import Numeric.Natural (Natural)
 <span class="lineno">   63 </span>
-<span class="lineno">   64 </span>import SAWCore.Name (Name(..), VarName(..), ecShortName, toShortName)
+<span class="lineno">   64 </span>import SAWCore.Name (Name(..), VarName(..), toShortName)
 <span class="lineno">   65 </span>import qualified SAWCore.Prim as Prim
 <span class="lineno">   66 </span>import qualified SAWCore.Recognizer as R
 <span class="lineno">   67 </span>import qualified SAWCore.Simulator as Sim
@@ -735,22 +735,22 @@ span.spaces    { background: white }
 <span class="lineno">  716 </span><span class="spaces">                  </span><span class="istickedoff">args</span>
 <span class="lineno">  717 </span><span class="spaces">  </span><span class="istickedoff">where nm' = &quot;|&quot; ++ nm ++ &quot;|&quot;</span></span> -- enclose name to allow primes and other non-alphanum chars
 <span class="lineno">  718 </span>
-<span class="lineno">  719 </span>sbvSATQuery :: SharedContext -&gt; Map Ident SPrim -&gt; SATQuery -&gt; IO ([Labeler], [ExtCns Term], Symbolic SBool)
+<span class="lineno">  719 </span>sbvSATQuery :: SharedContext -&gt; Map Ident SPrim -&gt; SATQuery -&gt; IO ([Labeler], [VarName], Symbolic SBool)
 <span class="lineno">  720 </span><span class="decl"><span class="istickedoff">sbvSATQuery sc addlPrims query =</span>
 <span class="lineno">  721 </span><span class="spaces">  </span><span class="istickedoff">do t &lt;- liftIO (satQueryAsTerm <span class="nottickedoff">sc</span> query)</span>
 <span class="lineno">  722 </span><span class="spaces">     </span><span class="istickedoff">let qvars = Map.toList (satVariables query)</span>
 <span class="lineno">  723 </span><span class="spaces">     </span><span class="istickedoff">let unintSet = satUninterp query</span>
-<span class="lineno">  724 </span><span class="spaces">     </span><span class="istickedoff">let ecVars (ec, fot) = newVars (Text.unpack (ecShortName ec)) fot</span>
+<span class="lineno">  724 </span><span class="spaces">     </span><span class="istickedoff">let mkVars (vn, fot) = newVars (Text.unpack (vnName vn)) fot</span>
 <span class="lineno">  725 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  726 </span><span class="spaces">     </span><span class="istickedoff">(labels, vars) &lt;-</span>
 <span class="lineno">  727 </span><span class="spaces">       </span><span class="istickedoff">flip evalStateT 0 $ unzip &lt;$&gt;</span>
-<span class="lineno">  728 </span><span class="spaces">       </span><span class="istickedoff">mapM ecVars qvars</span>
+<span class="lineno">  728 </span><span class="spaces">       </span><span class="istickedoff">mapM mkVars qvars</span>
 <span class="lineno">  729 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  730 </span><span class="spaces">     </span><span class="istickedoff">m &lt;- liftIO (scGetModuleMap sc)</span>
 <span class="lineno">  731 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  732 </span><span class="spaces">     </span><span class="istickedoff">return (labels, map fst qvars,</span>
 <span class="lineno">  733 </span><span class="spaces">       </span><span class="istickedoff">do vars' &lt;- sequence vars</span>
-<span class="lineno">  734 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList (zip (map (ecVarIndex . fst) qvars) vars')</span>
+<span class="lineno">  734 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList (zip (map (vnIndex . fst) qvars) vars')</span>
 <span class="lineno">  735 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  736 </span><span class="spaces">          </span><span class="istickedoff">let mkUninterp (VarName ix nm) ty =</span>
 <span class="lineno">  737 </span><span class="spaces">                </span><span class="istickedoff">parseUninterpreted [] (Text.unpack nm ++ &quot;#&quot; ++ show ix) ty</span>
@@ -829,13 +829,13 @@ span.spaces    { background: white }
 <span class="lineno">  810 </span>getLabels ::
 <span class="lineno">  811 </span>  [Labeler] -&gt;
 <span class="lineno">  812 </span>  Map String CV -&gt;
-<span class="lineno">  813 </span>  [ExtCns Term] -&gt; Maybe [(ExtCns Term,FirstOrderValue)]
+<span class="lineno">  813 </span>  [VarName] -&gt; Maybe [(VarName, FirstOrderValue)]
 <span class="lineno">  814 </span>
 <span class="lineno">  815 </span><span class="decl"><span class="istickedoff">getLabels ls d args</span>
 <span class="lineno">  816 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">length args == length xs</span> = Just (zip args xs)</span>
 <span class="lineno">  817 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">error $ unwords</span></span>
 <span class="lineno">  818 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;SBV SAT results do not match expected arguments &quot;</span></span>
-<span class="lineno">  819 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, show (map ecShortName args), show xs]</span></span>
+<span class="lineno">  819 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, show (map vnName args), show xs]</span></span>
 <span class="lineno">  820 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  821 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  822 </span><span class="spaces">  </span><span class="istickedoff">xs = fmap getLabel ls</span>

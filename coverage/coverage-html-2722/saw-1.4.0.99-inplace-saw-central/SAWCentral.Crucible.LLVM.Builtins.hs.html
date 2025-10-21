@@ -189,7 +189,7 @@ span.spaces    { background: white }
 <span class="lineno">  170 </span>
 <span class="lineno">  171 </span>-- saw-core
 <span class="lineno">  172 </span>import SAWCore.FiniteValue (ppFirstOrderValue)
-<span class="lineno">  173 </span>import SAWCore.Name (ecShortName)
+<span class="lineno">  173 </span>import SAWCore.Name (VarName(..))
 <span class="lineno">  174 </span>import SAWCore.SharedTerm
 <span class="lineno">  175 </span>import SAWCore.Recognizer
 <span class="lineno">  176 </span>import SAWCore.Term.Pretty (showTerm)
@@ -412,7 +412,7 @@ span.spaces    { background: white }
 <span class="lineno">  393 </span><span class="spaces">                </span><span class="istickedoff">(method_spec ^. MS.csPreState ^. MS.csPointsTos)</span>
 <span class="lineno">  394 </span><span class="spaces">          </span><span class="istickedoff">let input_parameters = nub $ value_input_parameters ++ reference_input_parameters</span>
 <span class="lineno">  395 </span><span class="spaces">          </span><span class="istickedoff">let pre_free_variables = Map.fromList $</span>
-<span class="lineno">  396 </span><span class="spaces">                </span><span class="istickedoff">map (\x -&gt; (tecExt x, <span class="nottickedoff">x</span>)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars</span>
+<span class="lineno">  396 </span><span class="spaces">                </span><span class="istickedoff">map (\x -&gt; (EC (tvName x) (tvType x), <span class="nottickedoff">x</span>)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars</span>
 <span class="lineno">  397 </span><span class="spaces">          </span><span class="istickedoff">let unsupported_input_parameters = Set.difference</span>
 <span class="lineno">  398 </span><span class="spaces">                </span><span class="istickedoff">(Map.keysSet pre_free_variables)</span>
 <span class="lineno">  399 </span><span class="spaces">                </span><span class="istickedoff">(Set.fromList input_parameters)</span>
@@ -438,7 +438,7 @@ span.spaces    { background: white }
 <span class="lineno">  419 </span><span class="spaces">                </span><span class="istickedoff">maybeToList return_output_parameter ++ reference_output_parameters</span>
 <span class="lineno">  420 </span><span class="spaces">          </span><span class="istickedoff">let post_free_variables =</span>
 <span class="lineno">  421 </span><span class="spaces">                </span><span class="istickedoff">Map.fromList $</span>
-<span class="lineno">  422 </span><span class="spaces">                </span><span class="istickedoff">map (\x -&gt; (tecExt x, <span class="nottickedoff">x</span>)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars</span>
+<span class="lineno">  422 </span><span class="spaces">                </span><span class="istickedoff">map (\x -&gt; (EC (tvName x) (tvType x), <span class="nottickedoff">x</span>)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars</span>
 <span class="lineno">  423 </span><span class="spaces">          </span><span class="istickedoff">let unsupported_output_parameters =</span>
 <span class="lineno">  424 </span><span class="spaces">                </span><span class="istickedoff">Set.difference (Map.keysSet post_free_variables) (Set.fromList output_parameters)</span>
 <span class="lineno">  425 </span><span class="spaces">          </span><span class="istickedoff">when (not $ Set.null unsupported_output_parameters) $</span>
@@ -859,8 +859,8 @@ span.spaces    { background: white }
 <span class="lineno">  840 </span><span class="spaces">                 </span><span class="istickedoff">if null vals then</span>
 <span class="lineno">  841 </span><span class="spaces">                   </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;&lt;&lt;All settings of the symbolic variables constitute a counterexample&gt;&gt;&quot;</span>
 <span class="lineno">  842 </span><span class="spaces">                 </span><span class="istickedoff">else</span>
-<span class="lineno">  843 </span><span class="spaces">                   </span><span class="istickedoff">let showEC ec = Text.unpack (ecShortName ec) in</span>
-<span class="lineno">  844 </span><span class="spaces">                   </span><span class="istickedoff">let showAssignment (ec, val) = &quot;  &quot; ++ showEC ec ++ &quot;: &quot; ++ show (ppFirstOrderValue opts val) in</span>
+<span class="lineno">  843 </span><span class="spaces">                   </span><span class="istickedoff">let showVar x = Text.unpack (vnName x) in</span>
+<span class="lineno">  844 </span><span class="spaces">                   </span><span class="istickedoff">let showAssignment (x, val) = &quot;  &quot; ++ showVar x ++ &quot;: &quot; ++ show (ppFirstOrderValue opts val) in</span>
 <span class="lineno">  845 </span><span class="spaces">                   </span><span class="istickedoff">mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>
 <span class="lineno">  846 </span><span class="spaces">                 </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------------------------------&quot;</span>
 <span class="lineno">  847 </span><span class="spaces">                 </span><span class="istickedoff">throwTopLevel &quot;Proof failed.&quot; -- Mirroring behavior of llvm_verify</span>
@@ -1610,12 +1610,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1591 </span><span class="spaces">     </span><span class="istickedoff">let ecs0 = IntMap.fromList</span>
 <span class="lineno"> 1592 </span><span class="spaces">           </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
 <span class="lineno"> 1593 </span><span class="spaces">           </span><span class="istickedoff">| tt &lt;- mspec ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno"> 1594 </span><span class="spaces">           </span><span class="istickedoff">, let ec = tecExt tt ]</span>
+<span class="lineno"> 1594 </span><span class="spaces">           </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt) ]</span>
 <span class="lineno"> 1595 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ traverse (scVariable sc) ecs0</span>
 <span class="lineno"> 1596 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1597 </span><span class="spaces">     </span><span class="istickedoff">let initialFree =</span>
 <span class="lineno"> 1598 </span><span class="spaces">           </span><span class="istickedoff">Set.fromList</span>
-<span class="lineno"> 1599 </span><span class="spaces">           </span><span class="istickedoff">(map (ecVarIndex . tecExt) (view (MS.csPostState . MS.csFreshVars) mspec))</span>
+<span class="lineno"> 1599 </span><span class="spaces">           </span><span class="istickedoff">(map (vnIndex . tvName) (view (MS.csPostState . MS.csFreshVars) mspec))</span>
 <span class="lineno"> 1600 </span><span class="spaces">     </span><span class="istickedoff">matchPost &lt;-</span>
 <span class="lineno"> 1601 </span><span class="spaces">       </span><span class="istickedoff">io $</span>
 <span class="lineno"> 1602 </span><span class="spaces">       </span><span class="istickedoff">runOverrideMatcher sym globals env0 terms0 initialFree <span class="nottickedoff">poststateLoc</span> $</span>
@@ -1848,7 +1848,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1829 </span>setupArg ::
 <span class="lineno"> 1830 </span>  SharedContext -&gt;
 <span class="lineno"> 1831 </span>  Sym -&gt;
-<span class="lineno"> 1832 </span>  IORef (Seq TypedExtCns) -&gt;
+<span class="lineno"> 1832 </span>  IORef (Seq TypedVariable) -&gt;
 <span class="lineno"> 1833 </span>  Crucible.TypeRepr tp -&gt;
 <span class="lineno"> 1834 </span>  IO (Crucible.RegEntry Sym tp)
 <span class="lineno"> 1835 </span><span class="decl"><span class="istickedoff">setupArg sc sym ecRef tp = do</span>
@@ -1861,10 +1861,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1842 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Common.typeReprToSAWTypes sym sc tp</span></span>
 <span class="lineno"> 1843 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1844 </span><span class="spaces">  </span><span class="istickedoff">ecs &lt;- readIORef ecRef</span>
-<span class="lineno"> 1845 </span><span class="spaces">  </span><span class="istickedoff">ec &lt;- scFreshEC sc (&quot;arg_&quot; &lt;&gt; Text.pack (show (length ecs))) scTp</span>
-<span class="lineno"> 1846 </span><span class="spaces">  </span><span class="istickedoff">writeIORef ecRef (ecs Seq.|&gt; TypedExtCns cty ec)</span>
+<span class="lineno"> 1845 </span><span class="spaces">  </span><span class="istickedoff">vn &lt;- scFreshVarName sc (&quot;arg_&quot; &lt;&gt; Text.pack (show (length ecs)))</span>
+<span class="lineno"> 1846 </span><span class="spaces">  </span><span class="istickedoff">writeIORef ecRef (ecs Seq.|&gt; TypedVariable cty vn scTp)</span>
 <span class="lineno"> 1847 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1848 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- scVariable sc ec</span>
+<span class="lineno"> 1848 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- scVariable sc (EC vn scTp)</span>
 <span class="lineno"> 1849 </span><span class="spaces">  </span><span class="istickedoff">elt &lt;-</span>
 <span class="lineno"> 1850 </span><span class="spaces">    </span><span class="istickedoff">case tp of</span>
 <span class="lineno"> 1851 </span><span class="spaces">      </span><span class="istickedoff">Crucible.LLVMPointerRepr w -&gt; do</span>
@@ -1880,7 +1880,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1861 </span>  SharedContext -&gt;
 <span class="lineno"> 1862 </span>  Sym -&gt;
 <span class="lineno"> 1863 </span>  Crucible.FnHandle init ret -&gt;
-<span class="lineno"> 1864 </span>  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
+<span class="lineno"> 1864 </span>  IO (Seq TypedVariable, Crucible.RegMap Sym init)
 <span class="lineno"> 1865 </span><span class="decl"><span class="istickedoff">setupArgs sc sym fn =</span>
 <span class="lineno"> 1866 </span><span class="spaces">  </span><span class="istickedoff">do ecRef  &lt;- newIORef Seq.empty</span>
 <span class="lineno"> 1867 </span><span class="spaces">     </span><span class="istickedoff">regmap &lt;- Crucible.RegMap &lt;$&gt; FC.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)</span>
@@ -1919,7 +1919,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1900 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">let cty = Cryptol.tWord (Cryptol.tNum (natValue w))</span></span>
 <span class="lineno"> 1901 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">pure $ TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t</span></span>
 <span class="lineno"> 1902 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ unwords [&quot;Unexpected return type:&quot;, show rt]</span></span>
-<span class="lineno"> 1903 </span><span class="spaces">            </span><span class="istickedoff">tt' &lt;- abstractTypedExts sc (toList ecs) tt</span>
+<span class="lineno"> 1903 </span><span class="spaces">            </span><span class="istickedoff">tt' &lt;- abstractTypedVars sc (toList ecs) tt</span>
 <span class="lineno"> 1904 </span><span class="spaces">            </span><span class="istickedoff">pure tt'</span>
 <span class="lineno"> 1905 </span><span class="spaces">       </span><span class="istickedoff">Crucible.AbortedResult _ ar -&gt;</span>
 <span class="lineno"> 1906 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do let resultDoc = ppAbortedResult cc ar</span></span>

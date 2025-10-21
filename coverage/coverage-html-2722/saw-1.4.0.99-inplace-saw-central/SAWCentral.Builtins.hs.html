@@ -546,7 +546,7 @@ span.spaces    { background: white }
 <span class="lineno">  527 </span><span class="spaces">     </span><span class="istickedoff">Set.fromList . mconcat &lt;$&gt; mapM (resolveName sc) nms</span></span>
 <span class="lineno">  528 </span>
 <span class="lineno">  529 </span>-- | Given a user-provided name, resolve it to (potentially several)
-<span class="lineno">  530 </span>-- 'ExtCns' that each represent an unfoldable 'Constant' value or a
+<span class="lineno">  530 </span>-- 'VarIndex'es that each represent an unfoldable 'Constant' value or a
 <span class="lineno">  531 </span>-- fresh uninterpreted constant.
 <span class="lineno">  532 </span>-- The given name is searched for in both the local Cryptol environment
 <span class="lineno">  533 </span>-- and the SAWCore naming environment.
@@ -570,7 +570,7 @@ span.spaces    { background: white }
 <span class="lineno">  551 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure scnms</span></span>
 <span class="lineno">  552 </span>
 <span class="lineno">  553 </span>-- | Given a user-provided name, resolve it to (potentially several)
-<span class="lineno">  554 </span>-- 'ExtCns' that each represent an unfoldable 'Constant' value or a
+<span class="lineno">  554 </span>-- 'VarIndex'es that each represent an unfoldable 'Constant' value or a
 <span class="lineno">  555 </span>-- fresh uninterpreted constant.
 <span class="lineno">  556 </span>-- The given name is searched for in both the local Cryptol environment
 <span class="lineno">  557 </span>-- and the SAWCore naming environment. If it is found in neither, an
@@ -1497,7 +1497,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1478 </span><span class="spaces">     </span><span class="nottickedoff">runManyTests testGen numTests &gt;&gt;= \case</span>
 <span class="lineno"> 1479 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; printOutLn opts Info $ &quot;All &quot; ++ show numTests ++ &quot; tests passed!&quot;</span>
 <span class="lineno"> 1480 </span><span class="spaces">        </span><span class="nottickedoff">Just cex -&gt;</span>
-<span class="lineno"> 1481 </span><span class="spaces">          </span><span class="nottickedoff">do let cex' = [ (Text.unpack (ecShortName ec), v) | (ec,v) &lt;- cex ]</span>
+<span class="lineno"> 1481 </span><span class="spaces">          </span><span class="nottickedoff">do let cex' = [ (Text.unpack (vnName x), v) | (x, v) &lt;- cex ]</span>
 <span class="lineno"> 1482 </span><span class="spaces">             </span><span class="nottickedoff">printOutLn opts OnlyCounterExamples $</span>
 <span class="lineno"> 1483 </span><span class="spaces">               </span><span class="nottickedoff">&quot;----------Counterexample----------\n&quot; ++</span>
 <span class="lineno"> 1484 </span><span class="spaces">               </span><span class="nottickedoff">showList cex' &quot;&quot;</span></span>
@@ -1666,10 +1666,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1647 </span><span class="decl"><span class="istickedoff">lambdas vars tt =</span>
 <span class="lineno"> 1648 </span><span class="spaces">  </span><span class="istickedoff">do tecs &lt;- traverse checkVar vars</span>
 <span class="lineno"> 1649 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 1650 </span><span class="spaces">     </span><span class="istickedoff">io $ abstractTypedExts sc tecs tt</span>
+<span class="lineno"> 1650 </span><span class="spaces">     </span><span class="istickedoff">io $ abstractTypedVars sc tecs tt</span>
 <span class="lineno"> 1651 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 1652 </span><span class="spaces">    </span><span class="istickedoff">checkVar v =</span>
-<span class="lineno"> 1653 </span><span class="spaces">      </span><span class="istickedoff">case asTypedExtCns v of</span>
+<span class="lineno"> 1653 </span><span class="spaces">      </span><span class="istickedoff">case asTypedVariable v of</span>
 <span class="lineno"> 1654 </span><span class="spaces">        </span><span class="istickedoff">Just tec -&gt; pure tec</span>
 <span class="lineno"> 1655 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;lambda: argument not a valid symbolic variable&quot;</span></span></span>
 <span class="lineno"> 1656 </span>
@@ -1684,16 +1684,16 @@ span.spaces    { background: white }
 <span class="lineno"> 1665 </span>
 <span class="lineno"> 1666 </span>generalize_term :: [TypedTerm] -&gt; TypedTerm -&gt; TopLevel TypedTerm
 <span class="lineno"> 1667 </span><span class="decl"><span class="nottickedoff">generalize_term vars tt =</span>
-<span class="lineno"> 1668 </span><span class="spaces">  </span><span class="nottickedoff">do tecs &lt;- traverse checkVar vars</span>
+<span class="lineno"> 1668 </span><span class="spaces">  </span><span class="nottickedoff">do tvs &lt;- traverse checkVar vars</span>
 <span class="lineno"> 1669 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 1670 </span><span class="spaces">     </span><span class="nottickedoff">tm &lt;- io $ scGeneralizeExts sc (map tecExt tecs) (ttTerm tt)</span>
+<span class="lineno"> 1670 </span><span class="spaces">     </span><span class="nottickedoff">tm &lt;- io $ scPiList sc (map (\tv -&gt; (tvName tv, tvType tv)) tvs) (ttTerm tt)</span>
 <span class="lineno"> 1671 </span><span class="spaces">     </span><span class="nottickedoff">_tp &lt;- io $ scTypeCheckError sc tm -- sanity check the term</span>
 <span class="lineno"> 1672 </span><span class="spaces">     </span><span class="nottickedoff">io $ mkTypedTerm sc tm</span>
 <span class="lineno"> 1673 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1674 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
 <span class="lineno"> 1675 </span><span class="spaces">    </span><span class="nottickedoff">checkVar v =</span>
-<span class="lineno"> 1676 </span><span class="spaces">      </span><span class="nottickedoff">case asTypedExtCns v of</span>
-<span class="lineno"> 1677 </span><span class="spaces">        </span><span class="nottickedoff">Just tec -&gt; pure tec</span>
+<span class="lineno"> 1676 </span><span class="spaces">      </span><span class="nottickedoff">case asTypedVariable v of</span>
+<span class="lineno"> 1677 </span><span class="spaces">        </span><span class="nottickedoff">Just tv -&gt; pure tv</span>
 <span class="lineno"> 1678 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; fail &quot;generalize_term: argument not a valid symbolic variable&quot;</span></span>
 <span class="lineno"> 1679 </span>
 <span class="lineno"> 1680 </span>-- | Apply the given Term to the given values, and evaluate to a

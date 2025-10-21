@@ -549,12 +549,12 @@ span.spaces    { background: white }
 <span class="lineno">  530 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">scPrettyTerm PPS.defaultOpts t</span></span></span>
 <span class="lineno">  531 </span>
 <span class="lineno">  532 </span>processVar ::
-<span class="lineno">  533 </span>  (ExtCns Term, FirstOrderType) -&gt;
-<span class="lineno">  534 </span>  IO (ExtCns Term, FiniteType)
-<span class="lineno">  535 </span><span class="decl"><span class="istickedoff">processVar (ec, fot) =</span>
+<span class="lineno">  533 </span>  (VarName, FirstOrderType) -&gt;
+<span class="lineno">  534 </span>  IO (VarName, FiniteType)
+<span class="lineno">  535 </span><span class="decl"><span class="istickedoff">processVar (vn, fot) =</span>
 <span class="lineno">  536 </span><span class="spaces">  </span><span class="istickedoff">case toFiniteType fot of</span>
 <span class="lineno">  537 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail (&quot;ABC solver does not support variables of type &quot; ++ show fot)</span></span>
-<span class="lineno">  538 </span><span class="spaces">    </span><span class="istickedoff">Just ft -&gt; pure (ec, ft)</span></span>
+<span class="lineno">  538 </span><span class="spaces">    </span><span class="istickedoff">Just ft -&gt; pure (vn, ft)</span></span>
 <span class="lineno">  539 </span>
 <span class="lineno">  540 </span>
 <span class="lineno">  541 </span>withBitBlastedSATQuery ::
@@ -563,7 +563,7 @@ span.spaces    { background: white }
 <span class="lineno">  544 </span>  SharedContext -&gt;
 <span class="lineno">  545 </span>  PrimMap l g -&gt;
 <span class="lineno">  546 </span>  SATQuery -&gt;
-<span class="lineno">  547 </span>  (forall s. g s -&gt; l s -&gt; [(ExtCns Term, FiniteType)] -&gt; IO a) -&gt;
+<span class="lineno">  547 </span>  (forall s. g s -&gt; l s -&gt; [(VarName, FiniteType)] -&gt; IO a) -&gt;
 <span class="lineno">  548 </span>  IO a
 <span class="lineno">  549 </span><span class="decl"><span class="istickedoff">withBitBlastedSATQuery proxy sc addlPrims satq cont =</span>
 <span class="lineno">  550 </span><span class="spaces">  </span><span class="istickedoff">do unless (Set.null (satUninterp satq)) $ <span class="nottickedoff">fail</span></span>
@@ -573,7 +573,7 @@ span.spaces    { background: white }
 <span class="lineno">  554 </span><span class="spaces">     </span><span class="istickedoff">modmap &lt;- scGetModuleMap sc</span>
 <span class="lineno">  555 </span><span class="spaces">     </span><span class="istickedoff">AIG.withNewGraph <span class="nottickedoff">proxy</span> $ \be -&gt;</span>
 <span class="lineno">  556 </span><span class="spaces">       </span><span class="istickedoff">do vars &lt;- traverse (traverse (newVars be)) varShapes</span>
-<span class="lineno">  557 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) &lt;- vars ]</span>
+<span class="lineno">  557 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList [ (vnIndex x, v) | (x, v) &lt;- vars ]</span>
 <span class="lineno">  558 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- bitBlastBasic be modmap addlPrims varMap t</span>
 <span class="lineno">  559 </span><span class="spaces">          </span><span class="istickedoff">case x of</span>
 <span class="lineno">  560 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l <span class="nottickedoff">varShapes</span></span>

@@ -130,7 +130,7 @@ span.spaces    { background: white }
 <span class="lineno">  111 </span>import qualified Data.Parameterized.Context as Ctx
 <span class="lineno">  112 </span>
 <span class="lineno">  113 </span>import SAWCore.FiniteValue (ppFirstOrderValue)
-<span class="lineno">  114 </span>import SAWCore.Name (ecShortName)
+<span class="lineno">  114 </span>import SAWCore.Name (VarName(..))
 <span class="lineno">  115 </span>import SAWCore.SharedTerm
 <span class="lineno">  116 </span>import CryptolSAWCore.TypedTerm
 <span class="lineno">  117 </span>
@@ -367,8 +367,8 @@ span.spaces    { background: white }
 <span class="lineno">  348 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop Info (show stats)</span>
 <span class="lineno">  349 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------Counterexample----------&quot;</span>
 <span class="lineno">  350 </span><span class="spaces">           </span><span class="istickedoff">opts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
-<span class="lineno">  351 </span><span class="spaces">           </span><span class="istickedoff">let showEC ec = Text.unpack (ecShortName ec)</span>
-<span class="lineno">  352 </span><span class="spaces">           </span><span class="istickedoff">let showAssignment (name, val) = &quot;  &quot; ++ showEC name ++ &quot;: &quot; ++ show (ppFirstOrderValue opts val)</span>
+<span class="lineno">  351 </span><span class="spaces">           </span><span class="istickedoff">let showVar x = Text.unpack (vnName x)</span>
+<span class="lineno">  352 </span><span class="spaces">           </span><span class="istickedoff">let showAssignment (name, val) = &quot;  &quot; ++ showVar name ++ &quot;: &quot; ++ show (ppFirstOrderValue opts val)</span>
 <span class="lineno">  353 </span><span class="spaces">           </span><span class="istickedoff">mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>
 <span class="lineno">  354 </span><span class="spaces">           </span><span class="istickedoff">io $ fail &quot;Proof failed.&quot; -- Mirroring behavior of llvm_verify</span>
 <span class="lineno">  355 </span><span class="spaces">         </span><span class="istickedoff">UnfinishedProof pst -&gt;</span>
@@ -805,10 +805,10 @@ span.spaces    { background: white }
 <span class="lineno">  786 </span><span class="spaces">     </span><span class="istickedoff">let ecs0 = IntMap.fromList</span>
 <span class="lineno">  787 </span><span class="spaces">           </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
 <span class="lineno">  788 </span><span class="spaces">           </span><span class="istickedoff">| tt &lt;- mspec ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno">  789 </span><span class="spaces">           </span><span class="istickedoff">, let ec = tecExt tt ]</span>
+<span class="lineno">  789 </span><span class="spaces">           </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt) ]</span>
 <span class="lineno">  790 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ traverse (scVariable sc) ecs0</span>
 <span class="lineno">  791 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  792 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map <span class="nottickedoff">(ecVarIndex . tecExt)</span></span>
+<span class="lineno">  792 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map <span class="nottickedoff">(vnIndex . tvName)</span></span>
 <span class="lineno">  793 </span><span class="spaces">                                    </span><span class="istickedoff">(view (MS.csPostState . MS.csFreshVars) mspec))</span>
 <span class="lineno">  794 </span><span class="spaces">     </span><span class="istickedoff">matchPost &lt;- io $</span>
 <span class="lineno">  795 </span><span class="spaces">          </span><span class="istickedoff">runOverrideMatcher sym globals env0 terms0 initialFree <span class="nottickedoff">poststateLoc</span> $</span>

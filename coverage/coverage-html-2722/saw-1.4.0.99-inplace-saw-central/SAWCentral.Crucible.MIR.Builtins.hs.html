@@ -166,7 +166,7 @@ span.spaces    { background: white }
 <span class="lineno">  147 </span>import qualified What4.ProgramLoc as W4
 <span class="lineno">  148 </span>
 <span class="lineno">  149 </span>import SAWCore.FiniteValue (ppFirstOrderValue)
-<span class="lineno">  150 </span>import SAWCore.Name (ecShortName)
+<span class="lineno">  150 </span>import SAWCore.Name (VarName(..))
 <span class="lineno">  151 </span>import SAWCore.Recognizer ((:*:)(..), asTupleType, asVecType)
 <span class="lineno">  152 </span>import SAWCore.SharedTerm
 <span class="lineno">  153 </span>import SAWCore.Term.Pretty (ppTerm)
@@ -1403,8 +1403,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1384 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop Info (show stats)</span>
 <span class="lineno"> 1385 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------Counterexample----------&quot;</span>
 <span class="lineno"> 1386 </span><span class="spaces">           </span><span class="istickedoff">opts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
-<span class="lineno"> 1387 </span><span class="spaces">           </span><span class="istickedoff">let showEC ec = Text.unpack (ecShortName ec)</span>
-<span class="lineno"> 1388 </span><span class="spaces">           </span><span class="istickedoff">let showAssignment (name, val) = &quot;  &quot; ++ showEC name ++ &quot;: &quot; ++ show (ppFirstOrderValue opts val)</span>
+<span class="lineno"> 1387 </span><span class="spaces">           </span><span class="istickedoff">let showVar x = Text.unpack (vnName x)</span>
+<span class="lineno"> 1388 </span><span class="spaces">           </span><span class="istickedoff">let showAssignment (name, val) = &quot;  &quot; ++ showVar name ++ &quot;: &quot; ++ show (ppFirstOrderValue opts val)</span>
 <span class="lineno"> 1389 </span><span class="spaces">           </span><span class="istickedoff">mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>
 <span class="lineno"> 1390 </span><span class="spaces">           </span><span class="istickedoff">io $ fail &quot;Proof failed.&quot; -- Mirroring behavior of llvm_verify</span>
 <span class="lineno"> 1391 </span><span class="spaces">         </span><span class="istickedoff">UnfinishedProof pst -&gt;</span>
@@ -1441,10 +1441,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1422 </span><span class="spaces">     </span><span class="istickedoff">let ecs0 = IntMap.fromList</span>
 <span class="lineno"> 1423 </span><span class="spaces">           </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
 <span class="lineno"> 1424 </span><span class="spaces">           </span><span class="istickedoff">| tt &lt;- mspec ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno"> 1425 </span><span class="spaces">           </span><span class="istickedoff">, let ec = tecExt tt ]</span>
+<span class="lineno"> 1425 </span><span class="spaces">           </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt) ]</span>
 <span class="lineno"> 1426 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ traverse (scVariable sc) ecs0</span>
 <span class="lineno"> 1427 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1428 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map (ecVarIndex . tecExt)</span>
+<span class="lineno"> 1428 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map (vnIndex . tvName)</span>
 <span class="lineno"> 1429 </span><span class="spaces">                                    </span><span class="istickedoff">(view (MS.csPostState . MS.csFreshVars) mspec))</span>
 <span class="lineno"> 1430 </span><span class="spaces">     </span><span class="istickedoff">matchPost &lt;- io $</span>
 <span class="lineno"> 1431 </span><span class="spaces">          </span><span class="istickedoff">runOverrideMatcher sym globals env0 terms0 initialFree <span class="nottickedoff">poststateLoc</span> $</span>
@@ -1723,7 +1723,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1704 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 1705 </span><span class="spaces">            </span><span class="istickedoff">term &lt;- setupResultTerm sc cc retTy rt rv</span>
 <span class="lineno"> 1706 </span><span class="spaces">            </span><span class="istickedoff">let tt = TypedTerm (TypedTermSchema (Cryptol.tMono cty)) term</span>
-<span class="lineno"> 1707 </span><span class="spaces">            </span><span class="istickedoff">tt' &lt;- abstractTypedExts sc (toList ecs) tt</span>
+<span class="lineno"> 1707 </span><span class="spaces">            </span><span class="istickedoff">tt' &lt;- abstractTypedVars sc (toList ecs) tt</span>
 <span class="lineno"> 1708 </span><span class="spaces">            </span><span class="istickedoff">pure tt'</span>
 <span class="lineno"> 1709 </span><span class="spaces">       </span><span class="istickedoff">Crucible.AbortedResult _ ar -&gt;</span>
 <span class="lineno"> 1710 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do let resultDoc = ppMIRAbortedResult ar</span></span>
@@ -1833,7 +1833,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1814 </span>  forall tp.
 <span class="lineno"> 1815 </span>  SharedContext -&gt;
 <span class="lineno"> 1816 </span>  MIRCrucibleContext -&gt;
-<span class="lineno"> 1817 </span>  IORef (Seq TypedExtCns) -&gt;
+<span class="lineno"> 1817 </span>  IORef (Seq TypedVariable) -&gt;
 <span class="lineno"> 1818 </span>  -- | The argument's MIR type.
 <span class="lineno"> 1819 </span>  Mir.Ty -&gt;
 <span class="lineno"> 1820 </span>  -- | The argument's corresponding Crucible type.
@@ -1959,8 +1959,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1940 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">, Text.pack $ show $ ppTerm PPS.defaultOpts scTp</span></span>
 <span class="lineno"> 1941 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 1942 </span><span class="spaces">              </span><span class="istickedoff">arraySzTerm &lt;- scNat sc arraySz</span>
-<span class="lineno"> 1943 </span><span class="spaces">              </span><span class="istickedoff">buildMirAggregateArray sym eltSz eltShp len (map pred [1..len]) $</span>
-<span class="lineno"> 1944 </span><span class="spaces">                </span><span class="istickedoff">\_off idx -&gt; do</span>
+<span class="lineno"> 1943 </span><span class="spaces">              </span><span class="istickedoff">generateMirAggregateArray sym eltSz eltShp len $</span>
+<span class="lineno"> 1944 </span><span class="spaces">                </span><span class="istickedoff">\idx -&gt; do</span>
 <span class="lineno"> 1945 </span><span class="spaces">                  </span><span class="istickedoff">idxTerm &lt;- scNat sc $ fromIntegral @Word @Natural idx</span>
 <span class="lineno"> 1946 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- scAt sc arraySzTerm eltScTp t idxTerm</span>
 <span class="lineno"> 1947 </span><span class="spaces">                  </span><span class="istickedoff">termToMirRegValue eltShp <span class="nottickedoff">eltScTp</span> t'</span>
@@ -1982,10 +1982,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1963 </span><span class="spaces">    </span><span class="istickedoff">(cty, scTp) &lt;- typeShapeToSAWTypes shp</span>
 <span class="lineno"> 1964 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1965 </span><span class="spaces">    </span><span class="istickedoff">ecs &lt;- readIORef ecRef</span>
-<span class="lineno"> 1966 </span><span class="spaces">    </span><span class="istickedoff">ec &lt;- scFreshEC sc (&quot;arg_&quot; &lt;&gt; Text.pack (show (length ecs))) scTp</span>
-<span class="lineno"> 1967 </span><span class="spaces">    </span><span class="istickedoff">writeIORef ecRef (ecs Seq.|&gt; TypedExtCns cty ec)</span>
+<span class="lineno"> 1966 </span><span class="spaces">    </span><span class="istickedoff">vn &lt;- scFreshVarName sc (&quot;arg_&quot; &lt;&gt; Text.pack (show (length ecs)))</span>
+<span class="lineno"> 1967 </span><span class="spaces">    </span><span class="istickedoff">writeIORef ecRef (ecs Seq.|&gt; TypedVariable cty vn scTp)</span>
 <span class="lineno"> 1968 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1969 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- scVariable sc ec</span>
+<span class="lineno"> 1969 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- scVariable sc (EC vn scTp)</span>
 <span class="lineno"> 1970 </span><span class="spaces">    </span><span class="istickedoff">Crucible.RegEntry tp0 &lt;$&gt; termToMirRegValue shp scTp t</span></span>
 <span class="lineno"> 1971 </span>
 <span class="lineno"> 1972 </span>-- | Create fresh argument variables of the appropriate types, suitable for use
@@ -1998,7 +1998,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1979 </span>  -- 'Crucible.FnHandle'.
 <span class="lineno"> 1980 </span>  [Mir.Ty] -&gt;
 <span class="lineno"> 1981 </span>  Crucible.FnHandle init ret -&gt;
-<span class="lineno"> 1982 </span>  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
+<span class="lineno"> 1982 </span>  IO (Seq TypedVariable, Crucible.RegMap Sym init)
 <span class="lineno"> 1983 </span><span class="decl"><span class="istickedoff">setupArgs sc cc mirArgTys fn =</span>
 <span class="lineno"> 1984 </span><span class="spaces">  </span><span class="istickedoff">do ecRef  &lt;- newIORef Seq.empty</span>
 <span class="lineno"> 1985 </span><span class="spaces">     </span><span class="istickedoff">let fnArgTys = Crucible.handleArgTypes fn</span>

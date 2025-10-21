@@ -269,7 +269,7 @@ span.spaces    { background: white }
 <span class="lineno">  250 </span>import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 <span class="lineno">  251 </span>import SAWCentral.Yosys.State (YosysSequential)
 <span class="lineno">  252 </span>
-<span class="lineno">  253 </span>import SAWCore.Name (ecShortName, DisplayNameEnv, emptyDisplayNameEnv)
+<span class="lineno">  253 </span>import SAWCore.Name (VarName(..), DisplayNameEnv, emptyDisplayNameEnv)
 <span class="lineno">  254 </span>import CryptolSAWCore.CryptolEnv as CEnv
 <span class="lineno">  255 </span>import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 <span class="lineno">  256 </span>import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, ctxtRewriteRule, listRules)
@@ -611,7 +611,7 @@ span.spaces    { background: white }
 <span class="lineno">  592 </span>
 <span class="lineno">  593 </span>data SatResult
 <span class="lineno">  594 </span>  = Unsat SolverStats
-<span class="lineno">  595 </span>  | Sat SolverStats [(ExtCns Term, FirstOrderValue)]
+<span class="lineno">  595 </span>  | Sat SolverStats [(VarName, FirstOrderValue)]
 <span class="lineno">  596 </span>  | SatUnknown
 <span class="lineno">  597 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">  598 </span>
@@ -623,8 +623,8 @@ span.spaces    { background: white }
 <span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">UnfinishedProof st  -&gt; showString &quot;Unfinished: &quot; . shows (length (psGoals st)) . showString &quot; goals remaining&quot;</span>
 <span class="lineno">  605 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  606 </span><span class="spaces">    </span><span class="istickedoff">showVal t = shows (ppFirstOrderValue opts t)</span>
-<span class="lineno">  607 </span><span class="spaces">    </span><span class="istickedoff">showEqn (x, t) = showEC x . showString &quot; = &quot; . showVal t</span>
-<span class="lineno">  608 </span><span class="spaces">    </span><span class="istickedoff">showEC ec = showString (Text.unpack (ecShortName ec))</span>
+<span class="lineno">  607 </span><span class="spaces">    </span><span class="istickedoff">showEqn (x, t) = showVarName x . showString &quot; = &quot; . showVal t</span>
+<span class="lineno">  608 </span><span class="spaces">    </span><span class="istickedoff">showVarName vn = showString (Text.unpack (vnName vn))</span>
 <span class="lineno">  609 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  610 </span><span class="spaces">    </span><span class="istickedoff">showMulti _ [] = showString &quot;]&quot;</span>
 <span class="lineno">  611 </span><span class="spaces">    </span><span class="istickedoff">showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti &quot;, &quot; eqns</span></span>
@@ -637,8 +637,8 @@ span.spaces    { background: white }
 <span class="lineno">  618 </span><span class="spaces">    </span><span class="istickedoff">SatUnknown  -&gt; <span class="nottickedoff">showString &quot;Unknown&quot;</span></span>
 <span class="lineno">  619 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  620 </span><span class="spaces">    </span><span class="istickedoff">showVal t = shows (ppFirstOrderValue opts t)</span>
-<span class="lineno">  621 </span><span class="spaces">    </span><span class="istickedoff">showEC ec = showString (Text.unpack (ecShortName ec))</span>
-<span class="lineno">  622 </span><span class="spaces">    </span><span class="istickedoff">showEqn (x, t) = showEC x . showString &quot; = &quot; . showVal t</span>
+<span class="lineno">  621 </span><span class="spaces">    </span><span class="istickedoff">showVarName vn = showString (Text.unpack (vnName vn))</span>
+<span class="lineno">  622 </span><span class="spaces">    </span><span class="istickedoff">showEqn (x, t) = showVarName x . showString &quot; = &quot; . showVal t</span>
 <span class="lineno">  623 </span><span class="spaces">    </span><span class="istickedoff">showMulti _ [] = showString &quot;]&quot;</span>
 <span class="lineno">  624 </span><span class="spaces">    </span><span class="istickedoff">showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti &quot;, &quot; eqns</span></span>
 <span class="lineno">  625 </span>

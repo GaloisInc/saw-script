@@ -121,7 +121,7 @@ span.spaces    { background: white }
 <span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">where <span class="nottickedoff">cmd tmp tmpCex = &quot;read_aiger &quot; ++ tmp ++ &quot;; sat; write_cex &quot; ++ tmpCex</span></span></span>
 <span class="lineno">  103 </span>
 <span class="lineno">  104 </span>w4AbcExternal ::
-<span class="lineno">  105 </span>  (FilePath -&gt; SATQuery -&gt; TopLevel [(ExtCns Term, FiniteType)]) -&gt;
+<span class="lineno">  105 </span>  (FilePath -&gt; SATQuery -&gt; TopLevel [(VarName, FiniteType)]) -&gt;
 <span class="lineno">  106 </span>  (String -&gt; String -&gt; String) -&gt;
 <span class="lineno">  107 </span>  Bool -&gt;
 <span class="lineno">  108 </span>  SATQuery -&gt;
@@ -213,7 +213,7 @@ span.spaces    { background: white }
 <span class="lineno">  194 </span><span class="spaces">         </span><span class="nottickedoff">([&quot;s SATISFIABLE&quot;], _) -&gt; do</span>
 <span class="lineno">  195 </span><span class="spaces">           </span><span class="nottickedoff">let bs = parseDimacsSolution variables vls</span>
 <span class="lineno">  196 </span><span class="spaces">           </span><span class="nottickedoff">let r = liftCexBB (map snd shapes) bs</span>
-<span class="lineno">  197 </span><span class="spaces">               </span><span class="nottickedoff">argNames = map (Text.unpack . ecShortName . fst) shapes</span>
+<span class="lineno">  197 </span><span class="spaces">               </span><span class="nottickedoff">argNames = map (Text.unpack . vnName . fst) shapes</span>
 <span class="lineno">  198 </span><span class="spaces">               </span><span class="nottickedoff">ecs = map fst shapes</span>
 <span class="lineno">  199 </span><span class="spaces">           </span><span class="nottickedoff">case r of</span>
 <span class="lineno">  200 </span><span class="spaces">             </span><span class="nottickedoff">Left msg -&gt; fail $ &quot;Can't parse counterexample: &quot; ++ msg</span>

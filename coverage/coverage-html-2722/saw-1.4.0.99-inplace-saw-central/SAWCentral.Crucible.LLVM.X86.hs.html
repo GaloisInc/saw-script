@@ -92,7 +92,7 @@ span.spaces    { background: white }
 <span class="lineno">   73 </span>import CryptolSAWCore.CryptolEnv
 <span class="lineno">   74 </span>import SAWCore.FiniteValue
 <span class="lineno">   75 </span>import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
-<span class="lineno">   76 </span>import SAWCore.Name (Name(..), ecShortName)
+<span class="lineno">   76 </span>import SAWCore.Name (Name(..), VarName(..))
 <span class="lineno">   77 </span>import SAWCore.Prelude
 <span class="lineno">   78 </span>import SAWCore.Recognizer
 <span class="lineno">   79 </span>import SAWCore.SharedTerm
@@ -1517,9 +1517,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1498 </span><span class="spaces">    </span><span class="istickedoff">initialECs = IntMap.fromList</span>
 <span class="lineno"> 1499 </span><span class="spaces">      </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
 <span class="lineno"> 1500 </span><span class="spaces">      </span><span class="istickedoff">| tt &lt;- ms ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno"> 1501 </span><span class="spaces">      </span><span class="istickedoff">, let ec = tecExt tt</span>
+<span class="lineno"> 1501 </span><span class="spaces">      </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt)</span>
 <span class="lineno"> 1502 </span><span class="spaces">      </span><span class="istickedoff">]</span>
-<span class="lineno"> 1503 </span><span class="spaces">    </span><span class="istickedoff">initialFree = Set.fromList . fmap (ecVarIndex . tecExt) $ ms ^. MS.csPostState . MS.csFreshVars</span>
+<span class="lineno"> 1503 </span><span class="spaces">    </span><span class="istickedoff">initialFree = Set.fromList . fmap (vnIndex . tvName) $ ms ^. MS.csPostState . MS.csFreshVars</span>
 <span class="lineno"> 1504 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1505 </span><span class="spaces">  </span><span class="istickedoff">initialTerms &lt;- liftIO $ traverse (scVariable sc) initialECs</span>
 <span class="lineno"> 1506 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1649,9 +1649,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1630 </span><span class="spaces">        </span><span class="istickedoff">ppOpts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
 <span class="lineno"> 1631 </span><span class="spaces">        </span><span class="istickedoff">case vals of</span>
 <span class="lineno"> 1632 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; printOutLnTop OnlyCounterExamples &quot;&lt;&lt;All settings of the symbolic variables constitute a counterexample&gt;&gt;&quot;</span>
-<span class="lineno"> 1633 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; let showEC ec = Text.unpack (ecShortName ec) in</span>
-<span class="lineno"> 1634 </span><span class="spaces">               </span><span class="istickedoff">let showAssignment (ec, val) =</span>
-<span class="lineno"> 1635 </span><span class="spaces">                     </span><span class="istickedoff">mconcat [ &quot; &quot;, showEC ec, &quot;: &quot;, show $ ppFirstOrderValue ppOpts val ]</span>
+<span class="lineno"> 1633 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; let showVar x = Text.unpack (vnName x) in</span>
+<span class="lineno"> 1634 </span><span class="spaces">               </span><span class="istickedoff">let showAssignment (x, val) =</span>
+<span class="lineno"> 1635 </span><span class="spaces">                     </span><span class="istickedoff">mconcat [ &quot; &quot;, showVar x, &quot;: &quot;, show $ ppFirstOrderValue ppOpts val ]</span>
 <span class="lineno"> 1636 </span><span class="spaces">               </span><span class="istickedoff">in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>
 <span class="lineno"> 1637 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------------------------------&quot;</span>
 <span class="lineno"> 1638 </span><span class="spaces">        </span><span class="istickedoff">throwTopLevel &quot;Proof failed.&quot;</span>
