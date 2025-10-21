@@ -28,6 +28,7 @@ import qualified Data.AIG as AIG
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
+import SAWCore.Name (VarName)
 import SAWCore.Prelude
 import SAWCore.Recognizer
 import SAWCore.SharedTerm hiding (scNot, scAnd, scOr)
@@ -121,11 +122,12 @@ networkAsSharedTerms ntk sc inputTerms outputLits = do
   traverse (viewFinish <=< evalFn) outputLits
 
 -- | Create vector for each input literal from expected types.
-bitblastVarsAsInputLits :: SharedContext -> [ExtCns Term] -> ExceptT String IO (V.Vector Term)
+bitblastVarsAsInputLits ::
+  SharedContext -> [(VarName, Term)] -> ExceptT String IO (V.Vector Term)
 bitblastVarsAsInputLits sc args = do
-  inputs <- liftIO $ mapM (scVariable sc) args
+  inputs <- liftIO $ scVariables sc args
   fmap snd $ runTypeParser V.empty $ do
-    zipWithM_ (bitblastSharedTerm sc) inputs (map ecType args)
+    zipWithM_ (bitblastSharedTerm sc) inputs (map snd args)
 
 withReadAiger :: (AIG.IsAIG l g) =>
                  AIG.Proxy l g
@@ -143,7 +145,7 @@ translateNetwork :: AIG.IsAIG l g
                  -> SharedContext    -- ^ Context to build in term.
                  -> g x              -- ^ Network to bitblast
                  -> [l x]            -- ^ Outputs for network.
-                 -> [ExtCns Term]    -- ^ Expected types
+                 -> [(VarName, Term)]-- ^ Expected types
                  -> Term             -- ^ Expected output type.
                  -> ExceptT String IO Term
 translateNetwork opts sc ntk outputLits args resultType = do
@@ -165,7 +167,7 @@ translateNetwork opts sc ntk outputLits args resultType = do
   (res,rargs) <- runTypeParser outputVars $ parseAIGResultType sc resultType
   unless (V.null rargs) $
     throwE "AIG contains more outputs than expected."
-  lift $ scAbstractExts sc args res
+  lift $ scLambdaList sc args res
 
 loadAIG :: (AIG.IsAIG l g) => AIG.Proxy l g  -> FilePath -> IO (Either String (AIG.Network l g))
 loadAIG p f = do
@@ -187,7 +189,8 @@ readAIG proxy opts sc f =
     let outLen = length outputLits
     inType <- scBitvector sc (fromIntegral inLen)
     outType <- scBitvector sc (fromIntegral outLen)
-    arg <- scFreshEC sc "x" inType
+    x <- scFreshVarName sc "x"
+    let arg = (x, inType)
     fmap (fmap (\t -> (inLen, outLen, t))) $ runExceptT $
       translateNetwork opts sc ntk outputLits [arg] outType
 
