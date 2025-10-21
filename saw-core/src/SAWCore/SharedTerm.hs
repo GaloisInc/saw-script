@@ -242,7 +242,7 @@ module SAWCore.SharedTerm
   , scInstantiateExt
   , scAbstractExts
   , scAbstractTerms
-  , scAbstractExtsEtaCollapse
+  , scLambdaListEtaCollapse
   , scGeneralizeExts
   , scGeneralizeTerms
   , scUnfoldConstants
@@ -2759,13 +2759,12 @@ scAbstractTerms sc args body =
         Just var -> pure var
         Nothing -> fail "scAbstractTerms: expected Variable"
 
--- | Abstract over the given list of external constants by wrapping
---   the given term with lambdas and replacing the external constant
---   occurrences with the appropriate local variables.  However,
---   the term will be eta-collapsed as far as possible, so unnecessary
---   lambdas will simply be omitted.
-scAbstractExtsEtaCollapse :: SharedContext -> [ExtCns Term] -> Term -> IO Term
-scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
+-- | Abstract over the given list of variables by wrapping the given
+-- term with lambdas.
+-- However, the term will be eta-collapsed as far as possible, so
+-- unnecessary lambdas will simply be omitted.
+scLambdaListEtaCollapse :: SharedContext -> [(VarName, Term)] -> Term -> IO Term
+scLambdaListEtaCollapse sc = \vars tm -> loop (reverse vars) tm
   where
     -- we eta-collapsed all the variables, nothing more to do
     loop [] tm = pure tm
@@ -2773,12 +2772,12 @@ scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
     -- the final variable to abstract is applied to the
     -- term, and does not appear elsewhere in the term,
     -- so we can eta-collapse.
-    loop (EC x _ : exts) (asApp -> Just (f, asVariable -> Just (x', _)))
-      | x == x', not (IntSet.member (vnIndex x) (freeVars f))
-      = loop exts f
+    loop ((x, _) : vars) (asApp -> Just (f, asVariable -> Just (x', _)))
+      | x == x', IntSet.notMember (vnIndex x) (freeVars f)
+      = loop vars f
 
     -- cannot eta-collapse, do abstraction as usual
-    loop exts tm = scAbstractExts sc (reverse exts) tm
+    loop vars tm = scLambdaList sc (reverse vars) tm
 
 
 -- | Generalize over the given list of external constants by wrapping
