@@ -13,6 +13,7 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Prelude
   ( module SAWCore.Prelude
+  , module SAWCore.Prelude.Module
   , module SAWCore.Prelude.Constants
   ) where
 
@@ -20,6 +21,7 @@ import qualified Data.Map as Map
 
 import SAWCore.ParserUtils
 import SAWCore.Prelude.Constants
+import SAWCore.Prelude.Module
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue
 import SAWCore.Term.Pretty (showTerm)
@@ -27,9 +29,7 @@ import SAWCore.Term.Pretty (showTerm)
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue)
 
-
-$(defineModuleFromFileWithFns
-  "preludeModule" "scLoadPreludeModule" "saw-core/prelude/Prelude.sawcore")
+$(defineModuleFns preludeModule "scLoadPreludeModule")
 
 -- | Given two terms, compute a term representing a decidable
 --   equality test between them.  The terms are assumed to

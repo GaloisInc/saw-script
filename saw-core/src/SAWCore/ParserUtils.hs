@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 {- |
@@ -12,14 +10,11 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.ParserUtils
- ( -- * Parser utilities.
-   readModuleFromFile
-   -- * Template haskell utilities.
- , DecWriter
+ ( -- * Template haskell utilities.
+   DecWriter
  , runDecWriter
- , defineModuleFromFile
  , declareSharedModuleFns
- , defineModuleFromFileWithFns
+ , defineModuleFns
  , tcInsertModule -- re-exported for code using defineModuleFromFileWithFns
  ) where
 
@@ -29,35 +24,12 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.List (intercalate)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.IO as TLIO
 import Language.Haskell.TH
-#if MIN_VERSION_template_haskell(2,7,0)
-import Language.Haskell.TH.Syntax (qAddDependentFile)
-#endif
-import System.Directory
-import qualified Language.Haskell.TH.Syntax as TH (lift)
 
 import SAWCore.Name (ModuleName, moduleNamePieces)
 import qualified SAWCore.Parser.AST as Un
-import qualified SAWCore.Parser.Grammar as Un
 import SAWCore.SharedTerm
 import SAWCore.Typechecker (tcInsertModule)
-
--- | Parse an untyped module declaration from a (lazy) Text
-readModule :: FilePath -> FilePath -> TL.Text -> Un.Module
-readModule base path b =
-  case Un.parseSAW base path b of
-    Right m -> m
-    Left err -> error $ "Module parsing failed:\n" ++ show err
-
--- | Parse an untyped module from file
-readModuleFromFile :: FilePath -> IO Un.Module
-readModuleFromFile path = do
-  base <- getCurrentDirectory
-  txt <- TLIO.readFile path
-  return $ readModule base path txt
-
 
 -- | Monad for defining TH declarations
 type DecWriter = StateT [Dec] Q
@@ -69,28 +41,6 @@ runDecWriter m = execStateT m []
 -- | Emit a list of TH declarations, adding them to the current list
 addDecs :: [Dec] -> DecWriter ()
 addDecs decs = modify (++ decs)
-
--- | Record @path@ as a dependency for this compilation
-addDep :: FilePath -> DecWriter ()
-#if MIN_VERSION_template_haskell(2,7,0)
-addDep path = lift $ qAddDependentFile path
-#else
-addDep path = return ()
-#endif
-
--- | @defineModuleFromFile str file@ reads an untyped module from @file@, adds a
--- TH declaration of the name @str@ that is bound to that module at runtime, and
--- also returns the module at TH time
-defineModuleFromFile :: String -> FilePath -> DecWriter Un.Module
-defineModuleFromFile decNameStr path = do
-  addDep path
-  m <- lift $ runIO $ readModuleFromFile path
-  let decName = mkName decNameStr
-  moduleTp <- lift $ [t| Un.Module |]
-  body <- lift $ TH.lift m
-  addDecs [ SigD decName moduleTp
-          , FunD decName [ Clause [] (NormalB body) [] ]]
-  return m
 
 
 -- | Return the type
@@ -193,24 +143,22 @@ declareSharedModuleFns m =
        declareCtorFun (Un.moduleName m) c tp
 
 
--- | @defineModuleFromFileWithFns str str2 file@ reads an untyped module from
--- @file@, adds a TH declaration of the name @str@ that is bound to that module
--- at runtime, and then calls 'declareSharedModuleFns' to add declarations of
--- Haskell term-building functions for each definition, constructor, and
--- datatype declared in the module that is loaded. It also defines the function
+-- | @defineModuleFns m str@ calls 'declareSharedModuleFns' to add
+-- declarations of Haskell term-building functions for each
+-- definition, constructor, and datatype declared in module @m@.
+-- It also defines the function
 --
--- > str2 :: SharedContext -> IO ()
+-- > str :: SharedContext -> IO ()
 --
--- that will load the module @str@ into the current 'SharedContext'.
-defineModuleFromFileWithFns :: String -> String -> FilePath -> Q [Dec]
-defineModuleFromFileWithFns mod_name mod_loader path =
+-- that will load the module @m@ into the current 'SharedContext'.
+defineModuleFns :: Un.Module -> String -> Q [Dec]
+defineModuleFns m mod_loader =
   runDecWriter $
-  do m <- defineModuleFromFile mod_name path
-     declareSharedModuleFns m
+  do declareSharedModuleFns m
      let sc = mkName "sc"
      load_tp <- lift $ [t| SharedContext -> IO () |]
      load_body <-
-       lift $ [e| tcInsertModule $(varE sc) $(varE $ mkName mod_name) |]
+       lift $ [e| tcInsertModule $(varE sc) m |]
      addDecs [ SigD (mkName mod_loader) load_tp
              , FunD (mkName mod_loader) [ Clause [VarP sc] (NormalB load_body) [] ]
              ]

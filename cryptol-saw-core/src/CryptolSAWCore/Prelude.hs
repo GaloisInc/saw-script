@@ -11,11 +11,13 @@ Portability : non-portable (language extensions)
 
 module CryptolSAWCore.Prelude
   ( module CryptolSAWCore.Prelude
+  , cryptolModule
   , scLoadPreludeModule
   ) where
 
 import SAWCore.Prelude
 import SAWCore.ParserUtils
 
-$(defineModuleFromFileWithFns
-  "cryptolModule" "scLoadCryptolModule" "cryptol-saw-core/saw/Cryptol.sawcore")
+import CryptolSAWCore.Module (cryptolModule)
+
+$(defineModuleFns cryptolModule "scLoadCryptolModule")
