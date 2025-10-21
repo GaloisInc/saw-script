@@ -49,6 +49,7 @@ module SAWScript.ValueOps (
 
 import Prelude hiding (fail)
 
+import Control.Monad (zipWithM)
 import Control.Monad.Catch (MonadThrow(..), try)
 import Control.Monad.State (get, gets, modify, put)
 import qualified Control.Exception as X
@@ -134,13 +135,25 @@ bracketTopLevel acquire release action =
         Left (bad :: X.SomeException) -> release resource >> throwM bad
         Right good -> release resource >> pure good
 
+-- Note: this is used only by restoreCheckpoint and restoreCheckpoint is
+-- not really expected to work.
+--
+-- This is good, because whatever this function is doing does not seem
+-- to make a great deal of sense. (Which has become more overt with recent
+-- reorgs and cleanup, but hasn't itself changed.)
 combineRW :: TopLevelCheckpoint -> TopLevelRW -> IO TopLevelRW
-combineRW (TopLevelCheckpoint chk scc) rw =
-  do cenv' <- CEnv.combineCryptolEnv (rwCryptol chk) (rwCryptol rw)
+combineRW (TopLevelCheckpoint chk scc) rw = do
+     let CryptolEnvStack chk'cenv chk'cenvs = rwGetCryptolEnvStack chk
+         CryptolEnvStack rw'cenv rw'cenvs = rwGetCryptolEnvStack rw
+     -- Caution: this merge may have unexpected results if the
+     -- number of scopes doesn't match. But, it doesn't make sense
+     -- to do that in the first place. Caveat emptor...
+     cenv' <- CEnv.combineCryptolEnv chk'cenv rw'cenv
+     cenvs' <- zipWithM CEnv.combineCryptolEnv chk'cenvs rw'cenvs
      sc' <- restoreSharedContext scc (rwSharedContext rw)
-     return chk{ rwCryptol = cenv'
-               , rwSharedContext = sc'
-               }
+     let cryenv' = CryptolEnvStack cenv' cenvs'
+     let chk' = rwSetCryptolEnvStack cryenv' chk
+     return chk' { rwSharedContext = sc' }
 
 -- | Represents the mutable state of the TopLevel monad
 --   that can later be restored.

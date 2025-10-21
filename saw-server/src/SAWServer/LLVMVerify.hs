@@ -16,7 +16,7 @@ import qualified Data.Map as Map
 import SAWCentral.Crucible.LLVM.Builtins
     ( llvm_unsafe_assume_spec, llvm_verify )
 import SAWCentral.Crucible.LLVM.X86 ( llvm_verify_x86 )
-import SAWCentral.Value (rwCryptol)
+import SAWCentral.Value (rwGetCryptolEnv)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
@@ -57,7 +57,7 @@ llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scr
             state <- Argo.getState
             mod <- getLLVMModule modName
             let bic = view sawBIC state
-                cenv = rwCryptol (view sawTopLevelRW state)
+                cenv = rwGetCryptolEnv (view sawTopLevelRW state)
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts
             setup <- compileLLVMContract fileReader bic ghostEnv cenv <$>
@@ -113,7 +113,7 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
             state <- Argo.getState
             mod <- getLLVMModule modName
             let bic = view  sawBIC state
-                cenv = rwCryptol (view sawTopLevelRW state)
+                cenv = rwGetCryptolEnv (view sawTopLevelRW state)
                 allocs = map (\(X86Alloc name size) -> (name, size)) globals
             proofScript <- interpretProofScript script
             fileReader <- Argo.getFileReader

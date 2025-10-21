@@ -63,7 +63,7 @@ import SAWCentral.Options (processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), SAWSimpset,JavaCodebase(..))
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), CryptolEnvStack(..), rwModifyCryptolEnv)
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
@@ -245,7 +245,7 @@ initialState readFileFn =
          rw = TopLevelRW
                 { rwValueInfo = mempty
                 , rwTypeInfo = mempty
-                , rwCryptol = cenv
+                , rwCryptol = CryptolEnvStack cenv []
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty
                 , rwLocalEnv = []
@@ -457,8 +457,8 @@ getServerValEither (SAWEnv serverEnv) n =
 
 bindCryptolVar :: Text -> TypedTerm -> Argo.Command SAWState ()
 bindCryptolVar x t =
-  do Argo.modifyState $ over sawTopLevelRW $ \rw ->
-       rw { rwCryptol = bindTypedTerm (Cryptol.mkIdent x, t) (rwCryptol rw) }
+  do Argo.modifyState $ over sawTopLevelRW $ rwModifyCryptolEnv $ \cenv ->
+       bindTypedTerm (Cryptol.mkIdent x, t) cenv
 
 getJVMClass :: ServerName -> Argo.Command SAWState JSS.Class
 getJVMClass n =

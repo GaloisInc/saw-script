@@ -490,14 +490,14 @@ interpretExpr expr =
           return $ VInteger z
       SS.Code pos str -> do
           sc <- getSharedContext
-          cenv <- fmap rwCryptol getMergedEnv
+          cenv <- getCryptolEnv
           --io $ putStrLn $ "Parsing code: " ++ show str
           --showCryptolEnv' cenv
           let str' = toInputText pos str
           t <- io $ CEnv.parseTypedTerm sc cenv str'
           return (VTerm t)
       SS.CType pos str -> do
-          cenv <- fmap rwCryptol getMergedEnv
+          cenv <- getCryptolEnv
           let str' = toInputText pos str
           s <- io $ CEnv.parseSchema cenv str'
           return (VType s)
@@ -733,12 +733,11 @@ interpretDoStmt stmt =
           liftTopLevel $ do
             sc <- getSharedContext
             rw <- getMergedEnv
+            let ce = rwGetCryptolEnv rw
 
             let str' = toInputText spos str
-            ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) str'
-            -- FIXME: Local bindings get saved into the global cryptol environment here.
-            -- We should change parseDecls to return only the new bindings instead.
-            putTopLevelRW $ rw{rwCryptol = ce'}
+            ce' <- io $ CEnv.parseDecls sc ce str'
+            putTopLevelRW $ rwSetCryptolEnv ce' rw
           -- return the current local environment unchanged
           liftTopLevel getLocalEnv
       SS.StmtImport _ _ ->
@@ -904,21 +903,23 @@ interpretTopStmt printBinds stmt = do
     SS.StmtCode _ spos str ->
       liftTopLevel $ do
          sc <- getSharedContext
+         let cenv = rwGetCryptolEnv rw
          --io $ putStrLn $ "Processing toplevel code: " ++ show str
          --showCryptolEnv
-         cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ toInputText spos str
-         putTopLevelRW $ rw { rwCryptol = cenv' }
+         cenv' <- io $ CEnv.parseDecls sc cenv $ toInputText spos str
+         putTopLevelRW $ rwSetCryptolEnv cenv' rw
          --showCryptolEnv
 
     SS.StmtImport _ imp ->
       liftTopLevel $ do
          sc <- getSharedContext
+         let cenv = rwGetCryptolEnv rw
          --showCryptolEnv
          let mLoc = iModule imp
              qual = iAs imp
              spec = iSpec imp
-         cenv' <- io $ CEnv.importCryptolModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec
-         putTopLevelRW $ rw { rwCryptol = cenv' }
+         cenv' <- io $ CEnv.importCryptolModule sc cenv mLoc qual CEnv.PublicAndPrivate spec
+         putTopLevelRW $ rwSetCryptolEnv cenv' rw
          --showCryptolEnv
 
     SS.StmtTypedef _ _ name ty ->
@@ -1063,7 +1064,7 @@ buildTopLevelEnv proxy opts scriptArgv =
        let rw0 = TopLevelRW
                    { rwValueInfo  = primValueEnv opts bic
                    , rwTypeInfo   = primNamedTypeEnv
-                   , rwCryptol    = ce0
+                   , rwCryptol    = CryptolEnvStack ce0 []
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
                    , rwLocalEnv = []
@@ -2067,7 +2068,7 @@ print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
-  cenv <- fmap rwCryptol getTopLevelRW
+  cenv <- getCryptolEnv'
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"

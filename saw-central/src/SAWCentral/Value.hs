@@ -61,8 +61,29 @@ module SAWCentral.Value (
     mergeLocalEnv,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter, and by getCryptolEnv
     getMergedEnv, getMergedEnv',
-    -- used by SAWCentral.Crucible.LLVM.FFI
-    getCryptolEnv,
+    -- used by SAWCentral.Builtins, SAWScript.ValueOps, SAWScript.Interpreter,
+    -- SAWServer.SAWServer
+    CryptolEnvStack(..),
+    -- used by SAWCentral.Crucible.LLVM.FFI, SAWCentral.Crucible.LLVM.X86,
+    -- SAWCentral.Crucible.MIR.Builtins, SAWCentral.Builtins,
+    -- SAWScript.Interpreter, SAWScript.REPL.Monad
+    getCryptolEnv, getCryptolEnv',
+    -- used by SAWCentral.Builtins
+    getCryptolEnvStack,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWScript.REPL.Monad
+    setCryptolEnv,
+    -- used by SAWScript.REPL.Monad, SAWServer.Eval,
+    -- SAWServer.ProofScript, SAWServer.CryptolSetup, SAWServer.CryptolExpression,
+    -- SAWServer.LLVMVerify, SAWServer.JVMVerify, SAWServer.MIRVerify, SAWServer.Yosys,
+    rwGetCryptolEnv,
+    -- used by SAWScript.ValueOps
+    rwGetCryptolEnvStack,
+    -- used by SAWServer.CryptolSetup
+    rwSetCryptolEnv,
+    -- used by SAWScript.ValueOps
+    rwSetCryptolEnvStack,
+    -- used by SAWScript.REPL.Monad, SAWServer.SAWServer, SAWServer.Yosys
+    rwModifyCryptolEnv,
     -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
     --    SAWServer.SAWServer
     TopLevelRO(..),
@@ -220,6 +241,7 @@ import qualified Data.AIG as AIG
 
 import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
 
+import SAWCentral.Panic (panic)
 import SAWCentral.Trace (Trace)
 import qualified SAWCentral.Trace as Trace
 
@@ -736,6 +758,12 @@ evaluateTypedTerm _sc (TypedTerm tp _) =
 
 -- TopLevel Monad --------------------------------------------------------------
 
+-- | The full Cryptol environment. We maintain a stack of plain
+--   Cryptol environments and push/pop them as we enter and leave
+--   scopes; otherwise the Cryptol environment doesn't track SAWScript
+--   scopes and horribly confusing wrong things happen.
+data CryptolEnvStack = CryptolEnvStack CEnv.CryptolEnv [CEnv.CryptolEnv]
+
 -- | Entry in the interpreter's local (as opposed to global) variable
 --   environment.
 --
@@ -786,10 +814,113 @@ getMergedEnv' env = do
     rw <- getTopLevelRW
     liftIO $ mergeLocalEnv sc env rw
 
+-- | Get the current Cryptol environment.
 getCryptolEnv :: TopLevel CEnv.CryptolEnv
 getCryptolEnv = do
-  env <- getMergedEnv
-  return $ rwCryptol env
+    env <- getMergedEnv
+    let CryptolEnvStack ce _ = rwCryptol env
+    return ce
+
+-- | Get the current Cryptol environment.
+--
+--   Variant version that doesn't call getMergedEnv, to avoid
+--   unexpected behavioral changes in this commit.
+getCryptolEnv' :: TopLevel CEnv.CryptolEnv
+getCryptolEnv' = do
+    CryptolEnvStack ce _ <- gets rwCryptol
+    return ce
+
+-- | Get the current full stack of Cryptol environments.
+getCryptolEnvStack :: TopLevel CryptolEnvStack
+getCryptolEnvStack =
+    gets rwCryptol
+
+-- | Update the current Cryptol environment.
+--
+--   Overwrites the previous value; the caller must ensure that the
+--   value applied has not become stale.
+setCryptolEnv :: CEnv.CryptolEnv -> TopLevel ()
+setCryptolEnv ce = do
+    CryptolEnvStack _ ces <- gets rwCryptol
+    modify (\rw -> rw { rwCryptol = CryptolEnvStack ce ces })
+
+-- | Get the current Cryptol environment from a TopLevelRW.
+--
+--   (Accessor method for use in SAWServer and SAWScript.REPL, which
+--   have their own monads and thus different access to TopLevelRW.)
+--
+--   XXX: SAWServer shouldn't be using, or need to use, TopLevelRW at
+--   all.
+rwGetCryptolEnv :: TopLevelRW -> CEnv.CryptolEnv
+rwGetCryptolEnv rw =
+    let CryptolEnvStack ce _ = rwCryptol rw in
+    ce
+
+-- | Get the current full stack of Cryptol environments from a
+--   TopLevelRW. Used by the checkpointing logic, in a fairly dubious
+--   way. (XXX)
+rwGetCryptolEnvStack :: TopLevelRW -> CryptolEnvStack
+rwGetCryptolEnvStack rw =
+    rwCryptol rw
+
+-- | Update the current Cryptol environment in a TopLevelRW.
+--
+--   Overwrites the previous environment; caller must ensure they
+--   haven't done anything to make the value they're working with
+--   stale.
+--
+--   (Accessor method for use in SAWServer and SAWScript.REPL, which
+--   have their own monads and thus different access to TopLevelRW.)
+--
+--   XXX: SAWServer shouldn't be using, or need to use, TopLevelRW at
+--   all.
+rwSetCryptolEnv :: CEnv.CryptolEnv -> TopLevelRW -> TopLevelRW
+rwSetCryptolEnv ce rw =
+    let CryptolEnvStack _ ces = rwCryptol rw in
+    rw { rwCryptol = CryptolEnvStack ce ces }
+
+-- | Update the current full stack of Cryptol environments in a
+--   TopLevelRW. Used by the checkpointing logic, in a fairly
+--   dubious way. (XXX)
+--
+--   Overwrites the previous stack; caller must ensure they haven't
+--   done anything to make the value they're working with stale.
+rwSetCryptolEnvStack :: CryptolEnvStack -> TopLevelRW -> TopLevelRW
+rwSetCryptolEnvStack cryenvs rw =
+    rw { rwCryptol = cryenvs }
+
+-- | Modify the current Cryptol environment in a TopLevelRW.
+--
+--   (Accessor method for use in SAWServer and SAWScript.REPL, which
+--   have their own monads and thus different access to TopLevelRW.)
+--
+--   XXX: SAWServer shouldn't be using, or need to use, TopLevelRW at
+--   all.
+rwModifyCryptolEnv :: (CEnv.CryptolEnv -> CEnv.CryptolEnv) -> TopLevelRW -> TopLevelRW
+rwModifyCryptolEnv f rw =
+    let CryptolEnvStack ce ces = rwCryptol rw
+        ce' = f ce
+    in
+    rw { rwCryptol = CryptolEnvStack ce' ces }
+
+-- | Push a new scope on the Cryptol environment stack.
+--
+--   (Not used yet.)
+_cryptolPush :: CryptolEnvStack -> CryptolEnvStack
+_cryptolPush (CryptolEnvStack ce ces) =
+    -- Each entry is the whole environment, so duplicate the top entry
+    CryptolEnvStack ce (ce : ces)
+
+-- | Pop the current scope off the Cryptol environment stack.
+--
+--   (Not used yet.)
+_cryptolPop :: CryptolEnvStack -> CryptolEnvStack
+_cryptolPop (CryptolEnvStack _ ces) =
+    -- Discard the top
+    case ces of
+        [] -> panic "cryptolPop" ["Cryptol environment scope stack ran out"]
+        ce : ces' -> CryptolEnvStack ce ces'
+
 
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
@@ -841,7 +972,7 @@ data TopLevelRW =
   , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
 
     -- | The Cryptol naming environment.
-  , rwCryptol    :: CEnv.CryptolEnv
+  , rwCryptol    :: CryptolEnvStack
 
     -- | The current execution position. This is only valid when the
     --   interpreter is calling out into saw-central to execute a
@@ -1183,11 +1314,11 @@ extendEnv sc pos name rb ty doc v rw =
            pure ce
      let valenv = rwValueInfo rw
          valenv' = M.insert name (pos, SS.Current, rb, ty, v, doc) valenv
-     pure $ rw { rwValueInfo = valenv', rwCryptol = ce' }
+     pure $ rw { rwValueInfo = valenv', rwCryptol = CryptolEnvStack ce' ces }
   where
     ident = T.mkIdent name
     modname = T.packModName [name]
-    ce = rwCryptol rw
+    CryptolEnvStack ce ces = rwCryptol rw
 
 typedTermOfString :: SharedContext -> String -> IO TypedTerm
 typedTermOfString sc str =

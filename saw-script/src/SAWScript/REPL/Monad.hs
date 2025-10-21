@@ -99,7 +99,8 @@ import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
 import SAWCentral.Value
   ( AIGProxy(..), mergeLocalEnv
-  , ProofScript(..), showsProofResult,
+  , ProofScript(..), showsProofResult
+  , rwGetCryptolEnv, rwModifyCryptolEnv
   )
 
 import SAWScript.Interpreter (buildTopLevelEnv)
@@ -456,10 +457,13 @@ setModuleEnv :: M.ModuleEnv -> REPL ()
 setModuleEnv me = modifyCryptolEnv (\ce -> ce { eModuleEnv = me })
 
 getCryptolEnv :: REPL CryptolEnv
-getCryptolEnv = rwCryptol `fmap` getTopLevelRW
+getCryptolEnv = do
+    rw <- getTopLevelRW
+    return $ rwGetCryptolEnv rw
 
 modifyCryptolEnv :: (CryptolEnv -> CryptolEnv) -> REPL ()
-modifyCryptolEnv f = modifyTopLevelRW (\rw -> rw { rwCryptol = f (rwCryptol rw) })
+modifyCryptolEnv f =
+    modifyTopLevelRW $ rwModifyCryptolEnv f
 
 setCryptolEnv :: CryptolEnv -> REPL ()
 setCryptolEnv x = modifyCryptolEnv (const x)

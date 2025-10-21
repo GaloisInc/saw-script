@@ -437,6 +437,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       opts <- getOptions
       basic_ss <- getBasicSS
       rw <- getTopLevelRW
+      cenv <- getCryptolEnv'
       sym <- liftIO $ newSAWCoreExprBuilder sc False
       mdMap <- liftIO $ newIORef mempty
       SomeOnlineBackend bak <- liftIO $
@@ -458,7 +459,6 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
-      let cenv = rwCryptol rw
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEnc sfs) $ cryptolUninterpreted path nm cenv "aesenc"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted path nm cenv "aesenclast"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesDec sfs) $ cryptolUninterpreted path nm cenv "aesdec"

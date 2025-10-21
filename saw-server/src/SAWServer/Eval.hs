@@ -80,7 +80,7 @@ eval ::
 eval f params = do
   state <- Argo.getState
   fileReader <- Argo.getFileReader
-  let cenv = SV.rwCryptol (view sawTopLevelRW state)
+  let cenv = SV.rwGetCryptolEnv (view sawTopLevelRW state)
       bic = view sawBIC state
   cexp <- getCryptolExpr $ evalExpr params
   (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv cexp
