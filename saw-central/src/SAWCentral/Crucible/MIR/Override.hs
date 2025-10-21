@@ -1024,9 +1024,9 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
            Mir.TyArray _ len -> do
              let elemSz = 1      -- TODO: hardcoded size=1
              let lenWord = fromIntegral len :: Word
-             ag <- liftIO $ buildMirAggregateArray sym elemSz innerShp lenWord [0 .. len - 1] $
-               \_off i -> do
-                 i_sym <- usizeBvLit sym i
+             ag <- liftIO $ generateMirAggregateArray sym elemSz innerShp lenWord $
+               \i -> do
+                 i_sym <- usizeBvLit sym (fromIntegral i)
                  referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
                  Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
              let arrShp = ArrayShape referentArrayMirTy

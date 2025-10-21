@@ -37,6 +37,7 @@ module SAWCentral.Crucible.MIR.TypeShape
   , zipMirAggregates
   , arrayAgElemShapes
   , buildMirAggregateArray
+  , generateMirAggregateArray
   , traverseMirAggregateArray
   , accessMirAggregateArray
   , accessMirAggregateArray'
@@ -701,6 +702,20 @@ buildMirAggregateArray sym elemSz elemShp len xs f = do
         Nothing -> panic "buildMirAggregateArray"
           ["impossible: arrayAgElemShapes always uses the input TypeShape"]
       f off x
+
+generateMirAggregateArray ::
+  (IsSymInterface sym, Monad m, MonadFail m) =>
+  sym ->
+  -- | Size of array element type
+  Word ->
+  -- | `TypeShape` of array element type
+  TypeShape tp ->
+  -- | Array length
+  Word ->
+  (Word -> m (RegValue sym tp)) ->
+  m (MirAggregate sym)
+generateMirAggregateArray sym elemSz elemShp len f = do
+  buildMirAggregateArray sym elemSz elemShp len (init [0 .. len]) $ \_off i -> f i
 
 traverseMirAggregateArray ::
   forall sym m tp.
