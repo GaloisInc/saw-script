@@ -785,13 +785,12 @@ ctxCtorArgBindings ::
   SharedContext ->
   Term {- ^ data type applied to ExtCns params -} ->
   [(VarName, CtorArg)] ->
-  IO [ExtCns Term]
+  IO [(VarName, Term)]
 ctxCtorArgBindings _ _ [] = return []
 ctxCtorArgBindings sc d_params ((x, arg) : args) =
   do tp <- ctxCtorArgType sc d_params arg
      rest <- ctxCtorArgBindings sc d_params args
-     let ec = EC x tp
-     return (ec : rest)
+     return ((x, tp) : rest)
 
 -- | Internal: Compute the type of a constructor from the name of its
 -- datatype and its 'CtorArgStruct'
@@ -801,7 +800,7 @@ ctxCtorType sc d (CtorArgStruct{..}) =
      d_params <- scConstApply sc d params
      bs <- ctxCtorArgBindings sc d_params ctorArgs
      d_params_ixs <- scApplyAll sc d_params ctorIndices
-     body <- scGeneralizeExts sc bs d_params_ixs
+     body <- scPiList sc bs d_params_ixs
      scPiList sc ctorParams body
 
 -- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
