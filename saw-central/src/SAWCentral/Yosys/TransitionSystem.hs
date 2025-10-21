@@ -43,6 +43,7 @@ import Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as TraversableFC
 
+import qualified SAWCore.Name as SC
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
 
@@ -118,10 +119,10 @@ ecBindingsOfFields ::
   Map Text SC.Term {- ^ Mapping from field names to SAWCore types -} ->
   SequentialFields ctx {- ^ Mapping from field names to What4 base types -} ->
   W4.SymStruct (W4.B.ExprBuilder n st fs) ctx {- ^ What4 record to deconstruct -} ->
-  m (Map Text (SC.ExtCns SC.Term, SimW4.SValue (W4.B.ExprBuilder n st fs)))
+  m (Map Text (SC.VarName, SC.Term, SimW4.SValue (W4.B.ExprBuilder n st fs)))
 ecBindingsOfFields sym sc pfx fs s inp = fmap Map.fromList . forM (Map.assocs fs) $ \(baseName, ty) -> do
   let nm = pfx <> baseName
-  ec <- liftIO $ SC.scFreshEC sc nm ty
+  vn <- liftIO $ SC.scFreshVarName sc nm
   val <- case s ^. sequentialFieldsIndex . at nm of
     Just (Some idx)
       | sf <- s ^. sequentialFields . ixF' idx
@@ -130,7 +131,7 @@ ecBindingsOfFields sym sc pfx fs s inp = fmap Map.fromList . forM (Map.assocs fs
           inpExpr <- liftIO $ W4.structField sym inp idx
           pure . Sim.VWord $ W4.DBV inpExpr
     _ -> throw $ YosysErrorTransitionSystemMissingField nm
-  pure (baseName, (ec, val))
+  pure (baseName, (vn, ty, val))
 
 -- | Given a sequential circuit and a query, construct and write to
 -- disk a Sally transition system encoding that query.
@@ -172,7 +173,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
   let stateNames = TraversableFC.fmapFC (Const . W4.safeSymbol . Text.unpack . view sequentialFieldName) $ stateFields ^. sequentialFields
   let lookupBinding nm bindings =
         case Map.lookup nm bindings of
-          Just (ec, _) -> SC.scVariable sc (SC.ecName ec) (SC.ecType ec)
+          Just (vn, tp, _) -> SC.scVariable sc vn tp
           Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
   let ts = W4.TransitionSystem
         { W4.inputReprs = inputReprs
@@ -187,7 +188,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             wnat <- SC.scNat sc 8
             cyclePred <- SC.scBvEq sc wnat cycleVal zero
             ref <- IORef.newIORef Map.empty
-            let args = Map.unions $ fmap (Map.fromList . fmap (\(ec, x) -> (SC.ecVarIndex ec, x)) . Map.elems)
+            let args = Map.unions $ fmap (Map.fromList . fmap (\(vn, _ty, x) -> (SC.vnIndex vn, x)) . Map.elems)
                   [ curInternalBindings
                   ]
             sval <- SimW4.w4SolveBasic sym sc Map.empty args ref Set.empty cyclePred
@@ -212,7 +213,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             inps <- fmap Map.fromList . forM (Map.assocs $ sequential ^. yosysSequentialInputWidths) $ \(nm, _) ->
               let bindings = if Set.member nm fixedInputs then curFixedInputBindings else inputBindings
               in (nm,) <$> lookupBinding nm bindings
-            states <- forM curBindings $ \(ec, _) -> SC.scVariable sc (SC.ecName ec) (SC.ecType ec)
+            states <- forM curBindings $ \(vn, tp, _) -> SC.scVariable sc vn tp
             inpst <- cryptolRecord sc states
             domainRec <- cryptolRecord sc $ Map.insert "__state__" inpst inps
             codomainRec <- liftIO $ SC.scApply sc (sequential ^. yosysSequentialTerm . SC.ttTermLens) domainRec
@@ -243,7 +244,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             identity <- SC.scBool sc True
             conj <- foldM (SC.scAnd sc) identity $ stPreds <> outputPreds <> fixedInputPreds <> [cycleIncrement]
             ref <- IORef.newIORef Map.empty
-            let args = Map.unions $ fmap (Map.fromList . fmap (\(ec, x) -> (SC.ecVarIndex ec, x)) . Map.elems)
+            let args = Map.unions $ fmap (Map.fromList . fmap (\(vn, _tp, x) -> (SC.vnIndex vn, x)) . Map.elems)
                   [ inputBindings
                   , curBindings
                   , curFixedInputBindings
@@ -278,7 +279,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             outputRec <- cryptolRecord sc outputs
             result <- liftIO $ SC.scApplyAll sc (query ^. SC.ttTermLens) [cycleVal, fixedInputRec, outputRec]
             ref <- IORef.newIORef Map.empty
-            let args = Map.unions $ fmap (Map.fromList . fmap (\(ec, x) -> (SC.ecVarIndex ec, x)) . Map.elems)
+            let args = Map.unions $ fmap (Map.fromList . fmap (\(vn, _ty, x) -> (SC.vnIndex vn, x)) . Map.elems)
                   [ curOutputBindings
                   , curFixedInputBindings
                   , curInternalBindings
