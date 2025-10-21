@@ -1513,8 +1513,8 @@ betaNormalize sc t0 =
       let n = length (zip args params)
       if n == 0 then go3 t else do
         body' <- go body
-        let ecs = map (uncurry EC) (drop n params)
-        f' <- scAbstractExts sc ecs body'
+        let vars = drop n params
+        f' <- scLambdaList sc vars body'
         args' <- mapM go args
         let sub = IntMap.fromList [(vnIndex nm, arg) | (arg, (nm, _)) <- zip args params]
         f'' <- scInstantiateExt sc sub f'
