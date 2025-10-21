@@ -1068,18 +1068,16 @@ resolveSAWTerm mcc tp tm =
         Right mirTy -> do
           Some (shp :: TypeShape tp) <- pure $ tyToShape col mirTy
 
-          let sz' = fromInteger sz
+          let szInt = fromInteger sz :: Int
+          let szWord = fromInteger sz :: Word
 
           let elemSz = 1      -- TODO: hardcoded size=1
-          vals <- forM [0 .. sz' - 1] $ \i -> do
+          vals <- forM [0 .. szInt - 1] $ \i -> do
             tm' <- doIndex i
             resolveSAWTerm mcc tp' tm'
-          ag <- buildMirAggregateWithVal
-            sym
-            [AgElemShape (fromInteger i * elemSz) elemSz shp | i <- [0 .. sz - 1]]
-            vals
-            (\_ _ _ rv -> return rv)
-          let arrShp = ArrayShape (Mir.TyArray mirTy sz') mirTy elemSz shp (fromIntegral sz)
+          ag <- buildMirAggregateArrayWithVal sym elemSz shp szWord vals $
+            \_ rv -> return rv
+          let arrShp = ArrayShape (Mir.TyArray mirTy szInt) mirTy elemSz shp szWord
           pure $ MIRVal arrShp ag
     Cryptol.TVStream _tp' ->
       fail "resolveSAWTerm: unsupported infinite stream type"
@@ -1279,7 +1277,7 @@ equalValsPred cc mv1 mv2 =
     goTy (TupleShape _ elems) ag1 ag2 =
       goAg elems ag1 ag2
     goTy (ArrayShape _ _ elemSz shp len) ag1 ag2 =
-      let elems = [AgElemShape (i * elemSz) elemSz shp | i <- map (subtract 1) [1 .. len]] in
+      let elems = arrayAgElemShapes elemSz shp len in
       goAg elems ag1 ag2
     goTy (StructShape _ _ fldShp) fldAssn1 fldAssn2 =
       goFldAssn fldShp fldAssn1 fldAssn2
