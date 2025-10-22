@@ -225,7 +225,7 @@ span.spaces    { background: white }
 <span class="lineno">  206 </span><span class="spaces">     </span><span class="nottickedoff">decl' &lt;- do</span>
 <span class="lineno">  207 </span><span class="spaces">       </span><span class="nottickedoff">let primsAvail = rwPrimsAvail rw</span>
 <span class="lineno">  208 </span><span class="spaces">           </span><span class="nottickedoff">-- XXX it should not be necessary to do this munging</span>
-<span class="lineno">  209 </span><span class="spaces">           </span><span class="nottickedoff">Environ varenv tyenv _cryenv = rwEnviron rw</span>
+<span class="lineno">  209 </span><span class="spaces">           </span><span class="nottickedoff">Environ varenv tyenv _cryenvs = rwEnviron rw</span>
 <span class="lineno">  210 </span><span class="spaces">           </span><span class="nottickedoff">squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)</span>
 <span class="lineno">  211 </span><span class="spaces">           </span><span class="nottickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span>
 <span class="lineno">  212 </span><span class="spaces">           </span><span class="nottickedoff">tyenv' = ScopedMap.flatten tyenv</span>
@@ -426,7 +426,7 @@ span.spaces    { background: white }
 <span class="lineno">  407 </span><span class="spaces">       </span><span class="nottickedoff">-- Note: there's no rebindable builtins and thus no way to</span>
 <span class="lineno">  408 </span><span class="spaces">       </span><span class="nottickedoff">-- attach help text to anything rebindable, so we can ignore</span>
 <span class="lineno">  409 </span><span class="spaces">       </span><span class="nottickedoff">-- the rebindables.</span>
-<span class="lineno">  410 </span><span class="spaces">       </span><span class="nottickedoff">let Environ varenv _tyenv _cryenv = rwEnviron rw</span>
+<span class="lineno">  410 </span><span class="spaces">       </span><span class="nottickedoff">let Environ varenv _tyenv _cryenvs = rwEnviron rw</span>
 <span class="lineno">  411 </span><span class="spaces">       </span><span class="nottickedoff">case ScopedMap.lookup (Text.pack cmd) varenv of</span>
 <span class="lineno">  412 </span><span class="spaces">         </span><span class="nottickedoff">Just (_pos, _lc, _ty, _v, Just doc) -&gt;</span>
 <span class="lineno">  413 </span><span class="spaces">           </span><span class="nottickedoff">io $ mapM_ TextIO.putStrLn doc</span>
