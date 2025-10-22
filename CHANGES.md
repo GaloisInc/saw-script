@@ -6,6 +6,9 @@ This release supports [version
 
 ## Changes
 
+* The `cryptol_load` and `cryptol_prims` commands now fail if used
+  in a nested scope, instead of behaving strangely.
+
 * The old behavior of SAWScript where top-level names could be
   arbitrarily rebound, such that existing uses would see the updated
   value, has been superseded. Among other problems, it wasn't
