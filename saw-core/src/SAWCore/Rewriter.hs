@@ -555,9 +555,8 @@ scExpandRewriteRules sc rs =
 scDefRewriteRules :: SharedContext -> Def -> IO [RewriteRule a]
 scDefRewriteRules sc d =
   case defBody d of
-    Just body ->
-      do lhs <- scDefTerm sc d
-         rhs <- scSharedTerm sc body
+    Just rhs ->
+      do lhs <- scConst sc (defName d)
          scExpandRewriteRules sc [mkRewriteRule [] lhs rhs False Nothing]
     Nothing ->
       pure []

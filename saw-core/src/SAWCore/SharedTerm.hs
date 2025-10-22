@@ -30,8 +30,6 @@ module SAWCore.SharedTerm
     -- * Shared terms
   , Term(..)
   , TermIndex
-  , scSharedTerm
-  , unshare
   , scImport
   , alphaEquiv
   , alistAllFields
@@ -1437,30 +1435,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         StringLit{} -> lift $ scStringType sc
 
 --------------------------------------------------------------------------------
-
--- | The inverse function to @scSharedTerm@.
-unshare :: Term -> Term
-unshare t0 = State.evalState (go t0) Map.empty
-  where
-    go :: Term -> State.State (Map TermIndex Term) Term
-    go (Unshared t) = Unshared <$> traverse go t
-    go (STApp{ stAppIndex = i, stAppTermF = t}) = do
-      memo <- State.get
-      case Map.lookup i memo of
-        Just x  -> return x
-        Nothing -> do
-          x <- Unshared <$> traverse go t
-          State.modify (Map.insert i x)
-          return x
-
--- | Perform hash-consing at every AST node to obtain maximal sharing.
---
--- FIXME: this should no longer be needed, since it was added to deal with the
--- fact that SAWCore files used to build all their terms as 'Unshared' terms,
--- but that is no longer how we are doing things...
-scSharedTerm :: SharedContext -> Term -> IO Term
-scSharedTerm sc = go
-    where go t = scTermF sc =<< traverse go (unwrapTermF t)
 
 -- | Imports a term built in a different shared context into the given
 -- shared context. The caller must ensure that all the global constants
