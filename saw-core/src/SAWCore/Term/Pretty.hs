@@ -507,7 +507,7 @@ ppTermF prec (Pi x tp body) =
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
 ppTermF _ (Constant nm) = annotate PPS.ConstantStyle <$> ppBestName nm
-ppTermF _ (Variable vn _tp) = annotate PPS.ExtCnsStyle <$> ppVarName vn
+ppTermF _ (Variable vn _tp) = annotate PPS.VariableStyle <$> ppVarName vn
 
 -- | Internal function to recursively pretty-print a term
 ppTerm' :: Prec -> Term -> PPM PPS.Doc

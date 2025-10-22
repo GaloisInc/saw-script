@@ -216,7 +216,7 @@ scReadExternalTyped sc input =
          vs <- State.gets rsVars
          nmi <- case Map.lookup vi nms of
                   Just (Right nmi) -> pure nmi
-                  _ -> lift $ fail $ "scReadExternal: ExtCns missing name info: " ++ show vi
+                  _ -> lift $ fail $ "scReadExternal: Name missing name info: " ++ show vi
          case nmi of
            ModuleIdentifier ident ->
              lift (scResolveNameByURI sc (moduleIdentToURI ident)) >>= \case

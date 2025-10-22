@@ -68,10 +68,8 @@ import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.FiniteValue
   ( FiniteType(..), readFiniteValue
-  , FirstOrderValue(..)
-  , scFirstOrderValue
   )
-import SAWCore.Name (ModuleName, VarName(..), ecShortName, mkModuleName)
+import SAWCore.Name (ModuleName, VarName(..), mkModuleName)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
@@ -83,7 +81,6 @@ import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import SAWCore.Term.Raw
 import CryptolSAWCore.TypedTerm
 
-import qualified SAWCore.Simulator.Concrete as Concrete
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter
 import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
@@ -739,15 +736,14 @@ build_congruence sc tm =
  where
   loop ((nm,tp):pis) vars =
     if closedTerm tp then
-      do l <- scFreshEC sc (vnName nm <> "_1") tp
-         r <- scFreshEC sc (vnName nm <> "_2") tp
+      do l <- scFreshVariable sc (vnName nm <> "_1") tp
+         r <- scFreshVariable sc (vnName nm <> "_2") tp
          loop pis ((l,r):vars)
      else
        fail "congruence_for: cannot build congruence for dependent functions"
 
   loop [] vars =
-    do lvars <- mapM (scVariable sc . fst) (reverse vars)
-       rvars <- mapM (scVariable sc . snd) (reverse vars)
+    do let (lvars, rvars) = unzip (reverse vars)
        let allVars = concat [ [l,r] | (l,r) <- reverse vars ]
 
        basel <- scApplyAll sc tm lvars
@@ -755,13 +751,11 @@ build_congruence sc tm =
        baseeq <- scEqTrue sc =<< scEq sc basel baser
 
        let f x (l,r) =
-             do l' <- scVariable sc l
-                r' <- scVariable sc r
-                eq <- scEqTrue sc =<< scEq sc l' r'
+             do eq <- scEqTrue sc =<< scEq sc l r
                 scFun sc eq x
        finalEq <- foldM f baseeq vars
 
-       scGeneralizeExts sc allVars finalEq
+       scGeneralizeTerms sc allVars finalEq
 
 
 filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
@@ -1267,10 +1261,10 @@ proveByBVInduction script t =
          do wt  <- io $ scNat sc w
             natty <- io $ scNatType sc
             toNat <- io $ scGlobalDef sc "Prelude.bvToNat"
-            vars  <- io $ mapM (scVariable sc) pis
+            vars  <- io $ scVariables sc pis
             innerVars <-
               io $ sequence $
-              [ scFreshVariable sc ("i_" <> ecShortName ec) (ecType ec) | ec <- pis ]
+              [ scFreshVariable sc ("i_" <> vnName vn) tp | (vn, tp) <- pis ]
             t1    <- io $ scApplyAllBeta sc (ttTerm t) vars
             tsz   <- io $ scTupleSelector sc t1 1 2 -- left element
             tbody <- io $ scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
@@ -1281,7 +1275,7 @@ proveByBVInduction script t =
             --
             --   (x : Vec w Bool) -> p x
             thmResult <- io $
-                do t3   <- scGeneralizeExts sc pis tbody
+                do t3   <- scPiList sc pis tbody
                    _    <- scTypeCheckError sc t3 -- sanity check
                    return t3
 
@@ -1298,7 +1292,7 @@ proveByBVInduction script t =
                    thyp   <- scGeneralizeTerms sc innerVars tinner
 
                    touter <- scFun sc thyp tbody
-                   scGeneralizeExts sc pis touter
+                   scPiList sc pis touter
 
             -- The "motive" we will pass to the 'Nat_complete_induction' principle.
             --
@@ -1397,7 +1391,7 @@ proveByBVInduction script t =
   checkInductionScheme sc opts pis ty =
     do ty' <- scWhnf sc ty
        case asPi ty' of
-         Just (nm, tp, body) -> checkInductionScheme sc opts (EC nm tp : pis) body
+         Just (nm, tp, body) -> checkInductionScheme sc opts ((nm, tp) : pis) body
          Nothing ->
            case asTupleType ty' of
              Just [bv, bool] ->
@@ -1633,7 +1627,7 @@ abstractSymbolicPrim (TypedTerm _ t) = do
   io (mkTypedTerm sc =<< bindAllExts sc t)
 
 bindAllExts :: SharedContext -> Term -> IO Term
-bindAllExts sc body = scAbstractExts sc (getAllExts body) body
+bindAllExts sc body = scLambdaList sc (getAllVars body) body
 
 term_apply :: TypedTerm -> [TypedTerm] -> TopLevel TypedTerm
 term_apply fn args =
@@ -1676,27 +1670,6 @@ generalize_term vars tt =
       case asTypedVariable v of
         Just tv -> pure tv
         Nothing -> fail "generalize_term: argument not a valid symbolic variable"
-
--- | Apply the given Term to the given values, and evaluate to a
--- final value.
-cexEvalFn :: SharedContext -> [(ExtCns Term, FirstOrderValue)] -> Term
-          -> IO Concrete.CValue
-cexEvalFn sc args tm = do
-  -- NB: there may be more args than exts, and this is ok. One side of
-  -- an equality may have more free variables than the other,
-  -- particularly in the case where there is a counter-example.
-  let exts = map fst args
-  args' <- mapM (scFirstOrderValue sc . snd) args
-  let is = map ecVarIndex exts
-      argMap = IntMap.fromList (zip is args')
-
-  -- TODO, instead of instantiating and then evaluating, we should
-  -- evaluate in the context of an EC map instead.  argMap is almost
-  -- what we need, but the values syould be @Concrete.CValue@ instead.
-
-  tm' <- scInstantiateExt sc argMap tm
-  modmap <- scGetModuleMap sc
-  return $ Concrete.evalSharedTerm modmap mempty mempty tm'
 
 envCmd :: TopLevel ()
 envCmd = do
@@ -1758,7 +1731,7 @@ eval_bool t = do
   case ttType t of
     TypedTermSchema (C.Forall [] [] (C.tIsBit -> True)) -> return ()
     _ -> fail "eval_bool: not type Bit"
-  unless (null (getAllExts (ttTerm t))) $
+  unless (closedTerm (ttTerm t)) $
     fail "eval_bool: term contains symbolic variables"
   v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t
   return (C.fromVBit v)
@@ -1768,7 +1741,7 @@ eval_int t = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
-  unless (null (getAllExts (ttTerm t))) $
+  unless (closedTerm (ttTerm t)) $
     fail "term contains symbolic variables"
   opts <- getOptions
   t' <- io $ defaultTypedTerm opts sc cfg t

@@ -33,7 +33,7 @@ import Numeric.Natural (Natural)
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
-import SAWCore.Name (VarName(..), ecShortName)
+import SAWCore.Name (VarName(..))
 import SAWCore.Module (ModuleMap)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
@@ -495,18 +495,18 @@ bitBlastTerm ::
 bitBlastTerm be sc addlPrims t = do
   ty <- scTypeOf sc t
   (args, ret) <- asPiTypes sc ty
-  let ecs = getAllExts t
+  let frees = getAllVars t
   argShapes <- traverse (asFiniteType sc) (map snd args)
-  ecShapes <- traverse (asFiniteType sc) (map ecType ecs)
+  freeShapes <- traverse (asFiniteType sc) (map snd frees)
   _retShape <- asFiniteType sc ret -- ensure return type is valid
   argVars <- traverse (newVars' be) argShapes
-  ecVars <- traverse (newVars be) ecShapes
-  let ecMap = Map.fromList $ zip (map ecVarIndex ecs) ecVars
+  freeVars <- traverse (newVars be) freeShapes
+  let freeMap = Map.fromList $ zip (map (vnIndex . fst) frees) freeVars
   modmap <- scGetModuleMap sc
-  bval <- bitBlastBasic be modmap addlPrims ecMap t
+  bval <- bitBlastBasic be modmap addlPrims freeMap t
   bval' <- applyAll bval argVars
-  let names =  map fst args ++ map (Text.unpack . ecShortName) ecs
-      shapes = argShapes ++ ecShapes
+  let names =  map fst args ++ map (Text.unpack . vnName . fst) frees
+      shapes = argShapes ++ freeShapes
   return (bval', zip names shapes)
 
 -- | Bitblast a term and apply a function to the result.

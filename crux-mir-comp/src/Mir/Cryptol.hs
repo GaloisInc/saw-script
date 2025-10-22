@@ -60,6 +60,7 @@ import qualified Mir.PP as M
 import Mir.Overrides (getString)
 
 import qualified CryptolSAWCore.CryptolEnv as SAW
+import qualified SAWCore.Name as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCoreWhat4.ReturnTrip as SAW
 import qualified SAWCore.Recognizer as SAW (asVariable)
@@ -351,16 +352,16 @@ munge sym shp0 rv0 = do
         eval' x = SAW.toSC sym scs x
         eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval x = do
-            -- When translating W4 vars to SAW `ExtCns`s, also record the
+            -- When translating W4 vars to SAW `Variable`s, also record the
             -- reverse mapping into `w4VarMapRef` so the reverse translation
             -- can be done later on.
             visitExprVars visitCache x $ \var -> do
                 let expr = W4.BoundVarExpr var
                 term <- eval' expr
-                ec <- case SAW.asVariable term of
-                    Just ec -> return ec
-                    Nothing -> error "eval on BoundVarExpr produced non-ExtCns?"
-                modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some expr)
+                vn <- case SAW.asVariable term of
+                    Just (vn, _) -> pure vn
+                    Nothing -> error "eval on BoundVarExpr produced non-Variable?"
+                modifyIORef w4VarMapRef $ Map.insert (SAW.vnIndex vn) (Some expr)
             eval' x
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
         uneval shp t = do

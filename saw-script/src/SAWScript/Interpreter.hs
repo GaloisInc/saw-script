@@ -107,6 +107,7 @@ import SAWCore.Name (mkModuleName, Name(..))
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import SAWCore.SharedTerm
+import SAWCore.Term.Raw (closedTerm)
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 import qualified CryptolSAWCore.Prelude as CryptolSAW
@@ -2069,7 +2070,7 @@ print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
-  unless (null (getAllExts (ttTerm t))) $
+  unless (closedTerm (ttTerm t)) $
     fail "term contains symbolic variables"
   sawopts <- getOptions
   t' <- io $ defaultTypedTerm sawopts sc cfg t

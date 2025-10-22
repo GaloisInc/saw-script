@@ -560,8 +560,7 @@ isSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi x2 a2 b2)
     (&&) <$> areConvertible a1 a2 <*> withVar x1 a1 (isSubtype b1 b2)
   | otherwise =
     do conv1 <- areConvertible a1 a2
-       let ec1 = EC x1 a1
-       var1 <- liftTCM scVariable ec1
+       var1 <- liftTCM scVariable x1 a1
        let sub = IntMap.singleton (vnIndex x2) var1
        b2' <- liftTCM scInstantiateExt sub b2
        conv2 <- withVar x1 a1 (isSubtype b1 b2')

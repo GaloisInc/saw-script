@@ -333,10 +333,10 @@ asConstant :: Recognizer Term Name
 asConstant (unwrapTermF -> Constant nm) = pure nm
 asConstant _ = Nothing
 
-asVariable :: Recognizer Term (ExtCns Term)
+asVariable :: Recognizer Term (VarName, Term)
 asVariable t =
   case unwrapTermF t of
-    Variable nm tp -> pure (EC nm tp)
+    Variable nm tp -> Just (nm, tp)
     _              -> Nothing
 
 asSort :: Recognizer Term Sort

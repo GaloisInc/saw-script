@@ -190,8 +190,7 @@ convertModule sc env m = do
     )
   inputRecordType <- cryptolRecordType sc inputFields
   outputRecordType <- cryptolRecordType sc outputFields
-  inputRecordEC <- liftIO $ SC.scFreshEC sc "input" inputRecordType
-  inputRecord <- liftIO $ SC.scVariable sc inputRecordEC
+  inputRecord <- liftIO $ SC.scFreshVariable sc "input" inputRecordType
 
   derivedInputs <- forM (Map.assocs inputPorts) $ \(nm, inp) -> do
     t <- liftIO $ cryptolRecordSelect sc inputFields inputRecord nm
@@ -217,7 +216,7 @@ convertModule sc env m = do
   outputRecord <- cryptolRecord sc =<< mapForWithKeyM outputPorts
     (\onm out -> lookupPatternTerm sc (YosysBitvecConsumerOutputPort onm) out terms)
 
-  t <- liftIO $ SC.scAbstractExts sc [inputRecordEC] outputRecord
+  t <- liftIO $ SC.scAbstractTerms sc [inputRecord] outputRecord
   ty <- liftIO $ SC.scFun sc inputRecordType outputRecordType
 
   let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)

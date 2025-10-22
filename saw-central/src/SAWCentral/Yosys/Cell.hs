@@ -150,13 +150,11 @@ primCellToMap sc c args = case c ^. cellType of
     liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "xor"
   CellTypeReduceXnor -> bvReduce True =<< do
     boolTy <- liftIO $ SC.scBoolType sc
-    xEC <- liftIO $ SC.scFreshEC sc "x" boolTy
-    x <- liftIO $ SC.scVariable sc xEC
-    yEC <- liftIO $ SC.scFreshEC sc "y" boolTy
-    y <- liftIO $ SC.scVariable sc yEC
+    x <- liftIO $ SC.scFreshVariable sc "x" boolTy
+    y <- liftIO $ SC.scFreshVariable sc "y" boolTy
     r <- liftIO $ SC.scXor sc x y
     res <- liftIO $ SC.scNot sc r
-    liftIO $ SC.scAbstractExts sc [xEC, yEC] res
+    liftIO $ SC.scAbstractTerms sc [x, y] res
   CellTypeReduceBool -> bvReduce False =<< do
     liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
   CellTypeShl -> do
@@ -258,11 +256,9 @@ primCellToMap sc c args = case c ^. cellType of
     accTy <- liftIO $ SC.scPairType sc nat widthBv
     defaultAcc <- liftIO $ SC.scPairValue sc zero ta
 
-    bitEC <- liftIO $ SC.scFreshEC sc "bit" bool
-    accEC <- liftIO $ SC.scFreshEC sc "acc" accTy
-    fun <- liftIO . SC.scAbstractExts sc [bitEC, accEC] =<< do
-      bit <- liftIO $ SC.scVariable sc bitEC
-      acc <- liftIO $ SC.scVariable sc accEC
+    bit <- liftIO $ SC.scFreshVariable sc "bit" bool
+    acc <- liftIO $ SC.scFreshVariable sc "acc" accTy
+    fun <- liftIO . SC.scAbstractTerms sc [bit, acc] =<< do
       idx <- liftIO $ SC.scPairLeft sc acc
       aval <- liftIO $ SC.scPairRight sc acc
       bval <- liftIO $ SC.scAtWithDefault sc swidth widthBv aval splitb idx

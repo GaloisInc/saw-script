@@ -25,8 +25,6 @@ module SAWCore.SharedTerm
   ( TermF(..)
   , Ident, mkIdent
   , VarIndex
-  , ExtCns(..)
-  , ecVarIndex
   , NameInfo(..)
   , ppName
     -- * Shared terms
@@ -56,7 +54,6 @@ module SAWCore.SharedTerm
     -- ** Implicit versions of functions.
   , scDefTerm
   , scFreshVariable
-  , scFreshEC
   , scFreshName
   , scFreshVarName
   , scVariable
@@ -236,14 +233,12 @@ module SAWCore.SharedTerm
     -- ** Variable substitution
   , betaNormalize
   , isConstFoldTerm
-  , getAllExts
-  , getAllExtSet
+  , getAllVars
+  , getAllVarsMap
   , getConstantSet
   , scInstantiateExt
-  , scAbstractExts
   , scAbstractTerms
-  , scAbstractExtsEtaCollapse
-  , scGeneralizeExts
+  , scLambdaListEtaCollapse
   , scGeneralizeTerms
   , scUnfoldConstants
   , scUnfoldConstants'
@@ -432,13 +427,13 @@ scConstApply sc i ts =
   do c <- scConst sc i
      scApplyAll sc c ts
 
--- | Create a named variable 'Term' from an 'ExtCns'.
-scVariable :: SharedContext -> ExtCns Term -> IO Term
-scVariable sc (EC nm tp) = scTermF sc (Variable nm tp)
+-- | Create a named variable 'Term' from a 'VarName' and a type.
+scVariable :: SharedContext -> VarName -> Term -> IO Term
+scVariable sc nm tp = scTermF sc (Variable nm tp)
 
 -- | Create a list of named variables from a list of names and types.
-scVariables :: SharedContext -> [(VarName, Term)] -> IO [Term]
-scVariables sc = traverse (\(v, t) -> scVariable sc (EC v t))
+scVariables :: Traversable t => SharedContext -> t (VarName, Term) -> IO (t Term)
+scVariables sc = traverse (\(v, t) -> scVariable sc v t)
 
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
@@ -500,15 +495,11 @@ scFreshName sc x =
 scFreshVarName :: SharedContext -> Text -> IO VarName
 scFreshVarName sc x = VarName <$> scFreshVarIndex sc <*> pure x
 
--- | Create a global variable with the given identifier (which may be "_") and type.
-scFreshEC :: SharedContext -> Text -> a -> IO (ExtCns a)
-scFreshEC sc x tp =
-  do nm <- scFreshVarName sc x
-     pure (EC nm tp)
-
 -- | Create a fresh variable with the given identifier (which may be "_") and type.
 scFreshVariable :: SharedContext -> Text -> Term -> IO Term
-scFreshVariable sc x tp = scVariable sc =<< scFreshEC sc x tp
+scFreshVariable sc x tp =
+  do nm <- scFreshVarName sc x
+     scVariable sc nm tp
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -770,7 +761,7 @@ allowedElimSort dt s =
 -- given a context of the parameters and of the previous arguments.
 ctxCtorArgType ::
   SharedContext ->
-  Term {- ^ datatype applied to ExtCns parameters -} ->
+  Term {- ^ datatype applied to parameters -} ->
   CtorArg ->
   IO Term
 ctxCtorArgType _ _ (ConstArg tp) = return tp
@@ -781,15 +772,14 @@ ctxCtorArgType sc d_params (RecursiveArg zs_ctx ixs) =
 -- of types.
 ctxCtorArgBindings ::
   SharedContext ->
-  Term {- ^ data type applied to ExtCns params -} ->
+  Term {- ^ data type applied to params -} ->
   [(VarName, CtorArg)] ->
-  IO [ExtCns Term]
+  IO [(VarName, Term)]
 ctxCtorArgBindings _ _ [] = return []
 ctxCtorArgBindings sc d_params ((x, arg) : args) =
   do tp <- ctxCtorArgType sc d_params arg
      rest <- ctxCtorArgBindings sc d_params args
-     let ec = EC x tp
-     return (ec : rest)
+     return ((x, tp) : rest)
 
 -- | Internal: Compute the type of a constructor from the name of its
 -- datatype and its 'CtorArgStruct'
@@ -799,7 +789,7 @@ ctxCtorType sc d (CtorArgStruct{..}) =
      d_params <- scConstApply sc d params
      bs <- ctxCtorArgBindings sc d_params ctorArgs
      d_params_ixs <- scApplyAll sc d_params ctorIndices
-     body <- scGeneralizeExts sc bs d_params_ixs
+     body <- scPiList sc bs d_params_ixs
      scPiList sc ctorParams body
 
 -- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
@@ -877,7 +867,7 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
      let helper :: [Term] -> [(VarName, CtorArg)] -> IO Term
          helper prevs ((nm, ConstArg tp) : args) =
            -- For a constant argument type, just abstract it and continue
-           do arg <- scVariable sc (EC nm tp)
+           do arg <- scVariable sc nm tp
               rest <- helper (prevs ++ [arg]) args
               scGeneralizeTerms sc [arg] rest
          helper prevs ((nm, RecursiveArg zs ts) : args) =
@@ -895,7 +885,7 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
            do d_params_ts <- scApplyAll sc d_params ts
               -- Build the type of the argument arg
               arg_tp <- scPiList sc zs d_params_ts
-              arg <- scVariable sc (EC nm arg_tp)
+              arg <- scVariable sc nm arg_tp
               -- Build the type of ih
               pret_ts <- scApplyAll sc p_ret ts
               z_vars <- scVariables sc zs
@@ -1023,7 +1013,7 @@ scRecursorAppType sc dt params motive =
      ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
      arg_vn <- scFreshVarName sc "arg"
-     arg_var <- scVariable sc (EC arg_vn d)
+     arg_var <- scVariable sc arg_vn d
      ret <- scApplyAll sc motive (ix_vars ++ [arg_var])
      ty <- scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
      let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
@@ -1048,7 +1038,7 @@ scRecursorType sc dt s =
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
      motive_ty <- scRecursorRetTypeType sc dt param_vars s
      motive_vn <- scFreshVarName sc "p"
-     motive_var <- scVariable sc (EC motive_vn motive_ty)
+     motive_var <- scVariable sc motive_vn motive_ty
 
      -- Compute the types of the elimination functions
      elims_tps <-
@@ -1512,8 +1502,8 @@ betaNormalize sc t0 =
       let n = length (zip args params)
       if n == 0 then go3 t else do
         body' <- go body
-        let ecs = map (uncurry EC) (drop n params)
-        f' <- scAbstractExts sc ecs body'
+        let vars = drop n params
+        f' <- scLambdaList sc vars body'
         args' <- mapM go args
         let sub = IntMap.fromList [(vnIndex nm, arg) | (arg, (nm, _)) <- zip args params]
         f'' <- scInstantiateExt sc sub f'
@@ -1748,7 +1738,7 @@ scFreshConstant sc name rhs ty =
        , "name: " ++ Text.unpack name
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
-       , "frees: " ++ unwords (map (Text.unpack . vnName . ecName) (getAllExts rhs))
+       , "frees: " ++ unwords (map (Text.unpack . vnName . fst) (getAllVars rhs))
        ]
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
@@ -1770,7 +1760,7 @@ scDefineConstant sc nmi rhs ty =
        , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
-       , "frees: " ++ unwords (map (Text.unpack . vnName . ecName) (getAllExts rhs))
+       , "frees: " ++ unwords (map (Text.unpack . vnName . fst) (getAllVars rhs))
        ]
      nm <- scRegisterName sc nmi
      scDeclareDef sc nm NoQualifier ty (Just rhs)
@@ -2632,40 +2622,40 @@ isConstFoldTerm sc unint t
           | otherwise -> Just vis
         _ -> foldM go vis tf
 
--- | Return a list of all ExtCns subterms in the given term, sorted by
--- index. Does not traverse the unfoldings of @Constant@ terms.
-getAllExts :: Term -> [ExtCns Term]
-getAllExts t = Set.toList (getAllExtSet t)
+-- | Return a list of all free variables in the given term along with
+-- their types, sorted by index.
+getAllVars :: Term -> [(VarName, Term)]
+getAllVars t = Map.toList (getAllVarsMap t)
 
--- | Return a set of all ExtCns subterms in the given term.
---   Does not traverse the unfoldings of @Constant@ terms.
-getAllExtSet :: Term -> Set.Set (ExtCns Term)
-getAllExtSet t = State.evalState (go t) IntMap.empty
+-- | Return a map of all free variables in the given term with their
+-- types.
+getAllVarsMap :: Term -> Map VarName Term
+getAllVarsMap t = State.evalState (go t) IntMap.empty
   where
-    go :: Term -> State.State (IntMap (Set.Set (ExtCns Term))) (Set.Set (ExtCns Term))
+    go :: Term -> State.State (IntMap (Map VarName Term)) (Map VarName Term)
     go (Unshared tf) = termf tf
     go STApp{ stAppIndex = i, stAppTermF = tf, stAppFreeVars = fvs }
-      | IntSet.null fvs = pure Set.empty
+      | IntSet.null fvs = pure Map.empty
       | otherwise =
         do memo <- State.get
            case IntMap.lookup i memo of
-             Just ecs -> pure ecs
+             Just vars -> pure vars
              Nothing ->
-               do ecs <- termf tf
-                  State.modify' (IntMap.insert i ecs)
-                  pure ecs
-    termf :: TermF Term -> State.State (IntMap (Set.Set (ExtCns Term))) (Set.Set (ExtCns Term))
+               do vars <- termf tf
+                  State.modify' (IntMap.insert i vars)
+                  pure vars
+    termf :: TermF Term -> State.State (IntMap (Map VarName Term)) (Map VarName Term)
     termf tf =
       case tf of
-        Variable x tp -> pure (Set.singleton (EC x tp))
+        Variable x tp -> pure (Map.singleton x tp)
         Lambda x t1 t2 ->
-          do ecs1 <- go t1
-             ecs2 <- go t2
-             pure (ecs1 <> Set.delete (EC x t1) ecs2)
+          do vars1 <- go t1
+             vars2 <- go t2
+             pure (vars1 <> Map.delete x vars2)
         Pi x t1 t2 ->
-          do ecs1 <- go t1
-             ecs2 <- go t2
-             pure (ecs1 <> Set.delete (EC x t1) ecs2)
+          do vars1 <- go t1
+             vars2 <- go t2
+             pure (vars1 <> Map.delete x vars2)
         _ -> Fold.fold <$> traverse go tf
 
 getConstantSet :: Term -> Map VarIndex NameInfo
@@ -2714,13 +2704,13 @@ scInstantiateExt sc vmap t0 =
                Variable nm tp ->
                  case IntMap.lookup (vnIndex nm) vmap of
                    Just t' -> pure t'
-                   Nothing -> scVariable sc =<< traverse memo (EC nm tp)
+                   Nothing -> scVariable sc nm =<< memo tp
          goBinder :: VarName -> Term -> Term -> IO (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
                -- Possibility of capture; rename bound variable.
                do x' <- scFreshVarName sc (vnName x)
-                  var <- scVariable sc (EC x' t)
+                  var <- scVariable sc x' t
                   let vmap' = IntMap.insert i var vmap
                   body' <- scInstantiateExt sc vmap' body
                   pure (x', body')
@@ -2735,36 +2725,26 @@ scInstantiateExt sc vmap t0 =
                   pure (x, body')
      go t0
 
--- | Abstract over the given list of external constants by wrapping
---   the given term with lambdas and replacing the external constant
---   occurrences with the appropriate local variables.
-scAbstractExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
-scAbstractExts _ [] x = return x
-scAbstractExts sc (ec : ecs) x =
-  do body <- scAbstractExts sc ecs x
-     scLambda sc (ecName ec) (ecType ec) body
-
 -- | Create a lambda term by abstracting over the list of arguments,
 -- which must all be named variables (e.g. terms generated by
 -- 'scVariable' or 'scFreshVariable').
 scAbstractTerms :: SharedContext -> [Term] -> Term -> IO Term
 scAbstractTerms sc args body =
-  do vars <- mapM toEC args
-     scAbstractExts sc vars body
+  do vars <- mapM toVar args
+     scLambdaList sc vars body
   where
-    toEC :: Term -> IO (ExtCns Term)
-    toEC t =
+    toVar :: Term -> IO (VarName, Term)
+    toVar t =
       case asVariable t of
-        Just ec -> pure ec
-        Nothing -> fail "scAbstractTerms: expected ExtCns"
+        Just var -> pure var
+        Nothing -> fail "scAbstractTerms: expected Variable"
 
--- | Abstract over the given list of external constants by wrapping
---   the given term with lambdas and replacing the external constant
---   occurrences with the appropriate local variables.  However,
---   the term will be eta-collapsed as far as possible, so unnecessary
---   lambdas will simply be omitted.
-scAbstractExtsEtaCollapse :: SharedContext -> [ExtCns Term] -> Term -> IO Term
-scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
+-- | Abstract over the given list of variables by wrapping the given
+-- term with lambdas.
+-- However, the term will be eta-collapsed as far as possible, so
+-- unnecessary lambdas will simply be omitted.
+scLambdaListEtaCollapse :: SharedContext -> [(VarName, Term)] -> Term -> IO Term
+scLambdaListEtaCollapse sc = \vars tm -> loop (reverse vars) tm
   where
     -- we eta-collapsed all the variables, nothing more to do
     loop [] tm = pure tm
@@ -2772,36 +2752,27 @@ scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
     -- the final variable to abstract is applied to the
     -- term, and does not appear elsewhere in the term,
     -- so we can eta-collapse.
-    loop (ec:exts) (asApp -> Just (f, asVariable -> Just ec'))
-      | ec == ec', not (Set.member ec (getAllExtSet f))
-      = loop exts f
+    loop ((x, _) : vars) (asApp -> Just (f, asVariable -> Just (x', _)))
+      | x == x', IntSet.notMember (vnIndex x) (freeVars f)
+      = loop vars f
 
     -- cannot eta-collapse, do abstraction as usual
-    loop exts tm = scAbstractExts sc (reverse exts) tm
+    loop vars tm = scLambdaList sc (reverse vars) tm
 
-
--- | Generalize over the given list of external constants by wrapping
--- the given term with foralls and replacing the external constant
--- occurrences with the appropriate local variables.
-scGeneralizeExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
-scGeneralizeExts _ [] x = return x
-scGeneralizeExts sc (ec : ecs) x =
-  do body <- scGeneralizeExts sc ecs x
-     scPi sc (ecName ec) (ecType ec) body
 
 -- | Create a pi term by abstracting over the list of arguments, which
 -- must all be named variables (e.g. terms generated by 'scVariable' or
 -- 'scFreshVariable').
 scGeneralizeTerms :: SharedContext -> [Term] -> Term -> IO Term
 scGeneralizeTerms sc args body =
-  do vars <- mapM toEC args
-     scGeneralizeExts sc vars body
+  do vars <- mapM toVar args
+     scPiList sc vars body
   where
-    toEC :: Term -> IO (ExtCns Term)
-    toEC t =
+    toVar :: Term -> IO (VarName, Term)
+    toVar t =
       case asVariable t of
-        Just ec -> pure ec
-        Nothing -> fail "scGeneralizeTerms: expected ExtCns"
+        Just var -> pure var
+        Nothing -> fail "scGeneralizeTerms: expected Variable"
 
 scUnfoldConstants :: SharedContext -> [VarIndex] -> Term -> IO Term
 scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0

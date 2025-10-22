@@ -62,8 +62,7 @@ theoremProp ::
   YosysTheorem ->
   m SC.TypedTerm
 theoremProp sc thm = do
-  ec <- liftIO $ SC.scFreshEC sc "r" $ thm ^. theoremInputType
-  r <- liftIO $ SC.scVariable sc ec
+  r <- liftIO $ SC.scFreshVariable sc "r" $ thm ^. theoremInputType
   modr <- liftIO $ SC.scApply sc (thm ^. theoremModule) r
   bodyr <- liftIO $ SC.scApply sc (thm ^. theoremBody) r
   equality <- liftIO $ eqBvRecords sc (thm ^. theoremOutputCryptolType) modr bodyr
@@ -72,7 +71,7 @@ theoremProp sc thm = do
     Just pc -> do
       pcr <- liftIO $ SC.scApply sc pc r
       liftIO $ SC.scImplies sc pcr equality
-  func <- liftIO $ SC.scAbstractExts sc [ec] res
+  func <- liftIO $ SC.scAbstractTerms sc [r] res
   let cty = C.tFun (thm ^. theoremInputCryptolType) C.tBit
   SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty)
     <$> validateTerm sc
@@ -87,8 +86,7 @@ theoremReplacement ::
   YosysTheorem ->
   m SC.Term
 theoremReplacement sc thm = do
-  ec <- liftIO $ SC.scFreshEC sc "r" $ thm ^. theoremInputType
-  r <- liftIO $ SC.scVariable sc ec
+  r <- liftIO $ SC.scFreshVariable sc "r" $ thm ^. theoremInputType
   body <- case thm ^. theoremPrecond of
     Nothing -> liftIO $ SC.scApply sc (thm ^. theoremBody) r
     Just pc -> do
@@ -96,7 +94,7 @@ theoremReplacement sc thm = do
       thenCase <- liftIO $ SC.scApply sc (thm ^. theoremBody) r
       elseCase <- liftIO $ SC.scApply sc (thm ^. theoremModule) r
       liftIO $ SC.scIte sc (thm ^. theoremOutputType) precond thenCase elseCase
-  ft <- liftIO $ SC.scAbstractExts sc [ec] body
+  ft <- liftIO $ SC.scAbstractTerms sc [r] body
   validateTerm sc
     ("constructing an override replacement for " <> URI.render (thm ^. theoremURI))
     ft

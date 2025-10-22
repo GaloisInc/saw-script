@@ -68,7 +68,7 @@ import           SAWCoreWhat4.Panic
 data SAWCoreState n
   = SAWCoreState
     { saw_ctx       :: SC.SharedContext                         -- ^ the main SAWCore datastructure for building shared terms
-    , saw_inputs    :: IORef (Seq (SC.ExtCns SC.Term ))
+    , saw_inputs    :: IORef (Seq (SC.VarName, SC.Term))
       -- ^ a record of all the symbolic input variables created so far,
       --   in the order they were created
 
@@ -109,7 +109,7 @@ data SAWExpr (bt :: BaseType) where
   -- implicit integer-to-real conversion.
   IntToRealSAWExpr :: !(SAWExpr BaseIntegerType) -> SAWExpr BaseRealType
 
-getInputs :: SAWCoreState n -> IO (Seq (SC.ExtCns SC.Term))
+getInputs :: SAWCoreState n -> IO (Seq (SC.VarName, SC.Term))
 getInputs st = readIORef (saw_inputs st)
 
 baseSCType ::
@@ -154,9 +154,9 @@ sawCreateVar :: SAWCoreState n
              -> IO SC.Term
 sawCreateVar st nm tp = do
   let sc = saw_ctx st
-  ec <- SC.scFreshEC sc nm tp
-  t <- SC.scVariable sc ec
-  modifyIORef (saw_inputs st) (\xs -> xs Seq.|> ec)
+  x <- SC.scFreshVarName sc nm
+  t <- SC.scVariable sc x tp
+  modifyIORef (saw_inputs st) (\xs -> xs Seq.|> (x, tp))
   return t
 
 bindSAWTerm ::

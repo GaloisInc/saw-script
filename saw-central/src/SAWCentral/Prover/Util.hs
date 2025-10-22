@@ -24,7 +24,7 @@ checkBooleanSchema tp =
   fail ("Expected boolean type, but got " ++ show (ppTypedTermType tp))
 
 bindAllExts :: SharedContext -> Term -> IO Term
-bindAllExts sc body = scAbstractExts sc (getAllExts body) body
+bindAllExts sc body = scLambdaList sc (getAllVars body) body
 
 liftCexBB :: [FiniteType] -> [Bool] -> Either String [FiniteValue]
 liftCexBB tys bs =

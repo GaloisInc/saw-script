@@ -174,6 +174,7 @@ import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import SAWCore.Term.Pretty (showTerm)
+import SAWCore.Term.Raw (closedTerm)
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -393,10 +394,10 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                 (method_spec ^. MS.csPreState ^. MS.csPointsTos)
           let input_parameters = nub $ value_input_parameters ++ reference_input_parameters
           let pre_free_variables = Map.fromList $
-                map (\x -> (EC (tvName x) (tvType x), x)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars
+                map (\x -> (tvName x, x)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars
           let unsupported_input_parameters = Set.difference
                 (Map.keysSet pre_free_variables)
-                (Set.fromList input_parameters)
+                (Set.fromList (map fst input_parameters))
           when (not $ Set.null unsupported_input_parameters) $
             fail $ unlines
               [ "Unsupported input parameters:"
@@ -415,13 +416,13 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                   LLVMPointsToBitfield _ _ _ val -> setupValueAsVariable val)
                 (method_spec ^. MS.csPostState ^. MS.csPointsTos)
           let output_parameters =
-                nub $ filter (isNothing . (Map.!?) pre_free_variables) $
+                nub $ filter (isNothing . (Map.!?) pre_free_variables . fst) $
                 maybeToList return_output_parameter ++ reference_output_parameters
           let post_free_variables =
                 Map.fromList $
-                map (\x -> (EC (tvName x) (tvType x), x)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars
+                map (\x -> (tvName x, x)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars
           let unsupported_output_parameters =
-                Set.difference (Map.keysSet post_free_variables) (Set.fromList output_parameters)
+                Set.difference (Map.keysSet post_free_variables) (Set.fromList (map fst output_parameters))
           when (not $ Set.null unsupported_output_parameters) $
             fail $ unlines
               [ "Unsupported output parameters:"
@@ -435,12 +436,12 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           shared_context <- getSharedContext
 
           let output_values =
-                map (((IntMap.!) $ post_override_state ^. termSub) . ecVarIndex) output_parameters
+                map (((IntMap.!) $ post_override_state ^. termSub) . vnIndex . fst) output_parameters
 
           extracted_func <-
-            io $ scAbstractExts shared_context input_parameters
+            io $ scLambdaList shared_context input_parameters
             =<< scTuple shared_context output_values
-          when ([] /= getAllExts extracted_func) $
+          when (not (closedTerm extracted_func)) $
             fail "Non-functional simulation summary."
 
           let nmi = llvmNameInfo func_name
@@ -448,7 +449,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           extracted_func_const <-
             io $ scDefineConstant shared_context nmi extracted_func
             =<< scTypeOf shared_context extracted_func
-          input_terms <- io $ traverse (scVariable shared_context) input_parameters
+          input_terms <- io $ scVariables shared_context input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
           applied_extracted_func_selectors <-
             io $ forM [1 .. (length output_parameters)] $ \i ->
@@ -456,7 +457,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
               =<< scTupleSelector shared_context applied_extracted_func i (length output_parameters)
           let output_parameter_substitution =
                 IntMap.fromList $
-                zip (map ecVarIndex output_parameters) (map ttTerm applied_extracted_func_selectors)
+                zip (map (vnIndex . fst) output_parameters) (map ttTerm applied_extracted_func_selectors)
           let substitute_output_parameters =
                 ttTermLens $ scInstantiateExt shared_context output_parameter_substitution
           let setup_value_substitute_output_parameter setup_value
@@ -504,13 +505,13 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           ps <- io (MS.mkProvedSpec MS.SpecProved extracted_method_spec stats vcs lemmaSet diff)
           returnLLVMProof (SomeLLVM ps)
 
-setupValueAsVariable :: SetupValue (LLVM arch) -> Maybe (ExtCns Term)
+setupValueAsVariable :: SetupValue (LLVM arch) -> Maybe (VarName, Term)
 setupValueAsVariable =
   \case
     SetupTerm term -> asVariable $ ttTerm term
     _ -> Nothing
 
-llvmPointsToValueAsVariable :: LLVMPointsToValue arch -> Maybe (ExtCns Term)
+llvmPointsToValueAsVariable :: LLVMPointsToValue arch -> Maybe (VarName, Term)
 llvmPointsToValueAsVariable =
   \case
     ConcreteSizeValue val -> setupValueAsVariable val
@@ -1588,11 +1589,11 @@ verifyPoststate cc mspec env0 globals ret mdMap invSubst =
      skipSafetyProofs <- gets rwSkipSafetyProofs
      when skipSafetyProofs (io (Crucible.clearProofObligations bak))
 
-     let ecs0 = IntMap.fromList
-           [ (ecVarIndex ec, ec)
+     let vars0 = IntMap.fromList
+           [ (vnIndex vn, (vn, tvType tt))
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
-           , let ec = EC (tvName tt) (tvType tt) ]
-     terms0 <- io $ traverse (scVariable sc) ecs0
+           , let vn = tvName tt ]
+     terms0 <- io $ scVariables sc vars0
 
      let initialFree =
            Set.fromList
@@ -1845,7 +1846,7 @@ setupArg sc sym ecRef tp = do
   vn <- scFreshVarName sc ("arg_" <> Text.pack (show (length ecs)))
   writeIORef ecRef (ecs Seq.|> TypedVariable cty vn scTp)
 
-  t <- scVariable sc (EC vn scTp)
+  t <- scVariable sc vn scTp
   elt <-
     case tp of
       Crucible.LLVMPointerRepr w -> do

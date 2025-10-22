@@ -107,13 +107,13 @@ import SAWCentral.Prover.Util (checkBooleanSchema)
 import SAWCentral.Value
 
 -- State used to facilitate the replacement of a 'Constant' application in a
--- 'Term' with an 'ExtCns'.  Used in 'replaceConstantTerm' and
+-- 'Term' with a 'Variable'.  Used in 'replaceConstantTerm' and
 -- 'replaceConstantTermF'
 data ReplaceState = ReplaceState {
     rsMemo :: Map.Map TermIndex Term
  -- ^ Memoization table to avoid re-visiting the same shared term
-  , rsExtCns :: Maybe Term
- -- ^ ExtCns that replaces the 'Constant' application, if the constant could be
+  , rsVariable :: Maybe Term
+ -- ^ Variable that replaces the 'Constant' application, if the constant could be
  -- located.
   , rsApp :: Maybe (TermF Term)
  -- ^ Application that was replaced, if it could be located.
@@ -196,14 +196,14 @@ buildCompositionSideCondition bc innerBt = do
   -- NOTE: Although not used in the final formula, we need to capture the input
   -- to the outer functions because the extracted inner function applications
   -- depend on it.  Therefore, it is necessary to match the expected form of the
-  -- inner ExtCns that this function instantiates.
+  -- inner variable that this function instantiates.
   input <- io $ importFresh sc "input" (bcInputType bc) -- in
 
   -- Locate inner function calls on each side and replace their arguments with
-  -- 'ExtCns's
-  (lhsInnerEc, lhsInnerApp) <-
+  -- 'Variable's
+  (lhsInnerVar, lhsInnerApp) <-
     openConstantApp (bisimTheoremLhs innerBt) (bisimTheoremLhs outerBt)
-  (rhsInnerEc, rhsInnerApp) <-
+  (rhsInnerVar, rhsInnerApp) <-
     openConstantApp (bisimTheoremRhs innerBt) (bisimTheoremRhs outerBt)
 
   -- Extract state accessors from each inner function
@@ -225,8 +225,8 @@ buildCompositionSideCondition bc innerBt = do
   rhsTuple <- io $ scTuple sc [rhsOuterState, input]  -- (f_rhs_s, in)
   innerRel' <- io $
     scInstantiateExt sc
-                     (IntMap.fromList [ (ecVarIndex lhsInnerEc, lhsTuple)
-                                      , (ecVarIndex rhsInnerEc, rhsTuple)])
+                     (IntMap.fromList [ (vnIndex lhsInnerVar, lhsTuple)
+                                      , (vnIndex rhsInnerVar, rhsTuple)])
                      innerRel
 
   -- outer state relation implies inner state relation
@@ -252,28 +252,27 @@ stateFromApp app = do
       fail $ "Error: " ++ showTerm term ++ " is not an App"
 
 -- | Given a term containing the application of a 'Constant', locate this
--- application and replace its argument with an 'ExtCns'.  Returns the inserted
--- 'ExtCns' and the updated 'App'.  Fails if 'constant' is not a 'Constant'.
+-- application and replace its argument with a 'Variable'.  Returns the inserted
+-- 'VarName' and the updated 'App'.  Fails if 'constant' is not a 'Constant'.
 openConstantApp :: TypedTerm
                 -- ^ 'Constant' to search for.
                 -> TypedTerm
                 -- ^ 'TypeTerm' to locate 'Constant' in.  Must itself be a
                 -- 'Constant' (will be unfolded).
-                -> TopLevel (ExtCns Term, TermF Term)
+                -> TopLevel (VarName, TermF Term)
 openConstantApp constant t = do
   -- Unfold constant
   name <- constantName (unwrapTermF (ttTerm t))
   tUnfolded <- unfold_term [name] t
 
   -- Break down lambda into its component parts.
-  (nm, tp, body) <- lambdaOrFail tUnfolded
+  (nm, _tp, body) <- lambdaOrFail tUnfolded
 
-  -- Replace outer function's argument with an 'ExtCns'
+  -- Replace outer function's argument with a 'Variable'
   -- NOTE: The bisimulation relation type ensures this is a single argument
   -- lambda, so it's OK to not recurse
-  let ec = EC nm tp
   extractedF <- extractApp constant body
-  pure (ec, extractedF)
+  pure (nm, extractedF)
 
   where
     -- Break down lambda into its component parts.  Fails if 'tt' is not a
@@ -327,8 +326,8 @@ extractApp constant term =
 -- 'Nothing' if simplification had no effect).
 --
 -- This function works by searching for the functions from 'bt' in 'term'.  If
--- it finds them, it replaces the calls in 'term' with 'ExtCns's and adds an
--- assumption that the output relation holds over those 'ExtCns's.  This has the
+-- it finds them, it replaces the calls in 'term' with 'Variable's and adds an
+-- assumption that the output relation holds over those 'Variable's.  This has the
 -- effect of saving the SMT solver from having to reason again about
 -- subrelations that have already been proven.  More formally, if @g_1@ and
 -- @g_2@ contain subfunctions @f_1@ and @f_2@ that satisfy some output relation
@@ -349,27 +348,27 @@ applyTheorem :: BisimTheorem
 applyTheorem bt bc term0 = do
   sc <- getSharedContext
 
-  -- Attempt to replace calls in 'term0' to the left side of 'bt' with an
-  -- 'ExtCns'.  In other words, replace @f_1@ with @v_1@.
+  -- Attempt to replace calls in 'term0' to the left side of 'bt' with a
+  -- 'Variable'.  In other words, replace @f_1@ with @v_1@.
   let tpLhs = C.TCon (C.TC (C.TCTuple 2)) [ bisimTheoremLhsStateType bt
                                           , bisimTheoremOutputType bt ]
   (term1, lhsRs) <-
     State.runStateT (replaceConstantTerm (bisimTheoremLhs bt) tpLhs term0)
                     emptyReplaceState
 
-  -- Attempt to replace calls in 'term1' to the right side of 'bt' with an
-  -- 'ExtCns'.  In other words, replace @f_2@ with @v_2@.
+  -- Attempt to replace calls in 'term1' to the right side of 'bt' with a
+  -- 'Variable'.  In other words, replace @f_2@ with @v_2@.
   let tpRhs = C.TCon (C.TC (C.TCTuple 2)) [ bisimTheoremRhsStateType bt
                                           , bisimTheoremOutputType bt ]
   (term2, rhsRs) <-
     State.runStateT (replaceConstantTerm (bisimTheoremRhs bt) tpRhs term1)
                     emptyReplaceState
 
-  case (rsExtCns lhsRs, rsExtCns rhsRs) of
+  case (rsVariable lhsRs, rsVariable rhsRs) of
     (Just lhsEc, Just rhsEc) -> do
       -- Simplification succeeded! Add assumption and generate side condition
 
-      -- Apply inner output relation to 'ExtCns's
+      -- Apply inner output relation to 'Variable's
       -- orel v_1 v_2
       app <- io $ scApplyAll sc
                               (ttTerm (bisimTheoremOutputRelation bt))
@@ -684,9 +683,9 @@ proveBisimulation script bthms srel orel lhs rhs = do
           , "  Expected: (" ++ stStr ++ ", inputType) -> (" ++ stStr ++ ", outputType)"
           , "  Actual: " ++ show (ppTypedTermType (ttType side)) ]
 
--- | Replace the invocation of a specific 'Constant' with an 'ExtCns'.  The
+-- | Replace the invocation of a specific 'Constant' with a 'Variable'.  The
 -- function returns the resulting 'Term' and updates a 'ReplaceState' to hold
--- the generated 'ExtCns' and the specific 'App' that was replaced.
+-- the generated 'Variable' and the specific 'App' that was replaced.
 replaceConstantTerm :: TypedTerm
                     -- ^ 'Constant' to replace application of
                     -> C.Type
@@ -717,7 +716,7 @@ replaceConstantTerm constant constantRetType term = do
     replaceConstantTermF termF = do
       case termF of
         App x _ | unwrapTermF x == unwrapTermF (ttTerm constant) ->
-          State.gets rsExtCns >>= \case
+          State.gets rsVariable >>= \case
             Just v ->
               State.gets rsApp >>= \case
                 Just a | a == termF ->
@@ -726,7 +725,7 @@ replaceConstantTerm constant constantRetType term = do
                   -- when the underlying Cryptol does not explicitly make
                   -- multiple calls because translation to SAWCore can insert
                   -- additional function calls with the same arguments.  In this
-                  -- case, simply return the same 'ExtCns' already generated.
+                  -- case, simply return the same 'Variable' already generated.
                   return $ unwrapTermF v
                 Just _ -> do
                   -- Encountered a call to the function under replacement with
@@ -738,16 +737,16 @@ replaceConstantTerm constant constantRetType term = do
                                 , "subfunction calls is not yet supported."
                                 ]
                 _ -> panic "replaceConstantTermF"
-                           ["rsApp should always exist when rsExtCns exists"]
+                           ["rsApp should always exist when rsVariable exists"]
             Nothing -> do
               sc <- lift getSharedContext
 
-              -- Generate an 'ExtCns' and return it, thereby replacing 'termF'
+              -- Generate a 'Variable' and return it, thereby replacing 'termF'
               -- with it.
               tp <- liftIO $ C.importType sc C.emptyEnv constantRetType
               name <- lift $ constantName $ unwrapTermF x
               v <- liftIO $ scFreshVariable sc name tp
-              State.modify $ \st -> st { rsExtCns = Just v, rsApp = Just termF }
+              State.modify $ \st -> st { rsVariable = Just v, rsApp = Just termF }
               return $ unwrapTermF v
         _ ->
           -- Recurse

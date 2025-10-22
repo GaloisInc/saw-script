@@ -130,8 +130,7 @@ convertModuleInline sc m = do
   codomainCryptolRecordType <- fieldsToCryptolType codomainFields
 
   -- convert module into term
-  domainRecordEC <- liftIO $ SC.scFreshEC sc "input" domainRecordType
-  domainRecord <- liftIO $ SC.scVariable sc domainRecordEC
+  domainRecord <- liftIO $ SC.scFreshVariable sc "input" domainRecordType
 
   derivedInputs <- forM (Map.assocs inputPorts) $ \(nm, inp) -> do
     t <- liftIO $ cryptolRecordSelect sc domainFields domainRecord nm
@@ -176,7 +175,7 @@ convertModuleInline sc m = do
     (\onm out -> lookupPatternTerm sc (YosysBitvecConsumerOutputPort onm) out terms)
 
   -- construct result
-  t <- liftIO $ SC.scAbstractExts sc [domainRecordEC] outputRecord
+  t <- liftIO $ SC.scAbstractTerms sc [domainRecord] outputRecord
   -- ty <- liftIO $ SC.scFun sc domainRecordType codomainRecordType
   _ <- validateTerm sc "translating a sequential circuit" t
   let cty = C.tFun domainCryptolRecordType codomainCryptolRecordType
@@ -214,8 +213,7 @@ composeYosysSequentialHelper sc s n = do
     pure (exty, excty)
   extendedInputType <- fieldsToType sc extendedInputFields
   extendedInputCryptolType <- fieldsToCryptolType extendedInputFields
-  extendedInputRecordEC <- liftIO $ SC.scFreshEC sc "input" extendedInputType
-  extendedInputRecord <- liftIO $ SC.scVariable sc extendedInputRecordEC
+  extendedInputRecord <- liftIO $ SC.scFreshVariable sc "input" extendedInputType
   extendedOutputCryptolType <- fieldsToCryptolType extendedOutputFields
 
   allInputs <- fmap Map.fromList . forM (Map.keys extendedInputFields) $ \nm -> do
@@ -262,12 +260,11 @@ composeYosysSequentialHelper sc s n = do
       pure (st', mergedOuts)
 
   stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
-  initialStateEC <- liftIO $ SC.scFreshEC sc "initial_state" stateType
-  initialState <- liftIO $ SC.scVariable sc initialStateEC
+  initialState <- liftIO $ SC.scFreshVariable sc "initial_state" stateType
   (_, outputs) <- foldM (\acc i -> compose1 i acc) (initialState, Map.empty) [0..n-1]
 
   outputRecord <- cryptolRecord sc outputs
-  res <- liftIO $ SC.scAbstractExts sc [initialStateEC, extendedInputRecordEC] outputRecord
+  res <- liftIO $ SC.scAbstractTerms sc [initialState, extendedInputRecord] outputRecord
   let cty = C.tFun extendedInputCryptolType extendedOutputCryptolType
 
   pure (res, cty)

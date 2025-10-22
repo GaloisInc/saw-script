@@ -114,7 +114,7 @@ scSubtype sc t1 t2
              (&&) <$> scTypeConvertible sc a1 a2 <*> scSubtype sc b1 b2
            | otherwise ->
              do conv1 <- scTypeConvertible sc a1 a2
-                var1 <- Raw.scVariable sc (EC x1 a1)
+                var1 <- Raw.scVariable sc x1 a1
                 b2' <- Raw.scInstantiateExt sc (IntMap.singleton (vnIndex x2) var1) b2
                 conv2 <- scSubtype sc b1 b2'
                 pure (conv1 && conv2)
@@ -203,7 +203,7 @@ scConstant sc nm =
 scVariable :: SharedContext -> VarName -> Term -> IO Term
 scVariable sc vn t =
   do let tp = rawTerm t
-     tm <- Raw.scVariable sc (EC vn tp)
+     tm <- Raw.scVariable sc vn tp
      let scx = IntMap.insert (vnIndex vn) tp (rawCtx t)
      pure (Term tm tp scx)
 

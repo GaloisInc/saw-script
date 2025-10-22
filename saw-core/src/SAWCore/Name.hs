@@ -36,16 +36,12 @@ module SAWCore.Name
   , moduleIdentToURI
   , nameURI
   , nameAliases
+  , scFreshNameURI
     -- * Name
   , VarIndex
   , Name(..)
     -- * VarName
   , VarName(..)
-    -- * ExtCns
-  , ExtCns(..)
-  , ecVarIndex
-  , ecShortName
-  , scFreshNameURI
     -- * Display Name Environments
   , DisplayNameEnv(..)
   , emptyDisplayNameEnv
@@ -236,6 +232,19 @@ moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constru
        , uriFragment = Nothing
        }
 
+scFreshNameURI :: Text -> VarIndex -> URI
+scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $
+  do sch <- mkScheme "fresh"
+     nm' <- mkPathPiece (if Text.null nm then "_" else nm)
+     i'  <- mkFragment (Text.pack (show i))
+     pure URI
+       { uriScheme = Just sch
+       , uriAuthority = Left False -- relative path
+       , uriPath   = Just (False, (nm' :| []))
+       , uriQuery  = []
+       , uriFragment = Just i'
+       }
+
 
 -- Global Names ----------------------------------------------------------------
 
@@ -290,50 +299,7 @@ instance Ord VarName where
 -- 'VarIndex'; this gives a stable hash value for a particular name,
 -- even if the unique IDs are assigned differently from run to run.
 instance Hashable VarName where
- hashWithSalt x vn = hashWithSalt x (vnName vn)
-
-
--- External Constants ----------------------------------------------------------
-
--- | A global name paired with a type.
--- We assume a global invariant: the type should be uniquely
--- determined by the name.
-data ExtCns e =
-  EC
-  { ecName :: !VarName
-  , ecType :: !e
-  }
-  deriving (Show, Functor, Foldable, Traversable)
-
--- | Because of the global uniqueness invariant, comparing the
--- 'Name' is sufficient to ensure equality.
-instance Eq (ExtCns e) where
-  x == y = ecName x == ecName y
-
-instance Ord (ExtCns e) where
-  compare x y = compare (ecName x) (ecName y)
-
-instance Hashable (ExtCns e) where
-  hashWithSalt x ec = hashWithSalt x (ecName ec)
-
-ecVarIndex :: ExtCns e -> VarIndex
-ecVarIndex ec = vnIndex (ecName ec)
-
-ecShortName :: ExtCns e -> Text
-ecShortName ec = vnName (ecName ec)
-
-scFreshNameURI :: Text -> VarIndex -> URI
-scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $
-  do sch <- mkScheme "fresh"
-     nm' <- mkPathPiece (if Text.null nm then "_" else nm)
-     i'  <- mkFragment (Text.pack (show i))
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left False -- relative path
-       , uriPath   = Just (False, (nm' :| []))
-       , uriQuery  = []
-       , uriFragment = Just i'
-       }
+  hashWithSalt x vn = hashWithSalt x (vnName vn)
 
 
 -- Display Name Environments --------------------------------------------------------

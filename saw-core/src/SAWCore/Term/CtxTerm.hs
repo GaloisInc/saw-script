@@ -71,8 +71,8 @@ asCtorDTApp d params dt_ixs (ctxAsDataTypeApp d params dt_ixs ->
     -- variables, one for each parameter
     isVarList :: [VarName] -> [Term] -> Bool
     isVarList _ [] = True
-    isVarList (p : ps) ((asVariable -> Just ec) : ts) =
-      ecName ec == p && isVarList ps ts
+    isVarList (p : ps) ((asVariable -> Just (x, _)) : ts) =
+      x == p && isVarList ps ts
     isVarList _ _ = False
 asCtorDTApp _ _ _ _ = Nothing
 

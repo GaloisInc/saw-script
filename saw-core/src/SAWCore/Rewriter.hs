@@ -450,9 +450,8 @@ scExpandRewriteRule :: SharedContext -> RewriteRule a -> IO (Maybe [RewriteRule 
 scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
   case R.asLambda rhs of
   Just (nm, tp, body) ->
-    do let ec = EC nm tp
-       let ctxt' = ctxt ++ [(nm, tp)]
-       var0 <- scVariable sc ec
+    do let ctxt' = ctxt ++ [(nm, tp)]
+       var0 <- scVariable sc nm tp
        lhs' <- scApply sc lhs var0
        pure $ Just [mkRewriteRule ctxt' lhs' body shallow ann]
   Nothing ->
@@ -470,10 +469,10 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
        (splitAt (length (recursorCtorOrder crec)) ->
         (elims,
          splitAt (recursorNumIxs crec) ->
-         (_ixs, (R.asVariable -> Just ec) : more))))))
-      | (ctxt1, _ : ctxt2) <- break ((== ecName ec) . fst) ctxt ->
+         (_ixs, (R.asVariable -> Just (x, xt)) : more))))))
+      | (ctxt1, _ : ctxt2) <- break ((== x) . fst) ctxt ->
       do -- ti is the type of the value being scrutinized
-         ti <- scWhnf sc (ecType ec)
+         ti <- scWhnf sc xt
          -- The datatype parameters are also in context @ctxt1@.
          let (_d, (params1, _ixs)) = fmap (splitAt (recursorNumParams crec)) (R.asApplyAll ti)
          let ctorRule ctor =
@@ -484,8 +483,8 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   args <- scVariables sc argCtx
                   c <- scConstApply sc (ctorName ctor) (params1 ++ args)
                   -- Define function to substitute the constructor @c@
-                  -- in for the old local variable @ec@.
-                  let subst = IntMap.singleton (ecVarIndex ec) c
+                  -- in for the old local variable @x@.
+                  let subst = IntMap.singleton (vnIndex x) c
                   let adjust t = scInstantiateExt sc subst t
                   -- Build the list of types of the new context.
                   ctxt2' <- traverse (traverse adjust) ctxt2
@@ -540,7 +539,7 @@ asFreshPiList sc t =
       do -- never use "_" as the base name
          let basename = if vnName x == "_" then "_x" else vnName x
          x' <- scFreshVarName sc basename
-         var <- scVariable sc (EC x' t1)
+         var <- scVariable sc x' t1
          t2' <- scInstantiateExt sc (IntMap.singleton (vnIndex x) var) t2
          (ctx, body) <- asFreshPiList sc t2'
          pure ((x', t1) : ctx, body)
@@ -1019,7 +1018,7 @@ doHoistIfs sc ss hoistCache = go
              do (then_branch',conds1) <- go then_branch
                 (else_branch',conds2) <- go else_branch
                 t' <- scGlobalApply sc "Prelude.ite" [branch_tp, cond, then_branch', else_branch']
-                let vars = Map.fromList $ map (\(EC vn tp) -> (vn, tp)) $ getAllExts cond
+                let vars = getAllVarsMap cond
                 return (t', (cond, vars) : conds1 ++ conds2)
            _ ->
              goF t tf

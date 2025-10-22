@@ -204,13 +204,13 @@ data TypedVariable =
 asTypedVariable :: TypedTerm -> Maybe TypedVariable
 asTypedVariable (TypedTerm tp t) =
   do cty <- ttIsMono tp
-     ec <- asVariable t
-     pure $ TypedVariable cty (ecName ec) (ecType ec)
+     (x, ty) <- asVariable t
+     pure $ TypedVariable cty x ty
 
 -- | Make a 'TypedTerm' from a 'TypedVariable'.
 typedTermOfVariable :: SharedContext -> TypedVariable -> IO TypedTerm
 typedTermOfVariable sc (TypedVariable cty vn ty) =
-  TypedTerm (TypedTermSchema (C.tMono cty)) <$> scVariable sc (EC vn ty)
+  TypedTerm (TypedTermSchema (C.tMono cty)) <$> scVariable sc vn ty
 
 abstractTypedVars :: SharedContext -> [TypedVariable] -> TypedTerm -> IO TypedTerm
 abstractTypedVars sc tvars (TypedTerm (TypedTermSchema (C.Forall params props ty)) trm) =
