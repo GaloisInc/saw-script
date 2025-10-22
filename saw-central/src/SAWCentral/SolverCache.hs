@@ -29,10 +29,10 @@ database. The interface, as used in 'applyProverToGoal', works as follows:
 
 A interesting detail is how results are represented. For all of the backends
 which use 'applyProverToGoal', the type of a result is:
-@Maybe [(ExtCns Term, FirstOrderValue)]@, where 'Nothing' represents a result
+@Maybe [(VarName, FirstOrderValue)]@, where 'Nothing' represents a result
 of "unsat," and 'Just' represents a result of "sat" along with a list of
-counterexamples. Since 'ExtCns' contains execution-specific 'VarIndex'es, we
-don't want to save these results directly. Instead, we represent each 'ExtCns'
+counterexamples. Since 'VarName' contains execution-specific 'VarIndex'es, we
+don't want to save these results directly. Instead, we represent each 'VarName'
 as its index in the 'satVariables' field of 'SATQuery' (which is where they
 were obtained by the backends in the first place).
 -}
