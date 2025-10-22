@@ -50,7 +50,6 @@ module SAWCore.SharedTerm
   , scTermF
   , scFlatTermF
     -- ** Implicit versions of functions.
-  , scDefTerm
   , scFreshVariable
   , scFreshName
   , scFreshVarName
@@ -1507,9 +1506,6 @@ scApplyBeta sc f arg =
 -- the function is a lambda
 scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAllBeta sc = foldlM (scApplyBeta sc)
-
-scDefTerm :: SharedContext -> Def -> IO Term
-scDefTerm sc d = scConst sc (defName d)
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.
