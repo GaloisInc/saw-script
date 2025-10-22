@@ -87,6 +87,9 @@ library saw-support
   exposed-modules:
     SAWSupport.PanicSupport
     SAWSupport.Pretty
+    SAWSupport.ScopedMap
+  other-modules:
+    SAWSupport.Panic
 
 
 ------------------------------------------------------------

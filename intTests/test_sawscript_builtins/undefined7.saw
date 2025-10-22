@@ -1,15 +1,7 @@
-// This currently doesn't crash unless you execute m.
-//
-// This is somewhat unexpected, as in theory it should trip on
-// undefined evaluating the right hand side of "let m" in
-// interpretExpr... or having not done so, file x in the environment
-// and then never see it again and not crash at all.
-//
-// For the time being I'm going to let this pass as an acceptable
-// weirdness, and with luck it'll change when other things in the
-// interpreter get cleaned up.
+// This crashes when m is bound. It will eval until it gets to
+// the do-block, and that trips on the undefined.
 
 let m = let x = undefined in do { return (); };
-print "not dead yet";
-m;
 print "oops didn't die";
+m;
+print "oops still didn't die";

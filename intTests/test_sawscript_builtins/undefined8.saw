@@ -1,0 +1,6 @@
+// This crashes immediately.
+
+let y = let x = undefined in ();
+print "oops didn't die";
+print y;
+print "oops still didn't die";

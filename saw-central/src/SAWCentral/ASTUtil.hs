@@ -3,6 +3,7 @@
 module SAWCentral.ASTUtil (
     namedTyVars,
     SubstituteTyVars(..),
+    SubstituteTyVars'(..),
     isDeprecated
  ) where
 
@@ -11,6 +12,9 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
+
+import qualified SAWSupport.ScopedMap as ScopedMap
+import SAWSupport.ScopedMap (ScopedMap)
 
 import SAWCentral.Panic
 import SAWCentral.Position
@@ -66,10 +70,10 @@ instance NamedTyVars Schema where
 --
 
 class SubstituteTyVars t where
-  -- | @substituteTyVars m x@ applies the map @m@ to type variables in @x@.
+  -- | @substituteTyVars m x@ applies the (scoped) map @m@ to type variables in @x@.
   substituteTyVars ::
       Set PrimitiveLifecycle ->
-      Map Name (PrimitiveLifecycle, NamedType) ->
+      ScopedMap Name (PrimitiveLifecycle, NamedType) ->
       t -> t
 
 instance (SubstituteTyVars a) => SubstituteTyVars (Maybe a) where
@@ -84,11 +88,49 @@ instance SubstituteTyVars Type where
     TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars avail tyenv) fs)
     TyUnifyVar _ _      -> ty
     TyVar _ n           ->
-        case Map.lookup n tyenv of
+        case ScopedMap.lookup n tyenv of
             Nothing -> ty
             Just (lc, expansion) ->
                 if not (Set.member lc avail) then
                     panic "substituteTyVars" [
+                        "Found reference to non-visible typedef: " <> n,
+                        "Lifecycle setting: " <> Text.pack (show lc)
+                    ]
+                else case expansion of
+                    AbstractType -> ty
+                    ConcreteType ty' -> ty'
+
+--
+-- The prime version uses an ordinary map.
+--
+-- This is used by the typechecker for the time being until the
+-- typechecker gets taught to use ScopedMap.
+--
+
+class SubstituteTyVars' t where
+  -- | @substituteTyVars' m x@ applies the (ordinary) map @m@ to type variables in @x@.
+  substituteTyVars' ::
+      Set PrimitiveLifecycle ->
+      Map Name (PrimitiveLifecycle, NamedType) ->
+      t -> t
+
+instance (SubstituteTyVars' a) => SubstituteTyVars' (Maybe a) where
+  substituteTyVars' avail tyenv = fmap (substituteTyVars' avail tyenv)
+
+instance (SubstituteTyVars' a) => SubstituteTyVars' [a] where
+  substituteTyVars' avail tyenv = map (substituteTyVars' avail tyenv)
+
+instance SubstituteTyVars' Type where
+  substituteTyVars' avail tyenv ty = case ty of
+    TyCon pos tc ts     -> TyCon pos tc (substituteTyVars' avail tyenv ts)
+    TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars' avail tyenv) fs)
+    TyUnifyVar _ _      -> ty
+    TyVar _ n           ->
+        case Map.lookup n tyenv of
+            Nothing -> ty
+            Just (lc, expansion) ->
+                if not (Set.member lc avail) then
+                    panic "substituteTyVars'" [
                         "Found reference to non-visible typedef: " <> n,
                         "Lifecycle setting: " <> Text.pack (show lc)
                     ]

@@ -30,7 +30,7 @@ import Cryptol.TypeCheck.Solver.SMT (withSolver)
 import Cryptol.Utils.Ident (interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP ( defaultPPOpts, pp )
-import SAWCentral.Value (biSharedContext, TopLevelRW(..))
+import SAWCentral.Value (biSharedContext, rwGetCryptolEnv)
 import CryptolSAWCore.CryptolEnv
     ( getAllIfaceDecls,
       getNamingEnv,
@@ -48,8 +48,8 @@ import CryptolServer.Exceptions (cryptolError)
 import SAWServer.SAWServer
 
 getTypedTerm :: Expression -> Argo.Command SAWState TypedTerm
-getTypedTerm inputExpr =
-  do cenv <- rwCryptol . view sawTopLevelRW <$> Argo.getState
+getTypedTerm inputExpr = do
+     cenv <- rwGetCryptolEnv . view sawTopLevelRW <$> Argo.getState
      fileReader <- Argo.getFileReader
      expr <- getCryptolExpr inputExpr
      sc <- biSharedContext . view sawBIC <$> Argo.getState

@@ -1,0 +1,20 @@
+// Example from #2243 using the Cryptol scope.
+
+enable_experimental;
+
+let foo () = do {
+   prove_print do {
+      proof_subshell ();
+      let _ = run (print {{ quack }});
+      return ();
+   } {{ True }};
+};
+
+let bar () = do {
+   print {{ quack }};
+};
+
+print "this should print 3";
+foo ();
+print "this should fail";
+fails (bar ());

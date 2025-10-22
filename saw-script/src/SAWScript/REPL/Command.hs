@@ -33,19 +33,22 @@ module SAWScript.REPL.Command (
 
 --import SAWCore.SharedTerm (SharedContext)
 
+import qualified SAWSupport.ScopedMap as ScopedMap
+
+import SAWCentral.Position (getPos, Pos)
+import SAWCentral.Value (Environ(..))
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
-import SAWCentral.Position (getPos, Pos)
 import SAWScript.Token (Token)
 
 import Cryptol.Parser (ParseError())
 
-import Control.Monad (guard, void)
+import Control.Monad (guard, unless, void)
 
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
-import Data.List (intercalate, nub)
+import Data.List (intercalate, intersperse, nub)
 import qualified Data.Text as Text
 import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
@@ -74,7 +77,7 @@ import SAWScript.Interpreter (interpretTopStmt)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression, parseSchemaPattern)
 import SAWCentral.TopLevel (TopLevelRW(..))
-import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable)
+import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable, Rebindable(..))
 
 
 -- Commands --------------------------------------------------------------------
@@ -199,14 +202,19 @@ typeOfCmd str
        Right expr -> return expr
      let pos = getPos expr
          decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
-     rw <- getValueEnvironment
+     rw <- getTopLevelRW
      decl' <- do
        let primsAvail = rwPrimsAvail rw
-           valueInfo = rwValueInfo rw
-           squash (defpos, lc, rb, ty, _val, _doc) = (defpos, lc, rb, ty)
-           valueInfo' = Map.map squash valueInfo
-           typeInfo = rwTypeInfo rw
-       let (errs_or_results, warns) = checkDecl primsAvail valueInfo' typeInfo decl
+           -- XXX it should not be necessary to do this munging
+           Environ varenv tyenv _cryenvs = rwEnviron rw
+           squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
+           varenv' = Map.map squash $ ScopedMap.flatten varenv
+           tyenv' = ScopedMap.flatten tyenv
+           rbenv = rwRebindables rw
+           rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
+           rbenv' = Map.map rbsquash rbenv
+           varenv'' = Map.union varenv' rbenv'
+       let (errs_or_results, warns) = checkDecl primsAvail varenv'' tyenv' decl
        let issueWarning (msgpos, msg) =
              -- XXX the print functions should be what knows how to show positions...
              putStrLn (show msgpos ++ ": Warning: " ++ msg)
@@ -223,7 +231,7 @@ searchCmd str
      pat <- case SAWScript.Parser.parseSchemaPattern tokens of
        Left err -> fail (show err)
        Right pat -> return pat
-     rw <- getValueEnvironment
+     rw <- getTopLevelRW
 
      -- Always search the entire environment and recognize all type
      -- names in the user's pattern, regardless of whether
@@ -240,19 +248,24 @@ searchCmd str
      -- for deprecated functions that take Terms.
 
      let primsAvail = rwPrimsAvail rw
-         valueInfo = rwValueInfo rw
-         squash (pos, lc, rb, ty, _val, _doc) = (pos, lc, rb, ty)
-         valueInfo' = Map.map squash valueInfo
-         typeInfo = rwTypeInfo rw
-         (errs_or_results, warns) = checkSchemaPattern everythingAvailable valueInfo' typeInfo pat
+         -- XXX it should not be necessary to do this munging
+         Environ varenv tyenv _cryenv = rwEnviron rw
+         rbenv = rwRebindables rw
+         squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)
+         varenv' = Map.map squash $ ScopedMap.flatten varenv
+         tyenv' = ScopedMap.flatten tyenv
+         rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)
+         rbenv' = Map.map rbsquash rbenv
+         varenv'' = Map.union varenv' rbenv'
+         (errs_or_results, warns) = checkSchemaPattern everythingAvailable varenv'' tyenv' pat
      let issueWarning (msgpos, msg) =
            -- XXX the print functions should be what knows how to show positions...
            putStrLn (show msgpos ++ ": Warning: " ++ msg)
      io $ mapM_ issueWarning warns
      pat' <- either failTypecheck return $ errs_or_results
-     let search = compileSearchPattern typeInfo pat'
+     let search = compileSearchPattern tyenv pat'
          keep (_pos, _lc, _rb, ty) = matchSearchPattern search ty
-         allMatches = Map.filter keep valueInfo'
+         allMatches = Map.filter keep varenv'
 
          -- Divide the results into visible, experimental-not-visible,
          -- and deprecated-not-visible.
@@ -339,34 +352,66 @@ quitCmd  = stop
 
 envCmd :: REPL ()
 envCmd = do
-  rw <- getValueEnvironment
-  let avail = rwPrimsAvail rw
-      valueInfo = rwValueInfo rw
-      keep (_pos, lc, _rb, _ty, _v, _doc) = Set.member lc avail
-      valueInfo' = Map.filter keep valueInfo
-      say (x, (_pos, _lc, _rb, ty, _val, _doc)) =
-          TextIO.putStrLn (x <> " : " <> PPS.pShowText ty)
-  io $ mapM_ say $ Map.assocs valueInfo'
+  rw <- getTopLevelRW
+  let Environ varenv _tyenv _cryenv = rwEnviron rw
+      rbenv = rwRebindables rw
+      avail = rwPrimsAvail rw
+
+  -- print the rebindable globals first, if any
+  unless (Map.null rbenv) $ do
+      let rbsay (x, (_pos, ty, _v)) = do
+              let ty' = PPS.pShowText ty
+              TextIO.putStrLn (x <> " : rebindable " <> ty')
+      io $ mapM_ rbsay $ Map.assocs rbenv
+      io $ TextIO.putStrLn ""
+
+  -- print the normal environment
+  let say (x, (_pos, _lc, ty, _v, _doc)) = do
+          let ty' = PPS.pShowText ty
+          TextIO.putStrLn (x <> " : " <> ty')
+      -- Print only the visible objects
+      keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
+      -- Insert a blank line in the output where there's a scope boundary
+      printScope mItems = case mItems of
+          Nothing -> TextIO.putStrLn ""
+          Just items -> mapM_ say $ filter keep items
+      -- Reverse the list of scopes so the innermost prints last,
+      -- because that's what people will expect to see.
+      itemses = reverse $ ScopedMap.scopedAssocs varenv
+  io $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
 tenvCmd :: REPL ()
 tenvCmd = do
-  rw <- getValueEnvironment
+  rw <- getTopLevelRW
   let avail = rwPrimsAvail rw
-      typeInfo = rwTypeInfo rw
-      typeInfo' = Map.filter (\(lc, _ty) -> Set.member lc avail) typeInfo
-      say (a, (_lc, ty)) =
-          TextIO.putStrLn (a <> " : " <> PPS.pShowText ty)
-  io $ mapM_ say $ Map.assocs typeInfo'
+      Environ _varenv tyenv _cryenv = rwEnviron rw
+      say (x, (_lc, ty)) = do
+          let ty' = PPS.pShowText ty
+          TextIO.putStrLn (x <> " : " <> ty')
+      -- Print only the visible objects
+      keep (_x, (lc, _ty)) = Set.member lc avail
+      -- Insert a blank line in the output where there's a scope boundary
+      printScope mItems = case mItems of
+          Nothing -> TextIO.putStrLn ""
+          Just items -> mapM_ say $ filter keep items
+      -- Reverse the list of scopes so the innermost prints last,
+      -- because that's what people will expect to see.
+      itemses = reverse $ ScopedMap.scopedAssocs tyenv
+  io $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
   | null cmd = io (mapM_ putStrLn (genHelp commandList))
   | otherwise =
-    do env <- getEnvironment
-       case Map.lookup (Text.pack cmd) (rwValueInfo env) of
-         Just (_pos, _lc, _rb, _ty, _v, Just doc) ->
+    do rw <- getTopLevelRW
+       -- Note: there's no rebindable builtins and thus no way to
+       -- attach help text to anything rebindable, so we can ignore
+       -- the rebindables.
+       let Environ varenv _tyenv _cryenvs = rwEnviron rw
+       case ScopedMap.lookup (Text.pack cmd) varenv of
+         Just (_pos, _lc, _ty, _v, Just doc) ->
            io $ mapM_ TextIO.putStrLn doc
-         Just (_pos, _lc, _rb, _ty, _v, Nothing) -> do
+         Just (_pos, _lc, _ty, _v, Nothing) -> do
            io $ putStrLn $ "// No documentation is available."
            typeOfCmd cmd
          Nothing ->

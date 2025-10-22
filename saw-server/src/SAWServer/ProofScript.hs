@@ -259,7 +259,7 @@ prove :: ProveParams Expression -> Argo.Command SAWState ProveResult
 prove params = do
   state <- Argo.getState
   fileReader <- Argo.getFileReader
-  let cenv = SV.rwCryptol (view sawTopLevelRW state)
+  let cenv = SV.rwGetCryptolEnv (view sawTopLevelRW state)
       bic = view sawBIC state
   cexp <- getCryptolExpr (ppGoal params)
   (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv cexp

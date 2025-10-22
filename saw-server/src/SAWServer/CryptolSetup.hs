@@ -18,7 +18,7 @@ import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (textToModName)
-import SAWCentral.Value (biSharedContext, rwCryptol)
+import SAWCentral.Value (biSharedContext, rwGetCryptolEnv, rwSetCryptolEnv)
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 import qualified Argo
@@ -36,7 +36,8 @@ cryptolLoadModuleDescr =
 cryptolLoadModule :: CryptolLoadModuleParams -> Argo.Command SAWState OK
 cryptolLoadModule (CryptolLoadModuleParams modName) =
   do sc <- biSharedContext . view sawBIC <$> Argo.getState
-     cenv <- rwCryptol . view sawTopLevelRW <$> Argo.getState
+     rw <- view sawTopLevelRW <$> Argo.getState
+     let cenv = rwGetCryptolEnv rw
      let qual = Nothing -- TODO add field to params
      let importSpec = Nothing -- TODO add field to params
      fileReader <- Argo.getFileReader
@@ -45,7 +46,7 @@ cryptolLoadModule (CryptolLoadModuleParams modName) =
      case cenv' of
        Left (ex :: SomeException) -> Argo.raise $ cryptolError (show ex)
        Right cenv'' ->
-         do Argo.modifyState $ over sawTopLevelRW $ \rw -> rw { rwCryptol = cenv'' }
+         do Argo.modifyState $ over sawTopLevelRW $ rwSetCryptolEnv cenv''
             ok
 
 newtype CryptolLoadModuleParams =
@@ -71,7 +72,8 @@ cryptolLoadFileDescr =
 cryptolLoadFile :: CryptolLoadFileParams -> Argo.Command SAWState OK
 cryptolLoadFile (CryptolLoadFileParams fileName) =
   do sc <- biSharedContext . view sawBIC <$> Argo.getState
-     cenv <- rwCryptol . view sawTopLevelRW <$> Argo.getState
+     rw <- view sawTopLevelRW <$> Argo.getState
+     let cenv = rwGetCryptolEnv rw
      let qual = Nothing -- TODO add field to params
      let importSpec = Nothing -- TODO add field to params
      fileReader <- Argo.getFileReader
@@ -80,7 +82,7 @@ cryptolLoadFile (CryptolLoadFileParams fileName) =
      case cenv' of
        Left (ex :: SomeException) -> Argo.raise $ cryptolError (show ex)
        Right cenv'' ->
-         do Argo.modifyState $ over sawTopLevelRW $ \rw -> rw { rwCryptol = cenv'' }
+         do Argo.modifyState $ over sawTopLevelRW $ rwSetCryptolEnv cenv''
             ok
 
 newtype CryptolLoadFileParams =

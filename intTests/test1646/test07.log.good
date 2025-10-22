@@ -1,0 +1,8 @@
+ Loading file "test07.saw"
+ Type errors:
+  test07.saw:4:4-4:26: Invalid use of 'rebindable'
+  test07.saw:4:4-4:26: It is only allowed at the syntactic top level
+  test07.saw:9:4-9:26: Invalid use of 'rebindable'
+  test07.saw:9:4-9:26: It is only allowed at the syntactic top level
+
+FAILED

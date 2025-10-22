@@ -1,0 +1,16 @@
+// This is rejected; once the rebindable tag is dropped it can't be
+// readded.
+
+let rebindable x = "a";
+
+do {
+   let x = 3;
+   print x;
+   return ();
+};
+
+let x = "b";
+print x;
+
+let rebindable x = "c";
+print x;
