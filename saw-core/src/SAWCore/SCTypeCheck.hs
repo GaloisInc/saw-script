@@ -194,7 +194,7 @@ data TCError
   | NoSuchCtor NameInfo
   | NoSuchConstant NameInfo
   | NotFullyAppliedRec NameInfo
-  | MalformedRecursor Term String
+  | MalformedRecursor NameInfo Sort String
   | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorCtx LocalName Term TCError
@@ -260,9 +260,9 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such constant: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
-  helper (MalformedRecursor trm reason) =
+  helper (MalformedRecursor d s reason) =
       ppWithPos [ return "Malformed recursor",
-                  ishow trm, return reason ]
+                  pure (show d), pure (show s), pure reason ]
   helper (DeclError nm reason) =
     ppWithPos [ return ("Malformed declaration for " ++ show nm), return reason ]
   helper (ErrorPos p err) =
@@ -587,8 +587,7 @@ compileRecursor dt s =
 
      -- Check that the parameters are correct for the given datatype
      let err =
-           MalformedRecursor
-           (Unshared $ fmap SC.rawTerm $ FTermF $ Recursor crec)
+           MalformedRecursor (nameInfo d) s
            "Disallowed propositional elimination"
 
      unless (allowedElimSort dt s) $ throwTCError err
