@@ -2240,7 +2240,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2221 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2222 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
 <span class="lineno"> 2223 </span><span class="spaces">  </span><span class="istickedoff">-- Common code to handle type parameters of the nominal type:</span>
-<span class="lineno"> 2224 </span><span class="spaces">  </span><span class="istickedoff">--  - ExtCns are used to capture each of the type variables.</span>
+<span class="lineno"> 2224 </span><span class="spaces">  </span><span class="istickedoff">--  - `Variable`s are used to capture each of the type variables.</span>
 <span class="lineno"> 2225 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2226 </span><span class="spaces">  </span><span class="istickedoff">-- The type parameters (`ts` in the example above)</span>
 <span class="lineno"> 2227 </span><span class="spaces">  </span><span class="istickedoff">let tyParamsInfo  = C.ntParams nt</span>
@@ -2249,7 +2249,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2230 </span><span class="spaces">  </span><span class="istickedoff">-- tyParamsKinds &lt;- forM tyParamsInfo $ \tpi -&gt;</span>
 <span class="lineno"> 2231 </span><span class="spaces">  </span><span class="istickedoff">--                   importKind sc (C.tpKind tpi)</span>
 <span class="lineno"> 2232 </span><span class="spaces">  </span><span class="istickedoff">-- | create variables for the type Params:</span>
-<span class="lineno"> 2233 </span><span class="spaces">  </span><span class="istickedoff">-- tyParamsVars  &lt;- mapM (scExtCns sc) tyParamsECs</span>
+<span class="lineno"> 2233 </span><span class="spaces">  </span><span class="istickedoff">-- tyParamsVars  &lt;- mapM (scVariable sc) tyParamsECs</span>
 <span class="lineno"> 2234 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2235 </span><span class="spaces">  </span><span class="istickedoff">(envWithTParams,tks) &lt;-</span>
 <span class="lineno"> 2236 </span><span class="spaces">    </span><span class="istickedoff">mapAccumLM</span>

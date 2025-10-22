@@ -43,7 +43,7 @@ span.spaces    { background: white }
 <span class="lineno">   24 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;Expected boolean type, but got &quot; ++ show (ppTypedTermType tp))</span></span></span>
 <span class="lineno">   25 </span>
 <span class="lineno">   26 </span>bindAllExts :: SharedContext -&gt; Term -&gt; IO Term
-<span class="lineno">   27 </span><span class="decl"><span class="nottickedoff">bindAllExts sc body = scAbstractExts sc (getAllExts body) body</span></span>
+<span class="lineno">   27 </span><span class="decl"><span class="nottickedoff">bindAllExts sc body = scLambdaList sc (getAllVars body) body</span></span>
 <span class="lineno">   28 </span>
 <span class="lineno">   29 </span>liftCexBB :: [FiniteType] -&gt; [Bool] -&gt; Either String [FiniteValue]
 <span class="lineno">   30 </span><span class="decl"><span class="nottickedoff">liftCexBB tys bs =</span>

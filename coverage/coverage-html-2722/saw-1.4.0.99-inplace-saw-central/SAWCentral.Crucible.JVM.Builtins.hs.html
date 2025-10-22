@@ -802,11 +802,11 @@ span.spaces    { background: white }
 <span class="lineno">  783 </span><span class="spaces">     </span><span class="istickedoff">skipSafetyProofs &lt;- gets rwSkipSafetyProofs</span>
 <span class="lineno">  784 </span><span class="spaces">     </span><span class="istickedoff">when skipSafetyProofs <span class="nottickedoff">(io (Crucible.clearProofObligations bak))</span></span>
 <span class="lineno">  785 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  786 </span><span class="spaces">     </span><span class="istickedoff">let ecs0 = IntMap.fromList</span>
-<span class="lineno">  787 </span><span class="spaces">           </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
+<span class="lineno">  786 </span><span class="spaces">     </span><span class="istickedoff">let vars0 = IntMap.fromList</span>
+<span class="lineno">  787 </span><span class="spaces">           </span><span class="istickedoff">[ (vnIndex vn, (vn, tvType tt))</span>
 <span class="lineno">  788 </span><span class="spaces">           </span><span class="istickedoff">| tt &lt;- mspec ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno">  789 </span><span class="spaces">           </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt) ]</span>
-<span class="lineno">  790 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ traverse (scVariable sc) ecs0</span>
+<span class="lineno">  789 </span><span class="spaces">           </span><span class="istickedoff">, let vn = tvName tt ]</span>
+<span class="lineno">  790 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ scVariables sc vars0</span>
 <span class="lineno">  791 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  792 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map <span class="nottickedoff">(vnIndex . tvName)</span></span>
 <span class="lineno">  793 </span><span class="spaces">                                    </span><span class="istickedoff">(view (MS.csPostState . MS.csFreshVars) mspec))</span>

@@ -571,7 +571,7 @@ span.spaces    { background: white }
 <span class="lineno">  552 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  553 </span><span class="spaces">    </span><span class="istickedoff">freshenTerm (TypedVariable _cty vn ty) =</span>
 <span class="lineno">  554 </span><span class="spaces">      </span><span class="istickedoff">do vn' &lt;- liftIO $ scFreshVarName sc (vnName vn)</span>
-<span class="lineno">  555 </span><span class="spaces">         </span><span class="istickedoff">new &lt;- liftIO $ scVariable sc (EC vn' ty)</span>
+<span class="lineno">  555 </span><span class="spaces">         </span><span class="istickedoff">new &lt;- liftIO $ scVariable sc vn' ty</span>
 <span class="lineno">  556 </span><span class="spaces">         </span><span class="istickedoff">return (vnIndex vn, new)</span></span>
 <span class="lineno">  557 </span>
 <span class="lineno">  558 </span>-- | An override packaged together with its preconditions, labeled with some

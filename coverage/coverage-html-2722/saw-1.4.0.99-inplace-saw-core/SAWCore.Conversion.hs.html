@@ -299,7 +299,7 @@ span.spaces    { background: white }
 <span class="lineno">  280 </span><span class="decl"><span class="istickedoff">asAnyVecLit = asVar $ \t -&gt; do ArrayValue u xs &lt;- R.asFTermF t; return (<span class="nottickedoff">u</span>,xs)</span></span>
 <span class="lineno">  281 </span>
 <span class="lineno">  282 </span>-- | Match any named variable.
-<span class="lineno">  283 </span>asVariable :: Matcher (ExtCns Term)
+<span class="lineno">  283 </span>asVariable :: Matcher (VarName, Term)
 <span class="lineno">  284 </span><span class="decl"><span class="nottickedoff">asVariable = asVar R.asVariable</span></span>
 <span class="lineno">  285 </span>
 <span class="lineno">  286 </span>----------------------------------------------------------------------

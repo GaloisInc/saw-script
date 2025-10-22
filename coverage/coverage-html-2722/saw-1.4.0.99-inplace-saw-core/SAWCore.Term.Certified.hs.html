@@ -133,7 +133,7 @@ span.spaces    { background: white }
 <span class="lineno">  114 </span><span class="spaces">             </span><span class="istickedoff">(&amp;&amp;) &lt;$&gt; scTypeConvertible <span class="nottickedoff">sc</span> a1 a2 &lt;*&gt; scSubtype <span class="nottickedoff">sc</span> b1 b2</span>
 <span class="lineno">  115 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
 <span class="lineno">  116 </span><span class="spaces">             </span><span class="istickedoff">do conv1 &lt;- scTypeConvertible sc a1 a2</span>
-<span class="lineno">  117 </span><span class="spaces">                </span><span class="istickedoff">var1 &lt;- Raw.scVariable sc (EC x1 a1)</span>
+<span class="lineno">  117 </span><span class="spaces">                </span><span class="istickedoff">var1 &lt;- Raw.scVariable sc x1 a1</span>
 <span class="lineno">  118 </span><span class="spaces">                </span><span class="istickedoff">b2' &lt;- Raw.scInstantiateExt sc (IntMap.singleton (vnIndex x2) var1) b2</span>
 <span class="lineno">  119 </span><span class="spaces">                </span><span class="istickedoff">conv2 &lt;- scSubtype sc b1 b2'</span>
 <span class="lineno">  120 </span><span class="spaces">                </span><span class="istickedoff">pure (conv1 &amp;&amp; conv2)</span>
@@ -222,7 +222,7 @@ span.spaces    { background: white }
 <span class="lineno">  203 </span>scVariable :: SharedContext -&gt; VarName -&gt; Term -&gt; IO Term
 <span class="lineno">  204 </span><span class="decl"><span class="istickedoff">scVariable sc vn t =</span>
 <span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">do let tp = rawTerm t</span>
-<span class="lineno">  206 </span><span class="spaces">     </span><span class="istickedoff">tm &lt;- Raw.scVariable sc (EC vn tp)</span>
+<span class="lineno">  206 </span><span class="spaces">     </span><span class="istickedoff">tm &lt;- Raw.scVariable sc vn tp</span>
 <span class="lineno">  207 </span><span class="spaces">     </span><span class="istickedoff">let scx = IntMap.insert (vnIndex vn) tp (rawCtx t)</span>
 <span class="lineno">  208 </span><span class="spaces">     </span><span class="istickedoff">pure (Term tm tp scx)</span></span>
 <span class="lineno">  209 </span>

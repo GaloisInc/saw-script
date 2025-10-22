@@ -76,8 +76,8 @@ span.spaces    { background: white }
 <span class="lineno">   57 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff">enableSubshell m =</span>
 <span class="lineno">   59 </span><span class="spaces">    </span><span class="istickedoff">REPL $ \refs -&gt;</span>
-<span class="lineno">   60 </span><span class="spaces">      </span><span class="istickedoff">do let ro' = (eTopLevelRO refs){ roSubshell = <span class="nottickedoff">subshell (runInputT replSettings (withInterrupt loop))</span> }</span>
-<span class="lineno">   61 </span><span class="spaces">         </span><span class="istickedoff">unREPL m refs{ eTopLevelRO = ro' }</span>
+<span class="lineno">   60 </span><span class="spaces">      </span><span class="istickedoff">do let ro' = (rTopLevelRO refs){ roSubshell = <span class="nottickedoff">subshell (runInputT replSettings (withInterrupt loop))</span> }</span>
+<span class="lineno">   61 </span><span class="spaces">         </span><span class="istickedoff">unREPL m refs{ rTopLevelRO = ro' }</span>
 <span class="lineno">   62 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   63 </span><span class="spaces">  </span><span class="istickedoff">loop = do</span>
 <span class="lineno">   64 </span><span class="spaces">    </span><span class="istickedoff">prompt &lt;- MTL.lift getPrompt</span>

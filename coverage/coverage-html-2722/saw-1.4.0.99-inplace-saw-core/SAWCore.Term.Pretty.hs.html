@@ -526,7 +526,7 @@ span.spaces    { background: white }
 <span class="lineno">  507 </span><span class="spaces">  </span><span class="istickedoff">(ppPi &lt;$&gt; ppTerm' PrecApp tp &lt;*&gt;</span>
 <span class="lineno">  508 </span><span class="spaces">   </span><span class="istickedoff">ppTermInBinder PrecLambda x body)</span>
 <span class="lineno">  509 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (Constant nm) = annotate <span class="nottickedoff">PPS.ConstantStyle</span> &lt;$&gt; ppBestName nm</span>
-<span class="lineno">  510 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (Variable vn _tp) = annotate <span class="nottickedoff">PPS.ExtCnsStyle</span> &lt;$&gt; ppVarName vn</span></span>
+<span class="lineno">  510 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (Variable vn _tp) = annotate <span class="nottickedoff">PPS.VariableStyle</span> &lt;$&gt; ppVarName vn</span></span>
 <span class="lineno">  511 </span>
 <span class="lineno">  512 </span>-- | Internal function to recursively pretty-print a term
 <span class="lineno">  513 </span>ppTerm' :: Prec -&gt; Term -&gt; PPM PPS.Doc

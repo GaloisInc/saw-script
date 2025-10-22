@@ -235,7 +235,7 @@ span.spaces    { background: white }
 <span class="lineno">  216 </span><span class="spaces">         </span><span class="istickedoff">vs &lt;- State.gets <span class="nottickedoff">rsVars</span></span>
 <span class="lineno">  217 </span><span class="spaces">         </span><span class="istickedoff">nmi &lt;- case Map.lookup vi nms of</span>
 <span class="lineno">  218 </span><span class="spaces">                  </span><span class="istickedoff">Just (Right nmi) -&gt; pure nmi</span>
-<span class="lineno">  219 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: ExtCns missing name info: &quot; ++ show vi</span></span>
+<span class="lineno">  219 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: Name missing name info: &quot; ++ show vi</span></span>
 <span class="lineno">  220 </span><span class="spaces">         </span><span class="istickedoff">case nmi of</span>
 <span class="lineno">  221 </span><span class="spaces">           </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
 <span class="lineno">  222 </span><span class="spaces">             </span><span class="istickedoff">lift (scResolveNameByURI sc (moduleIdentToURI ident)) &gt;&gt;= \case</span>

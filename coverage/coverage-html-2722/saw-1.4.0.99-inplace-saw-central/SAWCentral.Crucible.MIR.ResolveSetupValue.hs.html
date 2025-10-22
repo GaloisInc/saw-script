@@ -1219,7 +1219,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1200 </span><span class="spaces">  </span><span class="istickedoff">return $ MIRVal elemShp rv</span></span>
 <span class="lineno"> 1201 </span>
 <span class="lineno"> 1202 </span>-- | Create a symbolic @usize@ from an 'Int'.
-<span class="lineno"> 1203 </span>usizeBvLit :: Sym -&gt; Int -&gt; IO (W4.SymBV Sym Mir.SizeBits)
+<span class="lineno"> 1203 </span>usizeBvLit :: W4.IsSymExprBuilder sym =&gt; sym -&gt; Int -&gt; IO (W4.SymBV sym Mir.SizeBits)
 <span class="lineno"> 1204 </span><span class="decl"><span class="istickedoff">usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger</span></span>
 <span class="lineno"> 1205 </span>
 <span class="lineno"> 1206 </span>-- | Check if two 'MIRVal's are equal.
@@ -1604,7 +1604,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1585 </span><span class="spaces">     </span><span class="istickedoff">len_sym &lt;- usizeBvLit sym (ma^.maLen)</span>
 <span class="lineno"> 1586 </span><span class="spaces">     </span><span class="istickedoff">-- TODO: hardcoded size=1 (implied in conversion of `len_sym` to `sz_sym`</span>
 <span class="lineno"> 1587 </span><span class="spaces">     </span><span class="istickedoff">let sz_sym = len_sym</span>
-<span class="lineno"> 1588 </span><span class="spaces">     </span><span class="istickedoff">ag &lt;- Mir.mirAggregate_uninitSymIO <span class="nottickedoff">bak</span> sz_sym</span>
+<span class="lineno"> 1588 </span><span class="spaces">     </span><span class="istickedoff">ag &lt;- Mir.mirAggregate_uninitIO <span class="nottickedoff">bak</span> sz_sym</span>
 <span class="lineno"> 1589 </span><span class="spaces">     </span><span class="istickedoff">globals' &lt;- Mir.writeMirRefIO <span class="nottickedoff">bak</span> globals <span class="nottickedoff">iTypes</span> Mir.MirAggregateRepr ref ag</span>
 <span class="lineno"> 1590 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1591 </span><span class="spaces">     </span><span class="istickedoff">zero &lt;- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0</span>

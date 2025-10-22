@@ -357,8 +357,8 @@ span.spaces    { background: white }
 <span class="lineno">  338 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm (liftTCM SC.scGlobal ident)</span></span>
 <span class="lineno">  339 </span>
 <span class="lineno">  340 </span>-- | Build an 'OpenTerm' for a named variable.
-<span class="lineno">  341 </span>variableOpenTerm :: ExtCns Term -&gt; OpenTerm
-<span class="lineno">  342 </span><span class="decl"><span class="nottickedoff">variableOpenTerm ec = OpenTerm (liftTCM scVariable ec &gt;&gt;= typeInferComplete)</span></span>
+<span class="lineno">  341 </span>variableOpenTerm :: VarName -&gt; Term -&gt; OpenTerm
+<span class="lineno">  342 </span><span class="decl"><span class="nottickedoff">variableOpenTerm x t = OpenTerm (liftTCM scVariable x t &gt;&gt;= typeInferComplete)</span></span>
 <span class="lineno">  343 </span>
 <span class="lineno">  344 </span>-- | Apply an 'OpenTerm' to another
 <span class="lineno">  345 </span>applyOpenTerm :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm

@@ -456,28 +456,28 @@ span.spaces    { background: white }
 <span class="lineno">  437 </span><span class="spaces">      </span><span class="istickedoff">opts &lt;- getOptions</span>
 <span class="lineno">  438 </span><span class="spaces">      </span><span class="istickedoff">basic_ss &lt;- getBasicSS</span>
 <span class="lineno">  439 </span><span class="spaces">      </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
-<span class="lineno">  440 </span><span class="spaces">      </span><span class="istickedoff">sym &lt;- liftIO $ newSAWCoreExprBuilder sc <span class="nottickedoff">False</span></span>
-<span class="lineno">  441 </span><span class="spaces">      </span><span class="istickedoff">mdMap &lt;- liftIO $ newIORef <span class="nottickedoff">mempty</span></span>
-<span class="lineno">  442 </span><span class="spaces">      </span><span class="istickedoff">SomeOnlineBackend bak &lt;- liftIO $</span>
-<span class="lineno">  443 </span><span class="spaces">        </span><span class="istickedoff">newSAWCoreBackendWithTimeout pathSatSolver sym $ rwCrucibleTimeout rw</span>
-<span class="lineno">  444 </span><span class="spaces">      </span><span class="istickedoff">let config = W4.getConfiguration sym</span>
-<span class="lineno">  445 </span><span class="spaces">      </span><span class="istickedoff">cacheTermsSetting &lt;- liftIO $ W4.getOptionSetting W4.B.cacheTerms config</span>
-<span class="lineno">  446 </span><span class="spaces">      </span><span class="istickedoff">_ &lt;- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw</span>
-<span class="lineno">  447 </span><span class="spaces">      </span><span class="istickedoff">pushMuxOpsSetting &lt;- liftIO $ W4.getOptionSetting W4.B.pushMuxOpsOption config</span>
-<span class="lineno">  448 </span><span class="spaces">      </span><span class="istickedoff">_ &lt;- liftIO $ W4.setOpt pushMuxOpsSetting $ rwWhat4PushMuxOps rw</span>
-<span class="lineno">  449 </span><span class="spaces">      </span><span class="istickedoff">liftIO $ W4.extendConfig</span>
-<span class="lineno">  450 </span><span class="spaces">        </span><span class="istickedoff">[ W4.opt</span>
-<span class="lineno">  451 </span><span class="spaces">            </span><span class="istickedoff">LO.enableSMTArrayMemoryModel</span>
-<span class="lineno">  452 </span><span class="spaces">            </span><span class="istickedoff">(W4.ConcreteBool $ rwSMTArrayMemoryModel rw)</span>
-<span class="lineno">  453 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(&quot;Enable SMT array memory model&quot; :: Text)</span></span>
-<span class="lineno">  454 </span><span class="spaces">        </span><span class="istickedoff">]</span>
-<span class="lineno">  455 </span><span class="spaces">        </span><span class="istickedoff">config</span>
-<span class="lineno">  456 </span><span class="spaces">      </span><span class="istickedoff">let ?w4EvalTactic = W4EvalTactic { doW4Eval = rwWhat4Eval rw }</span>
-<span class="lineno">  457 </span><span class="spaces">      </span><span class="istickedoff">sawst &lt;- liftIO $ sawCoreState sym</span>
-<span class="lineno">  458 </span><span class="spaces">      </span><span class="istickedoff">halloc &lt;- getHandleAlloc</span>
-<span class="lineno">  459 </span><span class="spaces">      </span><span class="istickedoff">let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule</span>
-<span class="lineno">  460 </span><span class="spaces">      </span><span class="istickedoff">sfs &lt;- liftIO $ Macaw.newSymFuns sym</span>
-<span class="lineno">  461 </span><span class="spaces">      </span><span class="istickedoff">let <span class="nottickedoff">cenv = rwCryptol rw</span></span>
+<span class="lineno">  440 </span><span class="spaces">      </span><span class="istickedoff">cenv &lt;- getCryptolEnv</span>
+<span class="lineno">  441 </span><span class="spaces">      </span><span class="istickedoff">sym &lt;- liftIO $ newSAWCoreExprBuilder sc <span class="nottickedoff">False</span></span>
+<span class="lineno">  442 </span><span class="spaces">      </span><span class="istickedoff">mdMap &lt;- liftIO $ newIORef <span class="nottickedoff">mempty</span></span>
+<span class="lineno">  443 </span><span class="spaces">      </span><span class="istickedoff">SomeOnlineBackend bak &lt;- liftIO $</span>
+<span class="lineno">  444 </span><span class="spaces">        </span><span class="istickedoff">newSAWCoreBackendWithTimeout pathSatSolver sym $ rwCrucibleTimeout rw</span>
+<span class="lineno">  445 </span><span class="spaces">      </span><span class="istickedoff">let config = W4.getConfiguration sym</span>
+<span class="lineno">  446 </span><span class="spaces">      </span><span class="istickedoff">cacheTermsSetting &lt;- liftIO $ W4.getOptionSetting W4.B.cacheTerms config</span>
+<span class="lineno">  447 </span><span class="spaces">      </span><span class="istickedoff">_ &lt;- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw</span>
+<span class="lineno">  448 </span><span class="spaces">      </span><span class="istickedoff">pushMuxOpsSetting &lt;- liftIO $ W4.getOptionSetting W4.B.pushMuxOpsOption config</span>
+<span class="lineno">  449 </span><span class="spaces">      </span><span class="istickedoff">_ &lt;- liftIO $ W4.setOpt pushMuxOpsSetting $ rwWhat4PushMuxOps rw</span>
+<span class="lineno">  450 </span><span class="spaces">      </span><span class="istickedoff">liftIO $ W4.extendConfig</span>
+<span class="lineno">  451 </span><span class="spaces">        </span><span class="istickedoff">[ W4.opt</span>
+<span class="lineno">  452 </span><span class="spaces">            </span><span class="istickedoff">LO.enableSMTArrayMemoryModel</span>
+<span class="lineno">  453 </span><span class="spaces">            </span><span class="istickedoff">(W4.ConcreteBool $ rwSMTArrayMemoryModel rw)</span>
+<span class="lineno">  454 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(&quot;Enable SMT array memory model&quot; :: Text)</span></span>
+<span class="lineno">  455 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno">  456 </span><span class="spaces">        </span><span class="istickedoff">config</span>
+<span class="lineno">  457 </span><span class="spaces">      </span><span class="istickedoff">let ?w4EvalTactic = W4EvalTactic { doW4Eval = rwWhat4Eval rw }</span>
+<span class="lineno">  458 </span><span class="spaces">      </span><span class="istickedoff">sawst &lt;- liftIO $ sawCoreState sym</span>
+<span class="lineno">  459 </span><span class="spaces">      </span><span class="istickedoff">halloc &lt;- getHandleAlloc</span>
+<span class="lineno">  460 </span><span class="spaces">      </span><span class="istickedoff">let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule</span>
+<span class="lineno">  461 </span><span class="spaces">      </span><span class="istickedoff">sfs &lt;- liftIO $ Macaw.newSymFuns sym</span>
 <span class="lineno">  462 </span><span class="spaces">      </span><span class="istickedoff">liftIO $ sawRegisterSymFunInterp sawst <span class="nottickedoff">(Macaw.fnAesEnc sfs)</span> $ <span class="nottickedoff">cryptolUninterpreted path nm cenv &quot;aesenc&quot;</span></span>
 <span class="lineno">  463 </span><span class="spaces">      </span><span class="istickedoff">liftIO $ sawRegisterSymFunInterp sawst <span class="nottickedoff">(Macaw.fnAesEncLast sfs)</span> $ <span class="nottickedoff">cryptolUninterpreted path nm cenv &quot;aesenclast&quot;</span></span>
 <span class="lineno">  464 </span><span class="spaces">      </span><span class="istickedoff">liftIO $ sawRegisterSymFunInterp sawst <span class="nottickedoff">(Macaw.fnAesDec sfs)</span> $ <span class="nottickedoff">cryptolUninterpreted path nm cenv &quot;aesdec&quot;</span></span>
@@ -732,7 +732,7 @@ span.spaces    { background: white }
 <span class="lineno">  713 </span><span class="spaces">               </span><span class="nottickedoff">&amp;&amp; not (List.isPrefixOf &quot;calign_amount&quot; $ show $ W4.printSymExpr variable))</span>
 <span class="lineno">  714 </span><span class="spaces">             </span><span class="nottickedoff">uninterpreted_constants</span>
 <span class="lineno">  715 </span><span class="spaces">       </span><span class="nottickedoff">body_tms &lt;- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants</span>
-<span class="lineno">  716 </span><span class="spaces">       </span><span class="nottickedoff">implicit_parameters &lt;- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet body_tms</span>
+<span class="lineno">  716 </span><span class="spaces">       </span><span class="nottickedoff">implicit_parameters &lt;- scVariables sc $ Map.toList $ foldMap getAllVarsMap body_tms</span>
 <span class="lineno">  717 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  718 </span><span class="spaces">       </span><span class="nottickedoff">arguments &lt;- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) -&gt;</span>
 <span class="lineno">  719 </span><span class="spaces">         </span><span class="nottickedoff">toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry</span>
@@ -812,7 +812,7 @@ span.spaces    { background: white }
 <span class="lineno">  793 </span><span class="spaces">               </span><span class="nottickedoff">&amp;&amp; not (List.isPrefixOf &quot;calign_amount&quot; $ show $ W4.printSymExpr variable))</span>
 <span class="lineno">  794 </span><span class="spaces">             </span><span class="nottickedoff">uninterpreted_constants</span>
 <span class="lineno">  795 </span><span class="spaces">       </span><span class="nottickedoff">tms &lt;- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants</span>
-<span class="lineno">  796 </span><span class="spaces">       </span><span class="nottickedoff">implicit_parameters &lt;- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet tms</span>
+<span class="lineno">  796 </span><span class="spaces">       </span><span class="nottickedoff">implicit_parameters &lt;- scVariables sc $ Map.toList $ foldMap getAllVarsMap tms</span>
 <span class="lineno">  797 </span><span class="spaces">       </span><span class="nottickedoff">arguments &lt;- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) -&gt;</span>
 <span class="lineno">  798 </span><span class="spaces">         </span><span class="nottickedoff">toSC sym sawst $ Crucible.LLVM.FixpointCHC.headerValue fixpoint_entry</span>
 <span class="lineno">  799 </span><span class="spaces">       </span><span class="nottickedoff">arguments_tuple &lt;- scTuple sc arguments</span>
@@ -895,7 +895,7 @@ span.spaces    { background: white }
 <span class="lineno">  876 </span><span class="spaces">             </span><span class="nottickedoff">)</span>
 <span class="lineno">  877 </span><span class="spaces">             </span><span class="nottickedoff">implicit_params</span>
 <span class="lineno">  878 </span><span class="spaces">       </span><span class="nottickedoff">body_tms &lt;- mapM (viewSome $ toSC sym sawst) filtered_implicit_params</span>
-<span class="lineno">  879 </span><span class="spaces">       </span><span class="nottickedoff">implicit_params' &lt;- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet body_tms</span>
+<span class="lineno">  879 </span><span class="spaces">       </span><span class="nottickedoff">implicit_params' &lt;- scVariables sc $ Map.toList $ foldMap getAllVarsMap body_tms</span>
 <span class="lineno">  880 </span><span class="spaces">       </span><span class="nottickedoff">initial_exprs &lt;-</span>
 <span class="lineno">  881 </span><span class="spaces">         </span><span class="nottickedoff">forM subst_pairs $</span>
 <span class="lineno">  882 </span><span class="spaces">           </span><span class="nottickedoff">\ (MapF.Pair _var (SimpleInvariant.InvariantEntry initVal _current)) -&gt;</span>
@@ -1514,14 +1514,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1495 </span><span class="spaces">        </span><span class="istickedoff">$ ms ^. MS.csPostState . MS.csConditions</span>
 <span class="lineno"> 1496 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1497 </span><span class="spaces">  </span><span class="istickedoff">let</span>
-<span class="lineno"> 1498 </span><span class="spaces">    </span><span class="istickedoff">initialECs = IntMap.fromList</span>
-<span class="lineno"> 1499 </span><span class="spaces">      </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
+<span class="lineno"> 1498 </span><span class="spaces">    </span><span class="istickedoff">initialVars = IntMap.fromList</span>
+<span class="lineno"> 1499 </span><span class="spaces">      </span><span class="istickedoff">[ (vnIndex vn, (vn, tvType tt))</span>
 <span class="lineno"> 1500 </span><span class="spaces">      </span><span class="istickedoff">| tt &lt;- ms ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno"> 1501 </span><span class="spaces">      </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt)</span>
+<span class="lineno"> 1501 </span><span class="spaces">      </span><span class="istickedoff">, let vn = tvName tt</span>
 <span class="lineno"> 1502 </span><span class="spaces">      </span><span class="istickedoff">]</span>
 <span class="lineno"> 1503 </span><span class="spaces">    </span><span class="istickedoff">initialFree = Set.fromList . fmap (vnIndex . tvName) $ ms ^. MS.csPostState . MS.csFreshVars</span>
 <span class="lineno"> 1504 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1505 </span><span class="spaces">  </span><span class="istickedoff">initialTerms &lt;- liftIO $ traverse (scVariable sc) initialECs</span>
+<span class="lineno"> 1505 </span><span class="spaces">  </span><span class="istickedoff">initialTerms &lt;- liftIO $ scVariables sc initialVars</span>
 <span class="lineno"> 1506 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1507 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- liftIO</span>
 <span class="lineno"> 1508 </span><span class="spaces">    </span><span class="istickedoff">. O.runOverrideMatcher sym globals <span class="nottickedoff">env</span> initialTerms initialFree <span class="nottickedoff">(ms ^. MS.csLoc)</span></span>

@@ -579,40 +579,39 @@ span.spaces    { background: white }
 <span class="lineno">  560 </span><span class="spaces">    </span><span class="istickedoff">(&amp;&amp;) &lt;$&gt; areConvertible a1 a2 &lt;*&gt; withVar <span class="nottickedoff">x1</span> <span class="nottickedoff">a1</span> (isSubtype b1 b2)</span>
 <span class="lineno">  561 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
 <span class="lineno">  562 </span><span class="spaces">    </span><span class="istickedoff">do conv1 &lt;- areConvertible a1 a2</span>
-<span class="lineno">  563 </span><span class="spaces">       </span><span class="istickedoff">let ec1 = EC x1 a1</span>
-<span class="lineno">  564 </span><span class="spaces">       </span><span class="istickedoff">var1 &lt;- liftTCM scVariable ec1</span>
-<span class="lineno">  565 </span><span class="spaces">       </span><span class="istickedoff">let sub = IntMap.singleton (vnIndex x2) var1</span>
-<span class="lineno">  566 </span><span class="spaces">       </span><span class="istickedoff">b2' &lt;- liftTCM scInstantiateExt sub b2</span>
-<span class="lineno">  567 </span><span class="spaces">       </span><span class="istickedoff">conv2 &lt;- withVar <span class="nottickedoff">x1</span> <span class="nottickedoff">a1</span> (isSubtype b1 b2')</span>
-<span class="lineno">  568 </span><span class="spaces">       </span><span class="istickedoff">pure (conv1 &amp;&amp; conv2)</span>
-<span class="lineno">  569 </span><span class="spaces"></span><span class="istickedoff">isSubtype (asSort -&gt; Just s1) (asSort -&gt; Just s2) | <span class="tickonlytrue">s1 &lt;= s2</span> = return True</span>
-<span class="lineno">  570 </span><span class="spaces"></span><span class="istickedoff">isSubtype t1' t2' = areConvertible t1' t2'</span></span>
-<span class="lineno">  571 </span>
-<span class="lineno">  572 </span>-- | Check if two terms are &quot;convertible for type-checking&quot;, meaning that they
-<span class="lineno">  573 </span>-- are convertible up to 'natConversions'
-<span class="lineno">  574 </span>areConvertible :: Term -&gt; Term -&gt; TCM Bool
-<span class="lineno">  575 </span><span class="decl"><span class="istickedoff">areConvertible t1 t2 = liftTCM scConvertibleEval SC.scTypeCheckWHNF True t1 t2</span></span>
+<span class="lineno">  563 </span><span class="spaces">       </span><span class="istickedoff">var1 &lt;- liftTCM scVariable x1 a1</span>
+<span class="lineno">  564 </span><span class="spaces">       </span><span class="istickedoff">let sub = IntMap.singleton (vnIndex x2) var1</span>
+<span class="lineno">  565 </span><span class="spaces">       </span><span class="istickedoff">b2' &lt;- liftTCM scInstantiateExt sub b2</span>
+<span class="lineno">  566 </span><span class="spaces">       </span><span class="istickedoff">conv2 &lt;- withVar <span class="nottickedoff">x1</span> <span class="nottickedoff">a1</span> (isSubtype b1 b2')</span>
+<span class="lineno">  567 </span><span class="spaces">       </span><span class="istickedoff">pure (conv1 &amp;&amp; conv2)</span>
+<span class="lineno">  568 </span><span class="spaces"></span><span class="istickedoff">isSubtype (asSort -&gt; Just s1) (asSort -&gt; Just s2) | <span class="tickonlytrue">s1 &lt;= s2</span> = return True</span>
+<span class="lineno">  569 </span><span class="spaces"></span><span class="istickedoff">isSubtype t1' t2' = areConvertible t1' t2'</span></span>
+<span class="lineno">  570 </span>
+<span class="lineno">  571 </span>-- | Check if two terms are &quot;convertible for type-checking&quot;, meaning that they
+<span class="lineno">  572 </span>-- are convertible up to 'natConversions'
+<span class="lineno">  573 </span>areConvertible :: Term -&gt; Term -&gt; TCM Bool
+<span class="lineno">  574 </span><span class="decl"><span class="istickedoff">areConvertible t1 t2 = liftTCM scConvertibleEval SC.scTypeCheckWHNF True t1 t2</span></span>
+<span class="lineno">  575 </span>
 <span class="lineno">  576 </span>
-<span class="lineno">  577 </span>
-<span class="lineno">  578 </span>compileRecursor ::
-<span class="lineno">  579 </span>  DataType -&gt;
-<span class="lineno">  580 </span>  Sort          {- ^ elimination sort -} -&gt;
-<span class="lineno">  581 </span>  TCM CompiledRecursor
-<span class="lineno">  582 </span><span class="decl"><span class="istickedoff">compileRecursor dt s =</span>
-<span class="lineno">  583 </span><span class="spaces">  </span><span class="istickedoff">do let d = dtName dt</span>
-<span class="lineno">  584 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nparams = length (dtParams dt)</span></span>
-<span class="lineno">  585 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nixs = length (dtIndices dt)</span></span>
-<span class="lineno">  586 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">ctorOrder = map ctorName (dtCtors dt)</span></span>
-<span class="lineno">  587 </span><span class="spaces">     </span><span class="istickedoff">let crec = CompiledRecursor d s <span class="nottickedoff">nparams</span> <span class="nottickedoff">nixs</span> <span class="nottickedoff">ctorOrder</span></span>
-<span class="lineno">  588 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  589 </span><span class="spaces">     </span><span class="istickedoff">-- Check that the parameters are correct for the given datatype</span>
-<span class="lineno">  590 </span><span class="spaces">     </span><span class="istickedoff">let err =</span>
-<span class="lineno">  591 </span><span class="spaces">           </span><span class="istickedoff">MalformedRecursor</span>
-<span class="lineno">  592 </span><span class="spaces">           </span><span class="istickedoff">(Unshared $ fmap <span class="nottickedoff">SC.rawTerm</span> $ FTermF $ Recursor crec)</span>
-<span class="lineno">  593 </span><span class="spaces">           </span><span class="istickedoff">&quot;Disallowed propositional elimination&quot;</span>
-<span class="lineno">  594 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  595 </span><span class="spaces">     </span><span class="istickedoff">unless (allowedElimSort dt s) $ throwTCError err</span>
-<span class="lineno">  596 </span><span class="spaces">     </span><span class="istickedoff">return crec</span></span>
+<span class="lineno">  577 </span>compileRecursor ::
+<span class="lineno">  578 </span>  DataType -&gt;
+<span class="lineno">  579 </span>  Sort          {- ^ elimination sort -} -&gt;
+<span class="lineno">  580 </span>  TCM CompiledRecursor
+<span class="lineno">  581 </span><span class="decl"><span class="istickedoff">compileRecursor dt s =</span>
+<span class="lineno">  582 </span><span class="spaces">  </span><span class="istickedoff">do let d = dtName dt</span>
+<span class="lineno">  583 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nparams = length (dtParams dt)</span></span>
+<span class="lineno">  584 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nixs = length (dtIndices dt)</span></span>
+<span class="lineno">  585 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">ctorOrder = map ctorName (dtCtors dt)</span></span>
+<span class="lineno">  586 </span><span class="spaces">     </span><span class="istickedoff">let crec = CompiledRecursor d s <span class="nottickedoff">nparams</span> <span class="nottickedoff">nixs</span> <span class="nottickedoff">ctorOrder</span></span>
+<span class="lineno">  587 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  588 </span><span class="spaces">     </span><span class="istickedoff">-- Check that the parameters are correct for the given datatype</span>
+<span class="lineno">  589 </span><span class="spaces">     </span><span class="istickedoff">let err =</span>
+<span class="lineno">  590 </span><span class="spaces">           </span><span class="istickedoff">MalformedRecursor</span>
+<span class="lineno">  591 </span><span class="spaces">           </span><span class="istickedoff">(Unshared $ fmap <span class="nottickedoff">SC.rawTerm</span> $ FTermF $ Recursor crec)</span>
+<span class="lineno">  592 </span><span class="spaces">           </span><span class="istickedoff">&quot;Disallowed propositional elimination&quot;</span>
+<span class="lineno">  593 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  594 </span><span class="spaces">     </span><span class="istickedoff">unless (allowedElimSort dt s) $ throwTCError err</span>
+<span class="lineno">  595 </span><span class="spaces">     </span><span class="istickedoff">return crec</span></span>
 
 </pre>
 </body>

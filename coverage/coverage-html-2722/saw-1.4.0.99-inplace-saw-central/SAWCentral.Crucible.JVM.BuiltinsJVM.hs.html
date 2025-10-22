@@ -91,7 +91,7 @@ span.spaces    { background: white }
 <span class="lineno">   72 </span>
 <span class="lineno">   73 </span>-- saw-core
 <span class="lineno">   74 </span>import SAWCore.SharedTerm
-<span class="lineno">   75 </span>  ( ExtCns(..), Term, SharedContext, mkSharedContext, scFreshVarName, scImplies, scVariable )
+<span class="lineno">   75 </span>  ( Term, SharedContext, mkSharedContext, scFreshVarName, scImplies, scVariable )
 <span class="lineno">   76 </span>
 <span class="lineno">   77 </span>-- cryptol-saw-core
 <span class="lineno">   78 </span>import CryptolSAWCore.TypedTerm
@@ -235,7 +235,7 @@ span.spaces    { background: white }
 <span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">ecs &lt;- readIORef ecRef</span>
 <span class="lineno">  217 </span><span class="spaces">  </span><span class="istickedoff">vn &lt;- scFreshVarName sc (&quot;arg_&quot; &lt;&gt; Text.pack (show (length ecs)))</span>
 <span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">writeIORef ecRef (ecs Seq.|&gt; TypedVariable cty vn scTp)</span>
-<span class="lineno">  219 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- scVariable sc (EC vn scTp)</span>
+<span class="lineno">  219 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- scVariable sc vn scTp</span>
 <span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">Crucible.RegEntry tp &lt;$&gt; termToRegValue sym tp t</span></span>
 <span class="lineno">  221 </span>
 <span class="lineno">  222 </span>-- | Create fresh argument variables of the appropriate types, suitable for use

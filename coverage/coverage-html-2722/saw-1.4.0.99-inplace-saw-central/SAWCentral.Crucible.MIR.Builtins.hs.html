@@ -1438,11 +1438,11 @@ span.spaces    { background: white }
 <span class="lineno"> 1419 </span><span class="spaces">     </span><span class="istickedoff">skipSafetyProofs &lt;- gets rwSkipSafetyProofs</span>
 <span class="lineno"> 1420 </span><span class="spaces">     </span><span class="istickedoff">when skipSafetyProofs <span class="nottickedoff">(io (Crucible.clearProofObligations bak))</span></span>
 <span class="lineno"> 1421 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1422 </span><span class="spaces">     </span><span class="istickedoff">let ecs0 = IntMap.fromList</span>
-<span class="lineno"> 1423 </span><span class="spaces">           </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
+<span class="lineno"> 1422 </span><span class="spaces">     </span><span class="istickedoff">let vars0 = IntMap.fromList</span>
+<span class="lineno"> 1423 </span><span class="spaces">           </span><span class="istickedoff">[ (vnIndex vn, (vn, tvType tt))</span>
 <span class="lineno"> 1424 </span><span class="spaces">           </span><span class="istickedoff">| tt &lt;- mspec ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno"> 1425 </span><span class="spaces">           </span><span class="istickedoff">, let ec = EC (tvName tt) (tvType tt) ]</span>
-<span class="lineno"> 1426 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ traverse (scVariable sc) ecs0</span>
+<span class="lineno"> 1425 </span><span class="spaces">           </span><span class="istickedoff">, let vn = tvName tt ]</span>
+<span class="lineno"> 1426 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ scVariables sc vars0</span>
 <span class="lineno"> 1427 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1428 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map (vnIndex . tvName)</span>
 <span class="lineno"> 1429 </span><span class="spaces">                                    </span><span class="istickedoff">(view (MS.csPostState . MS.csFreshVars) mspec))</span>
@@ -1985,7 +1985,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1966 </span><span class="spaces">    </span><span class="istickedoff">vn &lt;- scFreshVarName sc (&quot;arg_&quot; &lt;&gt; Text.pack (show (length ecs)))</span>
 <span class="lineno"> 1967 </span><span class="spaces">    </span><span class="istickedoff">writeIORef ecRef (ecs Seq.|&gt; TypedVariable cty vn scTp)</span>
 <span class="lineno"> 1968 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1969 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- scVariable sc (EC vn scTp)</span>
+<span class="lineno"> 1969 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- scVariable sc vn scTp</span>
 <span class="lineno"> 1970 </span><span class="spaces">    </span><span class="istickedoff">Crucible.RegEntry tp0 &lt;$&gt; termToMirRegValue shp scTp t</span></span>
 <span class="lineno"> 1971 </span>
 <span class="lineno"> 1972 </span>-- | Create fresh argument variables of the appropriate types, suitable for use

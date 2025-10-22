@@ -352,10 +352,10 @@ span.spaces    { background: white }
 <span class="lineno">  333 </span><span class="decl"><span class="istickedoff">asConstant (unwrapTermF -&gt; Constant nm) = pure nm</span>
 <span class="lineno">  334 </span><span class="spaces"></span><span class="istickedoff">asConstant _ = Nothing</span></span>
 <span class="lineno">  335 </span>
-<span class="lineno">  336 </span>asVariable :: Recognizer Term (ExtCns Term)
+<span class="lineno">  336 </span>asVariable :: Recognizer Term (VarName, Term)
 <span class="lineno">  337 </span><span class="decl"><span class="istickedoff">asVariable t =</span>
 <span class="lineno">  338 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
-<span class="lineno">  339 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp -&gt; pure (EC nm tp)</span>
+<span class="lineno">  339 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp -&gt; Just (nm, tp)</span>
 <span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">_              -&gt; Nothing</span></span>
 <span class="lineno">  341 </span>
 <span class="lineno">  342 </span>asSort :: Recognizer Term Sort

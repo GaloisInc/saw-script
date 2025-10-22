@@ -60,7 +60,7 @@ span.spaces    { background: white }
 <span class="lineno">   41 </span>import qualified SAWSupport.Pretty as PPS
 <span class="lineno">   42 </span>
 <span class="lineno">   43 </span>import SAWCentral.AST
-<span class="lineno">   44 </span>import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), isDeprecated)
+<span class="lineno">   44 </span>import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars'(..), isDeprecated)
 <span class="lineno">   45 </span>import SAWScript.Panic (panic)
 <span class="lineno">   46 </span>import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 <span class="lineno">   47 </span>
@@ -435,11 +435,11 @@ span.spaces    { background: white }
 <span class="lineno">  416 </span>--
 <span class="lineno">  417 </span>-- The type t has already been checked, so it's ok to panic if it refers
 <span class="lineno">  418 </span>-- to something in the typedef collection that's not visible.
-<span class="lineno">  419 </span>resolveCurrentTypedefs :: SubstituteTyVars t =&gt; t -&gt; TI t
+<span class="lineno">  419 </span>resolveCurrentTypedefs :: SubstituteTyVars' t =&gt; t -&gt; TI t
 <span class="lineno">  420 </span><span class="decl"><span class="istickedoff">resolveCurrentTypedefs t = do</span>
 <span class="lineno">  421 </span><span class="spaces">    </span><span class="istickedoff">avail &lt;- asks primsAvail</span>
 <span class="lineno">  422 </span><span class="spaces">    </span><span class="istickedoff">s &lt;- gets tyEnv</span>
-<span class="lineno">  423 </span><span class="spaces">    </span><span class="istickedoff">return $ substituteTyVars avail s t</span></span>
+<span class="lineno">  423 </span><span class="spaces">    </span><span class="istickedoff">return $ substituteTyVars' avail s t</span></span>
 <span class="lineno">  424 </span>
 <span class="lineno">  425 </span>-- Get the unification vars that are used in the current variable typing
 <span class="lineno">  426 </span>-- and named type environments.
@@ -485,12 +485,12 @@ span.spaces    { background: white }
 <span class="lineno">  466 </span>getPatternContext :: Pattern -&gt; ContextName
 <span class="lineno">  467 </span><span class="decl"><span class="istickedoff">getPatternContext pat0 =</span>
 <span class="lineno">  468 </span><span class="spaces">  </span><span class="istickedoff">case visit pat0 of</span>
-<span class="lineno">  469 </span><span class="spaces">    </span><span class="istickedoff">Left pos -&gt; <span class="nottickedoff">ContextName pos &quot;_&quot;</span></span>
+<span class="lineno">  469 </span><span class="spaces">    </span><span class="istickedoff">Left pos -&gt; ContextName pos &quot;_&quot;</span>
 <span class="lineno">  470 </span><span class="spaces">    </span><span class="istickedoff">Right (pos, name) -&gt; ContextName pos name</span>
 <span class="lineno">  471 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  472 </span><span class="spaces">    </span><span class="istickedoff">visit pat =</span>
 <span class="lineno">  473 </span><span class="spaces">      </span><span class="istickedoff">case pat of</span>
-<span class="lineno">  474 </span><span class="spaces">        </span><span class="istickedoff">PWild pos _ -&gt; <span class="nottickedoff">Left pos</span></span>
+<span class="lineno">  474 </span><span class="spaces">        </span><span class="istickedoff">PWild pos _ -&gt; Left pos</span>
 <span class="lineno">  475 </span><span class="spaces">        </span><span class="istickedoff">PVar _ npos name _ -&gt; Right (npos, name)</span>
 <span class="lineno">  476 </span><span class="spaces">        </span><span class="istickedoff">PTuple pos [] -&gt; <span class="nottickedoff">Left pos</span></span>
 <span class="lineno">  477 </span><span class="spaces">        </span><span class="istickedoff">PTuple allpos ps -&gt;</span>
@@ -526,7 +526,7 @@ span.spaces    { background: white }
 <span class="lineno">  507 </span>patternBindingsWithSchema :: Pattern -&gt; Schema -&gt; [(Name, Pos, Schema)]
 <span class="lineno">  508 </span><span class="decl"><span class="istickedoff">patternBindingsWithSchema pat sch =</span>
 <span class="lineno">  509 </span><span class="spaces">  </span><span class="istickedoff">case pat of</span>
-<span class="lineno">  510 </span><span class="spaces">    </span><span class="istickedoff">PWild _ _ -&gt; <span class="nottickedoff">[]</span></span>
+<span class="lineno">  510 </span><span class="spaces">    </span><span class="istickedoff">PWild _ _ -&gt; []</span>
 <span class="lineno">  511 </span><span class="spaces">    </span><span class="istickedoff">PVar _ xpos x _ -&gt; [(x, xpos, sch)]</span>
 <span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">PTuple _ ps -&gt;</span>
 <span class="lineno">  513 </span><span class="spaces">      </span><span class="istickedoff">case sch of</span>
@@ -909,7 +909,7 @@ span.spaces    { background: white }
 <span class="lineno">  890 </span>-- Get the free type variables found in a Pattern.
 <span class="lineno">  891 </span>inspectPatternFTVs :: Pattern -&gt; TI (Map Name Pos)
 <span class="lineno">  892 </span><span class="decl"><span class="istickedoff">inspectPatternFTVs pat = case pat of</span>
-<span class="lineno">  893 </span><span class="spaces">    </span><span class="istickedoff">PWild _pos mty -&gt; <span class="nottickedoff">inspectMaybeTypeFTVs mty</span></span>
+<span class="lineno">  893 </span><span class="spaces">    </span><span class="istickedoff">PWild _pos mty -&gt; inspectMaybeTypeFTVs mty</span>
 <span class="lineno">  894 </span><span class="spaces">    </span><span class="istickedoff">PVar _allpos _xpos _x mty -&gt; inspectMaybeTypeFTVs mty</span>
 <span class="lineno">  895 </span><span class="spaces">    </span><span class="istickedoff">PTuple _pos subpats -&gt;</span>
 <span class="lineno">  896 </span><span class="spaces">        </span><span class="istickedoff">M.unions &lt;$&gt; mapM inspectPatternFTVs subpats</span></span>
@@ -1175,7 +1175,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1156 </span><span class="spaces">                </span><span class="istickedoff">at &lt;- getFreshTyVar apos</span>
 <span class="lineno"> 1157 </span><span class="spaces">                </span><span class="istickedoff">return (a, (Current, ConcreteType at))</span>
 <span class="lineno"> 1158 </span><span class="spaces">          </span><span class="istickedoff">substs &lt;- mapM once as</span>
-<span class="lineno"> 1159 </span><span class="spaces">          </span><span class="istickedoff">let t' = substituteTyVars avail (M.fromList substs) t</span>
+<span class="lineno"> 1159 </span><span class="spaces">          </span><span class="istickedoff">let t' = substituteTyVars' avail (M.fromList substs) t</span>
 <span class="lineno"> 1160 </span><span class="spaces">          </span><span class="istickedoff">return (Var pos x, t')</span>
 <span class="lineno"> 1161 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
 <span class="lineno"> 1162 </span><span class="spaces">          </span><span class="istickedoff">recordError pos $ &quot;Inaccessible variable: &quot; ++ show x ++ &quot; (&quot; ++ show pos ++ &quot;)&quot;</span>
@@ -1326,7 +1326,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1307 </span><span class="decl"><span class="istickedoff">addTypedef a ty = do</span>
 <span class="lineno"> 1308 </span><span class="spaces">    </span><span class="istickedoff">avail &lt;- asks primsAvail</span>
 <span class="lineno"> 1309 </span><span class="spaces">    </span><span class="istickedoff">env &lt;- gets tyEnv</span>
-<span class="lineno"> 1310 </span><span class="spaces">    </span><span class="istickedoff">let ty' = substituteTyVars avail env ty</span>
+<span class="lineno"> 1310 </span><span class="spaces">    </span><span class="istickedoff">let ty' = substituteTyVars' avail env ty</span>
 <span class="lineno"> 1311 </span><span class="spaces">        </span><span class="istickedoff">env' = M.insert a (Current, ConcreteType ty') env</span>
 <span class="lineno"> 1312 </span><span class="spaces">    </span><span class="istickedoff">modify (\rw -&gt; rw { tyEnv = env' })</span></span>
 <span class="lineno"> 1313 </span>
@@ -1637,7 +1637,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1618 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1619 </span><span class="spaces">    </span><span class="istickedoff">-- get the names for the Forall</span>
 <span class="lineno"> 1620 </span><span class="spaces">    </span><span class="istickedoff">let inames = [ (<span class="nottickedoff">pos</span>, n) | (_i, pos, n) &lt;- is3 ]</span>
-<span class="lineno"> 1621 </span><span class="spaces">    </span><span class="istickedoff">let bnames = [ <span class="nottickedoff">(pos, x)</span> | (x, pos) &lt;- bs2 ]</span>
+<span class="lineno"> 1621 </span><span class="spaces">    </span><span class="istickedoff">let bnames = [ (<span class="nottickedoff">pos</span>, x) | (x, pos) &lt;- bs2 ]</span>
 <span class="lineno"> 1622 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1623 </span><span class="spaces">    </span><span class="istickedoff">let mk e t = (appSubst <span class="nottickedoff">s</span> e, Forall (inames ++ bnames) (appSubst s t))</span>
 <span class="lineno"> 1624 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1762,7 +1762,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1743 </span><span class="spaces">      </span><span class="istickedoff">etys &lt;- generalize <span class="nottickedoff">foralls</span> es tys</span>
 <span class="lineno"> 1744 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1745 </span><span class="spaces">      </span><span class="istickedoff">-- Generate the updated declarations.</span>
-<span class="lineno"> 1746 </span><span class="spaces">      </span><span class="istickedoff">let rebuild pos pat (e1, ty) = Decl <span class="nottickedoff">pos</span> pat (Just <span class="nottickedoff">ty</span>) e1</span>
+<span class="lineno"> 1746 </span><span class="spaces">      </span><span class="istickedoff">let rebuild pos pat (e1, ty) = Decl <span class="nottickedoff">pos</span> pat (Just <span class="nottickedoff">ty</span>) <span class="nottickedoff">e1</span></span>
 <span class="lineno"> 1747 </span><span class="spaces">          </span><span class="istickedoff">ds' = zipWith3 rebuild (map <span class="nottickedoff">getPos</span> ds) pats' etys</span>
 <span class="lineno"> 1748 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1749 </span><span class="spaces">      </span><span class="istickedoff">return ds'</span></span>
@@ -2016,7 +2016,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1997 </span><span class="spaces">              </span><span class="istickedoff">return (a, (Current, ConcreteType ty'a))</span>
 <span class="lineno"> 1998 </span><span class="spaces">        </span><span class="istickedoff">substs &lt;- mapM generate as</span>
 <span class="lineno"> 1999 </span><span class="spaces">        </span><span class="istickedoff">-- Substitute them into the type</span>
-<span class="lineno"> 2000 </span><span class="spaces">        </span><span class="istickedoff">let ty' = substituteTyVars avail (M.fromList substs) ty</span>
+<span class="lineno"> 2000 </span><span class="spaces">        </span><span class="istickedoff">let ty' = substituteTyVars' avail (M.fromList substs) ty</span>
 <span class="lineno"> 2001 </span><span class="spaces">        </span><span class="istickedoff">return ty'</span>
 <span class="lineno"> 2002 </span><span class="spaces">      </span><span class="istickedoff">match = do</span>
 <span class="lineno"> 2003 </span><span class="spaces">        </span><span class="istickedoff">-- Unpack the schemas and check if they match</span>
