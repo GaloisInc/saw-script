@@ -506,7 +506,7 @@ span.spaces    { background: white }
 <span class="lineno">  487 </span><span class="spaces">           </span><span class="istickedoff">throwTCError $ BadRecordField fld (SC.rawType t)</span>
 <span class="lineno">  488 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scRecordProj t fld</span>
 <span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">Sort s flags -&gt;</span>
-<span class="lineno">  490 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scSort' s flags</span>
+<span class="lineno">  490 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scSortWithFlags s flags</span>
 <span class="lineno">  491 </span><span class="spaces">    </span><span class="istickedoff">NatLit n -&gt;</span>
 <span class="lineno">  492 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scNat n</span>
 <span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue tp vs -&gt;</span>
