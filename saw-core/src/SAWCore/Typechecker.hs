@@ -224,6 +224,7 @@ typeInferCompleteTerm (Un.App f arg) =
 typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferCompleteUTerm t
 typeInferCompleteTerm (Un.Lambda p ((Un.termVarLocalName -> x, tp) : ctx) t) =
   do tp_trm <- typeInferCompleteUTerm tp
+     _ <- lift $ TC.ensureSort (SC.rawType tp_trm)
      -- NOTE: we need the type of x to be normalized when we add it to the
      -- context in withVar, but we do not want to normalize this type in the
      -- output, as the contract for typeInferComplete only normalizes the type,
