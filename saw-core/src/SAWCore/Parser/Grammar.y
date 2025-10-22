@@ -34,7 +34,6 @@ import System.Directory (getCurrentDirectory)
 
 import Prelude hiding (mapM, sequence)
 
-import SAWCore.Module (DefQualifier(..))
 import SAWCore.Panic
 import SAWCore.Parser.AST
 import SAWCore.Parser.Lexer

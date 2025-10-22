@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -15,6 +16,7 @@ Portability : non-portable (language extensions)
 module SAWCore.Parser.AST
   ( Module(..)
   , ModuleName, mkModuleName
+  , DefQualifier(..)
   , Decl(..)
   , Import(..)
   , ImportConstraint(..)
@@ -43,13 +45,14 @@ module SAWCore.Parser.AST
   , moduleTypedCtorDecls
   ) where
 
+import Data.Hashable
 import Data.Text (Text)
 import qualified Data.Text as Text
 
+import GHC.Generics (Generic)
 import qualified Language.Haskell.TH.Syntax as TH
 import Numeric.Natural
 
-import SAWCore.Module (DefQualifier)
 import SAWCore.Name (ModuleName, mkModuleName)
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
@@ -142,6 +145,14 @@ badTerm = BadTerm
 -- | A constructor declaration of the form @c (x1 :: tp1) .. (xn :: tpn) :: tp@
 data CtorDecl = Ctor (PosPair Text) UTermCtx UTerm
   deriving (Show, TH.Lift)
+
+data DefQualifier
+  = NoQualifier
+  | PrimQualifier
+  | AxiomQualifier
+ deriving (Eq, Show, Generic, TH.Lift)
+
+instance Hashable DefQualifier -- automatically derived
 
 -- | A top-level declaration in a saw-core file
 data Decl
