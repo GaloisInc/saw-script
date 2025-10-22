@@ -103,8 +103,8 @@ import qualified SAWCentral.Yosys.State as Yo (YosysSequential)
 import qualified SAWCentral.Yosys.Theorem as Yo (YosysImport, YosysTheorem)
 
 import SAWCore.Conversion
-import SAWCore.Module (Def(..), emptyModule, moduleDefs)
-import SAWCore.Name (mkModuleName, Name(..))
+import SAWCore.Module (emptyModule)
+import SAWCore.Name (mkModuleName)
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import SAWCore.SharedTerm
@@ -1072,23 +1072,13 @@ buildTopLevelEnv proxy opts scriptArgv =
        CryptolSAW.scLoadPreludeModule sc0
        CryptolSAW.scLoadCryptolModule sc0
        scLoadModule sc0 (emptyModule mn)
-       cryptol_mod <- scFindModule sc0 $ mkModuleName ["Cryptol"]
        let convs = natConversions
                    ++ bvConversions
                    ++ vecConversions
                    ++ [ tupleConversion
                       , recordConversion
                       ]
-           cryptolDefs = filter defPred $ moduleDefs cryptol_mod
-           defPred d =
-             case nameInfo (defName d) of
-               ModuleIdentifier ident -> ident `Set.member` includedDefs
-               ImportedName{} -> False
-           includedDefs = Set.fromList
-                          [ "Cryptol.ecDemote"
-                          , "Cryptol.seq"
-                          ]
-       simps <- scSimpset sc0 cryptolDefs [] convs
+       simps <- scSimpset sc0 [] [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
        currDir <- getCurrentDirectory
