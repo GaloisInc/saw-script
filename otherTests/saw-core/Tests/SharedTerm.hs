@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 {-
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
@@ -29,5 +31,5 @@ preludeSharedSmokeTest =
   testCase "preludeSharedSmokeTest" $ do
     sc <- mkSharedContext
     scLoadPreludeModule sc
-    void $ scApplyPrelude_Bool sc
+    void $ scGlobalDef sc "Prelude.Bool"
     return ()

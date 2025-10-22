@@ -29,9 +29,8 @@ import qualified Data.AIG as AIG
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Name (VarName)
-import SAWCore.Prelude
 import SAWCore.Recognizer
-import SAWCore.SharedTerm hiding (scNot, scAnd, scOr)
+import SAWCore.SharedTerm
 import SAWCore.Term.Pretty (ppTerm)
 import SAWCentral.Options
 
@@ -54,9 +53,9 @@ bitblastSharedTerm _ v (asBoolType -> Just ()) = do
 bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
   inputs <- liftIO $ do
     wt <- scNat sc w
-    boolType <- scApplyPrelude_Bool sc
+    boolType <- scBoolType sc
     V.generateM (fromIntegral w) $ \i -> do
-      scApplyPrelude_at sc wt boolType v =<< scNat sc (fromIntegral i)
+      scAt sc wt boolType v =<< scNat sc (fromIntegral i)
   modify (V.++ inputs)
 bitblastSharedTerm _ _ tp = throwTP $ show $
   vcat
@@ -82,7 +81,7 @@ parseAIGResultType sc (asBitvectorType -> Just w) = do
   put remaining
   -- Return remaining as a vector.
   liftIO $ do
-    boolType <- scApplyPrelude_Bool sc
+    boolType <- scBoolType sc
     scVector sc boolType (V.toList base)
 parseAIGResultType _ _ = throwTP "Could not parse AIG output type."
 
@@ -97,20 +96,16 @@ networkAsSharedTerms
     -> IO (V.Vector Term)
 networkAsSharedTerms ntk sc inputTerms outputLits = do
   -- Get evaluator
-  let scNot = scApplyPrelude_not sc
-  let scAnd = scApplyPrelude_and sc
-  let scOr = scApplyPrelude_or sc
-  let scImpl = scApplyPrelude_implies sc
-  scFalse <- scApplyPrelude_False sc
+  scFalse <- scBool sc False
 
   -- Left is nonnegated, Right is negated
-  let viewAnd inj _ (Left x)  (Left y)  = fmap inj $ scAnd x y
-      viewAnd _ inj (Left x)  (Right y) = fmap inj $ scImpl x y
-      viewAnd _ inj (Right x) (Left y)  = fmap inj $ scImpl y x
-      viewAnd _ inj (Right x) (Right y) = fmap inj $ scOr x y
+  let viewAnd inj _ (Left x)  (Left y)  = fmap inj $ scAnd sc x y
+      viewAnd _ inj (Left x)  (Right y) = fmap inj $ scImplies sc x y
+      viewAnd _ inj (Right x) (Left y)  = fmap inj $ scImplies sc y x
+      viewAnd _ inj (Right x) (Right y) = fmap inj $ scOr sc x y
 
   let viewFinish (Left x)  = return x
-      viewFinish (Right x) = scNot x
+      viewFinish (Right x) = scNot sc x
 
   let viewFn (AIG.And x y)    = viewAnd Left  Right x y
       viewFn (AIG.NotAnd x y) = viewAnd Right Left  x y
