@@ -1,0 +1,11 @@
+// Proof subshell analogue of leak01
+
+enable_experimental;
+
+let f () = do { proof_subshell (); let _ = run (print "(exit)"); return (); };
+let x = 3;
+prove_print (f ()) {{ `x == 3 }};
+
+print "should be 3";
+print x;
+prove_print z3 {{ `x == 3 }};

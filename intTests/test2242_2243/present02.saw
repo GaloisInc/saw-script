@@ -1,0 +1,16 @@
+// Simple example akin to the failure case from #2242.
+//
+// The stdin file feeds f () to proof_subshell; if f is missing from
+// the nested environment that won't work.
+
+enable_experimental;
+
+let foo (x : Integer) : TopLevel Theorem = do {
+   let f () = z3;
+   
+   prove_print do {
+      proof_subshell ();
+   } {{ `x == 5 }};
+};
+
+foo 5;

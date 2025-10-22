@@ -1,0 +1,13 @@
+// TopLevel analogue of present02.
+//
+// The stdin file feeds f () to subshell; if f is missing from
+// the nested environment that won't work.
+
+enable_experimental;
+
+let foo (x : Integer) : TopLevel () = do {
+   let f () = print x;
+   subshell ();
+};
+
+foo 5;

@@ -1,0 +1,10 @@
+// Example of plain subshell leaking a binding from #2243
+
+enable_experimental;
+
+let f () = do { subshell (); print "(exit)"; return (); };
+let x = 3;
+f ();
+print "should be 3";
+print x;
+prove_print z3 {{ `x == 3 }};
