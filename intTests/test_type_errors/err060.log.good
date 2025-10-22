@@ -1,0 +1,3 @@
+ Loading file "err060.saw"
+ err060.saw:5:10-5:11: Unbound variable: "_" (err060.saw:5:10-5:11)
+FAILED

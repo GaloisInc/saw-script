@@ -1,0 +1,6 @@
+// "_" is not a legal variable name
+
+do {
+   _ <- do { print 0; return 4; };
+   print _;
+};

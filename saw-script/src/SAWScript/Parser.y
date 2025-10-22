@@ -170,10 +170,10 @@ Declaration :: { Decl }
 
 Pattern :: { Pattern }
  : Arg                                  { $1 }
- | name ':' Type                        { PVar (maxSpan [tokPos $1, getPos $3]) (tokPos $1) (tokStr $1) (Just $3) }
+ | name ':' Type                        { buildPVar (maxSpan [tokPos $1, getPos $3]) (tokPos $1) (tokStr $1) (Just $3) }
 
 Arg :: { Pattern }
- : name                                 { PVar (tokPos $1) (tokPos $1) (tokStr $1) Nothing }
+ : name                                 { buildPVar (tokPos $1) (tokPos $1) (tokStr $1) Nothing }
  | '(' ')'                              { PTuple (maxSpan [tokPos $1, tokPos $2]) [] }
  | '(' commas(Pattern) ')'              { case $2 of [p] -> p; _ -> PTuple (maxSpan [tokPos $1, tokPos $3]) $2 }
 
@@ -428,6 +428,21 @@ buildRec :: Pos -> [Decl] -> Stmt
 buildRec pos ds =
   StmtLet pos ReadOnlyVar (Recursive ds)
 
+-- | Build a variable-pattern. Discard the variable if it's _.
+--
+--   Note: it is probably more appropriate to discard all variables
+--   that _begin_ with an underscore; however, the traditional usage
+--   in ML, Haskell, and also Rust is to treat variables beginning
+--   with underscore as placeholder variables that can still be used
+--   behind your back. That's wrong; however, SAWScript is not the
+--   place to fight this battle...
+--
+buildPVar :: Pos -> Pos -> Text -> Maybe Type -> Pattern
+buildPVar allpos xpos x mty =
+  case x of
+    "_" -> PWild allpos mty
+    _ -> PVar allpos xpos x mty
+
 -- | Pop off the last statement in a do-block, which is required to
 --   be a plain expression, and unpack it to an expression.
 buildBlock :: Pos -> [Stmt] -> Either ParseError Expr
@@ -442,9 +457,13 @@ buildBlock pos stmts = case reverse stmts of
 toPattern :: Expr -> Either ParseError Pattern
 toPattern expr =
   case expr of
-    Tuple pos es       -> PTuple pos `fmap` mapM toPattern es
-    TSig pos (Var xpos x) t -> return (PVar pos xpos x (Just t))
-    Var pos x           -> return (PVar pos pos x Nothing)
-    _              -> Left (InvalidPattern expr)
+    Tuple pos es ->
+        PTuple pos `fmap` mapM toPattern es
+    TSig pos (Var xpos x) t ->
+        return (buildPVar pos xpos x (Just t))
+    Var pos x ->
+        return (buildPVar pos pos x Nothing)
+    _ ->
+        Left (InvalidPattern expr)
 
 }

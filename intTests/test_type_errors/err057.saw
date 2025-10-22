@@ -1,0 +1,4 @@
+// "_" is not a legal variable name
+
+let _ = 3;
+print _;

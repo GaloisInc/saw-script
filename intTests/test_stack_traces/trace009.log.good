@@ -23,8 +23,6 @@ Stack trace:
 
  ------------------------------------------------------------
  tuple with bind
- trace009.saw:30:6-30:7: Warning: Redeclaration of _
- trace009.saw:23:10-23:11: Warning: Previous declaration was here
 Stack trace:
    (builtin) in print_stack
    trace009.saw:28:14-28:25 in f4
@@ -32,8 +30,6 @@ Stack trace:
 
  ------------------------------------------------------------
  one-step tuple with let
- trace009.saw:36:10-36:11: Warning: Redeclaration of _
- trace009.saw:30:6-30:7: Warning: Previous declaration was here
 Stack trace:
    (builtin) in print_stack
    trace009.saw:36:16-36:27 in f5
@@ -41,21 +37,11 @@ Stack trace:
 
  ------------------------------------------------------------
  one-step tuple with bind
- trace009.saw:41:6-41:7: Warning: Redeclaration of _
- trace009.saw:36:10-36:11: Warning: Previous declaration was here
 Stack trace:
    (builtin) in print_stack
    trace009.saw:41:20-41:31 in f6
    trace009.saw:42:1-42:3 (at top level)
 
- trace009.saw:50:13-50:14: Warning: Redeclaration of _
- trace009.saw:41:6-41:7: Warning: Previous declaration was here
- trace009.saw:57:9-57:10: Warning: Redeclaration of _
- trace009.saw:50:13-50:14: Warning: Previous declaration was here
- trace009.saw:62:13-62:14: Warning: Redeclaration of _
- trace009.saw:57:9-57:10: Warning: Previous declaration was here
- trace009.saw:67:10-67:11: Warning: Redeclaration of _
- trace009.saw:62:13-62:14: Warning: Previous declaration was here
  ------------------------------------------------------------
  tuple with let, in do-block
 Stack trace:
