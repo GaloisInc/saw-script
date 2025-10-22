@@ -1,0 +1,234 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWScript.ValueOps
+<span class="lineno">    3 </span>Description : Operations on the SAWScript Value datatype, plus other code from Value.hs
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : saw@galois.com
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">    9 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   10 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   11 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>module SAWScript.ValueOps (
+<span class="lineno">   14 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   15 </span>    isVUnit,
+<span class="lineno">   16 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   17 </span>    -- XXX: name overlaps with unrelated fn from Data.Parameterized.Nonce
+<span class="lineno">   18 </span>    --      and should be changed
+<span class="lineno">   19 </span>    indexValue,
+<span class="lineno">   20 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   21 </span>    lookupValue,
+<span class="lineno">   22 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   23 </span>    tupleLookupValue,
+<span class="lineno">   24 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   25 </span>    bracketTopLevel,
+<span class="lineno">   26 </span>    -- unused but that probably won't stay that way
+<span class="lineno">   27 </span>    TopLevelCheckpoint(..),
+<span class="lineno">   28 </span>    -- used by SAWScript.REPL.Monad
+<span class="lineno">   29 </span>    makeCheckpoint,
+<span class="lineno">   30 </span>    -- used by SAWScript.REPL.Monad
+<span class="lineno">   31 </span>    restoreCheckpoint,
+<span class="lineno">   32 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   33 </span>    checkpoint,
+<span class="lineno">   34 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   35 </span>    proof_checkpoint,
+<span class="lineno">   36 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   37 </span>    withEnviron,
+<span class="lineno">   38 </span>    withEnvironProofScript,
+<span class="lineno">   39 </span>    withEnvironLLVM,
+<span class="lineno">   40 </span>    withEnvironJVM,
+<span class="lineno">   41 </span>    withEnvironMIR,
+<span class="lineno">   42 </span>    -- used in SAWScript.Interpreter
+<span class="lineno">   43 </span>    withOptions,
+<span class="lineno">   44 </span> ) where
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>import Prelude hiding (fail)
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>import Control.Monad (zipWithM)
+<span class="lineno">   49 </span>import Control.Monad.Catch (MonadThrow(..), try)
+<span class="lineno">   50 </span>import Control.Monad.State (get, gets, modify, put)
+<span class="lineno">   51 </span>import qualified Control.Exception as X
+<span class="lineno">   52 </span>import Control.Monad.IO.Class (liftIO)
+<span class="lineno">   53 </span>import Control.Monad.Reader (local)
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>import Data.Text (Text)
+<span class="lineno">   56 </span>import qualified Data.Text as Text (pack, unpack)
+<span class="lineno">   57 </span>--import Data.Map ( Map )
+<span class="lineno">   58 </span>import qualified Data.Map as M
+<span class="lineno">   59 </span>--import Data.Set ( Set )
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>import SAWCore.SharedTerm
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>import CryptolSAWCore.CryptolEnv as CEnv
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>import qualified SAWCentral.Position as SS
+<span class="lineno">   66 </span>--import qualified SAWCentral.AST as SS
+<span class="lineno">   67 </span>--import qualified SAWCentral.Crucible.JVM.MethodSpecIR ()
+<span class="lineno">   68 </span>--import qualified SAWCentral.Crucible.MIR.MethodSpecIR ()
+<span class="lineno">   69 </span>import SAWCentral.Options (Options, Verbosity(..))
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>import SAWCentral.Value
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>import SAWScript.Panic (panic)
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>isVUnit :: Value -&gt; Bool
+<span class="lineno">   77 </span><span class="decl"><span class="istickedoff">isVUnit (VTuple []) = True</span>
+<span class="lineno">   78 </span><span class="spaces"></span><span class="istickedoff">isVUnit _ = <span class="nottickedoff">False</span></span></span>
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>indexValue :: SS.Pos -&gt; Value -&gt; Value -&gt; Value
+<span class="lineno">   81 </span><span class="decl"><span class="nottickedoff">indexValue pos (VArray vs) (VInteger x)</span>
+<span class="lineno">   82 </span><span class="spaces">    </span><span class="nottickedoff">| i &lt; length vs = vs !! i</span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise = error $ show pos ++ &quot;: Array index out of bounds&quot;</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="nottickedoff">where i = fromInteger x</span>
+<span class="lineno">   85 </span><span class="spaces"></span><span class="nottickedoff">indexValue pos v1 v2 =</span>
+<span class="lineno">   86 </span><span class="spaces">    </span><span class="nottickedoff">panic &quot;indexValue&quot; [</span>
+<span class="lineno">   87 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Type error that escaped the typechecker&quot;,</span>
+<span class="lineno">   88 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Source position: &quot; &lt;&gt; Text.pack (show pos),</span>
+<span class="lineno">   89 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Array value: &quot; &lt;&gt; Text.pack (show v1),</span>
+<span class="lineno">   90 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Index value: &quot; &lt;&gt; Text.pack (show v2)</span>
+<span class="lineno">   91 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>lookupValue :: SS.Pos -&gt; Value -&gt; Text -&gt; Value
+<span class="lineno">   94 </span><span class="decl"><span class="nottickedoff">lookupValue pos (VRecord vm) name =</span>
+<span class="lineno">   95 </span><span class="spaces">    </span><span class="nottickedoff">case M.lookup name vm of</span>
+<span class="lineno">   96 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; error $ show pos ++ &quot;: No such record field: &quot; ++ Text.unpack name</span>
+<span class="lineno">   97 </span><span class="spaces">      </span><span class="nottickedoff">Just x -&gt; x</span>
+<span class="lineno">   98 </span><span class="spaces"></span><span class="nottickedoff">lookupValue pos v1 v2 =</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="nottickedoff">panic &quot;lookupValue&quot; [</span>
+<span class="lineno">  100 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Type error that escaped the typechecker&quot;,</span>
+<span class="lineno">  101 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Source position: &quot; &lt;&gt; Text.pack (show pos),</span>
+<span class="lineno">  102 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Array value: &quot; &lt;&gt; Text.pack (show v1),</span>
+<span class="lineno">  103 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Index value: &quot; &lt;&gt; Text.pack (show v2)</span>
+<span class="lineno">  104 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>tupleLookupValue :: SS.Pos -&gt; Value -&gt; Integer -&gt; Value
+<span class="lineno">  107 </span><span class="decl"><span class="nottickedoff">tupleLookupValue pos (VTuple vs) i</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="nottickedoff">| 0 &lt;= i &amp;&amp; fromIntegral i &lt; length vs = vs !! fromIntegral i</span>
+<span class="lineno">  109 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = error $ show pos ++ &quot;: No such tuple index: &quot; ++ show i</span>
+<span class="lineno">  110 </span><span class="spaces"></span><span class="nottickedoff">tupleLookupValue pos v1 v2 =</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="nottickedoff">panic &quot;tupleLookupValue&quot; [</span>
+<span class="lineno">  112 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Type error that escaped the typechecker&quot;,</span>
+<span class="lineno">  113 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Source position: &quot; &lt;&gt; Text.pack (show pos),</span>
+<span class="lineno">  114 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Array value: &quot; &lt;&gt; Text.pack (show v1),</span>
+<span class="lineno">  115 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Index value: &quot; &lt;&gt; Text.pack (show v2)</span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  117 </span>
+<span class="lineno">  118 </span>-- | A version of 'Control.Exception.bracket' specialized to 'TopLevel'. We
+<span class="lineno">  119 </span>-- can't use 'Control.Monad.Catch.bracket' because it requires 'TopLevel' to
+<span class="lineno">  120 </span>-- implement 'Control.Monad.Catch.MonadMask', which it can't do.
+<span class="lineno">  121 </span>bracketTopLevel :: TopLevel a -&gt; (a -&gt; TopLevel b) -&gt; (a -&gt; TopLevel c) -&gt; TopLevel c
+<span class="lineno">  122 </span><span class="decl"><span class="istickedoff">bracketTopLevel acquire release action =</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">do  resource &lt;- acquire</span>
+<span class="lineno">  124 </span><span class="spaces">      </span><span class="istickedoff">try (action <span class="nottickedoff">resource</span>) &gt;&gt;= \case</span>
+<span class="lineno">  125 </span><span class="spaces">        </span><span class="istickedoff">Left (bad :: X.SomeException) -&gt; release resource &gt;&gt; throwM bad</span>
+<span class="lineno">  126 </span><span class="spaces">        </span><span class="istickedoff">Right good -&gt; release resource &gt;&gt; pure <span class="nottickedoff">good</span></span></span>
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>-- Note: this is used only by restoreCheckpoint and restoreCheckpoint is
+<span class="lineno">  129 </span>-- not really expected to work.
+<span class="lineno">  130 </span>--
+<span class="lineno">  131 </span>-- This is good, because whatever this function is doing does not seem
+<span class="lineno">  132 </span>-- to make a great deal of sense. (Which has become more overt with recent
+<span class="lineno">  133 </span>-- reorgs and cleanup, but hasn't itself changed.)
+<span class="lineno">  134 </span>combineRW :: TopLevelCheckpoint -&gt; TopLevelRW -&gt; IO TopLevelRW
+<span class="lineno">  135 </span><span class="decl"><span class="istickedoff">combineRW (TopLevelCheckpoint chk scc) rw = do</span>
+<span class="lineno">  136 </span><span class="spaces">     </span><span class="istickedoff">let CryptolEnvStack chk'cenv chk'cenvs = rwGetCryptolEnvStack chk</span>
+<span class="lineno">  137 </span><span class="spaces">         </span><span class="istickedoff">CryptolEnvStack rw'cenv rw'cenvs = <span class="nottickedoff">rwGetCryptolEnvStack rw</span></span>
+<span class="lineno">  138 </span><span class="spaces">     </span><span class="istickedoff">-- Caution: this merge may have unexpected results if the</span>
+<span class="lineno">  139 </span><span class="spaces">     </span><span class="istickedoff">-- number of scopes doesn't match. But, it doesn't make sense</span>
+<span class="lineno">  140 </span><span class="spaces">     </span><span class="istickedoff">-- to do that in the first place. Caveat emptor...</span>
+<span class="lineno">  141 </span><span class="spaces">     </span><span class="istickedoff">cenv' &lt;- CEnv.combineCryptolEnv <span class="nottickedoff">chk'cenv</span> <span class="nottickedoff">rw'cenv</span></span>
+<span class="lineno">  142 </span><span class="spaces">     </span><span class="istickedoff">cenvs' &lt;- zipWithM <span class="nottickedoff">CEnv.combineCryptolEnv</span> chk'cenvs <span class="nottickedoff">rw'cenvs</span></span>
+<span class="lineno">  143 </span><span class="spaces">     </span><span class="istickedoff">sc' &lt;- restoreSharedContext <span class="nottickedoff">scc</span> (rwSharedContext rw)</span>
+<span class="lineno">  144 </span><span class="spaces">     </span><span class="istickedoff">let cryenv' = CryptolEnvStack <span class="nottickedoff">cenv'</span> cenvs'</span>
+<span class="lineno">  145 </span><span class="spaces">     </span><span class="istickedoff">let chk' = rwSetCryptolEnvStack cryenv' chk</span>
+<span class="lineno">  146 </span><span class="spaces">     </span><span class="istickedoff">return chk' { rwSharedContext = sc' }</span></span>
+<span class="lineno">  147 </span>
+<span class="lineno">  148 </span>-- | Represents the mutable state of the TopLevel monad
+<span class="lineno">  149 </span>--   that can later be restored.
+<span class="lineno">  150 </span>data TopLevelCheckpoint =
+<span class="lineno">  151 </span>  TopLevelCheckpoint
+<span class="lineno">  152 </span>    TopLevelRW
+<span class="lineno">  153 </span>    SharedContextCheckpoint
+<span class="lineno">  154 </span>
+<span class="lineno">  155 </span>makeCheckpoint :: TopLevelRW -&gt; IO TopLevelCheckpoint
+<span class="lineno">  156 </span><span class="decl"><span class="istickedoff">makeCheckpoint rw =</span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">do scc &lt;- checkpointSharedContext (rwSharedContext rw)</span>
+<span class="lineno">  158 </span><span class="spaces">     </span><span class="istickedoff">return (TopLevelCheckpoint rw <span class="nottickedoff">scc</span>)</span></span>
+<span class="lineno">  159 </span>
+<span class="lineno">  160 </span>restoreCheckpoint :: TopLevelCheckpoint -&gt; TopLevel ()
+<span class="lineno">  161 </span><span class="decl"><span class="istickedoff">restoreCheckpoint chk =</span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno">  163 </span><span class="spaces">     </span><span class="istickedoff">rw' &lt;- io (combineRW chk rw)</span>
+<span class="lineno">  164 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw'</span></span>
+<span class="lineno">  165 </span>
+<span class="lineno">  166 </span>-- | Capture the current state of the TopLevel monad
+<span class="lineno">  167 </span>--   and return an action that, if invoked, resets
+<span class="lineno">  168 </span>--   the state back to that point.
+<span class="lineno">  169 </span>checkpoint :: TopLevel (() -&gt; TopLevel ())
+<span class="lineno">  170 </span><span class="decl"><span class="nottickedoff">checkpoint = TopLevel_ $</span>
+<span class="lineno">  171 </span><span class="spaces">  </span><span class="nottickedoff">do chk &lt;- liftIO . makeCheckpoint =&lt;&lt; get</span>
+<span class="lineno">  172 </span><span class="spaces">     </span><span class="nottickedoff">return $ \_ -&gt;</span>
+<span class="lineno">  173 </span><span class="spaces">       </span><span class="nottickedoff">do printOutLnTop Info &quot;Restoring state from checkpoint&quot;</span>
+<span class="lineno">  174 </span><span class="spaces">          </span><span class="nottickedoff">restoreCheckpoint chk</span></span>
+<span class="lineno">  175 </span>
+<span class="lineno">  176 </span>-- | Capture the current proof state and return an
+<span class="lineno">  177 </span>--   action that, if invoked, resets the state back to that point.
+<span class="lineno">  178 </span>proof_checkpoint :: ProofScript (() -&gt; ProofScript ())
+<span class="lineno">  179 </span><span class="decl"><span class="nottickedoff">proof_checkpoint =</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="nottickedoff">do ps &lt;- get</span>
+<span class="lineno">  181 </span><span class="spaces">     </span><span class="nottickedoff">return $ \_ -&gt;</span>
+<span class="lineno">  182 </span><span class="spaces">       </span><span class="nottickedoff">do scriptTopLevel (printOutLnTop Info &quot;Restoring proof state from checkpoint&quot;)</span>
+<span class="lineno">  183 </span><span class="spaces">          </span><span class="nottickedoff">put ps</span></span>
+<span class="lineno">  184 </span>
+<span class="lineno">  185 </span>withEnviron :: Environ -&gt; TopLevel a -&gt; TopLevel a
+<span class="lineno">  186 </span><span class="decl"><span class="istickedoff">withEnviron env m = do</span>
+<span class="lineno">  187 </span><span class="spaces">  </span><span class="istickedoff">prevEnv &lt;- gets rwEnviron</span>
+<span class="lineno">  188 </span><span class="spaces">  </span><span class="istickedoff">modify (\rw -&gt; rw { rwEnviron = env })</span>
+<span class="lineno">  189 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- m</span>
+<span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">modify (\rw -&gt; rw { rwEnviron = prevEnv })</span>
+<span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">return result</span></span>
+<span class="lineno">  192 </span>
+<span class="lineno">  193 </span>withEnvironProofScript :: Environ -&gt; ProofScript a -&gt; ProofScript a
+<span class="lineno">  194 </span><span class="decl"><span class="istickedoff">withEnvironProofScript env (ProofScript m) = do</span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">ProofScript (underExceptT (underStateT (withEnviron env)) m)</span></span>
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>withEnvironLLVM :: Environ -&gt; LLVMCrucibleSetupM a -&gt; LLVMCrucibleSetupM a
+<span class="lineno">  198 </span><span class="decl"><span class="istickedoff">withEnvironLLVM env (LLVMCrucibleSetupM m) = do</span>
+<span class="lineno">  199 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM (underReaderT (underStateT (withEnviron env)) m)</span></span>
+<span class="lineno">  200 </span>
+<span class="lineno">  201 </span>withEnvironJVM :: Environ -&gt; JVMSetupM a -&gt; JVMSetupM a
+<span class="lineno">  202 </span><span class="decl"><span class="istickedoff">withEnvironJVM env (JVMSetupM m) = do</span>
+<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">JVMSetupM (underReaderT (underStateT (withEnviron env)) m)</span></span>
+<span class="lineno">  204 </span>
+<span class="lineno">  205 </span>withEnvironMIR :: Environ -&gt; MIRSetupM a -&gt; MIRSetupM a
+<span class="lineno">  206 </span><span class="decl"><span class="istickedoff">withEnvironMIR env (MIRSetupM m) = do</span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">MIRSetupM (underReaderT (underStateT (withEnviron env)) m)</span></span>
+<span class="lineno">  208 </span>
+<span class="lineno">  209 </span>withOptions :: (Options -&gt; Options) -&gt; TopLevel a -&gt; TopLevel a
+<span class="lineno">  210 </span><span class="decl"><span class="nottickedoff">withOptions f (TopLevel_ m) =</span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">TopLevel_ (local (\x -&gt; x {roOptions = f (roOptions x)}) m)</span></span>
+
+</pre>
+</body>
+</html>
