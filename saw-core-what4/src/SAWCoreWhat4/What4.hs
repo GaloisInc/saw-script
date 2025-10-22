@@ -63,6 +63,8 @@ module SAWCoreWhat4.What4
 import qualified Control.Arrow as A
 
 import Data.Bits
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.Kind (Type)
 import Data.List (genericTake)
@@ -1565,14 +1567,14 @@ w4EvalBasic ::
   SharedContext ->
   ModuleMap ->
   Map Ident (SPrim (B.ExprBuilder n st fs)) {- ^ additional primitives -} ->
-  Map VarIndex (SValue (B.ExprBuilder n st fs)) {- ^ bindings for free variables -} ->
+  IntMap (SValue (B.ExprBuilder n st fs)) {- ^ bindings for free variables -} ->
   IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ cache for uninterpreted function symbols -} ->
   Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
   IO (SValue (B.ExprBuilder n st fs))
 w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
   do let variable tf (VarName ix nm) ty
-           | Just v <- Map.lookup ix varCons = pure v
+           | Just v <- IntMap.lookup ix varCons = pure v
            | otherwise =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm

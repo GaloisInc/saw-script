@@ -165,7 +165,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     -- Later, we need to convert some SAWCore terms back to what4, so during
     -- this conversion, we also build up a mapping from SAWCore variables
     -- (`SAW.VarName`) to what4 ones (`W4.ExprBoundVar`).
-    w4VarMapRef <- liftIO $ newIORef Map.empty
+    w4VarMapRef <- liftIO $ newIORef mempty
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval x = exprToTerm sym sc w4VarMapRef x
 
@@ -532,9 +532,9 @@ setupToReg :: forall sym t fs tp0.
     -- | `termSub`: maps `VarIndex`es in the MethodSpec's namespace to `Term`s
     -- in the context's namespace.
     IntMap SAW.Term ->
-    -- | `myRegMap`: maps `VarIndex`es in the context's namespace to the
-    -- corresponding W4 variables in the context's namespace.
-    Map SAW.VarIndex (Some (W4.Expr t)) ->
+    -- | `myRegMap`: maps `VarIndex`es (which are `Int`s) in the context's
+    -- namespace to the corresponding W4 variables in the context's namespace.
+    IntMap (Some (W4.Expr t)) ->
     Map MS.AllocIndex (Some (MirPointer sym)) ->
     TypeShape tp0 ->
     MS.SetupValue MIR ->

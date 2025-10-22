@@ -18,9 +18,9 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Foldable
 import Data.Functor.Const
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.IORef
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Parameterized.Context (Assignment)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some
@@ -134,7 +134,7 @@ visitExprVars cache e0 f = go Set.empty e0
 termToExpr :: forall sym t fs.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
-    Map SAW.VarIndex (Some (W4.Expr t)) ->
+    IntMap (Some (W4.Expr t)) ->
     SAW.Term ->
     IO (Some (W4.SymExpr sym))
 termToExpr sym varMap term = do
@@ -149,7 +149,7 @@ termToExpr sym varMap term = do
 termToReg :: forall sym t fs tp.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
-    Map SAW.VarIndex (Some (W4.Expr t)) ->
+    IntMap (Some (W4.Expr t)) ->
     SAW.Term ->
     TypeShape tp ->
     IO (RegValue sym tp)
@@ -238,7 +238,7 @@ termToReg sym varMap term shp0 = do
 termToSValue :: forall sym t fs.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
-    Map SAW.VarIndex (Some (W4.Expr t)) ->
+    IntMap (Some (W4.Expr t)) ->
     SAW.Term ->
     IO (SAW.SValue sym)
 termToSValue sym varMap term = do
@@ -260,7 +260,7 @@ termToSValue sym varMap term = do
 termToPred :: forall sym t fs.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
-    Map SAW.VarIndex (Some (W4.Expr t)) ->
+    IntMap (Some (W4.Expr t)) ->
     SAW.Term ->
     IO (W4.Pred sym)
 termToPred sym varMap term = do
@@ -297,13 +297,13 @@ exprToTerm :: forall sym t fs tp m.
     (IsSymInterface sym, sym ~ MirSym t fs, MonadIO m, MonadFail m) =>
     sym ->
     SAW.SharedContext ->
-    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
+    IORef (IntMap (Some (W4.Expr t))) ->
     W4.Expr t tp ->
     m SAW.Term
 exprToTerm sym sc w4VarMapRef val = liftIO $ do
     ty <- SAW.baseSCType sym sc (W4.exprType val)
     vn <- SAW.scFreshVarName sc "w4expr"
-    modifyIORef w4VarMapRef $ Map.insert (SAW.vnIndex vn) (Some val)
+    modifyIORef w4VarMapRef $ IntMap.insert (SAW.vnIndex vn) (Some val)
     term <- SAW.scVariable sc vn ty
     return term
 
@@ -320,7 +320,7 @@ regToTermWithAdapt :: forall m p sym t fs tp0 rtp args ret.
     sym ->
     SAW.SharedContext ->
     String ->
-    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
+    IORef (IntMap (Some (W4.Expr t))) ->
     CryTermAdaptor Integer ->
     TypeShape tp0 ->
     RegValue sym tp0 ->
@@ -382,7 +382,7 @@ regToTerm :: forall sym t fs tp0 m.
     sym ->
     SAW.SharedContext ->
     String ->
-    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
+    IORef (IntMap (Some (W4.Expr t))) ->
     TypeShape tp0 ->
     RegValue sym tp0 ->
     m SAW.Term

@@ -18,10 +18,9 @@ import Control.Lens (use, (^.), (^?), _Wrapped, ix)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
+import qualified Data.IntMap as IntMap
 import Data.IORef
 import qualified Data.Kind as Kind
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -290,7 +289,7 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
 
     sym <- getSymInterface
 
-    w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
+    w4VarMapRef <- liftIO $ newIORef mempty
 
     RegMap argsCtx <- getOverrideArgs
     let sc = mirSharedContext (sym ^. W4.userState)
@@ -346,7 +345,7 @@ munge sym shp0 rv0 = do
     let scs = mirSAWCoreState (sym ^. W4.userState)
 
     visitCache <- W4.newIdxCache
-    w4VarMapRef <- newIORef Map.empty
+    w4VarMapRef <- newIORef mempty
 
     let eval' :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval' x = SAW.toSC sym scs x
@@ -361,7 +360,7 @@ munge sym shp0 rv0 = do
                 vn <- case SAW.asVariable term of
                     Just (vn, _) -> pure vn
                     Nothing -> error "eval on BoundVarExpr produced non-Variable?"
-                modifyIORef w4VarMapRef $ Map.insert (SAW.vnIndex vn) (Some expr)
+                modifyIORef w4VarMapRef $ IntMap.insert (SAW.vnIndex vn) (Some expr)
             eval' x
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
         uneval shp t = do
