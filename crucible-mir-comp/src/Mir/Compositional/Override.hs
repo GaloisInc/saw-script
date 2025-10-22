@@ -167,7 +167,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     -- (`SAW.VarName`) to what4 ones (`W4.ExprBoundVar`).
     w4VarMapRef <- liftIO $ newIORef mempty
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
-        eval x = exprToTerm sym sc w4VarMapRef x
+        eval x = exprToTerm sym w4VarMapRef x
 
     -- Generate fresh variables for use in postconditions and result.  The
     -- result, `postFreshTermSub`, maps MethodSpec `VarIndex`es to `Term`s

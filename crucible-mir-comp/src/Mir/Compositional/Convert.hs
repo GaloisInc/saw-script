@@ -42,12 +42,13 @@ import qualified What4.Partial as W4
 import qualified What4.SWord as W4 (SWord(..))
 
 import qualified SAWCore.Name as SAW
+import qualified SAWCore.Recognizer as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCore.Simulator.MonadLazy as SAW
 import qualified SAWCore.Simulator.Value as SAW
 import SAWCoreWhat4.What4 (SValue)
 import qualified SAWCoreWhat4.What4 as SAW
-import qualified SAWCoreWhat4.ReturnTrip as SAW (baseSCType)
+import qualified SAWCoreWhat4.ReturnTrip as SAW (toSC)
 
 import SAWCentral.Crucible.MIR.TypeShape
 
@@ -293,19 +294,28 @@ termToType sym term = do
         _ -> error $ "termToType: bad SValue"
 
 
+-- | Convert the `W4.Expr` into a `SAW.Term`, recording in @w4VarMapRef@'s map
+-- the new `SAW.Variable`s that were created to represent free variables in the
+-- provided expression.
 exprToTerm :: forall sym t fs tp m.
     (IsSymInterface sym, sym ~ MirSym t fs, MonadIO m, MonadFail m) =>
     sym ->
-    SAW.SharedContext ->
     IORef (IntMap (Some (W4.Expr t))) ->
     W4.Expr t tp ->
     m SAW.Term
-exprToTerm sym sc w4VarMapRef val = liftIO $ do
-    ty <- SAW.baseSCType sym sc (W4.exprType val)
-    vn <- SAW.scFreshVarName sc "w4expr"
-    modifyIORef w4VarMapRef $ IntMap.insert (SAW.vnIndex vn) (Some val)
-    term <- SAW.scVariable sc vn ty
-    return term
+exprToTerm sym w4VarMapRef expr = liftIO $ do
+    visitCache <- W4.newIdxCache
+    visitExprVars visitCache expr $ \var -> do
+        let varExpr = W4.BoundVarExpr var
+        varTerm <- eval varExpr
+        varName <- case SAW.asVariable varTerm of
+            Just (vn, _) -> pure vn
+            Nothing -> error "eval on BoundVarExpr produced non-Variable?"
+        modifyIORef w4VarMapRef $ IntMap.insert (SAW.vnIndex varName) (Some varExpr)
+    eval expr
+    where
+        eval :: forall tp'. W4.Expr t tp' -> IO SAW.Term
+        eval = SAW.toSC sym (mirSAWCoreState (sym ^. W4.userState))
 
 
 -- | Try to convert a Crucible register value into a SAW core `Term`, using
@@ -394,7 +404,7 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
         m SAW.Term
     go shp rv = case (shp, rv) of
         (UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
-        (PrimShape _ _, expr) -> exprToTerm sym sc w4VarMapRef expr
+        (PrimShape _ _, expr) -> exprToTerm sym w4VarMapRef expr
         (TupleShape _ elems, ag) -> do
             terms <- accessMirAggregate sym elems ag $ \_off _sz shp' rv' -> go shp' rv'
             liftIO $ SAW.scTuple sc terms
