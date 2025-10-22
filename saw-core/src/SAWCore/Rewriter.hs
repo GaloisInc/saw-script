@@ -661,26 +661,25 @@ asNatIotaRedex t =
 --   for `f (f x y) z`, return [x,y,z]
 --   for `f (x, f (y,z))`, return [x,y,z]
 appCollectedArgs :: Term -> [Term]
-appCollectedArgs t = step0 (unshared t) []
+appCollectedArgs t = step0 t []
   where
-    unshared (STApp{stAppIndex = _, stAppTermF = tf1}) = tf1
-    unshared (Unshared tf1) = tf1
     -- step 0: accumulate curried args, find the function
-    step0 ::  TermF Term -> [Term] -> [Term]
-    step0 (App f a) args = step0 (unshared f) (a:args)
+    step0 :: Term -> [Term] -> [Term]
+    step0 (R.asApp -> Just (f, a)) args = step0 f (a : args)
     step0 other args = step1 other args
     -- step 1: analyse each arg, knowing the called function, append together
-    step1 :: TermF Term -> [Term] -> [Term]
-    step1 f args = foldl (++) [] (map (\ x -> step2 f $ unshared x) args)
+    step1 :: Term -> [Term] -> [Term]
+    step1 f args = foldl (++) [] (map (step2 f) args)
     -- step2: analyse an arg.  look inside tuples, sequences (TBD), more calls to f
-    step2 :: TermF Term -> TermF Term -> [Term]
-    step2 f (FTermF (PairValue x y)) = (step2 f $ unshared x) ++ (step2 f $ unshared y)
-    step2 f (s@(App g a)) = possibly_curried_args s f (unshared g) (step2 f $ unshared a)
-    step2 _ a = [Unshared a]
+    step2 :: Term -> Term -> [Term]
+    step2 f (R.asPairValue -> Just (x, y)) = step2 f x ++ step2 f y
+    step2 f (s@(R.asApp -> Just (g, a))) = possibly_curried_args s f g (step2 f a)
+    step2 _ a = [a]
     --
-    possibly_curried_args :: TermF Term -> TermF Term -> TermF Term -> [Term] -> [Term]
-    possibly_curried_args s f (App g a) args = possibly_curried_args s f (unshared g) ((step2 f $ unshared a) ++ args)
-    possibly_curried_args s f h args = if f == h then args else [Unshared s]
+    possibly_curried_args :: Term -> Term -> Term -> [Term] -> [Term]
+    possibly_curried_args s f (R.asApp -> Just (g, a)) args =
+      possibly_curried_args s f g (step2 f a ++ args)
+    possibly_curried_args s f h args = if f == h then args else [s]
 
 
 termWeightLt :: Term -> Term -> Bool
