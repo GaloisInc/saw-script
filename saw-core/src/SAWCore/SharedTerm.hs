@@ -25,8 +25,6 @@ module SAWCore.SharedTerm
   ( TermF(..)
   , Ident, mkIdent
   , VarIndex
-  , ExtCns(..)
-  , ecVarIndex
   , NameInfo(..)
   , ppName
     -- * Shared terms
@@ -763,7 +761,7 @@ allowedElimSort dt s =
 -- given a context of the parameters and of the previous arguments.
 ctxCtorArgType ::
   SharedContext ->
-  Term {- ^ datatype applied to ExtCns parameters -} ->
+  Term {- ^ datatype applied to parameters -} ->
   CtorArg ->
   IO Term
 ctxCtorArgType _ _ (ConstArg tp) = return tp
@@ -774,7 +772,7 @@ ctxCtorArgType sc d_params (RecursiveArg zs_ctx ixs) =
 -- of types.
 ctxCtorArgBindings ::
   SharedContext ->
-  Term {- ^ data type applied to ExtCns params -} ->
+  Term {- ^ data type applied to params -} ->
   [(VarName, CtorArg)] ->
   IO [(VarName, Term)]
 ctxCtorArgBindings _ _ [] = return []
