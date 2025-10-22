@@ -1585,17 +1585,17 @@ span.spaces    { background: white }
 <span class="lineno"> 1566 </span><span class="spaces">      </span><span class="istickedoff">IO (Set TheoremNonce, TheoremSummary)</span>
 <span class="lineno"> 1567 </span><span class="spaces">    </span><span class="istickedoff">check nenv e sqt = case e of</span>
 <span class="lineno"> 1568 </span><span class="spaces">      </span><span class="istickedoff">ProofTerm tm -&gt;</span>
-<span class="lineno"> 1569 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">case sequentState sqt of</span></span>
-<span class="lineno"> 1570 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">ConclFocus (Prop ptm) _ -&gt;</span></span>
-<span class="lineno"> 1571 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">do ty &lt;- TC.scTypeCheckError sc tm</span></span>
-<span class="lineno"> 1572 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">ok &lt;- scConvertible sc True ptm ty</span></span>
-<span class="lineno"> 1573 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">unless ok $ fail $ unlines</span></span>
+<span class="lineno"> 1569 </span><span class="spaces">        </span><span class="istickedoff">case sequentState sqt of</span>
+<span class="lineno"> 1570 </span><span class="spaces">          </span><span class="istickedoff">ConclFocus (Prop ptm) _ -&gt;</span>
+<span class="lineno"> 1571 </span><span class="spaces">            </span><span class="istickedoff">do ty &lt;- TC.scTypeCheckError sc tm</span>
+<span class="lineno"> 1572 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible sc <span class="nottickedoff">True</span> ptm ty</span>
+<span class="lineno"> 1573 </span><span class="spaces">               </span><span class="istickedoff">unless ok $ <span class="nottickedoff">fail $ unlines</span></span>
 <span class="lineno"> 1574 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Proof term does not prove the required proposition&quot;</span></span>
 <span class="lineno"> 1575 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, showTerm ptm</span></span>
 <span class="lineno"> 1576 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, showTerm tm</span></span>
 <span class="lineno"> 1577 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1578 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">return (mempty, ProvedTheorem mempty)</span></span>
-<span class="lineno"> 1579 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; fail &quot;Sequent must be conclusion-focused for proof term evidence&quot;</span></span>
+<span class="lineno"> 1578 </span><span class="spaces">               </span><span class="istickedoff">return (<span class="nottickedoff">mempty</span>, <span class="nottickedoff">ProvedTheorem mempty</span>)</span>
+<span class="lineno"> 1579 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;Sequent must be conclusion-focused for proof term evidence&quot;</span></span>
 <span class="lineno"> 1580 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1581 </span><span class="spaces">      </span><span class="istickedoff">SolverEvidence stats sqt' -&gt;</span>
 <span class="lineno"> 1582 </span><span class="spaces">        </span><span class="istickedoff">do ok &lt;- sequentSubsumes sc sqt' sqt</span>
@@ -2263,7 +2263,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2244 </span><span class="spaces">                </span><span class="istickedoff">[ &quot;The trivial tactic cannot prove this equality&quot;</span>
 <span class="lineno"> 2245 </span><span class="spaces">                </span><span class="istickedoff">, showTerm gp</span>
 <span class="lineno"> 2246 </span><span class="spaces">                </span><span class="istickedoff">]</span>
-<span class="lineno"> 2247 </span><span class="spaces">              </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [], <span class="nottickedoff">leafEvidence (ProofTerm pf)</span>)</span></span>
+<span class="lineno"> 2247 </span><span class="spaces">              </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [], leafEvidence (ProofTerm pf))</span></span>
 <span class="lineno"> 2248 </span>
 <span class="lineno"> 2249 </span>-- | Attempt to prove a goal by giving a direct proof term.
 <span class="lineno"> 2250 </span>tacticExact :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Term -&gt; Tactic m ()

@@ -1183,7 +1183,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1164 </span><span class="spaces">  </span><span class="istickedoff">(_, ro, rw) &lt;- buildTopLevelEnv proxy opts scriptArgv</span>
 <span class="lineno"> 1165 </span><span class="spaces">  </span><span class="istickedoff">let ro' = case mbSubshell of</span>
 <span class="lineno"> 1166 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">ro</span></span>
-<span class="lineno"> 1167 </span><span class="spaces">              </span><span class="istickedoff">Just m  -&gt; ro{ roSubshell = <span class="nottickedoff">m</span> }</span>
+<span class="lineno"> 1167 </span><span class="spaces">              </span><span class="istickedoff">Just m  -&gt; ro{ roSubshell = m }</span>
 <span class="lineno"> 1168 </span><span class="spaces">  </span><span class="istickedoff">let ro'' = case mbProofSubshell of</span>
 <span class="lineno"> 1169 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">ro'</span></span>
 <span class="lineno"> 1170 </span><span class="spaces">              </span><span class="istickedoff">Just m  -&gt; ro'{ roProofSubshell = m }</span>
@@ -1752,9 +1752,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1733 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
 <span class="lineno"> 1734 </span>
 <span class="lineno"> 1735 </span>toplevelSubshell :: () -&gt; TopLevel Value
-<span class="lineno"> 1736 </span><span class="decl"><span class="nottickedoff">toplevelSubshell () = do</span>
-<span class="lineno"> 1737 </span><span class="spaces">     </span><span class="nottickedoff">m &lt;- roSubshell &lt;$&gt; ask</span>
-<span class="lineno"> 1738 </span><span class="spaces">     </span><span class="nottickedoff">toValue &quot;subshell&quot; &lt;$&gt; m</span></span>
+<span class="lineno"> 1736 </span><span class="decl"><span class="istickedoff">toplevelSubshell () = do</span>
+<span class="lineno"> 1737 </span><span class="spaces">     </span><span class="istickedoff">m &lt;- roSubshell &lt;$&gt; ask</span>
+<span class="lineno"> 1738 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">toValue &quot;subshell&quot;</span> &lt;$&gt; m</span></span>
 <span class="lineno"> 1739 </span>
 <span class="lineno"> 1740 </span>proofScriptSubshell :: () -&gt; ProofScript Value
 <span class="lineno"> 1741 </span><span class="decl"><span class="istickedoff">proofScriptSubshell () = do</span>
@@ -2590,7 +2590,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2571 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 2572 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2573 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;subshell&quot;            &quot;() -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 2574 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal toplevelSubshell)</span></span>
+<span class="lineno"> 2574 </span><span class="spaces">    </span><span class="istickedoff">(pureVal toplevelSubshell)</span>
 <span class="lineno"> 2575 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 2576 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Open an interactive subshell instance in the context where&quot;</span></span>
 <span class="lineno"> 2577 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;'subshell' was called. This works either from within execution&quot;</span></span>
