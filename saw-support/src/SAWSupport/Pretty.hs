@@ -120,7 +120,7 @@ import qualified Prettyprinter.Render.Text as PPT
 data Style
   = PrimitiveStyle
   | ConstantStyle
-  | ExtCnsStyle
+  | VariableStyle
   | LocalVarStyle
   | DataTypeStyle
   | CtorAppStyle
@@ -134,7 +134,7 @@ colorStyle =
   \case
     PrimitiveStyle -> mempty
     ConstantStyle -> PP.colorDull PP.Blue
-    ExtCnsStyle -> PP.colorDull PP.Red
+    VariableStyle -> PP.colorDull PP.Red
     LocalVarStyle -> PP.colorDull PP.Green
     DataTypeStyle -> mempty
     CtorAppStyle -> mempty
