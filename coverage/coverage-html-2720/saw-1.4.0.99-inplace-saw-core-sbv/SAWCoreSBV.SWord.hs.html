@@ -58,7 +58,7 @@ span.spaces    { background: white }
 <span class="lineno">   39 </span><span class="decl"><span class="istickedoff">literalSWord w i = svInteger (KBounded False w) i</span></span>
 <span class="lineno">   40 </span>
 <span class="lineno">   41 </span>literalSInteger :: Integer -&gt; SWord
-<span class="lineno">   42 </span><span class="decl"><span class="istickedoff">literalSInteger i = svInteger KUnbounded i</span></span>
+<span class="lineno">   42 </span><span class="decl"><span class="nottickedoff">literalSInteger i = svInteger KUnbounded i</span></span>
 <span class="lineno">   43 </span>
 <span class="lineno">   44 </span>forallSWord :: String -&gt; Int -&gt; Symbolic SWord
 <span class="lineno">   45 </span><span class="decl"><span class="nottickedoff">forallSWord nm w = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) (KBounded False w) (Just nm)</span></span>
