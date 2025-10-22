@@ -299,10 +299,10 @@ scReadExternalTyped sc input =
                             -> do t <- readIdx e
                                   lift $ scRecordProj sc t (Text.pack prj)
         ("Prop" : h)        -> do flags <- sortFlagsFromList <$> mapM readM h
-                                  lift $ scSort' sc propSort flags
+                                  lift $ scSortWithFlags sc propSort flags
         ("Sort" : s : h)    -> do s' <- mkSort <$> readM s
                                   flags <- sortFlagsFromList <$> mapM readM h
-                                  lift $ scSort' sc s' flags
+                                  lift $ scSortWithFlags sc s' flags
         ["Nat", n]          -> do n' <- readM n
                                   lift $ scNat sc n'
         ("Array" : e : es)  -> do t <- readIdx e

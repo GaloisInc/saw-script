@@ -32,9 +32,6 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:16:1-16:26 (at top level)
 .:1:0:
-While typechecking term:
-  \(x : Prelude.True) -> x
-.:1:0:
 Not a sort
   Prelude.Bool
 
