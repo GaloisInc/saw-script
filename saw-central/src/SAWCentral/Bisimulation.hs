@@ -81,7 +81,9 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Foldable (foldl')
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
+import Data.IntSet (IntSet)
 import qualified Data.Map.Strict as Map
+import Data.Map.Strict (Map)
 import Data.Maybe (mapMaybe)
 import qualified Data.Text as Text
 
@@ -110,7 +112,7 @@ import SAWCentral.Value
 -- 'Term' with a 'Variable'.  Used in 'replaceConstantTerm' and
 -- 'replaceConstantTermF'
 data ReplaceState = ReplaceState {
-    rsMemo :: Map.Map TermIndex Term
+    rsMemo :: Map TermIndex Term
  -- ^ Memoization table to avoid re-visiting the same shared term
   , rsVariable :: Maybe Term
  -- ^ Variable that replaces the 'Constant' application, if the constant could be
@@ -298,9 +300,9 @@ extractApp constant term =
                               , "  Constant: " ++ show (ppTypedTerm constant)
                               , "  Term: " ++ showTerm term ]
   where
-    go :: (IntSet.IntSet, Maybe (TermF Term))
+    go :: (IntSet, Maybe (TermF Term))
        -> Term
-       -> (IntSet.IntSet, Maybe (TermF Term))
+       -> (IntSet, Maybe (TermF Term))
     go (seen, acc) t =
       case acc of
         Just res -> (seen, Just res)
@@ -312,9 +314,9 @@ extractApp constant term =
               then (seen, acc)
               else termf (IntSet.insert i seen, acc) tf
 
-    termf :: (IntSet.IntSet, Maybe (TermF Term))
+    termf :: (IntSet, Maybe (TermF Term))
           -> TermF Term
-          -> (IntSet.IntSet, Maybe (TermF Term))
+          -> (IntSet, Maybe (TermF Term))
     termf (seen, acc) tf =
       case tf of
         App fn _ | unwrapTermF fn == unwrapTermF (ttTerm constant) ->

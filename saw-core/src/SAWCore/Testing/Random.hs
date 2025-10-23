@@ -33,6 +33,7 @@ import Control.Monad.Random
 import Data.Functor.Compose (Compose(..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
+import Data.Map (Map)
 import qualified Data.Set as Set
 import System.Random.TF (newTFGen, TFGen)
 
@@ -67,7 +68,7 @@ execTest ::
   (F.MonadFail m, MonadRandom m, MonadIO m) =>
   SharedContext ->
   ModuleMap ->
-  Map.Map VarName (m FirstOrderValue) ->
+  Map VarName (m FirstOrderValue) ->
   Term ->
   m (Maybe [(VarName, FirstOrderValue)])
 execTest sc mmap vars tm =

@@ -42,7 +42,9 @@ import qualified Data.IntMap.Strict                            as IntMap
 import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
 import qualified Data.Map                                      as Map
+import           Data.Map (Map)
 import qualified Data.Set                                      as Set
+import           Data.Set (Set)
 import qualified Data.Text                                     as Text
 import           Prelude                                       hiding (fail)
 import           Prettyprinter
@@ -83,11 +85,11 @@ data TranslationReader = TranslationReader
   { _currentModule  :: Maybe ModuleName
     -- ^ The current Coq module for the translation
 
-  , _namedEnvironment  :: Map.Map VarName Coq.Ident
+  , _namedEnvironment  :: Map VarName Coq.Ident
     -- ^ The map of Coq identifiers associated with the SAW core named
     -- variables in scope
 
-  , _unavailableIdents :: Set.Set Coq.Ident
+  , _unavailableIdents :: Set Coq.Ident
     -- ^ The set of Coq identifiers that are either reserved or already in use.
     -- To avoid shadowing, fresh identifiers should be chosen to be disjoint
     -- from this set.
@@ -219,7 +221,7 @@ withSharedTerms ((idx,t):ts) f =
 -- | The set of reserved identifiers in Coq, obtained from section
 -- \"Gallina Specification Language\" of the Coq reference manual.
 -- <https://coq.inria.fr/refman/language/gallina-specification-language.html>
-reservedIdents :: Set.Set Coq.Ident
+reservedIdents :: Set Coq.Ident
 reservedIdents =
   Set.fromList $
   map Coq.Ident $

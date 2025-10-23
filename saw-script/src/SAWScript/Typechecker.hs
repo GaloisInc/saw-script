@@ -29,11 +29,11 @@ import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
 import qualified Data.Text as Text
 import Data.List (intercalate, genericTake)
-import Data.Map (Map)
 import Data.Either (partitionEithers)
-import qualified Data.Map as M
+import qualified Data.Map as Map
+import Data.Map (Map)
+import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Data.Set as S
 
 import qualified Prettyprinter as PP
 
@@ -62,13 +62,13 @@ type TyEnv = Map Name (PrimitiveLifecycle, NamedType)
 --
 
 class UnifyVars t where
-  unifyVars :: t -> M.Map TypeIndex Pos
+  unifyVars :: t -> Map TypeIndex Pos
 
-instance (Ord k, UnifyVars a) => UnifyVars (M.Map k a) where
-  unifyVars = unifyVars . M.elems
+instance (Ord k, UnifyVars a) => UnifyVars (Map k a) where
+  unifyVars = unifyVars . Map.elems
 
 instance (UnifyVars a) => UnifyVars [a] where
-  unifyVars = M.unionsWith choosePos . map unifyVars
+  unifyVars = Map.unionsWith choosePos . map unifyVars
 
 instance (UnifyVars a) => UnifyVars (PrimitiveLifecycle, a) where
   unifyVars (_lc, t) = unifyVars t
@@ -80,8 +80,8 @@ instance UnifyVars Type where
   unifyVars t = case t of
     TyCon _ _ ts      -> unifyVars ts
     TyRecord _ tm     -> unifyVars tm
-    TyVar _ _         -> M.empty
-    TyUnifyVar pos i  -> M.singleton i pos
+    TyVar _ _         -> Map.empty
+    TyUnifyVar pos i  -> Map.singleton i pos
 
 instance UnifyVars Schema where
   unifyVars (Forall _ t) = unifyVars t
@@ -89,7 +89,7 @@ instance UnifyVars Schema where
 instance UnifyVars NamedType where
   unifyVars nt = case nt of
     ConcreteType ty -> unifyVars ty
-    AbstractType -> M.empty
+    AbstractType -> Map.empty
 
 -- }}}
 
@@ -98,7 +98,7 @@ instance UnifyVars NamedType where
 -- Substitutions {{{
 
 -- Subst is the type of a substitution map for unification vars.
-newtype Subst = Subst { unSubst :: M.Map TypeIndex Type } deriving (Show)
+newtype Subst = Subst { unSubst :: Map TypeIndex Type } deriving (Show)
 
 -- Merge two substitution maps.
 --
@@ -126,7 +126,7 @@ newtype Subst = Subst { unSubst :: M.Map TypeIndex Type } deriving (Show)
 -- problem or not but it should probably be looked into at some point.
 --
 -- XXX: we should probably crosscheck the key space of the maps. Note
--- that the ordering of the M.union args means that if there are
+-- that the ordering of the Map.union args means that if there are
 -- duplicated keys we prefer the right substitution (m1), namely the
 -- preexisting one. Given that this choice seems to be explicit, it
 -- must have been for a reason, but I'm not sure what that reason
@@ -159,18 +159,18 @@ newtype Subst = Subst { unSubst :: M.Map TypeIndex Type } deriving (Show)
 -- up with a different name that indicates that this operation isn't
 -- commutative. Unless it actually can be.
 mergeSubst :: Subst -> Subst -> Subst
-mergeSubst s2@(Subst m2) (Subst m1) = Subst $ m1' `M.union` m2
+mergeSubst s2@(Subst m2) (Subst m1) = Subst $ m1' `Map.union` m2
   where
   m1' = fmap (appSubst s2) m1
 
 emptySubst :: Subst
-emptySubst = Subst M.empty
+emptySubst = Subst Map.empty
 
 singletonSubst :: TypeIndex -> Type -> Subst
-singletonSubst tv t = Subst $ M.singleton tv t
+singletonSubst tv t = Subst $ Map.singleton tv t
 
 substFromList :: [(TypeIndex, Type)] -> Subst
-substFromList entries = Subst $ M.fromList entries
+substFromList entries = Subst $ Map.fromList entries
 
 --
 -- appSubst is a type-class-polymorphic function for applying a
@@ -192,7 +192,7 @@ instance (AppSubst t) => AppSubst (PrimitiveLifecycle, t) where
 instance (AppSubst t) => AppSubst (Pos, PrimitiveLifecycle, Rebindable, t) where
   appSubst s (pos, lc, rb, x) = (pos, lc, rb, appSubst s x)
 
-instance (Ord k, AppSubst a) => AppSubst (M.Map k a) where
+instance (Ord k, AppSubst a) => AppSubst (Map k a) where
   appSubst s = fmap (appSubst s)
 
 instance AppSubst Expr where
@@ -242,7 +242,7 @@ instance AppSubst Type where
     TyCon pos tc ts     -> TyCon pos tc (appSubst s ts)
     TyRecord pos fs     -> TyRecord pos (appSubst s fs)
     TyVar _ _           -> t
-    TyUnifyVar _ i      -> case M.lookup i (unSubst s) of
+    TyUnifyVar _ i      -> case Map.lookup i (unSubst s) of
                              Just t' -> t'
                              Nothing -> t
 
@@ -444,20 +444,20 @@ resolveCurrentTypedefs t = do
 -- about what unification vars do and don't appear.
 --
 -- Returns a map of the index number to the occurrence position.
-unifyVarsInEnvs :: TI (M.Map TypeIndex Pos)
+unifyVarsInEnvs :: TI (Map TypeIndex Pos)
 unifyVarsInEnvs = do
     venv <- gets varEnv
     tenv <- gets tyEnv
-    vtys <- mapM applyCurrentSubst $ M.elems venv
-    ttys <- mapM applyCurrentSubst $ M.elems tenv
-    return $ M.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
+    vtys <- mapM applyCurrentSubst $ Map.elems venv
+    ttys <- mapM applyCurrentSubst $ Map.elems tenv
+    return $ Map.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
 
 -- Get the named type vars that occur as keys in the current type name
 -- environment.
-namedVarDefinitions :: TI (S.Set Name)
+namedVarDefinitions :: TI (Set Name)
 namedVarDefinitions = do
     env <- gets tyEnv
-    return $ M.keysSet env
+    return $ Map.keysSet env
 
 -- Get the position and name of the first binding in a pattern,
 -- for use as context info when printing messages. If there's a
@@ -654,7 +654,7 @@ ppFailMGU (FailMGU start eflines lastfunlines) =
 -- cycles.
 resolveUnificationVar :: Pos -> TypeIndex -> Type -> Either FailMGU Subst
 resolveUnificationVar pos i t =
-  case M.lookup i $ unifyVars t of
+  case Map.lookup i $ unifyVars t of
      Just otherpos ->
        -- FIXME/XXX: this error message is better than the one that was here before
        -- but still lacks a certain something
@@ -686,13 +686,13 @@ mgu t1 t2 = case (t1, t2) of
       resolveUnificationVar pos i t1
 
   (TyRecord _ ts1, TyRecord _ ts2)
-    | M.keys ts1 /= M.keys ts2 ->
+    | Map.keys ts1 /= Map.keys ts2 ->
       -- records with different keys
       failMGU "Record field names mismatch." t1 t2
 
     | otherwise ->
       -- records with the same field names, try unifying the field types
-      case mgus (M.elems ts1) (M.elems ts2) of
+      case mgus (Map.elems ts1) (Map.elems ts2) of
         Right result -> Right result
         Left msgs -> Left $ failMGUAdd msgs t1 t2
 
@@ -872,19 +872,19 @@ matches t1 t2 = do
 -- Get the free type variables found in a Type.
 inspectTypeFTVs :: Type -> TI (Map Name Pos)
 inspectTypeFTVs ty = case ty of
-    TyCon _pos _ctor args -> M.unions <$> mapM inspectTypeFTVs args
-    TyRecord _pos fields -> M.unions <$> traverse inspectTypeFTVs fields
-    TyUnifyVar _pos _x -> return M.empty
+    TyCon _pos _ctor args -> Map.unions <$> mapM inspectTypeFTVs args
+    TyRecord _pos fields -> Map.unions <$> traverse inspectTypeFTVs fields
+    TyUnifyVar _pos _x -> return Map.empty
     TyVar pos x -> do
         tyenv <- gets tyEnv
-        case M.lookup x tyenv of
-            Nothing -> return $ M.singleton x pos
-            Just _ -> return $ M.empty
+        case Map.lookup x tyenv of
+            Nothing -> return $ Map.singleton x pos
+            Just _ -> return $ Map.empty
 
 -- Get the free type variables found in a Maybe Type.
 inspectMaybeTypeFTVs :: Maybe Type -> TI (Map Name Pos)
 inspectMaybeTypeFTVs mty = case mty of
-    Nothing -> return M.empty
+    Nothing -> return Map.empty
     Just ty -> inspectTypeFTVs ty
 
 -- Get the free type variables found in a Pattern.
@@ -893,7 +893,7 @@ inspectPatternFTVs pat = case pat of
     PWild _pos mty -> inspectMaybeTypeFTVs mty
     PVar _allpos _xpos _x mty -> inspectMaybeTypeFTVs mty
     PTuple _pos subpats ->
-        M.unions <$> mapM inspectPatternFTVs subpats
+        Map.unions <$> mapM inspectPatternFTVs subpats
 
 -- Get the free type variables found in a chain of Lambda Exprs.
 -- Also return the body expression found on the inside of the chain
@@ -903,9 +903,9 @@ inspectLambdaFTVs e0 = case e0 of
     Lambda _fpos _mname pat e1 -> do
         hereFTVs <- inspectPatternFTVs pat
         (e1', moreFTVs) <- inspectLambdaFTVs e1
-        return (e1', M.union hereFTVs moreFTVs)
+        return (e1', Map.union hereFTVs moreFTVs)
     _ ->
-        return (e0, M.empty)
+        return (e0, Map.empty)
 
 -- Get the free type variables found in a Decl.
 inspectDeclFTVs :: Decl -> TI (Map Name Pos)
@@ -914,8 +914,8 @@ inspectDeclFTVs (Decl _dpos pat _mty e0) = do
     (e1, argFTVs) <- inspectLambdaFTVs e0
     retFTVs <- case e1 of
         TSig _tspos _e2 ty -> inspectTypeFTVs ty
-        _ -> return M.empty
-    return $ M.unions [nameFTVs, argFTVs, retFTVs]
+        _ -> return Map.empty
+    return $ Map.unions [nameFTVs, argFTVs, retFTVs]
 
 
 -- }}}
@@ -943,7 +943,7 @@ inferField cname (n,e) = do
 addVar :: Name -> Pos -> Rebindable -> Schema -> TI ()
 addVar x pos rb ty = do
     env <- gets varEnv
-    let env' = M.insert x (pos, Current, rb, ty) env
+    let env' = Map.insert x (pos, Current, rb, ty) env
     modify (\rw -> rw { varEnv = env' })
 
 -- Add xs with type tys to the environment.
@@ -1031,8 +1031,8 @@ withDeclGroup (Recursive ds) m = foldr withDecl m ds
 -- Wrap the action m with some abstract type variables.
 withAbstractTyVars :: Map Name Pos -> TI a -> TI a
 withAbstractTyVars vars m = do
-    let insertOne x _pos tyenv = M.insert x (Current, AbstractType) tyenv
-        insertAll tyenv = M.foldrWithKey insertOne tyenv vars
+    let insertOne x _pos tyenv = Map.insert x (Current, AbstractType) tyenv
+        insertAll tyenv = Map.foldrWithKey insertOne tyenv vars
     tyenv <- gets tyEnv
     let tyenv' = insertAll tyenv
     modify (\rw -> rw { tyEnv = tyenv' })
@@ -1075,9 +1075,9 @@ inferExpr (ln, expr) = case expr of
       return (Tuple pos es', tTuple (PosInferred InfTerm pos) ts)
 
   Record pos fs -> do
-      (nes',nts) <- unzip `fmap` mapM (inferField ln) (M.toList fs)
-      let ty = TyRecord (PosInferred InfTerm pos) $ M.fromList nts
-      return (Record pos (M.fromList nes'), ty)
+      (nes',nts) <- unzip `fmap` mapM (inferField ln) (Map.toList fs)
+      let ty = TyRecord (PosInferred InfTerm pos) $ Map.fromList nts
+      return (Record pos (Map.fromList nes'), ty)
 
   -- XXX this is currently unreachable because there's no concrete
   -- syntax for it; the parser will never produce it.
@@ -1093,7 +1093,7 @@ inferExpr (ln, expr) = case expr of
       t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
       elTy <- case t1 of
           TyRecord typos fs
-           | Just ty <- M.lookup n fs -> do
+           | Just ty <- Map.lookup n fs -> do
               return ty
            | otherwise -> do
               recordError pos $
@@ -1136,13 +1136,13 @@ inferExpr (ln, expr) = case expr of
   Var pos x -> do
       avail <- asks primsAvail
       env <- gets varEnv
-      case M.lookup x env of
+      case Map.lookup x env of
         Nothing -> do
           recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
           t <- getFreshTyVar pos
           return (Var pos x, t)
         Just (_prevpos, lc, _rebindable, Forall as t)
-         | S.member lc avail -> do
+         | Set.member lc avail -> do
           when (isDeprecated lc) $
               case t of
                   TyCon _typos FunCon _args ->
@@ -1156,7 +1156,7 @@ inferExpr (ln, expr) = case expr of
                 at <- getFreshTyVar apos
                 return (a, (Current, ConcreteType at))
           substs <- mapM once as
-          let t' = substituteTyVars' avail (M.fromList substs) t
+          let t' = substituteTyVars' avail (Map.fromList substs) t
           return (Var pos x, t')
          | otherwise -> do
           recordError pos $ "Inaccessible variable: " ++ show x ++ " (" ++ show pos ++ ")"
@@ -1238,7 +1238,7 @@ inferPattern cname rebindable pat =
     PVar allpos xpos x mt ->
       do t <- resolveType allpos mt
          env <- gets varEnv
-         case M.lookup x env of
+         case Map.lookup x env of
              Nothing -> pure ()
              Just (prevpos, lc, prevrb, tyscheme) -> case rebindable of
                  RebindableVar -> do
@@ -1246,7 +1246,7 @@ inferPattern cname rebindable pat =
                            recordError xpos $ "Cannot rebind " ++
                                               Text.unpack x ++ ": " ++ msg
                      avail <- asks primsAvail
-                     when (not $ S.member lc avail) $
+                     when (not $ Set.member lc avail) $
                          croak "A previous binding exists but is hidden"
                      oldt <- case tyscheme of
                          Forall [] oldt' -> pure oldt'
@@ -1308,7 +1308,7 @@ addTypedef a ty = do
     avail <- asks primsAvail
     env <- gets tyEnv
     let ty' = substituteTyVars' avail env ty
-        env' = M.insert a (Current, ConcreteType ty') env
+        env' = Map.insert a (Current, ConcreteType ty') env
     modify (\rw -> rw { tyEnv = env' })
 
 -- break a monadic type down into its monad and value types, if it is one
@@ -1598,12 +1598,12 @@ generalize foralls es0 ts0 = do
 
     envUnifyVars <- unifyVarsInEnvs
     knownNamedVars <- namedVarDefinitions
-    let is1 = is0 M.\\ envUnifyVars
-    let bs1 = M.union foralls $ M.withoutKeys bs0 knownNamedVars
+    let is1 = is0 Map.\\ envUnifyVars
+    let bs1 = Map.union foralls $ Map.withoutKeys bs0 knownNamedVars
 
     -- convert to lists
-    let is2 = M.toList is1
-    let bs2 = M.toList bs1
+    let is2 = Map.toList is1
+    let bs2 = Map.toList bs1
 
     -- if the position is "fresh" turn it into "inferred from term"
     let adjustPos pos = case pos of
@@ -1716,7 +1716,7 @@ inferRecDecls ds = do
         cname = getPatternContext firstPat
 
     -- Collect the free type variables.
-    foralls <- M.unions <$> mapM inspectDeclFTVs ds
+    foralls <- Map.unions <$> mapM inspectDeclFTVs ds
 
     -- Add abstract type variables for the foralls while we check the
     -- bodies.
@@ -1850,12 +1850,12 @@ checkType kind ty = case ty of
   TyVar pos x -> do
       avail <- asks primsAvail
       tyenv <- gets tyEnv
-      case M.lookup x tyenv of
+      case Map.lookup x tyenv of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ Text.unpack x)
               getErrorTyVar pos
           Just (lc, _ty')
-           | S.member lc avail -> do
+           | Set.member lc avail -> do
               when (isDeprecated lc) $
                   recordWarning pos $ "Type is deprecated: " <> Text.unpack x
               -- Assume ty' was checked when it was entered.
@@ -1997,7 +1997,7 @@ typesMatch avail tenv schema'found schema'expected =
               return (a, (Current, ConcreteType ty'a))
         substs <- mapM generate as
         -- Substitute them into the type
-        let ty' = substituteTyVars' avail (M.fromList substs) ty
+        let ty' = substituteTyVars' avail (Map.fromList substs) ty
         return ty'
       match = do
         -- Unpack the schemas and check if they match
@@ -2005,7 +2005,7 @@ typesMatch avail tenv schema'found schema'expected =
         ty'expected <- unpack schema'expected
         matches ty'found ty'expected
   in
-  case evalTIWithEnv avail M.empty tenv match of
+  case evalTIWithEnv avail Map.empty tenv match of
     (Left _errors, _warnings) -> False          -- not actually reachable
     (Right b, _warnings) -> b                   -- return match success/failure
 

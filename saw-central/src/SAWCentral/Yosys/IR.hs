@@ -96,7 +96,7 @@ cellTypeIsPrimitive cellType =
     _ -> False
 
 -- | Mapping from 'Text' to primitive cell types
-textToPrimitiveCellType :: Map.Map Text CellType
+textToPrimitiveCellType :: Map Text CellType
 textToPrimitiveCellType = Map.fromList
   [ ("$not"         , CellTypeNot)
   , ("$pos"         , CellTypePos)
@@ -139,7 +139,7 @@ textToPrimitiveCellType = Map.fromList
   ]
 
 -- | Mapping from primitive cell types to textual representation
-primitiveCellTypeToText :: Map.Map CellType Text
+primitiveCellTypeToText :: Map CellType Text
 primitiveCellTypeToText =
   Map.fromList [(y, x) | (x, y) <- Map.toList textToPrimitiveCellType]
 

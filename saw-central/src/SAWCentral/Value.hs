@@ -222,7 +222,7 @@ import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.List.Extra ( dropEnd )
-import qualified Data.Map as M
+import qualified Data.Map as Map
 import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text)
@@ -666,7 +666,7 @@ showsPrecValue opts nenv p v =
     VArray vs -> PPS.showBrackets $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
     VTuple vs -> showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
     VRecord m ->
-      PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)
+      PPS.showBraces $ PPS.showCommaSep $ map showFld (Map.toList m)
         where
           showFld (n, fv) =
             showString (Text.unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
@@ -1295,7 +1295,7 @@ extendEnv pos name rb ty doc v = do
              -- The typechecker restricts this to happen only at the
              -- top level and only if any existing variable is already
              -- rebindable, so we don't have to update varenv.
-             let re' = M.insert name (pos, ty, v) rbenv in
+             let re' = Map.insert name (pos, ty, v) rbenv in
              (varenv, re')
 
      -- Mirror the value into the Cryptol environment if appropriate.

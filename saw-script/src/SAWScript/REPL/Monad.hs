@@ -372,7 +372,7 @@ setREPLTitle =
   do refs <- getRefs
      io (setTitle (mkTitle refs))
 
-getVars :: REPL (Map.Map T.Name M.IfaceDecl)
+getVars :: REPL (Map T.Name M.IfaceDecl)
 getVars  = do
   me <- getModuleEnv
   let decls = getAllIfaceDecls me
@@ -388,13 +388,13 @@ getVars  = do
                                                   }) extras
   return (Map.union vars1 vars2)
 
-getTSyns :: REPL (Map.Map T.Name T.TySyn)
+getTSyns :: REPL (Map T.Name T.TySyn)
 getTSyns  = do
   me <- getModuleEnv
   let decls = getAllIfaceDecls me
   return (M.ifTySyns decls)
 
-getNominalTypes :: REPL (Map.Map T.Name T.NominalType)
+getNominalTypes :: REPL (Map T.Name T.NominalType)
 getNominalTypes = do
   me <- getModuleEnv
   let decls = getAllIfaceDecls me

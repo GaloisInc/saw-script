@@ -28,6 +28,7 @@ import           Control.Lens                       (_1, _2, over)
 import           Control.Monad.Reader               (asks)
 import           Data.Char                          (isAlphaNum)
 import qualified Data.Map                           as Map
+import           Data.Map                           (Map)
 import           Data.String.Interpolate            (i)
 import qualified Data.Text                          as Text
 import           Prelude                            hiding (fail)
@@ -40,8 +41,8 @@ import           SAWCore.Name
 import           SAWCoreCoq.Monad
 
 data SpecialTreatment = SpecialTreatment
-  { moduleRenaming        :: Map.Map ModuleName String
-  , identSpecialTreatment :: Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
+  { moduleRenaming        :: Map ModuleName String
+  , identSpecialTreatment :: Map ModuleName (Map String IdentSpecialTreatment)
   }
 
 -- | How to handle SAWCore identifiers at their definition sites.
@@ -76,7 +77,7 @@ data IdentSpecialTreatment = IdentSpecialTreatment
   , atUseSite :: UseSiteTreatment
   }
 
-moduleRenamingMap :: Map.Map ModuleName ModuleName
+moduleRenamingMap :: Map ModuleName ModuleName
 moduleRenamingMap = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   over _2 (mkModuleName . (: [])) <$>
@@ -216,14 +217,14 @@ preludeExtraModule :: ModuleName
 preludeExtraModule = mkModuleName ["SAWCorePreludeExtra"]
 
 specialTreatmentMap :: TranslationConfiguration ->
-                       Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
+                       Map ModuleName (Map String IdentSpecialTreatment)
 specialTreatmentMap configuration = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   [ ("Cryptol", cryptolPreludeSpecialTreatmentMap)
   , ("Prelude", sawCorePreludeSpecialTreatmentMap configuration)
   ]
 
-cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
+cryptolPreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
   ++
   [ ("Num_rec",               rename "Num__rec")
@@ -239,7 +240,7 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
 -- reserved keyword in Coq), so that primitives' and axioms' types can be
 -- copy-pasted as is on the Coq side.
 sawCorePreludeSpecialTreatmentMap :: TranslationConfiguration ->
-                                     Map.Map String IdentSpecialTreatment
+                                     Map String IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap configuration =
   let vectorsModule = sawVectorDefinitionsModule configuration in
   Map.fromList $

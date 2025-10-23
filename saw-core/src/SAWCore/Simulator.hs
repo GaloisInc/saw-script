@@ -45,7 +45,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import qualified Data.IntMap as IMap
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
 import Data.Text (Text)
@@ -516,17 +515,17 @@ mkMemoClosed cfg t =
   where
     -- | Map of all closed subterms of t.
     subterms :: IntMap (TermF Term)
-    subterms = fmap fst $ IMap.filter (IntSet.null . snd) $ State.execState (go t) IMap.empty
+    subterms = fmap fst $ IntMap.filter (IntSet.null . snd) $ State.execState (go t) IntMap.empty
 
     go :: Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
     go (Unshared tf) = termf tf
     go (STApp{ stAppIndex = i, stAppTermF = tf }) =
       do memo <- State.get
-         case IMap.lookup i memo of
+         case IntMap.lookup i memo of
            Just (_, b) -> pure b
            Nothing ->
              do b <- termf tf
-                State.modify (IMap.insert i (tf, b))
+                State.modify (IntMap.insert i (tf, b))
                 pure b
 
     termf :: TermF Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
@@ -565,7 +564,7 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf IntMap.empty
     lam = evalOpen cfg memoClosed
     recEval (Unshared tf') = evalTermF cfg lam recEval tf' IntMap.empty
     recEval (STApp{ stAppIndex = i }) =
-      case IMap.lookup i memoClosed of
+      case IntMap.lookup i memoClosed of
         Just x -> force x
         Nothing -> panic "evalClosedTermF" ["internal error"]
 
@@ -595,12 +594,12 @@ mkMemoLocal cfg memoClosed t env = go mempty t
     go memo (t'@STApp{ stAppIndex = i, stAppTermF = tf })
       | closedTerm t' = pure memo
       | otherwise =
-        case IMap.lookup i memo of
+        case IntMap.lookup i memo of
           Just _ -> pure memo
           Nothing ->
             do memo' <- goTermF memo tf
                thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env)
-               pure (IMap.insert i thunk memo')
+               pure (IntMap.insert i thunk memo')
     goTermF :: IntMap (Thunk l) -> TermF Term -> EvalM l (IntMap (Thunk l))
     goTermF memo tf =
       case tf of
@@ -636,7 +635,7 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 
     lam = evalOpen cfg memoClosed
     recEval (Unshared tf) = evalTermF cfg lam recEval tf env
     recEval (t@STApp{ stAppIndex = i, stAppTermF = tf }) =
-      case IMap.lookup i memo of
+      case IntMap.lookup i memo of
         Just x -> force x
         Nothing -> evalTermF cfg lam recEval tf env
       where memo = if closedTerm t then memoClosed else memoLocal
@@ -665,7 +664,7 @@ evalOpen cfg memoClosed t env = do
   let eval :: Term -> MValue l
       eval (Unshared tf) = evalF tf
       eval (t'@STApp{ stAppIndex = i, stAppTermF = tf }) =
-        case IMap.lookup i memo of
+        case IntMap.lookup i memo of
           Just x -> force x
           Nothing -> evalF tf
         where memo = if closedTerm t' then memoClosed else memoLocal

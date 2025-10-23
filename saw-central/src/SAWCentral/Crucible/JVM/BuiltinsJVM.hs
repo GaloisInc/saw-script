@@ -33,7 +33,7 @@ import           Control.Lens
 import           Data.IORef
 import           Data.Text (Text)
 import qualified Data.Text as Text
-import           Data.Map (Map,(!))
+import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import           Data.Sequence (Seq)
