@@ -42,6 +42,7 @@ module SAWCore.Name
   , Name(..)
     -- * VarName
   , VarName(..)
+  , wildcardVarName
     -- * Display Name Environments
   , DisplayNameEnv(..)
   , emptyDisplayNameEnv
@@ -300,6 +301,10 @@ instance Ord VarName where
 -- even if the unique IDs are assigned differently from run to run.
 instance Hashable VarName where
   hashWithSalt x vn = hashWithSalt x (vnName vn)
+
+-- | A wildcard variable name consisting of an underscore "_".
+wildcardVarName :: VarName
+wildcardVarName = VarName 0 "_"
 
 
 -- Display Name Environments --------------------------------------------------------

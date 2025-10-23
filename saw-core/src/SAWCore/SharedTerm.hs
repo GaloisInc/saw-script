@@ -1655,9 +1655,7 @@ scFun :: SharedContext
       -> Term -- ^ The parameter type
       -> Term -- ^ The result type
       -> IO Term
-scFun sc a b =
-  do nm <- scFreshVarName sc "_"
-     scTermF sc (Pi nm a b)
+scFun sc a b = scTermF sc (Pi wildcardVarName a b)
 
 -- | Create a term representing the type of a non-dependent n-ary function,
 -- given a list of parameter types and a result type (as terms).
@@ -2561,7 +2559,7 @@ scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a,
 -- | The default instance of the SharedContext operations.
 mkSharedContext :: IO SharedContext
 mkSharedContext = do
-  vr <- newIORef 0 -- Reference for getting variables.
+  vr <- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.
   cr <- newMVar emptyAppCache
   gr <- newIORef HMap.empty
   mod_map_ref <- newIORef emptyModuleMap
