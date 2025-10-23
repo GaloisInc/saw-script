@@ -1002,17 +1002,16 @@ scRecursorMotiveType sc dt s =
 --
 -- where the @pi@ are the parameters of @d@, and the @ixj@ are the
 -- indices of @d@.
-scRecursorAppType :: SharedContext -> DataType -> [Term] -> Term -> IO Term
-scRecursorAppType sc dt params motive =
+-- Parameter variables @p1 .. pn@ will be free in the resulting term.
+scRecursorAppType :: SharedContext -> DataType -> Term -> IO Term
+scRecursorAppType sc dt motive =
   do param_vars <- scVariables sc (dtParams dt)
      ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
      arg_vn <- scFreshVarName sc "arg"
      arg_var <- scVariable sc arg_vn d
      ret <- scApplyAll sc motive (ix_vars ++ [arg_var])
-     ty <- scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
-     let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
-     scInstantiateExt sc subst ty
+     scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
 
 -- | Build the full type of an unapplied recursor for datatype @d@
 -- with elimination to sort @s@.
@@ -1026,8 +1025,6 @@ scRecursorAppType sc dt params motive =
 scRecursorType :: SharedContext -> DataType -> Sort -> IO Term
 scRecursorType sc dt s =
   do let d = dtName dt
-
-     param_vars <- scVariables sc (dtParams dt)
 
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
@@ -1043,7 +1040,7 @@ scRecursorType sc dt s =
      scPiList sc (dtParams dt) =<<
        scPi sc motive_vn motive_ty =<<
        scFunAll sc elims_tps =<<
-       scRecursorAppType sc dt param_vars motive_var
+       scRecursorAppType sc dt motive_var
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
