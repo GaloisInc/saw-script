@@ -652,6 +652,8 @@ scBeginDataType ::
 scBeginDataType sc dtIdent dtParams dtIndices dtSort =
   do dtName <- scRegisterName sc (ModuleIdentifier dtIdent)
      dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
+     dtMotiveName <- scFreshVarName sc "p"
+     dtArgName <- scFreshVarName sc "arg"
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
@@ -1008,7 +1010,7 @@ scRecursorAppType sc dt motive =
   do param_vars <- scVariables sc (dtParams dt)
      ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
-     arg_vn <- scFreshVarName sc "arg"
+     let arg_vn = dtArgName dt
      arg_var <- scVariable sc arg_vn d
      ret <- scApplyAll sc motive (ix_vars ++ [arg_var])
      scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
@@ -1029,7 +1031,7 @@ scRecursorType sc dt s =
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
      motive_ty <- scRecursorMotiveType sc dt s
-     motive_vn <- scFreshVarName sc "p"
+     let motive_vn = dtMotiveName dt
      motive_var <- scVariable sc motive_vn motive_ty
 
      -- Compute the types of the elimination functions

@@ -219,6 +219,10 @@ data DataType =
     --
     -- where the @pi@ are the 'dtParams' and the @ii@ are the 'dtIndices'. Note
     -- that this type should always be top-level, i.e., have no free variables.
+  , dtMotiveName :: VarName
+    -- ^ Variable name to use for the motive parameter of the recursor.
+  , dtArgName :: VarName
+    -- ^ Variable name to use for the data argument of the recursor.
   }
 
 -- | Return the number of parameters of a datatype
