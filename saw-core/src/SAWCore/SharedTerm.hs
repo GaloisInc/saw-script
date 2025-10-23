@@ -984,17 +984,14 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 --
 -- where the @pi@ are the parameters of @d@, the @ixj@ are the indices
 -- of @d@, and @s@ is any sort supplied as an argument.
-scRecursorMotiveType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
-scRecursorMotiveType sc dt params s =
+-- Parameter variables @p1 .. pn@ will be free in the resulting term.
+scRecursorMotiveType :: SharedContext -> DataType -> Sort -> IO Term
+scRecursorMotiveType sc dt s =
   do param_vars <- scVariables sc (dtParams dt)
      ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
      ret <- scFun sc d =<< scSort sc s
-     p_ret <- scPiList sc (dtIndices dt) ret
-     -- Note that dtIndices may refer to variables from dtParams, so
-     -- we can't just use params directly; the substitution is necessary.
-     let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
-     scInstantiateExt sc subst p_ret
+     scPiList sc (dtIndices dt) ret
 
 -- | Build the type of a recursor for datatype @d@ that has been
 -- applied to parameters, a motive function, and a full set of
@@ -1034,7 +1031,7 @@ scRecursorType sc dt s =
 
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
-     motive_ty <- scRecursorMotiveType sc dt param_vars s
+     motive_ty <- scRecursorMotiveType sc dt s
      motive_vn <- scFreshVarName sc "p"
      motive_var <- scVariable sc motive_vn motive_ty
 
