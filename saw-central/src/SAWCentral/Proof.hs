@@ -1321,9 +1321,10 @@ predicateToProp sc quant = loop
                        Universal -> scEqTrue sc t0
                        Existential -> scEqTrue sc =<< scNot sc t0
                toPi ((x, xT) : tys) t1 =
-                 do t2 <- scApply sc t1 =<< scVariable sc x xT
+                 do x' <- scFreshVarName sc (vnName x)
+                    t2 <- scApply sc t1 =<< scVariable sc x' xT
                     t3 <- toPi tys t2
-                    scPi sc x xT t3
+                    scPi sc x' xT t3
            Prop <$> toPi argTs t
 
 
