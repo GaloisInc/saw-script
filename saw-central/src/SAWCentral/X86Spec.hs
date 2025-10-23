@@ -1058,7 +1058,7 @@ checkAlloc opts s (l := a) =
 -- entry (established in 'setupGlobals') is for 0.
 mkGlobalMap ::
   (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
-  Map.Map RegionIndex (LLVMPtr Sym 64) ->
+  Map RegionIndex (LLVMPtr Sym 64) ->
   GlobalMap Sym Crucible.Mem 64
 mkGlobalMap rmap = GlobalMap $ \bak mem region off ->
   let

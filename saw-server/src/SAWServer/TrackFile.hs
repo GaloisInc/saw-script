@@ -1,7 +1,7 @@
 module SAWServer.TrackFile (trackFile, forgetFile) where
 
 import Control.Lens
-import qualified Data.Map as M
+import qualified Data.Map as Map
 import qualified Crypto.Hash.Conduit as Hash
 
 import qualified Argo
@@ -16,11 +16,11 @@ import SAWServer.SAWServer ( SAWState, trackedFiles )
 trackFile :: FilePath -> Argo.Command SAWState ()
 trackFile path =
   do hash <- Hash.hashFile path
-     Argo.modifyState $ over trackedFiles (M.insert path hash)
+     Argo.modifyState $ over trackedFiles (Map.insert path hash)
 
 -- | Stop tracking a given file. Any state that causally descends from the
 -- moment this method is invoked will not be invalidated by changes to the file
 -- on disk, even if this file was previously tracked via @trackFile@.
 forgetFile :: FilePath -> Argo.Command SAWState ()
 forgetFile path =
-  Argo.modifyState $ over trackedFiles (M.delete path)
+  Argo.modifyState $ over trackedFiles (Map.delete path)

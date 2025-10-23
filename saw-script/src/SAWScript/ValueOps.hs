@@ -55,7 +55,7 @@ import Control.Monad.Reader (local)
 import Data.Text (Text)
 import qualified Data.Text as Text (pack, unpack)
 --import Data.Map ( Map )
-import qualified Data.Map as M
+import qualified Data.Map as Map
 --import Data.Set ( Set )
 
 import SAWCore.SharedTerm
@@ -92,7 +92,7 @@ indexValue pos v1 v2 =
 
 lookupValue :: SS.Pos -> Value -> Text -> Value
 lookupValue pos (VRecord vm) name =
-    case M.lookup name vm of
+    case Map.lookup name vm of
       Nothing -> error $ show pos ++ ": No such record field: " ++ Text.unpack name
       Just x -> x
 lookupValue pos v1 v2 =

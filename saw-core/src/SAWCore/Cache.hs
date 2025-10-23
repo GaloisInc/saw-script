@@ -22,7 +22,9 @@ where
 
 import           Control.Monad (liftM)
 import qualified Data.IntMap as IntMap
+import           Data.IntMap (IntMap)
 import qualified Data.Map as Map
+import           Data.Map (Map)
 import           Data.Ref
 import           Prelude hiding (lookup)
 
@@ -44,7 +46,7 @@ newCache = newCacheMap
 newCacheMap :: (C m, Ord k) => m (Cache m k a)
 newCacheMap = newCacheMap' Map.empty
 
-newCacheMap' :: (C m, Ord k) => Map.Map k a -> m (Cache m k a)
+newCacheMap' :: (C m, Ord k) => Map k a -> m (Cache m k a)
 newCacheMap' initialMap = do
   ref <- new initialMap
   return (Cache ref Map.lookup Map.insert)
@@ -52,7 +54,7 @@ newCacheMap' initialMap = do
 newCacheIntMap :: (C m) => m (Cache m Int a)
 newCacheIntMap = newCacheIntMap' IntMap.empty
 
-newCacheIntMap' :: (C m) => IntMap.IntMap a -> m (Cache m Int a)
+newCacheIntMap' :: (C m) => IntMap a -> m (Cache m Int a)
 newCacheIntMap' initialMap = do
   ref <- new initialMap
   return (Cache ref IntMap.lookup IntMap.insert)

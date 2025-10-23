@@ -90,7 +90,7 @@ import Data.Functor ((<&>))
 import Numeric (readHex)
 
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
+import qualified Data.Map.Strict as Map
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -247,9 +247,9 @@ showSolverBackendVersion backend Nothing opt_words =
 showBackendVersionsWithOptions :: String -> SolverBackendVersions ->
                                   [SolverBackendOption] -> String
 showBackendVersionsWithOptions sep vs opts =
-  let entries = M.unionWith (<>) (M.map (\v -> (v, [])) vs)
-                                 (M.fromList $ optEntry <$> opts)
-   in intercalate sep $ showEntry <$> M.toList entries
+  let entries = Map.unionWith (<>) (Map.map (\v -> (v, [])) vs)
+                                 (Map.fromList $ optEntry <$> opts)
+   in intercalate sep $ showEntry <$> Map.toList entries
   where optEntry (W4_Tactic t) = (What4, (Nothing, ["using", t]))
         optEntry W4_SMTLib2    = (What4, (Nothing, ["to", "SMTLib2"]))
         optEntry W4_Verilog    = (What4, (Nothing, ["to", "Verilog"]))
@@ -275,12 +275,12 @@ instance Eq SolverCacheKey where
 
 instance Show SolverCacheKey where
   show (SolverCacheKey vs opts bs) = encodeHex (BS.take 8 bs) ++
-    if M.null vs && null opts then ""
+    if Map.null vs && null opts then ""
     else " (" ++ showBackendVersionsWithOptions ", " vs opts ++ ")"
 
 -- | Make a 'SolverCacheKey' with no version information
 solverCacheKeyFromHash :: ByteString -> SolverCacheKey
-solverCacheKeyFromHash = SolverCacheKey M.empty []
+solverCacheKeyFromHash = SolverCacheKey Map.empty []
 
 instance Serialise SolverCacheKey where
   encode = encode . solverCacheKeyHash
@@ -303,12 +303,12 @@ mkSolverCacheKey :: SharedContext -> SolverBackendVersions ->
 mkSolverCacheKey sc vs opts satq = do
   body <- satQueryAsPropTerm sc satq
   satVars <- traverse (scFirstOrderType sc) (satVariables satq)
-  let vars = M.toList satVars ++
+  let vars = Map.toList satVars ++
              filter (\(x, _) -> vnIndex x `elem` satUninterp satq)
                     (getAllVars body)
   tm <- scPiList sc vars body
   let str_prefix = [ showBackendVersionsWithOptions "\n" vs opts
-                   , "satVariables " ++ show (M.size (satVariables satq))
+                   , "satVariables " ++ show (Map.size (satVariables satq))
                    , "satUninterp "  ++ show (length (satUninterp  satq)) ]
       str_to_hash = unlines str_prefix ++ anonLocalNames (scWriteExternal tm)
   return $ SolverCacheKey vs opts $ SHA256.hash $ encodeUtf8 $ Text.pack $ str_to_hash
@@ -369,7 +369,7 @@ toSolverCacheValue vs opts satq (cexs, solver_name) = do
   getCurrentTime <&> \t -> case firstsMaybeM (`elemIndex` vns) cexs of
     Just cexs' -> Just $ SolverCacheValue vs opts solver_name cexs' t
     Nothing -> Nothing
-  where vns = M.keys $ satVariables satq
+  where vns = Map.keys $ satVariables satq
         firstsMaybeM :: Monad m => (a -> m b) ->
                         Maybe [(a, c)] -> m (Maybe [(b, c)])
         firstsMaybeM = mapM . mapM . firstM
@@ -379,7 +379,7 @@ toSolverCacheValue vs opts satq (cexs, solver_name) = do
 fromSolverCacheValue :: SATQuery -> SolverCacheValue -> (Maybe CEX, Text)
 fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs _) =
   (firstsMaybe (vns !!) cexs, solver_name)
-  where vns = M.keys $ satVariables satq
+  where vns = Map.keys $ satVariables satq
         firstsMaybe :: (a -> b) -> Maybe [(a, c)] -> Maybe [(b, c)]
         firstsMaybe = fmap . fmap . first
 
@@ -412,7 +412,7 @@ data SolverCacheStat = Lookups | FailedLookups | Inserts | FailedInserts
 -- both set to 'Nothing')
 lazyOpenSolverCache :: FilePath -> IO SolverCache
 lazyOpenSolverCache path = do
-  stats <- newIORef $ M.fromList ((,0) <$> [minBound..])
+  stats <- newIORef $ Map.fromList ((,0) <$> [minBound..])
   return SolverCache { solverCachePath    = path,
                        solverCacheEnv     = Nothing,
                        solverCacheDB      = Nothing,
@@ -489,12 +489,12 @@ lookupInSolverCache k = SCOpOrDefault Nothing $ \opts cache@SolverCache{..} ->
   tryTransaction @LMDB.ReadOnly cache (LMDB.lookup k) >>= \case
     (Right (Just v), cache') -> do
       printOutLn opts Debug ("Using cached result: " ++ show k)
-      modifyIORef solverCacheStats $ M.adjust (+1) Lookups
+      modifyIORef solverCacheStats $ Map.adjust (+1) Lookups
       cache'' <- snd <$> tryTransaction cache' (LMDB.update upd k)
       return (Just v, cache'')
     (Left err, cache') -> do
       printOutLn opts Warn ("Solver cache lookup failed:\n" ++ err)
-      modifyIORef solverCacheStats $ M.adjust (+1) FailedLookups
+      modifyIORef solverCacheStats $ Map.adjust (+1) FailedLookups
       return (Nothing, cache')
     (Right Nothing, cache') -> do
       return (Nothing, cache')
@@ -505,11 +505,11 @@ insertInSolverCache k v = SCOpOrDefault () $ \opts cache@SolverCache{..} ->
   printOutLn opts Debug ("Caching result: " ++ show k) >>
   tryTransaction cache (LMDB.insert k v) >>= \case
     (Right (), cache') -> do
-      modifyIORef solverCacheStats $ M.adjust (+1) Inserts
+      modifyIORef solverCacheStats $ Map.adjust (+1) Inserts
       return ((), cache')
     (Left err, cache') -> do
       printOutLn opts Warn ("Solver cache insert failed:\n" ++ err)
-      modifyIORef solverCacheStats $ M.adjust (+1) FailedInserts
+      modifyIORef solverCacheStats $ Map.adjust (+1) FailedInserts
       return ((), cache')
 
 -- | Set the 'FilePath' of the solver result cache and save all results cached
@@ -569,23 +569,23 @@ printSolverCacheByHex hex_pref_txt = SCOpOrFail $ \opts cache -> do
 -- do not match the current version(s) or are marked as stale
 cleanMismatchedVersionsSolverCache :: SolverBackendVersions -> SolverCacheOp ()
 cleanMismatchedVersionsSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
-  let known_curr_base_vs = M.filter isJust curr_base_vs
-      mismatched_vs vs = M.mapMaybe id $ M.intersectionWith
+  let known_curr_base_vs = Map.filter isJust curr_base_vs
+      mismatched_vs vs = Map.mapMaybe id $ Map.intersectionWith
         (\base_ver v_ver -> if base_ver /= v_ver
                             then Just (base_ver, v_ver) else Nothing)
         known_curr_base_vs vs
       flt k v (ks, mvs) = let mvs' = mismatched_vs (solverCacheValueVersions v)
-                           in if M.null mvs' then (ks, mvs)
-                                             else (k:ks, M.union mvs mvs')
+                           in if Map.null mvs' then (ks, mvs)
+                                             else (k:ks, Map.union mvs mvs')
   (env, db, cache') <- forceSolverCacheOpened cache
-  (ks, mvs) <- LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt ([], M.empty) db
+  (ks, mvs) <- LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt ([], Map.empty) db
   forM_ ks $ \k -> LMDB.transaction env $ LMDB.delete k db
   let s0 = if length ks == 1 then "" else "s"
-      s1 = if M.size mvs == 0 then "" else ":"
+      s1 = if Map.size mvs == 0 then "" else ":"
   printOutLn opts Info $
     "Removed " ++ show (length ks) ++
     " cached result" ++ s0 ++ " with mismatched version" ++ s0 ++ s1
-  forM_ (M.toList mvs) $ \(backend, (v1, v2)) ->
+  forM_ (Map.toList mvs) $ \(backend, (v1, v2)) ->
     printOutLn opts Info $
       "- " ++ showSolverBackendVersion backend v1 [] ++
       " (Current: " ++ showSolverBackendVersion backend v2 [] ++ ")"
@@ -604,8 +604,8 @@ printSolverCacheStats = SCOpOrFail $ \opts cache@SolverCache{..} -> do
   printOutLn opts Info ("- " ++ show sz ++ " result" ++ pl sz
                              ++ " cached in " ++ solverCachePath)
   stats <- readIORef solverCacheStats
-  let (ls, ls_f) = (stats M.! Lookups, stats M.! FailedLookups)
-      (is, is_f) = (stats M.! Inserts, stats M.! FailedInserts)
+  let (ls, ls_f) = (stats Map.! Lookups, stats Map.! FailedLookups)
+      (is, is_f) = (stats Map.! Inserts, stats Map.! FailedInserts)
   printOutLn opts Info $ "- " ++ show is ++ " insertion" ++ pl is
                               ++ " into the cache so far this run ("
                               ++ show is_f ++ " failed attempt" ++ pl is_f ++ ")"
@@ -625,10 +625,10 @@ testSolverCacheStats sz ls ls_f is is_f = SCOpOrFail $ \opts cache@SolverCache{.
   sz_actual <- fromIntegral <$> LMDB.readOnlyTransaction env (LMDB.size db)
   test sz sz_actual "Size of solver cache"
   stats <- readIORef solverCacheStats
-  test ls (stats M.! Lookups) "Number of usages of solver cache"
-  test ls_f (stats M.! FailedLookups) "Number of failed usages of solver cache"
-  test is (stats M.! Inserts) "Number of insertions into solver cache"
-  test is_f (stats M.! FailedInserts) "Number of failed insertions into solver cache"
+  test ls (stats Map.! Lookups) "Number of usages of solver cache"
+  test ls_f (stats Map.! FailedLookups) "Number of failed usages of solver cache"
+  test is (stats Map.! Inserts) "Number of insertions into solver cache"
+  test is_f (stats Map.! FailedInserts) "Number of failed insertions into solver cache"
   printOutLn opts Info $ "Solver cache stats matched expected (" ++ show sz ++ " " ++
     show ls ++ " " ++ show ls_f ++ " " ++ show is ++ " " ++ show is_f ++ ")"
   return ((), cache')

@@ -10,11 +10,12 @@ module SAWScript.REPL.Trie where
 
 import           Cryptol.Utils.Panic (panic)
 import qualified Data.Map as Map
+import           Data.Map (Map)
 import           Data.Maybe (fromMaybe,maybeToList)
 
 
 -- | Maps string names to values, allowing for partial key matches and querying.
-data Trie a = Node (Map.Map Char (Trie a)) (Maybe a)
+data Trie a = Node (Map Char (Trie a)) (Maybe a)
     deriving (Show)
 
 emptyTrie :: Trie a

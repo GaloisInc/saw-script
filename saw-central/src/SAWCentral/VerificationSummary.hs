@@ -20,6 +20,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Set (Set)
 import Data.String
 import Prettyprinter
 import Data.Aeson (encode, (.=), Value(..), object, toJSON)
@@ -51,17 +52,17 @@ data VerificationSummary =
   , vsTheorems :: [Theorem]
   }
 
-vsVerifSolvers :: VerificationSummary -> Set.Set Text
+vsVerifSolvers :: VerificationSummary -> Set Text
 vsVerifSolvers vs =
   Set.unions $
   map (\ms -> solverStatsSolvers (ms ^. psSolverStats)) (vsJVMMethodSpecs vs) ++
   map (\(CMSLLVM.SomeLLVM ms) -> solverStatsSolvers (ms ^. psSolverStats)) (vsLLVMMethodSpecs vs)
 
-vsTheoremSolvers :: VerificationSummary -> Set.Set Text
+vsTheoremSolvers :: VerificationSummary -> Set Text
 vsTheoremSolvers = Set.unions . map getSolvers . vsTheorems
   where getSolvers thm = solverStatsSolvers (thmStats thm)
 
-vsAllSolvers :: VerificationSummary -> Set.Set Text
+vsAllSolvers :: VerificationSummary -> Set Text
 vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 
 computeVerificationSummary :: TheoremDB -> [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> VerificationSummary

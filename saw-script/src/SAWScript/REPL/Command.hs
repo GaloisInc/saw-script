@@ -53,6 +53,7 @@ import qualified Data.Text as Text
 import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
+import Data.Map (Map)
 import qualified Data.Set as Set
 import qualified Data.Text.IO as TextIO
 
@@ -272,12 +273,12 @@ searchCmd str
          inspect ::
              SS.Name ->
              (SS.Pos, PrimitiveLifecycle, SS.Rebindable, SS.Schema) ->
-             (Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
-              Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
-              Map.Map SS.Name (PrimitiveLifecycle, SS.Schema)) ->
-             (Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
-              Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
-              Map.Map SS.Name (PrimitiveLifecycle, SS.Schema))
+             (Map SS.Name (PrimitiveLifecycle, SS.Schema),
+              Map SS.Name (PrimitiveLifecycle, SS.Schema),
+              Map SS.Name (PrimitiveLifecycle, SS.Schema)) ->
+             (Map SS.Name (PrimitiveLifecycle, SS.Schema),
+              Map SS.Name (PrimitiveLifecycle, SS.Schema),
+              Map SS.Name (PrimitiveLifecycle, SS.Schema))
          inspect name (_pos, lc, _rb, ty) (vis, ex, dep) =
              if Set.member lc primsAvail then
                  (Map.insert name (lc, ty) vis, ex, dep)

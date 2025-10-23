@@ -52,6 +52,7 @@ import Data.ByteString (ByteString)
 import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack, splitOn)
@@ -374,13 +375,13 @@ computeNamingEnv lm vis =
   -- Name Sets: --
 
     -- | names in scope at Top level of module
-    nmsTopLevels :: Set.Set MN.Name
+    nmsTopLevels :: Set MN.Name
     nmsTopLevels = MN.namingEnvNames envTopLevels
 
     -- | names defined in module and in submodules
     --   - this includes `PublicAndPrivate` names!
     --   - includes submodule names, type synonyms, and nominal types
-    nmsDefined :: Set.Set MN.Name
+    nmsDefined :: Set MN.Name
     nmsDefined =
         -- definitions from all submodules:
         ( Set.unions
@@ -394,10 +395,10 @@ computeNamingEnv lm vis =
         (MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm)
 
 
-    nmsPublic :: Set.Set MN.Name
+    nmsPublic :: Set MN.Name
     nmsPublic = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
 
-    nmsPrivate :: Set.Set MN.Name
+    nmsPrivate :: Set MN.Name
     nmsPrivate = nmsDefined Set.\\ nmsTopLevels
 
 

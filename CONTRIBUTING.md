@@ -776,6 +776,9 @@ make significant changes to it anyway, it's reasonable to reformat it
 first, but please do that as a separate commit that includes no
 functional changes.
 
+See [doc/developer/conventions.md](doc/developer/conventions.md) for
+some further and more specific formatting suggestions/requests.
+
 
 # Copyright and License
 

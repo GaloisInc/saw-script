@@ -19,7 +19,7 @@ import Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import Data.ByteString (ByteString)
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
+import qualified Data.Map.Strict as Map
 import Data.Parameterized.Pair ( Pair(..) )
 import Data.Parameterized.Some ( Some(..) )
 import Data.Text (Text)
@@ -246,7 +246,7 @@ initialState readFileFn =
                 }
          rw = TopLevelRW
                 { rwEnviron = Environ ScopedMap.empty ScopedMap.empty cryenvs
-                , rwRebindables = M.empty
+                , rwRebindables = Map.empty
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty
                 , rwPPOpts = PPS.defaultOpts
@@ -278,7 +278,7 @@ initialState readFileFn =
                 , rwSequentGoals = False
                 , rwJavaCodebase = JavaUninitialized
                 }
-     return (SAWState emptyEnv bic [] ro rw M.empty)
+     return (SAWState emptyEnv bic [] ro rw Map.empty)
 
 -- NOTE: KWF: 2020-04-22: This function could introduce a race condition: if a
 -- file changes on disk after its hash is computed by validateSAWState, but
@@ -291,7 +291,7 @@ initialState readFileFn =
 -- validateSAWState sawState =
 --   checkAll
 --     [ CryptolServer.validateServerState cryptolState
---     , checkAll $ map (uncurry checkHash) (M.assocs (view trackedFiles sawState))
+--     , checkAll $ map (uncurry checkHash) (Map.assocs (view trackedFiles sawState))
 --     ]
 --   where
 --     checkAll [] = pure True
@@ -315,7 +315,7 @@ newtype SAWEnv =
   deriving stock Show
 
 emptyEnv :: SAWEnv
-emptyEnv = SAWEnv M.empty
+emptyEnv = SAWEnv Map.empty
 
 newtype ServerName = ServerName Text
   deriving stock (Eq, Show, Ord)
@@ -434,7 +434,7 @@ setServerVal name val =
      Argo.modifyState $
        over sawEnv $
        \(SAWEnv env) ->
-         SAWEnv (M.insert name (toServerVal val) env)
+         SAWEnv (Map.insert name (toServerVal val) env)
      Argo.debugLog $ "Saved " <> (T.pack (show name))
      st <- Argo.getState @SAWState
      Argo.debugLog $ "State is " <> T.pack (show st)
@@ -451,7 +451,7 @@ getServerVal n =
 
 getServerValEither :: SAWEnv -> ServerName -> Either Argo.JSONRPCException ServerVal
 getServerValEither (SAWEnv serverEnv) n =
-  case M.lookup n serverEnv of
+  case Map.lookup n serverEnv of
     Nothing -> Left (serverValNotFound n)
     Just val -> Right val
 
@@ -551,7 +551,7 @@ getGhost n =
 getGhosts :: Argo.Command SAWState [(ServerName, CMS.GhostGlobal)]
 getGhosts =
   do SAWEnv serverEnv <- view sawEnv <$> Argo.getState
-     return [ (n, g) | (n, VGhostVar g) <- M.toList serverEnv ]
+     return [ (n, g) | (n, VGhostVar g) <- Map.toList serverEnv ]
 
 getYosysImport :: ServerName -> Argo.Command SAWState YosysImport
 getYosysImport n =

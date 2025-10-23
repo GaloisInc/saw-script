@@ -27,6 +27,7 @@ import Control.Exception (throw)
 
 import Data.Functor.Const (Const(..))
 import qualified Data.Set as Set
+import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Text (Text)
@@ -142,7 +143,7 @@ queryModelChecker ::
   YosysSequential ->
   FilePath {- ^ Path to write the resulting Sally input -} ->
   SC.TypedTerm {- ^ A boolean function of three parameters: an 8-bit cycle counter, a record of "fixed" inputs, and a record of circuit outputs -} ->
-  Set.Set Text {- ^ Names of circuit inputs that are fixed -}->
+  Set Text {- ^ Names of circuit inputs that are fixed -}->
   m ()
 queryModelChecker sym sc sequential path query fixedInputs = do
   -- there are 5 classes of field:

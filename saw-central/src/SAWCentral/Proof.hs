@@ -899,7 +899,7 @@ data Theorem =
 data TheoremDB =
   TheoremDB
   -- TODO, maybe this should be a summary or something simpler?
-  { theoremMap :: Map.Map TheoremNonce Theorem
+  { theoremMap :: Map TheoremNonce Theorem
   }
 
 emptyTheoremDB :: TheoremDB
