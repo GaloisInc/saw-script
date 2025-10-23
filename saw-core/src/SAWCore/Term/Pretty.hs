@@ -1,11 +1,8 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : SAWCore.Term.Pretty

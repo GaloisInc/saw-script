@@ -1,6 +1,5 @@
-{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
+
 -- |
 -- Module      :  SAWCore.Testing.Random
 -- Copyright   :  (c) 2013-2015 Galois, Inc.

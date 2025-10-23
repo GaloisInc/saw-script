@@ -1,16 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ParallelListComp #-}
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ImplicitParams #-}
 
 {- |
 Module      : SAWCore.SharedTerm
