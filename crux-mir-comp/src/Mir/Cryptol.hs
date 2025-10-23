@@ -18,7 +18,6 @@ import Control.Lens (use, (^.), (^?), _Wrapped, ix)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
-import qualified Data.IntMap as IntMap
 import Data.IORef
 import qualified Data.Kind as Kind
 import Data.String (fromString)
@@ -59,10 +58,7 @@ import qualified Mir.PP as M
 import Mir.Overrides (getString)
 
 import qualified CryptolSAWCore.CryptolEnv as SAW
-import qualified SAWCore.Name as SAW
 import qualified SAWCore.SharedTerm as SAW
-import qualified SAWCoreWhat4.ReturnTrip as SAW
-import qualified SAWCore.Recognizer as SAW (asVariable)
 import qualified CryptolSAWCore.TypedTerm as SAW
 
 import SAWCentral.Crucible.MIR.TypeShape
@@ -342,26 +338,10 @@ munge :: forall sym t fs tp0.
     (IsSymInterface sym, sym ~ MirSym t fs) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
 munge sym shp0 rv0 = do
-    let scs = mirSAWCoreState (sym ^. W4.userState)
-
-    visitCache <- W4.newIdxCache
     w4VarMapRef <- newIORef mempty
 
-    let eval' :: forall tp. W4.Expr t tp -> IO SAW.Term
-        eval' x = SAW.toSC sym scs x
-        eval :: forall tp. W4.Expr t tp -> IO SAW.Term
-        eval x = do
-            -- When translating W4 vars to SAW `Variable`s, also record the
-            -- reverse mapping into `w4VarMapRef` so the reverse translation
-            -- can be done later on.
-            visitExprVars visitCache x $ \var -> do
-                let expr = W4.BoundVarExpr var
-                term <- eval' expr
-                vn <- case SAW.asVariable term of
-                    Just (vn, _) -> pure vn
-                    Nothing -> error "eval on BoundVarExpr produced non-Variable?"
-                modifyIORef w4VarMapRef $ IntMap.insert (SAW.vnIndex vn) (Some expr)
-            eval' x
+    let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
+        eval = exprToTerm sym w4VarMapRef
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
         uneval shp t = do
             w4VarMap <- readIORef w4VarMapRef
