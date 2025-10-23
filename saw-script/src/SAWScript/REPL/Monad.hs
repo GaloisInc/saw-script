@@ -7,7 +7,6 @@ Stability   : provisional
 -}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 module SAWScript.REPL.Monad (
     -- * REPL Monad
@@ -86,8 +85,6 @@ import qualified SAWSupport.ScopedMap as ScopedMap
 
 import SAWCore.SharedTerm (Term)
 import CryptolSAWCore.CryptolEnv
-import qualified Data.AIG as AIG
-import qualified Data.AIG.CompactGraph as AIG
 
 --------------------
 
@@ -96,15 +93,12 @@ import SAWCore.SAWCore (SharedContext)
 import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
-import SAWCentral.Value (AIGProxy(..), ProofScript(..), showsProofResult, Environ(..),
+import SAWCentral.Value (ProofScript(..), showsProofResult, Environ(..),
                          rwGetCryptolEnv, rwModifyCryptolEnv,
                          pushScope, popScope)
 
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
-
-
-deriving instance Typeable AIG.Proxy
 
 
 -- REPL Environment ------------------------------------------------------------
@@ -121,7 +115,7 @@ data Refs = Refs
 -- | Initial, empty environment.
 defaultRefs :: Bool -> Options -> IO Refs
 defaultRefs isBatch opts =
-  do (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.compactProxy) opts []
+  do (ro, rw) <- buildTopLevelEnv opts []
      contRef <- newIORef True
      rwRef <- newIORef rw
      return Refs

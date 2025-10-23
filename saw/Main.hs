@@ -33,11 +33,9 @@ import SAWScript.Interpreter (processFile)
 import qualified SAWScript.REPL as REPL
 import qualified SAWScript.REPL.Haskeline as REPL
 import qualified SAWScript.REPL.Monad as REPL
-import SAWCentral.Value (AIGProxy(..))
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
 import SAWVersion.Version (shortVersionText)
-import qualified Data.AIG.CompactGraph as AIG
 
 
 pathDesc, pathDelim :: String
@@ -341,10 +339,9 @@ warn opts msg = do
 -- Load (and run) a saw-script file.
 loadFile :: Options -> FilePath -> [Text] -> IO ()
 loadFile opts file scriptArgv = do
-  let aigProxy = AIGProxy AIG.compactProxy
-      subsh = REPL.subshell (REPL.replBody Nothing (return ()))
+  let subsh = REPL.subshell (REPL.replBody Nothing (return ()))
       proofSubsh = REPL.proof_subshell (REPL.replBody Nothing (return ()))
-  processFile aigProxy opts file scriptArgv (Just subsh) (Just proofSubsh)
+  processFile opts file scriptArgv (Just subsh) (Just proofSubsh)
     `catch`
     (\(ErrorCall msg) -> err opts msg)
 

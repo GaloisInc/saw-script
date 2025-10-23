@@ -9,6 +9,7 @@ Stability   : provisional
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -38,12 +39,16 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
+import Data.Typeable (Typeable)
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
 import Data.Parameterized.Some
+
+import qualified Data.AIG as AIG
+import qualified Data.AIG.CompactGraph as AIG
 
 import qualified Text.LLVM.AST as LLVM (Type)
 
@@ -132,6 +137,9 @@ import qualified Prettyprinter.Render.Text as PP (putDoc)
 import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
+
+
+deriving instance Typeable AIG.Proxy
 
 
 ------------------------------------------------------------
@@ -1054,12 +1062,12 @@ interpretMain = do
       ]
 
 
-buildTopLevelEnv :: AIGProxy
-                 -> Options
+buildTopLevelEnv :: Options
                  -> [Text]
-                 -> IO (BuiltinContext, TopLevelRO, TopLevelRW)
-buildTopLevelEnv proxy opts scriptArgv =
-    do let mn = mkModuleName ["SAWScript"]
+                 -> IO (TopLevelRO, TopLevelRW)
+buildTopLevelEnv opts scriptArgv = do
+       let proxy = AIGProxy AIG.compactProxy
+       let mn = mkModuleName ["SAWScript"]
        sc <- mkSharedContext
        let ?fileReader = BS.readFile
        CryptolSAW.scLoadPreludeModule sc
@@ -1124,18 +1132,17 @@ buildTopLevelEnv proxy opts scriptArgv =
                    , rwSequentGoals = False
                    , rwJavaCodebase = JavaUninitialized
                    }
-       return (bic, ro0, rw0)
+       return (ro0, rw0)
 
 processFile ::
-  AIGProxy ->
   Options ->
   FilePath ->
   [Text] ->
   Maybe (TopLevel ()) ->
   Maybe (ProofScript ()) ->
   IO ()
-processFile proxy opts file scriptArgv mbSubshell mbProofSubshell = do
-  (_, ro, rw) <- buildTopLevelEnv proxy opts scriptArgv
+processFile opts file scriptArgv mbSubshell mbProofSubshell = do
+  (ro, rw) <- buildTopLevelEnv opts scriptArgv
   let ro' = case mbSubshell of
               Nothing -> ro
               Just m  -> ro{ roSubshell = m }
