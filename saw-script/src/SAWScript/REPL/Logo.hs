@@ -6,13 +6,11 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-module SAWScript.REPL.Logo where
+module SAWScript.REPL.Logo (displayLogo) where
 
 import SAWScript.Panic (panic)
 import SAWVersion.Version (versionText)
 import System.Console.ANSI
-
-type Version = String
 
 type Logo = [String]
 
