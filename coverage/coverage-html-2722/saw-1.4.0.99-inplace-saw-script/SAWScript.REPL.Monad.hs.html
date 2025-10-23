@@ -391,7 +391,7 @@ span.spaces    { background: white }
 <span class="lineno">  372 </span><span class="spaces">  </span><span class="nottickedoff">do refs &lt;- getRefs</span>
 <span class="lineno">  373 </span><span class="spaces">     </span><span class="nottickedoff">io (setTitle (mkTitle refs))</span></span>
 <span class="lineno">  374 </span>
-<span class="lineno">  375 </span>getVars :: REPL (Map.Map T.Name M.IfaceDecl)
+<span class="lineno">  375 </span>getVars :: REPL (Map T.Name M.IfaceDecl)
 <span class="lineno">  376 </span><span class="decl"><span class="nottickedoff">getVars  = do</span>
 <span class="lineno">  377 </span><span class="spaces">  </span><span class="nottickedoff">me &lt;- getModuleEnv</span>
 <span class="lineno">  378 </span><span class="spaces">  </span><span class="nottickedoff">let decls = getAllIfaceDecls me</span>
@@ -407,13 +407,13 @@ span.spaces    { background: white }
 <span class="lineno">  388 </span><span class="spaces">                                                  </span><span class="nottickedoff">}) extras</span>
 <span class="lineno">  389 </span><span class="spaces">  </span><span class="nottickedoff">return (Map.union vars1 vars2)</span></span>
 <span class="lineno">  390 </span>
-<span class="lineno">  391 </span>getTSyns :: REPL (Map.Map T.Name T.TySyn)
+<span class="lineno">  391 </span>getTSyns :: REPL (Map T.Name T.TySyn)
 <span class="lineno">  392 </span><span class="decl"><span class="nottickedoff">getTSyns  = do</span>
 <span class="lineno">  393 </span><span class="spaces">  </span><span class="nottickedoff">me &lt;- getModuleEnv</span>
 <span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">let decls = getAllIfaceDecls me</span>
 <span class="lineno">  395 </span><span class="spaces">  </span><span class="nottickedoff">return (M.ifTySyns decls)</span></span>
 <span class="lineno">  396 </span>
-<span class="lineno">  397 </span>getNominalTypes :: REPL (Map.Map T.Name T.NominalType)
+<span class="lineno">  397 </span>getNominalTypes :: REPL (Map T.Name T.NominalType)
 <span class="lineno">  398 </span><span class="decl"><span class="nottickedoff">getNominalTypes = do</span>
 <span class="lineno">  399 </span><span class="spaces">  </span><span class="nottickedoff">me &lt;- getModuleEnv</span>
 <span class="lineno">  400 </span><span class="spaces">  </span><span class="nottickedoff">let decls = getAllIfaceDecls me</span>

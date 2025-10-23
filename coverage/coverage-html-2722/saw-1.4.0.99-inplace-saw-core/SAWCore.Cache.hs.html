@@ -41,40 +41,42 @@ span.spaces    { background: white }
 <span class="lineno">   22 </span>
 <span class="lineno">   23 </span>import           Control.Monad (liftM)
 <span class="lineno">   24 </span>import qualified Data.IntMap as IntMap
-<span class="lineno">   25 </span>import qualified Data.Map as Map
-<span class="lineno">   26 </span>import           Data.Ref
-<span class="lineno">   27 </span>import           Prelude hiding (lookup)
-<span class="lineno">   28 </span>
-<span class="lineno">   29 </span>data Cache m k a = forall t. Cache (T m t) (k -&gt; t -&gt; Maybe a) (k -&gt; a -&gt; t -&gt; t)
+<span class="lineno">   25 </span>import           Data.IntMap (IntMap)
+<span class="lineno">   26 </span>import qualified Data.Map as Map
+<span class="lineno">   27 </span>import           Data.Map (Map)
+<span class="lineno">   28 </span>import           Data.Ref
+<span class="lineno">   29 </span>import           Prelude hiding (lookup)
 <span class="lineno">   30 </span>
-<span class="lineno">   31 </span>useCache :: C m =&gt; Cache m k a -&gt; k -&gt; m a -&gt; m a
-<span class="lineno">   32 </span><span class="decl"><span class="istickedoff">useCache (Cache ref lookup update) k action = do</span>
-<span class="lineno">   33 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- liftM (lookup k) (Data.Ref.read ref)</span>
-<span class="lineno">   34 </span><span class="spaces">  </span><span class="istickedoff">case result of</span>
-<span class="lineno">   35 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; return x</span>
-<span class="lineno">   36 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno">   37 </span><span class="spaces">      </span><span class="istickedoff">x &lt;- action</span>
-<span class="lineno">   38 </span><span class="spaces">      </span><span class="istickedoff">modify ref (update k x)</span>
-<span class="lineno">   39 </span><span class="spaces">      </span><span class="istickedoff">return x</span></span>
-<span class="lineno">   40 </span>
-<span class="lineno">   41 </span>newCache :: (C m, Ord k) =&gt; m (Cache m k a)
-<span class="lineno">   42 </span><span class="decl"><span class="istickedoff">newCache = newCacheMap</span></span>
-<span class="lineno">   43 </span>
-<span class="lineno">   44 </span>newCacheMap :: (C m, Ord k) =&gt; m (Cache m k a)
-<span class="lineno">   45 </span><span class="decl"><span class="istickedoff">newCacheMap = newCacheMap' Map.empty</span></span>
-<span class="lineno">   46 </span>
-<span class="lineno">   47 </span>newCacheMap' :: (C m, Ord k) =&gt; Map.Map k a -&gt; m (Cache m k a)
-<span class="lineno">   48 </span><span class="decl"><span class="istickedoff">newCacheMap' initialMap = do</span>
-<span class="lineno">   49 </span><span class="spaces">  </span><span class="istickedoff">ref &lt;- new initialMap</span>
-<span class="lineno">   50 </span><span class="spaces">  </span><span class="istickedoff">return (Cache ref Map.lookup Map.insert)</span></span>
-<span class="lineno">   51 </span>
-<span class="lineno">   52 </span>newCacheIntMap :: (C m) =&gt; m (Cache m Int a)
-<span class="lineno">   53 </span><span class="decl"><span class="istickedoff">newCacheIntMap = newCacheIntMap' IntMap.empty</span></span>
-<span class="lineno">   54 </span>
-<span class="lineno">   55 </span>newCacheIntMap' :: (C m) =&gt; IntMap.IntMap a -&gt; m (Cache m Int a)
-<span class="lineno">   56 </span><span class="decl"><span class="istickedoff">newCacheIntMap' initialMap = do</span>
-<span class="lineno">   57 </span><span class="spaces">  </span><span class="istickedoff">ref &lt;- new initialMap</span>
-<span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff">return (Cache ref IntMap.lookup IntMap.insert)</span></span>
+<span class="lineno">   31 </span>data Cache m k a = forall t. Cache (T m t) (k -&gt; t -&gt; Maybe a) (k -&gt; a -&gt; t -&gt; t)
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>useCache :: C m =&gt; Cache m k a -&gt; k -&gt; m a -&gt; m a
+<span class="lineno">   34 </span><span class="decl"><span class="istickedoff">useCache (Cache ref lookup update) k action = do</span>
+<span class="lineno">   35 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- liftM (lookup k) (Data.Ref.read ref)</span>
+<span class="lineno">   36 </span><span class="spaces">  </span><span class="istickedoff">case result of</span>
+<span class="lineno">   37 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; return x</span>
+<span class="lineno">   38 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">   39 </span><span class="spaces">      </span><span class="istickedoff">x &lt;- action</span>
+<span class="lineno">   40 </span><span class="spaces">      </span><span class="istickedoff">modify ref (update k x)</span>
+<span class="lineno">   41 </span><span class="spaces">      </span><span class="istickedoff">return x</span></span>
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>newCache :: (C m, Ord k) =&gt; m (Cache m k a)
+<span class="lineno">   44 </span><span class="decl"><span class="istickedoff">newCache = newCacheMap</span></span>
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>newCacheMap :: (C m, Ord k) =&gt; m (Cache m k a)
+<span class="lineno">   47 </span><span class="decl"><span class="istickedoff">newCacheMap = newCacheMap' Map.empty</span></span>
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>newCacheMap' :: (C m, Ord k) =&gt; Map k a -&gt; m (Cache m k a)
+<span class="lineno">   50 </span><span class="decl"><span class="istickedoff">newCacheMap' initialMap = do</span>
+<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">ref &lt;- new initialMap</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="istickedoff">return (Cache ref Map.lookup Map.insert)</span></span>
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>newCacheIntMap :: (C m) =&gt; m (Cache m Int a)
+<span class="lineno">   55 </span><span class="decl"><span class="istickedoff">newCacheIntMap = newCacheIntMap' IntMap.empty</span></span>
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>newCacheIntMap' :: (C m) =&gt; IntMap a -&gt; m (Cache m Int a)
+<span class="lineno">   58 </span><span class="decl"><span class="istickedoff">newCacheIntMap' initialMap = do</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff">ref &lt;- new initialMap</span>
+<span class="lineno">   60 </span><span class="spaces">  </span><span class="istickedoff">return (Cache ref IntMap.lookup IntMap.insert)</span></span>
 
 </pre>
 </body>

@@ -74,7 +74,7 @@ span.spaces    { background: white }
 <span class="lineno">   55 </span>import Data.Text (Text)
 <span class="lineno">   56 </span>import qualified Data.Text as Text (pack, unpack)
 <span class="lineno">   57 </span>--import Data.Map ( Map )
-<span class="lineno">   58 </span>import qualified Data.Map as M
+<span class="lineno">   58 </span>import qualified Data.Map as Map
 <span class="lineno">   59 </span>--import Data.Set ( Set )
 <span class="lineno">   60 </span>
 <span class="lineno">   61 </span>import SAWCore.SharedTerm
@@ -111,7 +111,7 @@ span.spaces    { background: white }
 <span class="lineno">   92 </span>
 <span class="lineno">   93 </span>lookupValue :: SS.Pos -&gt; Value -&gt; Text -&gt; Value
 <span class="lineno">   94 </span><span class="decl"><span class="nottickedoff">lookupValue pos (VRecord vm) name =</span>
-<span class="lineno">   95 </span><span class="spaces">    </span><span class="nottickedoff">case M.lookup name vm of</span>
+<span class="lineno">   95 </span><span class="spaces">    </span><span class="nottickedoff">case Map.lookup name vm of</span>
 <span class="lineno">   96 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; error $ show pos ++ &quot;: No such record field: &quot; ++ Text.unpack name</span>
 <span class="lineno">   97 </span><span class="spaces">      </span><span class="nottickedoff">Just x -&gt; x</span>
 <span class="lineno">   98 </span><span class="spaces"></span><span class="nottickedoff">lookupValue pos v1 v2 =</span>
