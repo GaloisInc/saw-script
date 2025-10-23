@@ -23,6 +23,7 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , resolveSAWPred
   , indexSeqTerm
   , indexMirVector
+  , indexMirArray
   , usizeBvLit
   , equalValsPred
   , checkCompatibleTys
@@ -51,7 +52,7 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   ) where
 
 import           Control.Lens
-import           Control.Monad (guard, unless, zipWithM, zipWithM_)
+import           Control.Monad (guard, unless, forM, foldM, zipWithM, zipWithM_)
 import qualified Control.Monad.Catch as X
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Maybe (MaybeT(..))
@@ -74,7 +75,6 @@ import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
 import qualified Data.Text as Text
 import           Data.Text (Text)
 import qualified Data.Vector as V
-import           Data.Vector (Vector)
 import           Data.Void (absurd)
 import           Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
@@ -133,17 +133,7 @@ ppMIRVal sym (MIRVal shp val) =
     PrimShape _ _ ->
       W4.printSymExpr val
     TupleShape _ elems -> prettyAggregate elems val
-    ArrayShape _ _ shp' ->
-      case val of
-        Mir.MirVector_Vector vec ->
-          PP.brackets $ commaList $ V.toList $
-          fmap (\v -> ppMIRVal sym (MIRVal shp' v)) vec
-        Mir.MirVector_PartialVector vec ->
-          PP.braces $ commaList $ V.toList $
-          fmap (\v -> let v' = readMaybeType sym "vector element" (shapeType shp') v in
-                      ppMIRVal sym (MIRVal shp' v')) vec
-        Mir.MirVector_Array arr ->
-          W4.printSymExpr arr
+    ArrayShape _ _ elemSz shp' len -> prettyAggregateArray elemSz shp' len val
     StructShape _ _ fldShp ->
       PP.braces $ prettyAdtOrTuple fldShp val
     EnumShape _ _ variantShps _ _
@@ -220,20 +210,36 @@ ppMIRVal sym (MIRVal shp val) =
     prettyAggregate elems (Mir.MirAggregate _sz m) =
       PP.braces $ commaList (map (prettyAgElem m) elems)
 
+    prettyAggregateArray ::
+      Word ->
+      TypeShape tp ->
+      Word ->
+      Mir.MirAggregate Sym ->
+      PP.Doc ann
+    prettyAggregateArray elemSz elemShp len (Mir.MirAggregate _sz m) =
+      let elems = arrayAgElemShapes elemSz elemShp len in
+      PP.brackets $ commaList (map (prettyAgElem m) elems)
+
     prettyAgElem ::
       IntMap (Mir.MirAggregateEntry Sym) ->
       AgElemShape ->
       PP.Doc ann
-    prettyAgElem m (AgElemShape off _sz shp') =
-      let valDoc = case IntMap.lookup (fromIntegral off) m of
-            Just (Mir.MirAggregateEntry _sz tpr rv)
-              | Just Refl <- W4.testEquality tpr (shapeType shp') ->
-                  ppMIRVal sym $ MIRVal shp' $
-                  readMaybeType sym "elem" tpr rv
-              | otherwise -> "<type mismatch>"
-            Nothing -> "<unset>"
-      in
+    prettyAgElem m e@(AgElemShape off _sz _shp') =
+      let valDoc = prettyAgElemValue m e in
       PP.viaShow off PP.<+> "->" PP.<+> valDoc
+
+    prettyAgElemValue ::
+      IntMap (Mir.MirAggregateEntry Sym) ->
+      AgElemShape ->
+      PP.Doc ann
+    prettyAgElemValue m (AgElemShape off _sz shp') =
+      case IntMap.lookup (fromIntegral off) m of
+        Just (Mir.MirAggregateEntry _sz tpr rv)
+          | Just Refl <- W4.testEquality tpr (shapeType shp') ->
+              ppMIRVal sym $ MIRVal shp' $
+              readMaybeType sym "elem" tpr rv
+          | otherwise -> "<type mismatch>"
+        Nothing -> "<unset>"
 
 
 -- | Wrapper around `buildMirAggregate` for the case where the additional
@@ -254,6 +260,26 @@ buildMirAggregateWithVal sym elems vals f =
         Just Refl -> f off sz shp rv
         Nothing -> fail $ "buildMirAggregateWithVal: type mismatch at offset "
           ++ show off ++ ": expected " ++ show shp ++ ", but the MIRVal contained " ++ show shp'
+
+buildMirAggregateArrayWithVal ::
+  (Monad m, MonadFail m) =>
+  Sym ->
+  -- | Size of array element type
+  Word ->
+  -- | `TypeShape` of array element type
+  TypeShape tp ->
+  -- | Array length
+  Word ->
+  [MIRVal] ->
+  (Word -> RegValue Sym tp -> m (RegValue Sym tp)) ->
+  m (Mir.MirAggregate Sym)
+buildMirAggregateArrayWithVal sym elemSz elemShp len vals f =
+  buildMirAggregateArray sym elemSz elemShp len vals $
+    \off (MIRVal shp rv) ->
+      case W4.testEquality elemShp shp of
+        Just Refl -> f off rv
+        Nothing -> fail $ "buildMirAggregateArrayWithVal: type mismatch at offset "
+          ++ show off ++ ": expected " ++ show elemShp ++ ", but the MIRVal contained " ++ show shp
 
 
 type SetupValue = MS.SetupValue MIR
@@ -733,41 +759,45 @@ resolveSetupVal mcc env tyenv nameEnv val =
           lenVal <- usizeBvLit sym $ end - start
           pure $ MIRVal sliceShp (Ctx.Empty Ctx.:> RV refVal1 Ctx.:> RV lenVal)
     MS.SetupArray elemTy vs -> do
-      vals <- V.mapM (resolveSetupVal mcc env tyenv nameEnv) (V.fromList vs)
+      vals <- mapM (resolveSetupVal mcc env tyenv nameEnv) vs
 
       Some (shp :: TypeShape tp) <-
         pure $ tyToShape col elemTy
 
-      let vals' :: Vector (RegValue Sym tp)
-          vals' = V.map (\(MIRVal shp' val') ->
-                          case W4.testEquality shp shp' of
-                            Just Refl -> val'
-                            Nothing -> error $ unlines
-                              [ "resolveSetupVal: internal error"
-                              , show shp
-                              , show shp'
-                              ])
-                        vals
-      return $ MIRVal (ArrayShape (Mir.TyArray elemTy (V.length vals)) elemTy shp)
-                      (Mir.MirVector_Vector vals')
+      let elemSz = 1      -- TODO: hardcoded size=1
+      let len = length vals
+
+      ag <- buildMirAggregateArrayWithVal sym elemSz shp (fromIntegral len) vals $
+        \_off rv -> return rv
+      let arrShp = ArrayShape (Mir.TyArray elemTy len) elemTy elemSz shp (fromIntegral len)
+      return $ MIRVal arrShp ag
     MS.SetupElem ixMode xs i -> do
       MIRVal xsShp xsVal <- resolveSetupVal mcc env tyenv nameEnv xs
       case ixMode of
         MirIndexIntoVal
-          | ArrayShape arrTy@(Mir.TyArray _ len) _ elemShp <- xsShp -> do
-            res <- runMaybeT $ indexMirVector sym i elemShp xsVal
-            case res of
-              Just mv -> pure mv
-              Nothing -> X.throwM $ MIRIndexOutOfBounds arrTy len i
+          | ArrayShape arrTy@(Mir.TyArray _ _) _ elemSz elemShp len <- xsShp -> do
+            if i >= 0 && i < fromIntegral len
+              then do
+                res <- runMaybeT $ indexMirArray sym i elemSz elemShp xsVal
+                case res of
+                  Just mv -> pure mv
+                  -- FIXME: use a different error kind here (this is a type
+                  -- or size mismatch error; bounds are checked elsewhere)
+                  Nothing -> X.throwM $ MIRIndexOutOfBounds arrTy (fromIntegral len) i
+              else
+                X.throwM $ MIRIndexOutOfBounds arrTy (fromIntegral len) i
         MirIndexIntoRef
           | RefShape ptrTy
                      (Mir.TyArray elemTy len)
                      mutbl
-                     (Mir.MirVectorRepr elemTpr)
+                     Mir.MirAggregateRepr
               <- xsShp ->
             if i >= 0 && i < len
               then do
                 let elemPtrTy = ptrKindToTy (tyToPtrKind ptrTy) elemTy mutbl
+                Some elemTpr <- case Mir.tyToRepr col elemTy of
+                  Left err -> panic "resolveSetupValue" ["Unsupported type", Text.pack err]
+                  Right x -> return x
                 i_sym <- usizeBvLit sym i
                 MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
                   Mir.subindexMirRefIO bak iTypes elemTpr xsVal i_sym
@@ -911,8 +941,11 @@ resolveSetupVal mcc env tyenv nameEnv val =
       let sym = backendGetSym bak
       MIRVal arrRefShp arrRefVal <- resolveSetupVal mcc env tyenv nameEnv arrRef
       case arrRefShp of
-        RefShape _ arrTy mut (Mir.MirVectorRepr elemTpr) -> do
+        RefShape _ arrTy mut Mir.MirAggregateRepr -> do
           (sliceTy, elemTy, len) <- arrayToSliceTys sliceInfo mut arrTy
+          Some elemTpr <- case Mir.tyToRepr col elemTy of
+            Left err -> panic "resolveSetupSliceFromArrayRef" ["Unsupported type", Text.pack err]
+            Right x -> return x
           zeroBV <- usizeBvLit sym 0
           refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
@@ -1028,24 +1061,17 @@ resolveSAWTerm mcc tp tm =
         Right mirTy -> do
           Some (shp :: TypeShape tp) <- pure $ tyToShape col mirTy
 
-          let sz' = fromInteger sz
+          let szInt = fromInteger sz :: Int
+          let szWord = fromInteger sz :: Word
 
-              f :: Int -> IO (RegValue Sym tp)
-              f i = do
-                tm' <- doIndex i
-                MIRVal shp' val <- resolveSAWTerm mcc tp' tm'
-                Refl <- case W4.testEquality shp shp' of
-                          Just r -> pure r
-                          Nothing -> fail $ unlines
-                            [ "resolveSAWTerm: internal error"
-                            , show shp
-                            , show shp'
-                            ]
-                pure val
-
-          vals <- V.generateM sz' f
-          pure $ MIRVal (ArrayShape (Mir.TyArray mirTy sz') mirTy shp)
-               $ Mir.MirVector_Vector vals
+          let elemSz = 1      -- TODO: hardcoded size=1
+          vals <- forM [0 .. szInt - 1] $ \i -> do
+            tm' <- doIndex i
+            resolveSAWTerm mcc tp' tm'
+          ag <- buildMirAggregateArrayWithVal sym elemSz shp szWord vals $
+            \_ rv -> return rv
+          let arrShp = ArrayShape (Mir.TyArray mirTy szInt) mirTy elemSz shp szWord
+          pure $ MIRVal arrShp ag
     Cryptol.TVStream _tp' ->
       fail "resolveSAWTerm: unsupported infinite stream type"
     Cryptol.TVTuple [] -> pure $ MIRVal (UnitShape (Mir.TyTuple [])) ()
@@ -1155,8 +1181,26 @@ indexMirVector sym i elemShp vec =
         i_sym <- usizeBvLit sym i
         W4.arrayLookup sym array (Ctx.Empty Ctx.:> i_sym)
 
+-- | Index into a 'MIRVal' with an 'ArrayShape' 'TypeShape'. Returns 'Nothing'
+-- if the index is out of bounds.
+indexMirArray ::
+  Monad m =>
+  Sym ->
+  Int {- ^ the index -} ->
+  Word {- ^ element size in bytes -} ->
+  TypeShape elemTp {- ^ 'TypeShape' of the array elements -} ->
+  Mir.MirAggregate Sym {- ^ 'RegValue' of the 'MIRVal' -} ->
+  MaybeT m MIRVal
+indexMirArray sym i elemSz elemShp (Mir.MirAggregate _totalSize m) = MaybeT $ pure $ do
+  let off = fromIntegral i * elemSz
+  Mir.MirAggregateEntry sz' tpr' rvPart <- IntMap.lookup (fromIntegral off) m
+  Refl <- W4.testEquality (shapeType elemShp) tpr'
+  guard (elemSz == sz')
+  rv <- readPartExprMaybe sym rvPart
+  return $ MIRVal elemShp rv
+
 -- | Create a symbolic @usize@ from an 'Int'.
-usizeBvLit :: Sym -> Int -> IO (W4.SymBV Sym Mir.SizeBits)
+usizeBvLit :: W4.IsSymExprBuilder sym => sym -> Int -> IO (W4.SymBV sym Mir.SizeBits)
 usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger
 
 -- | Check if two 'MIRVal's are equal.
@@ -1191,8 +1235,9 @@ equalValsPred cc mv1 mv2 =
       liftIO $ W4.isEq sym v1 v2
     goTy (TupleShape _ elems) ag1 ag2 =
       goAg elems ag1 ag2
-    goTy (ArrayShape _ _ shp) vec1 vec2 =
-      goVec shp vec1 vec2
+    goTy (ArrayShape _ _ elemSz shp len) ag1 ag2 =
+      let elems = arrayAgElemShapes elemSz shp len in
+      goAg elems ag1 ag2
     goTy (StructShape _ _ fldShp) fldAssn1 fldAssn2 =
       goFldAssn fldShp fldAssn1 fldAssn2
     goTy (EnumShape _ _ variantShp _ discrShp)
@@ -1215,30 +1260,6 @@ equalValsPred cc mv1 mv2 =
       liftIO $ W4.andPred sym refPred lenPred
     goTy (FnPtrShape _ _ _) _fh1 _fh2 =
       error "Function pointers not currently supported in overrides"
-
-    goVec :: TypeShape tp
-          -> Mir.MirVector Sym tp
-          -> Mir.MirVector Sym tp
-          -> MaybeT IO (W4.Pred Sym)
-    goVec shp (Mir.MirVector_Vector vec1)
-              (Mir.MirVector_Vector vec2) = do
-      eqs <- V.zipWithM (goTy shp) vec1 vec2
-      liftIO $ F.foldrM (W4.andPred sym) (W4.truePred sym) eqs
-    goVec shp (Mir.MirVector_PartialVector vec1)
-              (Mir.MirVector_PartialVector vec2) = do
-      eqs <- V.zipWithM
-               (\v1 v2 -> do
-                 let readElem v = readMaybeType sym "vector element" (shapeType shp) v
-                 let v1' = readElem v1
-                 let v2' = readElem v2
-                 goTy shp v1' v2')
-               vec1
-               vec2
-      liftIO $ F.foldrM (W4.andPred sym) (W4.truePred sym) eqs
-    goVec _shp (Mir.MirVector_Array vec1) (Mir.MirVector_Array vec2) =
-      liftIO $ W4.arrayEq sym vec1 vec2
-    goVec _shp _vec1 _vec2 =
-      pure $ W4.falsePred sym
 
     goFldAssn :: Ctx.Assignment FieldShape ctx
               -> Ctx.Assignment (RegValue' Sym) ctx
@@ -1556,15 +1577,16 @@ doAlloc cc globals (Some ma) =
        Left err -> panic "doAlloc" ["Unsupported type", Text.pack err]
        Right x -> return x
 
-     -- Create an uninitialized `MirVector_PartialVector` of the allocation's
+     -- Create an uninitialized `MirAggregate` of the allocation's
      -- length and return a pointer to its first element.
      -- See Note [Allocating multiple MIR values] for more details.
-     let vecRepr = Mir.MirVectorRepr tpr
-     ref <- Mir.newMirRefIO sym halloc vecRepr
+     ref <- Mir.newMirRefIO sym halloc Mir.MirAggregateRepr
 
      len_sym <- usizeBvLit sym (ma^.maLen)
-     vec <- Mir.mirVector_uninitIO bak len_sym
-     globals' <- Mir.writeMirRefIO bak globals iTypes vecRepr ref vec
+     -- TODO: hardcoded size=1 (implied in conversion of `len_sym` to `sz_sym`
+     let sz_sym = len_sym
+     ag <- Mir.mirAggregate_uninitIO bak sz_sym
+     globals' <- Mir.writeMirRefIO bak globals iTypes Mir.MirAggregateRepr ref ag
 
      zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
      ptr <- Mir.subindexMirRefIO bak iTypes tpr ref zero
@@ -1585,8 +1607,8 @@ MIR allocations have a type and a length. The length is the number of values of
 that type to allocate contiguously. The `newMirRef` family of functions in
 crucible-mir allocates and returns a reference to the space for a *single* value
 of the given type. So when we need to potentially allocate multiple values, we
-instead call `newMirRef` to allocate a single `MirVector`, which itself contains
-space for many elements. All elements of the vector start out as uninitialized
+instead call `newMirRef` to allocate a single `MirAggregate`, which itself contains
+space for many elements. All elements of the aggregate start out as uninitialized
 because the memory is uninitialized. Then we get the reference to the first
 element, and return that. This is the same way that crucible's custom allocator
 works, in Mir.TransCustom.allocate.
@@ -1642,32 +1664,35 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
         Mir.writeMirRefIO bak globals iTypes referenceInnerTy
           referenceVal referentVal
       MirPointsToMultiTarget referentArray -> do
-        MIRVal referentVecShp referentVecVal <-
+        MIRVal referentArrShp referentArrVal <-
           resolveSetupVal cc env tyenv nameEnv referentArray
-        case referentVecShp of
+        case referentArrShp of
           -- mir_points_to_multi should check that the RHS type is TyArray, so
           -- this case should always match.
-          ArrayShape _ _ referentElemShp -> do
+          ArrayShape _ _ _ referentElemShp _ -> do
+            Refl <- testReferentShp referentElemShp
             let write globals' i referentVal = do
                   i_sym <- usizeBvLit sym i
                   referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
                   Mir.writeMirRefIO bak globals' iTypes referenceInnerTy
                     referenceVal' referentVal
-            Refl <- testReferentShp referentElemShp
-            V.ifoldM' write globals $
-              case referentVecVal of
-                Mir.MirVector_Vector referentVals ->
-                  referentVals
-                Mir.MirVector_PartialVector referentMaybeVals ->
-                  V.map (readMaybeType sym "vector element" (shapeType referentElemShp))
-                        referentMaybeVals
-                Mir.MirVector_Array {} ->
-                  panic "doPointsTo"
-                    [ "Unexpected MirVector_Array as output of resolveSetupVal"
-                    ]
+            let writeEntry globals' (off, Mir.MirAggregateEntry _sz tpr rvPart) = do
+                  Refl <- case W4.testEquality tpr (shapeType referentElemShp) of
+                    Just r -> pure r
+                    Nothing ->
+                      panic "doPointsTo" [
+                          "Unexpected type mismatch between referent outer and entry types",
+                          "Outer type: " <> Text.pack (show (shapeType referentElemShp)),
+                          "Entry type: " <> Text.pack (show tpr),
+                          "At offset " <> Text.pack (show off)
+                      ]
+                  let rv = readMaybeType sym "array element" tpr rvPart
+                  -- TODO: hardcoded size=1 (implied in conversion of `off` to `i`)
+                  write globals' (fromIntegral off) rv
+            foldM writeEntry globals (Mir.mirAggregate_entries sym referentArrVal)
           _ -> panic "doPointsTo"
             [ "Unexpected non-array shape resolved from MirPointsToMultiTarget:"
-            , Text.pack (show referentVecShp)
+            , Text.pack (show referentArrShp)
             ]
   where
     iTypes = cc ^. mccIntrinsicTypes

@@ -52,7 +52,6 @@ import qualified Data.Parameterized.TraversableFC as FC
 import Data.Proxy (Proxy(..))
 import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Data.Vector as V
 import Data.Void (absurd)
 import qualified Prettyprinter as PP
 
@@ -1054,14 +1053,19 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
            -- mir_points_to_multi should check that the RHS type is TyArray, so
            -- this case should always match.
            Mir.TyArray _ len -> do
-             vs <- liftIO $ V.generateM len $ \i -> do
-               i_sym <- usizeBvLit sym i
-               referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
-               Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
-             matchArg opts sc cc spec prepost md
-               (MIRVal (ArrayShape referentArrayMirTy referenceInnerMirTy innerShp)
-                       (Mir.MirVector_Vector vs))
-               referentArray
+             let elemSz = 1      -- TODO: hardcoded size=1
+             let lenWord = fromIntegral len :: Word
+             ag <- liftIO $ generateMirAggregateArray sym elemSz innerShp lenWord $
+               \i -> do
+                 i_sym <- usizeBvLit sym (fromIntegral i)
+                 referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
+                 Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
+             let arrShp = ArrayShape referentArrayMirTy
+                                     referenceInnerMirTy
+                                     elemSz
+                                     innerShp
+                                     (fromIntegral len)
+             matchArg opts sc cc spec prepost md (MIRVal arrShp ag) referentArray
            _ ->
              panic "learnPointsTo"
                [ "Unexpected non-array SetupValue as MirPointsToMultiTarget:"
@@ -1216,19 +1220,10 @@ matchArg opts sc cc cs prepost md = go False []
             -- match arrays point-wise
             [] ->
               case actual of
-                MIRVal (ArrayShape _ _ elemShp) xs
-                  | Mir.MirVector_Vector xs' <- xs
-                  , V.length xs' == length zs ->
-                    sequence_
-                      [ go inCast [] (MIRVal elemShp x) z
-                      | (x, z) <- zip (V.toList xs') zs ]
-
-                  | Mir.MirVector_PartialVector xs' <- xs
-                  , V.length xs' == length zs ->
-                    do let xs'' = V.map (readMaybeType sym "vector element" (shapeType elemShp)) xs'
-                       sequence_
-                         [ go inCast [] (MIRVal elemShp x) z
-                         | (x, z) <- zip (V.toList xs'') zs ]
+                MIRVal (ArrayShape _ _ elemSz elemShp len) ag
+                  | fromIntegral len == length zs ->
+                    void $ accessMirAggregateArray' sym elemSz elemShp len zs ag $
+                      \_off rv z -> go inCast [] (MIRVal elemShp rv) z
 
                 _ -> fail_
 
@@ -1244,17 +1239,16 @@ matchArg opts sc cc cs prepost md = go False []
             -- containing vector
             MirIndexIntoRef ->
               case actual of
-                MIRVal (RefShape elemRefTy elemTy elemMutbl elemTpr) elemRef -> do
+                MIRVal (RefShape elemRefTy elemTy elemMutbl _elemTpr) elemRef -> do
                   arrRefTy <- typeOfSetupValue cc tyenv nameEnv z
                   case tyToShape col arrRefTy of
                     Some arrRefShp@(RefShape _
                                              (Mir.TyArray elemTy' _)
                                              arrMutbl
-                                             (Mir.MirVectorRepr elemTpr'))
+                                             Mir.MirAggregateRepr)
                       | tyToPtrKind elemRefTy == tyToPtrKind arrRefTy
                       , checkCompatibleTys elemTy elemTy'
-                      , elemMutbl == arrMutbl
-                      , Just Refl <- W4.testEquality elemTpr elemTpr' -> do
+                      , elemMutbl == arrMutbl -> do
                         -- get the reference to the containing vector and the
                         -- index of the current reference within it
                         Ctx.Empty Ctx.:> Crucible.RV arrRef
@@ -1380,7 +1374,7 @@ matchArg opts sc cc cs prepost md = go False []
 
         -- See Note [Matching slices in overrides]
         ([],
-         MIRVal (SliceShape actualSliceRefTy@(Mir.TyRef _ _) actualElemTy actualMutbl actualElemTpr)
+         MIRVal (SliceShape actualSliceRefTy@(Mir.TyRef _ _) actualElemTy actualMutbl _actualElemTpr)
                 (Ctx.Empty Ctx.:> Crucible.RV actualSliceRef Ctx.:> Crucible.RV actualSliceLenSym),
          MS.SetupSlice slice)
            | -- Currently, all slice lengths must be concrete, so the case below
@@ -1405,7 +1399,7 @@ matchArg opts sc cc cs prepost md = go False []
                    Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> _ <-
                      liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef
                    let actualArrTy = Mir.TyArray actualElemTy arrLen
-                   let actualArrTpr = Mir.MirVectorRepr actualElemTpr
+                   let actualArrTpr = Mir.MirAggregateRepr
                    let actualArrRefTy = Mir.TyRef actualArrTy actualMutbl
                    let actualArrRefShp = RefShape actualArrRefTy actualArrTy actualMutbl actualArrTpr
                    go inCast []
@@ -1928,23 +1922,12 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -> do terms <- accessMirAggregate' sym elems tys val $
               \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val')
             liftIO (scTupleReduced sc terms)
-    (Cryptol.TVSeq n cryty, ArrayShape _ _ arrShp)
-      |  Mir.MirVector_Vector vals <- val
-      ,  toInteger (V.length vals) == n
-      -> do terms <- V.toList <$>
-              traverse (\v -> valueToSC sym fail_ cryty (MIRVal arrShp v)) vals
-            t <- shapeToTerm sc arrShp
+    (Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz elemShp len)
+      | toInteger len == n
+      -> do terms <- accessMirAggregateArray sym elemSz elemShp len val $
+              \_off val' -> valueToSC sym fail_ cryty (MIRVal elemShp val')
+            t <- shapeToTerm sc elemShp
             liftIO (scVectorReduced sc t terms)
-      |  Mir.MirVector_PartialVector vals <- val
-      ,  toInteger (V.length vals) == n
-      -> do let vals' = V.toList $
-                        V.map (readMaybeType sym "vector element" (shapeType arrShp)) vals
-            terms <-
-              traverse (\v -> valueToSC sym fail_ cryty (MIRVal arrShp v)) vals'
-            t <- shapeToTerm sc arrShp
-            liftIO (scVectorReduced sc t terms)
-      |  Mir.MirVector_Array{} <- val
-      -> fail "valueToSC: Symbolic arrays not supported"
     _ ->
       fail_
   where
@@ -1982,8 +1965,8 @@ applyProjToMIRVal ::
 applyProjToMIRVal _ [] mv = pure mv
 applyProjToMIRVal sym (MatchIndex i : projStack) (MIRVal shp vec) =
   case shp of
-    ArrayShape _ _ elemShp ->
-      applyProjToMIRVal sym projStack =<< indexMirVector sym i elemShp vec
+    ArrayShape _ _ elemSz elemShp _ ->
+      applyProjToMIRVal sym projStack =<< indexMirArray sym i elemSz elemShp vec
     _ ->
       Applicative.empty
 
