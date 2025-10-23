@@ -61,7 +61,7 @@ module SAWCore.SharedTerm
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
-  , scRecursorRetTypeType
+  , scRecursorMotiveType
   , scRecursorAppType
   , scRecursorType
   , scReduceRecursor
@@ -986,8 +986,8 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 --
 -- where the @pi@ are the parameters of @d@, the @ixj@ are the indices
 -- of @d@, and @s@ is any sort supplied as an argument.
-scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
-scRecursorRetTypeType sc dt params s =
+scRecursorMotiveType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
+scRecursorMotiveType sc dt params s =
   do param_vars <- scVariables sc (dtParams dt)
      ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
@@ -1036,7 +1036,7 @@ scRecursorType sc dt s =
 
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
-     motive_ty <- scRecursorRetTypeType sc dt param_vars s
+     motive_ty <- scRecursorMotiveType sc dt param_vars s
      motive_vn <- scFreshVarName sc "p"
      motive_var <- scVariable sc motive_vn motive_ty
 
