@@ -36,7 +36,8 @@ import SAWCentral.Position (getPos, Pos)
 import SAWCentral.Value (Environ(..))
 
 import SAWScript.REPL.Monad
-import SAWScript.REPL.Trie
+import qualified SAWScript.REPL.Trie as Trie
+import SAWScript.REPL.Trie (Trie)
 import SAWScript.Token (Token)
 
 import Cryptol.Parser (ParseError())
@@ -114,9 +115,9 @@ data CommandBody
 
 -- | Convert the command list to a Trie, expanding aliases.
 makeCommands :: [CommandDescr] -> CommandMap
-makeCommands list  = foldl insert emptyTrie (concatMap expandAliases list)
+makeCommands list  = foldl insert Trie.empty (concatMap expandAliases list)
   where
-  insert m (name, d) = insertTrie name d m
+  insert m (name, d) = Trie.insert name d m
   expandAliases :: CommandDescr -> [(String, CommandDescr)]
   expandAliases d = (cName d, d) : zip (cAliases d) (repeat d)
 
@@ -514,7 +515,7 @@ splitCommand txt =
 -- command; otherwise such commands are inaccessible. Also, deduplicate
 -- the list of results to avoid silliness with command aliases.
 findSomeCommand :: String -> CommandMap -> [CommandDescr]
-findSomeCommand str commandTable = nub $ lookupTrieWithExact str commandTable
+findSomeCommand str commandTable = nub $ Trie.lookupWithExact str commandTable
 
 -- | Look up a string in the command list.
 findCommand :: String -> [CommandDescr]

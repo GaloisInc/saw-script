@@ -6,7 +6,16 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 
-module SAWScript.REPL.Trie where
+module SAWScript.REPL.Trie (
+    Trie,
+    empty,
+    insert,
+    lookup,
+    lookupWithExact,
+    leaves
+ ) where
+
+import Prelude hiding (lookup)
 
 import           Cryptol.Utils.Panic (panic)
 import qualified Data.Map as Map
@@ -18,37 +27,37 @@ import           Data.Maybe (fromMaybe,maybeToList)
 data Trie a = Node (Map Char (Trie a)) (Maybe a)
     deriving (Show)
 
-emptyTrie :: Trie a
-emptyTrie  = Node Map.empty Nothing
+empty :: Trie a
+empty  = Node Map.empty Nothing
 
 -- | Insert a value into the Trie.  Will call `panic` if a value already exists
 -- with that key.
-insertTrie :: String -> a -> Trie a -> Trie a
-insertTrie k a = loop k
+insert :: String -> a -> Trie a -> Trie a
+insert k a = loop k
   where
   loop key (Node m mb) = case key of
-    c:cs -> Node (Map.alter (Just . loop cs . fromMaybe emptyTrie) c m) mb
+    c:cs -> Node (Map.alter (Just . loop cs . fromMaybe empty) c m) mb
     []   -> case mb of
       Nothing -> Node m (Just a)
       Just _  -> panic "[REPL] Trie" ["key already exists:", "\t" ++ k]
 
 -- | Return all matches with the given prefix.
-lookupTrie :: String -> Trie a -> [a]
-lookupTrie key t@(Node mp _) = case key of
+lookup :: String -> Trie a -> [a]
+lookup key t@(Node mp _) = case key of
 
   c:cs -> case Map.lookup c mp of
-    Just m' -> lookupTrie cs m'
+    Just m' -> lookup cs m'
     Nothing -> []
 
   [] -> leaves t
 
 -- | Return all matches with the given prefix. However, if an exact match
 -- exists, return just that match.
-lookupTrieWithExact :: String -> Trie a -> [a]
-lookupTrieWithExact key t@(Node mp mb) = case key of
+lookupWithExact :: String -> Trie a -> [a]
+lookupWithExact key t@(Node mp mb) = case key of
 
   c:cs -> case Map.lookup c mp of
-    Just m' -> lookupTrieWithExact cs m'
+    Just m' -> lookupWithExact cs m'
     Nothing -> []
 
   [] -> case mb of
