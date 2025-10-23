@@ -22,7 +22,6 @@ module SAWCore.Term.Raw
   , TermIndex
   , unwrapTermF
   , alphaEquiv
-  , termToPat
   , freeVars
   , closedTerm
   ) where
@@ -33,14 +32,12 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
-import qualified Data.Text as Text
 import Data.Typeable (Typeable)
 
 import Instances.TH.Lift () -- for instance TH.Lift Text
 
 import SAWCore.Name
 import SAWCore.Term.Functor
-import qualified SAWCore.TermNet as Net
 
 -- Term Datatype ---------------------------------------------------------------
 
@@ -182,20 +179,6 @@ instance Ord Term where
   compare STApp{} Unshared{} = LT -- matches what we'd get from derived Ord instance
   compare Unshared{} STApp{} = GT
   compare x y = compare (unwrapTermF x) (unwrapTermF y)
-
--- TermNet Patterns ------------------------------------------------------------
-
-instance Net.Pattern Term where
-  toPat = termToPat
-
-termToPat :: Term -> Net.Pat
-termToPat t =
-    case unwrapTermF t of
-      Constant nm               -> Net.Atom (toShortName (nameInfo nm))
-      App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
-      FTermF (NatLit _)         -> Net.Var
-      _                         -> Net.Var
 
 -- Free Variables --------------------------------------------------------------
 

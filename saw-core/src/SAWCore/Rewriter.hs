@@ -130,9 +130,6 @@ rhsRewriteRule = rhs
 annRewriteRule :: RewriteRule a -> Maybe a
 annRewriteRule = annotation
 
-instance Net.Pattern (RewriteRule a) where
-  toPat (RewriteRule _ lhs _ _ _ _) = Net.toPat lhs
-
 -- | Convert a rewrite rule to a proposition (a 'Term' of SAWCore type
 -- @Prop@) representing the meaning of the rewrite rule.
 propOfRewriteRule :: SharedContext -> RewriteRule a -> IO Term
@@ -584,11 +581,11 @@ emptySimpset :: Simpset a
 emptySimpset = Net.empty
 
 addRule :: RewriteRule a -> Simpset a -> Simpset a
-addRule rule | lhs rule /= rhs rule = Net.insert_term (lhs rule, Left rule)
+addRule rule | lhs rule /= rhs rule = Net.insert_term (termPat (lhs rule), Left rule)
              | otherwise = id
 
 delRule :: RewriteRule a -> Simpset a -> Simpset a
-delRule rule = Net.delete_term (lhs rule, Left rule)
+delRule rule = Net.delete_term (termPat (lhs rule), Left rule)
 
 addRules :: [RewriteRule a] -> Simpset a -> Simpset a
 addRules rules ss = foldr addRule ss rules
@@ -600,7 +597,7 @@ delSimp :: Term -> Simpset a -> Simpset a
 delSimp prop = delRule (ruleOfTerm prop Nothing)
 
 addConv :: Conversion -> Simpset a -> Simpset a
-addConv conv = Net.insert_term (conv, Right conv)
+addConv conv = Net.insert_term (conversionPat conv, Right conv)
 
 addConvs :: [Conversion] -> Simpset a -> Simpset a
 addConvs convs ss = foldr addConv ss convs
@@ -745,7 +742,7 @@ rewriteSharedTerm sc ss t0 =
     rewriteTop t =
       do mt <- reduceSharedTerm sc t
          case mt of
-           Nothing -> apply (Net.unify_term ss t) t
+           Nothing -> apply (Net.unify_term ss (termPat t)) t
            Just t' -> rewriteAll t'
 
     recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> IO ()
@@ -858,7 +855,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
 
     rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
                   Term -> IO Term
-    rewriteTop t = apply (Net.match_term ss t) t
+    rewriteTop t = apply (Net.match_term ss (termPat t)) t
 
     recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> IO ()
     recordAnn Nothing  = return ()
@@ -893,7 +890,7 @@ rewritingSharedContext sc ss = sc'
         Nothing ->
           case asRecordRedex t of
             Just t' -> return t'
-            Nothing -> apply (Net.match_term ss t) t
+            Nothing -> apply (Net.match_term ss (termPat t)) t
       where t = Unshared tf
 
     apply :: [Either (RewriteRule a) Conversion] ->
