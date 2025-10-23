@@ -11,21 +11,15 @@ Stability   : provisional
 
 module SAWScript.REPL.Command (
     -- * Commands
-    Command(..), CommandDescr(..), CommandBody(..)
+    CommandDescr(..), CommandBody(..)
   , parseCommand
   , runCommand
   , splitCommand
   , findCommand
-  , findNbCommand
 
     -- Misc utilities
   , handleCtrlC
   , sanitize
-
-    -- To support Notebook interface (might need to refactor)
-  , replParse
-  --, liftModuleCmd
-  --, moduleCmdResult
   ) where
 
 --import SAWCore.SharedTerm (SharedContext)
@@ -39,8 +33,6 @@ import SAWCentral.Value (Environ(..))
 
 import SAWScript.REPL.Monad
 import SAWScript.Token (Token)
-
-import Cryptol.Parser (ParseError())
 
 import Control.Monad (unless, void)
 
@@ -125,10 +117,6 @@ makeCommands list  = foldl insert Trie.empty (concatMap expandAliases list)
 -- | REPL command parsing.
 commands :: CommandMap
 commands = makeCommands commandList
-
--- | Notebook command parsing.
-nbCommands :: CommandMap
-nbCommands = makeCommands nbCommandList
 
 -- | A subset of commands safe for Notebook execution
 nbCommandList :: [CommandDescr]
@@ -477,12 +465,6 @@ handleCtrlC  = io (putStrLn "Ctrl-C")
 
 -- Utilities -------------------------------------------------------------------
 
--- | Lift a parsing action into the REPL monad.
-replParse :: (Text -> Either ParseError a) -> Text -> REPL a
-replParse parse str = case parse str of
-  Right a -> return a
-  Left e  -> raise (ParseError e)
-
 type CommandMap = Trie CommandDescr
 
 
@@ -522,10 +504,6 @@ findSomeCommand str commandTable = nub $ Trie.lookupWithExact str commandTable
 -- | Look up a string in the command list.
 findCommand :: Text -> [CommandDescr]
 findCommand str = findSomeCommand str commands
-
--- | Look up a string in the notebook-safe command list.
-findNbCommand :: Text -> [CommandDescr]
-findNbCommand str = findSomeCommand str nbCommands
 
 -- | Parse a line as a command.
 parseCommand :: (Text -> [CommandDescr]) -> Text -> Maybe Command

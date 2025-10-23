@@ -14,9 +14,6 @@ module SAWScript.REPL.Monad (
   , io
   , raise
   , stop
-  , catch
-  , catchFail
-  , catchOther
   , exceptionProtect
   , liftTopLevel
   , liftProofScript
@@ -26,37 +23,23 @@ module SAWScript.REPL.Monad (
 
     -- ** Errors
   , REPLException(..)
-  , rethrowEvalError
 
     -- ** Environment
-  , getCryptolEnv, modifyCryptolEnv, setCryptolEnv
-  , getModuleEnv, setModuleEnv
-  , getTSyns, getNominalTypes, getVars
   , getCryptolExprNames
   , getCryptolTypeNames
-  , getPropertyNames
   , getPrompt
   , shouldContinue
-  , unlessBatch
-  , setREPLTitle
-  , getTermEnv, modifyTermEnv, setTermEnv
-  , getExtraTypes, modifyExtraTypes, setExtraTypes
-  , getExtraNames, modifyExtraNames, setExtraNames
 
     -- ** SAWScript stuff
-  , getSharedContext
-  , getTopLevelRO
-  , getTopLevelRW, modifyTopLevelRW, putTopLevelRW
-  , getTopLevelRWRef
+  , getTopLevelRW
   , getProofStateRef
   , getSAWScriptValueNames
   , getSAWScriptTypeNames
   ) where
 
-import Cryptol.Eval (EvalError, EvalErrorEx(..))
+import Cryptol.Eval (EvalError)
 import qualified Cryptol.ModuleSystem as M
 import qualified Cryptol.ModuleSystem.NamingEnv as MN
-import Cryptol.ModuleSystem.NamingEnv (NamingEnv)
 import Cryptol.Parser (ParseError,ppError)
 import Cryptol.Parser.NoInclude (IncludeError,ppIncludeError)
 import Cryptol.Parser.NoPat (Error)
@@ -64,7 +47,7 @@ import qualified Cryptol.TypeCheck.AST as T
 import Cryptol.Utils.Ident (Namespace(..))
 import Cryptol.Utils.PP
 
-import Control.Monad (unless, ap, void)
+import Control.Monad (ap, void)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (put, get, StateT(..))
 import Control.Monad.Except (ExceptT(..), runExceptT)
@@ -72,29 +55,25 @@ import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
 import qualified Data.Set as Set
-import Data.Map (Map)
+--import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Typeable (Typeable)
-import System.Console.ANSI (setTitle)
 import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
 import System.Exit (ExitCode)
 
 import qualified SAWSupport.ScopedMap as ScopedMap
 
-import SAWCore.SharedTerm (Term)
 import CryptolSAWCore.CryptolEnv
 
 --------------------
-
-import SAWCore.SAWCore (SharedContext)
 
 import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
 import SAWCentral.Value (ProofScript(..), showsProofResult, Environ(..),
-                         rwGetCryptolEnv, rwModifyCryptolEnv,
+                         rwGetCryptolEnv,
                          pushScope, popScope)
 
 import SAWScript.Interpreter (buildTopLevelEnv)
@@ -125,10 +104,6 @@ defaultRefs isBatch opts =
        , rTopLevelRW = rwRef
        , rProofState  = Nothing
        }
-
-
-mkTitle :: Refs -> String
-mkTitle _refs = "sawscript"
 
 
 -- REPL Monad ------------------------------------------------------------------
@@ -274,17 +249,6 @@ catchOther m k = REPL (\ref -> X.catchJust flt (unREPL m ref) (\s -> unREPL (k s
     | Just (_ :: ExitCode)       <- X.fromException e = Nothing
     | otherwise = Just e
 
-rethrowEvalError :: IO a -> IO a
-rethrowEvalError m = run `X.catch` rethrow
-  where
-  run = do
-    a <- m
-    return $! a
-
-  rethrow :: EvalErrorEx -> IO a
-  rethrow (EvalErrorEx _ exn) = X.throwIO (EvalError exn)
-
-
 exceptionProtect :: REPL () -> REPL ()
 exceptionProtect cmd =
       do chk <- io . makeCheckpoint =<< getTopLevelRW
@@ -358,45 +322,6 @@ shouldContinue = readRef rContinue
 stop :: REPL ()
 stop = modifyRef rContinue (const False)
 
-unlessBatch :: REPL () -> REPL ()
-unlessBatch body =
-  do batch <- REPL (return . rIsBatch)
-     unless batch body
-
-setREPLTitle :: REPL ()
-setREPLTitle =
-  unlessBatch $
-  do refs <- getRefs
-     io (setTitle (mkTitle refs))
-
-getVars :: REPL (Map T.Name M.IfaceDecl)
-getVars  = do
-  me <- getModuleEnv
-  let decls = getAllIfaceDecls me
-  let vars1 = M.ifDecls decls
-  extras <- getExtraTypes
-  let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl { M.ifDeclName = q
-                                                  , M.ifDeclSig = s
-                                                  , M.ifDeclIsPrim = False
-                                                  , M.ifDeclPragmas = []
-                                                  , M.ifDeclInfix = False
-                                                  , M.ifDeclFixity = Nothing
-                                                  , M.ifDeclDoc = Nothing
-                                                  }) extras
-  return (Map.union vars1 vars2)
-
-getTSyns :: REPL (Map T.Name T.TySyn)
-getTSyns  = do
-  me <- getModuleEnv
-  let decls = getAllIfaceDecls me
-  return (M.ifTySyns decls)
-
-getNominalTypes :: REPL (Map T.Name T.NominalType)
-getNominalTypes = do
-  me <- getModuleEnv
-  let decls = getAllIfaceDecls me
-  return (M.ifNominalTypes decls)
-
 -- | Get visible Cryptol variable names.
 getCryptolExprNames :: REPL [String]
 getCryptolExprNames =
@@ -409,62 +334,10 @@ getCryptolTypeNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
      return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
 
-getPropertyNames :: REPL [String]
-getPropertyNames =
-  do xs <- getVars
-     return [ getName x | (x,d) <- Map.toList xs,
-                T.PragmaProperty `elem` M.ifDeclPragmas d ]
-
-getName :: T.Name -> String
-getName  = show . pp
-
-getTermEnv :: REPL (Map T.Name Term)
-getTermEnv = fmap eTermEnv getCryptolEnv
-
-modifyTermEnv :: (Map T.Name Term -> Map T.Name Term) -> REPL ()
-modifyTermEnv f = modifyCryptolEnv $ \ce -> ce { eTermEnv = f (eTermEnv ce) }
-
-setTermEnv :: Map T.Name Term -> REPL ()
-setTermEnv x = modifyTermEnv (const x)
-
-getExtraTypes :: REPL (Map T.Name T.Schema)
-getExtraTypes = fmap eExtraTypes getCryptolEnv
-
-modifyExtraTypes :: (Map T.Name T.Schema -> Map T.Name T.Schema) -> REPL ()
-modifyExtraTypes f = modifyCryptolEnv $ \ce -> ce { eExtraTypes = f (eExtraTypes ce) }
-
-setExtraTypes :: Map T.Name T.Schema -> REPL ()
-setExtraTypes x = modifyExtraTypes (const x)
-
-getExtraNames :: REPL NamingEnv
-getExtraNames = fmap eExtraNames getCryptolEnv
-
-modifyExtraNames :: (NamingEnv -> NamingEnv) -> REPL ()
-modifyExtraNames f = modifyCryptolEnv $ \ce -> ce { eExtraNames = f (eExtraNames ce) }
-
-setExtraNames :: NamingEnv -> REPL ()
-setExtraNames x = modifyExtraNames (const x)
-
-getModuleEnv :: REPL M.ModuleEnv
-getModuleEnv  = eModuleEnv `fmap` getCryptolEnv
-
-setModuleEnv :: M.ModuleEnv -> REPL ()
-setModuleEnv me = modifyCryptolEnv (\ce -> ce { eModuleEnv = me })
-
 getCryptolEnv :: REPL CryptolEnv
 getCryptolEnv = do
     rw <- getTopLevelRW
     return $ rwGetCryptolEnv rw
-
-modifyCryptolEnv :: (CryptolEnv -> CryptolEnv) -> REPL ()
-modifyCryptolEnv f =
-    modifyTopLevelRW $ rwModifyCryptolEnv f
-
-setCryptolEnv :: CryptolEnv -> REPL ()
-setCryptolEnv x = modifyCryptolEnv (const x)
-
-getSharedContext :: REPL SharedContext
-getSharedContext = rwSharedContext <$> getTopLevelRW
 
 getTopLevelRO :: REPL TopLevelRO
 getTopLevelRO = REPL (return . rTopLevelRO)
@@ -477,12 +350,6 @@ getProofStateRef = rProofState <$> getRefs
 
 getTopLevelRW :: REPL TopLevelRW
 getTopLevelRW = readRef rTopLevelRW
-
-putTopLevelRW :: TopLevelRW -> REPL ()
-putTopLevelRW = modifyTopLevelRW . const
-
-modifyTopLevelRW :: (TopLevelRW -> TopLevelRW) -> REPL ()
-modifyTopLevelRW = modifyRef rTopLevelRW
 
 -- | Get visible variable names for Haskeline completion.
 getSAWScriptValueNames :: REPL [String]
@@ -505,11 +372,3 @@ getSAWScriptTypeNames = do
       Environ _valenv tyenv _cryenv = rwEnviron rw
   let rnames = ScopedMap.allKeys $ ScopedMap.filter visible tyenv
   return (map Text.unpack rnames)
-
--- User Environment Interaction ------------------------------------------------
-
-data EnvVal
-  = EnvString String
-  | EnvNum    !Int
-  | EnvBool   Bool
-    deriving (Show)
