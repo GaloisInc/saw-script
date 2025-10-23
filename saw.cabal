@@ -155,9 +155,11 @@ library saw-core
     SAWCore.Parser.Grammar
     SAWCore.Parser.Lexer
     SAWCore.Parser.Position
+    SAWCore.Parser.TH
     SAWCore.ParserUtils
     SAWCore.Prelude
     SAWCore.Prelude.Constants
+    SAWCore.Prelude.Module
     SAWCore.Prim
     SAWCore.Recognizer
     SAWCore.Rewriter
@@ -244,6 +246,7 @@ library cryptol-saw-core
     CryptolSAWCore.Simpset
     CryptolSAWCore.TypedTerm
   other-modules:
+    CryptolSAWCore.Module
     CryptolSAWCore.Panic
 
 

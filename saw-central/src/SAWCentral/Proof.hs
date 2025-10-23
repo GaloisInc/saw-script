@@ -153,7 +153,6 @@ import Data.Parameterized.Nonce
 
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
 
-import SAWCore.Prelude (scApplyPrelude_False)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
@@ -475,7 +474,7 @@ betaReduceProp sc (Prop tm) =
 
 -- | Return the contant false proposition.
 falseProp :: SharedContext -> IO Prop
-falseProp sc = Prop <$> (scEqTrue sc =<< scApplyPrelude_False sc)
+falseProp sc = Prop <$> (scEqTrue sc =<< scBool sc False)
 
 -- | Compute the shared-term size of the proposition.
 propSize :: Prop -> Integer

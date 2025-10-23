@@ -85,25 +85,16 @@ import Data.Maybe (mapMaybe, fromMaybe)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 
-import qualified Language.Haskell.TH.Syntax as TH
-
 import Prelude hiding (all, foldr, sum)
 
 import SAWCore.Name
+import SAWCore.Parser.AST (DefQualifier(..))
 import SAWCore.Panic (panic)
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 
 
 -- Definitions -----------------------------------------------------------------
-
-data DefQualifier
-  = NoQualifier
-  | PrimQualifier
-  | AxiomQualifier
- deriving (Eq, Show, Generic, TH.Lift)
-
-instance Hashable DefQualifier -- automatically derived
 
 -- | A Definition contains a name, the type of the definition, and an
 -- optional body (axioms and primitives do not have a body).

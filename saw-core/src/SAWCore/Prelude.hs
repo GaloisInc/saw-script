@@ -1,6 +1,4 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 {- |
 Module      : SAWCore.Prelude
@@ -13,6 +11,7 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Prelude
   ( module SAWCore.Prelude
+  , module SAWCore.Prelude.Module
   , module SAWCore.Prelude.Constants
   ) where
 
@@ -20,6 +19,7 @@ import qualified Data.Map as Map
 
 import SAWCore.ParserUtils
 import SAWCore.Prelude.Constants
+import SAWCore.Prelude.Module (preludeModule)
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue
 import SAWCore.Term.Pretty (showTerm)
@@ -27,9 +27,8 @@ import SAWCore.Term.Pretty (showTerm)
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue)
 
-
-$(defineModuleFromFileWithFns
-  "preludeModule" "scLoadPreludeModule" "saw-core/prelude/Prelude.sawcore")
+scLoadPreludeModule :: SharedContext -> IO ()
+scLoadPreludeModule sc = tcInsertModule sc preludeModule
 
 -- | Given two terms, compute a term representing a decidable
 --   equality test between them.  The terms are assumed to
@@ -138,9 +137,3 @@ scDecEq sc fot args = case fot of
         fp  <- scDecEq sc tp (Just (xf,yf))
         fsp <- mkRecordEqBody fs x y
         scAnd sc fp fsp
-
--- | For backwards compatibility: @Bool@ used to be a datatype, and so its
--- creation function was called @scPrelude_Bool@ instead of
--- @scApplyPrelude_Bool@
-scPrelude_Bool :: SharedContext -> IO Term
-scPrelude_Bool = scApplyPrelude_Bool

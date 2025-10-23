@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 {- |
 Module      : CryptolSAWCore.Prelude
 Copyright   : Galois, Inc. 2012-2015
@@ -11,11 +9,15 @@ Portability : non-portable (language extensions)
 
 module CryptolSAWCore.Prelude
   ( module CryptolSAWCore.Prelude
+  , cryptolModule
   , scLoadPreludeModule
   ) where
 
 import SAWCore.Prelude
-import SAWCore.ParserUtils
+import SAWCore.SharedTerm (SharedContext)
+import SAWCore.Typechecker (tcInsertModule)
 
-$(defineModuleFromFileWithFns
-  "cryptolModule" "scLoadCryptolModule" "cryptol-saw-core/saw/Cryptol.sawcore")
+import CryptolSAWCore.Module (cryptolModule)
+
+scLoadCryptolModule :: SharedContext -> IO ()
+scLoadCryptolModule sc = tcInsertModule sc cryptolModule
