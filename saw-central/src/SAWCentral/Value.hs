@@ -88,6 +88,8 @@ module SAWCentral.Value (
     TopLevelRW(..),
     -- used by ... a lot of places, let's not try to make a list just yet
     TopLevel(..),
+    -- Used by TopLevelRW
+    LLVMGlobalAllocMode(..),
     -- used by SAWCentral.Builtins, SAWScript.REPL.Monad, SAWScript.Interpreter,
     --    SAWServer.TopLevel
     runTopLevel,
@@ -957,6 +959,12 @@ data JavaCodebase =
     -- ^ At least one Java-related command has been invoked successfully.
     -- We cache the resulting 'JSS.Codebase' for subsequent commands.
 
+data LLVMGlobalAllocMode
+  = LLVMAllocConstantGlobals -- ^ constants are allocated, globals need llvm_alloc_global
+  | LLVMAllocAllGlobals   -- ^ all globals are allocated
+  | LLVMAllocNoGlobals -- ^ No globals are allocated, use llvm_alloc_global and llvm_alloc_constant
+  deriving (Show)
+
 data TopLevelRW =
   TopLevelRW
   {
@@ -993,6 +1001,7 @@ data TopLevelRW =
   , rwLaxLoadsAndStores :: Bool
   , rwLaxPointerOrdering :: Bool
   , rwDebugIntrinsics :: Bool
+  , rwLLVMGlobalAllocMode :: LLVMGlobalAllocMode
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
