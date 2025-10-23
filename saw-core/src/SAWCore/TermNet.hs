@@ -14,18 +14,17 @@ Portability : non-portable (language extensions)
 
 module SAWCore.TermNet
   ( Pat(..)
-  , Pattern(..)
   , Key
   , key_of_term  -- :: Pat -> [Key]
   , Net          -- :: * -> *
   , empty        -- :: Net a
   , insert       -- :: Eq a => ([Key], a) -> Net a -> Net a
-  , insert_term  -- :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
+  , insert_term  -- :: Eq a => (Pat, a) -> Net a -> Net a
   , delete       -- :: Eq a => ([Key], a) -> Net a -> Net a
-  , delete_term  -- :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
+  , delete_term  -- :: Eq a => (Pat, a) -> Net a -> Net a
   , lookup       -- :: Net a -> [Key] -> [a]
-  , match_term   -- :: Pattern t => Net a -> t -> [a]
-  , unify_term   -- :: Pattern t => Net a -> t -> [a]
+  , match_term   -- :: Net a -> Pat -> [a]
+  , unify_term   -- :: Net a -> Pat -> [a]
   , merge        -- :: Eq a => Net a -> Net a -> Net a
   , content      -- :: Net a -> [a]
   ) where
@@ -59,9 +58,6 @@ only wildcards in patterns.  Requires operands to be beta-eta-normal.
 -- traverse patterns for very large terms.
 data Pat = Atom Text | Var | App Pat Pat
     deriving Eq
-
-class Pattern t where
-  toPat :: t -> Pat
 
 instance Show Pat where
   showsPrec _ (Atom s) = shows s
@@ -162,8 +158,8 @@ insert (keys0, x) net = ins1 keys0 net
     ins1 [] (Net {}) = error "impossible"
     ins1 (_ : _) (Leaf (_ : _)) = error "impossible"
 
-insert_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
-insert_term (t, x) = insert (key_of_term (toPat t), x)
+insert_term :: (Eq a) => (Pat, a) -> Net a -> Net a
+insert_term (pat, x) = insert (key_of_term pat, x)
 
 {-** Deletion from a discrimination net **-}
 
@@ -193,8 +189,8 @@ delete (keys0, x) net0 = del1 keys0 net0
     del1 [] (Net {}) = error "impossible"
     del1 (_ : _) (Leaf (_ : _)) = error "impossible"
 
-delete_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
-delete_term (t, x) = delete (key_of_term (toPat t), x)
+delete_term :: (Eq a) => (Pat, a) -> Net a -> Net a
+delete_term (pat, x) = delete (key_of_term pat, x)
 
 {-** Retrieval functions for discrimination nets **-}
 
@@ -257,13 +253,13 @@ extract_leaves = concatMap $ \case
   Leaf xs -> xs
   Net{}   -> error "extract_leaves: Unexpected Net node"
 
-{-return items whose key could match t, WHICH MUST BE BETA-ETA NORMAL-}
-match_term :: Pattern t => Net a -> t -> [a]
-match_term net t = extract_leaves (matching False (toPat t) net [])
+{-return items whose key could match pat, WHICH MUST BE BETA-ETA NORMAL-}
+match_term :: Net a -> Pat -> [a]
+match_term net pat = extract_leaves (matching False pat net [])
 
-{-return items whose key could unify with t-}
-unify_term :: Pattern t => Net a -> t -> [a]
-unify_term net t = extract_leaves (matching True (toPat t) net [])
+{-return items whose key could unify with pat-}
+unify_term :: Net a -> Pat -> [a]
+unify_term net pat = extract_leaves (matching True pat net [])
 
 {--------------------------------------------------------------------
 

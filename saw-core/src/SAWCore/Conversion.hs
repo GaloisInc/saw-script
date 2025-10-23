@@ -21,8 +21,7 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Conversion
   ( (:*:)(..)
-  , Net.toPat
-  , termToPat
+  , termPat
     -- * Matcher
   , Matcher
   , matcherPat
@@ -76,6 +75,7 @@ module SAWCore.Conversion
     -- * Conversion
   , Conversion(..)
   , runConversion
+  , conversionPat
     -- ** Prelude conversions
   , tupleConversion
   , recordConversion
@@ -123,18 +123,27 @@ import SAWCore.Term.Raw
 
 -- | A hack to allow storage of conversions in a term net.
 instance Eq Conversion where
-    x == y = Net.toPat x == Net.toPat y
+    x == y = conversionPat x == conversionPat y
 
 instance Show Conversion where
-    show x = show (Net.toPat x)
+    show x = show (conversionPat x)
+
+----------------------------------------------------------------------
+-- TermNet Patterns
+
+termPat :: Term -> Net.Pat
+termPat t =
+    case unwrapTermF t of
+      Constant nm               -> Net.Atom (toShortName (nameInfo nm))
+      App t1 t2                 -> Net.App (termPat t1) (termPat t2)
+      FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
+      FTermF (NatLit _)         -> Net.Var
+      _                         -> Net.Var
 
 ----------------------------------------------------------------------
 -- Matchers for terms
 
 data Matcher a = Matcher { matcherPat :: Net.Pat, runMatcher :: Term -> Maybe a }
-
-instance Net.Pattern (Matcher a) where
-    toPat = matcherPat
 
 instance Functor Matcher where
   fmap f (Matcher p m) = Matcher p (fmap f . m)
@@ -267,7 +276,7 @@ asAnySort = asVar $ \t -> do Sort v _ <- R.asFTermF t; return v
 
 -- | Match a specific sort.
 asSort :: Sort -> Matcher ()
-asSort s = Matcher (termToPat (Unshared (FTermF (Sort s noFlags)))) fn
+asSort s = Matcher (termPat (Unshared (FTermF (Sort s noFlags)))) fn
   where fn t = do s' <- R.asSort t
                   guard (s == s')
 
@@ -438,11 +447,11 @@ instance Buildable Prim.BitVector where
 
 newtype Conversion = Conversion (Matcher (TermBuilder Term))
 
-instance Net.Pattern Conversion where
-    toPat (Conversion m) = Net.toPat m
-
 runConversion :: Conversion -> Term -> Maybe (TermBuilder Term)
 runConversion (Conversion m) = runMatcher m
+
+conversionPat :: Conversion -> Net.Pat
+conversionPat (Conversion m) = matcherPat m
 
 -- | This class is meant to include n-ary function types whose
 -- arguments are all in class @Matchable@ and whose result type is
