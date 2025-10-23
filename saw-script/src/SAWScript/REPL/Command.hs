@@ -31,13 +31,13 @@ module SAWScript.REPL.Command (
 --import SAWCore.SharedTerm (SharedContext)
 
 import qualified SAWSupport.ScopedMap as ScopedMap
+import qualified SAWSupport.Trie as Trie
+import SAWSupport.Trie (Trie)
 
 import SAWCentral.Position (getPos, Pos)
 import SAWCentral.Value (Environ(..))
 
 import SAWScript.REPL.Monad
-import qualified SAWScript.REPL.Trie as Trie
-import SAWScript.REPL.Trie (Trie)
 import SAWScript.Token (Token)
 
 import Cryptol.Parser (ParseError())

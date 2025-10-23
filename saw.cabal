@@ -88,6 +88,7 @@ library saw-support
     SAWSupport.PanicSupport
     SAWSupport.Pretty
     SAWSupport.ScopedMap
+    SAWSupport.Trie
   other-modules:
     SAWSupport.Panic
 
@@ -681,7 +682,6 @@ library saw-script
     SAWScript.REPL.Haskeline
     SAWScript.REPL.Logo
     SAWScript.REPL.Monad
-    SAWScript.REPL.Trie
   other-modules:
     SAWScript.Panic
 

@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
-Module      : SAWScript.REPL.Trie
+Module      : SAWSupport.Trie
 Description :
 License     : BSD3
-Maintainer  : huffman
+Maintainer  : saw@galois.com
 Stability   : provisional
 -}
 
-module SAWScript.REPL.Trie (
+module SAWSupport.Trie (
     Trie,
     empty,
     insert,
@@ -25,7 +25,7 @@ import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (maybeToList)
 
-import           SAWScript.Panic (panic)
+import           SAWSupport.Panic (panic)
 
 
 -- | Maps string names to values, allowing for partial key matches and
