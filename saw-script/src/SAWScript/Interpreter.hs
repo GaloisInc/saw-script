@@ -18,7 +18,6 @@ Stability   : provisional
 
 module SAWScript.Interpreter
   ( interpretTopStmt
-  , interpretFile
   , processFile
   , buildTopLevelEnv
   )
