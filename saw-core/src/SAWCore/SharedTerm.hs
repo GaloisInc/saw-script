@@ -61,8 +61,6 @@ module SAWCore.SharedTerm
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
-  , scRecursorMotiveType
-  , scRecursorAppType
   , scRecursorType
   , scReduceRecursor
   , scReduceNatRecursor
