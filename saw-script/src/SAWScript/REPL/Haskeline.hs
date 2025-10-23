@@ -6,6 +6,7 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module SAWScript.REPL.Haskeline (repl, replBody) where
@@ -18,6 +19,8 @@ import Control.Monad (when)
 import qualified Control.Monad.Catch as E
 #endif
 import Data.Char (isAlphaNum, isSpace)
+import qualified Data.Text as Text
+import Data.Text (Text)
 import Data.List (isPrefixOf)
 import Data.Maybe (isJust)
 import System.Console.Haskeline
@@ -64,7 +67,7 @@ replBody mbBatch begin =
     mb     <- handleInterrupt (return (Just "")) (getInputLines prompt [])
     case mb of
       Just line
-        | Just cmd <- parseCommand findCommand line -> do
+        | Just cmd <- parseCommand findCommand (Text.pack line) -> do
           continue <- MTL.lift $ do
             handleInterrupt handleCtrlC (runCommand cmd)
             shouldContinue
@@ -146,14 +149,15 @@ instance E.MonadMask REPL where
 -- | Top-level completion for the REPL.
 replComp :: CompletionFunc REPL
 replComp cursor@(l,r)
-  | ":" `isPrefixOf` l'
+  | ":" `Text.isPrefixOf` l'
   , Just (cmd,rest) <- splitCommand l' = case findCommand cmd of
 
-      [c] | null rest && not (any isSpace l') -> do
+      [c] | Text.null rest && not (Text.any isSpace l') -> do
             return (l, [cmdComp cmd c])
           | otherwise -> do
-            (rest',cs) <- cmdArgument (cBody c) (reverse (sanitize rest),r)
-            return (unwords [rest', reverse cmd],cs)
+            (rest',cs) <- cmdArgument (cBody c) (reverse $ Text.unpack $ sanitize rest, r)
+            -- XXX this drops any leading spaces in l', which is ok but untidy
+            return (unwords [rest', reverse $ Text.unpack cmd], cs)
 
       cmds ->
         return (l, [ cmdComp l' c | c <- cmds ])
@@ -162,13 +166,13 @@ replComp cursor@(l,r)
       return (l, [ cmdComp l' c | c <- findCommand "" ])
   | otherwise = completeSAWScriptValue cursor
   where
-  l' = sanitize (reverse l)
+  l' = sanitize (Text.pack $ reverse l)
 
 -- | Generate a completion from a REPL command definition.
-cmdComp :: String -> CommandDescr -> Completion
+cmdComp :: Text -> CommandDescr -> Completion
 cmdComp prefix c = Completion
-  { replacement = drop (length prefix) (cName c)
-  , display     = cName c
+  { replacement = Text.unpack $ Text.drop (Text.length prefix) (cName c)
+  , display     = Text.unpack $ cName c
   , isFinished  = True
   }
 
@@ -206,7 +210,7 @@ lexerMode = normal
     quote (_ : s) = quote s
 
 isIdentChar :: Char -> Bool
-isIdentChar c = isAlphaNum c || c `elem` "_\'"
+isIdentChar c = isAlphaNum c || c == '_' || c == '\''
 
 -- | Complete a name from the SAWScript value environment.
 completeSAWScriptValue :: CompletionFunc REPL

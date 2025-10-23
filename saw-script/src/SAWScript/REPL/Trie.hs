@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 {- |
 Module      : SAWScript.REPL.Trie
 Description :
@@ -17,10 +19,13 @@ module SAWScript.REPL.Trie (
 
 import Prelude hiding (lookup)
 
-import           Cryptol.Utils.Panic (panic)
+import qualified Data.Text as Text
+import           Data.Text (Text)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (fromMaybe,maybeToList)
+
+import           SAWScript.Panic (panic)
 
 
 -- | Maps string names to values, allowing for partial key matches and querying.
@@ -32,35 +37,35 @@ empty  = Node Map.empty Nothing
 
 -- | Insert a value into the Trie.  Will call `panic` if a value already exists
 -- with that key.
-insert :: String -> a -> Trie a -> Trie a
+insert :: Text -> a -> Trie a -> Trie a
 insert k a = loop k
   where
-  loop key (Node m mb) = case key of
-    c:cs -> Node (Map.alter (Just . loop cs . fromMaybe empty) c m) mb
-    []   -> case mb of
+  loop key (Node m mb) = case Text.uncons key of
+    Just (c, key') -> Node (Map.alter (Just . loop key' . fromMaybe empty) c m) mb
+    Nothing -> case mb of
       Nothing -> Node m (Just a)
-      Just _  -> panic "[REPL] Trie" ["key already exists:", "\t" ++ k]
+      Just _  -> panic "insert" ["Key already exists: " <> k]
 
 -- | Return all matches with the given prefix.
-lookup :: String -> Trie a -> [a]
-lookup key t@(Node mp _) = case key of
+lookup :: Text -> Trie a -> [a]
+lookup key t@(Node mp _) = case Text.uncons key of
 
-  c:cs -> case Map.lookup c mp of
-    Just m' -> lookup cs m'
+  Just (c, key') -> case Map.lookup c mp of
+    Just m' -> lookup key' m'
     Nothing -> []
 
-  [] -> leaves t
+  Nothing -> leaves t
 
 -- | Return all matches with the given prefix. However, if an exact match
 -- exists, return just that match.
-lookupWithExact :: String -> Trie a -> [a]
-lookupWithExact key t@(Node mp mb) = case key of
+lookupWithExact :: Text -> Trie a -> [a]
+lookupWithExact key t@(Node mp mb) = case Text.uncons key of
 
-  c:cs -> case Map.lookup c mp of
-    Just m' -> lookupWithExact cs m'
+  Just (c, key') -> case Map.lookup c mp of
+    Just m' -> lookupWithExact key' m'
     Nothing -> []
 
-  [] -> case mb of
+  Nothing -> case mb of
     Just b -> [b]
     Nothing -> leaves t
 

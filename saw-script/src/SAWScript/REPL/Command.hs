@@ -42,12 +42,13 @@ import SAWScript.Token (Token)
 
 import Cryptol.Parser (ParseError())
 
-import Control.Monad (guard, unless, void)
+import Control.Monad (unless, void)
 
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
-import Data.List (intercalate, intersperse, nub)
+import Data.List (intersperse, nub)
 import qualified Data.Text as Text
+import Data.Text (Text)
 import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
@@ -84,20 +85,20 @@ import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable, Rebindable(.
 -- | Commands.
 data Command
   = Command (REPL ())         -- ^ Successfully parsed command
-  | Ambiguous String [String] -- ^ Ambiguous command, list of conflicting
+  | Ambiguous Text [Text]     -- ^ Ambiguous command, list of conflicting
                               --   commands
-  | Unknown String            -- ^ The unknown command
+  | Unknown Text              -- ^ The unknown command
 
 -- | Command builder.
 data CommandDescr = CommandDescr
-  { cName :: String
-  , cAliases :: [String]
+  { cName :: Text
+  , cAliases :: [Text]
   , cBody :: CommandBody
-  , cHelp :: String
+  , cHelp :: Text
   }
 
 instance Show CommandDescr where
-  show = cName
+  show cd = Text.unpack $ cName cd
 
 instance Eq CommandDescr where
   (==) = (==) `on` cName
@@ -106,10 +107,10 @@ instance Ord CommandDescr where
   compare = compare `on` cName
 
 data CommandBody
-  = ExprArg     (String   -> REPL ())
-  | TypeArg     (String   -> REPL ())
+  = ExprArg     (Text     -> REPL ())
+  | TypeArg     (Text     -> REPL ())
   | FilenameArg (FilePath -> REPL ())
-  | ShellArg    (String   -> REPL ())
+  | ShellArg    (Text     -> REPL ())
   | NoArg       (REPL ())
 
 
@@ -118,7 +119,7 @@ makeCommands :: [CommandDescr] -> CommandMap
 makeCommands list  = foldl insert Trie.empty (concatMap expandAliases list)
   where
   insert m (name, d) = Trie.insert name d m
-  expandAliases :: CommandDescr -> [(String, CommandDescr)]
+  expandAliases :: CommandDescr -> [(Text, CommandDescr)]
   expandAliases d = (cName d, d) : zip (cAliases d) (repeat d)
 
 -- | REPL command parsing.
@@ -157,12 +158,12 @@ commandList  =
     "display the current working directory"
   ]
 
-genHelp :: [CommandDescr] -> [String]
+genHelp :: [CommandDescr] -> [Text]
 genHelp cs = map cmdHelp cs
   where
-  cmdHelp cmd = concat [ "  ", cName cmd, pad (cName cmd), cHelp cmd ]
-  padding     = 2 + maximum (map (length . cName) cs)
-  pad n       = replicate (max 0 (padding - length n)) ' '
+  cmdHelp cmd = Text.concat [ "  ", cName cmd, pad (cName cmd), cHelp cmd ]
+  padding     = 2 + maximum (map (Text.length . cName) cs)
+  pad n       = Text.replicate (max 0 (padding - Text.length n)) " "
 
 
 -- Command Evaluation ----------------------------------------------------------
@@ -173,14 +174,14 @@ runCommand c = case c of
 
   Command cmd -> exceptionProtect cmd
 
-  Unknown cmd -> io (putStrLn ("Unknown command: " ++ cmd))
+  Unknown cmd -> io (TextIO.putStrLn ("Unknown command: " <> cmd))
 
   Ambiguous cmd cmds -> io $ do
-    putStrLn (cmd ++ " is ambiguous, it could mean one of:")
-    putStrLn ("\t" ++ intercalate ", " cmds)
+    TextIO.putStrLn (cmd <> " is ambiguous; it could mean one of:")
+    TextIO.putStrLn ("\t" <> Text.intercalate ", " cmds)
 
 
-lexSAW :: String -> Text.Text -> REPL [Token Pos]
+lexSAW :: FilePath -> Text.Text -> REPL [Token Pos]
 lexSAW fileName str = do
   -- XXX wrap printing of positions in the message-printing infrastructure
   case SAWScript.Lexer.lexSAW fileName str of
@@ -191,11 +192,11 @@ lexSAW fileName str = do
          fail $ show pos ++ ": " ++ Text.unpack msg
     Right (tokens', Just _) -> pure tokens'
 
-typeOfCmd :: String -> REPL ()
+typeOfCmd :: Text -> REPL ()
 typeOfCmd str
-  | null str = do io $ putStrLn "[error] :type requires an argument"
+  | Text.null str = io $ putStrLn "[error] :type requires an argument"
   | otherwise =
-  do tokens <- lexSAW replFileName (Text.pack str)
+  do tokens <- lexSAW replFileName str
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
        Right expr -> return expr
@@ -222,11 +223,11 @@ typeOfCmd str
      let ~(SS.Decl _pos _ (Just schema) _expr') = decl'
      io $ TextIO.putStrLn $ PPS.pShowText schema
 
-searchCmd :: String -> REPL ()
+searchCmd :: Text -> REPL ()
 searchCmd str
-  | null str = do io $ putStrLn $ "[error] :search requires at least one argument"
+  | Text.null str = io $ putStrLn $ "[error] :search requires at least one argument"
   | otherwise =
-  do tokens <- lexSAW replFileName (Text.pack str)
+  do tokens <- lexSAW replFileName str
      pat <- case SAWScript.Parser.parseSchemaPattern tokens of
        Left err -> fail (show err)
        Right pat -> return pat
@@ -398,16 +399,16 @@ tenvCmd = do
       itemses = reverse $ ScopedMap.scopedAssocs tyenv
   io $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
-helpCmd :: String -> REPL ()
+helpCmd :: Text -> REPL ()
 helpCmd cmd
-  | null cmd = io (mapM_ putStrLn (genHelp commandList))
+  | Text.null cmd = io (mapM_ TextIO.putStrLn (genHelp commandList))
   | otherwise =
     do rw <- getTopLevelRW
        -- Note: there's no rebindable builtins and thus no way to
        -- attach help text to anything rebindable, so we can ignore
        -- the rebindables.
        let Environ varenv _tyenv _cryenvs = rwEnviron rw
-       case ScopedMap.lookup (Text.pack cmd) varenv of
+       case ScopedMap.lookup cmd varenv of
          Just (_pos, _lc, _ty, _v, Just doc) ->
            io $ mapM_ TextIO.putStrLn doc
          Just (_pos, _lc, _ty, _v, Nothing) -> do
@@ -453,9 +454,9 @@ caveats:
      which is bad.  Instead, we hang onto the inferred types of previous
      computations and use them to seed the name resolver and the typechecker;
      we also hang onto the results and use them to seed the interpreter. -}
-sawScriptCmd :: String -> REPL ()
+sawScriptCmd :: Text -> REPL ()
 sawScriptCmd str = do
-  tokens <- lexSAW replFileName (Text.pack str)
+  tokens <- lexSAW replFileName str
   case SAWScript.Parser.parseStmtSemi tokens of
     Left err -> io $ print err
     Right stmt ->
@@ -464,7 +465,7 @@ sawScriptCmd str = do
            Nothing -> void $ liftTopLevel (interpretTopStmt True stmt)
            Just r  -> void $ liftProofScript (interpretTopStmt True stmt) r
 
-replFileName :: String
+replFileName :: FilePath
 replFileName = "<stdin>"
 
 -- C-c Handlings ---------------------------------------------------------------
@@ -477,7 +478,7 @@ handleCtrlC  = io (putStrLn "Ctrl-C")
 -- Utilities -------------------------------------------------------------------
 
 -- | Lift a parsing action into the REPL monad.
-replParse :: (String -> Either ParseError a) -> String -> REPL a
+replParse :: (Text -> Either ParseError a) -> Text -> REPL a
 replParse parse str = case parse str of
   Right a -> return a
   Left e  -> raise (ParseError e)
@@ -488,54 +489,55 @@ type CommandMap = Trie CommandDescr
 -- Command Parsing -------------------------------------------------------------
 
 -- | Strip leading space.
-sanitize :: String -> String
-sanitize  = dropWhile isSpace
+sanitize :: Text -> Text
+sanitize  = Text.dropWhile isSpace
 
 -- | Strip trailing space.
-sanitizeEnd :: String -> String
-sanitizeEnd = reverse . sanitize . reverse
+sanitizeEnd :: Text -> Text
+sanitizeEnd = Text.dropWhileEnd isSpace
 
 -- | Split at the first word boundary.
-splitCommand :: String -> Maybe (String,String)
-splitCommand txt =
-  case sanitize txt of
-    ':' : more
-      | (as,bs) <- span (\x -> isPunctuation x || isSymbol x) more
-      , not (null as) -> Just (':' : as, sanitize bs)
+splitCommand :: Text -> Maybe (Text, Text)
+splitCommand txt = do
+  (c, more) <- Text.uncons (sanitize txt) 
+  case c of
+    ':'
+      | (as,bs) <- Text.span (\x -> isPunctuation x || isSymbol x) more
+      , not (Text.null as) -> Just (Text.cons ':' as, sanitize bs)
 
-      | (as,bs) <- break isSpace more
-      , not (null as) -> Just (':' : as, sanitize bs)
+      | (as,bs) <- Text.break isSpace more
+      , not (Text.null as) -> Just (Text.cons ':' as, sanitize bs)
 
       | otherwise -> Nothing
 
-    expr -> guard (not (null expr)) >> return (expr,[])
+    _ -> Just (Text.cons c more, "")
 
 -- | Look up a string in a command list. If given a string that's both
 -- itself a command and a prefix of something else, choose that
 -- command; otherwise such commands are inaccessible. Also, deduplicate
 -- the list of results to avoid silliness with command aliases.
-findSomeCommand :: String -> CommandMap -> [CommandDescr]
+findSomeCommand :: Text -> CommandMap -> [CommandDescr]
 findSomeCommand str commandTable = nub $ Trie.lookupWithExact str commandTable
 
 -- | Look up a string in the command list.
-findCommand :: String -> [CommandDescr]
+findCommand :: Text -> [CommandDescr]
 findCommand str = findSomeCommand str commands
 
 -- | Look up a string in the notebook-safe command list.
-findNbCommand :: String -> [CommandDescr]
+findNbCommand :: Text -> [CommandDescr]
 findNbCommand str = findSomeCommand str nbCommands
 
 -- | Parse a line as a command.
-parseCommand :: (String -> [CommandDescr]) -> String -> Maybe Command
+parseCommand :: (Text -> [CommandDescr]) -> Text -> Maybe Command
 parseCommand findCmd line = do
   (cmd,args) <- splitCommand line
   let args' = sanitizeEnd args
   case findCmd cmd of
     -- nothing matched; if it doesn't begin with a colon, eval it
-    [] -> case cmd of
-      []      -> Nothing
-      ':' : _ -> Just (Unknown cmd)
-      _       -> Just (Command (sawScriptCmd line))
+    [] -> case Text.uncons cmd of
+      Nothing -> Nothing
+      Just (':', _) -> Just (Unknown cmd)
+      Just _ -> Just (Command (sawScriptCmd line))
 
     -- matched exactly one command; run it
     [c] -> case cBody c of
@@ -550,7 +552,7 @@ parseCommand findCmd line = do
 
   where
   expandHome path =
-    case path of
+    case Text.unpack path of
       '~' : c : more | isPathSeparator c -> do dir <- io getHomeDirectory
                                                return (dir </> more)
-      _ -> return path
+      path' -> pure path'
