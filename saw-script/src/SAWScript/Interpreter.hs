@@ -1075,9 +1075,6 @@ buildTopLevelEnv proxy opts scriptArgv =
        let convs = natConversions
                    ++ bvConversions
                    ++ vecConversions
-                   ++ [ tupleConversion
-                      , recordConversion
-                      ]
        simps <- scSimpset sc0 [] [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
