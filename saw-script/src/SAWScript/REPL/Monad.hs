@@ -22,7 +22,7 @@ module SAWScript.REPL.Monad (
   , liftProofScript
   , subshell
   , proof_subshell
-  , Refs(..)
+  , REPLState(..)
 
     -- ** Errors
   , REPLException(..)
@@ -86,7 +86,7 @@ import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
 -- REPL Environment ------------------------------------------------------------
 
 -- REPL Environment.
-data Refs = Refs
+data REPLState = REPLState
   { rContinue   :: IORef Bool
   , rIsBatch    :: Bool
   , rTopLevelRO :: TopLevelRO
@@ -95,12 +95,12 @@ data Refs = Refs
   }
 
 -- | Initial, empty environment.
-defaultRefs :: Bool -> Options -> IO Refs
-defaultRefs isBatch opts =
+startupState :: Bool -> Options -> IO REPLState
+startupState isBatch opts =
   do (ro, rw) <- buildTopLevelEnv opts []
      contRef <- newIORef True
      rwRef <- newIORef rw
-     return Refs
+     return REPLState
        { rContinue   = contRef
        , rIsBatch    = isBatch
        , rTopLevelRO = ro
@@ -112,22 +112,22 @@ defaultRefs isBatch opts =
 -- REPL Monad ------------------------------------------------------------------
 
 -- | REPL monad context.
-newtype REPL a = REPL { unREPL :: StateT Refs IO a }
+newtype REPL a = REPL { unREPL :: StateT REPLState IO a }
   deriving (Applicative, Functor, Monad, MonadThrow, MonadCatch, MonadMask, MonadFail)
 
-deriving instance MonadState Refs REPL
+deriving instance MonadState REPLState REPL
 
 -- | Run a REPL action with a fresh environment.
 runREPLFresh :: Bool -> Options -> REPL a -> IO a
 runREPLFresh isBatch opts m =
-  do refs <- defaultRefs isBatch opts
-     (result, _refs') <- runStateT (unREPL m) refs
+  do st <- startupState isBatch opts
+     (result, _st') <- runStateT (unREPL m) st
      return result
 
 -- | Run a REPL action on a REPL state.
-runREPLOn :: REPL a -> Refs -> IO a
-runREPLOn m refs = do
-    (result, _refs') <- runStateT (unREPL m) refs
+runREPLOn :: REPL a -> REPLState -> IO a
+runREPLOn m st = do
+    (result, _st') <- runStateT (unREPL m) st
     return result
 
 subshell :: REPL () -> TopLevel ()
@@ -138,14 +138,14 @@ subshell m =
      rw' <- liftIO $
        do contRef <- newIORef True
           rwRef <- newIORef rw
-          let refs = Refs
+          let st = REPLState
                      { rContinue = contRef
                      , rIsBatch  = False
                      , rTopLevelRO = ro
                      , rTopLevelRW = rwRef
                      , rProofState  = Nothing
                      }
-          runREPLOn m refs
+          runREPLOn m st
           readIORef rwRef
      put rw'
      popScope
@@ -160,14 +160,14 @@ proof_subshell m =
        do contRef <- newIORef True
           rwRef <- newIORef rw
           proofRef <- newIORef proofSt
-          let refs = Refs
+          let st = REPLState
                      { rContinue = contRef
                      , rIsBatch  = False
                      , rTopLevelRO = ro
                      , rTopLevelRW = rwRef
                      , rProofState  = Just proofRef
                      }
-          runREPLOn m refs
+          runREPLOn m st
           (,) <$> readIORef rwRef <*> readIORef proofRef
      put rw'
      popScope
@@ -287,12 +287,12 @@ liftProofScript m ref =
 instance MonadIO REPL where
   liftIO m = REPL (liftIO m)
 
-readRef :: (Refs -> IORef a) -> REPL a
+readRef :: (REPLState -> IORef a) -> REPL a
 readRef r = do
     ref <- gets r
     liftIO $ readIORef ref
 
-modifyRef :: (Refs -> IORef a) -> (a -> a) -> REPL ()
+modifyRef :: (REPLState -> IORef a) -> (a -> a) -> REPL ()
 modifyRef r f = do
     ref <- gets r
     liftIO $ modifyIORef ref f
