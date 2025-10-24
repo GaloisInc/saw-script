@@ -47,7 +47,7 @@ r3 <- lemma "EqTrue (bvEq 1 [ecNumber (TCNum 1) Bool PLiteralBit] (bvNat 1 1))";
 // some of these nested `groupBy`s and `join`s.
 r4 <- prove_print w4 {{ \(x : [16][32]) -> groupBy`{32} (convert (join x)) == map (\y -> join (reverse (groupBy`{8} y))) x }};
 
-let ss = addsimps [t0,t1,t2,t3,t4,t5,t6,t7,t8,t9,ta,tb,tc,td,te,tf,r1,r2,r3,r4] empty_ss;
+let ss = addsimps [t0,t1,t2,t3,t4,t5,t6,t7,t8,t9,ta,tb,tc,td,te,tf,r1,r2,r3,r4] basic_ss;
 
 c <- java_load_class "JavaMD5";
 jvm_verify c "computeMD5" [] false md5_spec
