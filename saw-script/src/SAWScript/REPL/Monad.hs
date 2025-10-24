@@ -5,12 +5,16 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module SAWScript.REPL.Monad (
     -- * REPL Monad
-    REPL(..), runREPL
+    REPL(..), runREPLFresh
   , io
   , raise
   , stop
@@ -47,12 +51,12 @@ import qualified Cryptol.TypeCheck.AST as T
 import Cryptol.Utils.Ident (Namespace(..))
 import Cryptol.Utils.PP
 
-import Control.Monad (ap, void)
+import Control.Monad (void)
 import Control.Monad.Reader (ask)
-import Control.Monad.State (put, get, StateT(..))
+import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), MonadMask(..), catchJust)
+import Control.Monad.State (MonadState(..), StateT(..), get, gets, put)
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.IO.Class (liftIO)
-import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
 import qualified Data.Set as Set
 --import Data.Map (Map)
@@ -108,17 +112,27 @@ defaultRefs isBatch opts =
 
 -- REPL Monad ------------------------------------------------------------------
 
--- | REPL_ context with InputT handling.
-newtype REPL a = REPL { unREPL :: Refs -> IO a }
+-- | REPL monad context.
+newtype REPL a = REPL { unREPL :: StateT Refs IO a }
+  deriving (Applicative, Functor, Monad, MonadThrow, MonadCatch, MonadMask, MonadFail)
+
+deriving instance MonadState Refs REPL
 
 -- | Run a REPL action with a fresh environment.
-runREPL :: Bool -> Options -> REPL a -> IO a
-runREPL isBatch opts m =
+runREPLFresh :: Bool -> Options -> REPL a -> IO a
+runREPLFresh isBatch opts m =
   do refs <- defaultRefs isBatch opts
-     unREPL m refs
+     (result, _refs') <- runStateT (unREPL m) refs
+     return result
+
+-- | Run a REPL action on a REPL state.
+runREPLOn :: REPL a -> Refs -> IO a
+runREPLOn m refs = do
+    (result, _refs') <- runStateT (unREPL m) refs
+    return result
 
 subshell :: REPL () -> TopLevel ()
-subshell (REPL m) =
+subshell m =
   do pushScope
      ro <- ask
      rw <- get
@@ -132,13 +146,13 @@ subshell (REPL m) =
                      , rTopLevelRW = rwRef
                      , rProofState  = Nothing
                      }
-          m refs
+          runREPLOn m refs
           readIORef rwRef
      put rw'
      popScope
 
 proof_subshell :: REPL () -> ProofScript ()
-proof_subshell (REPL m) =
+proof_subshell m =
   ProofScript $ ExceptT $ StateT $ \proofSt ->
   do pushScope
      ro <- ask
@@ -154,34 +168,12 @@ proof_subshell (REPL m) =
                      , rTopLevelRW = rwRef
                      , rProofState  = Just proofRef
                      }
-          m refs
+          runREPLOn m refs
           (,) <$> readIORef rwRef <*> readIORef proofRef
      put rw'
      popScope
      return (Right (), outProofSt)
 
-instance Functor REPL where
-  {-# INLINE fmap #-}
-  fmap f m = REPL (\ ref -> fmap f (unREPL m ref))
-
-instance Monad REPL where
-  {-# INLINE return #-}
-  return = pure
-
-  {-# INLINE (>>=) #-}
-  m >>= f = REPL $ \ref -> do
-    x <- unREPL m ref
-    unREPL (f x) ref
-
-instance Fail.MonadFail REPL where
-  {-# INLINE fail #-}
-  fail msg = REPL (\_ -> fail msg)
-
-instance Applicative REPL where
-  {-# INLINE pure #-}
-  pure x = REPL (\_ -> pure x)
-  {-# INLINE (<*>) #-}
-  (<*>) = ap
 
 -- Exceptions ------------------------------------------------------------------
 
@@ -222,19 +214,19 @@ instance PP REPLException where
 
 -- | Raise an exception.
 raise :: REPLException -> REPL a
-raise exn = io (X.throwIO exn)
+raise exn = io $ X.throwIO exn
 
 -- | Handle any exception type in 'REPL' actions.
 catchEx :: X.Exception e => REPL a -> (e -> REPL a) -> REPL a
-catchEx m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
+catchEx m k = m `catch` k
 
 -- | Handle 'REPLException' exceptions in 'REPL' actions.
-catch :: REPL a -> (REPLException -> REPL a) -> REPL a
-catch = catchEx
+catchREPL :: REPL a -> (REPLException -> REPL a) -> REPL a
+catchREPL = catchEx
 
--- | Similar to 'catch' above, but catches generic IO exceptions from 'fail'.
+-- | Similar to 'catchREPL' above, but catches generic IO exceptions from 'fail'.
 catchFail :: REPL a -> (String -> REPL a) -> REPL a
-catchFail m k = REPL (\ ref -> X.catchJust sel (unREPL m ref) (\s -> unREPL (k s) ref))
+catchFail m k = catchJust sel m k
   where
     sel :: X.IOException -> Maybe String
     sel e | isUserError e = Just (ioeGetErrorString e)
@@ -242,7 +234,7 @@ catchFail m k = REPL (\ ref -> X.catchJust sel (unREPL m ref) (\s -> unREPL (k s
 
 -- | Handle any other exception (except that we ignore async exceptions and exitWith)
 catchOther :: REPL a -> (X.SomeException -> REPL a) -> REPL a
-catchOther m k = REPL (\ref -> X.catchJust flt (unREPL m ref) (\s -> unREPL (k s) ref))
+catchOther m k = catchJust flt m k
  where
   flt e
     | Just (_ :: X.AsyncException) <- X.fromException e = Nothing
@@ -252,7 +244,7 @@ catchOther m k = REPL (\ref -> X.catchJust flt (unREPL m ref) (\s -> unREPL (k s
 exceptionProtect :: REPL () -> REPL ()
 exceptionProtect cmd =
       do chk <- io . makeCheckpoint =<< getTopLevelRW
-         cmd `catch`      (handlerPP chk)
+         cmd `catchREPL`  (handlerPP chk)
              `catchFail`  (handlerFail chk)
              `catchOther` (handlerPrint chk)
 
@@ -293,21 +285,22 @@ liftProofScript m ref =
 -- Primitives ------------------------------------------------------------------
 
 io :: IO a -> REPL a
-io m = REPL (\ _ -> m)
-
-getRefs :: REPL Refs
-getRefs = REPL pure
+io m = REPL (liftIO m)
 
 readRef :: (Refs -> IORef a) -> REPL a
-readRef r = REPL (\refs -> readIORef (r refs))
+readRef r = do
+    ref <- gets r
+    io $ readIORef ref
 
 modifyRef :: (Refs -> IORef a) -> (a -> a) -> REPL ()
-modifyRef r f = REPL (\refs -> modifyIORef (r refs) f)
+modifyRef r f = do
+    ref <- gets r
+    io $ modifyIORef ref f
 
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
 getPrompt =
-  do batch <- REPL (return . rIsBatch)
+  do batch <- gets rIsBatch
      if batch then return ""
      else
        getProofStateRef >>= \case
@@ -340,13 +333,13 @@ getCryptolEnv = do
     return $ rwGetCryptolEnv rw
 
 getTopLevelRO :: REPL TopLevelRO
-getTopLevelRO = REPL (return . rTopLevelRO)
+getTopLevelRO = gets rTopLevelRO
 
 getTopLevelRWRef :: REPL (IORef TopLevelRW)
-getTopLevelRWRef = rTopLevelRW <$> getRefs
+getTopLevelRWRef = gets rTopLevelRW
 
 getProofStateRef :: REPL (Maybe (IORef ProofState))
-getProofStateRef = rProofState <$> getRefs
+getProofStateRef = gets rProofState
 
 getTopLevelRW :: REPL TopLevelRW
 getTopLevelRW = readRef rTopLevelRW

@@ -627,7 +627,7 @@ library saw-script
     extra,
     filepath,
     free,
-    haskeline,
+    haskeline >= 0.8.0.0,
     IfElse,
     lens,
     mtl >= 2.1,

@@ -15,9 +15,7 @@ import SAWScript.REPL.Command
 import SAWScript.REPL.Monad
 
 import Control.Monad (when)
-#if MIN_VERSION_haskeline(0,8,0)
-import qualified Control.Monad.Catch as E
-#endif
+import Control.Monad.State (gets, modify)
 import Data.Char (isAlphaNum, isSpace)
 import qualified Data.Text as Text
 import Data.Text (Text)
@@ -41,7 +39,7 @@ import SAWCentral.TopLevel( TopLevelRO(..) )
 -- handle this.
 repl :: Maybe FilePath -> Options -> REPL () -> IO ()
 repl mbBatch opts begin =
-  runREPL (isJust mbBatch) opts (replBody mbBatch begin)
+  runREPLFresh (isJust mbBatch) opts (replBody mbBatch begin)
 
 
 replBody :: Maybe FilePath -> REPL () -> REPL ()
@@ -57,10 +55,15 @@ replBody mbBatch begin =
     Nothing   -> defaultBehavior
     Just path -> useFile path
 
-  enableSubshell m =
-    REPL $ \refs ->
-      do let ro' = (rTopLevelRO refs){ roSubshell = subshell (runInputT replSettings (withInterrupt loop)) }
-         unREPL m refs{ rTopLevelRO = ro' }
+  -- not entirely sure why we need a type signature here, but it croaks without
+  enableSubshell :: REPL a -> REPL a
+  enableSubshell m = do
+    ro <- gets rTopLevelRO
+    let ro' = ro { roSubshell = subshell (runInputT replSettings (withInterrupt loop)) }
+    modify (\refs -> refs { rTopLevelRO = ro' })
+    result <- m
+    modify (\refs -> refs { rTopLevelRO = ro })
+    return result
 
   loop = do
     prompt <- MTL.lift getPrompt
@@ -109,39 +112,6 @@ replSettings  = Settings
 
 instance MTL.MonadIO REPL where
   liftIO = io
-
-#if !MIN_VERSION_haskeline(0,8,0)
--- older haskeline provides a MonadException class internally
-
-instance MonadException REPL where
-  controlIO branchIO = REPL $ \ ref -> do
-    runBody <- branchIO $ RunIO $ \ m -> do
-      a <- unREPL m ref
-      return (return a)
-    unREPL runBody ref
-
-#else
-
--- haskeline requires instances of MonadMask
-
-instance E.MonadThrow REPL where
-  throwM e = REPL $ \_ -> X.throwIO e
-
-instance E.MonadCatch REPL where
-  catch repl_op handler = REPL $ \ioref ->
-    E.catch (unREPL repl_op ioref) (\e -> unREPL (handler e) ioref)
-
-instance E.MonadMask REPL where
-  mask repl_op = REPL $ \ioref ->
-    E.mask (\runIO -> unREPL (repl_op (\f -> REPL (\ioref' -> runIO (unREPL f ioref')))) ioref)
-  uninterruptibleMask repl_op = REPL $ \ioref ->
-    E.uninterruptibleMask (\runIO -> unREPL (repl_op (\f -> REPL (\ioref' -> runIO (unREPL f ioref')))) ioref)
-  generalBracket acquire release repl_op = REPL $ \ioref ->
-    E.generalBracket
-    (unREPL acquire ioref)
-    (\rsrc exitCase -> unREPL (release rsrc exitCase) ioref)
-    (\rsrc -> unREPL (repl_op rsrc) ioref)
-#endif
 
 
 -- Completion ------------------------------------------------------------------
