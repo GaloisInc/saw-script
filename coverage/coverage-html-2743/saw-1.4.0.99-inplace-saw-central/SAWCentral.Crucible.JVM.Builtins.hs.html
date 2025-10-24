@@ -324,7 +324,7 @@ span.spaces    { background: white }
 <span class="lineno">  305 </span><span class="spaces">     </span><span class="istickedoff">-- check for missing jvm_execute_func</span>
 <span class="lineno">  306 </span><span class="spaces">     </span><span class="istickedoff">unless (st' ^. Setup.csPrePost == PostState) $</span>
 <span class="lineno">  307 </span><span class="spaces">       </span><span class="istickedoff">X.throwM JVMExecuteMissing</span>
-<span class="lineno">  308 </span><span class="spaces">     </span><span class="istickedoff">-- check for missing jvm_return</span>
+<span class="lineno">  308 </span><span class="spaces">     </span><span class="istickedoff">-- check that jvm_return value is present if return type is non-void</span>
 <span class="lineno">  309 </span><span class="spaces">     </span><span class="istickedoff">let mspec = st' ^. Setup.csMethodSpec</span>
 <span class="lineno">  310 </span><span class="spaces">     </span><span class="istickedoff">case mspec ^. MS.csRet of</span>
 <span class="lineno">  311 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
