@@ -1073,7 +1073,6 @@ buildTopLevelEnv proxy opts scriptArgv =
        CryptolSAW.scLoadCryptolModule sc0
        scLoadModule sc0 (emptyModule mn)
        let convs = natConversions
-                   ++ vecConversions
        simps <- scSimpset sc0 [] [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
