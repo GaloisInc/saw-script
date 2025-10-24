@@ -1,0 +1,14 @@
+// The subshell itself is its own scope
+//
+// note: have to print {{ `x }} for fails to be able to catch it
+
+enable_experimental;
+
+let f () = do {
+   subshell ();
+   print "should be unbound";
+   fails (do { print {{ `x }}; });
+   print "(exit)";
+   return ();
+};
+f ();

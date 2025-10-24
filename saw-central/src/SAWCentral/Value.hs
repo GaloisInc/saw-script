@@ -512,6 +512,29 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   their own type. If things become more regular, it might be worth
 --   revisiting that proposition.
 --
+--   In addition to all of the above, VLambda and VDo carry an
+--   environment (the interpreter's name -> value environment) which
+--   closes in the naming environment they're run against. This
+--   environment is collected when the corresponding lambda or do
+--   expression is evaluated (basically, where it appears in the input
+--   source), and arguments get added to it as they're applied. This
+--   produces the expected lexical scoping behavior.
+--
+--   VBuiltin, even though it's effectively also a lambda, does _not_
+--   carry an environment. Closing in a copy of the partly-built
+--   default environment that exists when the VBuiltin values are
+--   constructed, or even the whole default environment, wouldn't
+--   serve any purpose.
+
+--   Furthermore, VBuiltin is used to bind in Haskell functions, which
+--   don't themselves run in SAWScript and don't need or use the
+--   naming environment; they just need their arguments. The exception
+--   is the subshell and proof_subshell builtins, which intentionally
+--   inherit the SAWScript environment they're invoked in. Any
+--   otherwise pointless environment capturing we indulged in for
+--   uniformity's sake would break that behavior.
+
+--
 data Value
   = VBool Bool
   | VString Text
