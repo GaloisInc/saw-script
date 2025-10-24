@@ -548,9 +548,8 @@ check_fails test "get"
     jvm_return (jvm_term val);
   };
 
-// This is issue #2506
 print "jvm_execute_func missing";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
