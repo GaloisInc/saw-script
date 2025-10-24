@@ -100,9 +100,9 @@ span.spaces    { background: white }
 <span class="lineno">   81 </span><span class="spaces">  </span><span class="nottickedoff">where j = fromInteger (min i (toInteger (AIG.length xs)))</span></span>
 <span class="lineno">   82 </span>
 <span class="lineno">   83 </span>lvShr :: l -&gt; LitVector l -&gt; Natural -&gt; LitVector l
-<span class="lineno">   84 </span><span class="decl"><span class="istickedoff">lvShr l v i = AIG.replicate j l AIG.++ AIG.slice v 0 (n-j)</span>
-<span class="lineno">   85 </span><span class="spaces">  </span><span class="istickedoff">where n = AIG.length v</span>
-<span class="lineno">   86 </span><span class="spaces">        </span><span class="istickedoff">j = fromIntegral i `min` n</span></span>
+<span class="lineno">   84 </span><span class="decl"><span class="nottickedoff">lvShr l v i = AIG.replicate j l AIG.++ AIG.slice v 0 (n-j)</span>
+<span class="lineno">   85 </span><span class="spaces">  </span><span class="nottickedoff">where n = AIG.length v</span>
+<span class="lineno">   86 </span><span class="spaces">        </span><span class="nottickedoff">j = fromIntegral i `min` n</span></span>
 <span class="lineno">   87 </span>
 <span class="lineno">   88 </span>------------------------------------------------------------
 <span class="lineno">   89 </span>-- Values
@@ -136,9 +136,9 @@ span.spaces    { background: white }
 <span class="lineno">  117 </span><span class="decl"><span class="istickedoff">vWord lv = VWord lv</span></span>
 <span class="lineno">  118 </span>
 <span class="lineno">  119 </span>toWord :: BValue l -&gt; IO (LitVector l)
-<span class="lineno">  120 </span><span class="decl"><span class="nottickedoff">toWord (VWord lv) = return lv</span>
-<span class="lineno">  121 </span><span class="spaces"></span><span class="nottickedoff">toWord (VVector vv) = lvFromV &lt;$&gt; traverse (fmap toBool . force) vv</span>
-<span class="lineno">  122 </span><span class="spaces"></span><span class="nottickedoff">toWord x = fail $ unwords [&quot;SAWCoreAIG.BitBlast.toWord&quot;, show x]</span></span>
+<span class="lineno">  120 </span><span class="decl"><span class="istickedoff">toWord (VWord lv) = return lv</span>
+<span class="lineno">  121 </span><span class="spaces"></span><span class="istickedoff">toWord (VVector vv) = <span class="nottickedoff">lvFromV &lt;$&gt; traverse (fmap toBool . force) vv</span></span>
+<span class="lineno">  122 </span><span class="spaces"></span><span class="istickedoff">toWord x = <span class="nottickedoff">fail $ unwords [&quot;SAWCoreAIG.BitBlast.toWord&quot;, show x]</span></span></span>
 <span class="lineno">  123 </span>
 <span class="lineno">  124 </span>flattenBValue :: BValue l -&gt; IO (LitVector l)
 <span class="lineno">  125 </span><span class="decl"><span class="istickedoff">flattenBValue (VBool l) = return (AIG.replicate 1 l)</span>
@@ -166,12 +166,12 @@ span.spaces    { background: white }
 <span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">Prims.wordFun (pure1 lvFromV) $ \x -&gt;</span>
 <span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \y -&gt; Prims.Prim $</span>
 <span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">case y of</span>
-<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">VNat n   -&gt; return (vWord (natOp x n))</span>
-<span class="lineno">  151 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _ v -&gt; <span class="nottickedoff">fmap vWord (bvOp x =&lt;&lt; toWord v)</span></span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">VNat n   -&gt; <span class="nottickedoff">return (vWord (natOp x n))</span></span>
+<span class="lineno">  151 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _ v -&gt; fmap vWord (bvOp x =&lt;&lt; toWord v)</span>
 <span class="lineno">  152 </span><span class="spaces">      </span><span class="istickedoff">_        -&gt; <span class="nottickedoff">error $ unwords [&quot;SAWCoreAIG.BitBlast.shiftOp&quot;, show y]</span></span></span>
 <span class="lineno">  153 </span>
 <span class="lineno">  154 </span>lvSShr :: LitVector l -&gt; Natural -&gt; LitVector l
-<span class="lineno">  155 </span><span class="decl"><span class="istickedoff">lvSShr v i = lvShr (AIG.msb v) v i</span></span>
+<span class="lineno">  155 </span><span class="decl"><span class="nottickedoff">lvSShr v i = lvShr (AIG.msb v) v i</span></span>
 <span class="lineno">  156 </span>
 <span class="lineno">  157 </span>------------------------------------------------------------
 <span class="lineno">  158 </span>
@@ -284,8 +284,8 @@ span.spaces    { background: white }
 <span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
 <span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">-- Shifts</span>
 <span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;Prelude.bvShl&quot; , <span class="nottickedoff">bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be))</span>)</span>
-<span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvShr&quot; , bvShiftOp <span class="nottickedoff">(AIG.ushr be)</span> (lvShr (AIG.falseLit <span class="nottickedoff">be</span>)))</span>
-<span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSShr&quot;, bvShiftOp <span class="nottickedoff">(AIG.sshr be)</span> lvSShr)</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvShr&quot; , bvShiftOp (AIG.ushr <span class="nottickedoff">be</span>) <span class="nottickedoff">(lvShr (AIG.falseLit be))</span>)</span>
+<span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSShr&quot;, bvShiftOp (AIG.sshr <span class="nottickedoff">be</span>) <span class="nottickedoff">lvSShr</span>)</span>
 <span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
 <span class="lineno">  271 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToNat&quot;, Prims.intToNatOp)</span>
 <span class="lineno">  272 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.natToInt&quot;, Prims.natToIntOp)</span>
@@ -576,7 +576,7 @@ span.spaces    { background: white }
 <span class="lineno">  557 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList [ (vnIndex x, v) | (x, v) &lt;- vars ]</span>
 <span class="lineno">  558 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- bitBlastBasic be modmap addlPrims varMap t</span>
 <span class="lineno">  559 </span><span class="spaces">          </span><span class="istickedoff">case x of</span>
-<span class="lineno">  560 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l <span class="nottickedoff">varShapes</span></span>
+<span class="lineno">  560 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l varShapes</span>
 <span class="lineno">  561 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;SAWCoreAIG.BitBlast.withBitBlastedSATQuery: non-boolean result type.&quot;</span></span></span>
 
 </pre>
