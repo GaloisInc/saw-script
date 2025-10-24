@@ -1,0 +1,20 @@
+c <- java_load_class "Test";
+
+let f_spec = do {
+    i <- jvm_fresh_var "i" java_long;
+    jvm_execute_func [jvm_term i];
+    jvm_return (jvm_term {{
+      if i == LONG_MIN then LONG_MIN + 1 else i
+        where
+          LONG_MIN = [1] # zero
+    }});
+};
+
+print "Verifying `f`";
+jvm_verify
+    c
+    "f"
+    []
+    true // Without enabling path satisfiability here, verification diverges
+    f_spec
+    z3;
