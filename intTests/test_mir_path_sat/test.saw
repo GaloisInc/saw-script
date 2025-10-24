@@ -1,0 +1,18 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let f_spec = do {
+    i <- mir_fresh_var "i" mir_usize;
+    mir_execute_func [mir_term i];
+    mir_return (mir_term {{ max 1 i }});
+};
+
+print "Verifying `f`";
+mir_verify
+    m
+    "test::f"
+    []
+    true // Without enabling path satisfiability here, verification diverges
+    f_spec
+    z3;

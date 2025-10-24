@@ -180,6 +180,10 @@ This release supports [version
 
 ## Bug Fixes
 
+* `jvm_verify` and `mir_verify` now honor their respective parameters that
+  enable or disable path satisfiability checking. As discovered in #2740, these
+  parameters had been ignored.
+
 * The Cryptol environment now tracks SAWScript scopes properly (#2304).
   Note though that SAWCore-level names, which are for example bound by
   uses of `let {{ ... }}`, are still not scoped and can trigger

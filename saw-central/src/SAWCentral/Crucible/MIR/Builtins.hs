@@ -125,11 +125,13 @@ import qualified Cryptol.TypeCheck.Type as Cryptol
 
 import qualified Lang.Crucible.Analysis.Postdom as Crucible
 import qualified Lang.Crucible.Backend as Crucible
+import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
 import qualified Lang.Crucible.CFG.Extension as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified Mir.DefId as Mir
@@ -1557,7 +1559,7 @@ verifySimulate ::
   Bool {- ^ path sat checking -} ->
   IORef MetadataMap {- ^ metadata map -} ->
   IO (Maybe MIRVal, Crucible.SymGlobalState Sym)
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat mdMap =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat mdMap =
   mccWithBackend cc $ \bak ->
   do let rm = cc^.mccRustModule
      let cs = rm ^. Mir.rmCS
@@ -1575,9 +1577,13 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
      let methodArgTys = Crucible.handleArgTypes methodHndl
      let methodRetTy = Crucible.handleReturnType methodHndl
 
+     pathSatFeature <-
+       Crucible.pathSatisfiabilityFeature (cc ^. mccSym)
+         (Crucible.considerSatisfiability bak)
+
      regmap <- prepareArgs methodArgTys (map snd args)
      (_, Crucible.GlobalPair retval globals1) <-
-       do let feats = pfs
+       do let feats = if checkSat then pathSatFeature : pfs else pfs
           let fnCall = Crucible.regValue <$> Crucible.callCFG methodCfg regmap
           let overrideSim =
                 do mapM_ (registerOverride opts cc simctx top_loc mdMap)

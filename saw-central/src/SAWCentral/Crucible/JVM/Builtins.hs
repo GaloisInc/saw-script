@@ -96,10 +96,12 @@ import qualified Language.JVM.Common as J (dotsToSlashes)
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
+import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(..))
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 -- crucible-jvm
@@ -679,7 +681,7 @@ verifySimulate ::
   Bool {- ^ path sat checking -} ->
   IORef MetadataMap {- ^ metadata map -} ->
   IO (Maybe (J.Type, JVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat mdMap =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat mdMap =
   jccWithBackend cc $ \bak ->
   do let jc = cc^.jccJVMContext
      let sym = cc^.jccSym
@@ -694,13 +696,17 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
 
      CJ.setSimulatorVerbosity verbosity sym
 
+     pathSatFeature <-
+       Crucible.pathSatisfiabilityFeature (cc ^. jccSym)
+         (Crucible.considerSatisfiability bak)
+
      --when (not (J.methodIsStatic meth)) $ do
      --  fail $ unlines [ "Crucible can only extract static methods" ]
 
      (CJ.JVMHandleInfo _ h) <- getMethodHandle jc method
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
-       do let feats = pfs
+       do let feats = if checkSat then pathSatFeature : pfs else pfs
           -- TODO: Use crucible-jvm's jvmSimContext here (instead of manually
           -- calling mkDelayedBindings/initSimContext), once
           -- https://github.com/GaloisInc/crucible/issues/1128 has been fixed
