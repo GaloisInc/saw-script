@@ -15,8 +15,15 @@ module SAWCore.Term.Certified
   , scTypeCheckWHNF
   , scTypeOf
   , scWHNF
+  , scWhnf
+  , scAscribe
+  , scFreshConstant
+  , scDefineConstant
+  , scOpaqueConstant
+  , scInstantiate
     -- * Building certified terms
   , scApply
+  , scApplyBeta
   , scLambda
   , scAbstract
   , scPi
@@ -139,10 +146,18 @@ scTypeOf sc (Term ctx _tm tp) =
      let ctx' = pruneContext (freeVars tp_tp) ctx
      pure (Term ctx' tp tp_tp)
 
--- | Reduce a 'Cterm' to WHNF (see also 'scTypeCheckWHNF').
+-- | Reduce a 'Term' to WHNF using all reductions and conversions
+-- allowed by the SAWCore type system (see also 'scTypeCheckWHNF').
 scWHNF :: SharedContext -> Term -> IO Term
 scWHNF sc (Term ctx tm tp) =
   do tm' <- scTypeCheckWHNF sc tm
+     pure (Term ctx tm' tp)
+
+-- | Reduce a 'Term' to WHNF using beta reductions, tuple and record
+-- reductions, recursor reductions, and unfolding definitions.
+scWhnf :: SharedContext -> Term -> IO Term
+scWhnf sc (Term ctx tm tp) =
+  do tm' <- Raw.scWhnf sc tm
      pure (Term ctx tm' tp)
 
 scGlobal :: SharedContext -> Ident -> IO Term
@@ -150,6 +165,52 @@ scGlobal sc ident =
   do tm <- Raw.scGlobalDef sc ident
      tp <- Raw.scTypeOfIdent sc ident
      pure (Term IntMap.empty tm tp)
+
+-- | @scAscribe sc arg t@ ascribes the type @t@ to term @arg@.
+-- The original type of @arg@ must be a subtype of type @t@.
+scAscribe :: SharedContext -> Term -> Term -> IO Term
+scAscribe sc arg t =
+  do ok <- scSubtype sc (rawType arg) (rawTerm t)
+     unless ok $ fail $ unlines $
+       ["Not a subtype",
+        "expected: " ++ showTerm (rawTerm t),
+        "got: " ++ showTerm (rawType arg)]
+     let tm = rawTerm arg
+     let tp = rawTerm t
+     ctx <- unifyContexts "scTypedApply" (rawCtx arg) (rawCtx t)
+     pure (Term ctx tm tp)
+
+scFreshConstant :: SharedContext -> Text -> Term -> IO Term
+scFreshConstant sc name rhs =
+  do tm <- Raw.scFreshConstant sc name (rawTerm rhs) (rawType rhs)
+     let tp = rawType rhs
+     pure (Term IntMap.empty tm tp)
+
+scDefineConstant :: SharedContext -> NameInfo -> Term -> IO Term
+scDefineConstant sc nmi rhs =
+  do tm <- Raw.scDefineConstant sc nmi (rawTerm rhs) (rawType rhs)
+     let tp = rawType rhs
+     pure (Term IntMap.empty tm tp)
+
+scOpaqueConstant :: SharedContext -> NameInfo -> Term -> IO Term
+scOpaqueConstant sc nmi ty =
+  do _s <- ensureSort sc (rawType ty)
+     unless (IntMap.null (rawCtx ty)) $
+       fail "scOpaqueConstant"
+     let tp = rawTerm ty
+     tm <- Raw.scOpaqueConstant sc nmi tp
+     pure (Term IntMap.empty tm tp)
+
+scInstantiate :: SharedContext -> IntMap Term -> Term -> IO Term
+scInstantiate sc sub t0 =
+  do _ <- unifyContexts "scInstantiate" (fmap rawType sub) (rawCtx t0) -- ensure sub is well-typed
+     let tm0 = rawTerm t0
+     tm <- Raw.scInstantiateExt sc (fmap rawTerm sub) tm0
+     let tp = rawType t0
+     let ctx0 = IntMap.difference (rawCtx t0) sub
+     let contexts = ctx0 : map rawCtx (IntMap.elems (IntMap.restrictKeys sub (freeVars tm0)))
+     ctx <- unifyContextList "scInstantiate" contexts
+     pure (Term ctx tm tp)
 
 --------------------------------------------------------------------------------
 -- * Building certified terms
@@ -165,6 +226,19 @@ scApply sc f arg =
      tp <- Raw.scInstantiateExt sc (IntMap.singleton i (rawTerm arg)) t2
      ctx <- unifyContexts "scApply" (rawCtx f) (rawCtx arg)
      pure (Term ctx tm tp)
+
+-- possible errors: not a pi type, bad argument type, context mismatch
+scApplyBeta :: SharedContext -> Term -> Term -> IO Term
+scApplyBeta sc f arg =
+  do tm <- Raw.scApplyBeta sc (rawTerm f) (rawTerm arg)
+     (vnIndex -> i, t1, t2) <- ensurePi sc (rawType f)
+     ok <- scSubtype sc (rawType arg) t1
+     unless ok $ fail $ unlines $
+       ["Not a subtype", "expected: " ++ showTerm t1, "got: " ++ showTerm (rawType arg)]
+     tp <- Raw.scInstantiateExt sc (IntMap.singleton i (rawTerm arg)) t2
+     ctx <- unifyContexts "scApplyBeta" (rawCtx f) (rawCtx arg)
+     pure (Term ctx tm tp)
+
 
 -- possible errors: not a type, context mismatch, variable free in context
 scLambda :: SharedContext -> VarName -> Term -> Term -> IO Term

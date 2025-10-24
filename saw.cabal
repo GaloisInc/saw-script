@@ -172,6 +172,7 @@ library saw-core
     SAWCore.Simulator.RME
     SAWCore.Simulator.Value
     SAWCore.SharedTerm
+    SAWCore.Term
     SAWCore.Term.Certified
     SAWCore.Term.Functor
     SAWCore.Term.Raw
