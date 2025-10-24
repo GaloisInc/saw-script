@@ -41,192 +41,175 @@ span.spaces    { background: white }
 <span class="lineno">   22 </span>  , TermIndex
 <span class="lineno">   23 </span>  , unwrapTermF
 <span class="lineno">   24 </span>  , alphaEquiv
-<span class="lineno">   25 </span>  , termToPat
-<span class="lineno">   26 </span>  , freeVars
-<span class="lineno">   27 </span>  , closedTerm
-<span class="lineno">   28 </span>  ) where
-<span class="lineno">   29 </span>
-<span class="lineno">   30 </span>import qualified Data.Foldable as Foldable (and)
-<span class="lineno">   31 </span>import Data.Hashable
-<span class="lineno">   32 </span>import Data.IntMap (IntMap)
-<span class="lineno">   33 </span>import qualified Data.IntMap as IntMap
-<span class="lineno">   34 </span>import Data.IntSet (IntSet)
-<span class="lineno">   35 </span>import qualified Data.IntSet as IntSet
-<span class="lineno">   36 </span>import qualified Data.Text as Text
-<span class="lineno">   37 </span>import Data.Typeable (Typeable)
+<span class="lineno">   25 </span>  , freeVars
+<span class="lineno">   26 </span>  , closedTerm
+<span class="lineno">   27 </span>  ) where
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>import qualified Data.Foldable as Foldable (and)
+<span class="lineno">   30 </span>import Data.Hashable
+<span class="lineno">   31 </span>import Data.IntMap (IntMap)
+<span class="lineno">   32 </span>import qualified Data.IntMap as IntMap
+<span class="lineno">   33 </span>import Data.IntSet (IntSet)
+<span class="lineno">   34 </span>import qualified Data.IntSet as IntSet
+<span class="lineno">   35 </span>import Data.Typeable (Typeable)
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>import Instances.TH.Lift () -- for instance TH.Lift Text
 <span class="lineno">   38 </span>
-<span class="lineno">   39 </span>import Instances.TH.Lift () -- for instance TH.Lift Text
-<span class="lineno">   40 </span>
-<span class="lineno">   41 </span>import SAWCore.Name
-<span class="lineno">   42 </span>import SAWCore.Term.Functor
-<span class="lineno">   43 </span>import qualified SAWCore.TermNet as Net
-<span class="lineno">   44 </span>
-<span class="lineno">   45 </span>-- Term Datatype ---------------------------------------------------------------
-<span class="lineno">   46 </span>
-<span class="lineno">   47 </span>type TermIndex = Int -- Word64
-<span class="lineno">   48 </span>
-<span class="lineno">   49 </span>-- | For more information on the semantics of 'Term's, see the
-<span class="lineno">   50 </span>-- [manual](https://saw.galois.com/manual.html). 'Term' and 'TermF' are split
-<span class="lineno">   51 </span>-- into two structures to facilitate mutual structural recursion (sometimes
-<span class="lineno">   52 </span>-- referred to as the [&quot;knot-tying&quot;](https://wiki.haskell.org/Tying_the_Knot)
-<span class="lineno">   53 </span>-- pattern, sometimes referred to in terms of [&quot;recursion
-<span class="lineno">   54 </span>-- schemes&quot;](https://blog.sumtypeofway.com/posts/introduction-to-recursion-schemes.html))
-<span class="lineno">   55 </span>-- and term object reuse via hash-consing.
-<span class="lineno">   56 </span>data Term
-<span class="lineno">   57 </span>  = STApp
-<span class="lineno">   58 </span>    -- ^ This constructor \&quot;wraps\&quot; a 'TermF' 'Term', assigning it a
-<span class="lineno">   59 </span>    -- guaranteed-unique integer identifier and caching its likely-unique hash.
-<span class="lineno">   60 </span>    -- Most 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
-<span class="lineno">   61 </span>    -- in the course of a SAW invocation and needs to be lifted into a 'Term',
-<span class="lineno">   62 </span>    -- we can see if we've already created a 'Term' wrapper for an identical
-<span class="lineno">   63 </span>    -- 'TermF', and reuse it if so. The implementation of hash-consed 'Term'
-<span class="lineno">   64 </span>    -- construction exists in 'SAWCore.SharedTerm', in particular in the
-<span class="lineno">   65 </span>    -- 'SAWCore.SharedTerm.scTermF' field of the
-<span class="lineno">   66 </span>    -- t'SAWCore.SharedTerm.SharedContext' object.
-<span class="lineno">   67 </span>     { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppIndex</span></span></span>    :: {-# UNPACK #-} !TermIndex
-<span class="lineno">   68 </span>       -- ^ The UID associated with a 'Term'. It is guaranteed unique across a
-<span class="lineno">   69 </span>       -- universe of properly-constructed 'Term's within a single SAW
-<span class="lineno">   70 </span>       -- invocation.
-<span class="lineno">   71 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppHash</span></span></span>     :: {-# UNPACK #-} !Int
-<span class="lineno">   72 </span>       -- ^ The hash, according to 'hash', of the 'stAppTermF' field associated
-<span class="lineno">   73 </span>       -- with this 'Term'. This should be as unique as a hash can be, but is
-<span class="lineno">   74 </span>       -- not guaranteed unique as 'stAppIndex' is.
-<span class="lineno">   75 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppFreeVars</span></span></span> :: !IntSet
-<span class="lineno">   76 </span>       -- ^ A set containing the 'VarIndex' of each of the free named
-<span class="lineno">   77 </span>       -- variables from 'Variable' constructors in the term.
-<span class="lineno">   78 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppTermF</span></span></span>    :: !(TermF Term)
-<span class="lineno">   79 </span>       -- ^ The underlying 'TermF' that this 'Term' wraps. This field &quot;ties the
-<span class="lineno">   80 </span>       -- knot&quot; of the 'Term'/'TermF' recursion scheme.
-<span class="lineno">   81 </span>     }
-<span class="lineno">   82 </span>  | Unshared !(TermF Term)
-<span class="lineno">   83 </span>    -- ^ Used for constructing 'Term's that don't need to be shared/reused.
-<span class="lineno">   84 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, Typeable)
-<span class="lineno">   85 </span>
-<span class="lineno">   86 </span>instance Hashable Term where
-<span class="lineno">   87 </span>  -- The hash of an 'STApp' depends on its not-necessarily-unique
-<span class="lineno">   88 </span>  -- 'stAppHash' instead of its necessarily-unique 'stAppIndex'.
-<span class="lineno">   89 </span>  -- The reason is that per #1830 (PR) and #1831 (issue), we want to
-<span class="lineno">   90 </span>  -- to derive references to terms based solely on their shape.
-<span class="lineno">   91 </span>  -- Indices have nothing to do with a term's shape - they're assigned
-<span class="lineno">   92 </span>  -- sequentially when building terms, according to the (arbitrary)
-<span class="lineno">   93 </span>  -- order in which a term is built.
-<span class="lineno">   94 </span>  -- As for uniqueness, though hashing a term based on its subterms'
-<span class="lineno">   95 </span>  -- hashes introduces less randomness/freshness, it maintains plenty,
-<span class="lineno">   96 </span>  -- and provides benefits as described above.
-<span class="lineno">   97 </span>  -- No code should ever rely on total uniqueness of hashes, and terms
-<span class="lineno">   98 </span>  -- are no exception.
-<span class="lineno">   99 </span>  --
-<span class="lineno">  100 </span>  -- Note: Nevertheless, we do take some minor liberties with the
-<span class="lineno">  101 </span>  -- contract of 'hashWithSalt'. The contract states that if two
-<span class="lineno">  102 </span>  -- values are equal according to '(==)', then they must have the
-<span class="lineno">  103 </span>  -- same hash.
-<span class="lineno">  104 </span>  -- For terms constructed by/within SAW, this will hold, because
-<span class="lineno">  105 </span>  -- SAW's handling of index generation and assignment ensures that
-<span class="lineno">  106 </span>  -- equality of indices implies equality of terms and term hashes
-<span class="lineno">  107 </span>  -- (see 'SAWCore.SharedTerm.getTerm').
-<span class="lineno">  108 </span>  -- However, if terms are constructed outside this standard procedure
-<span class="lineno">  109 </span>  -- or in a way that does not respect index uniqueness rules,
-<span class="lineno">  110 </span>  -- 'hashWithSalt''s contract could be violated.
-<span class="lineno">  111 </span>  <span class="decl"><span class="istickedoff">hash STApp{ stAppHash = h } = h</span>
-<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">hash (Unshared t) = <span class="nottickedoff">hash t</span></span></span>
-<span class="lineno">  113 </span>  <span class="decl"><span class="istickedoff">hashWithSalt salt = hashWithSalt salt . hash</span></span>
+<span class="lineno">   39 </span>import SAWCore.Name
+<span class="lineno">   40 </span>import SAWCore.Term.Functor
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>-- Term Datatype ---------------------------------------------------------------
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>type TermIndex = Int -- Word64
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>-- | For more information on the semantics of 'Term's, see the
+<span class="lineno">   47 </span>-- [manual](https://saw.galois.com/manual.html). 'Term' and 'TermF' are split
+<span class="lineno">   48 </span>-- into two structures to facilitate mutual structural recursion (sometimes
+<span class="lineno">   49 </span>-- referred to as the [&quot;knot-tying&quot;](https://wiki.haskell.org/Tying_the_Knot)
+<span class="lineno">   50 </span>-- pattern, sometimes referred to in terms of [&quot;recursion
+<span class="lineno">   51 </span>-- schemes&quot;](https://blog.sumtypeofway.com/posts/introduction-to-recursion-schemes.html))
+<span class="lineno">   52 </span>-- and term object reuse via hash-consing.
+<span class="lineno">   53 </span>data Term
+<span class="lineno">   54 </span>  = STApp
+<span class="lineno">   55 </span>    -- ^ This constructor \&quot;wraps\&quot; a 'TermF' 'Term', assigning it a
+<span class="lineno">   56 </span>    -- guaranteed-unique integer identifier and caching its likely-unique hash.
+<span class="lineno">   57 </span>    -- Most 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
+<span class="lineno">   58 </span>    -- in the course of a SAW invocation and needs to be lifted into a 'Term',
+<span class="lineno">   59 </span>    -- we can see if we've already created a 'Term' wrapper for an identical
+<span class="lineno">   60 </span>    -- 'TermF', and reuse it if so. The implementation of hash-consed 'Term'
+<span class="lineno">   61 </span>    -- construction exists in 'SAWCore.SharedTerm', in particular in the
+<span class="lineno">   62 </span>    -- 'SAWCore.SharedTerm.scTermF' field of the
+<span class="lineno">   63 </span>    -- t'SAWCore.SharedTerm.SharedContext' object.
+<span class="lineno">   64 </span>     { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppIndex</span></span></span>    :: {-# UNPACK #-} !TermIndex
+<span class="lineno">   65 </span>       -- ^ The UID associated with a 'Term'. It is guaranteed unique across a
+<span class="lineno">   66 </span>       -- universe of properly-constructed 'Term's within a single SAW
+<span class="lineno">   67 </span>       -- invocation.
+<span class="lineno">   68 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppHash</span></span></span>     :: {-# UNPACK #-} !Int
+<span class="lineno">   69 </span>       -- ^ The hash, according to 'hash', of the 'stAppTermF' field associated
+<span class="lineno">   70 </span>       -- with this 'Term'. This should be as unique as a hash can be, but is
+<span class="lineno">   71 </span>       -- not guaranteed unique as 'stAppIndex' is.
+<span class="lineno">   72 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppFreeVars</span></span></span> :: !IntSet
+<span class="lineno">   73 </span>       -- ^ A set containing the 'VarIndex' of each of the free named
+<span class="lineno">   74 </span>       -- variables from 'Variable' constructors in the term.
+<span class="lineno">   75 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppTermF</span></span></span>    :: !(TermF Term)
+<span class="lineno">   76 </span>       -- ^ The underlying 'TermF' that this 'Term' wraps. This field &quot;ties the
+<span class="lineno">   77 </span>       -- knot&quot; of the 'Term'/'TermF' recursion scheme.
+<span class="lineno">   78 </span>     }
+<span class="lineno">   79 </span>  | Unshared !(TermF Term)
+<span class="lineno">   80 </span>    -- ^ Used for constructing 'Term's that don't need to be shared/reused.
+<span class="lineno">   81 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, Typeable)
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>instance Hashable Term where
+<span class="lineno">   84 </span>  -- The hash of an 'STApp' depends on its not-necessarily-unique
+<span class="lineno">   85 </span>  -- 'stAppHash' instead of its necessarily-unique 'stAppIndex'.
+<span class="lineno">   86 </span>  -- The reason is that per #1830 (PR) and #1831 (issue), we want to
+<span class="lineno">   87 </span>  -- to derive references to terms based solely on their shape.
+<span class="lineno">   88 </span>  -- Indices have nothing to do with a term's shape - they're assigned
+<span class="lineno">   89 </span>  -- sequentially when building terms, according to the (arbitrary)
+<span class="lineno">   90 </span>  -- order in which a term is built.
+<span class="lineno">   91 </span>  -- As for uniqueness, though hashing a term based on its subterms'
+<span class="lineno">   92 </span>  -- hashes introduces less randomness/freshness, it maintains plenty,
+<span class="lineno">   93 </span>  -- and provides benefits as described above.
+<span class="lineno">   94 </span>  -- No code should ever rely on total uniqueness of hashes, and terms
+<span class="lineno">   95 </span>  -- are no exception.
+<span class="lineno">   96 </span>  --
+<span class="lineno">   97 </span>  -- Note: Nevertheless, we do take some minor liberties with the
+<span class="lineno">   98 </span>  -- contract of 'hashWithSalt'. The contract states that if two
+<span class="lineno">   99 </span>  -- values are equal according to '(==)', then they must have the
+<span class="lineno">  100 </span>  -- same hash.
+<span class="lineno">  101 </span>  -- For terms constructed by/within SAW, this will hold, because
+<span class="lineno">  102 </span>  -- SAW's handling of index generation and assignment ensures that
+<span class="lineno">  103 </span>  -- equality of indices implies equality of terms and term hashes
+<span class="lineno">  104 </span>  -- (see 'SAWCore.SharedTerm.getTerm').
+<span class="lineno">  105 </span>  -- However, if terms are constructed outside this standard procedure
+<span class="lineno">  106 </span>  -- or in a way that does not respect index uniqueness rules,
+<span class="lineno">  107 </span>  -- 'hashWithSalt''s contract could be violated.
+<span class="lineno">  108 </span>  <span class="decl"><span class="istickedoff">hash STApp{ stAppHash = h } = h</span>
+<span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">hash (Unshared t) = <span class="nottickedoff">hash t</span></span></span>
+<span class="lineno">  110 </span>  <span class="decl"><span class="istickedoff">hashWithSalt salt = hashWithSalt salt . hash</span></span>
+<span class="lineno">  111 </span>
+<span class="lineno">  112 </span>instance <span class="decl"><span class="istickedoff">Eq Term</span></span> where
+<span class="lineno">  113 </span>  <span class="decl"><span class="istickedoff">(==) = equalTerm</span></span>
 <span class="lineno">  114 </span>
-<span class="lineno">  115 </span>instance <span class="decl"><span class="istickedoff">Eq Term</span></span> where
-<span class="lineno">  116 </span>  <span class="decl"><span class="istickedoff">(==) = equalTerm</span></span>
-<span class="lineno">  117 </span>
-<span class="lineno">  118 </span>equalTerm :: Term -&gt; Term -&gt; Bool
-<span class="lineno">  119 </span><span class="decl"><span class="istickedoff">equalTerm (Unshared tf1) (Unshared tf2) = <span class="nottickedoff">tf1 == tf2</span></span>
-<span class="lineno">  120 </span><span class="spaces"></span><span class="istickedoff">equalTerm Unshared{} STApp{} = <span class="nottickedoff">False</span></span>
-<span class="lineno">  121 </span><span class="spaces"></span><span class="istickedoff">equalTerm STApp{} Unshared{} = <span class="nottickedoff">False</span></span>
-<span class="lineno">  122 </span><span class="spaces"></span><span class="istickedoff">equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})</span>
-<span class="lineno">  123 </span><span class="spaces">          </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) =</span>
-<span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff">i1 == i2 || (h1 == h2 &amp;&amp; tf1 == tf2)</span></span>
-<span class="lineno">  125 </span>  -- The hash check (^) is merely an optimization that enables us to
-<span class="lineno">  126 </span>  -- quickly return 'False' in most cases. Since we're assuming the
-<span class="lineno">  127 </span>  -- contract of 'hashWithSalt' holds, then we know @tf1 == tf2@
-<span class="lineno">  128 </span>  -- implies @h1 == h2@. Thus we could safely remove @h1 == h2@ without
-<span class="lineno">  129 </span>  -- changing the behavior of this function, but keeping it in enables
-<span class="lineno">  130 </span>  -- us to utilize the fact that we save 'STApp' hashes to get away
-<span class="lineno">  131 </span>  -- with not traversing the 'stAppTermF' fields in most cases of
-<span class="lineno">  132 </span>  -- inequality.
-<span class="lineno">  133 </span>
-<span class="lineno">  134 </span>-- | Return 'True' iff the given terms are equal modulo alpha equivalence (i.e.
-<span class="lineno">  135 </span>-- 'VarName's in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
-<span class="lineno">  136 </span>-- 'Unshared' expressions).
-<span class="lineno">  137 </span>alphaEquiv :: Term -&gt; Term -&gt; Bool
-<span class="lineno">  138 </span><span class="decl"><span class="istickedoff">alphaEquiv = term IntMap.empty</span>
-<span class="lineno">  139 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff">term :: IntMap VarIndex -&gt; Term -&gt; Term -&gt; Bool</span>
-<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">term vm (Unshared tf1) (Unshared tf2) = <span class="nottickedoff">termf vm tf1 tf2</span></span>
-<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">term vm (Unshared tf1) (STApp{stAppTermF = tf2}) = <span class="nottickedoff">termf vm tf1 tf2</span></span>
-<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">term vm (STApp{stAppTermF = tf1}) (Unshared tf2) = <span class="nottickedoff">termf vm tf1 tf2</span></span>
-<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">term vm</span>
-<span class="lineno">  145 </span><span class="spaces">      </span><span class="istickedoff">(STApp{stAppIndex = i1, stAppTermF = tf1, stAppFreeVars = vs1})</span>
-<span class="lineno">  146 </span><span class="spaces">      </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppTermF = tf2}) =</span>
-<span class="lineno">  147 </span><span class="spaces">      </span><span class="istickedoff">(IntSet.disjoint vs1 (IntMap.keysSet vm) &amp;&amp; i1 == i2) || termf vm tf1 tf2</span>
-<span class="lineno">  148 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">termf :: IntMap VarIndex -&gt; TermF Term -&gt; TermF Term -&gt; Bool</span>
-<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">termf vm (FTermF ftf1) (FTermF ftf2) = ftermf vm ftf1 ftf2</span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">termf vm (App t1 u1) (App t2 u2) = term vm t1 t2 &amp;&amp; term vm u1 u2</span>
-<span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Lambda (vnIndex -&gt; i1) t1 u1) (Lambda (vnIndex -&gt; i2) t2 u2) =</span>
+<span class="lineno">  115 </span>equalTerm :: Term -&gt; Term -&gt; Bool
+<span class="lineno">  116 </span><span class="decl"><span class="istickedoff">equalTerm (Unshared tf1) (Unshared tf2) = <span class="nottickedoff">tf1 == tf2</span></span>
+<span class="lineno">  117 </span><span class="spaces"></span><span class="istickedoff">equalTerm Unshared{} STApp{} = <span class="nottickedoff">False</span></span>
+<span class="lineno">  118 </span><span class="spaces"></span><span class="istickedoff">equalTerm STApp{} Unshared{} = <span class="nottickedoff">False</span></span>
+<span class="lineno">  119 </span><span class="spaces"></span><span class="istickedoff">equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})</span>
+<span class="lineno">  120 </span><span class="spaces">          </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) =</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">i1 == i2 || (h1 == h2 &amp;&amp; tf1 == tf2)</span></span>
+<span class="lineno">  122 </span>  -- The hash check (^) is merely an optimization that enables us to
+<span class="lineno">  123 </span>  -- quickly return 'False' in most cases. Since we're assuming the
+<span class="lineno">  124 </span>  -- contract of 'hashWithSalt' holds, then we know @tf1 == tf2@
+<span class="lineno">  125 </span>  -- implies @h1 == h2@. Thus we could safely remove @h1 == h2@ without
+<span class="lineno">  126 </span>  -- changing the behavior of this function, but keeping it in enables
+<span class="lineno">  127 </span>  -- us to utilize the fact that we save 'STApp' hashes to get away
+<span class="lineno">  128 </span>  -- with not traversing the 'stAppTermF' fields in most cases of
+<span class="lineno">  129 </span>  -- inequality.
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>-- | Return 'True' iff the given terms are equal modulo alpha equivalence (i.e.
+<span class="lineno">  132 </span>-- 'VarName's in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
+<span class="lineno">  133 </span>-- 'Unshared' expressions).
+<span class="lineno">  134 </span>alphaEquiv :: Term -&gt; Term -&gt; Bool
+<span class="lineno">  135 </span><span class="decl"><span class="istickedoff">alphaEquiv = term IntMap.empty</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">term :: IntMap VarIndex -&gt; Term -&gt; Term -&gt; Bool</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff">term vm (Unshared tf1) (Unshared tf2) = <span class="nottickedoff">termf vm tf1 tf2</span></span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">term vm (Unshared tf1) (STApp{stAppTermF = tf2}) = <span class="nottickedoff">termf vm tf1 tf2</span></span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff">term vm (STApp{stAppTermF = tf1}) (Unshared tf2) = <span class="nottickedoff">termf vm tf1 tf2</span></span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">term vm</span>
+<span class="lineno">  142 </span><span class="spaces">      </span><span class="istickedoff">(STApp{stAppIndex = i1, stAppTermF = tf1, stAppFreeVars = vs1})</span>
+<span class="lineno">  143 </span><span class="spaces">      </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppTermF = tf2}) =</span>
+<span class="lineno">  144 </span><span class="spaces">      </span><span class="istickedoff">(IntSet.disjoint vs1 (IntMap.keysSet vm) &amp;&amp; i1 == i2) || termf vm tf1 tf2</span>
+<span class="lineno">  145 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">termf :: IntMap VarIndex -&gt; TermF Term -&gt; TermF Term -&gt; Bool</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">termf vm (FTermF ftf1) (FTermF ftf2) = ftermf vm ftf1 ftf2</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">termf vm (App t1 u1) (App t2 u2) = term vm t1 t2 &amp;&amp; term vm u1 u2</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Lambda (vnIndex -&gt; i1) t1 u1) (Lambda (vnIndex -&gt; i2) t2 u2) =</span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm</span>
+<span class="lineno">  151 </span><span class="spaces">      </span><span class="istickedoff">in term <span class="nottickedoff">vm</span> t1 t2 &amp;&amp; term vm' u1 u2</span>
+<span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Pi (vnIndex -&gt; i1) t1 u1) (Pi (vnIndex -&gt; i2) t2 u2) =</span>
 <span class="lineno">  153 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm</span>
-<span class="lineno">  154 </span><span class="spaces">      </span><span class="istickedoff">in term <span class="nottickedoff">vm</span> t1 t2 &amp;&amp; term vm' u1 u2</span>
-<span class="lineno">  155 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Pi (vnIndex -&gt; i1) t1 u1) (Pi (vnIndex -&gt; i2) t2 u2) =</span>
-<span class="lineno">  156 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm</span>
-<span class="lineno">  157 </span><span class="spaces">      </span><span class="istickedoff">in term vm t1 t2 &amp;&amp; term vm' u1 u2</span>
-<span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff">termf _vm (Constant x1) (Constant x2) = x1 == x2</span>
-<span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Variable x1 _t1) (Variable x2 _t2) =</span>
-<span class="lineno">  160 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (vnIndex x1) vm of</span>
-<span class="lineno">  161 </span><span class="spaces">        </span><span class="istickedoff">Just i -&gt; vnIndex x2 == i</span>
-<span class="lineno">  162 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">x1 == x2</span></span>
-<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">termf _ FTermF{}   _ = False</span>
-<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">termf _ App{}      _ = False</span>
-<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">termf _ Lambda{}   _ = False</span>
-<span class="lineno">  166 </span><span class="spaces">    </span><span class="istickedoff">termf _ Pi{}       _ = False</span>
-<span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff">termf _ Constant{} _ = False</span>
-<span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">termf _ Variable{} _ = False</span>
-<span class="lineno">  169 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">ftermf :: IntMap Int -&gt; FlatTermF Term -&gt; FlatTermF Term -&gt; Bool</span>
-<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">ftermf vm ftf1 ftf2 =</span>
-<span class="lineno">  172 </span><span class="spaces">      </span><span class="istickedoff">case zipWithFlatTermF (term vm) ftf1 ftf2 of</span>
-<span class="lineno">  173 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; False</span>
-<span class="lineno">  174 </span><span class="spaces">        </span><span class="istickedoff">Just ftf3 -&gt; Foldable.and ftf3</span></span>
-<span class="lineno">  175 </span>
-<span class="lineno">  176 </span>unwrapTermF :: Term -&gt; TermF Term
-<span class="lineno">  177 </span><span class="decl"><span class="istickedoff">unwrapTermF STApp{stAppTermF = tf} = tf</span>
-<span class="lineno">  178 </span><span class="spaces"></span><span class="istickedoff">unwrapTermF (Unshared tf) = tf</span></span>
-<span class="lineno">  179 </span>
-<span class="lineno">  180 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Term</span></span></span></span></span></span></span></span></span></span></span></span> where
-<span class="lineno">  181 </span>  <span class="decl"><span class="istickedoff">compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | <span class="tickonlytrue">i == j</span> = EQ</span>
-<span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">compare STApp{} Unshared{} = <span class="nottickedoff">LT</span> -- matches what we'd get from derived Ord instance</span>
-<span class="lineno">  183 </span><span class="spaces">  </span><span class="istickedoff">compare Unshared{} STApp{} = <span class="nottickedoff">GT</span></span>
-<span class="lineno">  184 </span><span class="spaces">  </span><span class="istickedoff">compare x y = <span class="nottickedoff">compare (unwrapTermF x) (unwrapTermF y)</span></span></span>
-<span class="lineno">  185 </span>
-<span class="lineno">  186 </span>-- TermNet Patterns ------------------------------------------------------------
-<span class="lineno">  187 </span>
-<span class="lineno">  188 </span>instance Net.Pattern Term where
-<span class="lineno">  189 </span>  <span class="decl"><span class="istickedoff">toPat = termToPat</span></span>
+<span class="lineno">  154 </span><span class="spaces">      </span><span class="istickedoff">in term vm t1 t2 &amp;&amp; term vm' u1 u2</span>
+<span class="lineno">  155 </span><span class="spaces">    </span><span class="istickedoff">termf _vm (Constant x1) (Constant x2) = x1 == x2</span>
+<span class="lineno">  156 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Variable x1 _t1) (Variable x2 _t2) =</span>
+<span class="lineno">  157 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (vnIndex x1) vm of</span>
+<span class="lineno">  158 </span><span class="spaces">        </span><span class="istickedoff">Just i -&gt; vnIndex x2 == i</span>
+<span class="lineno">  159 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">x1 == x2</span></span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">termf _ FTermF{}   _ = False</span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">termf _ App{}      _ = False</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">termf _ Lambda{}   _ = False</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">termf _ Pi{}       _ = False</span>
+<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">termf _ Constant{} _ = False</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">termf _ Variable{} _ = False</span>
+<span class="lineno">  166 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff">ftermf :: IntMap Int -&gt; FlatTermF Term -&gt; FlatTermF Term -&gt; Bool</span>
+<span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">ftermf vm ftf1 ftf2 =</span>
+<span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff">case zipWithFlatTermF (term vm) ftf1 ftf2 of</span>
+<span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; False</span>
+<span class="lineno">  171 </span><span class="spaces">        </span><span class="istickedoff">Just ftf3 -&gt; Foldable.and ftf3</span></span>
+<span class="lineno">  172 </span>
+<span class="lineno">  173 </span>unwrapTermF :: Term -&gt; TermF Term
+<span class="lineno">  174 </span><span class="decl"><span class="istickedoff">unwrapTermF STApp{stAppTermF = tf} = tf</span>
+<span class="lineno">  175 </span><span class="spaces"></span><span class="istickedoff">unwrapTermF (Unshared tf) = tf</span></span>
+<span class="lineno">  176 </span>
+<span class="lineno">  177 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Term</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  178 </span>  <span class="decl"><span class="istickedoff">compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | <span class="tickonlytrue">i == j</span> = EQ</span>
+<span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">compare STApp{} Unshared{} = <span class="nottickedoff">LT</span> -- matches what we'd get from derived Ord instance</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">compare Unshared{} STApp{} = <span class="nottickedoff">GT</span></span>
+<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">compare x y = <span class="nottickedoff">compare (unwrapTermF x) (unwrapTermF y)</span></span></span>
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>-- Free Variables --------------------------------------------------------------
+<span class="lineno">  184 </span>
+<span class="lineno">  185 </span>-- | Return an 'IntSet' containing the 'VarIndex' of all free
+<span class="lineno">  186 </span>-- variables in the 'Term'.
+<span class="lineno">  187 </span>freeVars :: Term -&gt; IntSet
+<span class="lineno">  188 </span><span class="decl"><span class="istickedoff">freeVars STApp{ stAppFreeVars = s } = s</span>
+<span class="lineno">  189 </span><span class="spaces"></span><span class="istickedoff">freeVars (Unshared tf) = <span class="nottickedoff">freesTermF (fmap freeVars tf)</span></span></span>
 <span class="lineno">  190 </span>
-<span class="lineno">  191 </span>termToPat :: Term -&gt; Net.Pat
-<span class="lineno">  192 </span><span class="decl"><span class="istickedoff">termToPat t =</span>
-<span class="lineno">  193 </span><span class="spaces">    </span><span class="istickedoff">case unwrapTermF t of</span>
-<span class="lineno">  194 </span><span class="spaces">      </span><span class="istickedoff">Constant nm               -&gt; Net.Atom (toShortName (nameInfo nm))</span>
-<span class="lineno">  195 </span><span class="spaces">      </span><span class="istickedoff">App t1 t2                 -&gt; Net.App (termToPat t1) (termToPat t2)</span>
-<span class="lineno">  196 </span><span class="spaces">      </span><span class="istickedoff">FTermF (Sort s _)         -&gt; Net.Atom (Text.pack ('*' : show s))</span>
-<span class="lineno">  197 </span><span class="spaces">      </span><span class="istickedoff">FTermF (NatLit _)         -&gt; Net.Var</span>
-<span class="lineno">  198 </span><span class="spaces">      </span><span class="istickedoff">_                         -&gt; Net.Var</span></span>
-<span class="lineno">  199 </span>
-<span class="lineno">  200 </span>-- Free Variables --------------------------------------------------------------
-<span class="lineno">  201 </span>
-<span class="lineno">  202 </span>-- | Return an 'IntSet' containing the 'VarIndex' of all free
-<span class="lineno">  203 </span>-- variables in the 'Term'.
-<span class="lineno">  204 </span>freeVars :: Term -&gt; IntSet
-<span class="lineno">  205 </span><span class="decl"><span class="istickedoff">freeVars STApp{ stAppFreeVars = s } = s</span>
-<span class="lineno">  206 </span><span class="spaces"></span><span class="istickedoff">freeVars (Unshared tf) = <span class="nottickedoff">freesTermF (fmap freeVars tf)</span></span></span>
-<span class="lineno">  207 </span>
-<span class="lineno">  208 </span>-- | Test whether a 'Term' is closed, i.e., it has no free variables.
-<span class="lineno">  209 </span>closedTerm :: Term -&gt; Bool
-<span class="lineno">  210 </span><span class="decl"><span class="istickedoff">closedTerm t = IntSet.null (freeVars t)</span></span>
+<span class="lineno">  191 </span>-- | Test whether a 'Term' is closed, i.e., it has no free variables.
+<span class="lineno">  192 </span>closedTerm :: Term -&gt; Bool
+<span class="lineno">  193 </span><span class="decl"><span class="istickedoff">closedTerm t = IntSet.null (freeVars t)</span></span>
 
 </pre>
 </body>

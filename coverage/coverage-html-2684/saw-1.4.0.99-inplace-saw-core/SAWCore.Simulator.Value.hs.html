@@ -294,7 +294,7 @@ span.spaces    { background: white }
 <span class="lineno">  275 </span>
 <span class="lineno">  276 </span>{-# INLINE applyPiBody #-}
 <span class="lineno">  277 </span>applyPiBody :: VMonad l =&gt; PiBody l -&gt; Thunk l -&gt; EvalM l (TValue l)
-<span class="lineno">  278 </span><span class="decl"><span class="istickedoff">applyPiBody (VDependentPi f) x    = <span class="nottickedoff">f x</span></span>
+<span class="lineno">  278 </span><span class="decl"><span class="istickedoff">applyPiBody (VDependentPi f) x    = f x</span>
 <span class="lineno">  279 </span><span class="spaces"></span><span class="istickedoff">applyPiBody (VNondependentPi t) _ = pure t</span></span>
 <span class="lineno">  280 </span>
 <span class="lineno">  281 </span>asFiniteTypeValue :: Value l -&gt; Maybe FiniteType
@@ -358,30 +358,30 @@ span.spaces    { background: white }
 <span class="lineno">  339 </span>-- are intended to be useful as suffixes for names of type instances
 <span class="lineno">  340 </span>-- of uninterpreted constants.
 <span class="lineno">  341 </span>suffixTValue :: TValue sym -&gt; Maybe String
-<span class="lineno">  342 </span><span class="decl"><span class="nottickedoff">suffixTValue tv =</span>
-<span class="lineno">  343 </span><span class="spaces">  </span><span class="nottickedoff">case tv of</span>
-<span class="lineno">  344 </span><span class="spaces">    </span><span class="nottickedoff">VVecType n a -&gt;</span>
-<span class="lineno">  345 </span><span class="spaces">      </span><span class="nottickedoff">do a' &lt;- suffixTValue a</span>
-<span class="lineno">  346 </span><span class="spaces">         </span><span class="nottickedoff">Just (&quot;_Vec_&quot; ++ show n ++ a')</span>
-<span class="lineno">  347 </span><span class="spaces">    </span><span class="nottickedoff">VBoolType -&gt; Just &quot;_Bool&quot;</span>
-<span class="lineno">  348 </span><span class="spaces">    </span><span class="nottickedoff">VIntType -&gt; Just &quot;_Int&quot;</span>
-<span class="lineno">  349 </span><span class="spaces">    </span><span class="nottickedoff">VIntModType n -&gt; Just (&quot;_IntMod_&quot; ++ show n)</span>
-<span class="lineno">  350 </span><span class="spaces">    </span><span class="nottickedoff">VArrayType a b -&gt;</span>
-<span class="lineno">  351 </span><span class="spaces">      </span><span class="nottickedoff">do a' &lt;- suffixTValue a</span>
-<span class="lineno">  352 </span><span class="spaces">         </span><span class="nottickedoff">b' &lt;- suffixTValue b</span>
-<span class="lineno">  353 </span><span class="spaces">         </span><span class="nottickedoff">Just (&quot;_Array&quot; ++ a' ++ b')</span>
-<span class="lineno">  354 </span><span class="spaces">    </span><span class="nottickedoff">VPiType _ _ -&gt; Nothing</span>
-<span class="lineno">  355 </span><span class="spaces">    </span><span class="nottickedoff">VUnitType -&gt; Just &quot;_Unit&quot;</span>
-<span class="lineno">  356 </span><span class="spaces">    </span><span class="nottickedoff">VPairType a b -&gt;</span>
-<span class="lineno">  357 </span><span class="spaces">      </span><span class="nottickedoff">do a' &lt;- suffixTValue a</span>
-<span class="lineno">  358 </span><span class="spaces">         </span><span class="nottickedoff">b' &lt;- suffixTValue b</span>
-<span class="lineno">  359 </span><span class="spaces">         </span><span class="nottickedoff">Just (&quot;_Pair&quot; ++ a' ++ b')</span>
-<span class="lineno">  360 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  361 </span><span class="spaces">    </span><span class="nottickedoff">VStringType -&gt; Nothing</span>
-<span class="lineno">  362 </span><span class="spaces">    </span><span class="nottickedoff">VDataType {} -&gt; Nothing</span>
-<span class="lineno">  363 </span><span class="spaces">    </span><span class="nottickedoff">VRecordType {} -&gt; Nothing</span>
-<span class="lineno">  364 </span><span class="spaces">    </span><span class="nottickedoff">VSort {} -&gt; Nothing</span>
-<span class="lineno">  365 </span><span class="spaces">    </span><span class="nottickedoff">VTyTerm{} -&gt; Nothing</span></span>
+<span class="lineno">  342 </span><span class="decl"><span class="istickedoff">suffixTValue tv =</span>
+<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">case tv of</span>
+<span class="lineno">  344 </span><span class="spaces">    </span><span class="istickedoff">VVecType n a -&gt;</span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do a' &lt;- suffixTValue a</span></span>
+<span class="lineno">  346 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just (&quot;_Vec_&quot; ++ show n ++ a')</span></span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="istickedoff">VBoolType -&gt; Just &quot;_Bool&quot;</span>
+<span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff">VIntType -&gt; <span class="nottickedoff">Just &quot;_Int&quot;</span></span>
+<span class="lineno">  349 </span><span class="spaces">    </span><span class="istickedoff">VIntModType n -&gt; <span class="nottickedoff">Just (&quot;_IntMod_&quot; ++ show n)</span></span>
+<span class="lineno">  350 </span><span class="spaces">    </span><span class="istickedoff">VArrayType a b -&gt;</span>
+<span class="lineno">  351 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do a' &lt;- suffixTValue a</span></span>
+<span class="lineno">  352 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- suffixTValue b</span></span>
+<span class="lineno">  353 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just (&quot;_Array&quot; ++ a' ++ b')</span></span>
+<span class="lineno">  354 </span><span class="spaces">    </span><span class="istickedoff">VPiType _ _ -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; <span class="nottickedoff">Just &quot;_Unit&quot;</span></span>
+<span class="lineno">  356 </span><span class="spaces">    </span><span class="istickedoff">VPairType a b -&gt;</span>
+<span class="lineno">  357 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do a' &lt;- suffixTValue a</span></span>
+<span class="lineno">  358 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- suffixTValue b</span></span>
+<span class="lineno">  359 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just (&quot;_Pair&quot; ++ a' ++ b')</span></span>
+<span class="lineno">  360 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  361 </span><span class="spaces">    </span><span class="istickedoff">VStringType -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  362 </span><span class="spaces">    </span><span class="istickedoff">VDataType {} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  363 </span><span class="spaces">    </span><span class="istickedoff">VRecordType {} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  364 </span><span class="spaces">    </span><span class="istickedoff">VSort {} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  365 </span><span class="spaces">    </span><span class="istickedoff">VTyTerm{} -&gt; <span class="nottickedoff">Nothing</span></span></span>
 
 </pre>
 </body>

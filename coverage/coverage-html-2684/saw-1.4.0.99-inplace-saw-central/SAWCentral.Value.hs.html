@@ -241,7 +241,7 @@ span.spaces    { background: white }
 <span class="lineno">  222 </span>import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
 <span class="lineno">  223 </span>import Control.Monad.Trans.Class (MonadTrans(lift))
 <span class="lineno">  224 </span>import Data.List.Extra ( dropEnd )
-<span class="lineno">  225 </span>import qualified Data.Map as M
+<span class="lineno">  225 </span>import qualified Data.Map as Map
 <span class="lineno">  226 </span>import Data.Map ( Map )
 <span class="lineno">  227 </span>import Data.Set ( Set )
 <span class="lineno">  228 </span>import Data.Text (Text)
@@ -685,7 +685,7 @@ span.spaces    { background: white }
 <span class="lineno">  666 </span><span class="spaces">    </span><span class="istickedoff">VArray vs -&gt; PPS.showBrackets $ PPS.showCommaSep $ map (showsPrecValue opts nenv <span class="nottickedoff">0</span>) vs</span>
 <span class="lineno">  667 </span><span class="spaces">    </span><span class="istickedoff">VTuple vs -&gt; showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv <span class="nottickedoff">0</span>) vs</span>
 <span class="lineno">  668 </span><span class="spaces">    </span><span class="istickedoff">VRecord m -&gt;</span>
-<span class="lineno">  669 </span><span class="spaces">      </span><span class="istickedoff">PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)</span>
+<span class="lineno">  669 </span><span class="spaces">      </span><span class="istickedoff">PPS.showBraces $ PPS.showCommaSep $ map showFld (Map.toList m)</span>
 <span class="lineno">  670 </span><span class="spaces">        </span><span class="istickedoff">where</span>
 <span class="lineno">  671 </span><span class="spaces">          </span><span class="istickedoff">showFld (n, fv) =</span>
 <span class="lineno">  672 </span><span class="spaces">            </span><span class="istickedoff">showString (Text.unpack n) . showString &quot;=&quot; . showsPrecValue <span class="nottickedoff">opts</span> <span class="nottickedoff">nenv</span> <span class="nottickedoff">0</span> fv</span>
@@ -1314,7 +1314,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1295 </span><span class="spaces">             </span><span class="istickedoff">-- The typechecker restricts this to happen only at the</span>
 <span class="lineno"> 1296 </span><span class="spaces">             </span><span class="istickedoff">-- top level and only if any existing variable is already</span>
 <span class="lineno"> 1297 </span><span class="spaces">             </span><span class="istickedoff">-- rebindable, so we don't have to update varenv.</span>
-<span class="lineno"> 1298 </span><span class="spaces">             </span><span class="istickedoff">let re' = M.insert name (pos, ty, v) rbenv in</span>
+<span class="lineno"> 1298 </span><span class="spaces">             </span><span class="istickedoff">let re' = Map.insert name (pos, ty, v) rbenv in</span>
 <span class="lineno"> 1299 </span><span class="spaces">             </span><span class="istickedoff">(varenv, re')</span>
 <span class="lineno"> 1300 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1301 </span><span class="spaces">     </span><span class="istickedoff">-- Mirror the value into the Cryptol environment if appropriate.</span>

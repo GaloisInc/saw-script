@@ -48,11 +48,11 @@ span.spaces    { background: white }
 <span class="lineno">   29 </span>import Control.Monad.Identity (Identity)
 <span class="lineno">   30 </span>import qualified Data.Text as Text
 <span class="lineno">   31 </span>import Data.List (intercalate, genericTake)
-<span class="lineno">   32 </span>import Data.Map (Map)
-<span class="lineno">   33 </span>import Data.Either (partitionEithers)
-<span class="lineno">   34 </span>import qualified Data.Map as M
-<span class="lineno">   35 </span>import Data.Set (Set)
-<span class="lineno">   36 </span>import qualified Data.Set as S
+<span class="lineno">   32 </span>import Data.Either (partitionEithers)
+<span class="lineno">   33 </span>import qualified Data.Map as Map
+<span class="lineno">   34 </span>import Data.Map (Map)
+<span class="lineno">   35 </span>import qualified Data.Set as Set
+<span class="lineno">   36 </span>import Data.Set (Set)
 <span class="lineno">   37 </span>
 <span class="lineno">   38 </span>import qualified Prettyprinter as PP
 <span class="lineno">   39 </span>
@@ -81,13 +81,13 @@ span.spaces    { background: white }
 <span class="lineno">   62 </span>--
 <span class="lineno">   63 </span>
 <span class="lineno">   64 </span>class UnifyVars t where
-<span class="lineno">   65 </span>  unifyVars :: t -&gt; M.Map TypeIndex Pos
+<span class="lineno">   65 </span>  unifyVars :: t -&gt; Map TypeIndex Pos
 <span class="lineno">   66 </span>
-<span class="lineno">   67 </span>instance (Ord k, UnifyVars a) =&gt; UnifyVars (M.Map k a) where
-<span class="lineno">   68 </span>  <span class="decl"><span class="istickedoff">unifyVars = unifyVars . M.elems</span></span>
+<span class="lineno">   67 </span>instance (Ord k, UnifyVars a) =&gt; UnifyVars (Map k a) where
+<span class="lineno">   68 </span>  <span class="decl"><span class="istickedoff">unifyVars = unifyVars . Map.elems</span></span>
 <span class="lineno">   69 </span>
 <span class="lineno">   70 </span>instance (UnifyVars a) =&gt; UnifyVars [a] where
-<span class="lineno">   71 </span>  <span class="decl"><span class="istickedoff">unifyVars = M.unionsWith <span class="nottickedoff">choosePos</span> . map unifyVars</span></span>
+<span class="lineno">   71 </span>  <span class="decl"><span class="istickedoff">unifyVars = Map.unionsWith <span class="nottickedoff">choosePos</span> . map unifyVars</span></span>
 <span class="lineno">   72 </span>
 <span class="lineno">   73 </span>instance (UnifyVars a) =&gt; UnifyVars (PrimitiveLifecycle, a) where
 <span class="lineno">   74 </span>  <span class="decl"><span class="istickedoff">unifyVars (_lc, t) = unifyVars t</span></span>
@@ -99,8 +99,8 @@ span.spaces    { background: white }
 <span class="lineno">   80 </span>  <span class="decl"><span class="istickedoff">unifyVars t = case t of</span>
 <span class="lineno">   81 </span><span class="spaces">    </span><span class="istickedoff">TyCon _ _ ts      -&gt; unifyVars ts</span>
 <span class="lineno">   82 </span><span class="spaces">    </span><span class="istickedoff">TyRecord _ tm     -&gt; unifyVars tm</span>
-<span class="lineno">   83 </span><span class="spaces">    </span><span class="istickedoff">TyVar _ _         -&gt; M.empty</span>
-<span class="lineno">   84 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar pos i  -&gt; M.singleton i pos</span></span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="istickedoff">TyVar _ _         -&gt; Map.empty</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar pos i  -&gt; Map.singleton i pos</span></span>
 <span class="lineno">   85 </span>
 <span class="lineno">   86 </span>instance UnifyVars Schema where
 <span class="lineno">   87 </span>  <span class="decl"><span class="istickedoff">unifyVars (Forall _ t) = unifyVars t</span></span>
@@ -108,7 +108,7 @@ span.spaces    { background: white }
 <span class="lineno">   89 </span>instance UnifyVars NamedType where
 <span class="lineno">   90 </span>  <span class="decl"><span class="istickedoff">unifyVars nt = case nt of</span>
 <span class="lineno">   91 </span><span class="spaces">    </span><span class="istickedoff">ConcreteType ty -&gt; <span class="nottickedoff">unifyVars ty</span></span>
-<span class="lineno">   92 </span><span class="spaces">    </span><span class="istickedoff">AbstractType -&gt; M.empty</span></span>
+<span class="lineno">   92 </span><span class="spaces">    </span><span class="istickedoff">AbstractType -&gt; Map.empty</span></span>
 <span class="lineno">   93 </span>
 <span class="lineno">   94 </span>-- }}}
 <span class="lineno">   95 </span>
@@ -117,7 +117,7 @@ span.spaces    { background: white }
 <span class="lineno">   98 </span>-- Substitutions {{{
 <span class="lineno">   99 </span>
 <span class="lineno">  100 </span>-- Subst is the type of a substitution map for unification vars.
-<span class="lineno">  101 </span>newtype Subst = Subst { <span class="istickedoff"><span class="decl"><span class="istickedoff">unSubst</span></span></span> :: M.Map TypeIndex Type } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  101 </span>newtype Subst = Subst { <span class="istickedoff"><span class="decl"><span class="istickedoff">unSubst</span></span></span> :: Map TypeIndex Type } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">  102 </span>
 <span class="lineno">  103 </span>-- Merge two substitution maps.
 <span class="lineno">  104 </span>--
@@ -145,7 +145,7 @@ span.spaces    { background: white }
 <span class="lineno">  126 </span>-- problem or not but it should probably be looked into at some point.
 <span class="lineno">  127 </span>--
 <span class="lineno">  128 </span>-- XXX: we should probably crosscheck the key space of the maps. Note
-<span class="lineno">  129 </span>-- that the ordering of the M.union args means that if there are
+<span class="lineno">  129 </span>-- that the ordering of the Map.union args means that if there are
 <span class="lineno">  130 </span>-- duplicated keys we prefer the right substitution (m1), namely the
 <span class="lineno">  131 </span>-- preexisting one. Given that this choice seems to be explicit, it
 <span class="lineno">  132 </span>-- must have been for a reason, but I'm not sure what that reason
@@ -178,18 +178,18 @@ span.spaces    { background: white }
 <span class="lineno">  159 </span>-- up with a different name that indicates that this operation isn't
 <span class="lineno">  160 </span>-- commutative. Unless it actually can be.
 <span class="lineno">  161 </span>mergeSubst :: Subst -&gt; Subst -&gt; Subst
-<span class="lineno">  162 </span><span class="decl"><span class="istickedoff">mergeSubst s2@(Subst m2) (Subst m1) = Subst $ m1' `M.union` m2</span>
+<span class="lineno">  162 </span><span class="decl"><span class="istickedoff">mergeSubst s2@(Subst m2) (Subst m1) = Subst $ m1' `Map.union` m2</span>
 <span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">m1' = fmap (appSubst s2) m1</span></span>
 <span class="lineno">  165 </span>
 <span class="lineno">  166 </span>emptySubst :: Subst
-<span class="lineno">  167 </span><span class="decl"><span class="istickedoff">emptySubst = Subst M.empty</span></span>
+<span class="lineno">  167 </span><span class="decl"><span class="istickedoff">emptySubst = Subst Map.empty</span></span>
 <span class="lineno">  168 </span>
 <span class="lineno">  169 </span>singletonSubst :: TypeIndex -&gt; Type -&gt; Subst
-<span class="lineno">  170 </span><span class="decl"><span class="istickedoff">singletonSubst tv t = Subst $ M.singleton tv t</span></span>
+<span class="lineno">  170 </span><span class="decl"><span class="istickedoff">singletonSubst tv t = Subst $ Map.singleton tv t</span></span>
 <span class="lineno">  171 </span>
 <span class="lineno">  172 </span>substFromList :: [(TypeIndex, Type)] -&gt; Subst
-<span class="lineno">  173 </span><span class="decl"><span class="istickedoff">substFromList entries = Subst $ M.fromList entries</span></span>
+<span class="lineno">  173 </span><span class="decl"><span class="istickedoff">substFromList entries = Subst $ Map.fromList entries</span></span>
 <span class="lineno">  174 </span>
 <span class="lineno">  175 </span>--
 <span class="lineno">  176 </span>-- appSubst is a type-class-polymorphic function for applying a
@@ -211,7 +211,7 @@ span.spaces    { background: white }
 <span class="lineno">  192 </span>instance (AppSubst t) =&gt; AppSubst (Pos, PrimitiveLifecycle, Rebindable, t) where
 <span class="lineno">  193 </span>  <span class="decl"><span class="istickedoff">appSubst s (pos, lc, rb, x) = (<span class="nottickedoff">pos</span>, <span class="nottickedoff">lc</span>, <span class="nottickedoff">rb</span>, appSubst <span class="nottickedoff">s</span> x)</span></span>
 <span class="lineno">  194 </span>
-<span class="lineno">  195 </span>instance (Ord k, AppSubst a) =&gt; AppSubst (M.Map k a) where
+<span class="lineno">  195 </span>instance (Ord k, AppSubst a) =&gt; AppSubst (Map k a) where
 <span class="lineno">  196 </span>  <span class="decl"><span class="istickedoff">appSubst s = fmap (appSubst s)</span></span>
 <span class="lineno">  197 </span>
 <span class="lineno">  198 </span>instance AppSubst Expr where
@@ -261,7 +261,7 @@ span.spaces    { background: white }
 <span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">TyCon pos tc ts     -&gt; TyCon pos tc (appSubst s ts)</span>
 <span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">TyRecord pos fs     -&gt; TyRecord pos (appSubst s fs)</span>
 <span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">TyVar _ _           -&gt; t</span>
-<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar _ i      -&gt; case M.lookup i (unSubst s) of</span>
+<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar _ i      -&gt; case Map.lookup i (unSubst s) of</span>
 <span class="lineno">  246 </span><span class="spaces">                             </span><span class="istickedoff">Just t' -&gt; t'</span>
 <span class="lineno">  247 </span><span class="spaces">                             </span><span class="istickedoff">Nothing -&gt; t</span></span>
 <span class="lineno">  248 </span>
@@ -463,20 +463,20 @@ span.spaces    { background: white }
 <span class="lineno">  444 </span>-- about what unification vars do and don't appear.
 <span class="lineno">  445 </span>--
 <span class="lineno">  446 </span>-- Returns a map of the index number to the occurrence position.
-<span class="lineno">  447 </span>unifyVarsInEnvs :: TI (M.Map TypeIndex Pos)
+<span class="lineno">  447 </span>unifyVarsInEnvs :: TI (Map TypeIndex Pos)
 <span class="lineno">  448 </span><span class="decl"><span class="istickedoff">unifyVarsInEnvs = do</span>
 <span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">venv &lt;- gets varEnv</span>
 <span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">tenv &lt;- gets tyEnv</span>
-<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">vtys &lt;- mapM applyCurrentSubst $ M.elems venv</span>
-<span class="lineno">  452 </span><span class="spaces">    </span><span class="istickedoff">ttys &lt;- mapM applyCurrentSubst $ M.elems tenv</span>
-<span class="lineno">  453 </span><span class="spaces">    </span><span class="istickedoff">return $ M.unionWith <span class="nottickedoff">choosePos</span> (unifyVars vtys) (unifyVars ttys)</span></span>
+<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">vtys &lt;- mapM applyCurrentSubst $ Map.elems venv</span>
+<span class="lineno">  452 </span><span class="spaces">    </span><span class="istickedoff">ttys &lt;- mapM applyCurrentSubst $ Map.elems tenv</span>
+<span class="lineno">  453 </span><span class="spaces">    </span><span class="istickedoff">return $ Map.unionWith <span class="nottickedoff">choosePos</span> (unifyVars vtys) (unifyVars ttys)</span></span>
 <span class="lineno">  454 </span>
 <span class="lineno">  455 </span>-- Get the named type vars that occur as keys in the current type name
 <span class="lineno">  456 </span>-- environment.
-<span class="lineno">  457 </span>namedVarDefinitions :: TI (S.Set Name)
+<span class="lineno">  457 </span>namedVarDefinitions :: TI (Set Name)
 <span class="lineno">  458 </span><span class="decl"><span class="istickedoff">namedVarDefinitions = do</span>
 <span class="lineno">  459 </span><span class="spaces">    </span><span class="istickedoff">env &lt;- gets tyEnv</span>
-<span class="lineno">  460 </span><span class="spaces">    </span><span class="istickedoff">return $ M.keysSet env</span></span>
+<span class="lineno">  460 </span><span class="spaces">    </span><span class="istickedoff">return $ Map.keysSet env</span></span>
 <span class="lineno">  461 </span>
 <span class="lineno">  462 </span>-- Get the position and name of the first binding in a pattern,
 <span class="lineno">  463 </span>-- for use as context info when printing messages. If there's a
@@ -673,7 +673,7 @@ span.spaces    { background: white }
 <span class="lineno">  654 </span>-- cycles.
 <span class="lineno">  655 </span>resolveUnificationVar :: Pos -&gt; TypeIndex -&gt; Type -&gt; Either FailMGU Subst
 <span class="lineno">  656 </span><span class="decl"><span class="istickedoff">resolveUnificationVar pos i t =</span>
-<span class="lineno">  657 </span><span class="spaces">  </span><span class="istickedoff">case M.lookup i $ unifyVars t of</span>
+<span class="lineno">  657 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup i $ unifyVars t of</span>
 <span class="lineno">  658 </span><span class="spaces">     </span><span class="istickedoff">Just otherpos -&gt;</span>
 <span class="lineno">  659 </span><span class="spaces">       </span><span class="istickedoff">-- FIXME/XXX: this error message is better than the one that was here before</span>
 <span class="lineno">  660 </span><span class="spaces">       </span><span class="istickedoff">-- but still lacks a certain something</span>
@@ -705,13 +705,13 @@ span.spaces    { background: white }
 <span class="lineno">  686 </span><span class="spaces">      </span><span class="istickedoff">resolveUnificationVar <span class="nottickedoff">pos</span> i t1</span>
 <span class="lineno">  687 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  688 </span><span class="spaces">  </span><span class="istickedoff">(TyRecord _ ts1, TyRecord _ ts2)</span>
-<span class="lineno">  689 </span><span class="spaces">    </span><span class="istickedoff">| M.keys ts1 /= M.keys ts2 -&gt;</span>
+<span class="lineno">  689 </span><span class="spaces">    </span><span class="istickedoff">| Map.keys ts1 /= Map.keys ts2 -&gt;</span>
 <span class="lineno">  690 </span><span class="spaces">      </span><span class="istickedoff">-- records with different keys</span>
 <span class="lineno">  691 </span><span class="spaces">      </span><span class="istickedoff">failMGU &quot;Record field names mismatch.&quot; t1 t2</span>
 <span class="lineno">  692 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  693 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
 <span class="lineno">  694 </span><span class="spaces">      </span><span class="istickedoff">-- records with the same field names, try unifying the field types</span>
-<span class="lineno">  695 </span><span class="spaces">      </span><span class="istickedoff">case mgus (M.elems ts1) (M.elems ts2) of</span>
+<span class="lineno">  695 </span><span class="spaces">      </span><span class="istickedoff">case mgus (Map.elems ts1) (Map.elems ts2) of</span>
 <span class="lineno">  696 </span><span class="spaces">        </span><span class="istickedoff">Right result -&gt; Right result</span>
 <span class="lineno">  697 </span><span class="spaces">        </span><span class="istickedoff">Left msgs -&gt; Left $ failMGUAdd msgs t1 t2</span>
 <span class="lineno">  698 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -891,19 +891,19 @@ span.spaces    { background: white }
 <span class="lineno">  872 </span>-- Get the free type variables found in a Type.
 <span class="lineno">  873 </span>inspectTypeFTVs :: Type -&gt; TI (Map Name Pos)
 <span class="lineno">  874 </span><span class="decl"><span class="istickedoff">inspectTypeFTVs ty = case ty of</span>
-<span class="lineno">  875 </span><span class="spaces">    </span><span class="istickedoff">TyCon _pos _ctor args -&gt; M.unions &lt;$&gt; mapM inspectTypeFTVs args</span>
-<span class="lineno">  876 </span><span class="spaces">    </span><span class="istickedoff">TyRecord _pos fields -&gt; M.unions &lt;$&gt; traverse inspectTypeFTVs fields</span>
-<span class="lineno">  877 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar _pos _x -&gt; <span class="nottickedoff">return M.empty</span></span>
+<span class="lineno">  875 </span><span class="spaces">    </span><span class="istickedoff">TyCon _pos _ctor args -&gt; Map.unions &lt;$&gt; mapM inspectTypeFTVs args</span>
+<span class="lineno">  876 </span><span class="spaces">    </span><span class="istickedoff">TyRecord _pos fields -&gt; Map.unions &lt;$&gt; traverse inspectTypeFTVs fields</span>
+<span class="lineno">  877 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar _pos _x -&gt; <span class="nottickedoff">return Map.empty</span></span>
 <span class="lineno">  878 </span><span class="spaces">    </span><span class="istickedoff">TyVar pos x -&gt; do</span>
 <span class="lineno">  879 </span><span class="spaces">        </span><span class="istickedoff">tyenv &lt;- gets tyEnv</span>
-<span class="lineno">  880 </span><span class="spaces">        </span><span class="istickedoff">case M.lookup x tyenv of</span>
-<span class="lineno">  881 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; return $ M.singleton x <span class="nottickedoff">pos</span></span>
-<span class="lineno">  882 </span><span class="spaces">            </span><span class="istickedoff">Just _ -&gt; return $ M.empty</span></span>
+<span class="lineno">  880 </span><span class="spaces">        </span><span class="istickedoff">case Map.lookup x tyenv of</span>
+<span class="lineno">  881 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; return $ Map.singleton x <span class="nottickedoff">pos</span></span>
+<span class="lineno">  882 </span><span class="spaces">            </span><span class="istickedoff">Just _ -&gt; return $ Map.empty</span></span>
 <span class="lineno">  883 </span>
 <span class="lineno">  884 </span>-- Get the free type variables found in a Maybe Type.
 <span class="lineno">  885 </span>inspectMaybeTypeFTVs :: Maybe Type -&gt; TI (Map Name Pos)
 <span class="lineno">  886 </span><span class="decl"><span class="istickedoff">inspectMaybeTypeFTVs mty = case mty of</span>
-<span class="lineno">  887 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; return M.empty</span>
+<span class="lineno">  887 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; return Map.empty</span>
 <span class="lineno">  888 </span><span class="spaces">    </span><span class="istickedoff">Just ty -&gt; inspectTypeFTVs ty</span></span>
 <span class="lineno">  889 </span>
 <span class="lineno">  890 </span>-- Get the free type variables found in a Pattern.
@@ -912,7 +912,7 @@ span.spaces    { background: white }
 <span class="lineno">  893 </span><span class="spaces">    </span><span class="istickedoff">PWild _pos mty -&gt; inspectMaybeTypeFTVs mty</span>
 <span class="lineno">  894 </span><span class="spaces">    </span><span class="istickedoff">PVar _allpos _xpos _x mty -&gt; inspectMaybeTypeFTVs mty</span>
 <span class="lineno">  895 </span><span class="spaces">    </span><span class="istickedoff">PTuple _pos subpats -&gt;</span>
-<span class="lineno">  896 </span><span class="spaces">        </span><span class="istickedoff">M.unions &lt;$&gt; mapM inspectPatternFTVs subpats</span></span>
+<span class="lineno">  896 </span><span class="spaces">        </span><span class="istickedoff">Map.unions &lt;$&gt; mapM inspectPatternFTVs subpats</span></span>
 <span class="lineno">  897 </span>
 <span class="lineno">  898 </span>-- Get the free type variables found in a chain of Lambda Exprs.
 <span class="lineno">  899 </span>-- Also return the body expression found on the inside of the chain
@@ -922,9 +922,9 @@ span.spaces    { background: white }
 <span class="lineno">  903 </span><span class="spaces">    </span><span class="istickedoff">Lambda _fpos _mname pat e1 -&gt; do</span>
 <span class="lineno">  904 </span><span class="spaces">        </span><span class="istickedoff">hereFTVs &lt;- inspectPatternFTVs pat</span>
 <span class="lineno">  905 </span><span class="spaces">        </span><span class="istickedoff">(e1', moreFTVs) &lt;- inspectLambdaFTVs e1</span>
-<span class="lineno">  906 </span><span class="spaces">        </span><span class="istickedoff">return (e1', M.union hereFTVs moreFTVs)</span>
+<span class="lineno">  906 </span><span class="spaces">        </span><span class="istickedoff">return (e1', Map.union hereFTVs moreFTVs)</span>
 <span class="lineno">  907 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  908 </span><span class="spaces">        </span><span class="istickedoff">return (e0, M.empty)</span></span>
+<span class="lineno">  908 </span><span class="spaces">        </span><span class="istickedoff">return (e0, Map.empty)</span></span>
 <span class="lineno">  909 </span>
 <span class="lineno">  910 </span>-- Get the free type variables found in a Decl.
 <span class="lineno">  911 </span>inspectDeclFTVs :: Decl -&gt; TI (Map Name Pos)
@@ -933,8 +933,8 @@ span.spaces    { background: white }
 <span class="lineno">  914 </span><span class="spaces">    </span><span class="istickedoff">(e1, argFTVs) &lt;- inspectLambdaFTVs e0</span>
 <span class="lineno">  915 </span><span class="spaces">    </span><span class="istickedoff">retFTVs &lt;- case e1 of</span>
 <span class="lineno">  916 </span><span class="spaces">        </span><span class="istickedoff">TSig _tspos _e2 ty -&gt; inspectTypeFTVs ty</span>
-<span class="lineno">  917 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; return M.empty</span>
-<span class="lineno">  918 </span><span class="spaces">    </span><span class="istickedoff">return $ M.unions [nameFTVs, argFTVs, retFTVs]</span></span>
+<span class="lineno">  917 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; return Map.empty</span>
+<span class="lineno">  918 </span><span class="spaces">    </span><span class="istickedoff">return $ Map.unions [nameFTVs, argFTVs, retFTVs]</span></span>
 <span class="lineno">  919 </span>
 <span class="lineno">  920 </span>
 <span class="lineno">  921 </span>-- }}}
@@ -962,7 +962,7 @@ span.spaces    { background: white }
 <span class="lineno">  943 </span>addVar :: Name -&gt; Pos -&gt; Rebindable -&gt; Schema -&gt; TI ()
 <span class="lineno">  944 </span><span class="decl"><span class="istickedoff">addVar x pos rb ty = do</span>
 <span class="lineno">  945 </span><span class="spaces">    </span><span class="istickedoff">env &lt;- gets varEnv</span>
-<span class="lineno">  946 </span><span class="spaces">    </span><span class="istickedoff">let env' = M.insert x (pos, Current, rb, ty) env</span>
+<span class="lineno">  946 </span><span class="spaces">    </span><span class="istickedoff">let env' = Map.insert x (pos, Current, rb, ty) env</span>
 <span class="lineno">  947 </span><span class="spaces">    </span><span class="istickedoff">modify (\rw -&gt; rw { varEnv = env' })</span></span>
 <span class="lineno">  948 </span>
 <span class="lineno">  949 </span>-- Add xs with type tys to the environment.
@@ -1050,8 +1050,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1031 </span>-- Wrap the action m with some abstract type variables.
 <span class="lineno"> 1032 </span>withAbstractTyVars :: Map Name Pos -&gt; TI a -&gt; TI a
 <span class="lineno"> 1033 </span><span class="decl"><span class="istickedoff">withAbstractTyVars vars m = do</span>
-<span class="lineno"> 1034 </span><span class="spaces">    </span><span class="istickedoff">let insertOne x _pos tyenv = M.insert x (Current, AbstractType) tyenv</span>
-<span class="lineno"> 1035 </span><span class="spaces">        </span><span class="istickedoff">insertAll tyenv = M.foldrWithKey insertOne tyenv vars</span>
+<span class="lineno"> 1034 </span><span class="spaces">    </span><span class="istickedoff">let insertOne x _pos tyenv = Map.insert x (Current, AbstractType) tyenv</span>
+<span class="lineno"> 1035 </span><span class="spaces">        </span><span class="istickedoff">insertAll tyenv = Map.foldrWithKey insertOne tyenv vars</span>
 <span class="lineno"> 1036 </span><span class="spaces">    </span><span class="istickedoff">tyenv &lt;- gets tyEnv</span>
 <span class="lineno"> 1037 </span><span class="spaces">    </span><span class="istickedoff">let tyenv' = insertAll tyenv</span>
 <span class="lineno"> 1038 </span><span class="spaces">    </span><span class="istickedoff">modify (\rw -&gt; rw { tyEnv = tyenv' })</span>
@@ -1094,9 +1094,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1075 </span><span class="spaces">      </span><span class="istickedoff">return (Tuple pos es', tTuple (PosInferred InfTerm pos) ts)</span>
 <span class="lineno"> 1076 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1077 </span><span class="spaces">  </span><span class="istickedoff">Record pos fs -&gt; do</span>
-<span class="lineno"> 1078 </span><span class="spaces">      </span><span class="istickedoff">(nes',nts) &lt;- unzip `fmap` mapM (inferField <span class="nottickedoff">ln</span>) (M.toList fs)</span>
-<span class="lineno"> 1079 </span><span class="spaces">      </span><span class="istickedoff">let ty = TyRecord (PosInferred InfTerm pos) $ M.fromList nts</span>
-<span class="lineno"> 1080 </span><span class="spaces">      </span><span class="istickedoff">return (Record <span class="nottickedoff">pos</span> (M.fromList nes'), ty)</span>
+<span class="lineno"> 1078 </span><span class="spaces">      </span><span class="istickedoff">(nes',nts) &lt;- unzip `fmap` mapM (inferField <span class="nottickedoff">ln</span>) (Map.toList fs)</span>
+<span class="lineno"> 1079 </span><span class="spaces">      </span><span class="istickedoff">let ty = TyRecord (PosInferred InfTerm pos) $ Map.fromList nts</span>
+<span class="lineno"> 1080 </span><span class="spaces">      </span><span class="istickedoff">return (Record <span class="nottickedoff">pos</span> (Map.fromList nes'), ty)</span>
 <span class="lineno"> 1081 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1082 </span><span class="spaces">  </span><span class="istickedoff">-- XXX this is currently unreachable because there's no concrete</span>
 <span class="lineno"> 1083 </span><span class="spaces">  </span><span class="istickedoff">-- syntax for it; the parser will never produce it.</span>
@@ -1112,7 +1112,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1093 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- applyCurrentSubst =&lt;&lt; resolveCurrentTypedefs t</span>
 <span class="lineno"> 1094 </span><span class="spaces">      </span><span class="istickedoff">elTy &lt;- case t1 of</span>
 <span class="lineno"> 1095 </span><span class="spaces">          </span><span class="istickedoff">TyRecord typos fs</span>
-<span class="lineno"> 1096 </span><span class="spaces">           </span><span class="istickedoff">| Just ty &lt;- M.lookup n fs -&gt; do</span>
+<span class="lineno"> 1096 </span><span class="spaces">           </span><span class="istickedoff">| Just ty &lt;- Map.lookup n fs -&gt; do</span>
 <span class="lineno"> 1097 </span><span class="spaces">              </span><span class="istickedoff">return ty</span>
 <span class="lineno"> 1098 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
 <span class="lineno"> 1099 </span><span class="spaces">              </span><span class="istickedoff">recordError pos $</span>
@@ -1155,13 +1155,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1136 </span><span class="spaces">  </span><span class="istickedoff">Var pos x -&gt; do</span>
 <span class="lineno"> 1137 </span><span class="spaces">      </span><span class="istickedoff">avail &lt;- asks primsAvail</span>
 <span class="lineno"> 1138 </span><span class="spaces">      </span><span class="istickedoff">env &lt;- gets varEnv</span>
-<span class="lineno"> 1139 </span><span class="spaces">      </span><span class="istickedoff">case M.lookup x env of</span>
+<span class="lineno"> 1139 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup x env of</span>
 <span class="lineno"> 1140 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; do</span>
 <span class="lineno"> 1141 </span><span class="spaces">          </span><span class="istickedoff">recordError pos $ &quot;Unbound variable: &quot; ++ show x ++ &quot; (&quot; ++ show pos ++ &quot;)&quot;</span>
 <span class="lineno"> 1142 </span><span class="spaces">          </span><span class="istickedoff">t &lt;- getFreshTyVar <span class="nottickedoff">pos</span></span>
 <span class="lineno"> 1143 </span><span class="spaces">          </span><span class="istickedoff">return (<span class="nottickedoff">Var pos x</span>, t)</span>
 <span class="lineno"> 1144 </span><span class="spaces">        </span><span class="istickedoff">Just (_prevpos, lc, _rebindable, Forall as t)</span>
-<span class="lineno"> 1145 </span><span class="spaces">         </span><span class="istickedoff">| S.member lc avail -&gt; do</span>
+<span class="lineno"> 1145 </span><span class="spaces">         </span><span class="istickedoff">| Set.member lc avail -&gt; do</span>
 <span class="lineno"> 1146 </span><span class="spaces">          </span><span class="istickedoff">when (isDeprecated lc) $</span>
 <span class="lineno"> 1147 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">case t of</span></span>
 <span class="lineno"> 1148 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">TyCon _typos FunCon _args -&gt;</span></span>
@@ -1175,7 +1175,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1156 </span><span class="spaces">                </span><span class="istickedoff">at &lt;- getFreshTyVar apos</span>
 <span class="lineno"> 1157 </span><span class="spaces">                </span><span class="istickedoff">return (a, (Current, ConcreteType at))</span>
 <span class="lineno"> 1158 </span><span class="spaces">          </span><span class="istickedoff">substs &lt;- mapM once as</span>
-<span class="lineno"> 1159 </span><span class="spaces">          </span><span class="istickedoff">let t' = substituteTyVars' avail (M.fromList substs) t</span>
+<span class="lineno"> 1159 </span><span class="spaces">          </span><span class="istickedoff">let t' = substituteTyVars' avail (Map.fromList substs) t</span>
 <span class="lineno"> 1160 </span><span class="spaces">          </span><span class="istickedoff">return (Var pos x, t')</span>
 <span class="lineno"> 1161 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
 <span class="lineno"> 1162 </span><span class="spaces">          </span><span class="istickedoff">recordError pos $ &quot;Inaccessible variable: &quot; ++ show x ++ &quot; (&quot; ++ show pos ++ &quot;)&quot;</span>
@@ -1257,7 +1257,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1238 </span><span class="spaces">    </span><span class="istickedoff">PVar allpos xpos x mt -&gt;</span>
 <span class="lineno"> 1239 </span><span class="spaces">      </span><span class="istickedoff">do t &lt;- resolveType <span class="nottickedoff">allpos</span> mt</span>
 <span class="lineno"> 1240 </span><span class="spaces">         </span><span class="istickedoff">env &lt;- gets varEnv</span>
-<span class="lineno"> 1241 </span><span class="spaces">         </span><span class="istickedoff">case M.lookup x env of</span>
+<span class="lineno"> 1241 </span><span class="spaces">         </span><span class="istickedoff">case Map.lookup x env of</span>
 <span class="lineno"> 1242 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
 <span class="lineno"> 1243 </span><span class="spaces">             </span><span class="istickedoff">Just (prevpos, lc, prevrb, tyscheme) -&gt; case rebindable of</span>
 <span class="lineno"> 1244 </span><span class="spaces">                 </span><span class="istickedoff">RebindableVar -&gt; do</span>
@@ -1265,7 +1265,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1246 </span><span class="spaces">                           </span><span class="istickedoff">recordError xpos $ &quot;Cannot rebind &quot; ++</span>
 <span class="lineno"> 1247 </span><span class="spaces">                                              </span><span class="istickedoff">Text.unpack x ++ &quot;: &quot; ++ msg</span>
 <span class="lineno"> 1248 </span><span class="spaces">                     </span><span class="istickedoff">avail &lt;- asks primsAvail</span>
-<span class="lineno"> 1249 </span><span class="spaces">                     </span><span class="istickedoff">when (not $ S.member lc avail) $</span>
+<span class="lineno"> 1249 </span><span class="spaces">                     </span><span class="istickedoff">when (not $ Set.member lc avail) $</span>
 <span class="lineno"> 1250 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">croak &quot;A previous binding exists but is hidden&quot;</span></span>
 <span class="lineno"> 1251 </span><span class="spaces">                     </span><span class="istickedoff">oldt &lt;- case tyscheme of</span>
 <span class="lineno"> 1252 </span><span class="spaces">                         </span><span class="istickedoff">Forall [] oldt' -&gt; pure oldt'</span>
@@ -1327,7 +1327,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1308 </span><span class="spaces">    </span><span class="istickedoff">avail &lt;- asks primsAvail</span>
 <span class="lineno"> 1309 </span><span class="spaces">    </span><span class="istickedoff">env &lt;- gets tyEnv</span>
 <span class="lineno"> 1310 </span><span class="spaces">    </span><span class="istickedoff">let ty' = substituteTyVars' avail env ty</span>
-<span class="lineno"> 1311 </span><span class="spaces">        </span><span class="istickedoff">env' = M.insert a (Current, ConcreteType ty') env</span>
+<span class="lineno"> 1311 </span><span class="spaces">        </span><span class="istickedoff">env' = Map.insert a (Current, ConcreteType ty') env</span>
 <span class="lineno"> 1312 </span><span class="spaces">    </span><span class="istickedoff">modify (\rw -&gt; rw { tyEnv = env' })</span></span>
 <span class="lineno"> 1313 </span>
 <span class="lineno"> 1314 </span>-- break a monadic type down into its monad and value types, if it is one
@@ -1617,12 +1617,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1598 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1599 </span><span class="spaces">    </span><span class="istickedoff">envUnifyVars &lt;- unifyVarsInEnvs</span>
 <span class="lineno"> 1600 </span><span class="spaces">    </span><span class="istickedoff">knownNamedVars &lt;- namedVarDefinitions</span>
-<span class="lineno"> 1601 </span><span class="spaces">    </span><span class="istickedoff">let is1 = is0 M.\\ envUnifyVars</span>
-<span class="lineno"> 1602 </span><span class="spaces">    </span><span class="istickedoff">let bs1 = M.union foralls $ M.withoutKeys bs0 knownNamedVars</span>
+<span class="lineno"> 1601 </span><span class="spaces">    </span><span class="istickedoff">let is1 = is0 Map.\\ envUnifyVars</span>
+<span class="lineno"> 1602 </span><span class="spaces">    </span><span class="istickedoff">let bs1 = Map.union foralls $ Map.withoutKeys bs0 knownNamedVars</span>
 <span class="lineno"> 1603 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1604 </span><span class="spaces">    </span><span class="istickedoff">-- convert to lists</span>
-<span class="lineno"> 1605 </span><span class="spaces">    </span><span class="istickedoff">let is2 = M.toList is1</span>
-<span class="lineno"> 1606 </span><span class="spaces">    </span><span class="istickedoff">let bs2 = M.toList bs1</span>
+<span class="lineno"> 1605 </span><span class="spaces">    </span><span class="istickedoff">let is2 = Map.toList is1</span>
+<span class="lineno"> 1606 </span><span class="spaces">    </span><span class="istickedoff">let bs2 = Map.toList bs1</span>
 <span class="lineno"> 1607 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1608 </span><span class="spaces">    </span><span class="istickedoff">-- if the position is &quot;fresh&quot; turn it into &quot;inferred from term&quot;</span>
 <span class="lineno"> 1609 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">adjustPos pos = case pos of</span></span>
@@ -1735,7 +1735,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1716 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">cname = getPatternContext firstPat</span></span>
 <span class="lineno"> 1717 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1718 </span><span class="spaces">    </span><span class="istickedoff">-- Collect the free type variables.</span>
-<span class="lineno"> 1719 </span><span class="spaces">    </span><span class="istickedoff">foralls &lt;- M.unions &lt;$&gt; mapM inspectDeclFTVs ds</span>
+<span class="lineno"> 1719 </span><span class="spaces">    </span><span class="istickedoff">foralls &lt;- Map.unions &lt;$&gt; mapM inspectDeclFTVs ds</span>
 <span class="lineno"> 1720 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1721 </span><span class="spaces">    </span><span class="istickedoff">-- Add abstract type variables for the foralls while we check the</span>
 <span class="lineno"> 1722 </span><span class="spaces">    </span><span class="istickedoff">-- bodies.</span>
@@ -1869,12 +1869,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1850 </span><span class="spaces">  </span><span class="istickedoff">TyVar pos x -&gt; do</span>
 <span class="lineno"> 1851 </span><span class="spaces">      </span><span class="istickedoff">avail &lt;- asks primsAvail</span>
 <span class="lineno"> 1852 </span><span class="spaces">      </span><span class="istickedoff">tyenv &lt;- gets tyEnv</span>
-<span class="lineno"> 1853 </span><span class="spaces">      </span><span class="istickedoff">case M.lookup x tyenv of</span>
+<span class="lineno"> 1853 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup x tyenv of</span>
 <span class="lineno"> 1854 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; do</span>
 <span class="lineno"> 1855 </span><span class="spaces">              </span><span class="istickedoff">recordError pos (&quot;Unbound type variable &quot; ++ Text.unpack x)</span>
 <span class="lineno"> 1856 </span><span class="spaces">              </span><span class="istickedoff">getErrorTyVar <span class="nottickedoff">pos</span></span>
 <span class="lineno"> 1857 </span><span class="spaces">          </span><span class="istickedoff">Just (lc, _ty')</span>
-<span class="lineno"> 1858 </span><span class="spaces">           </span><span class="istickedoff">| S.member lc avail -&gt; do</span>
+<span class="lineno"> 1858 </span><span class="spaces">           </span><span class="istickedoff">| Set.member lc avail -&gt; do</span>
 <span class="lineno"> 1859 </span><span class="spaces">              </span><span class="istickedoff">when (isDeprecated lc) $</span>
 <span class="lineno"> 1860 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">recordWarning pos $ &quot;Type is deprecated: &quot; &lt;&gt; Text.unpack x</span></span>
 <span class="lineno"> 1861 </span><span class="spaces">              </span><span class="istickedoff">-- Assume ty' was checked when it was entered.</span>
@@ -2016,7 +2016,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1997 </span><span class="spaces">              </span><span class="istickedoff">return (a, (Current, ConcreteType ty'a))</span>
 <span class="lineno"> 1998 </span><span class="spaces">        </span><span class="istickedoff">substs &lt;- mapM generate as</span>
 <span class="lineno"> 1999 </span><span class="spaces">        </span><span class="istickedoff">-- Substitute them into the type</span>
-<span class="lineno"> 2000 </span><span class="spaces">        </span><span class="istickedoff">let ty' = substituteTyVars' avail (M.fromList substs) ty</span>
+<span class="lineno"> 2000 </span><span class="spaces">        </span><span class="istickedoff">let ty' = substituteTyVars' avail (Map.fromList substs) ty</span>
 <span class="lineno"> 2001 </span><span class="spaces">        </span><span class="istickedoff">return ty'</span>
 <span class="lineno"> 2002 </span><span class="spaces">      </span><span class="istickedoff">match = do</span>
 <span class="lineno"> 2003 </span><span class="spaces">        </span><span class="istickedoff">-- Unpack the schemas and check if they match</span>
@@ -2024,7 +2024,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2005 </span><span class="spaces">        </span><span class="istickedoff">ty'expected &lt;- unpack schema'expected</span>
 <span class="lineno"> 2006 </span><span class="spaces">        </span><span class="istickedoff">matches ty'found ty'expected</span>
 <span class="lineno"> 2007 </span><span class="spaces">  </span><span class="istickedoff">in</span>
-<span class="lineno"> 2008 </span><span class="spaces">  </span><span class="istickedoff">case evalTIWithEnv avail <span class="nottickedoff">M.empty</span> tenv match of</span>
+<span class="lineno"> 2008 </span><span class="spaces">  </span><span class="istickedoff">case evalTIWithEnv avail <span class="nottickedoff">Map.empty</span> tenv match of</span>
 <span class="lineno"> 2009 </span><span class="spaces">    </span><span class="istickedoff">(Left _errors, _warnings) -&gt; <span class="nottickedoff">False</span>          -- not actually reachable</span>
 <span class="lineno"> 2010 </span><span class="spaces">    </span><span class="istickedoff">(Right b, _warnings) -&gt; b</span></span>                   -- return match success/failure
 <span class="lineno"> 2011 </span>
