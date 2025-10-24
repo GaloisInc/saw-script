@@ -15,7 +15,6 @@ Stability   : provisional
 module SAWScript.REPL.Monad (
     -- * REPL Monad
     REPL(..), runREPLFresh
-  , io
   , raise
   , stop
   , exceptionProtect
@@ -214,7 +213,7 @@ instance PP REPLException where
 
 -- | Raise an exception.
 raise :: REPLException -> REPL a
-raise exn = io $ X.throwIO exn
+raise exn = liftIO $ X.throwIO exn
 
 -- | Handle any exception type in 'REPL' actions.
 catchEx :: X.Exception e => REPL a -> (e -> REPL a) -> REPL a
@@ -243,29 +242,30 @@ catchOther m k = catchJust flt m k
 
 exceptionProtect :: REPL () -> REPL ()
 exceptionProtect cmd =
-      do chk <- io . makeCheckpoint =<< getTopLevelRW
+      do chk <- liftIO . makeCheckpoint =<< getTopLevelRW
          cmd `catchREPL`  (handlerPP chk)
              `catchFail`  (handlerFail chk)
              `catchOther` (handlerPrint chk)
 
     where
     handlerPP chk re =
-      do io (putStrLn "" >> print (pp re))
+      do liftIO (putStrLn "" >> print (pp re))
          void $ liftTopLevel (restoreCheckpoint chk)
          return ()
     handlerPrint chk e =
-      do io (putStrLn "" >> putStrLn (X.displayException e))
+      do liftIO (putStrLn "" >> putStrLn (X.displayException e))
          void $ liftTopLevel (restoreCheckpoint chk)
 
     handlerFail chk s =
-      do io (putStrLn "" >> putStrLn s)
+      do liftIO (putStrLn "" >> putStrLn s)
          void $ liftTopLevel (restoreCheckpoint chk)
 
 liftTopLevel :: TopLevel a -> REPL a
 liftTopLevel m =
   do ro  <- getTopLevelRO
      ref <- getTopLevelRWRef
-     io $ do rw <- readIORef ref
+     liftIO $ do
+             rw <- readIORef ref
              (a, rw') <- runTopLevel m ro rw
              writeIORef ref rw'
              return a
@@ -284,21 +284,18 @@ liftProofScript m ref =
 
 -- Primitives ------------------------------------------------------------------
 
-io :: IO a -> REPL a
-io m = REPL (liftIO m)
-
 instance MonadIO REPL where
-  liftIO = io
+  liftIO m = REPL (liftIO m)
 
 readRef :: (Refs -> IORef a) -> REPL a
 readRef r = do
     ref <- gets r
-    io $ readIORef ref
+    liftIO $ readIORef ref
 
 modifyRef :: (Refs -> IORef a) -> (a -> a) -> REPL ()
 modifyRef r f = do
     ref <- gets r
-    io $ modifyIORef ref f
+    liftIO $ modifyIORef ref f
 
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
@@ -309,7 +306,7 @@ getPrompt =
        getProofStateRef >>= \case
          Nothing -> return "sawscript> "
          Just psr ->
-           do ps <- io (readIORef psr)
+           do ps <- liftIO (readIORef psr)
               return ("proof ("++show (length (psGoals ps))++")> ")
 
 shouldContinue :: REPL Bool

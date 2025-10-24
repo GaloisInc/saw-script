@@ -33,6 +33,7 @@ import SAWScript.REPL.Monad
 import SAWScript.Token (Token)
 
 import Control.Monad (unless, void)
+import Control.Monad.IO.Class (liftIO)
 
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
@@ -160,9 +161,9 @@ runCommand c = case c of
 
   Command cmd -> exceptionProtect cmd
 
-  Unknown cmd -> io (TextIO.putStrLn ("Unknown command: " <> cmd))
+  Unknown cmd -> liftIO (TextIO.putStrLn ("Unknown command: " <> cmd))
 
-  Ambiguous cmd cmds -> io $ do
+  Ambiguous cmd cmds -> liftIO $ do
     TextIO.putStrLn (cmd <> " is ambiguous; it could mean one of:")
     TextIO.putStrLn ("\t" <> Text.intercalate ", " cmds)
 
@@ -180,7 +181,7 @@ lexSAW fileName str = do
 
 typeOfCmd :: Text -> REPL ()
 typeOfCmd str
-  | Text.null str = io $ putStrLn "[error] :type requires an argument"
+  | Text.null str = liftIO $ putStrLn "[error] :type requires an argument"
   | otherwise =
   do tokens <- lexSAW replFileName str
      expr <- case SAWScript.Parser.parseExpression tokens of
@@ -204,7 +205,7 @@ typeOfCmd str
        let issueWarning (msgpos, msg) =
              -- XXX the print functions should be what knows how to show positions...
              putStrLn (show msgpos ++ ": Warning: " ++ msg)
-       io $ mapM_ issueWarning warns
+       liftIO $ mapM_ issueWarning warns
        either failTypecheck return errs_or_results
      let schema = case SS.dType decl' of
            Just sch -> sch
@@ -214,11 +215,11 @@ typeOfCmd str
                -- or position in panic, since it's what the user just
                -- typed.
                panic "typeOfCmd" ["Typechecker failed to produce a type"]
-     io $ TextIO.putStrLn $ PPS.pShowText schema
+     liftIO $ TextIO.putStrLn $ PPS.pShowText schema
 
 searchCmd :: Text -> REPL ()
 searchCmd str
-  | Text.null str = io $ putStrLn $ "[error] :search requires at least one argument"
+  | Text.null str = liftIO $ putStrLn $ "[error] :search requires at least one argument"
   | otherwise =
   do tokens <- lexSAW replFileName str
      pat <- case SAWScript.Parser.parseSchemaPattern tokens of
@@ -254,7 +255,7 @@ searchCmd str
      let issueWarning (msgpos, msg) =
            -- XXX the print functions should be what knows how to show positions...
            putStrLn (show msgpos ++ ": Warning: " ++ msg)
-     io $ mapM_ issueWarning warns
+     liftIO $ mapM_ issueWarning warns
      pat' <- either failTypecheck return $ errs_or_results
      let search = compileSearchPattern tyenv pat'
          keep (_pos, _lc, _rb, ty) = matchSearchPattern search ty
@@ -299,7 +300,7 @@ searchCmd str
                    Experimental -> "  (EXPERIMENTAL)"
            TextIO.putStrLn (name <> " : " <> ty' <> lc')
          printMatches matches =
-           io $ mapM_ printMatch (Map.assocs matches)
+           liftIO $ mapM_ printMatch (Map.assocs matches)
 
          moreMatches matches =
              let n = Map.size matches in
@@ -307,14 +308,14 @@ searchCmd str
              else show n ++ " more matches"
          alsoExperimental =
              if not (Map.null expMatches) then
-                 io $ putStrLn $ moreMatches expMatches ++ " tagged " ++
+                 liftIO $ putStrLn $ moreMatches expMatches ++ " tagged " ++
                                  "experimental; use enable_experimental to " ++
                                  "see them"
              else
                  pure ()
          alsoDeprecated =
              if not (Map.null depMatches) then
-                 io $ putStrLn $ moreMatches depMatches ++ " tagged " ++
+                 liftIO $ putStrLn $ moreMatches depMatches ++ " tagged " ++
                                  "deprecated; use enable_deprecated to " ++
                                  "see them"
              else
@@ -325,14 +326,14 @@ searchCmd str
          alsoExperimental
          alsoDeprecated
      else do
-         io $ putStrLn "No matches."
+         liftIO $ putStrLn "No matches."
          if not (Map.null expMatches) then do
-             io $ putStrLn $ "The following experimental matches require " ++
+             liftIO $ putStrLn $ "The following experimental matches require " ++
                              "enable_experimental:"
              printMatches expMatches
              alsoDeprecated
          else if not (Map.null depMatches) then do
-             io $ putStrLn $ "The following deprecated matches require " ++
+             liftIO $ putStrLn $ "The following deprecated matches require " ++
                              "enable_deprecated:"
              printMatches depMatches
          else
@@ -355,8 +356,8 @@ envCmd = do
       let rbsay (x, (_pos, ty, _v)) = do
               let ty' = PPS.pShowText ty
               TextIO.putStrLn (x <> " : rebindable " <> ty')
-      io $ mapM_ rbsay $ Map.assocs rbenv
-      io $ TextIO.putStrLn ""
+      liftIO $ mapM_ rbsay $ Map.assocs rbenv
+      liftIO $ TextIO.putStrLn ""
 
   -- print the normal environment
   let say (x, (_pos, _lc, ty, _v, _doc)) = do
@@ -371,7 +372,7 @@ envCmd = do
       -- Reverse the list of scopes so the innermost prints last,
       -- because that's what people will expect to see.
       itemses = reverse $ ScopedMap.scopedAssocs varenv
-  io $ mapM_ printScope $ intersperse Nothing $ map Just itemses
+  liftIO $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
 tenvCmd :: REPL ()
 tenvCmd = do
@@ -390,11 +391,11 @@ tenvCmd = do
       -- Reverse the list of scopes so the innermost prints last,
       -- because that's what people will expect to see.
       itemses = reverse $ ScopedMap.scopedAssocs tyenv
-  io $ mapM_ printScope $ intersperse Nothing $ map Just itemses
+  liftIO $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
 helpCmd :: Text -> REPL ()
 helpCmd cmd
-  | Text.null cmd = io (mapM_ TextIO.putStrLn (genHelp commandList))
+  | Text.null cmd = liftIO (mapM_ TextIO.putStrLn (genHelp commandList))
   | otherwise =
     do rw <- getTopLevelRW
        -- Note: there's no rebindable builtins and thus no way to
@@ -403,27 +404,27 @@ helpCmd cmd
        let Environ varenv _tyenv _cryenvs = rwEnviron rw
        case ScopedMap.lookup cmd varenv of
          Just (_pos, _lc, _ty, _v, Just doc) ->
-           io $ mapM_ TextIO.putStrLn doc
+           liftIO $ mapM_ TextIO.putStrLn doc
          Just (_pos, _lc, _ty, _v, Nothing) -> do
-           io $ putStrLn $ "// No documentation is available."
+           liftIO $ putStrLn $ "// No documentation is available."
            typeOfCmd cmd
          Nothing ->
-           io $ putStrLn "// No such command."
+           liftIO $ putStrLn "// No such command."
 -- FIXME? can we restore the ability to lookup doc strings from Cryptol?
 --  | Just (ec,_) <- lookup cmd builtIns =
---                io $ print $ helpDoc ec
+--                liftIO $ print $ helpDoc ec
 
 
 cdCmd :: FilePath -> REPL ()
-cdCmd f | null f = io $ putStrLn $ "[error] :cd requires a path argument"
+cdCmd f | null f = liftIO $ putStrLn $ "[error] :cd requires a path argument"
         | otherwise = do
-  exists <- io $ doesDirectoryExist f
+  exists <- liftIO $ doesDirectoryExist f
   if exists
-    then io $ setCurrentDirectory f
+    then liftIO $ setCurrentDirectory f
     else raise $ DirectoryNotFound f
 
 pwdCmd :: REPL ()
-pwdCmd = io $ getCurrentDirectory >>= putStrLn
+pwdCmd = liftIO $ getCurrentDirectory >>= putStrLn
 
 -- SAWScript commands ----------------------------------------------------------
 
@@ -451,7 +452,7 @@ sawScriptCmd :: Text -> REPL ()
 sawScriptCmd str = do
   tokens <- lexSAW replFileName str
   case SAWScript.Parser.parseStmtSemi tokens of
-    Left err -> io $ print err
+    Left err -> liftIO $ print err
     Right stmt ->
       do mr <- getProofStateRef
          case mr of
@@ -465,7 +466,7 @@ replFileName = "<stdin>"
 
 -- XXX this should probably do something a bit more specific.
 handleCtrlC :: REPL ()
-handleCtrlC  = io (putStrLn "Ctrl-C")
+handleCtrlC  = liftIO (putStrLn "Ctrl-C")
 
 
 -- Utilities -------------------------------------------------------------------
@@ -536,6 +537,6 @@ parseCommand findCmd line = do
   where
   expandHome path =
     case Text.unpack path of
-      '~' : c : more | isPathSeparator c -> do dir <- io getHomeDirectory
+      '~' : c : more | isPathSeparator c -> do dir <- liftIO getHomeDirectory
                                                return (dir </> more)
       path' -> pure path'
