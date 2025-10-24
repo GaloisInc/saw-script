@@ -225,6 +225,7 @@ PolyType :: { Schema }
 SchemaPattern :: { SchemaPattern }
  : BaseFunType                          { SchemaPattern [] [$1]       }
  | BaseType list(BaseType)              { SchemaPattern [] ($1 : $2)  }
+ | Context                              { SchemaPattern [] [$1]       }
  | '{' Names '}' BaseFunType            { SchemaPattern $2 [$4]       }
  | '{' Names '}' BaseType list(BaseType) { SchemaPattern $2 ($4 : $5) }
 

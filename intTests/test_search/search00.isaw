@@ -10,6 +10,10 @@ print "-- (LLVMSpec -> [String])"
 :search (LLVMSpec -> [String])
 
 print "--------------------------------"
+print "-- LLVMSetup"
+:search LLVMSetup
+
+print "--------------------------------"
 print "-- (LLVMSetup ())"
 :search (LLVMSetup ())
 
