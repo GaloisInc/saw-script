@@ -268,7 +268,10 @@ Context :: { Type }
  | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
  | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
  | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
- | name                                 { tVar (getPos $1) (tokStr $1)        }
+ | TypeName                             { $1                                  }
+
+TypeName :: { Type }
+ : name                                 { tVar (getPos $1) (tokStr $1)        }
 
 FieldType :: { (Name, Type) }
   : name ':' Type                       { (tokStr $1, $3)         }
