@@ -537,9 +537,8 @@ check_fails test "set"
     jvm_field_is this "val" (jvm_term x);
   };
 
-// (this is issue #946)
 print "multiple use of jvm_execute_func";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -547,6 +546,14 @@ KNOWN_FALSE_POSITIVE test "get"
     jvm_execute_func [this];
     jvm_execute_func [this];
     jvm_return (jvm_term val);
+  };
+
+print "jvm_execute_func missing";
+check_fails test "set"
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_field_is this "val" (jvm_term x);
   };
 
 print "jvm_return with non-monomorphic type";
@@ -590,7 +597,7 @@ check_fails test "get"
   };
 
 print "jvm_return missing when one was expected";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;

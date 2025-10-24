@@ -240,10 +240,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
 
      -- execute commands of the method spec
      io $ W4.setCurrentProgramLoc sym loc
-     methodSpec <- view Setup.csMethodSpec <$>
-                     execStateT
-                       (runReaderT (runJVMSetupM setup) Setup.makeCrucibleSetupRO)
-                     st0
+     methodSpec <- execJVMSetup setup st0
 
      -- construct the dynamic class table and declare static fields
      globals1 <- liftIO $ setupGlobalState sym jc
@@ -298,10 +295,26 @@ jvm_unsafe_assume_spec cls nm setup =
      (cls', method) <- io $ findMethod cb pos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version
      let loc = SS.toW4Loc "_SAW_JVM_unsafe_assume_spec" pos
      let st0 = initialCrucibleSetupState cc (cls', method) loc
-     ms <- (view Setup.csMethodSpec) <$>
-             execStateT (runReaderT (runJVMSetupM setup) Setup.makeCrucibleSetupRO) st0
+     ms <- execJVMSetup setup st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
      returnJVMProof ps
+
+execJVMSetup :: JVMSetupM a -> Setup.CrucibleSetupState CJ.JVM -> TopLevel MethodSpec
+execJVMSetup setup st0 =
+  do st' <- execStateT (runReaderT (runJVMSetupM setup) Setup.makeCrucibleSetupRO) st0
+     -- check for missing jvm_execute_func
+     unless (st' ^. Setup.csPrePost == PostState) $
+       X.throwM JVMExecuteMissing
+     -- check that jvm_return value is present if return type is non-void
+     let mspec = st' ^. Setup.csMethodSpec
+     case mspec ^. MS.csRet of
+       Nothing -> pure ()
+       Just retTy ->
+         case mspec ^. MS.csRetValue of
+           Just _ -> pure ()
+           Nothing ->
+             X.throwM $ JVMReturnMissing retTy
+     pure mspec
 
 verifyObligations ::
   JVMCrucibleContext ->
@@ -956,8 +969,11 @@ data JVMSetupError
   | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
   | JVMArrayMultiple AllocIndex
   | JVMArrayModifyPrestate AllocIndex
+  | JVMExecuteMissing
+  | JVMExecuteMultiple
   | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
   | JVMArgNumberWrong Int Int -- number expected, number found
+  | JVMReturnMissing J.Type -- expected
   | JVMReturnUnexpected J.Type -- found
   | JVMReturnTypeMismatch J.Type J.Type -- expected, found
   | JVMNonValueType TypedTermType
@@ -1044,6 +1060,10 @@ instance Show JVMSetupError where
         "jvm_array_is: Multiple specifications for the same array reference"
       JVMArrayModifyPrestate _ptr ->
         "jvm_modifies_array: Invalid use before jvm_execute_func"
+      JVMExecuteMissing ->
+        "JVMSetup: Missing jvm_execute_func specification"
+      JVMExecuteMultiple ->
+        "jvm_execute_func: Multiple jvm_execute_func specifications"
       JVMArgTypeMismatch i expected found ->
         unlines
         [ "jvm_execute_func: Argument type mismatch"
@@ -1056,6 +1076,11 @@ instance Show JVMSetupError where
         [ "jvm_execute_func: Wrong number of arguments"
         , "Expected: " ++ show expected
         , "Given: " ++ show found
+        ]
+      JVMReturnMissing expected ->
+        unlines
+        [ "JVMSetup: Missing jvm_return specification"
+        , "Expected type: " ++ show expected
         ]
       JVMReturnUnexpected found ->
         unlines
@@ -1410,6 +1435,8 @@ jvm_execute_func args =
      let env = MS.csAllocations mspec
      let nameEnv = MS.csTypeNames mspec
      let argTys = mspec ^. MS.csArgs
+     unless (st ^. Setup.csPrePost == PreState) $
+       X.throwM JVMExecuteMultiple
      let
        checkArg i expectedTy val =
          do valTy <- typeOfSetupValue cc env nameEnv val
