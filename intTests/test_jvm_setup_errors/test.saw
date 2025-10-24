@@ -597,7 +597,7 @@ check_fails test "get"
   };
 
 print "jvm_return missing when one was expected";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;

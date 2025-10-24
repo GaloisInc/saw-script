@@ -305,8 +305,16 @@ execJVMSetup setup st0 =
      -- check for missing jvm_execute_func
      unless (st' ^. Setup.csPrePost == PostState) $
        X.throwM JVMExecuteMissing
-     -- TODO: check for missing jvm_return
-     pure (st' ^. Setup.csMethodSpec)
+     -- check that jvm_return value is present if return type is non-void
+     let mspec = st' ^. Setup.csMethodSpec
+     case mspec ^. MS.csRet of
+       Nothing -> pure ()
+       Just retTy ->
+         case mspec ^. MS.csRetValue of
+           Just _ -> pure ()
+           Nothing ->
+             X.throwM $ JVMReturnMissing retTy
+     pure mspec
 
 verifyObligations ::
   JVMCrucibleContext ->
@@ -965,6 +973,7 @@ data JVMSetupError
   | JVMExecuteMultiple
   | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
   | JVMArgNumberWrong Int Int -- number expected, number found
+  | JVMReturnMissing J.Type -- expected
   | JVMReturnUnexpected J.Type -- found
   | JVMReturnTypeMismatch J.Type J.Type -- expected, found
   | JVMNonValueType TypedTermType
@@ -1067,6 +1076,11 @@ instance Show JVMSetupError where
         [ "jvm_execute_func: Wrong number of arguments"
         , "Expected: " ++ show expected
         , "Given: " ++ show found
+        ]
+      JVMReturnMissing expected ->
+        unlines
+        [ "JVMSetup: Missing jvm_return specification"
+        , "Expected type: " ++ show expected
         ]
       JVMReturnUnexpected found ->
         unlines
