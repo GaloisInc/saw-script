@@ -235,6 +235,7 @@ Type :: { Type }
 AppliedType :: { Type }
  : BaseType                             { $1                      }
  | Context AppliedType                  { tBlock (maxSpan' $1 $2) $1 $2 }
+ | TypeName AppliedType                 { tBlock (maxSpan' $1 $2) $1 $2 }
 
 -- special case of function type that can be followed by more base types
 -- without requiring parens
@@ -268,7 +269,6 @@ Context :: { Type }
  | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
  | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
  | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
- | TypeName                             { $1                                  }
 
 TypeName :: { Type }
  : name                                 { tVar (getPos $1) (tokStr $1)        }
