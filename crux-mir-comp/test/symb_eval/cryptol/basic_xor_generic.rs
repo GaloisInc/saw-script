@@ -16,5 +16,10 @@ fn test() {
     let actual = xor_bits(x, y);
     crucible_assert!(
         actual == expected,
-        "f({x}, {y}) = {actual:?}, but expected {expected:?}");
+        "f({:?}, {:?}) = {:?}, but expected {:?}",
+        x,
+        y,
+        actual,
+        expected,
+    );
 }
