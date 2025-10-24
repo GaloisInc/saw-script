@@ -56,7 +56,7 @@ import Control.Monad.Reader (ask)
 import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), MonadMask(..), catchJust)
 import Control.Monad.State (MonadState(..), StateT(..), get, gets, put)
 import Control.Monad.Except (ExceptT(..), runExceptT)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
 import qualified Data.Set as Set
 --import Data.Map (Map)
@@ -286,6 +286,9 @@ liftProofScript m ref =
 
 io :: IO a -> REPL a
 io m = REPL (liftIO m)
+
+instance MonadIO REPL where
+  liftIO = io
 
 readRef :: (Refs -> IORef a) -> REPL a
 readRef r = do

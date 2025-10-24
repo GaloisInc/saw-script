@@ -6,8 +6,6 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE OverloadedStrings #-}
--- TODO RGS: Do better (or at least comment why we do this)
-{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 
 module SAWScript.REPL.Command (
     -- * Commands
@@ -62,7 +60,7 @@ import qualified SAWCentral.AST as SS (
  )
 import SAWCentral.Exceptions
 
-import SAWScript.Panic
+import SAWScript.Panic (panic)
 import SAWScript.Typechecker (checkDecl, checkSchemaPattern)
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretTopStmt)
@@ -208,7 +206,14 @@ typeOfCmd str
              putStrLn (show msgpos ++ ": Warning: " ++ msg)
        io $ mapM_ issueWarning warns
        either failTypecheck return errs_or_results
-     let ~(SS.Decl _pos _ (Just schema) _expr') = decl'
+     let schema = case SS.dType decl' of
+           Just sch -> sch
+           Nothing ->
+               -- If the typechecker didn't insert a type, it's bust,
+               -- so panic. Not much point in printing the expression
+               -- or position in panic, since it's what the user just
+               -- typed.
+               panic "typeOfCmd" ["Typechecker failed to produce a type"]
      io $ TextIO.putStrLn $ PPS.pShowText schema
 
 searchCmd :: Text -> REPL ()

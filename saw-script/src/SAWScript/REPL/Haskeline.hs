@@ -7,7 +7,6 @@ Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module SAWScript.REPL.Haskeline (repl, replBody) where
 
@@ -106,12 +105,6 @@ replSettings  = Settings
   , historyFile    = Nothing
   , autoAddHistory = True
   }
-
-
--- Utilities -------------------------------------------------------------------
-
-instance MTL.MonadIO REPL where
-  liftIO = io
 
 
 -- Completion ------------------------------------------------------------------
