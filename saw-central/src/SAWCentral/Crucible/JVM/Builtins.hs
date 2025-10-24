@@ -956,6 +956,7 @@ data JVMSetupError
   | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
   | JVMArrayMultiple AllocIndex
   | JVMArrayModifyPrestate AllocIndex
+  | JVMExecuteMultiple
   | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
   | JVMArgNumberWrong Int Int -- number expected, number found
   | JVMReturnUnexpected J.Type -- found
@@ -1044,6 +1045,8 @@ instance Show JVMSetupError where
         "jvm_array_is: Multiple specifications for the same array reference"
       JVMArrayModifyPrestate _ptr ->
         "jvm_modifies_array: Invalid use before jvm_execute_func"
+      JVMExecuteMultiple ->
+        "jvm_execute_func: Multiple jvm_execute_func specifications"
       JVMArgTypeMismatch i expected found ->
         unlines
         [ "jvm_execute_func: Argument type mismatch"
@@ -1410,6 +1413,8 @@ jvm_execute_func args =
      let env = MS.csAllocations mspec
      let nameEnv = MS.csTypeNames mspec
      let argTys = mspec ^. MS.csArgs
+     unless (st ^. Setup.csPrePost == PreState) $
+       X.throwM JVMExecuteMultiple
      let
        checkArg i expectedTy val =
          do valTy <- typeOfSetupValue cc env nameEnv val
