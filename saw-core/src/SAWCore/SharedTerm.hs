@@ -61,8 +61,6 @@ module SAWCore.SharedTerm
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
-  , scRecursorRetTypeType
-  , scRecursorAppType
   , scRecursorType
   , scReduceRecursor
   , scReduceNatRecursor
@@ -654,6 +652,8 @@ scBeginDataType ::
 scBeginDataType sc dtIdent dtParams dtIndices dtSort =
   do dtName <- scRegisterName sc (ModuleIdentifier dtIdent)
      dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
+     dtMotiveName <- scFreshVarName sc "p"
+     dtArgName <- scFreshVarName sc "arg"
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
@@ -986,17 +986,14 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 --
 -- where the @pi@ are the parameters of @d@, the @ixj@ are the indices
 -- of @d@, and @s@ is any sort supplied as an argument.
-scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
-scRecursorRetTypeType sc dt params s =
+-- Parameter variables @p1 .. pn@ will be free in the resulting term.
+scRecursorMotiveType :: SharedContext -> DataType -> Sort -> IO Term
+scRecursorMotiveType sc dt s =
   do param_vars <- scVariables sc (dtParams dt)
      ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
      ret <- scFun sc d =<< scSort sc s
-     p_ret <- scPiList sc (dtIndices dt) ret
-     -- Note that dtIndices may refer to variables from dtParams, so
-     -- we can't just use params directly; the substitution is necessary.
-     let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
-     scInstantiateExt sc subst p_ret
+     scPiList sc (dtIndices dt) ret
 
 -- | Build the type of a recursor for datatype @d@ that has been
 -- applied to parameters, a motive function, and a full set of
@@ -1007,17 +1004,16 @@ scRecursorRetTypeType sc dt params s =
 --
 -- where the @pi@ are the parameters of @d@, and the @ixj@ are the
 -- indices of @d@.
-scRecursorAppType :: SharedContext -> DataType -> [Term] -> Term -> IO Term
-scRecursorAppType sc dt params motive =
+-- Parameter variables @p1 .. pn@ will be free in the resulting term.
+scRecursorAppType :: SharedContext -> DataType -> Term -> IO Term
+scRecursorAppType sc dt motive =
   do param_vars <- scVariables sc (dtParams dt)
      ix_vars <- scVariables sc (dtIndices dt)
      d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
-     arg_vn <- scFreshVarName sc "arg"
+     let arg_vn = dtArgName dt
      arg_var <- scVariable sc arg_vn d
      ret <- scApplyAll sc motive (ix_vars ++ [arg_var])
-     ty <- scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
-     let subst = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) params)
-     scInstantiateExt sc subst ty
+     scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
 
 -- | Build the full type of an unapplied recursor for datatype @d@
 -- with elimination to sort @s@.
@@ -1032,12 +1028,10 @@ scRecursorType :: SharedContext -> DataType -> Sort -> IO Term
 scRecursorType sc dt s =
   do let d = dtName dt
 
-     param_vars <- scVariables sc (dtParams dt)
-
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
-     motive_ty <- scRecursorRetTypeType sc dt param_vars s
-     motive_vn <- scFreshVarName sc "p"
+     motive_ty <- scRecursorMotiveType sc dt s
+     let motive_vn = dtMotiveName dt
      motive_var <- scVariable sc motive_vn motive_ty
 
      -- Compute the types of the elimination functions
@@ -1048,7 +1042,7 @@ scRecursorType sc dt s =
      scPiList sc (dtParams dt) =<<
        scPi sc motive_vn motive_ty =<<
        scFunAll sc elims_tps =<<
-       scRecursorAppType sc dt param_vars motive_var
+       scRecursorAppType sc dt motive_var
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
@@ -1661,9 +1655,7 @@ scFun :: SharedContext
       -> Term -- ^ The parameter type
       -> Term -- ^ The result type
       -> IO Term
-scFun sc a b =
-  do nm <- scFreshVarName sc "_"
-     scTermF sc (Pi nm a b)
+scFun sc a b = scTermF sc (Pi wildcardVarName a b)
 
 -- | Create a term representing the type of a non-dependent n-ary function,
 -- given a list of parameter types and a result type (as terms).
@@ -2567,7 +2559,7 @@ scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a,
 -- | The default instance of the SharedContext operations.
 mkSharedContext :: IO SharedContext
 mkSharedContext = do
-  vr <- newIORef 0 -- Reference for getting variables.
+  vr <- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.
   cr <- newMVar emptyAppCache
   gr <- newIORef HMap.empty
   mod_map_ref <- newIORef emptyModuleMap
