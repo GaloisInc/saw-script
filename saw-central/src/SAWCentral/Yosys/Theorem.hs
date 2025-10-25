@@ -25,6 +25,7 @@ import Control.Monad.Catch (MonadThrow)
 import Data.Text (Text)
 import qualified Data.Set as Set
 import Data.Map (Map)
+import qualified Data.Map as Map
 
 import qualified Text.URI as URI
 
@@ -118,7 +119,7 @@ buildTheorem sc ymod newmod precond body = do
     _ -> throw YosysErrorInvalidOverrideTarget
   inpTy <- liftIO $ CSC.importType sc CSC.emptyEnv cinpTy
   outTy <- liftIO $ CSC.importType sc CSC.emptyEnv coutTy
-  nmi <- case SC.ttTerm ymod of
+  nmi <- case reduceSelectors (SC.ttTerm ymod) of
     (R.asConstant -> Just (SC.Name _ nmi)) -> pure nmi
     _ -> throw YosysErrorInvalidOverrideTarget
   uri <- case nmi of
@@ -134,6 +135,24 @@ buildTheorem sc ymod newmod precond body = do
     , _theoremPrecond = SC.ttTerm <$> precond
     , _theoremBody = SC.ttTerm body
     }
+
+-- | Reduce nested tuple and record selectors at the top-level of the
+-- given term, if possible.
+reduceSelectors :: SC.Term -> SC.Term
+reduceSelectors t =
+  case t of
+    (R.asPairSelector -> Just (t1, b)) ->
+      case R.asPairValue (reduceSelectors t1) of
+        Nothing -> t
+        Just (x, y) -> if b then y else x
+    (R.asRecordSelector -> Just (t1, fname)) ->
+      case R.asRecordValue (reduceSelectors t1) of
+        Nothing -> t
+        Just tm ->
+          case Map.lookup fname tm of
+            Nothing -> t
+            Just t' -> t'
+    _ -> t
 
 -- | Applying a theorem thm as an "override" in a Yosys-derived term t proceeds as follows:
 --  1) unfold all names except thm.theoremURI in t
