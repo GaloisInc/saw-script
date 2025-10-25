@@ -274,7 +274,7 @@ span.spaces    { background: white }
 <span class="lineno">  255 </span>
 <span class="lineno">  256 </span>{-return items whose key could match pat, WHICH MUST BE BETA-ETA NORMAL-}
 <span class="lineno">  257 </span>match_term :: Net a -&gt; Pat -&gt; [a]
-<span class="lineno">  258 </span><span class="decl"><span class="istickedoff">match_term net pat = extract_leaves (matching <span class="nottickedoff">False</span> <span class="nottickedoff">pat</span> net [])</span></span>
+<span class="lineno">  258 </span><span class="decl"><span class="nottickedoff">match_term net pat = extract_leaves (matching False pat net [])</span></span>
 <span class="lineno">  259 </span>
 <span class="lineno">  260 </span>{-return items whose key could unify with pat-}
 <span class="lineno">  261 </span>unify_term :: Net a -&gt; Pat -&gt; [a]

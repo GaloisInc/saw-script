@@ -76,7 +76,7 @@ span.spaces    { background: white }
 <span class="lineno">   57 </span><span class="decl"><span class="nottickedoff">forallSBool nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) KBool (Just nm)</span></span>
 <span class="lineno">   58 </span>
 <span class="lineno">   59 </span>existsSBool :: String -&gt; Symbolic SBool
-<span class="lineno">   60 </span><span class="decl"><span class="nottickedoff">existsSBool nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just EX)) KBool (Just nm)</span></span>
+<span class="lineno">   60 </span><span class="decl"><span class="istickedoff">existsSBool nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just <span class="nottickedoff">EX</span>)) KBool (Just nm)</span></span>
 <span class="lineno">   61 </span>
 <span class="lineno">   62 </span>forallSBool_ :: Symbolic SBool
 <span class="lineno">   63 </span><span class="decl"><span class="nottickedoff">forallSBool_ = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) KBool Nothing</span></span>
