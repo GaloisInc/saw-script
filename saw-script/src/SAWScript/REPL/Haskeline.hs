@@ -14,7 +14,6 @@ import SAWScript.REPL.Command
 import SAWScript.REPL.Monad
 
 import Control.Monad (when)
-import Control.Monad.State (gets, modify)
 import Data.Char (isAlphaNum, isSpace)
 import qualified Data.Text as Text
 import Data.Text (Text)
@@ -25,8 +24,6 @@ import System.FilePath((</>))
 import qualified Control.Monad.IO.Class as MTL
 import qualified Control.Monad.Trans.Class as MTL
 import qualified Control.Exception as X
-
-import SAWCentral.TopLevel( TopLevelRO(..) )
 
 
 -- | Haskeline-specific repl implementation.
@@ -42,23 +39,13 @@ repl mbBatchFile =
 replBody :: Maybe FilePath -> REPL ()
 replBody mbBatchFile =
   do settings <- MTL.liftIO (setHistoryFile replSettings)
-     enableSubshell (runInputTBehavior style settings body)
+     runInputTBehavior style settings body
   where
   body = withInterrupt loop
 
   style = case mbBatchFile of
     Nothing   -> defaultBehavior
     Just path -> useFile path
-
-  -- not entirely sure why we need a type signature here, but it croaks without
-  enableSubshell :: REPL a -> REPL a
-  enableSubshell m = do
-    ro <- gets rTopLevelRO
-    let ro' = ro { roSubshell = subshell (runInputT replSettings (withInterrupt loop)) }
-    modify (\refs -> refs { rTopLevelRO = ro' })
-    result <- m
-    modify (\refs -> refs { rTopLevelRO = ro })
-    return result
 
   loop = do
     prompt <- MTL.lift getPrompt

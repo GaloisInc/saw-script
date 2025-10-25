@@ -31,8 +31,6 @@ import SAWCentral.Options
 import SAWCentral.Utils
 import SAWScript.Interpreter (processFile)
 import qualified SAWScript.REPL as REPL
-import qualified SAWScript.REPL.Haskeline as REPL
-import qualified SAWScript.REPL.Monad as REPL
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
 import SAWVersion.Version (shortVersionText)
@@ -339,9 +337,7 @@ warn opts msg = do
 -- Load (and run) a saw-script file.
 loadFile :: Options -> FilePath -> [Text] -> IO ()
 loadFile opts file scriptArgv = do
-  let subsh = REPL.subshell (REPL.replBody Nothing)
-      proofSubsh = REPL.proof_subshell (REPL.replBody Nothing)
-  processFile opts file scriptArgv (Just subsh) (Just proofSubsh)
+  processFile opts file scriptArgv REPL.reenterTopLevel REPL.reenterProofScript
     `catch`
     (\(ErrorCall msg) -> err opts msg)
 

@@ -17,13 +17,12 @@ module SAWScript.REPL.Monad (
     -- * REPL Monad
     REPL(..), runREPL
   , initREPL
+  , resumeREPL
   , raise
   , stop
   , exceptionProtect
   , liftTopLevel
   , liftProofScript
-  , subshell
-  , proof_subshell
   , REPLState(..)
 
     -- ** Errors
@@ -53,10 +52,9 @@ import Cryptol.Utils.Ident (Namespace(..))
 import Cryptol.Utils.PP
 
 import Control.Monad (void)
-import Control.Monad.Reader (ask)
 import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), MonadMask(..), catchJust)
-import Control.Monad.State (MonadState(..), StateT(..), get, gets, put, modify)
-import Control.Monad.Except (ExceptT(..), runExceptT)
+import Control.Monad.State (MonadState(..), StateT(..), get, gets, modify)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.Set as Set
 --import Data.Map (Map)
@@ -77,8 +75,7 @@ import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
 import SAWCentral.Value (ProofScript(..), showsProofResult, Environ(..),
-                         rwGetCryptolEnv,
-                         pushScope, popScope)
+                         rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook)
 
 import SAWScript.Panic (panic)
 import SAWScript.Interpreter (buildTopLevelEnv)
@@ -97,9 +94,9 @@ data REPLState = REPLState
   }
 
 -- | Create an initial, empty environment.
-initREPL :: Bool -> Options -> IO REPLState
-initREPL isBatch opts =
-  do (ro, rw) <- buildTopLevelEnv opts []
+initREPL :: Bool -> Options -> TopLevelShellHook -> ProofScriptShellHook -> IO REPLState
+initREPL isBatch opts tlhook pshook =
+  do (ro, rw) <- buildTopLevelEnv opts [] tlhook pshook
      return REPLState
        { rContinue   = True
        , rIsBatch    = isBatch
@@ -107,6 +104,22 @@ initREPL isBatch opts =
        , rTopLevelRW = rw
        , rProofState  = Nothing
        }
+
+-- | Create an environment from an existing interpreter state.
+--
+-- FUTURE: it might be nice to be able to read subshell input from a
+-- file in batch mode. Or from the same file that's feeding the parent
+-- shell, though that's probably difficult. For now, assume any
+-- subshells are intended to be interactive.
+resumeREPL :: TopLevelRO -> TopLevelRW -> Maybe ProofState -> REPLState
+resumeREPL ro rw mpst =
+    REPLState {
+        rContinue   = True,
+        rIsBatch    = False,
+        rTopLevelRO = ro,
+        rTopLevelRW = rw,
+        rProofState = mpst
+    }
 
 
 -- REPL Monad ------------------------------------------------------------------
@@ -121,47 +134,6 @@ deriving instance MonadState REPLState REPL
 runREPL :: REPL a -> REPLState -> IO (a, REPLState)
 runREPL m st = do
     runStateT (unREPL m) st
-
-subshell :: REPL () -> TopLevel ()
-subshell m =
-  do pushScope
-     ro <- ask
-     rw <- get
-     rw' <- liftIO $
-       do let st = REPLState
-                     { rContinue = True
-                     , rIsBatch  = False
-                     , rTopLevelRO = ro
-                     , rTopLevelRW = rw
-                     , rProofState  = Nothing
-                     }
-          (_result, st') <- runREPL m st
-          return $ rTopLevelRW st'
-     put rw'
-     popScope
-
-proof_subshell :: REPL () -> ProofScript ()
-proof_subshell m =
-  ProofScript $ ExceptT $ StateT $ \proofSt ->
-  do pushScope
-     ro <- ask
-     rw <- get
-     (rw', outProofSt) <- liftIO $
-       do let st = REPLState
-                     { rContinue = True
-                     , rIsBatch  = False
-                     , rTopLevelRO = ro
-                     , rTopLevelRW = rw
-                     , rProofState  = Just proofSt
-                     }
-          (_result, st') <- runREPL m st
-          let proofSt' = case rProofState st' of
-                Nothing -> panic "proof_subshell" ["Proof state disappeared!"]
-                Just ps -> ps
-          return (rTopLevelRW st', proofSt')
-     put rw'
-     popScope
-     return (Right (), outProofSt)
 
 
 -- Exceptions ------------------------------------------------------------------

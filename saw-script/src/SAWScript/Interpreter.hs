@@ -26,8 +26,9 @@ module SAWScript.Interpreter
 
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
-import Control.Monad.Reader (asks)
-import Control.Monad.State (gets)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Reader (ask)
+import Control.Monad.State (gets, get, put)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.List (genericLength)
@@ -1064,8 +1065,10 @@ interpretMain = do
 
 buildTopLevelEnv :: Options
                  -> [Text]
+                 -> TopLevelShellHook
+                 -> ProofScriptShellHook
                  -> IO (TopLevelRO, TopLevelRW)
-buildTopLevelEnv opts scriptArgv = do
+buildTopLevelEnv opts scriptArgv tlhook pshook = do
        let proxy = AIGProxy AIG.compactProxy
        let mn = mkModuleName ["SAWScript"]
        sc <- mkSharedContext
@@ -1086,8 +1089,8 @@ buildTopLevelEnv opts scriptArgv = do
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
-                   , roSubshell = fail "Subshells not supported"
-                   , roProofSubshell = fail "Proof subshells not supported"
+                   , roSubshell = tlhook
+                   , roProofSubshell = pshook
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -1138,18 +1141,12 @@ processFile ::
   Options ->
   FilePath ->
   [Text] ->
-  Maybe (TopLevel ()) ->
-  Maybe (ProofScript ()) ->
+  TopLevelShellHook ->
+  ProofScriptShellHook ->
   IO ()
-processFile opts file scriptArgv mbSubshell mbProofSubshell = do
-  (ro, rw) <- buildTopLevelEnv opts scriptArgv
-  let ro' = case mbSubshell of
-              Nothing -> ro
-              Just m  -> ro{ roSubshell = m }
-  let ro'' = case mbProofSubshell of
-              Nothing -> ro'
-              Just m  -> ro'{ roProofSubshell = m }
-  _ <- runTopLevel (interpretFile file True) ro'' rw
+processFile opts file scriptArgv tlhook pshook = do
+  (ro, rw) <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  _ <- runTopLevel (interpretFile file True) ro rw
             `X.catch` (handleException opts)
   return ()
 
@@ -1713,15 +1710,61 @@ add_primitives lc _bic _opts = do
     rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
 
+-- The subshell command.
+--
+-- The SubshellHook is an IO action that takes interpreter state and
+-- runs the REPL. (Because it recurses back into the repl, it has to
+-- be passed down to us as a closure; it's stored in TopLevelRO while
+-- we execute.)
+--
+-- This function is bound into the interpreter with `pureVal`, which
+-- means the returned TopLevel action gets wrapped in a `Value` and is
+-- not bound into the Haskell-level monad sequencing until the
+-- interpreter unwraps it. (That happens when the value is monad-bound
+-- in SAWScript and not, in particular, just when the () is applied to
+-- the SAWScript name "subshell".)
+--
+-- This should prevent former weirdnesses like x not appearing in the
+-- subshell context in:
+--
+--    do { let s = subshell (); let x = 3; s; return (); };
+--
+-- because the TopLevelRW got fetched at the wrong point.
+--
+-- But note that because the SAWScript interpreter is very fragile it
+-- is very easy for these things to regress.
+--
 toplevelSubshell :: () -> TopLevel Value
 toplevelSubshell () = do
-     m <- asks roSubshell
-     toValue "subshell" <$> m
+    pushScope
+    ro <- ask
+    rw <- get
+    let hook = roSubshell ro
+    rw' <- liftIO $ hook ro rw
+    put rw'
+    popScope
+    return $ toValue "subshell" ()
 
+-- The proof_subshell command.
+--
+-- Much the same as an ordinary subshell, except it runs in the
+-- ProofScript monad and handles the additional ProofScript state.
+--
 proofScriptSubshell :: () -> ProofScript Value
 proofScriptSubshell () = do
-     m <- scriptTopLevel $ asks roProofSubshell
-     toValue "proof_subshell" <$> m
+    (ro, rw) <- scriptTopLevel $ do
+        pushScope
+        ro_ <- ask
+        rw_ <- get
+        return (ro_, rw_)
+    pst <- get
+    let hook = roProofSubshell ro
+    (rw', pst') <- liftIO $ hook ro rw pst
+    put pst'
+    scriptTopLevel $ do
+        put rw'
+        popScope
+    return $ toValue "proof_subshell" ()
 
 -- The "for" builtin.
 --
