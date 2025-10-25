@@ -270,6 +270,7 @@ Context :: { Type }
  | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
  | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
  | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
+ | '(' Context ')'                      { $2                                  }
 
 TypeName :: { Type }
  : name                                 { tVar (getPos $1) (tokStr $1)        }
