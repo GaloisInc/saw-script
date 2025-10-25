@@ -102,11 +102,10 @@ import qualified SAWCentral.Yosys as Yo (YosysIR)
 import qualified SAWCentral.Yosys.State as Yo (YosysSequential)
 import qualified SAWCentral.Yosys.Theorem as Yo (YosysImport, YosysTheorem)
 
-import SAWCore.Conversion
 import SAWCore.Module (emptyModule)
 import SAWCore.Name (mkModuleName)
 import SAWCore.Prim (rethrowEvalError)
-import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
+import SAWCore.Rewriter (emptySimpset, rewritingSharedContext)
 import SAWCore.SharedTerm
 import SAWCore.Term.Raw (closedTerm)
 import qualified CryptolSAWCore.CryptolEnv as CEnv
@@ -1072,9 +1071,7 @@ buildTopLevelEnv proxy opts scriptArgv =
        CryptolSAW.scLoadPreludeModule sc0
        CryptolSAW.scLoadCryptolModule sc0
        scLoadModule sc0 (emptyModule mn)
-       let convs = natConversions
-       simps <- scSimpset sc0 [] [] convs
-       let sc = rewritingSharedContext sc0 simps
+       let sc = rewritingSharedContext sc0 emptySimpset
        ss <- basic_ss sc
        currDir <- getCurrentDirectory
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
