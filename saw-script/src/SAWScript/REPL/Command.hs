@@ -454,10 +454,10 @@ sawScriptCmd str = do
   case SAWScript.Parser.parseStmtSemi tokens of
     Left err -> liftIO $ print err
     Right stmt ->
-      do mr <- getProofStateRef
-         case mr of
+      do mpst <- getProofState
+         case mpst of
            Nothing -> void $ liftTopLevel (interpretTopStmt True stmt)
-           Just r  -> void $ liftProofScript (interpretTopStmt True stmt) r
+           Just _  -> void $ liftProofScript (interpretTopStmt True stmt)
 
 replFileName :: FilePath
 replFileName = "<stdin>"

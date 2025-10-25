@@ -9,6 +9,7 @@ Stability   : provisional
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
@@ -35,7 +36,7 @@ module SAWScript.REPL.Monad (
 
     -- ** SAWScript stuff
   , getTopLevelRW
-  , getProofStateRef
+  , getProofState
   , getSAWScriptValueNames
   , getSAWScriptTypeNames
   ) where
@@ -53,10 +54,9 @@ import Cryptol.Utils.PP
 import Control.Monad (void)
 import Control.Monad.Reader (ask)
 import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), MonadMask(..), catchJust)
-import Control.Monad.State (MonadState(..), StateT(..), get, gets, put)
+import Control.Monad.State (MonadState(..), StateT(..), get, gets, put, modify)
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
 import qualified Data.Set as Set
 --import Data.Map (Map)
 import qualified Data.Map as Map
@@ -79,6 +79,7 @@ import SAWCentral.Value (ProofScript(..), showsProofResult, Environ(..),
                          rwGetCryptolEnv,
                          pushScope, popScope)
 
+import SAWScript.Panic (panic)
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
 
@@ -87,24 +88,22 @@ import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
 
 -- REPL Environment.
 data REPLState = REPLState
-  { rContinue   :: IORef Bool
+  { rContinue   :: Bool
   , rIsBatch    :: Bool
   , rTopLevelRO :: TopLevelRO
-  , rTopLevelRW :: IORef TopLevelRW
-  , rProofState :: Maybe (IORef ProofState)
+  , rTopLevelRW :: TopLevelRW
+  , rProofState :: Maybe ProofState
   }
 
 -- | Initial, empty environment.
 startupState :: Bool -> Options -> IO REPLState
 startupState isBatch opts =
   do (ro, rw) <- buildTopLevelEnv opts []
-     contRef <- newIORef True
-     rwRef <- newIORef rw
      return REPLState
-       { rContinue   = contRef
+       { rContinue   = True
        , rIsBatch    = isBatch
        , rTopLevelRO = ro
-       , rTopLevelRW = rwRef
+       , rTopLevelRW = rw
        , rProofState  = Nothing
        }
 
@@ -125,10 +124,9 @@ runREPLFresh isBatch opts m =
      return result
 
 -- | Run a REPL action on a REPL state.
-runREPLOn :: REPL a -> REPLState -> IO a
+runREPLOn :: REPL a -> REPLState -> IO (a, REPLState)
 runREPLOn m st = do
-    (result, _st') <- runStateT (unREPL m) st
-    return result
+    runStateT (unREPL m) st
 
 subshell :: REPL () -> TopLevel ()
 subshell m =
@@ -136,17 +134,15 @@ subshell m =
      ro <- ask
      rw <- get
      rw' <- liftIO $
-       do contRef <- newIORef True
-          rwRef <- newIORef rw
-          let st = REPLState
-                     { rContinue = contRef
+       do let st = REPLState
+                     { rContinue = True
                      , rIsBatch  = False
                      , rTopLevelRO = ro
-                     , rTopLevelRW = rwRef
+                     , rTopLevelRW = rw
                      , rProofState  = Nothing
                      }
-          runREPLOn m st
-          readIORef rwRef
+          (_result, st') <- runREPLOn m st
+          return $ rTopLevelRW st'
      put rw'
      popScope
 
@@ -157,18 +153,18 @@ proof_subshell m =
      ro <- ask
      rw <- get
      (rw', outProofSt) <- liftIO $
-       do contRef <- newIORef True
-          rwRef <- newIORef rw
-          proofRef <- newIORef proofSt
-          let st = REPLState
-                     { rContinue = contRef
+       do let st = REPLState
+                     { rContinue = True
                      , rIsBatch  = False
                      , rTopLevelRO = ro
-                     , rTopLevelRW = rwRef
-                     , rProofState  = Just proofRef
+                     , rTopLevelRW = rw
+                     , rProofState  = Just proofSt
                      }
-          runREPLOn m st
-          (,) <$> readIORef rwRef <*> readIORef proofRef
+          (_result, st') <- runREPLOn m st
+          let proofSt' = case rProofState st' of
+                Nothing -> panic "proof_subshell" ["Proof state disappeared!"]
+                Just ps -> ps
+          return (rTopLevelRW st', proofSt')
      put rw'
      popScope
      return (Right (), outProofSt)
@@ -261,25 +257,25 @@ exceptionProtect cmd =
          void $ liftTopLevel (restoreCheckpoint chk)
 
 liftTopLevel :: TopLevel a -> REPL a
-liftTopLevel m =
-  do ro  <- getTopLevelRO
-     ref <- getTopLevelRWRef
-     liftIO $ do
-             rw <- readIORef ref
-             (a, rw') <- runTopLevel m ro rw
-             writeIORef ref rw'
-             return a
+liftTopLevel m = do
+    ro <- getTopLevelRO
+    rw <- getTopLevelRW
+    (result, rw') <- liftIO $ runTopLevel m ro rw
+    modify (\st -> st { rTopLevelRW = rw' })
+    return result
 
-liftProofScript :: ProofScript a -> IORef ProofState -> REPL a
-liftProofScript m ref =
-  liftTopLevel $
-  do st <- liftIO $ readIORef ref
-     (res, st') <- runStateT (runExceptT (unProofScript m)) st
-     liftIO $ writeIORef ref st'
-     case res of
+liftProofScript :: ProofScript a -> REPL a
+liftProofScript m = do
+    mpst <- gets rProofState
+    let pst = case mpst of
+          Nothing -> panic "liftProofScript" ["Not in ProofScript mode"]
+          Just ps -> ps
+    (result, pst') <- liftTopLevel $ runStateT (runExceptT (unProofScript m)) pst
+    modify (\st -> st { rProofState = Just pst' })
+    liftTopLevel $ case result of
        Left (stats, cex) ->
          do ppOpts <- rwPPOpts <$> get
-            fail (showsProofResult ppOpts (InvalidProof stats cex st') "")
+            fail (showsProofResult ppOpts (InvalidProof stats cex pst') "")
        Right x -> return x
 
 -- Primitives ------------------------------------------------------------------
@@ -287,33 +283,26 @@ liftProofScript m ref =
 instance MonadIO REPL where
   liftIO m = REPL (liftIO m)
 
-readRef :: (REPLState -> IORef a) -> REPL a
-readRef r = do
-    ref <- gets r
-    liftIO $ readIORef ref
-
-modifyRef :: (REPLState -> IORef a) -> (a -> a) -> REPL ()
-modifyRef r f = do
-    ref <- gets r
-    liftIO $ modifyIORef ref f
-
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
 getPrompt =
   do batch <- gets rIsBatch
      if batch then return ""
-     else
-       getProofStateRef >>= \case
-         Nothing -> return "sawscript> "
-         Just psr ->
-           do ps <- liftIO (readIORef psr)
-              return ("proof ("++show (length (psGoals ps))++")> ")
+     else do
+       mpst <- gets rProofState
+       case mpst of
+         Nothing ->
+             return "sawscript> "
+         Just pst ->
+             return ("proof ("++show (length (psGoals pst))++")> ")
 
 shouldContinue :: REPL Bool
-shouldContinue = readRef rContinue
+shouldContinue =
+    gets rContinue
 
 stop :: REPL ()
-stop = modifyRef rContinue (const False)
+stop =
+    modify (\st -> st { rContinue = False })
 
 -- | Get visible Cryptol variable names.
 getCryptolExprNames :: REPL [String]
@@ -335,14 +324,11 @@ getCryptolEnv = do
 getTopLevelRO :: REPL TopLevelRO
 getTopLevelRO = gets rTopLevelRO
 
-getTopLevelRWRef :: REPL (IORef TopLevelRW)
-getTopLevelRWRef = gets rTopLevelRW
-
-getProofStateRef :: REPL (Maybe (IORef ProofState))
-getProofStateRef = gets rProofState
-
 getTopLevelRW :: REPL TopLevelRW
-getTopLevelRW = readRef rTopLevelRW
+getTopLevelRW = gets rTopLevelRW
+
+getProofState :: REPL (Maybe ProofState)
+getProofState = gets rProofState
 
 -- | Get visible variable names for Haskeline completion.
 getSAWScriptValueNames :: REPL [String]
