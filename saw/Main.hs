@@ -339,8 +339,8 @@ warn opts msg = do
 -- Load (and run) a saw-script file.
 loadFile :: Options -> FilePath -> [Text] -> IO ()
 loadFile opts file scriptArgv = do
-  let subsh = REPL.subshell (REPL.replBody Nothing (return ()))
-      proofSubsh = REPL.proof_subshell (REPL.replBody Nothing (return ()))
+  let subsh = REPL.subshell (REPL.replBody Nothing)
+      proofSubsh = REPL.proof_subshell (REPL.replBody Nothing)
   processFile opts file scriptArgv (Just subsh) (Just proofSubsh)
     `catch`
     (\(ErrorCall msg) -> err opts msg)
@@ -410,9 +410,9 @@ main = do
                 -- because there's no way to retrieve the context from
                 -- loading a file and then feed it to the repl.
                 warn opts "Warning: files loaded along with -I are ignored"
-            REPL.run opts
+            REPL.run Nothing opts
        | [] <- scriptArgv ->
-            REPL.run opts
+            REPL.run Nothing opts
        | file : _ <- scriptArgv ->
             loadFile opts file (map Text.pack scriptArgv)
       Just f -> do
@@ -421,4 +421,4 @@ main = do
             when (scriptArgv /= []) $
                 err opts $ "Error: cannot load ordinary saw-script files" ++
                            " along with -B"
-            REPL.runFromFile f opts
+            REPL.run (Just f) opts

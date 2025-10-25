@@ -15,7 +15,8 @@ Stability   : provisional
 
 module SAWScript.REPL.Monad (
     -- * REPL Monad
-    REPL(..), runREPLFresh
+    REPL(..), runREPL
+  , initREPL
   , raise
   , stop
   , exceptionProtect
@@ -95,9 +96,9 @@ data REPLState = REPLState
   , rProofState :: Maybe ProofState
   }
 
--- | Initial, empty environment.
-startupState :: Bool -> Options -> IO REPLState
-startupState isBatch opts =
+-- | Create an initial, empty environment.
+initREPL :: Bool -> Options -> IO REPLState
+initREPL isBatch opts =
   do (ro, rw) <- buildTopLevelEnv opts []
      return REPLState
        { rContinue   = True
@@ -116,16 +117,9 @@ newtype REPL a = REPL { unREPL :: StateT REPLState IO a }
 
 deriving instance MonadState REPLState REPL
 
--- | Run a REPL action with a fresh environment.
-runREPLFresh :: Bool -> Options -> REPL a -> IO a
-runREPLFresh isBatch opts m =
-  do st <- startupState isBatch opts
-     (result, _st') <- runStateT (unREPL m) st
-     return result
-
 -- | Run a REPL action on a REPL state.
-runREPLOn :: REPL a -> REPLState -> IO (a, REPLState)
-runREPLOn m st = do
+runREPL :: REPL a -> REPLState -> IO (a, REPLState)
+runREPL m st = do
     runStateT (unREPL m) st
 
 subshell :: REPL () -> TopLevel ()
@@ -141,7 +135,7 @@ subshell m =
                      , rTopLevelRW = rw
                      , rProofState  = Nothing
                      }
-          (_result, st') <- runREPLOn m st
+          (_result, st') <- runREPL m st
           return $ rTopLevelRW st'
      put rw'
      popScope
@@ -160,7 +154,7 @@ proof_subshell m =
                      , rTopLevelRW = rw
                      , rProofState  = Just proofSt
                      }
-          (_result, st') <- runREPLOn m st
+          (_result, st') <- runREPL m st
           let proofSt' = case rProofState st' of
                 Nothing -> panic "proof_subshell" ["Proof state disappeared!"]
                 Just ps -> ps

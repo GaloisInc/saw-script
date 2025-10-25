@@ -19,7 +19,6 @@ import Data.Char (isAlphaNum, isSpace)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.List (isPrefixOf)
-import Data.Maybe (isJust)
 import System.Console.Haskeline
 import System.Directory(getAppUserDataDirectory,createDirectoryIfMissing)
 import System.FilePath((</>))
@@ -27,7 +26,6 @@ import qualified Control.Monad.IO.Class as MTL
 import qualified Control.Monad.Trans.Class as MTL
 import qualified Control.Exception as X
 
-import SAWCentral.Options (Options)
 import SAWCentral.TopLevel( TopLevelRO(..) )
 
 
@@ -36,21 +34,19 @@ import SAWCentral.TopLevel( TopLevelRO(..) )
 -- XXX this needs to handle Ctrl-C, which at the moment will just cause
 -- haskeline to exit.  See the function 'withInterrupt' for more info on how to
 -- handle this.
-repl :: Maybe FilePath -> Options -> REPL () -> IO ()
-repl mbBatch opts begin =
-  runREPLFresh (isJust mbBatch) opts (replBody mbBatch begin)
+repl :: Maybe FilePath -> REPL ()
+repl mbBatchFile =
+  replBody mbBatchFile
 
 
-replBody :: Maybe FilePath -> REPL () -> REPL ()
-replBody mbBatch begin =
+replBody :: Maybe FilePath -> REPL ()
+replBody mbBatchFile =
   do settings <- MTL.liftIO (setHistoryFile replSettings)
      enableSubshell (runInputTBehavior style settings body)
   where
-  body = withInterrupt $ do
-    MTL.lift begin
-    loop
+  body = withInterrupt loop
 
-  style = case mbBatch of
+  style = case mbBatchFile of
     Nothing   -> defaultBehavior
     Just path -> useFile path
 
