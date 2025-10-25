@@ -21,13 +21,14 @@ import SAWCore.SharedTerm
 mkCryptolSimpset :: SharedContext -> IO (Simpset a)
 mkCryptolSimpset sc =
   do m <- scFindModule sc cryptolModuleName
-     scSimpset sc (cryptolDefs m) [] []
+     scSimpset sc (cryptolDefs m) idents []
   where
     cryptolDefs m = filter (not . excluded) $ moduleDefs m
     excluded d =
       case nameInfo (defName d) of
         ModuleIdentifier ident -> ident `elem` excludedNames
         ImportedName{} -> True
+    idents = ["Prelude.coerce_same", "Prelude.unsafeCoerce_same"]
 
 cryptolModuleName :: ModuleName
 cryptolModuleName = mkModuleName ["Cryptol"]

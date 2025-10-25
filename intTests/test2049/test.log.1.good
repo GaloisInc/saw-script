@@ -13,7 +13,7 @@ Literal equality postcondition
 Expected term: 
 zero::table
 Actual term:
-let { x@1 = Prelude.Vec 8 Prelude.Bool
+let { x@1 = Cryptol.seq (Cryptol.TCNum 8) Prelude.Bool
     }
  in Cryptol.ecArrayUpdate x@1 x@1 zero::table zero::k
       (Prelude.bvNat 8 0)

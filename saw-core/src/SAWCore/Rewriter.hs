@@ -52,9 +52,7 @@ module SAWCore.Rewriter
   , rewriteSharedTermTypeSafe
   -- * Matching
   , scMatch
-  -- * SharedContext
-  , rewritingSharedContext
-
+  -- * Miscellaneous
   , replaceTerm
   , hoistIfs
   ) where
@@ -875,40 +873,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
       case runConversion conv t of
         Nothing -> apply rules t
         Just tb -> rewriteAll =<< runTermBuilder tb (scGlobalDef sc) (scTermF sc)
-
--- | Generate a new SharedContext that normalizes terms as it builds them.
---   Rule annotations are ignored.
-rewritingSharedContext :: SharedContext -> Simpset a -> SharedContext
-rewritingSharedContext sc ss = sc'
-  where
-    sc' = sc { scTermF = rewriteTop }
-
-    rewriteTop :: TermF Term -> IO Term
-    rewriteTop tf =
-      case asPairRedex t of
-        Just t' -> return t'
-        Nothing ->
-          case asRecordRedex t of
-            Just t' -> return t'
-            Nothing -> apply (Net.match_term ss (termPat t)) t
-      where t = Unshared tf
-
-    apply :: [Either (RewriteRule a) Conversion] ->
-             Term -> IO Term
-    apply [] (Unshared tf) = scTermF sc tf
-    apply [] STApp{ stAppTermF = tf } = scTermF sc tf
-    apply (Left (RewriteRule c l r _ _shallow _ann) : rules) t =
-      case firstOrderMatch c l t of
-        Nothing -> apply rules t
-        Just inst
-          | l == r ->
-            do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ scPrettyTerm PPS.defaultOpts l
-               apply rules t
-          | otherwise -> scInstantiateExt sc' inst r
-    apply (Right conv : rules) t =
-      case runConversion conv t of
-        Nothing -> apply rules t
-        Just tb -> runTermBuilder tb (scGlobalDef sc) (scTermF sc')
 
 
 -- FIXME: is there some way to have sensable term replacement in the presence of loose variables

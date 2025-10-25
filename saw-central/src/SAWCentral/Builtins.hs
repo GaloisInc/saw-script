@@ -1795,17 +1795,21 @@ list_term tts@(tt0 : _) =
      return (TypedTerm (TypedTermSchema (C.tMono (C.tSeq n a))) trm)
 
 eval_list :: TypedTerm -> TopLevel [TypedTerm]
-eval_list t = do
-  sc <- getSharedContext
-  (n, a) <-
-    case ttType t of
-      TypedTermSchema (C.Forall [] [] (C.tIsSeq -> Just (C.tIsNum -> Just n, a))) -> return (n, a)
-      _ -> fail "eval_list: not a monomorphic array type"
-  n' <- io $ scNat sc (fromInteger n)
-  a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
-  idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
-  ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
-  return (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
+eval_list t =
+  do sc <- getSharedContext
+     (n, a) <-
+       case ttType t of
+         TypedTermSchema (C.Forall [] [] (C.tIsSeq -> Just (C.tIsNum -> Just n, a))) -> return (n, a)
+         _ -> fail "eval_list: not a monomorphic array type"
+     case asArrayValue (ttTerm t) of
+       Just (_ty, ts) ->
+         pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
+       Nothing ->
+         do n' <- io $ scNat sc (fromInteger n)
+            a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
+            idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
+            ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
+            pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
 
 term_theories :: [Text] -> TypedTerm -> TopLevel [Text]
 term_theories unints t = do
