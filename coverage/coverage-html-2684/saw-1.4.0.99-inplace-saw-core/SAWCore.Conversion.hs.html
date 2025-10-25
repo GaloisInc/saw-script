@@ -583,7 +583,7 @@ span.spaces    { background: white }
 <span class="lineno">  564 </span>subNat_NatLit :: Conversion
 <span class="lineno">  565 </span><span class="decl"><span class="istickedoff">subNat_NatLit = Conversion $</span>
 <span class="lineno">  566 </span><span class="spaces">  </span><span class="istickedoff">thenMatcher (asGlobalDef &quot;Prelude.subNat&quot; &lt;:&gt; asAnyNatLit &lt;:&gt; asAnyNatLit)</span>
-<span class="lineno">  567 </span><span class="spaces">    </span><span class="istickedoff">(\(_ :*: x :*: y) -&gt; if <span class="tickonlytrue">x &gt;= y</span> then Just (mkNatLit (x - y)) else <span class="nottickedoff">Nothing</span>)</span></span>
+<span class="lineno">  567 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(\(_ :*: x :*: y) -&gt; if x &gt;= y then Just (mkNatLit (x - y)) else Nothing)</span></span></span>
 <span class="lineno">  568 </span>
 <span class="lineno">  569 </span>mulNat_NatLit :: Conversion
 <span class="lineno">  570 </span><span class="decl"><span class="istickedoff">mulNat_NatLit = globalConv &quot;Prelude.mulNat&quot; ((*) :: Natural -&gt; Natural -&gt; Natural)</span></span>

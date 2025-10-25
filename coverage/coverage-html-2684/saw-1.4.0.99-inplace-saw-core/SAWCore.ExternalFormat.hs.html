@@ -80,7 +80,7 @@ span.spaces    { background: white }
 <span class="lineno">   61 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))</span>
 <span class="lineno">   62 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Right (Right (uri,as))) =</span>
 <span class="lineno">   63 </span><span class="spaces">       </span><span class="istickedoff">do uri' &lt;- mkURI uri</span>
-<span class="lineno">   64 </span><span class="spaces">          </span><span class="istickedoff">pure (idx, Right (ImportedName uri' as))</span></span>
+<span class="lineno">   64 </span><span class="spaces">          </span><span class="istickedoff">pure (idx, Right (ImportedName uri' <span class="nottickedoff">as</span>))</span></span>
 <span class="lineno">   65 </span>
 <span class="lineno">   66 </span>-- | Render to external text format
 <span class="lineno">   67 </span>scWriteExternal :: Raw.Term -&gt; String

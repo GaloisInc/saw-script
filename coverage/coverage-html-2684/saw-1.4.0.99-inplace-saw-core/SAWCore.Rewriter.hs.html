@@ -909,7 +909,7 @@ span.spaces    { background: white }
 <span class="lineno">  890 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  891 </span><span class="spaces">          </span><span class="istickedoff">case asRecordRedex t of</span>
 <span class="lineno">  892 </span><span class="spaces">            </span><span class="istickedoff">Just t' -&gt; return t'</span>
-<span class="lineno">  893 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; apply (Net.match_term ss (termPat t)) t</span>
+<span class="lineno">  893 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; apply (Net.match_term ss <span class="nottickedoff">(termPat t)</span>) t</span>
 <span class="lineno">  894 </span><span class="spaces">      </span><span class="istickedoff">where t = Unshared tf</span>
 <span class="lineno">  895 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  896 </span><span class="spaces">    </span><span class="istickedoff">apply :: [Either (RewriteRule a) Conversion] -&gt;</span>
@@ -925,9 +925,9 @@ span.spaces    { background: white }
 <span class="lineno">  906 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">apply rules t</span></span>
 <span class="lineno">  907 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| otherwise -&gt; scInstantiateExt sc' inst r</span></span>
 <span class="lineno">  908 </span><span class="spaces">    </span><span class="istickedoff">apply (Right conv : rules) t =</span>
-<span class="lineno">  909 </span><span class="spaces">      </span><span class="istickedoff">case runConversion conv t of</span>
-<span class="lineno">  910 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; apply rules t</span>
-<span class="lineno">  911 </span><span class="spaces">        </span><span class="istickedoff">Just tb -&gt; runTermBuilder tb <span class="nottickedoff">(scGlobalDef sc)</span> (scTermF sc')</span></span>
+<span class="lineno">  909 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case runConversion conv t of</span></span>
+<span class="lineno">  910 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; apply rules t</span></span>
+<span class="lineno">  911 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just tb -&gt; runTermBuilder tb (scGlobalDef sc) (scTermF sc')</span></span></span>
 <span class="lineno">  912 </span>
 <span class="lineno">  913 </span>
 <span class="lineno">  914 </span>-- FIXME: is there some way to have sensable term replacement in the presence of loose variables

@@ -256,7 +256,7 @@ span.spaces    { background: white }
 <span class="lineno">  237 </span><span class="spaces">        </span><span class="istickedoff">Leaf _ -&gt; nets</span>
 <span class="lineno">  238 </span><span class="spaces">        </span><span class="istickedoff">Net {var} -&gt;</span>
 <span class="lineno">  239 </span><span class="spaces">          </span><span class="istickedoff">case t of</span>
-<span class="lineno">  240 </span><span class="spaces">            </span><span class="istickedoff">Var -&gt; if unif then net_skip net nets else var : nets {-only matches Var in net-}</span>
+<span class="lineno">  240 </span><span class="spaces">            </span><span class="istickedoff">Var -&gt; if <span class="tickonlytrue">unif</span> then net_skip net nets else <span class="nottickedoff">var : nets</span> {-only matches Var in net-}</span>
 <span class="lineno">  241 </span><span class="spaces">            </span><span class="istickedoff">_   -&gt; rands t net (var : nets)  {-var could match also-}</span>
 <span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">rands :: Pat -&gt; Net a -&gt; [Net a] -&gt; [Net a]</span>
 <span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">rands _ (Leaf _) nets = nets</span>
@@ -274,7 +274,7 @@ span.spaces    { background: white }
 <span class="lineno">  255 </span>
 <span class="lineno">  256 </span>{-return items whose key could match pat, WHICH MUST BE BETA-ETA NORMAL-}
 <span class="lineno">  257 </span>match_term :: Net a -&gt; Pat -&gt; [a]
-<span class="lineno">  258 </span><span class="decl"><span class="istickedoff">match_term net pat = extract_leaves (matching False pat net [])</span></span>
+<span class="lineno">  258 </span><span class="decl"><span class="istickedoff">match_term net pat = extract_leaves (matching <span class="nottickedoff">False</span> <span class="nottickedoff">pat</span> net [])</span></span>
 <span class="lineno">  259 </span>
 <span class="lineno">  260 </span>{-return items whose key could unify with pat-}
 <span class="lineno">  261 </span>unify_term :: Net a -&gt; Pat -&gt; [a]

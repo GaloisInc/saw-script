@@ -853,7 +853,7 @@ span.spaces    { background: white }
 <span class="lineno">  834 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;jvm_array_is: not a monomorphic sequence type&quot;</span></span>
 <span class="lineno">  835 </span><span class="spaces">             </span><span class="istickedoff">Just x -&gt; pure x</span>
 <span class="lineno">  836 </span><span class="spaces">         </span><span class="istickedoff">rval &lt;- resolveAllocIndexJVM ptr</span>
-<span class="lineno">  837 </span><span class="spaces">         </span><span class="istickedoff">vs &lt;- traverse (injectSetupValueJVM sym <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> . MS.SetupTerm) tts</span>
+<span class="lineno">  837 </span><span class="spaces">         </span><span class="istickedoff">vs &lt;- traverse (injectSetupValueJVM sym <span class="nottickedoff">opts</span> cc sc <span class="nottickedoff">spec</span> . MS.SetupTerm) tts</span>
 <span class="lineno">  838 </span><span class="spaces">         </span><span class="istickedoff">globals' &lt;- liftIO $ doEntireArrayStore bak globals rval vs</span>
 <span class="lineno">  839 </span><span class="spaces">         </span><span class="istickedoff">OM (overrideGlobals .= globals')</span>
 <span class="lineno">  840 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -875,7 +875,7 @@ span.spaces    { background: white }
 <span class="lineno">  856 </span>  SetupValue           -&gt;
 <span class="lineno">  857 </span>  OverrideMatcher CJ.JVM w (Crucible.RegValue Sym CJ.JVMValueType)
 <span class="lineno">  858 </span><span class="decl"><span class="istickedoff">injectSetupValueJVM sym opts cc sc spec val =</span>
-<span class="lineno">  859 </span><span class="spaces">  </span><span class="istickedoff">injectJVMVal sym &lt;$&gt; resolveSetupValueJVM <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> val</span></span>
+<span class="lineno">  859 </span><span class="spaces">  </span><span class="istickedoff">injectJVMVal sym &lt;$&gt; resolveSetupValueJVM <span class="nottickedoff">opts</span> cc sc <span class="nottickedoff">spec</span> val</span></span>
 <span class="lineno">  860 </span>
 <span class="lineno">  861 </span>doEntireArrayStore ::
 <span class="lineno">  862 </span>  (Crucible.IsSymBackend sym bak) =&gt;
