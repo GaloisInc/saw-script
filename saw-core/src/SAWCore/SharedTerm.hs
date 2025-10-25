@@ -374,7 +374,7 @@ insertTFM tf x tfm =
 -- then do another lookup for hash-consing the Constant term.
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
-  , scTermF          :: TermF Term -> IO Term
+  , scAppCache       :: AppCacheRef
   , scDisplayNameEnv :: IORef DisplayNameEnv
   , scURIEnv         :: IORef (Map URI VarIndex)
   , scGlobalEnv      :: IORef (HashMap Ident Term)
@@ -726,9 +726,9 @@ emptyAppCache :: AppCache
 emptyAppCache = emptyTFM
 
 -- | Return term for application using existing term in cache if it is available.
-getTerm :: AppCacheRef -> TermF Term -> IO Term
-getTerm cache termF =
-  modifyMVar cache $ \s -> do
+scTermF :: SharedContext -> TermF Term -> IO Term
+scTermF sc termF =
+  modifyMVar (scAppCache sc) $ \s -> do
     case lookupTFM termF s of
       Just term -> return (s, term)
       Nothing -> do
@@ -2567,7 +2567,7 @@ mkSharedContext = do
   ur <- newIORef Map.empty
   return SharedContext {
              scModuleMap = mod_map_ref
-           , scTermF = getTerm cr
+           , scAppCache = cr
            , scNextVarIndex = vr
            , scDisplayNameEnv = dr
            , scURIEnv = ur
