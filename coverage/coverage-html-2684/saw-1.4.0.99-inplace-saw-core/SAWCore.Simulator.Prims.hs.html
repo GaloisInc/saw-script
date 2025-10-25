@@ -302,7 +302,7 @@ span.spaces    { background: white }
 <span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">-- Bitwise</span>
 <span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvAnd&quot; , wordBinOp (bpPack bp) (bpBvAnd bp))</span>
 <span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvOr&quot;  , wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvOr  bp))</span>
-<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvXor&quot; , wordBinOp (bpPack bp) (bpBvXor bp))</span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvXor&quot; , wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvXor bp))</span>
 <span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNot&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvNot bp))</span>
 <span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">-- Arithmetic</span>
 <span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNeg&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvNeg bp))</span>
@@ -705,7 +705,7 @@ span.spaces    { background: white }
 <span class="lineno">  686 </span>divModNatOp :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
 <span class="lineno">  687 </span><span class="decl"><span class="istickedoff">divModNatOp bp = binNatOp <span class="nottickedoff">bp</span> <span class="nottickedoff">max</span></span>
 <span class="lineno">  688 </span><span class="spaces">                 </span><span class="istickedoff">(\m n -&gt; let (q,r) = divMod m n in</span>
-<span class="lineno">  689 </span><span class="spaces">                          </span><span class="istickedoff">pure $ vTuple [ready $ vNat q, ready $ vNat r])</span>
+<span class="lineno">  689 </span><span class="spaces">                          </span><span class="istickedoff">pure $ vTuple [ready $ vNat q, <span class="nottickedoff">ready $ vNat r</span>])</span>
 <span class="lineno">  690 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">(\w x1 x2 -&gt; do q &lt;- VBVToNat w . VWord &lt;$&gt; bpBvUDiv bp x1 x2</span></span>
 <span class="lineno">  691 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">r &lt;- VBVToNat w . VWord &lt;$&gt; bpBvURem bp x1 x2</span></span>
 <span class="lineno">  692 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">pure $ vTuple [ready q, ready r])</span></span></span>
@@ -957,7 +957,7 @@ span.spaces    { background: white }
 <span class="lineno">  938 </span><span class="spaces">    </span><span class="istickedoff">(VWord xw, VWord yw) -&gt; lift (VWord &lt;$&gt; bpBvJoin bp xw yw)</span>
 <span class="lineno">  939 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, VVector yv) -&gt; return $ VVector ((V.++) xv yv)</span>
 <span class="lineno">  940 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, VWord yw) -&gt; lift (liftM (\yv -&gt; VVector ((V.++) xv (fmap (ready . VBool) yv))) (bpUnpack bp yw))</span>
-<span class="lineno">  941 </span><span class="spaces">    </span><span class="istickedoff">(VWord xw, VVector yv) -&gt; lift (liftM (\xv -&gt; VVector ((V.++) (fmap (ready . VBool) xv) yv)) (bpUnpack bp xw))</span>
+<span class="lineno">  941 </span><span class="spaces">    </span><span class="istickedoff">(VWord xw, VVector yv) -&gt; <span class="nottickedoff">lift (liftM (\xv -&gt; VVector ((V.++) (fmap (ready . VBool) xv) yv)) (bpUnpack bp xw))</span></span>
 <span class="lineno">  942 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $ &quot;SAWCore.Simulator.Prims.appendOp: &quot; &lt;&gt; Text.pack (show xs) &lt;&gt; &quot;, &quot; &lt;&gt; Text.pack (show ys)</span></span></span>
 <span class="lineno">  943 </span>
 <span class="lineno">  944 </span>-- join  :: (m n :: Nat) -&gt; (a :: sort 0) -&gt; Vec m (Vec n a) -&gt; Vec (mulNat m n) a;
@@ -1355,7 +1355,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1336 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1337 </span><span class="spaces">    </span><span class="istickedoff">value VUnit VUnit = <span class="nottickedoff">return VUnit</span></span>
 <span class="lineno"> 1338 </span><span class="spaces">    </span><span class="istickedoff">value (VPair x1 x2) (VPair y1 y2) =</span>
-<span class="lineno"> 1339 </span><span class="spaces">      </span><span class="istickedoff">VPair &lt;$&gt; thunk x1 y1 &lt;*&gt; thunk x2 y2</span>
+<span class="lineno"> 1339 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">VPair &lt;$&gt; thunk x1 y1 &lt;*&gt; thunk x2 y2</span></span>
 <span class="lineno"> 1340 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1341 </span><span class="spaces">    </span><span class="istickedoff">value (VRecordValue elems1) (VRecordValue elems2) =</span>
 <span class="lineno"> 1342 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let em2 = Map.fromList elems2</span></span>
@@ -1395,8 +1395,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1376 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1377 </span><span class="spaces">    </span><span class="istickedoff">value x@(VWord _)       y                 = do xv &lt;- toVector' x</span>
 <span class="lineno"> 1378 </span><span class="spaces">                                                   </span><span class="istickedoff">value (VVector xv) y</span>
-<span class="lineno"> 1379 </span><span class="spaces">    </span><span class="istickedoff">value x                 y@(VWord _)       = do yv &lt;- toVector' y</span>
-<span class="lineno"> 1380 </span><span class="spaces">                                                   </span><span class="istickedoff">value x (VVector yv)</span>
+<span class="lineno"> 1379 </span><span class="spaces">    </span><span class="istickedoff">value x                 y@(VWord _)       = <span class="nottickedoff">do yv &lt;- toVector' y</span></span>
+<span class="lineno"> 1380 </span><span class="spaces">                                                   </span><span class="istickedoff"><span class="nottickedoff">value x (VVector yv)</span></span>
 <span class="lineno"> 1381 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1382 </span><span class="spaces">    </span><span class="istickedoff">value x@(VNat _)        y                 = <span class="nottickedoff">nat x y</span></span>
 <span class="lineno"> 1383 </span><span class="spaces">    </span><span class="istickedoff">value x@(VBVToNat _ _)  y                 = <span class="nottickedoff">nat x y</span></span>

@@ -306,11 +306,11 @@ span.spaces    { background: white }
 <span class="lineno">  287 </span><span class="spaces">        </span><span class="istickedoff">Just (ResolvedCtor ctor) -&gt; Just (ctor, args)</span>
 <span class="lineno">  288 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VNat 0) =</span>
-<span class="lineno">  290 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap preludeZeroIdent (simModMap cfg)</span>
-<span class="lineno">  291 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [])</span>
+<span class="lineno">  290 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do ctor &lt;- findCtorInMap preludeZeroIdent (simModMap cfg)</span></span>
+<span class="lineno">  291 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Just (ctor, [])</span></span>
 <span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VNat n) =</span>
 <span class="lineno">  293 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap preludeSuccIdent (simModMap cfg)</span>
-<span class="lineno">  294 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [ ready (VNat (pred n)) ])</span>
+<span class="lineno">  294 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [ <span class="nottickedoff">ready (VNat (pred n))</span> ])</span>
 <span class="lineno">  295 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor _ =</span>
 <span class="lineno">  296 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  297 </span><span class="spaces"></span><span class="istickedoff"></span>

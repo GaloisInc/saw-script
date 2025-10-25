@@ -393,7 +393,7 @@ span.spaces    { background: white }
 <span class="lineno">  374 </span>-- then do another lookup for hash-consing the Constant term.
 <span class="lineno">  375 </span>data SharedContext = SharedContext
 <span class="lineno">  376 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">scModuleMap</span></span></span>      :: IORef ModuleMap
-<span class="lineno">  377 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scTermF</span></span></span>          :: TermF Term -&gt; IO Term
+<span class="lineno">  377 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scAppCache</span></span></span>       :: AppCacheRef
 <span class="lineno">  378 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scDisplayNameEnv</span></span></span> :: IORef DisplayNameEnv
 <span class="lineno">  379 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scURIEnv</span></span></span>         :: IORef (Map URI VarIndex)
 <span class="lineno">  380 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scGlobalEnv</span></span></span>      :: IORef (HashMap Ident Term)
@@ -745,9 +745,9 @@ span.spaces    { background: white }
 <span class="lineno">  726 </span><span class="decl"><span class="istickedoff">emptyAppCache = emptyTFM</span></span>
 <span class="lineno">  727 </span>
 <span class="lineno">  728 </span>-- | Return term for application using existing term in cache if it is available.
-<span class="lineno">  729 </span>getTerm :: AppCacheRef -&gt; TermF Term -&gt; IO Term
-<span class="lineno">  730 </span><span class="decl"><span class="istickedoff">getTerm cache termF =</span>
-<span class="lineno">  731 </span><span class="spaces">  </span><span class="istickedoff">modifyMVar cache $ \s -&gt; do</span>
+<span class="lineno">  729 </span>scTermF :: SharedContext -&gt; TermF Term -&gt; IO Term
+<span class="lineno">  730 </span><span class="decl"><span class="istickedoff">scTermF sc termF =</span>
+<span class="lineno">  731 </span><span class="spaces">  </span><span class="istickedoff">modifyMVar (scAppCache sc) $ \s -&gt; do</span>
 <span class="lineno">  732 </span><span class="spaces">    </span><span class="istickedoff">case lookupTFM termF s of</span>
 <span class="lineno">  733 </span><span class="spaces">      </span><span class="istickedoff">Just term -&gt; return (s, term)</span>
 <span class="lineno">  734 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; do</span>
@@ -2586,7 +2586,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2567 </span><span class="spaces">  </span><span class="istickedoff">ur &lt;- newIORef Map.empty</span>
 <span class="lineno"> 2568 </span><span class="spaces">  </span><span class="istickedoff">return SharedContext {</span>
 <span class="lineno"> 2569 </span><span class="spaces">             </span><span class="istickedoff">scModuleMap = mod_map_ref</span>
-<span class="lineno"> 2570 </span><span class="spaces">           </span><span class="istickedoff">, scTermF = getTerm cr</span>
+<span class="lineno"> 2570 </span><span class="spaces">           </span><span class="istickedoff">, scAppCache = cr</span>
 <span class="lineno"> 2571 </span><span class="spaces">           </span><span class="istickedoff">, scNextVarIndex = vr</span>
 <span class="lineno"> 2572 </span><span class="spaces">           </span><span class="istickedoff">, scDisplayNameEnv = dr</span>
 <span class="lineno"> 2573 </span><span class="spaces">           </span><span class="istickedoff">, scURIEnv = ur</span>
