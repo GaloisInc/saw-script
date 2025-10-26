@@ -240,7 +240,7 @@ scMatch sc ctxt pat term =
     check inst (t, n) = do
       --lift $ putStrLn $ "checking: " ++ show (t, n)
       -- apply substitution to the term
-      t' <- lift $ scInstantiateExt sc inst t
+      t' <- lift $ scInstantiate sc inst t
       --lift $ putStrLn $ "t': " ++ show t'
       -- constant-fold nat operations
       -- ensure that it evaluates to the same number
@@ -480,7 +480,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   -- Define function to substitute the constructor @c@
                   -- in for the old local variable @x@.
                   let subst = IntMap.singleton (vnIndex x) c
-                  let adjust t = scInstantiateExt sc subst t
+                  let adjust t = scInstantiate sc subst t
                   -- Build the list of types of the new context.
                   ctxt2' <- traverse (traverse adjust) ctxt2
                   let ctxt' = ctxt1 ++ argCtx ++ ctxt2'
@@ -523,7 +523,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
              case R.asLambda f' of
                Nothing -> scApply sc f' arg
                Just (vn, _, body) ->
-                 scInstantiateExt sc (IntMap.singleton (vnIndex vn) arg) body
+                 scInstantiate sc (IntMap.singleton (vnIndex vn) arg) body
 
 -- | Like 'R.asPiList', but freshen all variables in the context.
 asFreshPiList :: SharedContext -> Term -> IO ([(VarName, Term)], Term)
@@ -535,7 +535,7 @@ asFreshPiList sc t =
          let basename = if vnName x == "_" then "_x" else vnName x
          x' <- scFreshVarName sc basename
          var <- scVariable sc x' t1
-         t2' <- scInstantiateExt sc (IntMap.singleton (vnIndex x) var) t2
+         t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
          (ctx, body) <- asFreshPiList sc t2'
          pure ((x', t1) : ctx, body)
 
@@ -692,7 +692,7 @@ termWeightLt t t' =
 -- level, if possible.
 reduceSharedTerm :: SharedContext -> Term -> IO (Maybe Term)
 reduceSharedTerm sc (asBetaRedex -> Just (vn, _, body, arg)) =
-  Just <$> scInstantiateExt sc (IntMap.singleton (vnIndex vn) arg) body
+  Just <$> scInstantiate sc (IntMap.singleton (vnIndex vn) arg) body
 reduceSharedTerm _ (asPairRedex -> Just t) = pure (Just t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = pure (Just t)
 reduceSharedTerm sc (asNatIotaRedex -> Just (f1, f2, n)) =
@@ -767,19 +767,19 @@ rewriteSharedTerm sc ss t0 =
                apply rules t
           | permutative ->
             do
-              t' <- scInstantiateExt sc inst rhs
+              t' <- scInstantiate sc inst rhs
               case termWeightLt t' t of
                 True -> recordAnn annotation >> rewriteAll t' -- keep the result only if it is "smaller"
                 False -> apply rules t
           | shallow ->
             -- do not to further rewriting to the result of a "shallow" rule
             do recordAnn annotation
-               scInstantiateExt sc inst rhs
+               scInstantiate sc inst rhs
           | otherwise ->
             do -- putStrLn "REWRITING:"
                -- print lhs
                recordAnn annotation
-               rewriteAll =<< scInstantiateExt sc inst rhs
+               rewriteAll =<< scInstantiate sc inst rhs
     apply (Right conv : rules) t =
         do -- putStrLn "REWRITING:"
            -- print (Net.toPat conv)
@@ -868,7 +868,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
         Nothing -> apply rules t
         Just inst ->
           do recordAnn (annotation rule)
-             rewriteAll =<< scInstantiateExt sc inst (rhs rule)
+             rewriteAll =<< scInstantiate sc inst (rhs rule)
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t

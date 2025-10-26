@@ -459,7 +459,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                 IntMap.fromList $
                 zip (map (vnIndex . fst) output_parameters) (map ttTerm applied_extracted_func_selectors)
           let substitute_output_parameters =
-                ttTermLens $ scInstantiateExt shared_context output_parameter_substitution
+                ttTermLens $ scInstantiate shared_context output_parameter_substitution
           let setup_value_substitute_output_parameter setup_value
                 | SetupTerm term <- setup_value = SetupTerm <$> substitute_output_parameters term
                 | otherwise = return $ setup_value

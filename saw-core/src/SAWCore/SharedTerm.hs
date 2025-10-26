@@ -234,7 +234,7 @@ module SAWCore.SharedTerm
   , getAllVars
   , getAllVarsMap
   , getConstantSet
-  , scInstantiateExt
+  , scInstantiate
   , scAbstractTerms
   , scLambdaListEtaCollapse
   , scGeneralizeTerms
@@ -957,8 +957,8 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 
     -- process an argument that is a recursive call
     mk_args pre_xs ((x, (nm, RecursiveArg zs ixs)) : xs_args) =
-      do zs'  <- traverse (traverse (scInstantiateExt sc pre_xs)) zs
-         ixs' <- traverse (scInstantiateExt sc pre_xs) ixs
+      do zs'  <- traverse (traverse (scInstantiate sc pre_xs)) zs
+         ixs' <- traverse (scInstantiate sc pre_xs) ixs
          recx <- mk_rec_arg zs' ixs' x
          tl   <- mk_args (IntMap.insert (vnIndex nm) x pre_xs) xs_args
          pure (x : recx : tl)
@@ -1194,7 +1194,7 @@ scWhnf sc t0 =
       betaReduce xs ((vn, x) : vs) body
     betaReduce xs vs body =
       do let subst = IntMap.fromList [ (vnIndex vn, x) | (vn, x) <- vs ]
-         body' <- scInstantiateExt sc subst body
+         body' <- scInstantiate sc subst body
          go xs body'
 
     reapply :: Term -> WHNFElim -> IO Term
@@ -1308,7 +1308,7 @@ reducePi sc t arg = do
   t' <- scWhnf sc t
   case asPi t' of
     Just (vn, _, body) ->
-      scInstantiateExt sc (IntMap.singleton (vnIndex vn) arg) body
+      scInstantiate sc (IntMap.singleton (vnIndex vn) arg) body
     _ ->
       fail $ unlines ["reducePi: not a Pi term", showTerm t']
 
@@ -1501,7 +1501,7 @@ betaNormalize sc t0 =
         f' <- scLambdaList sc vars body'
         args' <- mapM go args
         let sub = IntMap.fromList [(vnIndex nm, arg) | (arg, (nm, _)) <- zip args params]
-        f'' <- scInstantiateExt sc sub f'
+        f'' <- scInstantiate sc sub f'
         scApplyAll sc f'' (drop n args')
 
     go3 :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
@@ -1525,7 +1525,7 @@ scApplyBeta :: SharedContext -> Term -> Term -> IO Term
 scApplyBeta sc f arg =
   case asLambda f of
     Just (name, _, body) ->
-      scInstantiateExt sc (IntMap.singleton (vnIndex name) arg) body
+      scInstantiate sc (IntMap.singleton (vnIndex name) arg) body
     Nothing ->
       scApply sc f arg
 
@@ -2668,8 +2668,8 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
 -- The 'IntMap' is keyed by 'VarIndex'.
 -- Note: The replacement is _not_ applied recursively
 -- to the terms in the substitution map.
-scInstantiateExt :: SharedContext -> IntMap Term -> Term -> IO Term
-scInstantiateExt sc vmap t0 =
+scInstantiate :: SharedContext -> IntMap Term -> Term -> IO Term
+scInstantiate sc vmap t0 =
   do let domainVars = IntMap.keysSet vmap
      let rangeVars = foldMap freeVars vmap
      tcache <- newCacheIntMap
@@ -2705,12 +2705,12 @@ scInstantiateExt sc vmap t0 =
                do x' <- scFreshVarName sc (vnName x)
                   var <- scVariable sc x' t
                   let vmap' = IntMap.insert i var vmap
-                  body' <- scInstantiateExt sc vmap' body
+                  body' <- scInstantiate sc vmap' body
                   pure (x', body')
            | IntMap.member i vmap =
                -- Shadowing; remove entry from substitution.
                do let vmap' = IntMap.delete i vmap
-                  body' <- scInstantiateExt sc vmap' body
+                  body' <- scInstantiate sc vmap' body
                   pure (x, body')
            | otherwise =
                -- No possibility of shadowing or capture.

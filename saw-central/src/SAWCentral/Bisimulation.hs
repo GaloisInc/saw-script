@@ -226,8 +226,7 @@ buildCompositionSideCondition bc innerBt = do
   lhsTuple <- io $ scTuple sc [lhsOuterState, input]  -- (f_lhs_s, in)
   rhsTuple <- io $ scTuple sc [rhsOuterState, input]  -- (f_rhs_s, in)
   innerRel' <- io $
-    scInstantiateExt sc
-                     (IntMap.fromList [ (vnIndex lhsInnerVar, lhsTuple)
+    scInstantiate sc (IntMap.fromList [ (vnIndex lhsInnerVar, lhsTuple)
                                       , (vnIndex rhsInnerVar, rhsTuple)])
                      innerRel
 

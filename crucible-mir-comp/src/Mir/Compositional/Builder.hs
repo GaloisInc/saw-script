@@ -588,7 +588,7 @@ buildSubstMap sc substs0 = go IntMap.empty substs0
     go sm ((vn, term) : substs) = do
         -- Rewrite the RHSs of previous substitutions using the current one.
         let sm1 = IntMap.singleton (SAW.vnIndex vn) term
-        sm' <- mapM (SAW.scInstantiateExt sc sm1) sm
+        sm' <- mapM (SAW.scInstantiate sc sm1) sm
         -- Add the current subst and continue.
         go (IntMap.insert (SAW.vnIndex vn) term sm') substs
 
@@ -677,7 +677,7 @@ substMethodSpec sc sm ms = do
         term' <- goTerm $ SAW.ttTerm tt
         return $ tt { SAW.ttTerm = term' }
 
-    goTerm term = SAW.scInstantiateExt sc sm term
+    goTerm term = SAW.scInstantiate sc sm term
 
 
 

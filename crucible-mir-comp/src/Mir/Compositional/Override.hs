@@ -545,7 +545,7 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
     go (UnitShape _) (MS.SetupTuple _ []) = return ()
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
         let sc = mirSharedContext (sym ^. W4.userState)
-        term <- liftIO $ SAW.scInstantiateExt sc termSub $ SAW.ttTerm tt
+        term <- liftIO $ SAW.scInstantiate sc termSub $ SAW.ttTerm tt
         Some expr <- termToExpr sym myRegMap term
         Refl <- case testEquality (W4.exprType expr) btpr of
             Just x -> return x
@@ -607,7 +607,7 @@ condTerm _sc (MS.SetupCond_Equal _loc _sv1 _sv2) = do
     error $ "learnCond: SetupCond_Equal NYI" -- TODO
 condTerm sc (MS.SetupCond_Pred md tt) = do
     sub <- use MS.termSub
-    t' <- liftIO $ SAW.scInstantiateExt sc sub $ SAW.ttTerm tt
+    t' <- liftIO $ SAW.scInstantiate sc sub $ SAW.ttTerm tt
     return (md, t')
 condTerm _ (MS.SetupCond_Ghost _ _ _) = do
     error $ "learnCond: SetupCond_Ghost is not supported"

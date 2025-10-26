@@ -660,7 +660,7 @@ executePred ::
   OverrideMatcher MIR w ()
 executePred sc cc md tt =
   do s <- OM (use termSub)
-     t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
+     t <- liftIO $ scInstantiate sc s (ttTerm tt)
      p <- liftIO $ resolveBoolTerm (cc ^. mccSym) (cc ^. mccUninterp) t
      addAssume p md
 
@@ -900,7 +900,7 @@ instantiateExtResolveSAWPred ::
   OverrideMatcher MIR md (W4.Pred Sym)
 instantiateExtResolveSAWPred sc cc cond = do
   sub <- OM (use termSub)
-  liftIO $ resolveSAWPred cc =<< scInstantiateExt sc sub cond
+  liftIO $ resolveSAWPred cc =<< scInstantiate sc sub cond
 
 -- | Map the given substitution over all 'SetupTerm' constructors in
 -- the given 'MirPointsTo' value.
@@ -949,7 +949,7 @@ instantiateSetupValue sc s v =
                                            <*> instantiateSetupValue sc s t
                                            <*> instantiateSetupValue sc s f
   where
-    doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
+    doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiate sc s t
 
     instantiateSetupEnum :: MirSetupEnum -> IO MirSetupEnum
     instantiateSetupEnum (MirSetupEnumVariant adt variant variantIdx vs) =
@@ -1085,7 +1085,7 @@ learnPred ::
   OverrideMatcher MIR w ()
 learnPred sc cc md prepost t =
   do s <- OM (use termSub)
-     u <- liftIO $ scInstantiateExt sc s t
+     u <- liftIO $ scInstantiate sc s t
      p <- liftIO $ resolveBoolTerm (cc ^. mccSym) (cc ^. mccUninterp) u
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
