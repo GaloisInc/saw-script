@@ -813,7 +813,7 @@ span.spaces    { background: white }
 <span class="lineno">  794 </span><span class="spaces">      </span><span class="istickedoff">do t &lt;- importSchema sc env sch</span>
 <span class="lineno">  795 </span><span class="spaces">         </span><span class="istickedoff">e &lt;- importExpr sc env expr</span>
 <span class="lineno">  796 </span><span class="spaces">         </span><span class="istickedoff">nmi &lt;- importName n</span>
-<span class="lineno">  797 </span><span class="spaces">         </span><span class="istickedoff">scDefineConstant sc nmi e <span class="nottickedoff">t</span></span>
+<span class="lineno">  797 </span><span class="spaces">         </span><span class="istickedoff">scDefineConstant sc nmi e t</span>
 <span class="lineno">  798 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  799 </span><span class="spaces">  </span><span class="istickedoff">-- lookup primitive in the extra primitive lookup table</span>
 <span class="lineno">  800 </span><span class="spaces">  </span><span class="istickedoff">| Just nm &lt;- <span class="nottickedoff">C.asPrim n</span>, Just t &lt;- <span class="nottickedoff">Map.lookup nm (envPrims env)</span> = <span class="nottickedoff">return t</span></span>
@@ -835,7 +835,7 @@ span.spaces    { background: white }
 <span class="lineno">  816 </span><span class="decl"><span class="istickedoff">importOpaque sc env n sch = do</span>
 <span class="lineno">  817 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- importSchema sc <span class="nottickedoff">env</span> sch</span>
 <span class="lineno">  818 </span><span class="spaces">  </span><span class="istickedoff">nmi &lt;- importName n</span>
-<span class="lineno">  819 </span><span class="spaces">  </span><span class="istickedoff">scOpaqueConstant sc nmi <span class="nottickedoff">t</span></span></span>
+<span class="lineno">  819 </span><span class="spaces">  </span><span class="istickedoff">scOpaqueConstant sc nmi t</span></span>
 <span class="lineno">  820 </span>
 <span class="lineno">  821 </span>importConstant :: SharedContext -&gt; Env -&gt; C.Name -&gt; C.Schema -&gt; Term -&gt; IO Term
 <span class="lineno">  822 </span><span class="decl"><span class="istickedoff">importConstant sc env n sch rhs = do</span>
@@ -1528,7 +1528,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1509 </span><span class="spaces">        </span><span class="istickedoff">rhs' &lt;- case declOpts of</span>
 <span class="lineno"> 1510 </span><span class="spaces">                  </span><span class="istickedoff">TopLevelDeclGroup _ -&gt;</span>
 <span class="lineno"> 1511 </span><span class="spaces">                    </span><span class="istickedoff">do nmi &lt;- importName nm</span>
-<span class="lineno"> 1512 </span><span class="spaces">                       </span><span class="istickedoff">scDefineConstant sc nmi rhs <span class="nottickedoff">t'</span></span>
+<span class="lineno"> 1512 </span><span class="spaces">                       </span><span class="istickedoff">scDefineConstant sc nmi rhs t'</span>
 <span class="lineno"> 1513 </span><span class="spaces">                  </span><span class="istickedoff">NestedDeclGroup -&gt;</span>
 <span class="lineno"> 1514 </span><span class="spaces">                    </span><span class="istickedoff">return rhs</span>
 <span class="lineno"> 1515 </span><span class="spaces">        </span><span class="istickedoff">return env0 { envE = Map.insert nm rhs' (envE env0)</span>
@@ -1604,7 +1604,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1585 </span><span class="spaces">               </span><span class="istickedoff">case declOpts of</span>
 <span class="lineno"> 1586 </span><span class="spaces">                 </span><span class="istickedoff">TopLevelDeclGroup _ -&gt;</span>
 <span class="lineno"> 1587 </span><span class="spaces">                   </span><span class="istickedoff">do nmi &lt;- importName (C.dName d)</span>
-<span class="lineno"> 1588 </span><span class="spaces">                      </span><span class="istickedoff">scDefineConstant sc nmi r <span class="nottickedoff">t</span></span>
+<span class="lineno"> 1588 </span><span class="spaces">                      </span><span class="istickedoff">scDefineConstant sc nmi r t</span>
 <span class="lineno"> 1589 </span><span class="spaces">                 </span><span class="istickedoff">NestedDeclGroup -&gt; <span class="nottickedoff">return r</span></span>
 <span class="lineno"> 1590 </span><span class="spaces">      </span><span class="istickedoff">rhss &lt;- sequence (Map.intersectionWith mkRhs dm tm)</span>
 <span class="lineno"> 1591 </span><span class="spaces"></span><span class="istickedoff"></span>
