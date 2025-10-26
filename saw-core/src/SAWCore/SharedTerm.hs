@@ -725,7 +725,8 @@ type AppCacheRef = MVar AppCache
 emptyAppCache :: AppCache
 emptyAppCache = emptyTFM
 
--- | Return term for application using existing term in cache if it is available.
+-- | Build a new 'Term' value from the given 'TermF'.
+-- Reuse a 'Term' from the cache if an identical one already exists.
 scTermF :: SharedContext -> TermF Term -> IO Term
 scTermF sc termF =
   modifyMVar (scAppCache sc) $ \s -> do
