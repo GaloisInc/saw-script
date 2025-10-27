@@ -725,8 +725,6 @@ rewriteSharedTerm sc ss t0 =
 
   where
     rewriteAll :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) => Term -> IO Term
-    rewriteAll (Unshared tf) =
-        traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop
     rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
         useCache ?cache tidx (traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop)
 
@@ -800,8 +798,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
   where
     rewriteAll :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
                   Term -> IO Term
-    rewriteAll (Unshared tf) =
-        rewriteTermF tf >>= scTermF sc >>= rewriteTop
     rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
         -- putStrLn "Rewriting term:" >> print t >>
         useCache ?cache tidx (rewriteTermF tf >>= scTermF sc >>= rewriteTop)
@@ -968,7 +964,6 @@ doHoistIfs sc ss hoistCache = go
 
  where go :: Term -> IO (HoistIfs s)
        go t@(STApp{ stAppIndex = idx, stAppTermF = tf}) = useCache hoistCache idx $ top t tf
-       go t@(Unshared tf)  = top t tf
 
        top :: Term -> TermF Term -> IO (HoistIfs s)
        top t tf =

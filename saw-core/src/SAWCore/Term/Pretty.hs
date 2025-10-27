@@ -155,7 +155,6 @@ termVarNames t0 = evalState (go t0) IntMap.empty
     go :: Term -> State (IntMap (Set VarName)) (Set VarName)
     go tm =
       case tm of
-        Unshared tf -> termf <$> traverse go tf
         STApp { stAppIndex = i, stAppTermF = tf, stAppFreeVars = _vs } ->
           do memo <- get
              case IntMap.lookup i memo of
@@ -512,7 +511,6 @@ ppTermF _ (Variable vn _tp) = annotate PPS.VariableStyle <$> ppVarName vn
 -- | Internal function to recursively pretty-print a term
 ppTerm' :: Prec -> Term -> PPM PPS.Doc
 ppTerm' prec = atNextDepthM "..." . ppTerm'' where
-  ppTerm'' (Unshared tf) = ppTermF prec tf
   ppTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
     do maybe_memo_var <- memoLookupM idx
        case maybe_memo_var of
@@ -543,7 +541,6 @@ scTermCountAux doBinders = go
         go [] = return ()
         go (t:r) =
           case t of
-            Unshared _ -> recurse
             STApp{ stAppIndex = i } -> do
               m <- get
               case IntMap.lookup i m of

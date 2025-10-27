@@ -170,7 +170,6 @@ bindSAWTerm sym st bt t = do
   let midx =
         case t of
           SC.STApp { SC.stAppIndex = idx } -> Just idx
-          SC.Unshared _ -> Nothing
   case midx >>= flip IntMap.lookup ch_r of
     Just (Some var) -> do
       Just Refl <- return $ testEquality bt (B.exprType var)

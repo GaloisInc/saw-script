@@ -72,11 +72,6 @@ scWriteExternal t0 =
         , renderNames nms
         ] ++ reverse lns
   where
-    nextId :: WriteM Int
-    nextId =
-       do (m, nms, lns, x) <- State.get
-          State.put (m, nms, lns, x+1)
-          return x
     output :: String -> WriteM ()
     output l =
        do (m, nms, lns, x) <- State.get
@@ -96,13 +91,6 @@ scWriteExternal t0 =
           State.put (m, Map.insert (vnIndex vn) (Left (vnName vn)) nms, lns, x)
 
     go :: Raw.Term -> WriteM Int
-    go (Raw.Unshared tf) = do
-      tf' <- traverse go tf
-      body <- writeTermF tf'
-      x <- nextId
-      output (unwords [show x, body])
-      return x
-
     go Raw.STApp{ Raw.stAppIndex = i, Raw.stAppTermF = tf } = do
       (memo, _, _, _) <- State.get
       case Map.lookup i memo of

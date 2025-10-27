@@ -370,8 +370,6 @@ instance TypeInfer Term where
   typeInfer t = SC.rawType <$> typeInferComplete t
   typeInferComplete t =
     case t of
-      Unshared tf ->
-        withErrorTerm t $ typeInferComplete tf
       STApp{stAppIndex = i, stAppTermF = tf} ->
         do table <- get
            case IntMap.lookup i table of

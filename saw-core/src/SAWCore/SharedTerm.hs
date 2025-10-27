@@ -1133,7 +1133,6 @@ scWhnf sc t0 =
     memo :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
     memo t =
       case t of
-        Unshared _ -> go [] t
         STApp { stAppIndex = i } -> useCache ?cache i (go [] t)
 
     go :: (?cache :: Cache IO TermIndex Term) => [WHNFElim] -> Term -> IO Term
@@ -1237,7 +1236,6 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
    go c IntMap.empty tm1 tm2
 
  where whnf :: Cache IO TermIndex Term -> Term -> IO (TermF Term)
-       whnf _c t@(Unshared _) = unwrapTermF <$> eval sc t
        whnf c t@(STApp{ stAppIndex = idx}) =
          unwrapTermF <$> useCache c idx (eval sc t)
 
@@ -1337,7 +1335,6 @@ scTypeOf' :: SharedContext -> IntMap Term -> Term -> IO Term
 scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: Term -> State.StateT (Map TermIndex Term) IO Term
-    memo (Unshared t) = termf t
     memo STApp{ stAppIndex = i, stAppTermF = t} = do
       table <- State.get
       case Map.lookup i table of
@@ -1444,8 +1441,6 @@ scImport sc t0 =
        go cache t0
   where
     go :: Cache IO TermIndex Term -> Term -> IO Term
-    go cache (Unshared tf) =
-          Unshared <$> traverse (go cache) tf
     go cache (STApp{ stAppIndex = idx, stAppTermF = tf}) =
           useCache cache idx (scTermF sc =<< traverse (go cache) tf)
 
@@ -1460,7 +1455,6 @@ betaNormalize sc t0 =
   where
     go :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
     go t = case t of
-      Unshared _ -> go' t
       STApp{ stAppIndex = i } -> useCache ?cache i (go' t)
 
     go' :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
@@ -1478,7 +1472,6 @@ betaNormalize sc t0 =
         scApplyAll sc f'' (drop n args')
 
     go3 :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
-    go3 (Unshared tf) = Unshared <$> traverseTF go tf
     go3 (STApp{ stAppTermF = tf }) = scTermF sc =<< traverseTF go tf
 
     traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
@@ -2575,7 +2568,6 @@ isConstFoldTerm sc unint t
         STApp { stAppIndex = idx, stAppTermF = termF }
           | IntSet.member idx vis -> Just vis
           | otherwise -> goF (IntSet.insert idx vis) termF
-        Unshared termF -> goF vis termF
     goF vis tf =
       case tf of
         Constant c
@@ -2596,7 +2588,6 @@ getAllVarsMap :: Term -> Map VarName Term
 getAllVarsMap t = State.evalState (go t) IntMap.empty
   where
     go :: Term -> State.State (IntMap (Map VarName Term)) (Map VarName Term)
-    go (Unshared tf) = termf tf
     go STApp{ stAppIndex = i, stAppTermF = tf, stAppFreeVars = fvs }
       | IntSet.null fvs = pure Map.empty
       | otherwise =
@@ -2627,7 +2618,6 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
     go acc@(idxs, names) (STApp{ stAppIndex = i, stAppTermF = tf})
       | IntSet.member i idxs = acc
       | otherwise = termf (IntSet.insert i idxs, names) tf
-    go acc (Unshared tf) = termf acc tf
 
     termf acc@(idxs, names) tf =
       case tf of
@@ -2646,7 +2636,6 @@ scInstantiate sc vmap t0 =
      let memo :: Term -> IO Term
          memo t =
            case t of
-             Unshared {} -> go t
              STApp {stAppIndex = i} -> useCache tcache i (go t)
          go :: Term -> IO Term
          go t
@@ -2757,13 +2746,6 @@ scUnfoldConstantSet sc b names t0 = do
           Just (ResolvedDef d) -> defBody d
           _ -> Nothing
   let go :: Term -> IO Term
-      go t@(Unshared tf) =
-        case tf of
-          Constant (Name idx _)
-            | Set.member idx names == b
-            , Just rhs <- getRhs idx    -> go rhs
-            | otherwise                 -> return t
-          _ -> Unshared <$> traverse go tf
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
           Constant (Name nmidx _)
@@ -2797,10 +2779,6 @@ scUnfoldOnceFixConstantSet sc b names t0 = do
         | otherwise =
           return t
   let go :: Term -> IO Term
-      go t@(Unshared tf) =
-        case tf of
-          Constant (Name idx _) | Just rhs <- getRhs idx -> unfold t idx rhs
-          _ -> Unshared <$> traverse go tf
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
           Constant (Name nmidx _) | Just rhs <- getRhs nmidx -> unfold t nmidx rhs
@@ -2821,13 +2799,6 @@ scUnfoldConstantSet' sc b names t0 = do
           Just (ResolvedDef d) -> defBody d
           _ -> Nothing
   let go :: Term -> ChangeT IO Term
-      go t@(Unshared tf) =
-        case tf of
-          Constant (Name idx _)
-            | Set.member idx names == b
-            , Just rhs <- getRhs idx    -> taint (go rhs)
-            | otherwise                 -> pure t
-          _ -> whenModified t (return . Unshared) (traverse go tf)
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =
         case tf of
           Constant (Name nmidx _)
@@ -2848,7 +2819,6 @@ scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)
 scSharedSizeAux :: (Integer, Set TermIndex) -> Term -> (Integer, Set TermIndex)
 scSharedSizeAux = go
   where
-    go (sz, seen) (Unshared tf) = foldl' go (strictPair (sz + 1) seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf })
       | Set.member idx seen = (sz, seen)
       | otherwise = foldl' go (strictPair (sz + 1) (Set.insert idx seen)) tf
@@ -2867,7 +2837,6 @@ scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)
 scTreeSizeAux :: (Integer, Map TermIndex Integer) -> Term -> (Integer, Map TermIndex Integer)
 scTreeSizeAux = go
   where
-    go (sz, seen) (Unshared tf) = foldl' go (sz + 1, seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf }) =
       case Map.lookup idx seen of
         Just sz' -> (sz + sz', seen)

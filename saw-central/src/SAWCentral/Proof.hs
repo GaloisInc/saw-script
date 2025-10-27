@@ -1359,10 +1359,9 @@ propsSubset sc ps1 ps2 =
   where
     ps2Ids = foldr (\x idents -> case (unProp x) of
                                    STApp{ stAppIndex = ident } -> Set.insert ident idents
-                                   _ -> idents)
+                   )
                    Set.empty ps2
     idSubset STApp{ stAppIndex = ident } = Set.member ident ps2Ids
-    idSubset _ = False
 
 -- exists y in ps where x == y
 propsElem :: SharedContext -> Prop -> [Prop] -> IO Bool

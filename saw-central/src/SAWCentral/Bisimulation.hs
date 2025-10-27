@@ -307,7 +307,6 @@ extractApp constant term =
         Just res -> (seen, Just res)
         Nothing ->
           case t of
-            Unshared tf -> termf (seen, acc) tf
             STApp{ stAppIndex = i, stAppTermF = tf } ->
               if IntSet.member i seen
               then (seen, acc)
@@ -697,9 +696,6 @@ replaceConstantTerm :: TypedTerm
 replaceConstantTerm constant constantRetType term = do
   sc <- lift getSharedContext
   case term of
-    Unshared termF -> do
-      termF' <- replaceConstantTermF termF
-      liftIO $ scTermF sc termF'
     STApp{ stAppIndex = i, stAppTermF = termF } -> do
       table <- State.gets rsMemo
       case Map.lookup i table of
