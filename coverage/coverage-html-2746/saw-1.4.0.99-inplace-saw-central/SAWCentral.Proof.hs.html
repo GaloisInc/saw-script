@@ -1655,7 +1655,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1636 </span><span class="spaces">        </span><span class="istickedoff">case sequentState sqt of</span>
 <span class="lineno"> 1637 </span><span class="spaces">          </span><span class="istickedoff">ConclFocus p mkSqt -&gt;</span>
 <span class="lineno"> 1638 </span><span class="spaces">            </span><span class="istickedoff">do (d,sy,p') &lt;- checkApply <span class="nottickedoff">nenv</span> mkSqt (thmProp thm) es</span>
-<span class="lineno"> 1639 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible sc <span class="nottickedoff">False</span> (unProp p) p'</span>
+<span class="lineno"> 1639 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible <span class="nottickedoff">sc</span> <span class="nottickedoff">False</span> (unProp p) p'</span>
 <span class="lineno"> 1640 </span><span class="spaces">               </span><span class="istickedoff">unless ok $ <span class="nottickedoff">fail $ unlines</span></span>
 <span class="lineno"> 1641 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Apply evidence does not match the required proposition&quot;</span></span>
 <span class="lineno"> 1642 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, showTerm (unProp p)</span></span>

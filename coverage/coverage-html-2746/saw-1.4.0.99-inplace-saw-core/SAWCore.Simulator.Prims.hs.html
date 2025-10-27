@@ -366,8 +366,8 @@ span.spaces    { background: white }
 <span class="lineno">  347 </span><span class="spaces">  </span><span class="istickedoff">-- Vectors</span>
 <span class="lineno">  348 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.Vec&quot;, vecTypeOp)</span>
 <span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.gen&quot;, genOp)</span>
-<span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.head&quot;, headOp bp)</span>
-<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.tail&quot;, tailOp bp)</span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.head&quot;, headOp <span class="nottickedoff">bp</span>)</span>
+<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.tail&quot;, tailOp <span class="nottickedoff">bp</span>)</span>
 <span class="lineno">  352 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.atWithDefault&quot;, atWithDefaultOp bp)</span>
 <span class="lineno">  353 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.upd&quot;, updOp bp)</span>
 <span class="lineno">  354 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.take&quot;, takeOp bp)</span>
@@ -819,7 +819,7 @@ span.spaces    { background: white }
 <span class="lineno">  800 </span><span class="spaces">  </span><span class="istickedoff">Prim $</span>
 <span class="lineno">  801 </span><span class="spaces">    </span><span class="istickedoff">case x of</span>
 <span class="lineno">  802 </span><span class="spaces">      </span><span class="istickedoff">VVector xv -&gt; force (V.head xv)</span>
-<span class="lineno">  803 </span><span class="spaces">      </span><span class="istickedoff">VWord xw -&gt; VBool &lt;$&gt; bpBvAt bp xw 0</span>
+<span class="lineno">  803 </span><span class="spaces">      </span><span class="istickedoff">VWord xw -&gt; <span class="nottickedoff">VBool &lt;$&gt; bpBvAt bp xw 0</span></span>
 <span class="lineno">  804 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;headOp&quot; [&quot;expected vector&quot;]</span></span></span>
 <span class="lineno">  805 </span>
 <span class="lineno">  806 </span>-- tail : (n : Nat) -&gt; (a : sort 0) -&gt; Vec (Succ n) a -&gt; Vec n a;
@@ -831,7 +831,7 @@ span.spaces    { background: white }
 <span class="lineno">  812 </span><span class="spaces">  </span><span class="istickedoff">Prim $</span>
 <span class="lineno">  813 </span><span class="spaces">    </span><span class="istickedoff">case x of</span>
 <span class="lineno">  814 </span><span class="spaces">      </span><span class="istickedoff">VVector xv -&gt; pure (VVector (V.tail xv))</span>
-<span class="lineno">  815 </span><span class="spaces">      </span><span class="istickedoff">VWord vw -&gt; VWord &lt;$&gt; bpBvSlice bp 1 (bpBvSize bp vw - 1) vw</span>
+<span class="lineno">  815 </span><span class="spaces">      </span><span class="istickedoff">VWord vw -&gt; <span class="nottickedoff">VWord &lt;$&gt; bpBvSlice bp 1 (bpBvSize bp vw - 1) vw</span></span>
 <span class="lineno">  816 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;tailOp&quot; [&quot;expected vector&quot;]</span></span></span>
 <span class="lineno">  817 </span>
 <span class="lineno">  818 </span>-- atWithDefault :: (n :: Nat) -&gt; (a :: sort 0) -&gt; a -&gt; Vec n a -&gt; Nat -&gt; a;

@@ -322,7 +322,7 @@ span.spaces    { background: white }
 <span class="lineno">  303 </span>
 <span class="lineno">  304 </span>asArrayValue :: Recognizer Term (Term, [Term])
 <span class="lineno">  305 </span><span class="decl"><span class="istickedoff">asArrayValue (unwrapTermF -&gt; FTermF (ArrayValue tp tms)) =</span>
-<span class="lineno">  306 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">return (tp, V.toList tms)</span></span>
+<span class="lineno">  306 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">tp</span>, V.toList tms)</span>
 <span class="lineno">  307 </span><span class="spaces"></span><span class="istickedoff">asArrayValue _ = Nothing</span></span>
 <span class="lineno">  308 </span>
 <span class="lineno">  309 </span>asStringLit :: Recognizer Term Text

@@ -175,7 +175,7 @@ span.spaces    { background: white }
 <span class="lineno">  156 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Variable x1 _t1) (Variable x2 _t2) =</span>
 <span class="lineno">  157 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (vnIndex x1) vm of</span>
 <span class="lineno">  158 </span><span class="spaces">        </span><span class="istickedoff">Just i -&gt; vnIndex x2 == i</span>
-<span class="lineno">  159 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; x1 == x2</span>
+<span class="lineno">  159 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">x1 == x2</span></span>
 <span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">termf _ FTermF{}   _ = False</span>
 <span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">termf _ App{}      _ = False</span>
 <span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">termf _ Lambda{}   _ = False</span>

@@ -456,23 +456,23 @@ span.spaces    { background: white }
 <span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">case y of</span>
 <span class="lineno">  438 </span><span class="spaces">      </span><span class="istickedoff">VNat i   -&gt; VWord &lt;$&gt; natOp x j</span>
 <span class="lineno">  439 </span><span class="spaces">        </span><span class="istickedoff">where j = toInteger i `min` SW.bvWidth x</span>
-<span class="lineno">  440 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _ v -&gt; <span class="nottickedoff">VWord &lt;$&gt; (bvOp x =&lt;&lt; toWord sym v)</span></span>
+<span class="lineno">  440 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _ v -&gt; VWord &lt;$&gt; (bvOp x =&lt;&lt; toWord <span class="nottickedoff">sym</span> v)</span>
 <span class="lineno">  441 </span><span class="spaces">      </span><span class="istickedoff">_        -&gt; <span class="nottickedoff">error $ unwords [&quot;SAWCoreWhat4.What4.bvShiftOp&quot;, show y]</span></span></span>
 <span class="lineno">  442 </span>
 <span class="lineno">  443 </span>-- bvShl : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  444 </span>bvShLOp :: forall sym. Sym sym =&gt; sym -&gt; SPrim sym
-<span class="lineno">  445 </span><span class="decl"><span class="istickedoff">bvShLOp sym = bvShiftOp sym <span class="nottickedoff">(SW.bvShl sym)</span></span>
+<span class="lineno">  445 </span><span class="decl"><span class="istickedoff">bvShLOp sym = bvShiftOp sym (SW.bvShl sym)</span>
 <span class="lineno">  446 </span><span class="spaces">                    </span><span class="istickedoff">(liftShift sym (SW.bvShl sym))</span></span>
 <span class="lineno">  447 </span>
 <span class="lineno">  448 </span>-- bvShR : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  449 </span>bvShROp :: forall sym. Sym sym =&gt; sym -&gt; SPrim sym
-<span class="lineno">  450 </span><span class="decl"><span class="istickedoff">bvShROp sym = bvShiftOp sym <span class="nottickedoff">(SW.bvLshr sym)</span></span>
+<span class="lineno">  450 </span><span class="decl"><span class="istickedoff">bvShROp sym = bvShiftOp sym (SW.bvLshr sym)</span>
 <span class="lineno">  451 </span><span class="spaces">                    </span><span class="istickedoff">(liftShift sym (SW.bvLshr sym))</span></span>
 <span class="lineno">  452 </span>
 <span class="lineno">  453 </span>-- bvSShR : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  454 </span>bvSShROp :: forall sym. Sym sym =&gt; sym -&gt; SPrim sym
-<span class="lineno">  455 </span><span class="decl"><span class="istickedoff">bvSShROp sym = bvShiftOp <span class="nottickedoff">sym</span> <span class="nottickedoff">(SW.bvAshr sym)</span></span>
-<span class="lineno">  456 </span><span class="spaces">                     </span><span class="istickedoff">(liftShift sym (SW.bvAshr sym))</span></span>
+<span class="lineno">  455 </span><span class="decl"><span class="istickedoff">bvSShROp sym = bvShiftOp <span class="nottickedoff">sym</span> (SW.bvAshr sym)</span>
+<span class="lineno">  456 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">(liftShift sym (SW.bvAshr sym))</span></span></span>
 <span class="lineno">  457 </span>
 <span class="lineno">  458 </span>bvForall :: W.IsSymExprBuilder sym =&gt;
 <span class="lineno">  459 </span>  sym -&gt; Natural -&gt; (SWord sym -&gt; IO (Pred sym)) -&gt; IO (Pred sym)
@@ -513,11 +513,11 @@ span.spaces    { background: white }
 <span class="lineno">  494 </span><span class="decl"><span class="istickedoff">intDiv sym x y = do</span>
 <span class="lineno">  495 </span><span class="spaces">  </span><span class="istickedoff">neg &lt;- W.intLt sym y =&lt;&lt; W.intLit sym 0</span>
 <span class="lineno">  496 </span><span class="spaces">  </span><span class="istickedoff">case W.asConstantPred neg of</span>
-<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; W.intDiv sym x y</span>
+<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; <span class="nottickedoff">W.intDiv sym x y</span></span>
 <span class="lineno">  498 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt;</span>
-<span class="lineno">  499 </span><span class="spaces">       </span><span class="istickedoff">do xneg &lt;- W.intNeg sym x</span>
-<span class="lineno">  500 </span><span class="spaces">          </span><span class="istickedoff">yneg &lt;- W.intNeg sym y</span>
-<span class="lineno">  501 </span><span class="spaces">          </span><span class="istickedoff">W.intDiv sym xneg yneg</span>
+<span class="lineno">  499 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
+<span class="lineno">  500 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>
+<span class="lineno">  501 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">W.intDiv sym xneg yneg</span></span>
 <span class="lineno">  502 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  503 </span><span class="spaces">       </span><span class="istickedoff">do xneg &lt;- W.intNeg sym x</span>
 <span class="lineno">  504 </span><span class="spaces">          </span><span class="istickedoff">yneg &lt;- W.intNeg sym y</span>
@@ -539,9 +539,9 @@ span.spaces    { background: white }
 <span class="lineno">  520 </span><span class="spaces">  </span><span class="istickedoff">case W.asConstantPred neg of</span>
 <span class="lineno">  521 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; W.intMod sym x y</span>
 <span class="lineno">  522 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt;</span>
-<span class="lineno">  523 </span><span class="spaces">       </span><span class="istickedoff">do xneg &lt;- W.intNeg sym x</span>
-<span class="lineno">  524 </span><span class="spaces">          </span><span class="istickedoff">yneg &lt;- W.intNeg sym y</span>
-<span class="lineno">  525 </span><span class="spaces">          </span><span class="istickedoff">W.intNeg sym =&lt;&lt; W.intMod sym xneg yneg</span>
+<span class="lineno">  523 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
+<span class="lineno">  524 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>
+<span class="lineno">  525 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">W.intNeg sym =&lt;&lt; W.intMod sym xneg yneg</span></span>
 <span class="lineno">  526 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  527 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
 <span class="lineno">  528 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>
@@ -1020,10 +1020,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1001 </span><span class="spaces">             </span><span class="istickedoff">return (VVector (V.fromList (map ready xs)))</span>
 <span class="lineno"> 1002 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1003 </span><span class="spaces">    </span><span class="istickedoff">VArrayType ity ety</span>
-<span class="lineno"> 1004 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some idx_repr) &lt;- <span class="nottickedoff">valueAsBaseType ity</span></span>
-<span class="lineno"> 1005 </span><span class="spaces">      </span><span class="istickedoff">, Just (Some elm_repr) &lt;- <span class="nottickedoff">valueAsBaseType ety</span></span>
-<span class="lineno"> 1006 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">(VArray . SArray) &lt;$&gt;</span></span>
-<span class="lineno"> 1007 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">mkUninterpreted sym ref app (BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr)</span></span>
+<span class="lineno"> 1004 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some idx_repr) &lt;- valueAsBaseType ity</span>
+<span class="lineno"> 1005 </span><span class="spaces">      </span><span class="istickedoff">, Just (Some elm_repr) &lt;- valueAsBaseType ety</span>
+<span class="lineno"> 1006 </span><span class="spaces">      </span><span class="istickedoff">-&gt; (VArray . SArray) &lt;$&gt;</span>
+<span class="lineno"> 1007 </span><span class="spaces">          </span><span class="istickedoff">mkUninterpreted sym ref app (BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr)</span>
 <span class="lineno"> 1008 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1009 </span><span class="spaces">    </span><span class="istickedoff">VUnitType</span>
 <span class="lineno"> 1010 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">return VUnit</span></span>
@@ -1103,7 +1103,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1084 </span><span class="spaces">                                    </span><span class="istickedoff">si' &lt;- W.intMod sym si n'</span>
 <span class="lineno"> 1085 </span><span class="spaces">                                    </span><span class="istickedoff">return (extendUnintApp app0 si' BaseIntegerRepr)</span>
 <span class="lineno"> 1086 </span><span class="spaces">    </span><span class="istickedoff">VWord (DBV sw)            -&gt; return (extendUnintApp app0 sw (W.exprType sw))</span>
-<span class="lineno"> 1087 </span><span class="spaces">    </span><span class="istickedoff">VArray (SArray sa)        -&gt; <span class="nottickedoff">return (extendUnintApp app0 sa (W.exprType sa))</span></span>
+<span class="lineno"> 1087 </span><span class="spaces">    </span><span class="istickedoff">VArray (SArray sa)        -&gt; return (extendUnintApp app0 sa (W.exprType sa))</span>
 <span class="lineno"> 1088 </span><span class="spaces">    </span><span class="istickedoff">VWord ZBV                 -&gt; <span class="nottickedoff">return app0</span></span>
 <span class="lineno"> 1089 </span><span class="spaces">    </span><span class="istickedoff">VCtorApp i _ ps xv        -&gt; <span class="nottickedoff">foldM (applyUnintApp sym) app' =&lt;&lt; traverse force (ps++xv)</span></span>
 <span class="lineno"> 1090 </span><span class="spaces">                                   </span><span class="istickedoff">where <span class="nottickedoff">app' = suffixUnintApp (&quot;_&quot; ++ (Text.unpack (toShortName (nameInfo i)))) app0</span></span>
