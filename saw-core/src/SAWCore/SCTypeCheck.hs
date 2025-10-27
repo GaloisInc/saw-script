@@ -56,6 +56,7 @@ import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
@@ -262,7 +263,8 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
   helper (MalformedRecursor d s reason) =
       ppWithPos [ return "Malformed recursor",
-                  pure (show d), pure (show s), pure reason ]
+                  pure (indent "  " (Text.unpack (toAbsoluteName d) ++ sortSuffix s)),
+                  pure reason ]
   helper (DeclError nm reason) =
     ppWithPos [ return ("Malformed declaration for " ++ show nm), return reason ]
   helper (ErrorPos p err) =
@@ -285,6 +287,13 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   ishow tm =
     -- return $ show tm
     (\(_ctx,_) -> indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm) <$> ask
+
+  sortSuffix :: Sort -> String
+  sortSuffix s =
+    case s of
+      TypeSort 0 -> "#rec"
+      TypeSort n -> "#rec" ++ show n
+      PropSort -> "#ind"
 
 instance Show TCError where
   show = unlines . prettyTCError
