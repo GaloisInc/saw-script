@@ -1,0 +1,17 @@
+ Loading file "leak05.saw"
+ should be unbound
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   leak05.saw:11:17-11:46 in (callback)
+   (builtin) in run
+   leak05.saw:11:12-11:46 in f
+   leak05.saw:16:14-16:18 in (callback)
+   (builtin) in prove_print
+   leak05.saw:16:1-16:30 (at top level)
+Cryptol error:
+[error] at leak05.saw:11:39--11:40
+    Type not in scope: x
+
+ (exit)
