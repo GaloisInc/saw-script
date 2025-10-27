@@ -102,11 +102,10 @@ import qualified SAWCentral.Yosys as Yo (YosysIR)
 import qualified SAWCentral.Yosys.State as Yo (YosysSequential)
 import qualified SAWCentral.Yosys.Theorem as Yo (YosysImport, YosysTheorem)
 
-import SAWCore.Conversion
-import SAWCore.Module (Def(..), emptyModule, moduleDefs)
-import SAWCore.Name (mkModuleName, Name(..))
+import SAWCore.Module (emptyModule)
+import SAWCore.Name (mkModuleName)
 import SAWCore.Prim (rethrowEvalError)
-import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
+import SAWCore.Rewriter (emptySimpset)
 import SAWCore.SharedTerm
 import SAWCore.Term.Raw (closedTerm)
 import qualified CryptolSAWCore.CryptolEnv as CEnv
@@ -1067,31 +1066,11 @@ buildTopLevelEnv :: AIGProxy
                  -> IO (BuiltinContext, TopLevelRO, TopLevelRW)
 buildTopLevelEnv proxy opts scriptArgv =
     do let mn = mkModuleName ["SAWScript"]
-       sc0 <- mkSharedContext
+       sc <- mkSharedContext
        let ?fileReader = BS.readFile
-       CryptolSAW.scLoadPreludeModule sc0
-       CryptolSAW.scLoadCryptolModule sc0
-       scLoadModule sc0 (emptyModule mn)
-       cryptol_mod <- scFindModule sc0 $ mkModuleName ["Cryptol"]
-       let convs = natConversions
-                   ++ bvConversions
-                   ++ vecConversions
-                   ++ [ tupleConversion
-                      , recordConversion
-                      , remove_ident_coerce
-                      , remove_ident_unsafeCoerce
-                      ]
-           cryptolDefs = filter defPred $ moduleDefs cryptol_mod
-           defPred d =
-             case nameInfo (defName d) of
-               ModuleIdentifier ident -> ident `Set.member` includedDefs
-               ImportedName{} -> False
-           includedDefs = Set.fromList
-                          [ "Cryptol.ecDemote"
-                          , "Cryptol.seq"
-                          ]
-       simps <- scSimpset sc0 cryptolDefs [] convs
-       let sc = rewritingSharedContext sc0 simps
+       CryptolSAW.scLoadPreludeModule sc
+       CryptolSAW.scLoadCryptolModule sc
+       scLoadModule sc (emptyModule mn)
        ss <- basic_ss sc
        currDir <- getCurrentDirectory
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case

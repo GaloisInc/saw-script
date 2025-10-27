@@ -500,14 +500,14 @@ inferFlatTermF ftf =
 
 -- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
 -- result of substituting @arg@ for @x@ in the result type @b@, i.e.,
--- @[arg/x]b@. This substitution could create redexes, so we call the
--- evaluator. If @fun_tp@ is not a pi type, raise the supplied error.
+-- @[arg/x]b@.
+-- If @fun_tp@ is not a pi type, raise the supplied error.
 applyPiTyped :: TCError -> Term -> SC.Term -> TCM Term
 applyPiTyped err fun_tp arg =
   ensurePiType err fun_tp >>= \(nm, arg_tp, ret_tp) ->
   do checkSubtype arg arg_tp
      let sub = IntMap.singleton (vnIndex nm) (SC.rawTerm arg)
-     liftTCM scInstantiateExt sub ret_tp >>= typeCheckWHNF
+     liftTCM scInstantiateExt sub ret_tp
 
 -- | Ensure that a 'Term' matches a recognizer function, normalizing if
 -- necessary; otherwise throw the supplied 'TCError'

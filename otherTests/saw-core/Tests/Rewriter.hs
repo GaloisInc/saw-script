@@ -31,15 +31,14 @@ rewriter_tests =
 prelude_bveq_sameL_test :: TestTree
 prelude_bveq_sameL_test =
   testCase "prelude_bveq_sameL_test" $ do
-    sc0 <- mkSharedContext
-    scLoadPreludeModule sc0
+    sc <- mkSharedContext
+    scLoadPreludeModule sc
     let eqs = [ "Prelude.bveq_sameL" ]
-    ss <- scSimpset sc0 [] eqs []
-    let sc = rewritingSharedContext sc0 ss
-    natType <- scNatType sc0
+    ss <- scSimpset sc [] eqs [] :: IO (Simpset ())
+    natType <- scNatType sc
     n <- scFreshVariable sc "n" natType
-    boolType <- scBoolType sc0
-    bvType <- scVecType sc0 n boolType
+    boolType <- scBoolType sc
+    bvType <- scVecType sc n boolType
     x <- scFreshVariable sc "x" bvType
     z <- scFreshVariable sc "z" bvType
     let lhs =
@@ -52,6 +51,6 @@ prelude_bveq_sameL_test =
             `pureApp` n
             `mkApp` (mkGlobalDef "Prelude.bvNat" `pureApp` n `mkApp` mkNatLit 0)
             `pureApp` z
-    lhs_term <- scMkTerm sc lhs
-    rhs_term <- scMkTerm sc rhs
+    (_, lhs_term) <- rewriteSharedTerm sc ss =<< scMkTerm sc lhs
+    (_, rhs_term) <- rewriteSharedTerm sc ss =<< scMkTerm sc rhs
     assertEqual "Incorrect conversion\n" lhs_term rhs_term
