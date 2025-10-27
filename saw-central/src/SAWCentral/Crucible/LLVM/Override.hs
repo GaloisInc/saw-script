@@ -1483,7 +1483,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
                           zero_byte_tm <- scBvNat sc byte_width_tm =<< scNat sc 0
                           zero_arr_const_tm <- scArrayConstant sc off_type_tm byte_type_tm zero_byte_tm
 
-                          instantiated_expected_sz_tm <- scInstantiateExt sc sub $ ttTerm expected_sz_tm
+                          instantiated_expected_sz_tm <- scInstantiate sc sub $ ttTerm expected_sz_tm
                           scArrayCopy sc ptr_width_tm byte_type_tm
                             zero_arr_const_tm -- dest array
                             zero_off_tm -- dest offset
@@ -1502,7 +1502,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
 
               _ ->
                 do sub <- OM (use termSub)
-                   instantiated_expected_sz_tm <- liftIO $ scInstantiateExt sc sub $ ttTerm expected_sz_tm
+                   instantiated_expected_sz_tm <- liftIO $ scInstantiate sc sub $ ttTerm expected_sz_tm
                    normalized_expected_sz_tm <- liftIO $
                      scTypeCheckWHNF sc =<< scUnfoldConstantSet sc False mempty instantiated_expected_sz_tm
                    case asUnsignedConcreteBv normalized_expected_sz_tm of
@@ -1743,7 +1743,7 @@ instantiateExtResolveSAWPred ::
   OverrideMatcher (LLVM arch) md (W4.Pred Sym)
 instantiateExtResolveSAWPred sc cc cond = do
   sub <- OM (use termSub)
-  liftIO $ resolveSAWPred cc =<< scInstantiateExt sc sub cond
+  liftIO $ resolveSAWPred cc =<< scInstantiate sc sub cond
 
 instantiateExtResolveSAWSymBV ::
   (?w4EvalTactic :: W4EvalTactic, 1 <= w) =>
@@ -1754,7 +1754,7 @@ instantiateExtResolveSAWSymBV ::
   OverrideMatcher (LLVM arch) md (W4.SymBV Sym w)
 instantiateExtResolveSAWSymBV sc cc w tm = do
   sub <- OM (use termSub)
-  liftIO $ resolveSAWSymBV cc w =<< scInstantiateExt sc sub tm
+  liftIO $ resolveSAWSymBV cc w =<< scInstantiate sc sub tm
 
 ------------------------------------------------------------------------
 
@@ -1979,7 +1979,7 @@ executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr v
      val' <- liftIO $ case val of
        ConcreteSizeValue val'' -> ConcreteSizeValue <$> instantiateSetupValue sc s val''
        SymbolicSizeValue arr sz ->
-         SymbolicSizeValue <$> ttTermLens (scInstantiateExt sc s) arr <*> ttTermLens (scInstantiateExt sc s) sz
+         SymbolicSizeValue <$> ttTermLens (scInstantiate sc s) arr <*> ttTermLens (scInstantiate sc s) sz
      cond' <- mapM (instantiateExtResolveSAWPred sc cc . ttTerm) cond
      let Crucible.LLVMPointer blk _ = ptr'
      let invalidate_msg = Map.lookup blk overwritten_allocs
@@ -2330,7 +2330,7 @@ instantiateSetupValue sc s v =
     SetupTuple empty _       -> absurd empty
     SetupSlice empty         -> absurd empty
   where
-    doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
+    doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiate sc s t
 
 ------------------------------------------------------------------------
 

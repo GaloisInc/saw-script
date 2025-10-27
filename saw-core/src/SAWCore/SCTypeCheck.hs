@@ -507,7 +507,7 @@ applyPiTyped err fun_tp arg =
   ensurePiType err fun_tp >>= \(nm, arg_tp, ret_tp) ->
   do checkSubtype arg arg_tp
      let sub = IntMap.singleton (vnIndex nm) (SC.rawTerm arg)
-     liftTCM scInstantiateExt sub ret_tp
+     liftTCM scInstantiate sub ret_tp
 
 -- | Ensure that a 'Term' matches a recognizer function, normalizing if
 -- necessary; otherwise throw the supplied 'TCError'
@@ -562,7 +562,7 @@ isSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi x2 a2 b2)
     do conv1 <- areConvertible a1 a2
        var1 <- liftTCM scVariable x1 a1
        let sub = IntMap.singleton (vnIndex x2) var1
-       b2' <- liftTCM scInstantiateExt sub b2
+       b2' <- liftTCM scInstantiate sub b2
        conv2 <- withVar x1 a1 (isSubtype b1 b2')
        pure (conv1 && conv2)
 isSubtype (asSort -> Just s1) (asSort -> Just s2) | s1 <= s2 = return True

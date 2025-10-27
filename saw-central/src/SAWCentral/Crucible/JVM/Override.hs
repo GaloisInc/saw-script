@@ -730,7 +730,7 @@ learnPred ::
   OverrideMatcher CJ.JVM w ()
 learnPred sc cc md prepost t =
   do s <- OM (use termSub)
-     u <- liftIO $ scInstantiateExt sc s t
+     u <- liftIO $ scInstantiate sc s t
      p <- liftIO $ resolveBoolTerm (cc ^. jccSym) (cc ^. jccUninterp) u
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
@@ -742,7 +742,7 @@ instantiateExtResolveSAWPred ::
   OverrideMatcher CJ.JVM md (W4.Pred Sym)
 instantiateExtResolveSAWPred sc cc cond = do
   sub <- OM (use termSub)
-  liftIO $ resolveSAWPred cc =<< scInstantiateExt sc sub cond
+  liftIO $ resolveSAWPred cc =<< scInstantiate sc sub cond
 
 ------------------------------------------------------------------------
 
@@ -918,7 +918,7 @@ executePred ::
   OverrideMatcher CJ.JVM w ()
 executePred sc cc md tt =
   do s <- OM (use termSub)
-     t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
+     t <- liftIO $ scInstantiate sc s (ttTerm tt)
      p <- liftIO $ resolveBoolTerm (cc ^. jccSym) (cc ^. jccUninterp) t
      addAssume p md
 
@@ -949,7 +949,7 @@ instantiateSetupValue sc s v =
     MS.SetupGlobalInitializer empty _ -> absurd empty
     MS.SetupMux empty _ _ _           -> absurd empty
   where
-    doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
+    doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiate sc s t
 
 ------------------------------------------------------------------------
 

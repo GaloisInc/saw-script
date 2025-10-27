@@ -689,7 +689,7 @@ executeGhost ::
   OverrideMatcher ext RW ()
 executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =
   do s <- OM (use termSub)
-     tm' <- liftIO (scInstantiateExt sc s tm)
+     tm' <- liftIO (scInstantiate sc s tm)
      writeGlobal var (sch,tm')
 executeGhost _sc _md _var (TypedTerm tp _) =
   fail $ unlines
@@ -708,7 +708,7 @@ instantiateExtMatchTerm ::
   OverrideMatcher ext md ()
 instantiateExtMatchTerm sc md prepost actual expected = do
   sub <- OM (use termSub)
-  matchTerm sc md prepost actual =<< liftIO (scInstantiateExt sc sub expected)
+  matchTerm sc md prepost actual =<< liftIO (scInstantiate sc sub expected)
 
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->

@@ -1741,7 +1741,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                      , showTerm ty
                      ]
                    x' <- scVariable sc x xty
-                   body' <- scInstantiateExt sc (IntMap.singleton (vnIndex nm) x') body
+                   body' <- scInstantiate sc (IntMap.singleton (vnIndex nm) x') body
                    check nenv e' (mkSqt (Prop body'))
 
 passthroughEvidence :: [Evidence] -> IO Evidence
@@ -2017,7 +2017,7 @@ propApply sc rule goal = applyFirst (asPiLists (unProp rule))
                       case IntMap.lookup (vnIndex vn) inst of
                         Nothing ->
                           -- this argument not solved by unification, so make it a goal
-                          do c0 <- scInstantiateExt sc inst tp
+                          do c0 <- scInstantiate sc inst tp
                              mp <- termToMaybeProp sc c0
                              let nm = vnName vn
                              case mp of
@@ -2052,7 +2052,7 @@ tacticIntro sc usernm = Tactic \goal ->
              vn' <- liftIO $ scFreshVarName sc name
              x  <- liftIO $ scVariable sc vn' tp
              tt <- liftIO $ mkTypedTerm sc x
-             body' <- liftIO $ scInstantiateExt sc (IntMap.singleton (vnIndex vn) x) body
+             body' <- liftIO $ scInstantiate sc (IntMap.singleton (vnIndex vn) x) body
              let goal' = goal { goalSequent = mkSqt (Prop body') }
              return (tt, mempty, [goal'], introEvidence vn' tp)
 

@@ -23,7 +23,7 @@ import SAWCore.Name (VarName(..))
 import SAWCore.SATQuery
 import SAWCore.SharedTerm
   ( scGetModuleMap, SharedContext, Term
-  , scInstantiateExt
+  , scInstantiate
   )
 import SAWCore.Simulator.Concrete (evalSharedTerm) -- , CValue)
 import SAWCore.Simulator.Value (Value(..)) -- , TValue(..))
@@ -76,7 +76,7 @@ execTest sc mmap vars tm =
      tm' <- liftIO $
              do argMap0 <- traverse (scFirstOrderValue sc) testVec
                 let argMap = IntMap.fromList [ (vnIndex x, v) | (x, v) <- Map.toList argMap0 ]
-                scInstantiateExt sc argMap tm
+                scInstantiate sc argMap tm
      case evalSharedTerm mmap Map.empty Map.empty tm' of
        -- satisfaible, return counterexample
        VBool True  -> return (Just (Map.toList testVec))

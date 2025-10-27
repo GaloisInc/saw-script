@@ -122,7 +122,7 @@ scSubtype sc t1 t2
            | otherwise ->
              do conv1 <- scTypeConvertible sc a1 a2
                 var1 <- Raw.scVariable sc x1 a1
-                b2' <- Raw.scInstantiateExt sc (IntMap.singleton (vnIndex x2) var1) b2
+                b2' <- Raw.scInstantiate sc (IntMap.singleton (vnIndex x2) var1) b2
                 conv2 <- scSubtype sc b1 b2'
                 pure (conv1 && conv2)
          _ ->
@@ -162,7 +162,7 @@ scApply sc f arg =
      ok <- scSubtype sc (rawType arg) t1
      unless ok $ fail $ unlines $
        ["Not a subtype", "expected: " ++ showTerm t1, "got: " ++ showTerm (rawType arg)]
-     tp <- Raw.scInstantiateExt sc (IntMap.singleton i (rawTerm arg)) t2
+     tp <- Raw.scInstantiate sc (IntMap.singleton i (rawTerm arg)) t2
      ctx <- unifyContexts "scApply" (rawCtx f) (rawCtx arg)
      pure (Term ctx tm tp)
 
