@@ -390,7 +390,7 @@ unfoldFixOnceProp sc unints (Prop tm) =
 -- | Rewrite the proposition using the provided Simpset
 simplifyProp :: Ord a => SharedContext -> Simpset a -> Prop -> IO (Set a, Prop)
 simplifyProp sc ss (Prop tm) =
-  do (a, tm') <- rewriteSharedTerm sc ss tm
+  do (a, tm') <- rewriteSharedTermConvertibility sc ss tm
      return (a, Prop tm')
 
 -- | Rewrite the propositions using the provided Simpset
