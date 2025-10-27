@@ -73,7 +73,7 @@ span.spaces    { background: white }
 <span class="lineno">   54 </span>  = STApp
 <span class="lineno">   55 </span>    -- ^ This constructor \&quot;wraps\&quot; a 'TermF' 'Term', assigning it a
 <span class="lineno">   56 </span>    -- guaranteed-unique integer identifier and caching its likely-unique hash.
-<span class="lineno">   57 </span>    -- Most 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
+<span class="lineno">   57 </span>    -- 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
 <span class="lineno">   58 </span>    -- in the course of a SAW invocation and needs to be lifted into a 'Term',
 <span class="lineno">   59 </span>    -- we can see if we've already created a 'Term' wrapper for an identical
 <span class="lineno">   60 </span>    -- 'TermF', and reuse it if so. The implementation of hash-consed 'Term'
