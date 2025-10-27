@@ -151,7 +151,9 @@ withErrorTerm tm m = catchError m (throwError . ErrorTerm tm)
 
 -- | Lift @withErrorTerm@ to `TermF Term`
 withErrorTermF :: TermF Term -> TCM a -> TCM a
-withErrorTermF tm = withErrorTerm (Unshared tm)
+withErrorTermF tf tcm =
+  do t <- liftTCM scTermF tf
+     withErrorTerm t tcm
 
 -- | Lift @withErrorTerm@ to `TermF SC.Term`
 withErrorCTermF :: TermF SC.Term -> TCM a -> TCM a
