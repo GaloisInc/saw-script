@@ -175,11 +175,6 @@ applyOverride sc thm t = do
   cache <- liftIO SC.newCache
   let
     go :: SC.Term -> IO SC.Term
-    go s@(SC.Unshared tf) = case tf of
-      SC.Constant (SC.Name idx _)
-        | idx == tidx -> theoremReplacement sc thm
-        | otherwise -> pure s
-      _ -> SC.Unshared <$> traverse go tf
     go s@SC.STApp { SC.stAppIndex = aidx, SC.stAppTermF = tf } = SC.useCache cache aidx $ case tf of
       SC.Constant (SC.Name idx _)
         | idx == tidx -> theoremReplacement sc thm

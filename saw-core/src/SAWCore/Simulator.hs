@@ -518,7 +518,6 @@ mkMemoClosed cfg t =
     subterms = fmap fst $ IntMap.filter (IntSet.null . snd) $ State.execState (go t) IntMap.empty
 
     go :: Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
-    go (Unshared tf) = termf tf
     go (STApp{ stAppIndex = i, stAppTermF = tf }) =
       do memo <- State.get
          case IntMap.lookup i memo of
@@ -562,7 +561,6 @@ evalClosedTermF :: (VMonadLazy l, Show (Extra l)) =>
 evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf IntMap.empty
   where
     lam = evalOpen cfg memoClosed
-    recEval (Unshared tf') = evalTermF cfg lam recEval tf' IntMap.empty
     recEval (STApp{ stAppIndex = i }) =
       case IntMap.lookup i memoClosed of
         Just x -> force x
@@ -590,7 +588,6 @@ mkMemoLocal :: forall l. (VMonadLazy l, Show (Extra l)) =>
 mkMemoLocal cfg memoClosed t env = go mempty t
   where
     go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))
-    go memo (Unshared tf) = goTermF memo tf
     go memo (t'@STApp{ stAppIndex = i, stAppTermF = tf })
       | closedTerm t' = pure memo
       | otherwise =
@@ -633,7 +630,6 @@ evalLocalTermF :: (VMonadLazy l, Show (Extra l)) =>
 evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 env
   where
     lam = evalOpen cfg memoClosed
-    recEval (Unshared tf) = evalTermF cfg lam recEval tf env
     recEval (t@STApp{ stAppIndex = i, stAppTermF = tf }) =
       case IntMap.lookup i memo of
         Just x -> force x
@@ -662,7 +658,6 @@ evalOpen :: forall l. (VMonadLazy l, Show (Extra l)) =>
 evalOpen cfg memoClosed t env = do
   memoLocal <- mkMemoLocal cfg memoClosed t env
   let eval :: Term -> MValue l
-      eval (Unshared tf) = evalF tf
       eval (t'@STApp{ stAppIndex = i, stAppTermF = tf }) =
         case IntMap.lookup i memo of
           Just x -> force x

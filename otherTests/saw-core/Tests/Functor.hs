@@ -21,11 +21,10 @@ import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 
 
--- There are three properties of Term/TermF/FlatTermF that the
--- Eq, Ord, and Hashable instances are supposed to respect:
---    1. Comparison is up to structural equality.
---    2. The STApp (shared) and Unshared cases of Term are
---       distinguished.
+-- The Eq, Ord, and Hashable instances for Term/TermF/FlatTermF are
+-- supposed to perform comparisons up to structural equality.
+-- Terms that differ in their stAppIndex fields but are otherwise
+-- structurally equal should compare as equal.
 --
 -- And of course Eq, Ord, and Hashable need to be mutually consistent:
 --    t1 == t2 <-> compare t1 t2 == Eq
@@ -146,11 +145,11 @@ instance TestIt (TermF Term) where
       checkEq f f
       -- continue at the Term level
       let s = shared 0 f
-          u = Unshared f
+          u = shared 100 f
       testOne depth s
       testOne depth u
-      -- shared and unshared compare unequal
-      testTwo depth LT s u
+      -- different term IDs compare equal
+      testTwo depth EQ s u
 
   testTwo depth comp f1 f2 = do
       -- check that they compare as expected
@@ -158,13 +157,13 @@ instance TestIt (TermF Term) where
       -- continue at the Term level
       let s1 = shared 1 f1
           s2 = shared 2 f2
-          u1 = Unshared f1
-          u2 = Unshared f2
+          u1 = shared 101 f1
+          u2 = shared 102 f2
       testTwo depth comp s1 s2
       testTwo depth comp u1 u2
-      -- shared and unshared compare as different
-      testTwo depth LT s1 u2
-      testTwo depth GT u1 s2
+      -- different term IDs compare as equal
+      testTwo depth comp s1 u2
+      testTwo depth comp u1 s2
 
 instance TestIt Term where
   testOne depth t = do
@@ -173,9 +172,9 @@ instance TestIt Term where
       -- build and test more stuff
       when (depth < 2) $ do
         let depth' = depth + 1
-            unit = Unshared $ FTermF $ UnitValue
-            zero = Unshared $ FTermF $ NatLit 0
-            localvar = Unshared $ Variable vnBar t
+            unit = shared 103 $ FTermF $ UnitValue
+            zero = shared 104 $ FTermF $ NatLit 0
+            localvar = shared 105 $ Variable vnBar t
         testOne depth' $ PairValue t t
         testOne depth' $ PairValue t zero
         testOne depth' $ PairValue unit t

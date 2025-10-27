@@ -54,7 +54,7 @@ data Term
   = STApp
     -- ^ This constructor \"wraps\" a 'TermF' 'Term', assigning it a
     -- guaranteed-unique integer identifier and caching its likely-unique hash.
-    -- Most 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
+    -- 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
     -- in the course of a SAW invocation and needs to be lifted into a 'Term',
     -- we can see if we've already created a 'Term' wrapper for an identical
     -- 'TermF', and reuse it if so. The implementation of hash-consed 'Term'
@@ -76,8 +76,6 @@ data Term
        -- ^ The underlying 'TermF' that this 'Term' wraps. This field "ties the
        -- knot" of the 'Term'/'TermF' recursion scheme.
      }
-  | Unshared !(TermF Term)
-    -- ^ Used for constructing 'Term's that don't need to be shared/reused.
   deriving (Show, Typeable)
 
 instance Hashable Term where
@@ -106,16 +104,12 @@ instance Hashable Term where
   -- or in a way that does not respect index uniqueness rules,
   -- 'hashWithSalt''s contract could be violated.
   hash STApp{ stAppHash = h } = h
-  hash (Unshared t) = hash t
   hashWithSalt salt = hashWithSalt salt . hash
 
 instance Eq Term where
   (==) = equalTerm
 
 equalTerm :: Term -> Term -> Bool
-equalTerm (Unshared tf1) (Unshared tf2) = tf1 == tf2
-equalTerm Unshared{} STApp{} = False
-equalTerm STApp{} Unshared{} = False
 equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
           (STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) =
   i1 == i2 || (h1 == h2 && tf1 == tf2)
@@ -129,15 +123,11 @@ equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
   -- inequality.
 
 -- | Return 'True' iff the given terms are equal modulo alpha equivalence (i.e.
--- 'VarName's in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
--- 'Unshared' expressions).
+-- 'VarName's in 'Lambda' and 'Pi' expressions).
 alphaEquiv :: Term -> Term -> Bool
 alphaEquiv = term IntMap.empty
   where
     term :: IntMap VarIndex -> Term -> Term -> Bool
-    term vm (Unshared tf1) (Unshared tf2) = termf vm tf1 tf2
-    term vm (Unshared tf1) (STApp{stAppTermF = tf2}) = termf vm tf1 tf2
-    term vm (STApp{stAppTermF = tf1}) (Unshared tf2) = termf vm tf1 tf2
     term vm
       (STApp{stAppIndex = i1, stAppTermF = tf1, stAppFreeVars = vs1})
       (STApp{stAppIndex = i2, stAppTermF = tf2}) =
@@ -172,12 +162,9 @@ alphaEquiv = term IntMap.empty
 
 unwrapTermF :: Term -> TermF Term
 unwrapTermF STApp{stAppTermF = tf} = tf
-unwrapTermF (Unshared tf) = tf
 
 instance Ord Term where
   compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | i == j = EQ
-  compare STApp{} Unshared{} = LT -- matches what we'd get from derived Ord instance
-  compare Unshared{} STApp{} = GT
   compare x y = compare (unwrapTermF x) (unwrapTermF y)
 
 -- Free Variables --------------------------------------------------------------
@@ -186,7 +173,6 @@ instance Ord Term where
 -- variables in the 'Term'.
 freeVars :: Term -> IntSet
 freeVars STApp{ stAppFreeVars = s } = s
-freeVars (Unshared tf) = freesTermF (fmap freeVars tf)
 
 -- | Test whether a 'Term' is closed, i.e., it has no free variables.
 closedTerm :: Term -> Bool

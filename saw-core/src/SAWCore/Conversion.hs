@@ -22,6 +22,7 @@ Portability : non-portable (language extensions)
 module SAWCore.Conversion
   ( (:*:)(..)
   , termPat
+  , termFPat
     -- * Matcher
   , Matcher
   , matcherPat
@@ -128,13 +129,16 @@ instance Show Conversion where
 -- TermNet Patterns
 
 termPat :: Term -> Net.Pat
-termPat t =
-    case unwrapTermF t of
-      Constant nm               -> Net.Atom (toShortName (nameInfo nm))
-      App t1 t2                 -> Net.App (termPat t1) (termPat t2)
-      FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
-      FTermF (NatLit _)         -> Net.Var
-      _                         -> Net.Var
+termPat t = termFPat (unwrapTermF t)
+
+termFPat :: TermF Term -> Net.Pat
+termFPat tf =
+  case tf of
+    Constant nm               -> Net.Atom (toShortName (nameInfo nm))
+    App t1 t2                 -> Net.App (termPat t1) (termPat t2)
+    FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
+    FTermF (NatLit _)         -> Net.Var
+    _                         -> Net.Var
 
 ----------------------------------------------------------------------
 -- Matchers for terms
@@ -272,7 +276,7 @@ asAnySort = asVar $ \t -> do Sort v _ <- R.asFTermF t; return v
 
 -- | Match a specific sort.
 asSort :: Sort -> Matcher ()
-asSort s = Matcher (termPat (Unshared (FTermF (Sort s noFlags)))) fn
+asSort s = Matcher (termFPat (FTermF (Sort s noFlags))) fn
   where fn t = do s' <- R.asSort t
                   guard (s == s')
 

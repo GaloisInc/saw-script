@@ -56,6 +56,7 @@ import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
@@ -150,7 +151,9 @@ withErrorTerm tm m = catchError m (throwError . ErrorTerm tm)
 
 -- | Lift @withErrorTerm@ to `TermF Term`
 withErrorTermF :: TermF Term -> TCM a -> TCM a
-withErrorTermF tm = withErrorTerm (Unshared tm)
+withErrorTermF tf tcm =
+  do t <- liftTCM scTermF tf
+     withErrorTerm t tcm
 
 -- | Lift @withErrorTerm@ to `TermF SC.Term`
 withErrorCTermF :: TermF SC.Term -> TCM a -> TCM a
@@ -194,7 +197,7 @@ data TCError
   | NoSuchCtor NameInfo
   | NoSuchConstant NameInfo
   | NotFullyAppliedRec NameInfo
-  | MalformedRecursor Term String
+  | MalformedRecursor NameInfo Sort String
   | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorCtx LocalName Term TCError
@@ -260,9 +263,10 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such constant: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
-  helper (MalformedRecursor trm reason) =
+  helper (MalformedRecursor d s reason) =
       ppWithPos [ return "Malformed recursor",
-                  ishow trm, return reason ]
+                  pure (indent "  " (Text.unpack (toAbsoluteName d) ++ sortSuffix s)),
+                  pure reason ]
   helper (DeclError nm reason) =
     ppWithPos [ return ("Malformed declaration for " ++ show nm), return reason ]
   helper (ErrorPos p err) =
@@ -285,6 +289,13 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   ishow tm =
     -- return $ show tm
     (\(_ctx,_) -> indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm) <$> ask
+
+  sortSuffix :: Sort -> String
+  sortSuffix s =
+    case s of
+      TypeSort 0 -> "#rec"
+      TypeSort n -> "#rec" ++ show n
+      PropSort -> "#ind"
 
 instance Show TCError where
   show = unlines . prettyTCError
@@ -359,8 +370,6 @@ instance TypeInfer Term where
   typeInfer t = SC.rawType <$> typeInferComplete t
   typeInferComplete t =
     case t of
-      Unshared tf ->
-        withErrorTerm t $ typeInferComplete tf
       STApp{stAppIndex = i, stAppTermF = tf} ->
         do table <- get
            case IntMap.lookup i table of
@@ -587,8 +596,7 @@ compileRecursor dt s =
 
      -- Check that the parameters are correct for the given datatype
      let err =
-           MalformedRecursor
-           (Unshared $ fmap SC.rawTerm $ FTermF $ Recursor crec)
+           MalformedRecursor (nameInfo d) s
            "Disallowed propositional elimination"
 
      unless (allowedElimSort dt s) $ throwTCError err

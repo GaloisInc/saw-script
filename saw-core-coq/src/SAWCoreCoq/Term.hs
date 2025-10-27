@@ -632,7 +632,6 @@ translateTermLet t =
 translateTerm :: TermTranslationMonad m => Term -> m Coq.Term
 translateTerm t =
   case t of
-    Unshared {} -> translateTermUnshared t
     STApp { stAppIndex = i } ->
       do shared <- view sharedNames <$> askTR
          case IntMap.lookup i shared of
