@@ -18,15 +18,11 @@ module SAWScript.REPL.Monad (
     REPL(..), runREPL
   , initREPL
   , resumeREPL
-  , raise
   , stop
   , exceptionProtect
   , liftTopLevel
   , liftProofScript
   , REPLState(..)
-
-    -- ** Errors
-  , REPLException(..)
 
     -- ** Environment
   , getCryptolExprNames
@@ -41,6 +37,7 @@ module SAWScript.REPL.Monad (
   , getSAWScriptTypeNames
   ) where
 
+
 import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import Cryptol.Utils.Ident (Namespace(..))
 import Cryptol.Utils.PP
@@ -54,7 +51,6 @@ import qualified Data.Set as Set
 --import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
-import Data.Typeable (Typeable)
 import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
 import System.Exit (ExitCode)
@@ -132,33 +128,7 @@ runREPL m st = do
 
 -- Exceptions ------------------------------------------------------------------
 
--- | REPL exceptions.
-data REPLException
-  = DirectoryNotFound FilePath
-    deriving (Show,Typeable)
-
-instance X.Exception REPLException
-
-instance PP REPLException where
-  ppPrec _ re = case re of
-    DirectoryNotFound path -> sep [ text "Directory"
-                                  , text ("`" ++ path ++ "'")
-                                  , text"not found or not a directory"
-                                  ]
-
--- | Raise an exception.
-raise :: REPLException -> REPL a
-raise exn = liftIO $ X.throwIO exn
-
--- | Handle any exception type in 'REPL' actions.
-catchEx :: X.Exception e => REPL a -> (e -> REPL a) -> REPL a
-catchEx m k = m `catch` k
-
--- | Handle 'REPLException' exceptions in 'REPL' actions.
-catchREPL :: REPL a -> (REPLException -> REPL a) -> REPL a
-catchREPL = catchEx
-
--- | Similar to 'catchREPL' above, but catches generic IO exceptions from 'fail'.
+-- | Handle generic IO exceptions from 'fail in 'REPL' actions.
 catchFail :: REPL a -> (String -> REPL a) -> REPL a
 catchFail m k = catchJust sel m k
   where
@@ -178,15 +148,10 @@ catchOther m k = catchJust flt m k
 exceptionProtect :: REPL () -> REPL ()
 exceptionProtect cmd =
       do chk <- liftIO . makeCheckpoint =<< getTopLevelRW
-         cmd `catchREPL`  (handlerPP chk)
-             `catchFail`  (handlerFail chk)
+         cmd `catchFail`  (handlerFail chk)
              `catchOther` (handlerPrint chk)
 
     where
-    handlerPP chk re =
-      do liftIO (putStrLn "" >> print (pp re))
-         void $ liftTopLevel (restoreCheckpoint chk)
-         return ()
     handlerPrint chk e =
       do liftIO (putStrLn "" >> putStrLn (X.displayException e))
          void $ liftTopLevel (restoreCheckpoint chk)

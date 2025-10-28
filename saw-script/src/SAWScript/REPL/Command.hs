@@ -421,7 +421,11 @@ cdCmd f | null f = liftIO $ putStrLn $ "[error] :cd requires a path argument"
   exists <- liftIO $ doesDirectoryExist f
   if exists
     then liftIO $ setCurrentDirectory f
-    else raise $ DirectoryNotFound f
+    else do
+        let f' = "`" <> Text.pack f <> "'"
+            msg = "Directory " <> f' <> " not found or not a directory"
+        liftIO $ TextIO.putStrLn msg
+
 
 pwdCmd :: REPL ()
 pwdCmd = liftIO $ getCurrentDirectory >>= putStrLn
