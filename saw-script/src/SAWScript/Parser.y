@@ -233,7 +233,7 @@ Type :: { Type }
  | AppliedType '->' Type                { tFun (maxSpan [$1, $3]) $1 $3 }
 
 AppliedType :: { Type }
- : BaseType                             { $1                      }
+ : BaseType                             { $1                            }
  | BaseType AppliedType                 { tBlock (maxSpan' $1 $2) $1 $2 }
 
 -- special case of function type that can be followed by more base types
@@ -242,30 +242,30 @@ BaseFunType :: { Type }
  : BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
 
 BaseType :: { Type }
- : name                                 { tVar (getPos $1) (tokStr $1)  }
- | '(' ')'                              { tTuple (maxSpan [$1, $2]) []  }
- | 'Bool'                               { tBool (getPos $1)             }
- | 'Int'                                { tInt (getPos $1)              }
- | 'String'                             { tString (getPos $1)           }
- | 'Term'                               { tTerm (getPos $1)             }
- | 'Type'                               { tType (getPos $1)             }
- | 'AIG'                                { tAIG (getPos $1)              }
- | 'CFG'                                { tCFG (getPos $1)              }
- | 'CrucibleMethodSpec'                 { tLLVMSpec (getPos $1)         }
- | 'LLVMSpec'                           { tLLVMSpec (getPos $1)         }
- | 'JVMMethodSpec'                      { tJVMSpec (getPos $1)          }
- | 'JVMSpec'                            { tJVMSpec (getPos $1)          }
- | 'MIRSpec'                            { tMIRSpec (getPos $1)          }
- | 'JavaSetup'                          { tContext (getPos $1) JavaSetup      }
- | 'LLVMSetup'                          { tContext (getPos $1) LLVMSetup      }
- | 'MIRSetup'                           { tContext (getPos $1) MIRSetup       }
- | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
- | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
- | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
- | '(' Type ')'                         { $2                            }
- | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2  }
- | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2  }
- | '{' commas(FieldType) '}'            { tRecord (maxSpan [$1, $3]) $2 }
+ : name                                 { tVar (getPos $1) (tokStr $1)     }
+ | '(' ')'                              { tTuple (maxSpan [$1, $2]) []     }
+ | 'Bool'                               { tBool (getPos $1)                }
+ | 'Int'                                { tInt (getPos $1)                 }
+ | 'String'                             { tString (getPos $1)              }
+ | 'Term'                               { tTerm (getPos $1)                }
+ | 'Type'                               { tType (getPos $1)                }
+ | 'AIG'                                { tAIG (getPos $1)                 }
+ | 'CFG'                                { tCFG (getPos $1)                 }
+ | 'CrucibleMethodSpec'                 { tLLVMSpec (getPos $1)            }
+ | 'LLVMSpec'                           { tLLVMSpec (getPos $1)            }
+ | 'JVMMethodSpec'                      { tJVMSpec (getPos $1)             }
+ | 'JVMSpec'                            { tJVMSpec (getPos $1)             }
+ | 'MIRSpec'                            { tMIRSpec (getPos $1)             }
+ | 'JavaSetup'                          { tContext (getPos $1) JavaSetup   }
+ | 'LLVMSetup'                          { tContext (getPos $1) LLVMSetup   }
+ | 'MIRSetup'                           { tContext (getPos $1) MIRSetup    }
+ | 'ProofScript'                        { tContext (getPos $1) ProofScript }
+ | 'TopLevel'                           { tContext (getPos $1) TopLevel    }
+ | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup   }
+ | '(' Type ')'                         { $2                               }
+ | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2     }
+ | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2     }
+ | '{' commas(FieldType) '}'            { tRecord (maxSpan [$1, $3]) $2    }
 
 FieldType :: { (Name, Type) }
   : name ':' Type                       { (tokStr $1, $3)         }
