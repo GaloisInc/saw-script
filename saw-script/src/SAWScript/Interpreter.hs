@@ -31,7 +31,7 @@ module SAWScript.Interpreter
 
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
-import Control.Monad.Reader (ask, asks)
+import Control.Monad.Reader (asks)
 import Control.Monad.State (gets)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe, mapMaybe)
@@ -1714,7 +1714,7 @@ add_primitives lc _bic _opts = do
 
 toplevelSubshell :: () -> TopLevel Value
 toplevelSubshell () = do
-     m <- roSubshell <$> ask
+     m <- asks roSubshell
      toValue "subshell" <$> m
 
 proofScriptSubshell :: () -> ProofScript Value

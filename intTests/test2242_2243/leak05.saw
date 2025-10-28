@@ -1,0 +1,16 @@
+// The subshell itself is its own scope
+// (ProofScript version)
+//
+// note: have to print {{ `x }} for fails to be able to catch it
+
+enable_experimental;
+
+let f () = do {
+   proof_subshell ();
+   let _ = run (print "should be unbound");
+   let _ = run (fails (do { print {{ `x }}; }));
+   trivial;
+   let _ = run (print "(exit)");
+   return ();
+};
+prove_print (f ()) {{ True }};

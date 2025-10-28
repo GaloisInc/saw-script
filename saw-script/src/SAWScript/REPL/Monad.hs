@@ -99,7 +99,8 @@ import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
 import SAWCentral.Value (AIGProxy(..), ProofScript(..), showsProofResult, Environ(..),
-                         rwGetCryptolEnv, rwModifyCryptolEnv)
+                         rwGetCryptolEnv, rwModifyCryptolEnv,
+                         pushScope, popScope)
 
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
@@ -150,8 +151,9 @@ runREPL isBatch opts m =
      unREPL m refs
 
 subshell :: REPL () -> TopLevel ()
-subshell (REPL m) = TopLevel_ $
-  do ro <- ask
+subshell (REPL m) =
+  do pushScope
+     ro <- ask
      rw <- get
      rw' <- liftIO $
        do contRef <- newIORef True
@@ -166,11 +168,13 @@ subshell (REPL m) = TopLevel_ $
           m refs
           readIORef rwRef
      put rw'
+     popScope
 
 proof_subshell :: REPL () -> ProofScript ()
 proof_subshell (REPL m) =
   ProofScript $ ExceptT $ StateT $ \proofSt ->
-  do ro <- ask
+  do pushScope
+     ro <- ask
      rw <- get
      (rw', outProofSt) <- liftIO $
        do contRef <- newIORef True
@@ -186,6 +190,7 @@ proof_subshell (REPL m) =
           m refs
           (,) <$> readIORef rwRef <*> readIORef proofRef
      put rw'
+     popScope
      return (Right (), outProofSt)
 
 instance Functor REPL where
