@@ -6,6 +6,10 @@ This release supports [version
 
 ## Changes
 
+* The REPL's `:search` command can now handle unapplied type constructors. For
+  example, one can now write `:search ProofScript` to find objects mentioning
+  `ProofScript` applied to any type.
+
 * The `cryptol_load` and `cryptol_prims` commands now fail if used
   in a nested scope, instead of behaving strangely.
 
