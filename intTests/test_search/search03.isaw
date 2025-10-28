@@ -1,4 +1,4 @@
-return ()    // these don't work because of parser shortcomings
+return ()    // applied and partially-applied contexts
 
 print "--------------------------------"
 print "-- ProofScript"
