@@ -41,13 +41,7 @@ module SAWScript.REPL.Monad (
   , getSAWScriptTypeNames
   ) where
 
-import Cryptol.Eval (EvalError)
-import qualified Cryptol.ModuleSystem as M
 import qualified Cryptol.ModuleSystem.NamingEnv as MN
-import Cryptol.Parser (ParseError,ppError)
-import Cryptol.Parser.NoInclude (IncludeError,ppIncludeError)
-import Cryptol.Parser.NoPat (Error)
-import qualified Cryptol.TypeCheck.AST as T
 import Cryptol.Utils.Ident (Namespace(..))
 import Cryptol.Utils.PP
 
@@ -140,38 +134,17 @@ runREPL m st = do
 
 -- | REPL exceptions.
 data REPLException
-  = ParseError ParseError
-  | FileNotFound FilePath
-  | DirectoryNotFound FilePath
-  | NoPatError [Error]
-  | NoIncludeError [IncludeError]
-  | EvalError EvalError
-  | ModuleSystemError M.ModuleError
-  | EvalPolyError T.Schema
-  | TypeNotTestable T.Type
+  = DirectoryNotFound FilePath
     deriving (Show,Typeable)
 
 instance X.Exception REPLException
 
 instance PP REPLException where
   ppPrec _ re = case re of
-    ParseError e         -> ppError e
-    FileNotFound path    -> sep [ text "File"
-                                , text ("`" ++ path ++ "'")
-                                , text"not found"
-                                ]
     DirectoryNotFound path -> sep [ text "Directory"
                                   , text ("`" ++ path ++ "'")
                                   , text"not found or not a directory"
                                   ]
-    NoPatError es        -> vcat (map pp es)
-    NoIncludeError es    -> vcat (map ppIncludeError es)
-    ModuleSystemError me -> pp me
-    EvalError e          -> pp e
-    EvalPolyError s      -> text "Cannot evaluate polymorphic value."
-                         $$ text "Type:" <+> pp s
-    TypeNotTestable t    -> text "The expression is not of a testable type."
-                         $$ text "Type:" <+> pp t
 
 -- | Raise an exception.
 raise :: REPLException -> REPL a
