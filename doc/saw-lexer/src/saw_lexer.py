@@ -41,7 +41,7 @@ class SAWScriptLexer(RegexLexer):
             ),
             (
                 (
-                    r"(CryptolSetup|JavaSetup|LLVMSetup|MIRSetup|ProofScript|"
+                    r"(JavaSetup|LLVMSetup|MIRSetup|ProofScript|"
                     r"TopLevel|CrucibleSetup|Int|String|Term|Type|Bool|AIG|"
                     r"CFG|CrucibleMethodSpec|LLVMSpec|JVMMethodSpec|JVMSpec|"
                     r"MIRSpec)(\s+)"

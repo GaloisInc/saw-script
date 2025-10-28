@@ -64,7 +64,6 @@ import Control.Exception
   'else'         { TReserved _ "else"           }
   'typedef'      { TReserved _ "typedef"        }
   'rebindable'   { TReserved _ "rebindable"     }
-  'CryptolSetup' { TReserved _ "CryptolSetup"   }
   'JavaSetup'    { TReserved _ "JavaSetup"      }
   'LLVMSetup'    { TReserved _ "LLVMSetup"      }
   'MIRSetup'     { TReserved _ "MIRSetup"       }
