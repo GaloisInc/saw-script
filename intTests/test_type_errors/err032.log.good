@@ -1,3 +1,12 @@
  Loading file "err032.saw"
- Parse error at err032.saw:7:13-7:17: Unexpected `Bool'
+ err032.saw:7:20-7:25: Type mismatch.
+    Mismatch of type constructors. Expected: <Block> but got Bool
+    err032.saw:7:9-7:17: The type Int Bool arises from this type annotation
+    <type of false>:1:1-1:5: The type Bool arises from this type annotation
+
+    Expected: Int Bool
+    Found:    Bool
+
+    within "x" (err032.saw:7:5-7:6)
+
 FAILED

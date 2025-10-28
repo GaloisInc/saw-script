@@ -225,7 +225,6 @@ PolyType :: { Schema }
 SchemaPattern :: { SchemaPattern }
  : BaseFunType                          { SchemaPattern [] [$1]       }
  | BaseType list(BaseType)              { SchemaPattern [] ($1 : $2)  }
- | Context                              { SchemaPattern [] [$1]       }
  | '{' Names '}' BaseFunType            { SchemaPattern $2 [$4]       }
  | '{' Names '}' BaseType list(BaseType) { SchemaPattern $2 ($4 : $5) }
 
@@ -235,8 +234,7 @@ Type :: { Type }
 
 AppliedType :: { Type }
  : BaseType                             { $1                      }
- | Context AppliedType                  { tBlock (maxSpan' $1 $2) $1 $2 }
- | TypeName AppliedType                 { tBlock (maxSpan' $1 $2) $1 $2 }
+ | BaseType AppliedType                 { tBlock (maxSpan' $1 $2) $1 $2 }
 
 -- special case of function type that can be followed by more base types
 -- without requiring parens
@@ -258,22 +256,16 @@ BaseType :: { Type }
  | 'JVMMethodSpec'                      { tJVMSpec (getPos $1)          }
  | 'JVMSpec'                            { tJVMSpec (getPos $1)          }
  | 'MIRSpec'                            { tMIRSpec (getPos $1)          }
- | '(' Type ')'                         { $2                            }
- | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2  }
- | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2  }
- | '{' commas(FieldType) '}'            { tRecord (maxSpan [$1, $3]) $2 }
-
-Context :: { Type }
- : 'JavaSetup'                          { tContext (getPos $1) JavaSetup      }
+ | 'JavaSetup'                          { tContext (getPos $1) JavaSetup      }
  | 'LLVMSetup'                          { tContext (getPos $1) LLVMSetup      }
  | 'MIRSetup'                           { tContext (getPos $1) MIRSetup       }
  | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
  | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
  | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
- | '(' Context ')'                      { $2                                  }
-
-TypeName :: { Type }
- : name                                 { tVar (getPos $1) (tokStr $1)        }
+ | '(' Type ')'                         { $2                            }
+ | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2  }
+ | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2  }
+ | '{' commas(FieldType) '}'            { tRecord (maxSpan [$1, $3]) $2 }
 
 FieldType :: { (Name, Type) }
   : name ':' Type                       { (tokStr $1, $3)         }

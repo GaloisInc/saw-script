@@ -7,3 +7,23 @@ print "-- ProofScript"
 print "--------------------------------"
 print "-- (ProofScript)"
 :search (ProofScript)
+
+print "--------------------------------"
+print "-- ProofScript Int"
+:search ProofScript Int
+
+print "--------------------------------"
+print "-- (ProofScript Int)"
+:search (ProofScript Int)
+
+print "--------------------------------"
+print "-- ProofScript Int String"
+:search ProofScript Int String
+
+print "--------------------------------"
+print "-- (ProofScript Int) String"
+:search (ProofScript Int) String
+
+print "--------------------------------"
+print "-- Int String ProofScript"
+:search Int String ProofScript

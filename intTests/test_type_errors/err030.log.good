@@ -1,3 +1,12 @@
  Loading file "err030.saw"
- Parse error at err030.saw:7:14-7:17: Unexpected `Int'
+ err030.saw:7:20-7:29: Type mismatch.
+    Mismatch of type constructors. Expected: <Block> but got Type
+    err030.saw:7:9-7:17: The type Type Int arises from this type annotation
+    err030.saw:7:20-7:29: The type Type arises from the type of this term
+
+    Expected: Type Int
+    Found:    Type
+
+    within "x" (err030.saw:7:5-7:6)
+
 FAILED
