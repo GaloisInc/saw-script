@@ -5,7 +5,7 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE PatternGuards #-}
+
 module CryptolSAWCore.TypedTerm
  -- ppTypedTerm,
  -- ppTypedTermType,

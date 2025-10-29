@@ -1,12 +1,8 @@
-{-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 
 {- |
 Module      : CryptolSAWCore.Cryptol
