@@ -38,8 +38,6 @@ import System.Exit (ExitCode)
 
 import CryptolSAWCore.CryptolEnv
 
---------------------
-
 import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..))
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
@@ -51,7 +49,8 @@ import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
 
 
--- REPL Environment ------------------------------------------------------------
+------------------------------------------------------------
+-- REPL state and state monad
 
 -- REPL Environment.
 data REPLState = REPLState
@@ -90,9 +89,6 @@ resumeREPL ro rw mpst =
         rProofState = mpst
     }
 
-
--- REPL Monad ------------------------------------------------------------------
-
 -- | REPL monad context.
 newtype REPL a = REPL { unREPL :: StateT REPLState IO a }
   deriving (Applicative, Functor, Monad, MonadThrow, MonadCatch, MonadMask, MonadFail)
@@ -129,6 +125,10 @@ liftProofScript m = do
             fail (showsProofResult ppOpts (InvalidProof stats cex pst') "")
        Right x -> return x
 
+
+------------------------------------------------------------
+-- Accessors
+
 getTopLevelRO :: REPL TopLevelRO
 getTopLevelRO = gets rTopLevelRO
 
@@ -144,7 +144,8 @@ getCryptolEnv = do
     return $ rwGetCryptolEnv rw
 
 
--- Exceptions ------------------------------------------------------------------
+------------------------------------------------------------
+-- Exceptions
 
 -- | Handle generic IO exceptions from 'fail in 'REPL' actions.
 catchFail :: REPL a -> (String -> REPL a) -> REPL a
