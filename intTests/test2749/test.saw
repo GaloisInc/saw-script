@@ -1,0 +1,16 @@
+// test.saw
+enable_experimental;
+
+let
+{{
+inc : [1024][8] -> [64] -> [1024][8]
+inc arr idx = update arr idx (arr @ idx + 10)
+}};
+
+prove_print
+  do {
+    print_goal;
+    goal_normalize [];
+    z3;
+  }
+  {{ \arr_val -> inc arr_val 0 == update arr_val 0 (arr_val @ 0 + 10) }};
