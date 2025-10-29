@@ -1,9 +1,3 @@
-Examples from #2242 (scoping regression in proof_subshell) and #2243
-(bindings escape proof_subshell).
-
-It might be better to use test-and-diff.sh here so as to capture the
-output; however, it doesn't work. For a TopLevel subshell, the input
-for the subshell needs to be on stdin, even if you use .isaw files
-with saw -B, and test-and-diff.sh can't do that. For a ProofScript
-subshell, it's even worse: for some reason one gets "Proof subshells
-not supported".
+Examples from #2242 (scoping regression in proof_subshell), #2243
+(bindings escape proof_subshell), and #2306 (bizarre environment
+capturing in the subshell / proof_subshell commands)
