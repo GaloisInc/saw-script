@@ -104,6 +104,45 @@ runREPL :: REPL a -> REPLState -> IO (a, REPLState)
 runREPL m st = do
     runStateT (unREPL m) st
 
+instance MonadIO REPL where
+  liftIO m = REPL (liftIO m)
+
+liftTopLevel :: TopLevel a -> REPL a
+liftTopLevel m = do
+    ro <- getTopLevelRO
+    rw <- getTopLevelRW
+    (result, rw') <- liftIO $ runTopLevel m ro rw
+    modify (\st -> st { rTopLevelRW = rw' })
+    return result
+
+liftProofScript :: ProofScript a -> REPL a
+liftProofScript m = do
+    mpst <- gets rProofState
+    let pst = case mpst of
+          Nothing -> panic "liftProofScript" ["Not in ProofScript mode"]
+          Just ps -> ps
+    (result, pst') <- liftTopLevel $ runStateT (runExceptT (unProofScript m)) pst
+    modify (\st -> st { rProofState = Just pst' })
+    liftTopLevel $ case result of
+       Left (stats, cex) ->
+         do ppOpts <- rwPPOpts <$> get
+            fail (showsProofResult ppOpts (InvalidProof stats cex pst') "")
+       Right x -> return x
+
+getTopLevelRO :: REPL TopLevelRO
+getTopLevelRO = gets rTopLevelRO
+
+getTopLevelRW :: REPL TopLevelRW
+getTopLevelRW = gets rTopLevelRW
+
+getProofState :: REPL (Maybe ProofState)
+getProofState = gets rProofState
+
+getCryptolEnv :: REPL CryptolEnv
+getCryptolEnv = do
+    rw <- getTopLevelRW
+    return $ rwGetCryptolEnv rw
+
 
 -- Exceptions ------------------------------------------------------------------
 
@@ -138,44 +177,3 @@ exceptionProtect cmd =
     handlerFail chk s =
       do liftIO (putStrLn "" >> putStrLn s)
          void $ liftTopLevel (restoreCheckpoint chk)
-
-liftTopLevel :: TopLevel a -> REPL a
-liftTopLevel m = do
-    ro <- getTopLevelRO
-    rw <- getTopLevelRW
-    (result, rw') <- liftIO $ runTopLevel m ro rw
-    modify (\st -> st { rTopLevelRW = rw' })
-    return result
-
-liftProofScript :: ProofScript a -> REPL a
-liftProofScript m = do
-    mpst <- gets rProofState
-    let pst = case mpst of
-          Nothing -> panic "liftProofScript" ["Not in ProofScript mode"]
-          Just ps -> ps
-    (result, pst') <- liftTopLevel $ runStateT (runExceptT (unProofScript m)) pst
-    modify (\st -> st { rProofState = Just pst' })
-    liftTopLevel $ case result of
-       Left (stats, cex) ->
-         do ppOpts <- rwPPOpts <$> get
-            fail (showsProofResult ppOpts (InvalidProof stats cex pst') "")
-       Right x -> return x
-
--- Primitives ------------------------------------------------------------------
-
-instance MonadIO REPL where
-  liftIO m = REPL (liftIO m)
-
-getCryptolEnv :: REPL CryptolEnv
-getCryptolEnv = do
-    rw <- getTopLevelRW
-    return $ rwGetCryptolEnv rw
-
-getTopLevelRO :: REPL TopLevelRO
-getTopLevelRO = gets rTopLevelRO
-
-getTopLevelRW :: REPL TopLevelRW
-getTopLevelRW = gets rTopLevelRW
-
-getProofState :: REPL (Maybe ProofState)
-getProofState = gets rProofState
