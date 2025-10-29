@@ -1,3 +1,6 @@
  Loading file "err025.saw"
- err025.saw:3:9-3:14: do block must include at least one expression
+ Stack trace:
+   (builtin) (at top level)
+err025.saw:3:9-3:14: do block must include at least one expression
+
 FAILED

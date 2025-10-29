@@ -25,7 +25,7 @@ module SAWScript.Interpreter
   where
 
 import qualified Control.Exception as X
-import Control.Monad (unless, (>=>), when)
+import Control.Monad (unless, when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (gets, get, put)
@@ -989,7 +989,15 @@ interpretFile file runMain =
   where
     interp = do
       opts <- getOptions
-      stmts <- io $ SAWScript.Import.findAndLoadFile opts file
+      errs_or_stmts <- io $ SAWScript.Import.findAndLoadFile opts file
+      stmts <- do
+        case errs_or_stmts of
+          Left errs -> do
+            -- Don't use Text.unlines here; it inserts a newline at
+            -- the end and that produces extra blank lines in the
+            -- output.
+            throwTopLevel $ Text.unpack $ Text.intercalate "\n" errs
+          Right stmts -> pure stmts
       io $ setCurrentDirectory (takeDirectory file)
       mapM_ stmtWithPrint stmts
       when runMain interpretMain
@@ -2165,13 +2173,23 @@ print_value v = do
 
 dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
 dump_file_AST _bic opts filetxt = do
-  let file = Text.unpack filetxt
-  (SAWScript.Import.findAndLoadFile opts >=> mapM_ print) file
+    let file = Text.unpack filetxt
+    errs_or_stmts <- SAWScript.Import.findAndLoadFile opts file
+    case errs_or_stmts of
+        Left errs ->
+            X.throwIO $ userError $ Text.unpack $ Text.unlines errs
+        Right stmts ->
+            mapM_ print stmts
 
 parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> IO ()
 parser_printer_roundtrip _bic opts filetxt = do
-  let file = Text.unpack filetxt
-  (SAWScript.Import.findAndLoadFile opts >=> PP.putDoc . SS.prettyWholeModule) file
+    let file = Text.unpack filetxt
+    errs_or_stmts <- SAWScript.Import.findAndLoadFile opts file
+    case errs_or_stmts of
+        Left errs ->
+            X.throwIO $ userError $ Text.unpack $ Text.unlines errs
+        Right stmts ->
+            PP.putDoc $ SS.prettyWholeModule stmts
 
 exec :: Text -> [Text] -> Text -> IO Text
 exec name args input = do
