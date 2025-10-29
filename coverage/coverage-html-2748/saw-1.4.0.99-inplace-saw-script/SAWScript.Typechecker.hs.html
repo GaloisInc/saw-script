@@ -1070,8 +1070,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1051 </span><span class="spaces">  </span><span class="istickedoff">Bool pos b    -&gt; <span class="nottickedoff">return (Bool pos b, tBool (PosInferred InfTerm pos))</span></span>
 <span class="lineno"> 1052 </span><span class="spaces">  </span><span class="istickedoff">String pos s  -&gt; return (String pos s, tString (PosInferred InfTerm pos))</span>
 <span class="lineno"> 1053 </span><span class="spaces">  </span><span class="istickedoff">Int pos i     -&gt; return (Int pos i, tInt (PosInferred InfTerm pos))</span>
-<span class="lineno"> 1054 </span><span class="spaces">  </span><span class="istickedoff">Code pos s    -&gt; return (Code pos s, tTerm <span class="nottickedoff">(PosInferred InfTerm pos)</span>)</span>
-<span class="lineno"> 1055 </span><span class="spaces">  </span><span class="istickedoff">CType pos s   -&gt; return (CType pos s, tType <span class="nottickedoff">(PosInferred InfTerm pos)</span>)</span>
+<span class="lineno"> 1054 </span><span class="spaces">  </span><span class="istickedoff">Code pos s    -&gt; return (Code pos s, tTerm (PosInferred InfTerm pos))</span>
+<span class="lineno"> 1055 </span><span class="spaces">  </span><span class="istickedoff">CType pos s   -&gt; return (CType pos s, tType (PosInferred InfTerm pos))</span>
 <span class="lineno"> 1056 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1057 </span><span class="spaces">  </span><span class="istickedoff">Array pos [] -&gt; do</span>
 <span class="lineno"> 1058 </span><span class="spaces">      </span><span class="istickedoff">a &lt;- getFreshTyVar <span class="nottickedoff">pos</span></span>
@@ -1096,7 +1096,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1077 </span><span class="spaces">  </span><span class="istickedoff">Record pos fs -&gt; do</span>
 <span class="lineno"> 1078 </span><span class="spaces">      </span><span class="istickedoff">(nes',nts) &lt;- unzip `fmap` mapM (inferField <span class="nottickedoff">ln</span>) (Map.toList fs)</span>
 <span class="lineno"> 1079 </span><span class="spaces">      </span><span class="istickedoff">let ty = TyRecord (PosInferred InfTerm pos) $ Map.fromList nts</span>
-<span class="lineno"> 1080 </span><span class="spaces">      </span><span class="istickedoff">return (Record <span class="nottickedoff">pos</span> (Map.fromList nes'), ty)</span>
+<span class="lineno"> 1080 </span><span class="spaces">      </span><span class="istickedoff">return (Record pos (Map.fromList nes'), ty)</span>
 <span class="lineno"> 1081 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1082 </span><span class="spaces">  </span><span class="istickedoff">-- XXX this is currently unreachable because there's no concrete</span>
 <span class="lineno"> 1083 </span><span class="spaces">  </span><span class="istickedoff">-- syntax for it; the parser will never produce it.</span>
@@ -1795,7 +1795,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1776 </span><span class="spaces">    </span><span class="istickedoff">FunCon -&gt; [kindStar, kindStar]</span>
 <span class="lineno"> 1777 </span><span class="spaces">    </span><span class="istickedoff">StringCon -&gt; []</span>
 <span class="lineno"> 1778 </span><span class="spaces">    </span><span class="istickedoff">TermCon -&gt; []</span>
-<span class="lineno"> 1779 </span><span class="spaces">    </span><span class="istickedoff">TypeCon -&gt; <span class="nottickedoff">[]</span></span>
+<span class="lineno"> 1779 </span><span class="spaces">    </span><span class="istickedoff">TypeCon -&gt; []</span>
 <span class="lineno"> 1780 </span><span class="spaces">    </span><span class="istickedoff">BoolCon -&gt; []</span>
 <span class="lineno"> 1781 </span><span class="spaces">    </span><span class="istickedoff">IntCon -&gt; []</span>
 <span class="lineno"> 1782 </span><span class="spaces">    </span><span class="istickedoff">BlockCon -&gt; [kindStar, kindStar]</span>

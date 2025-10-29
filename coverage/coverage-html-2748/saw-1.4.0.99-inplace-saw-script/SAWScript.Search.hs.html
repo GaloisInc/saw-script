@@ -278,22 +278,22 @@ span.spaces    { background: white }
 <span class="lineno">  259 </span><span class="spaces">          </span><span class="istickedoff">TyCon _pos _ctor args -&gt;</span>
 <span class="lineno">  260 </span><span class="spaces">              </span><span class="istickedoff">-- take the max score of the args, deduct one,</span>
 <span class="lineno">  261 </span><span class="spaces">              </span><span class="istickedoff">-- clamp to 1</span>
-<span class="lineno">  262 </span><span class="spaces">              </span><span class="istickedoff">max 1 ((foldr <span class="nottickedoff">max</span> 1 $ map <span class="nottickedoff">score</span> args) - 1)</span>
+<span class="lineno">  262 </span><span class="spaces">              </span><span class="istickedoff">max 1 ((foldr max 1 $ map score args) - 1)</span>
 <span class="lineno">  263 </span><span class="spaces">          </span><span class="istickedoff">TyRecord _pos fields -&gt;</span>
 <span class="lineno">  264 </span><span class="spaces">              </span><span class="istickedoff">-- same treatment</span>
 <span class="lineno">  265 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">max 1 ((foldr max 1 $ map score $ Map.elems fields) - 1)</span></span>
 <span class="lineno">  266 </span><span class="spaces">          </span><span class="istickedoff">TyVar _pos x</span>
-<span class="lineno">  267 </span><span class="spaces">           </span><span class="istickedoff">| <span class="nottickedoff">x == &quot;_&quot;</span> -&gt;</span>
+<span class="lineno">  267 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlyfalse">x == &quot;_&quot;</span> -&gt;</span>
 <span class="lineno">  268 </span><span class="spaces">              </span><span class="istickedoff">-- wildcard matches everything</span>
 <span class="lineno">  269 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">4</span></span>
-<span class="lineno">  270 </span><span class="spaces">           </span><span class="istickedoff">| <span class="nottickedoff">Set.member x (mPatFreeVars ctx)</span> -&gt;</span>
+<span class="lineno">  270 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlyfalse">Set.member x (mPatFreeVars ctx)</span> -&gt;</span>
 <span class="lineno">  271 </span><span class="spaces">              </span><span class="istickedoff">-- free var matches anything</span>
 <span class="lineno">  272 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">3</span></span>
-<span class="lineno">  273 </span><span class="spaces">           </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
+<span class="lineno">  273 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
 <span class="lineno">  274 </span><span class="spaces">              </span><span class="istickedoff">-- forall-bound var, treat as &quot;one thing&quot;</span>
 <span class="lineno">  275 </span><span class="spaces">              </span><span class="istickedoff">-- (even though it's not quite)</span>
 <span class="lineno">  276 </span><span class="spaces">              </span><span class="istickedoff">-- or previously-bound var, which is one thing</span>
-<span class="lineno">  277 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">1</span></span>
+<span class="lineno">  277 </span><span class="spaces">              </span><span class="istickedoff">1</span>
 <span class="lineno">  278 </span><span class="spaces">          </span><span class="istickedoff">TyUnifyVar _pos _x -&gt;</span>
 <span class="lineno">  279 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unifyVarPanic &quot;compareBySelectivity&quot; &quot;pattern&quot;</span></span></span>
 <span class="lineno">  280 </span>
@@ -483,7 +483,7 @@ span.spaces    { background: white }
 <span class="lineno">  464 </span><span class="spaces">        </span><span class="istickedoff">--</span>
 <span class="lineno">  465 </span><span class="spaces">        </span><span class="istickedoff">-- (Note: last rather than first because we're using foldr, not</span>
 <span class="lineno">  466 </span><span class="spaces">        </span><span class="istickedoff">-- foldl.)</span>
-<span class="lineno">  467 </span><span class="spaces">        </span><span class="istickedoff">patTypes' = sortBy (compareBySelectivity <span class="nottickedoff">ctx</span>) patTypes</span>
+<span class="lineno">  467 </span><span class="spaces">        </span><span class="istickedoff">patTypes' = sortBy (compareBySelectivity ctx) patTypes</span>
 <span class="lineno">  468 </span><span class="spaces">    </span><span class="istickedoff">in</span>
 <span class="lineno">  469 </span><span class="spaces">    </span><span class="istickedoff">foldr oneType (Set.singleton cand0) patTypes'</span></span>
 <span class="lineno">  470 </span>

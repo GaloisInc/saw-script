@@ -159,7 +159,7 @@ span.spaces    { background: white }
 <span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">getPos (Array pos _) = pos</span>
 <span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">getPos (Block pos _) = pos</span>
 <span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">getPos (Tuple pos _) = pos</span>
-<span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">getPos (Record pos _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">getPos (Record pos _) = pos</span>
 <span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">getPos (Index pos _ _) = <span class="nottickedoff">pos</span></span>
 <span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">getPos (Lookup pos _ _) = <span class="nottickedoff">pos</span></span>
 <span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">getPos (TLookup pos _ _) = <span class="nottickedoff">pos</span></span>
@@ -473,8 +473,8 @@ span.spaces    { background: white }
 <span class="lineno">  454 </span><span class="spaces">    </span><span class="istickedoff">(ArrayCon,[typ])       -&gt; PP.brackets (PPS.prettyPrec <span class="nottickedoff">0</span> typ)</span>
 <span class="lineno">  455 </span><span class="spaces">    </span><span class="istickedoff">(FunCon,[f,v])         -&gt; (if par &gt; 0 then PP.parens else id) $</span>
 <span class="lineno">  456 </span><span class="spaces">                                </span><span class="istickedoff">PPS.prettyPrec 1 f PP.&lt;+&gt; &quot;-&gt;&quot; PP.&lt;+&gt; PPS.prettyPrec 0 v</span>
-<span class="lineno">  457 </span><span class="spaces">    </span><span class="istickedoff">(BlockCon,[cxt,typ])   -&gt; (if <span class="tickonlyfalse">par &gt; 1</span> then <span class="nottickedoff">PP.parens</span> else id) $</span>
-<span class="lineno">  458 </span><span class="spaces">                                </span><span class="istickedoff">PPS.prettyPrec <span class="nottickedoff">1</span> cxt PP.&lt;+&gt; PPS.prettyPrec <span class="nottickedoff">2</span> typ</span>
+<span class="lineno">  457 </span><span class="spaces">    </span><span class="istickedoff">(BlockCon,[cxt,typ])   -&gt; (if par &gt; 1 then PP.parens else id) $</span>
+<span class="lineno">  458 </span><span class="spaces">                                </span><span class="istickedoff">PPS.prettyPrec <span class="nottickedoff">1</span> cxt PP.&lt;+&gt; PPS.prettyPrec 2 typ</span>
 <span class="lineno">  459 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error $ &quot;malformed TyCon: &quot; ++ show t</span></span>
 <span class="lineno">  460 </span><span class="spaces">  </span><span class="istickedoff">prettyPrec _par (TyRecord _ fs) =</span>
 <span class="lineno">  461 </span><span class="spaces">      </span><span class="istickedoff">PP.braces</span>
@@ -544,10 +544,10 @@ span.spaces    { background: white }
 <span class="lineno">  525 </span><span class="decl"><span class="istickedoff">tString pos = TyCon pos StringCon []</span></span>
 <span class="lineno">  526 </span>
 <span class="lineno">  527 </span>tTerm :: Pos -&gt; Type
-<span class="lineno">  528 </span><span class="decl"><span class="istickedoff">tTerm pos = TyCon <span class="nottickedoff">pos</span> TermCon []</span></span>
+<span class="lineno">  528 </span><span class="decl"><span class="istickedoff">tTerm pos = TyCon pos TermCon []</span></span>
 <span class="lineno">  529 </span>
 <span class="lineno">  530 </span>tType :: Pos -&gt; Type
-<span class="lineno">  531 </span><span class="decl"><span class="istickedoff">tType pos = TyCon <span class="nottickedoff">pos</span> TypeCon []</span></span>
+<span class="lineno">  531 </span><span class="decl"><span class="istickedoff">tType pos = TyCon pos TypeCon []</span></span>
 <span class="lineno">  532 </span>
 <span class="lineno">  533 </span>tBool :: Pos -&gt; Type
 <span class="lineno">  534 </span><span class="decl"><span class="istickedoff">tBool pos = TyCon pos BoolCon []</span></span>

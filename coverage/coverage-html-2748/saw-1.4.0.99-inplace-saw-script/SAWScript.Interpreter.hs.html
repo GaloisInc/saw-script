@@ -50,7 +50,7 @@ span.spaces    { background: white }
 <span class="lineno">   31 </span>
 <span class="lineno">   32 </span>import qualified Control.Exception as X
 <span class="lineno">   33 </span>import Control.Monad (unless, (&gt;=&gt;), when)
-<span class="lineno">   34 </span>import Control.Monad.Reader (ask, asks)
+<span class="lineno">   34 </span>import Control.Monad.Reader (asks)
 <span class="lineno">   35 </span>import Control.Monad.State (gets)
 <span class="lineno">   36 </span>import qualified Data.ByteString as BS
 <span class="lineno">   37 </span>import Data.Maybe (fromMaybe, mapMaybe)
@@ -1733,7 +1733,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1714 </span>
 <span class="lineno"> 1715 </span>toplevelSubshell :: () -&gt; TopLevel Value
 <span class="lineno"> 1716 </span><span class="decl"><span class="istickedoff">toplevelSubshell () = do</span>
-<span class="lineno"> 1717 </span><span class="spaces">     </span><span class="istickedoff">m &lt;- roSubshell &lt;$&gt; ask</span>
+<span class="lineno"> 1717 </span><span class="spaces">     </span><span class="istickedoff">m &lt;- asks roSubshell</span>
 <span class="lineno"> 1718 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">toValue &quot;subshell&quot;</span> &lt;$&gt; m</span></span>
 <span class="lineno"> 1719 </span>
 <span class="lineno"> 1720 </span>proofScriptSubshell :: () -&gt; ProofScript Value

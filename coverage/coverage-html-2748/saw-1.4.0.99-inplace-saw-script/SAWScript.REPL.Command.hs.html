@@ -307,7 +307,7 @@ span.spaces    { background: white }
 <span class="lineno">  288 </span><span class="spaces">               </span><span class="istickedoff">HideDeprecated -&gt;</span>
 <span class="lineno">  289 </span><span class="spaces">                 </span><span class="istickedoff">(vis, ex, Map.insert name <span class="nottickedoff">(lc, ty)</span> dep)</span>
 <span class="lineno">  290 </span><span class="spaces">               </span><span class="istickedoff">Experimental -&gt;</span>
-<span class="lineno">  291 </span><span class="spaces">                 </span><span class="istickedoff">(vis, Map.insert name <span class="nottickedoff">(lc, ty)</span> ex, dep)</span>
+<span class="lineno">  291 </span><span class="spaces">                 </span><span class="istickedoff">(vis, Map.insert name (lc, ty) ex, dep)</span>
 <span class="lineno">  292 </span><span class="spaces">             </span><span class="istickedoff">where</span>
 <span class="lineno">  293 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">oops =</span></span>
 <span class="lineno">  294 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">panic &quot;searchCmd&quot; [</span></span>
@@ -323,7 +323,7 @@ span.spaces    { background: white }
 <span class="lineno">  304 </span><span class="spaces">                   </span><span class="istickedoff">Current -&gt; &quot;&quot;</span>
 <span class="lineno">  305 </span><span class="spaces">                   </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">&quot;  (DEPRECATED AND WILL WARN)&quot;</span></span>
 <span class="lineno">  306 </span><span class="spaces">                   </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">&quot;  (DEPRECATED AND UNAVAILABLE BY DEFAULT)&quot;</span></span>
-<span class="lineno">  307 </span><span class="spaces">                   </span><span class="istickedoff">Experimental -&gt; <span class="nottickedoff">&quot;  (EXPERIMENTAL)&quot;</span></span>
+<span class="lineno">  307 </span><span class="spaces">                   </span><span class="istickedoff">Experimental -&gt; &quot;  (EXPERIMENTAL)&quot;</span>
 <span class="lineno">  308 </span><span class="spaces">           </span><span class="istickedoff">TextIO.putStrLn (name &lt;&gt; &quot; : &quot; &lt;&gt; ty' &lt;&gt; lc')</span>
 <span class="lineno">  309 </span><span class="spaces">         </span><span class="istickedoff">printMatches matches =</span>
 <span class="lineno">  310 </span><span class="spaces">           </span><span class="istickedoff">io $ mapM_ printMatch (Map.assocs matches)</span>
@@ -353,11 +353,11 @@ span.spaces    { background: white }
 <span class="lineno">  334 </span><span class="spaces">         </span><span class="istickedoff">alsoDeprecated</span>
 <span class="lineno">  335 </span><span class="spaces">     </span><span class="istickedoff">else do</span>
 <span class="lineno">  336 </span><span class="spaces">         </span><span class="istickedoff">io $ putStrLn &quot;No matches.&quot;</span>
-<span class="lineno">  337 </span><span class="spaces">         </span><span class="istickedoff">if <span class="tickonlyfalse">not (Map.null expMatches)</span> then <span class="nottickedoff">do</span></span>
-<span class="lineno">  338 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">io $ putStrLn $ &quot;The following experimental matches require &quot; ++</span></span>
-<span class="lineno">  339 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">&quot;enable_experimental:&quot;</span></span>
-<span class="lineno">  340 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">printMatches expMatches</span></span>
-<span class="lineno">  341 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">alsoDeprecated</span></span>
+<span class="lineno">  337 </span><span class="spaces">         </span><span class="istickedoff">if not (Map.null expMatches) then do</span>
+<span class="lineno">  338 </span><span class="spaces">             </span><span class="istickedoff">io $ putStrLn $ &quot;The following experimental matches require &quot; ++</span>
+<span class="lineno">  339 </span><span class="spaces">                             </span><span class="istickedoff">&quot;enable_experimental:&quot;</span>
+<span class="lineno">  340 </span><span class="spaces">             </span><span class="istickedoff">printMatches expMatches</span>
+<span class="lineno">  341 </span><span class="spaces">             </span><span class="istickedoff">alsoDeprecated</span>
 <span class="lineno">  342 </span><span class="spaces">         </span><span class="istickedoff">else if <span class="tickonlyfalse">not (Map.null depMatches)</span> then <span class="nottickedoff">do</span></span>
 <span class="lineno">  343 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">io $ putStrLn $ &quot;The following deprecated matches require &quot; ++</span></span>
 <span class="lineno">  344 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">&quot;enable_deprecated:&quot;</span></span>
