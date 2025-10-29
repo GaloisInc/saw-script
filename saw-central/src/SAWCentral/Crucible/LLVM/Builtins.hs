@@ -915,7 +915,12 @@ checkSpecReturnType cc mspec =
            , "Expected: " <> Text.pack (show retTy)
            , "but given value of type: " <> Text.pack (show retTy')
            ]
-    (Nothing, _) -> return ()
+    (Nothing, Just retTy) ->
+      throwMethodSpec mspec $ Text.unpack $ Text.unlines
+      [ "Missing return value specification for function with non-void return type"
+      , "Expected: " <> Text.pack (show retTy)
+      ]
+    (Nothing, Nothing) -> pure ()
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
