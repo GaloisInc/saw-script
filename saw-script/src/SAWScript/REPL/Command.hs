@@ -30,6 +30,7 @@ import SAWCentral.Position (getPos, Pos)
 import SAWCentral.Value (Environ(..))
 
 import SAWScript.REPL.Monad
+import SAWScript.REPL.Data
 import SAWScript.Token (Token)
 
 import Control.Monad (unless, void)
@@ -88,33 +89,25 @@ cdCmd f | null f = liftIO $ putStrLn $ "[error] :cd requires a path argument"
 
 envCmd :: REPL ()
 envCmd = do
-  rw <- getTopLevelRW
-  let Environ varenv _tyenv _cryenv = rwEnviron rw
-      rbenv = rwRebindables rw
-      avail = rwPrimsAvail rw
+  (rbenv, scopes) <- getSAWScriptVarEnv
+  liftIO $ do
+      let blankline = TextIO.putStrLn ""
 
-  -- print the rebindable globals first, if any
-  unless (Map.null rbenv) $ do
-      let rbsay (x, (_pos, ty, _v)) = do
-              let ty' = PPS.pShowText ty
-              TextIO.putStrLn (x <> " : rebindable " <> ty')
-      liftIO $ mapM_ rbsay $ Map.assocs rbenv
-      liftIO $ TextIO.putStrLn ""
+      unless (null rbenv) $ do
+          let printrb (x, ty) = do
+                let ty' = PPS.pShowText ty
+                TextIO.putStrLn (x <> " : rebindable " <> ty')
+          mapM_ printrb rbenv
+          blankline
 
-  -- print the normal environment
-  let say (x, (_pos, _lc, ty, _v, _doc)) = do
-          let ty' = PPS.pShowText ty
-          TextIO.putStrLn (x <> " : " <> ty')
-      -- Print only the visible objects
-      keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
+      let printscope entries = do
+            let printentry (x, ty) = do
+                  let ty' = PPS.pShowText ty
+                  TextIO.putStrLn (x <> " : " <> ty')
+            mapM_ printentry entries
+
       -- Insert a blank line in the output where there's a scope boundary
-      printScope mItems = case mItems of
-          Nothing -> TextIO.putStrLn ""
-          Just items -> mapM_ say $ filter keep items
-      -- Reverse the list of scopes so the innermost prints last,
-      -- because that's what people will expect to see.
-      itemses = reverse $ ScopedMap.scopedAssocs varenv
-  liftIO $ mapM_ printScope $ intersperse Nothing $ map Just itemses
+      sequence_ $ intersperse blankline $ map printscope scopes
 
 helpCmd :: Text -> REPL ()
 helpCmd cmd
@@ -271,22 +264,18 @@ searchCmd str
 
 tenvCmd :: REPL ()
 tenvCmd = do
-  rw <- getTopLevelRW
-  let avail = rwPrimsAvail rw
-      Environ _varenv tyenv _cryenv = rwEnviron rw
-      say (x, (_lc, ty)) = do
-          let ty' = PPS.pShowText ty
-          TextIO.putStrLn (x <> " : " <> ty')
-      -- Print only the visible objects
-      keep (_x, (lc, _ty)) = Set.member lc avail
+  scopes <- getSAWScriptTypeEnv
+  liftIO $ do
+      let blankline = TextIO.putStrLn ""
+
+      let printscope entries = do
+            let printentry (x, ty) = do
+                  let ty' = PPS.pShowText ty
+                  TextIO.putStrLn (x <> " = " <> ty')
+            mapM_ printentry entries
+
       -- Insert a blank line in the output where there's a scope boundary
-      printScope mItems = case mItems of
-          Nothing -> TextIO.putStrLn ""
-          Just items -> mapM_ say $ filter keep items
-      -- Reverse the list of scopes so the innermost prints last,
-      -- because that's what people will expect to see.
-      itemses = reverse $ ScopedMap.scopedAssocs tyenv
-  liftIO $ mapM_ printScope $ intersperse Nothing $ map Just itemses
+      sequence_ $ intersperse blankline $ map printscope scopes
 
 typeOfCmd :: Text -> REPL ()
 typeOfCmd str
