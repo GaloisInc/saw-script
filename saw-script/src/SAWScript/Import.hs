@@ -5,6 +5,7 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+
 module SAWScript.Import
   ( findAndLoadFile
   ) where
@@ -21,6 +22,12 @@ import SAWScript.Lexer (lexSAW)
 import SAWCentral.Options
 import SAWScript.Parser
 import SAWScript.Token (Token)
+
+parseFile :: [Token Pos] -> Either ParseError [Stmt]
+parseFile tokens = do
+  case parseModule tokens of
+    Left err -> Left err
+    Right stmts -> Right stmts
 
 -- | Load the 'Stmt's in a @.saw@ file.
 loadFile :: Options -> FilePath -> IO [Stmt]
@@ -45,12 +52,6 @@ loadFile opts fname = do
             Error -> throwIO $ userError txt'
             _ -> printOutLn opts vrb txt'
       either throwIO return (parseFile tokens)
-
-parseFile :: [Token Pos] -> Either ParseError [Stmt]
-parseFile tokens = do
-  case parseModule tokens of
-    Left err -> Left err
-    Right stmts -> Right stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
