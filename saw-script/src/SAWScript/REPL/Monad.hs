@@ -14,57 +14,36 @@ Stability   : provisional
 {-# LANGUAGE StandaloneDeriving #-}
 
 module SAWScript.REPL.Monad (
-    -- * REPL Monad
     REPL(..), runREPL
   , initREPL
   , resumeREPL
-  , stop
   , exceptionProtect
   , liftTopLevel
   , liftProofScript
   , REPLState(..)
-
-    -- ** Environment
-  , getCryptolExprNames
-  , getCryptolTypeNames
-  , getPrompt
-  , shouldContinue
-
-    -- ** SAWScript stuff
+  , getCryptolEnv
   , getTopLevelRW
   , getProofState
-  , getSAWScriptValueNames
-  , getSAWScriptTypeNames
   ) where
 
-
-import qualified Cryptol.ModuleSystem.NamingEnv as MN
-import Cryptol.Utils.Ident (Namespace(..))
-import Cryptol.Utils.PP
 
 import Control.Monad (void)
 import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), MonadMask(..), catchJust)
 import Control.Monad.State (MonadState(..), StateT(..), get, gets, modify)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
-import qualified Data.Set as Set
---import Data.Map (Map)
-import qualified Data.Map as Map
-import qualified Data.Text as Text
 import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
 import System.Exit (ExitCode)
-
-import qualified SAWSupport.ScopedMap as ScopedMap
 
 import CryptolSAWCore.CryptolEnv
 
 --------------------
 
 import SAWCentral.Options (Options)
-import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
+import SAWCentral.Proof (ProofState, ProofResult(..))
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
-import SAWCentral.Value (ProofScript(..), showsProofResult, Environ(..),
+import SAWCentral.Value (ProofScript(..), showsProofResult,
                          rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook)
 
 import SAWScript.Panic (panic)
@@ -187,39 +166,6 @@ liftProofScript m = do
 instance MonadIO REPL where
   liftIO m = REPL (liftIO m)
 
--- | Construct the prompt for the current environment.
-getPrompt :: REPL String
-getPrompt =
-  do batch <- gets rIsBatch
-     if batch then return ""
-     else do
-       mpst <- gets rProofState
-       case mpst of
-         Nothing ->
-             return "sawscript> "
-         Just pst ->
-             return ("proof ("++show (length (psGoals pst))++")> ")
-
-shouldContinue :: REPL Bool
-shouldContinue =
-    gets rContinue
-
-stop :: REPL ()
-stop =
-    modify (\st -> st { rContinue = False })
-
--- | Get visible Cryptol variable names.
-getCryptolExprNames :: REPL [String]
-getCryptolExprNames =
-  do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))
-
--- | Get visible Cryptol type names.
-getCryptolTypeNames :: REPL [String]
-getCryptolTypeNames =
-  do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
-
 getCryptolEnv :: REPL CryptolEnv
 getCryptolEnv = do
     rw <- getTopLevelRW
@@ -233,25 +179,3 @@ getTopLevelRW = gets rTopLevelRW
 
 getProofState :: REPL (Maybe ProofState)
 getProofState = gets rProofState
-
--- | Get visible variable names for Haskeline completion.
-getSAWScriptValueNames :: REPL [String]
-getSAWScriptValueNames = do
-  rw <- getTopLevelRW
-  let avail = rwPrimsAvail rw
-      visible (_, lc, _, _, _) = Set.member lc avail
-      Environ valenv _tyenv _cryenv = rwEnviron rw
-      rbenv = rwRebindables rw
-  let rnames1 = ScopedMap.allKeys $ ScopedMap.filter visible valenv
-      rnames2 = Map.keys rbenv
-  return (map Text.unpack (rnames1 ++ rnames2))
-
--- | Get visible type names for Haskeline completion.
-getSAWScriptTypeNames :: REPL [String]
-getSAWScriptTypeNames = do
-  rw <- getTopLevelRW
-  let avail = rwPrimsAvail rw
-      visible (lc, _) = Set.member lc avail
-      Environ _valenv tyenv _cryenv = rwEnviron rw
-  let rnames = ScopedMap.allKeys $ ScopedMap.filter visible tyenv
-  return (map Text.unpack rnames)

@@ -10,10 +10,12 @@ Stability   : provisional
 
 module SAWScript.REPL.Haskeline (repl, replBody) where
 
-import SAWScript.REPL.Command
 import SAWScript.REPL.Monad
+import SAWScript.REPL.Data
+import SAWScript.REPL.Command
 
 import Control.Monad (when)
+import Control.Monad.State (gets)
 import Data.Char (isAlphaNum, isSpace)
 import qualified Data.Text as Text
 import Data.Text (Text)
@@ -24,6 +26,26 @@ import System.FilePath((</>))
 import qualified Control.Monad.IO.Class as MTL
 import qualified Control.Monad.Trans.Class as MTL
 import qualified Control.Exception as X
+
+import SAWCentral.Proof (psGoals)
+
+-- | Construct the prompt for the current environment.
+getPrompt :: REPL String
+getPrompt =
+  do batch <- gets rIsBatch
+     if batch then return ""
+     else do
+       mpst <- gets rProofState
+       case mpst of
+         Nothing ->
+             return "sawscript> "
+         Just pst ->
+             return ("proof ("++show (length (psGoals pst))++")> ")
+
+shouldContinue :: REPL Bool
+shouldContinue =
+    gets rContinue
+
 
 
 -- | Haskeline-specific repl implementation.

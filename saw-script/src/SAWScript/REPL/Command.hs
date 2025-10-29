@@ -34,6 +34,7 @@ import SAWScript.Token (Token)
 
 import Control.Monad (unless, void)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.State (modify)
 
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
@@ -342,6 +343,10 @@ searchCmd str
 
 quitCmd :: REPL ()
 quitCmd  = stop
+
+stop :: REPL ()
+stop =
+    modify (\st -> st { rContinue = False })
 
 
 envCmd :: REPL ()

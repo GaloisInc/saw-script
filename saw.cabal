@@ -679,6 +679,7 @@ library saw-script
 
     SAWScript.REPL
     SAWScript.REPL.Command
+    SAWScript.REPL.Data
     SAWScript.REPL.Haskeline
     SAWScript.REPL.Logo
     SAWScript.REPL.Monad
