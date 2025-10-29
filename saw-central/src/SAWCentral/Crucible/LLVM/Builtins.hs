@@ -574,7 +574,6 @@ withMethodSpec pathSat lm nm setup action =
               -- execute commands of the method spec
               io $ W4.setCurrentProgramLoc sym setupLoc
 
-              
               setupState  <-
                 (execStateT
                    (runReaderT (runLLVMCrucibleSetupM setup)
@@ -582,6 +581,13 @@ withMethodSpec pathSat lm nm setup action =
                      st0)
               let methodSpec = setupState ^. Setup.csMethodSpec
                   cc1        = setupState ^. Setup.csCrucibleContext
+
+              -- check for missing llvm_execute_func
+              unless (setupState ^. Setup.csPrePost == PostState) $
+                io $ throwMethodSpec methodSpec $ Text.unpack $
+                "Missing llvm_execute_func specification when verifying " <>
+                methodSpec^.csName
+
               io $ checkSpecArgumentTypes cc1 methodSpec
               io $ checkSpecReturnType cc1 methodSpec
 
