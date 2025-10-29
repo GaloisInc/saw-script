@@ -72,151 +72,80 @@ import SAWCentral.TopLevel (TopLevelRW(..))
 import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable, Rebindable(..))
 
 
--- Commands --------------------------------------------------------------------
+------------------------------------------------------------
+-- REPL commands
 
--- | Commands.
-data Command
-  = Command (REPL ())         -- ^ Successfully parsed command
-  | Ambiguous Text [Text]     -- ^ Ambiguous command, list of conflicting
-                              --   commands
-  | Unknown Text              -- ^ The unknown command
+cdCmd :: FilePath -> REPL ()
+cdCmd f | null f = liftIO $ putStrLn $ "[error] :cd requires a path argument"
+        | otherwise = do
+  exists <- liftIO $ doesDirectoryExist f
+  if exists
+    then liftIO $ setCurrentDirectory f
+    else do
+        let f' = "`" <> Text.pack f <> "'"
+            msg = "Directory " <> f' <> " not found or not a directory"
+        liftIO $ TextIO.putStrLn msg
 
--- | Command builder.
-data CommandDescr = CommandDescr
-  { cName :: Text
-  , cAliases :: [Text]
-  , cBody :: CommandBody
-  , cHelp :: Text
-  }
+envCmd :: REPL ()
+envCmd = do
+  rw <- getTopLevelRW
+  let Environ varenv _tyenv _cryenv = rwEnviron rw
+      rbenv = rwRebindables rw
+      avail = rwPrimsAvail rw
 
-instance Show CommandDescr where
-  show cd = Text.unpack $ cName cd
+  -- print the rebindable globals first, if any
+  unless (Map.null rbenv) $ do
+      let rbsay (x, (_pos, ty, _v)) = do
+              let ty' = PPS.pShowText ty
+              TextIO.putStrLn (x <> " : rebindable " <> ty')
+      liftIO $ mapM_ rbsay $ Map.assocs rbenv
+      liftIO $ TextIO.putStrLn ""
 
-instance Eq CommandDescr where
-  (==) = (==) `on` cName
+  -- print the normal environment
+  let say (x, (_pos, _lc, ty, _v, _doc)) = do
+          let ty' = PPS.pShowText ty
+          TextIO.putStrLn (x <> " : " <> ty')
+      -- Print only the visible objects
+      keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
+      -- Insert a blank line in the output where there's a scope boundary
+      printScope mItems = case mItems of
+          Nothing -> TextIO.putStrLn ""
+          Just items -> mapM_ say $ filter keep items
+      -- Reverse the list of scopes so the innermost prints last,
+      -- because that's what people will expect to see.
+      itemses = reverse $ ScopedMap.scopedAssocs varenv
+  liftIO $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
-instance Ord CommandDescr where
-  compare = compare `on` cName
-
-data CommandBody
-  = ExprArg     (Text     -> REPL ())
-  | TypeArg     (Text     -> REPL ())
-  | FilenameArg (FilePath -> REPL ())
-  | ShellArg    (Text     -> REPL ())
-  | NoArg       (REPL ())
-
-
--- | Convert the command list to a Trie, expanding aliases.
-makeCommands :: [CommandDescr] -> CommandMap
-makeCommands list  = foldl insert Trie.empty (concatMap expandAliases list)
-  where
-  insert m (name, d) = Trie.insert name d m
-  expandAliases :: CommandDescr -> [(Text, CommandDescr)]
-  expandAliases d = (cName d, d) : zip (cAliases d) (repeat d)
-
--- | REPL command parsing.
-commands :: CommandMap
-commands = makeCommands commandList
-
--- | A subset of commands safe for Notebook execution
-nbCommandList :: [CommandDescr]
-nbCommandList  =
-  [ CommandDescr ":env"  []      (NoArg envCmd)
-    "display the current sawscript environment"
-  , CommandDescr ":search" []    (TypeArg searchCmd)
-    "search the environment by type"
-  , CommandDescr ":tenv" []      (NoArg tenvCmd)
-    "display the current sawscript type environment"
-  , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
-    "check the type of an expression"
-  , CommandDescr ":?"    []      (ExprArg helpCmd)
-    "display a brief description about a built-in operator"
-  , CommandDescr ":help" []      (ExprArg helpCmd)
-    "display a brief description about a built-in operator"
-  ]
-
-commandList :: [CommandDescr]
-commandList  =
-  nbCommandList ++
-  [ CommandDescr ":quit" []   (NoArg quitCmd)
-    "exit the REPL"
-  , CommandDescr ":cd"   []   (FilenameArg cdCmd)
-    "set the current working directory"
-  , CommandDescr ":pwd"  []   (NoArg pwdCmd)
-    "display the current working directory"
-  ]
-
-genHelp :: [CommandDescr] -> [Text]
-genHelp cs = map cmdHelp cs
-  where
-  cmdHelp cmd = Text.concat [ "  ", cName cmd, pad (cName cmd), cHelp cmd ]
-  padding     = 2 + maximum (map (Text.length . cName) cs)
-  pad n       = Text.replicate (max 0 (padding - Text.length n)) " "
-
-
--- Command Evaluation ----------------------------------------------------------
-
--- | Run a command.
-runCommand :: Command -> REPL ()
-runCommand c = case c of
-
-  Command cmd -> exceptionProtect cmd
-
-  Unknown cmd -> liftIO (TextIO.putStrLn ("Unknown command: " <> cmd))
-
-  Ambiguous cmd cmds -> liftIO $ do
-    TextIO.putStrLn (cmd <> " is ambiguous; it could mean one of:")
-    TextIO.putStrLn ("\t" <> Text.intercalate ", " cmds)
-
-
-lexSAW :: FilePath -> Text.Text -> REPL [Token Pos]
-lexSAW fileName str = do
-  -- XXX wrap printing of positions in the message-printing infrastructure
-  case SAWScript.Lexer.lexSAW fileName str of
-    Left (_, pos, msg) ->
-         fail $ show pos ++ ": " ++ Text.unpack msg
-    Right (tokens', Nothing) -> pure tokens'
-    Right (_, Just (SAWCentral.Options.Error, pos, msg)) ->
-         fail $ show pos ++ ": " ++ Text.unpack msg
-    Right (tokens', Just _) -> pure tokens'
-
-typeOfCmd :: Text -> REPL ()
-typeOfCmd str
-  | Text.null str = liftIO $ putStrLn "[error] :type requires an argument"
+helpCmd :: Text -> REPL ()
+helpCmd cmd
+  | Text.null cmd = liftIO (mapM_ TextIO.putStrLn (genHelp commandList))
   | otherwise =
-  do tokens <- lexSAW replFileName str
-     expr <- case SAWScript.Parser.parseExpression tokens of
-       Left err -> fail (show err)
-       Right expr -> return expr
-     let pos = getPos expr
-         decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
-     rw <- getTopLevelRW
-     decl' <- do
-       let primsAvail = rwPrimsAvail rw
-           -- XXX it should not be necessary to do this munging
-           Environ varenv tyenv _cryenvs = rwEnviron rw
-           squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
-           varenv' = Map.map squash $ ScopedMap.flatten varenv
-           tyenv' = ScopedMap.flatten tyenv
-           rbenv = rwRebindables rw
-           rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
-           rbenv' = Map.map rbsquash rbenv
-           varenv'' = Map.union varenv' rbenv'
-       let (errs_or_results, warns) = checkDecl primsAvail varenv'' tyenv' decl
-       let issueWarning (msgpos, msg) =
-             -- XXX the print functions should be what knows how to show positions...
-             putStrLn (show msgpos ++ ": Warning: " ++ msg)
-       liftIO $ mapM_ issueWarning warns
-       either failTypecheck return errs_or_results
-     let schema = case SS.dType decl' of
-           Just sch -> sch
-           Nothing ->
-               -- If the typechecker didn't insert a type, it's bust,
-               -- so panic. Not much point in printing the expression
-               -- or position in panic, since it's what the user just
-               -- typed.
-               panic "typeOfCmd" ["Typechecker failed to produce a type"]
-     liftIO $ TextIO.putStrLn $ PPS.pShowText schema
+    do rw <- getTopLevelRW
+       -- Note: there's no rebindable builtins and thus no way to
+       -- attach help text to anything rebindable, so we can ignore
+       -- the rebindables.
+       let Environ varenv _tyenv _cryenvs = rwEnviron rw
+       case ScopedMap.lookup cmd varenv of
+         Just (_pos, _lc, _ty, _v, Just doc) ->
+           liftIO $ mapM_ TextIO.putStrLn doc
+         Just (_pos, _lc, _ty, _v, Nothing) -> do
+           liftIO $ putStrLn $ "// No documentation is available."
+           typeOfCmd cmd
+         Nothing ->
+           liftIO $ putStrLn "// No such command."
+-- FIXME? can we restore the ability to lookup doc strings from Cryptol?
+--  | Just (ec,_) <- lookup cmd builtIns =
+--                liftIO $ print $ helpDoc ec
+
+pwdCmd :: REPL ()
+pwdCmd = liftIO $ getCurrentDirectory >>= putStrLn
+
+quitCmd :: REPL ()
+quitCmd  = stop
+
+stop :: REPL ()
+stop =
+    modify (\st -> st { rContinue = False })
 
 searchCmd :: Text -> REPL ()
 searchCmd str
@@ -340,45 +269,6 @@ searchCmd str
          else
              pure ()
 
-
-quitCmd :: REPL ()
-quitCmd  = stop
-
-stop :: REPL ()
-stop =
-    modify (\st -> st { rContinue = False })
-
-
-envCmd :: REPL ()
-envCmd = do
-  rw <- getTopLevelRW
-  let Environ varenv _tyenv _cryenv = rwEnviron rw
-      rbenv = rwRebindables rw
-      avail = rwPrimsAvail rw
-
-  -- print the rebindable globals first, if any
-  unless (Map.null rbenv) $ do
-      let rbsay (x, (_pos, ty, _v)) = do
-              let ty' = PPS.pShowText ty
-              TextIO.putStrLn (x <> " : rebindable " <> ty')
-      liftIO $ mapM_ rbsay $ Map.assocs rbenv
-      liftIO $ TextIO.putStrLn ""
-
-  -- print the normal environment
-  let say (x, (_pos, _lc, ty, _v, _doc)) = do
-          let ty' = PPS.pShowText ty
-          TextIO.putStrLn (x <> " : " <> ty')
-      -- Print only the visible objects
-      keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
-      -- Insert a blank line in the output where there's a scope boundary
-      printScope mItems = case mItems of
-          Nothing -> TextIO.putStrLn ""
-          Just items -> mapM_ say $ filter keep items
-      -- Reverse the list of scopes so the innermost prints last,
-      -- because that's what people will expect to see.
-      itemses = reverse $ ScopedMap.scopedAssocs varenv
-  liftIO $ mapM_ printScope $ intersperse Nothing $ map Just itemses
-
 tenvCmd :: REPL ()
 tenvCmd = do
   rw <- getTopLevelRW
@@ -398,44 +288,157 @@ tenvCmd = do
       itemses = reverse $ ScopedMap.scopedAssocs tyenv
   liftIO $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
-helpCmd :: Text -> REPL ()
-helpCmd cmd
-  | Text.null cmd = liftIO (mapM_ TextIO.putStrLn (genHelp commandList))
+typeOfCmd :: Text -> REPL ()
+typeOfCmd str
+  | Text.null str = liftIO $ putStrLn "[error] :type requires an argument"
   | otherwise =
-    do rw <- getTopLevelRW
-       -- Note: there's no rebindable builtins and thus no way to
-       -- attach help text to anything rebindable, so we can ignore
-       -- the rebindables.
-       let Environ varenv _tyenv _cryenvs = rwEnviron rw
-       case ScopedMap.lookup cmd varenv of
-         Just (_pos, _lc, _ty, _v, Just doc) ->
-           liftIO $ mapM_ TextIO.putStrLn doc
-         Just (_pos, _lc, _ty, _v, Nothing) -> do
-           liftIO $ putStrLn $ "// No documentation is available."
-           typeOfCmd cmd
-         Nothing ->
-           liftIO $ putStrLn "// No such command."
--- FIXME? can we restore the ability to lookup doc strings from Cryptol?
---  | Just (ec,_) <- lookup cmd builtIns =
---                liftIO $ print $ helpDoc ec
+  do tokens <- lexSAW replFileName str
+     expr <- case SAWScript.Parser.parseExpression tokens of
+       Left err -> fail (show err)
+       Right expr -> return expr
+     let pos = getPos expr
+         decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
+     rw <- getTopLevelRW
+     decl' <- do
+       let primsAvail = rwPrimsAvail rw
+           -- XXX it should not be necessary to do this munging
+           Environ varenv tyenv _cryenvs = rwEnviron rw
+           squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
+           varenv' = Map.map squash $ ScopedMap.flatten varenv
+           tyenv' = ScopedMap.flatten tyenv
+           rbenv = rwRebindables rw
+           rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
+           rbenv' = Map.map rbsquash rbenv
+           varenv'' = Map.union varenv' rbenv'
+       let (errs_or_results, warns) = checkDecl primsAvail varenv'' tyenv' decl
+       let issueWarning (msgpos, msg) =
+             -- XXX the print functions should be what knows how to show positions...
+             putStrLn (show msgpos ++ ": Warning: " ++ msg)
+       liftIO $ mapM_ issueWarning warns
+       either failTypecheck return errs_or_results
+     let schema = case SS.dType decl' of
+           Just sch -> sch
+           Nothing ->
+               -- If the typechecker didn't insert a type, it's bust,
+               -- so panic. Not much point in printing the expression
+               -- or position in panic, since it's what the user just
+               -- typed.
+               panic "typeOfCmd" ["Typechecker failed to produce a type"]
+     liftIO $ TextIO.putStrLn $ PPS.pShowText schema
 
 
-cdCmd :: FilePath -> REPL ()
-cdCmd f | null f = liftIO $ putStrLn $ "[error] :cd requires a path argument"
-        | otherwise = do
-  exists <- liftIO $ doesDirectoryExist f
-  if exists
-    then liftIO $ setCurrentDirectory f
-    else do
-        let f' = "`" <> Text.pack f <> "'"
-            msg = "Directory " <> f' <> " not found or not a directory"
-        liftIO $ TextIO.putStrLn msg
+------------------------------------------------------------
+-- Command table
+
+-- | Commands.
+data Command
+  = Command (REPL ())         -- ^ Successfully parsed command
+  | Ambiguous Text [Text]     -- ^ Ambiguous command, list of conflicting
+                              --   commands
+  | Unknown Text              -- ^ The unknown command
+
+-- | Command builder.
+data CommandDescr = CommandDescr
+  { cName :: Text
+  , cAliases :: [Text]
+  , cBody :: CommandBody
+  , cHelp :: Text
+  }
+
+instance Show CommandDescr where
+  show cd = Text.unpack $ cName cd
+
+instance Eq CommandDescr where
+  (==) = (==) `on` cName
+
+instance Ord CommandDescr where
+  compare = compare `on` cName
+
+data CommandBody
+  = ExprArg     (Text     -> REPL ())
+  | TypeArg     (Text     -> REPL ())
+  | FilenameArg (FilePath -> REPL ())
+  | ShellArg    (Text     -> REPL ())
+  | NoArg       (REPL ())
+
+type CommandMap = Trie CommandDescr
 
 
-pwdCmd :: REPL ()
-pwdCmd = liftIO $ getCurrentDirectory >>= putStrLn
+-- | Convert the command list to a Trie, expanding aliases.
+makeCommands :: [CommandDescr] -> CommandMap
+makeCommands list  = foldl insert Trie.empty (concatMap expandAliases list)
+  where
+  insert m (name, d) = Trie.insert name d m
+  expandAliases :: CommandDescr -> [(Text, CommandDescr)]
+  expandAliases d = (cName d, d) : zip (cAliases d) (repeat d)
 
--- SAWScript commands ----------------------------------------------------------
+-- | REPL command parsing.
+commands :: CommandMap
+commands = makeCommands commandList
+
+-- | A subset of commands safe for Notebook execution
+nbCommandList :: [CommandDescr]
+nbCommandList  =
+  [ CommandDescr ":env"  []      (NoArg envCmd)
+    "display the current sawscript environment"
+  , CommandDescr ":search" []    (TypeArg searchCmd)
+    "search the environment by type"
+  , CommandDescr ":tenv" []      (NoArg tenvCmd)
+    "display the current sawscript type environment"
+  , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
+    "check the type of an expression"
+  , CommandDescr ":?"    []      (ExprArg helpCmd)
+    "display a brief description about a built-in operator"
+  , CommandDescr ":help" []      (ExprArg helpCmd)
+    "display a brief description about a built-in operator"
+  ]
+
+commandList :: [CommandDescr]
+commandList  =
+  nbCommandList ++
+  [ CommandDescr ":quit" []   (NoArg quitCmd)
+    "exit the REPL"
+  , CommandDescr ":cd"   []   (FilenameArg cdCmd)
+    "set the current working directory"
+  , CommandDescr ":pwd"  []   (NoArg pwdCmd)
+    "display the current working directory"
+  ]
+
+genHelp :: [CommandDescr] -> [Text]
+genHelp cs = map cmdHelp cs
+  where
+  cmdHelp cmd = Text.concat [ "  ", cName cmd, pad (cName cmd), cHelp cmd ]
+  padding     = 2 + maximum (map (Text.length . cName) cs)
+  pad n       = Text.replicate (max 0 (padding - Text.length n)) " "
+
+
+------------------------------------------------------------
+-- Evaluation
+
+-- | Run a command.
+runCommand :: Command -> REPL ()
+runCommand c = case c of
+
+  Command cmd -> exceptionProtect cmd
+
+  Unknown cmd -> liftIO (TextIO.putStrLn ("Unknown command: " <> cmd))
+
+  Ambiguous cmd cmds -> liftIO $ do
+    TextIO.putStrLn (cmd <> " is ambiguous; it could mean one of:")
+    TextIO.putStrLn ("\t" <> Text.intercalate ", " cmds)
+
+
+lexSAW :: FilePath -> Text.Text -> REPL [Token Pos]
+lexSAW fileName str = do
+  -- XXX wrap printing of positions in the message-printing infrastructure
+  case SAWScript.Lexer.lexSAW fileName str of
+    Left (_, pos, msg) ->
+         fail $ show pos ++ ": " ++ Text.unpack msg
+    Right (tokens', Nothing) -> pure tokens'
+    Right (_, Just (SAWCentral.Options.Error, pos, msg)) ->
+         fail $ show pos ++ ": " ++ Text.unpack msg
+    Right (tokens', Just _) -> pure tokens'
+
 
 {- Evaluation is fairly straightforward; however, there are a few important
 caveats:
@@ -471,19 +474,13 @@ sawScriptCmd str = do
 replFileName :: FilePath
 replFileName = "<stdin>"
 
--- C-c Handlings ---------------------------------------------------------------
-
 -- XXX this should probably do something a bit more specific.
 handleCtrlC :: REPL ()
 handleCtrlC  = liftIO (putStrLn "Ctrl-C")
 
 
--- Utilities -------------------------------------------------------------------
-
-type CommandMap = Trie CommandDescr
-
-
--- Command Parsing -------------------------------------------------------------
+------------------------------------------------------------
+-- Command parsing
 
 -- | Strip leading space.
 sanitize :: Text -> Text
