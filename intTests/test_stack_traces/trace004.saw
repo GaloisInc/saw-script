@@ -9,18 +9,18 @@ print "";
 
 
 // Test just llvm_stack by itself.
-// This probably should not actually verify, but it does...
+// This should not actually verify.
 print "------------------------------------------------------------";
 print "just llvm_stack";
-llvm_verify mod "foo" [] false llvm_stack z3;
+fails (llvm_verify mod "foo" [] false llvm_stack z3);
 print "";
 
 // Test just llvm_stack via a let-binding.
-// This probably should not actually verify, but it does...
+// This should not actually verify.
 print "------------------------------------------------------------";
 print "llvm_stack via let";
 let spec0 = llvm_stack;
-llvm_verify mod "foo" [] false spec0 z3;
+fails (llvm_verify mod "foo" [] false spec0 z3);
 print "";
 
 // Test with an inline do-block.
