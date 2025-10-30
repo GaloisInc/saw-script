@@ -130,7 +130,7 @@ span.spaces    { background: white }
 <span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">st &lt;- get</span>
 <span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">tps &lt;- use (csMethodSpec . MS.csArgs)</span>
 <span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">when (st ^. csPrePost == MS.PostState) $</span>
-<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail &quot;duplicate crucible_execute_func declaration&quot;</span></span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail &quot;duplicate execute_func declaration&quot;</span></span>
 <span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">csPrePost .= MS.PostState</span>
 <span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">csMethodSpec . MS.csArgBindings .= Map.fromList [ (i, (t,a))</span>
 <span class="lineno">  117 </span><span class="spaces">                                                  </span><span class="istickedoff">| i &lt;- [0..]</span>
