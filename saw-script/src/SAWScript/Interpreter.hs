@@ -2461,7 +2461,7 @@ primTypes = Map.fromList
           , primTypeLife = lc
           }
         fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
-        ty = case Import.readSchema fakeFileName tystr of
+        ty = case Import.readSchemaPure fakeFileName tystr of
             SS.Forall [] ty' -> ty'
             _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
 
@@ -6404,12 +6404,14 @@ primitives = Map.fromList $
     prim :: Text -> Text -> (Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [Text]
          -> (SS.Name, Primitive)
     prim name ty fn lc doc = (name, Primitive
-                                     { primitiveType = Import.readSchema fakeFileName ty
+                                     { primitiveType = ty'
                                      , primitiveDoc  = doc
                                      , primitiveFn   = fn name
                                      , primitiveLife = lc
                                      })
-      where fakeFileName = Text.unpack $ "<type of " <> name <> ">"
+      where
+        ty' = Import.readSchemaPure fakeFileName ty
+        fakeFileName = Text.unpack $ "<type of " <> name <> ">"
 
     pureVal :: forall t. IsValue t => t -> Text -> Options -> BuiltinContext -> Value
     pureVal x name _ _ = toValue name x
