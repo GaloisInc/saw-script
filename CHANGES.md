@@ -20,6 +20,12 @@ This release supports [version
     llvm_return (llvm_term ret);
   }
 
+* `jvm_verify` now enforces that a `jvm_return` specification is
+  included for any method with a non-void return type.
+  To write a spec that asserts nothing about the return value,
+  `jvm_return` may be used with a fresh variable declared with
+  `jvm_fresh_var` in the post-state section.
+
 * The `cryptol_load` and `cryptol_prims` commands now fail if used
   in a nested scope, instead of behaving strangely.
 
