@@ -1,7 +1,7 @@
 //
 // Too many arguments for type: records
 //
-// Currently this is a parser message; the kind mismatch message in
-// the typechecker is unreachable.
+// Currently this produces a generic type mismatch error, rather than the
+// desired kind mismatch error.
 
 let x : { a: Int } Int = { a = 3 };
