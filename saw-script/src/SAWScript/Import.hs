@@ -5,8 +5,6 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
-
 module SAWScript.Import
   ( loadFile
   , findAndLoadFile
@@ -63,16 +61,3 @@ findAndLoadFile opts fp = do
         , "  Searched in directories:"
         ] ++ map ("    " ++) paths
     Just fname -> loadFile opts fname
-
-#if __GLASGOW_HASKELL__ < 706
-findFile :: [FilePath] -> String -> IO (Maybe FilePath)
-findFile paths fileName = search paths
-  where
-    search :: [FilePath] -> IO (Maybe FilePath)
-    search [] = return Nothing
-    search (d:ds) = do
-        let path = d </> fileName
-        b <- doesFileExist path
-        if b then return (Just path)
-             else search ds
-#endif
