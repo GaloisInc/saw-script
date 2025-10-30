@@ -30,183 +30,205 @@ span.spaces    { background: white }
 <span class="lineno">   11 </span>
 <span class="lineno">   12 </span>module SAWScript.REPL.Haskeline (repl, replBody) where
 <span class="lineno">   13 </span>
-<span class="lineno">   14 </span>import SAWScript.REPL.Command
-<span class="lineno">   15 </span>import SAWScript.REPL.Monad
-<span class="lineno">   16 </span>
-<span class="lineno">   17 </span>import Control.Monad (when)
-<span class="lineno">   18 </span>import Data.Char (isAlphaNum, isSpace)
-<span class="lineno">   19 </span>import qualified Data.Text as Text
-<span class="lineno">   20 </span>import Data.Text (Text)
-<span class="lineno">   21 </span>import Data.List (isPrefixOf)
-<span class="lineno">   22 </span>import System.Console.Haskeline
-<span class="lineno">   23 </span>import System.Directory(getAppUserDataDirectory,createDirectoryIfMissing)
-<span class="lineno">   24 </span>import System.FilePath((&lt;/&gt;))
-<span class="lineno">   25 </span>import qualified Control.Monad.IO.Class as MTL
-<span class="lineno">   26 </span>import qualified Control.Monad.Trans.Class as MTL
-<span class="lineno">   27 </span>import qualified Control.Exception as X
-<span class="lineno">   28 </span>
-<span class="lineno">   29 </span>
-<span class="lineno">   30 </span>-- | Haskeline-specific repl implementation.
-<span class="lineno">   31 </span>--
-<span class="lineno">   32 </span>-- XXX this needs to handle Ctrl-C, which at the moment will just cause
-<span class="lineno">   33 </span>-- haskeline to exit.  See the function 'withInterrupt' for more info on how to
-<span class="lineno">   34 </span>-- handle this.
-<span class="lineno">   35 </span>repl :: Maybe FilePath -&gt; REPL ()
-<span class="lineno">   36 </span><span class="decl"><span class="istickedoff">repl mbBatchFile =</span>
-<span class="lineno">   37 </span><span class="spaces">  </span><span class="istickedoff">replBody mbBatchFile</span></span>
-<span class="lineno">   38 </span>
-<span class="lineno">   39 </span>
-<span class="lineno">   40 </span>replBody :: Maybe FilePath -&gt; REPL ()
-<span class="lineno">   41 </span><span class="decl"><span class="istickedoff">replBody mbBatchFile =</span>
-<span class="lineno">   42 </span><span class="spaces">  </span><span class="istickedoff">do settings &lt;- MTL.liftIO (setHistoryFile replSettings)</span>
-<span class="lineno">   43 </span><span class="spaces">     </span><span class="istickedoff">runInputTBehavior style settings body</span>
-<span class="lineno">   44 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">   45 </span><span class="spaces">  </span><span class="istickedoff">body = withInterrupt loop</span>
-<span class="lineno">   46 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">   47 </span><span class="spaces">  </span><span class="istickedoff">style = case mbBatchFile of</span>
-<span class="lineno">   48 </span><span class="spaces">    </span><span class="istickedoff">Nothing   -&gt; defaultBehavior</span>
-<span class="lineno">   49 </span><span class="spaces">    </span><span class="istickedoff">Just path -&gt; useFile path</span>
-<span class="lineno">   50 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">loop = do</span>
-<span class="lineno">   52 </span><span class="spaces">    </span><span class="istickedoff">prompt &lt;- MTL.lift getPrompt</span>
-<span class="lineno">   53 </span><span class="spaces">    </span><span class="istickedoff">mb     &lt;- handleInterrupt <span class="nottickedoff">(return (Just &quot;&quot;))</span> (getInputLines prompt [])</span>
-<span class="lineno">   54 </span><span class="spaces">    </span><span class="istickedoff">case mb of</span>
-<span class="lineno">   55 </span><span class="spaces">      </span><span class="istickedoff">Just line</span>
-<span class="lineno">   56 </span><span class="spaces">        </span><span class="istickedoff">| Just cmd &lt;- parseCommand findCommand (Text.pack line) -&gt; do</span>
-<span class="lineno">   57 </span><span class="spaces">          </span><span class="istickedoff">continue &lt;- MTL.lift $ do</span>
-<span class="lineno">   58 </span><span class="spaces">            </span><span class="istickedoff">handleInterrupt <span class="nottickedoff">handleCtrlC</span> (runCommand cmd)</span>
-<span class="lineno">   59 </span><span class="spaces">            </span><span class="istickedoff">shouldContinue</span>
-<span class="lineno">   60 </span><span class="spaces">          </span><span class="istickedoff">when continue loop</span>
-<span class="lineno">   61 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">   62 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; loop</span>
-<span class="lineno">   63 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">   64 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
-<span class="lineno">   65 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">getInputLines prompt ls =</span>
-<span class="lineno">   67 </span><span class="spaces">    </span><span class="istickedoff">do mb &lt;- fmap (filter (/= '\r')) &lt;$&gt; getInputLine prompt</span>
-<span class="lineno">   68 </span><span class="spaces">       </span><span class="istickedoff">let <span class="nottickedoff">newPrompt = map (\_ -&gt; ' ') prompt</span></span>
-<span class="lineno">   69 </span><span class="spaces">       </span><span class="istickedoff">case mb of</span>
-<span class="lineno">   70 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; return Nothing</span>
-<span class="lineno">   71 </span><span class="spaces">          </span><span class="istickedoff">Just l | <span class="tickonlyfalse">not (null l) &amp;&amp; last l == '\\'</span> -&gt;</span>
-<span class="lineno">   72 </span><span class="spaces">                                      </span><span class="istickedoff"><span class="nottickedoff">getInputLines newPrompt (init l : ls)</span></span>
-<span class="lineno">   73 </span><span class="spaces">                 </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; return $ Just $ unlines $ reverse $ l : ls</span></span>
-<span class="lineno">   74 </span>
-<span class="lineno">   75 </span>
-<span class="lineno">   76 </span>
-<span class="lineno">   77 </span>-- | Try to set the history file.
-<span class="lineno">   78 </span>setHistoryFile :: Settings REPL -&gt; IO (Settings REPL)
-<span class="lineno">   79 </span><span class="decl"><span class="istickedoff">setHistoryFile ss =</span>
-<span class="lineno">   80 </span><span class="spaces">  </span><span class="istickedoff">do dir &lt;- getAppUserDataDirectory &quot;saw&quot;</span>
-<span class="lineno">   81 </span><span class="spaces">     </span><span class="istickedoff">createDirectoryIfMissing True dir</span>
-<span class="lineno">   82 </span><span class="spaces">     </span><span class="istickedoff">return ss { historyFile = Just (dir &lt;/&gt; &quot;history&quot;) }</span>
-<span class="lineno">   83 </span><span class="spaces">   </span><span class="istickedoff">`X.catch` <span class="nottickedoff">\(X.SomeException {}) -&gt; return ss</span></span></span>
-<span class="lineno">   84 </span>
-<span class="lineno">   85 </span>-- | Haskeline settings for the REPL.
-<span class="lineno">   86 </span>replSettings :: Settings REPL
-<span class="lineno">   87 </span><span class="decl"><span class="istickedoff">replSettings  = Settings</span>
-<span class="lineno">   88 </span><span class="spaces">  </span><span class="istickedoff">{ complete       = <span class="nottickedoff">replComp</span></span>
-<span class="lineno">   89 </span><span class="spaces">  </span><span class="istickedoff">, historyFile    = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">   90 </span><span class="spaces">  </span><span class="istickedoff">, autoAddHistory = <span class="nottickedoff">True</span></span>
-<span class="lineno">   91 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
-<span class="lineno">   92 </span>
-<span class="lineno">   93 </span>
-<span class="lineno">   94 </span>-- Completion ------------------------------------------------------------------
-<span class="lineno">   95 </span>
-<span class="lineno">   96 </span>-- | Top-level completion for the REPL.
-<span class="lineno">   97 </span>replComp :: CompletionFunc REPL
-<span class="lineno">   98 </span><span class="decl"><span class="nottickedoff">replComp cursor@(l,r)</span>
-<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">| &quot;:&quot; `Text.isPrefixOf` l'</span>
-<span class="lineno">  100 </span><span class="spaces">  </span><span class="nottickedoff">, Just (cmd,rest) &lt;- splitCommand l' = case findCommand cmd of</span>
-<span class="lineno">  101 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  102 </span><span class="spaces">      </span><span class="nottickedoff">[c] | Text.null rest &amp;&amp; not (Text.any isSpace l') -&gt; do</span>
-<span class="lineno">  103 </span><span class="spaces">            </span><span class="nottickedoff">return (l, [cmdComp cmd c])</span>
-<span class="lineno">  104 </span><span class="spaces">          </span><span class="nottickedoff">| otherwise -&gt; do</span>
-<span class="lineno">  105 </span><span class="spaces">            </span><span class="nottickedoff">(rest',cs) &lt;- cmdArgument (cBody c) (reverse $ Text.unpack $ sanitize rest, r)</span>
-<span class="lineno">  106 </span><span class="spaces">            </span><span class="nottickedoff">-- XXX this drops any leading spaces in l', which is ok but untidy</span>
-<span class="lineno">  107 </span><span class="spaces">            </span><span class="nottickedoff">return (unwords [rest', reverse $ Text.unpack cmd], cs)</span>
-<span class="lineno">  108 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  109 </span><span class="spaces">      </span><span class="nottickedoff">cmds -&gt;</span>
-<span class="lineno">  110 </span><span class="spaces">        </span><span class="nottickedoff">return (l, [ cmdComp l' c | c &lt;- cmds ])</span>
-<span class="lineno">  111 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  112 </span><span class="spaces">  </span><span class="nottickedoff">| l' == &quot;:&quot; =</span>
-<span class="lineno">  113 </span><span class="spaces">      </span><span class="nottickedoff">return (l, [ cmdComp l' c | c &lt;- findCommand &quot;&quot; ])</span>
-<span class="lineno">  114 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = completeSAWScriptValue cursor</span>
-<span class="lineno">  115 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  116 </span><span class="spaces">  </span><span class="nottickedoff">l' = sanitize (Text.pack $ reverse l)</span></span>
+<span class="lineno">   14 </span>import SAWScript.REPL.Monad
+<span class="lineno">   15 </span>import SAWScript.REPL.Data
+<span class="lineno">   16 </span>import SAWScript.REPL.Command
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>import Control.Monad (when)
+<span class="lineno">   19 </span>import Control.Monad.State (gets)
+<span class="lineno">   20 </span>import Data.Char (isAlphaNum, isSpace)
+<span class="lineno">   21 </span>import qualified Data.Text as Text
+<span class="lineno">   22 </span>import Data.Text (Text)
+<span class="lineno">   23 </span>import Data.List (isPrefixOf)
+<span class="lineno">   24 </span>import System.Console.Haskeline
+<span class="lineno">   25 </span>import System.Directory(getAppUserDataDirectory,createDirectoryIfMissing)
+<span class="lineno">   26 </span>import System.FilePath((&lt;/&gt;))
+<span class="lineno">   27 </span>import qualified Control.Monad.IO.Class as MTL
+<span class="lineno">   28 </span>import qualified Control.Monad.Trans.Class as MTL
+<span class="lineno">   29 </span>import qualified Control.Exception as X
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import SAWCentral.Proof (psGoals)
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>-- | Construct the prompt for the current environment.
+<span class="lineno">   34 </span>getPrompt :: REPL String
+<span class="lineno">   35 </span><span class="decl"><span class="istickedoff">getPrompt =</span>
+<span class="lineno">   36 </span><span class="spaces">  </span><span class="istickedoff">do batch &lt;- gets rIsBatch</span>
+<span class="lineno">   37 </span><span class="spaces">     </span><span class="istickedoff">if batch then return &quot;&quot;</span>
+<span class="lineno">   38 </span><span class="spaces">     </span><span class="istickedoff">else do</span>
+<span class="lineno">   39 </span><span class="spaces">       </span><span class="istickedoff">mpst &lt;- gets rProofState</span>
+<span class="lineno">   40 </span><span class="spaces">       </span><span class="istickedoff">case mpst of</span>
+<span class="lineno">   41 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">   42 </span><span class="spaces">             </span><span class="istickedoff">return &quot;sawscript&gt; &quot;</span>
+<span class="lineno">   43 </span><span class="spaces">         </span><span class="istickedoff">Just pst -&gt;</span>
+<span class="lineno">   44 </span><span class="spaces">             </span><span class="istickedoff">return (&quot;proof (&quot;++show (length (psGoals pst))++&quot;)&gt; &quot;)</span></span>
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>shouldContinue :: REPL Bool
+<span class="lineno">   47 </span><span class="decl"><span class="istickedoff">shouldContinue =</span>
+<span class="lineno">   48 </span><span class="spaces">    </span><span class="istickedoff">gets rContinue</span></span>
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>-- | Haskeline-specific repl implementation.
+<span class="lineno">   53 </span>--
+<span class="lineno">   54 </span>-- XXX this needs to handle Ctrl-C, which at the moment will just cause
+<span class="lineno">   55 </span>-- haskeline to exit.  See the function 'withInterrupt' for more info on how to
+<span class="lineno">   56 </span>-- handle this.
+<span class="lineno">   57 </span>repl :: Maybe FilePath -&gt; REPL ()
+<span class="lineno">   58 </span><span class="decl"><span class="istickedoff">repl mbBatchFile =</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff">replBody mbBatchFile</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>replBody :: Maybe FilePath -&gt; REPL ()
+<span class="lineno">   63 </span><span class="decl"><span class="istickedoff">replBody mbBatchFile =</span>
+<span class="lineno">   64 </span><span class="spaces">  </span><span class="istickedoff">do settings &lt;- MTL.liftIO (setHistoryFile replSettings)</span>
+<span class="lineno">   65 </span><span class="spaces">     </span><span class="istickedoff">runInputTBehavior style settings body</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">body = withInterrupt loop</span>
+<span class="lineno">   68 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   69 </span><span class="spaces">  </span><span class="istickedoff">style = case mbBatchFile of</span>
+<span class="lineno">   70 </span><span class="spaces">    </span><span class="istickedoff">Nothing   -&gt; defaultBehavior</span>
+<span class="lineno">   71 </span><span class="spaces">    </span><span class="istickedoff">Just path -&gt; useFile path</span>
+<span class="lineno">   72 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="istickedoff">loop = do</span>
+<span class="lineno">   74 </span><span class="spaces">    </span><span class="istickedoff">prompt &lt;- MTL.lift getPrompt</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">mb     &lt;- handleInterrupt <span class="nottickedoff">(return (Just &quot;&quot;))</span> (getInputLines prompt [])</span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">case mb of</span>
+<span class="lineno">   77 </span><span class="spaces">      </span><span class="istickedoff">Just line</span>
+<span class="lineno">   78 </span><span class="spaces">        </span><span class="istickedoff">| Just cmd &lt;- parseCommand findCommand (Text.pack line) -&gt; do</span>
+<span class="lineno">   79 </span><span class="spaces">          </span><span class="istickedoff">continue &lt;- MTL.lift $ do</span>
+<span class="lineno">   80 </span><span class="spaces">            </span><span class="istickedoff">handleInterrupt <span class="nottickedoff">handleCtrlC</span> (runCommand cmd)</span>
+<span class="lineno">   81 </span><span class="spaces">            </span><span class="istickedoff">shouldContinue</span>
+<span class="lineno">   82 </span><span class="spaces">          </span><span class="istickedoff">when continue loop</span>
+<span class="lineno">   83 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   84 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; loop</span>
+<span class="lineno">   85 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   86 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
+<span class="lineno">   87 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   88 </span><span class="spaces">  </span><span class="istickedoff">getInputLines prompt ls =</span>
+<span class="lineno">   89 </span><span class="spaces">    </span><span class="istickedoff">do mb &lt;- fmap (filter (/= '\r')) &lt;$&gt; getInputLine prompt</span>
+<span class="lineno">   90 </span><span class="spaces">       </span><span class="istickedoff">let <span class="nottickedoff">newPrompt = map (\_ -&gt; ' ') prompt</span></span>
+<span class="lineno">   91 </span><span class="spaces">       </span><span class="istickedoff">case mb of</span>
+<span class="lineno">   92 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; return Nothing</span>
+<span class="lineno">   93 </span><span class="spaces">          </span><span class="istickedoff">Just l | <span class="tickonlyfalse">not (null l) &amp;&amp; last l == '\\'</span> -&gt;</span>
+<span class="lineno">   94 </span><span class="spaces">                                      </span><span class="istickedoff"><span class="nottickedoff">getInputLines newPrompt (init l : ls)</span></span>
+<span class="lineno">   95 </span><span class="spaces">                 </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; return $ Just $ unlines $ reverse $ l : ls</span></span>
+<span class="lineno">   96 </span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>
+<span class="lineno">   99 </span>-- | Try to set the history file.
+<span class="lineno">  100 </span>setHistoryFile :: Settings REPL -&gt; IO (Settings REPL)
+<span class="lineno">  101 </span><span class="decl"><span class="istickedoff">setHistoryFile ss =</span>
+<span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">do dir &lt;- getAppUserDataDirectory &quot;saw&quot;</span>
+<span class="lineno">  103 </span><span class="spaces">     </span><span class="istickedoff">createDirectoryIfMissing True dir</span>
+<span class="lineno">  104 </span><span class="spaces">     </span><span class="istickedoff">return ss { historyFile = Just (dir &lt;/&gt; &quot;history&quot;) }</span>
+<span class="lineno">  105 </span><span class="spaces">   </span><span class="istickedoff">`X.catch` <span class="nottickedoff">\(X.SomeException {}) -&gt; return ss</span></span></span>
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>-- | Haskeline settings for the REPL.
+<span class="lineno">  108 </span>replSettings :: Settings REPL
+<span class="lineno">  109 </span><span class="decl"><span class="istickedoff">replSettings  = Settings</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">{ complete       = <span class="nottickedoff">replComp</span></span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">, historyFile    = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">, autoAddHistory = <span class="nottickedoff">True</span></span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
+<span class="lineno">  114 </span>
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>-- Completion ------------------------------------------------------------------
 <span class="lineno">  117 </span>
-<span class="lineno">  118 </span>-- | Generate a completion from a REPL command definition.
-<span class="lineno">  119 </span>cmdComp :: Text -&gt; CommandDescr -&gt; Completion
-<span class="lineno">  120 </span><span class="decl"><span class="nottickedoff">cmdComp prefix c = Completion</span>
-<span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">{ replacement = Text.unpack $ Text.drop (Text.length prefix) (cName c)</span>
-<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">, display     = Text.unpack $ cName c</span>
-<span class="lineno">  123 </span><span class="spaces">  </span><span class="nottickedoff">, isFinished  = True</span>
-<span class="lineno">  124 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
-<span class="lineno">  125 </span>
-<span class="lineno">  126 </span>-- | Dispatch to a completion function based on the kind of completion the
-<span class="lineno">  127 </span>-- command is expecting.
-<span class="lineno">  128 </span>cmdArgument :: CommandBody -&gt; CompletionFunc REPL
-<span class="lineno">  129 </span><span class="decl"><span class="nottickedoff">cmdArgument ct cursor@(l,_) = case ct of</span>
-<span class="lineno">  130 </span><span class="spaces">  </span><span class="nottickedoff">ExprArg _     -&gt; completeSAWScriptValue cursor</span>
-<span class="lineno">  131 </span><span class="spaces">  </span><span class="nottickedoff">TypeArg _     -&gt; completeSAWScriptType cursor</span>
-<span class="lineno">  132 </span><span class="spaces">  </span><span class="nottickedoff">FilenameArg _ -&gt; completeFilename cursor</span>
-<span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">ShellArg _    -&gt; completeFilename cursor</span>
-<span class="lineno">  134 </span><span class="spaces">  </span><span class="nottickedoff">NoArg       _ -&gt; return (l,[])</span></span>
-<span class="lineno">  135 </span>
-<span class="lineno">  136 </span>data LexerMode = ModeNormal | ModeCryptol | ModeCryType | ModeQuote
-<span class="lineno">  137 </span>
-<span class="lineno">  138 </span>lexerMode :: String -&gt; LexerMode
-<span class="lineno">  139 </span><span class="decl"><span class="nottickedoff">lexerMode = normal</span>
-<span class="lineno">  140 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  141 </span><span class="spaces">    </span><span class="nottickedoff">normal [] = ModeNormal</span>
-<span class="lineno">  142 </span><span class="spaces">    </span><span class="nottickedoff">normal ('{' : '{' : s) = cryptol s</span>
-<span class="lineno">  143 </span><span class="spaces">    </span><span class="nottickedoff">normal ('{' : '|' : s) = crytype s</span>
-<span class="lineno">  144 </span><span class="spaces">    </span><span class="nottickedoff">normal ('\&quot;' : s) = quote s</span>
-<span class="lineno">  145 </span><span class="spaces">    </span><span class="nottickedoff">normal (_ : s) = normal s</span>
-<span class="lineno">  146 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  147 </span><span class="spaces">    </span><span class="nottickedoff">cryptol [] = ModeCryptol</span>
-<span class="lineno">  148 </span><span class="spaces">    </span><span class="nottickedoff">cryptol ('}' : '}' : s) = normal s</span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="nottickedoff">cryptol (_ : s) = cryptol s</span>
-<span class="lineno">  150 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="nottickedoff">crytype [] = ModeCryType</span>
-<span class="lineno">  152 </span><span class="spaces">    </span><span class="nottickedoff">crytype ('|' : '}' : s) = normal s</span>
-<span class="lineno">  153 </span><span class="spaces">    </span><span class="nottickedoff">crytype (_ : s) = crytype s</span>
-<span class="lineno">  154 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  155 </span><span class="spaces">    </span><span class="nottickedoff">quote [] = ModeQuote</span>
-<span class="lineno">  156 </span><span class="spaces">    </span><span class="nottickedoff">quote ('\&quot;' : s) = normal s</span>
-<span class="lineno">  157 </span><span class="spaces">    </span><span class="nottickedoff">quote (_ : s) = quote s</span></span>
-<span class="lineno">  158 </span>
-<span class="lineno">  159 </span>isIdentChar :: Char -&gt; Bool
-<span class="lineno">  160 </span><span class="decl"><span class="nottickedoff">isIdentChar c = isAlphaNum c || c == '_' || c == '\''</span></span>
-<span class="lineno">  161 </span>
-<span class="lineno">  162 </span>-- | Complete a name from the SAWScript value environment.
-<span class="lineno">  163 </span>completeSAWScriptValue :: CompletionFunc REPL
-<span class="lineno">  164 </span><span class="decl"><span class="nottickedoff">completeSAWScriptValue cursor@(l, _) = do</span>
-<span class="lineno">  165 </span><span class="spaces">  </span><span class="nottickedoff">ns1 &lt;- getSAWScriptValueNames</span>
-<span class="lineno">  166 </span><span class="spaces">  </span><span class="nottickedoff">ns2 &lt;- getCryptolExprNames</span>
-<span class="lineno">  167 </span><span class="spaces">  </span><span class="nottickedoff">ns3 &lt;- getCryptolTypeNames</span>
-<span class="lineno">  168 </span><span class="spaces">  </span><span class="nottickedoff">let n = reverse (takeWhile isIdentChar l)</span>
-<span class="lineno">  169 </span><span class="spaces">      </span><span class="nottickedoff">nameComps prefix ns = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)</span>
-<span class="lineno">  170 </span><span class="spaces">  </span><span class="nottickedoff">case lexerMode (reverse l) of</span>
-<span class="lineno">  171 </span><span class="spaces">    </span><span class="nottickedoff">ModeNormal  -&gt; return (l, nameComps n ns1)</span>
-<span class="lineno">  172 </span><span class="spaces">    </span><span class="nottickedoff">ModeCryptol -&gt; return (l, nameComps n ns2)</span>
-<span class="lineno">  173 </span><span class="spaces">    </span><span class="nottickedoff">ModeCryType -&gt; return (l, nameComps n ns3)</span>
-<span class="lineno">  174 </span><span class="spaces">    </span><span class="nottickedoff">ModeQuote   -&gt; completeFilename cursor</span></span>
-<span class="lineno">  175 </span>
-<span class="lineno">  176 </span>-- | Complete a name from the SAWScript type environment.
-<span class="lineno">  177 </span>completeSAWScriptType :: CompletionFunc REPL
-<span class="lineno">  178 </span><span class="decl"><span class="nottickedoff">completeSAWScriptType (l, _) = do</span>
-<span class="lineno">  179 </span><span class="spaces">  </span><span class="nottickedoff">ns &lt;- getSAWScriptTypeNames</span>
-<span class="lineno">  180 </span><span class="spaces">  </span><span class="nottickedoff">let prefix = reverse (takeWhile isIdentChar l)</span>
-<span class="lineno">  181 </span><span class="spaces">      </span><span class="nottickedoff">nameComps = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)</span>
-<span class="lineno">  182 </span><span class="spaces">  </span><span class="nottickedoff">return (l, nameComps)</span></span>
+<span class="lineno">  118 </span>-- | Top-level completion for the REPL.
+<span class="lineno">  119 </span>replComp :: CompletionFunc REPL
+<span class="lineno">  120 </span><span class="decl"><span class="nottickedoff">replComp cursor@(l,r)</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">| &quot;:&quot; `Text.isPrefixOf` l'</span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">, Just (cmd,rest) &lt;- splitCommand l' = case findCommand cmd of</span>
+<span class="lineno">  123 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  124 </span><span class="spaces">      </span><span class="nottickedoff">[c] | Text.null rest &amp;&amp; not (Text.any isSpace l') -&gt; do</span>
+<span class="lineno">  125 </span><span class="spaces">            </span><span class="nottickedoff">return (l, [cmdComp cmd c])</span>
+<span class="lineno">  126 </span><span class="spaces">          </span><span class="nottickedoff">| otherwise -&gt; do</span>
+<span class="lineno">  127 </span><span class="spaces">            </span><span class="nottickedoff">(rest',cs) &lt;- cmdArgument (cBody c) (reverse $ Text.unpack $ sanitize rest, r)</span>
+<span class="lineno">  128 </span><span class="spaces">            </span><span class="nottickedoff">-- XXX this drops any leading spaces in l', which is ok but untidy</span>
+<span class="lineno">  129 </span><span class="spaces">            </span><span class="nottickedoff">return (unwords [rest', reverse $ Text.unpack cmd], cs)</span>
+<span class="lineno">  130 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  131 </span><span class="spaces">      </span><span class="nottickedoff">cmds -&gt;</span>
+<span class="lineno">  132 </span><span class="spaces">        </span><span class="nottickedoff">return (l, [ cmdComp l' c | c &lt;- cmds ])</span>
+<span class="lineno">  133 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="nottickedoff">| l' == &quot;:&quot; =</span>
+<span class="lineno">  135 </span><span class="spaces">      </span><span class="nottickedoff">return (l, [ cmdComp l' c | c &lt;- findCommand &quot;&quot; ])</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = completeSAWScriptValue cursor</span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">l' = sanitize (Text.pack $ reverse l)</span></span>
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>-- | Generate a completion from a REPL command definition.
+<span class="lineno">  141 </span>cmdComp :: Text -&gt; CommandDescr -&gt; Completion
+<span class="lineno">  142 </span><span class="decl"><span class="nottickedoff">cmdComp prefix c = Completion</span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="nottickedoff">{ replacement = Text.unpack $ Text.drop (Text.length prefix) (cName c)</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="nottickedoff">, display     = Text.unpack $ cName c</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">, isFinished  = True</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  147 </span>
+<span class="lineno">  148 </span>-- | Dispatch to a completion function based on the kind of completion the
+<span class="lineno">  149 </span>-- command is expecting.
+<span class="lineno">  150 </span>cmdArgument :: CommandBody -&gt; CompletionFunc REPL
+<span class="lineno">  151 </span><span class="decl"><span class="nottickedoff">cmdArgument ct cursor@(l,_) = case ct of</span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="nottickedoff">ExprArg _     -&gt; completeSAWScriptValue cursor</span>
+<span class="lineno">  153 </span><span class="spaces">  </span><span class="nottickedoff">TypeArg _     -&gt; completeSAWScriptType cursor</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="nottickedoff">FilenameArg _ -&gt; completeFilename cursor</span>
+<span class="lineno">  155 </span><span class="spaces">  </span><span class="nottickedoff">ShellArg _    -&gt; completeFilename cursor</span>
+<span class="lineno">  156 </span><span class="spaces">  </span><span class="nottickedoff">NoArg       _ -&gt; return (l,[])</span></span>
+<span class="lineno">  157 </span>
+<span class="lineno">  158 </span>data LexerMode = ModeNormal | ModeCryptol | ModeCryType | ModeQuote
+<span class="lineno">  159 </span>
+<span class="lineno">  160 </span>lexerMode :: String -&gt; LexerMode
+<span class="lineno">  161 </span><span class="decl"><span class="nottickedoff">lexerMode = normal</span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="nottickedoff">normal [] = ModeNormal</span>
+<span class="lineno">  164 </span><span class="spaces">    </span><span class="nottickedoff">normal ('{' : '{' : s) = cryptol s</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="nottickedoff">normal ('{' : '|' : s) = crytype s</span>
+<span class="lineno">  166 </span><span class="spaces">    </span><span class="nottickedoff">normal ('\&quot;' : s) = quote s</span>
+<span class="lineno">  167 </span><span class="spaces">    </span><span class="nottickedoff">normal (_ : s) = normal s</span>
+<span class="lineno">  168 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  169 </span><span class="spaces">    </span><span class="nottickedoff">cryptol [] = ModeCryptol</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="nottickedoff">cryptol ('}' : '}' : s) = normal s</span>
+<span class="lineno">  171 </span><span class="spaces">    </span><span class="nottickedoff">cryptol (_ : s) = cryptol s</span>
+<span class="lineno">  172 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="nottickedoff">crytype [] = ModeCryType</span>
+<span class="lineno">  174 </span><span class="spaces">    </span><span class="nottickedoff">crytype ('|' : '}' : s) = normal s</span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="nottickedoff">crytype (_ : s) = crytype s</span>
+<span class="lineno">  176 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  177 </span><span class="spaces">    </span><span class="nottickedoff">quote [] = ModeQuote</span>
+<span class="lineno">  178 </span><span class="spaces">    </span><span class="nottickedoff">quote ('\&quot;' : s) = normal s</span>
+<span class="lineno">  179 </span><span class="spaces">    </span><span class="nottickedoff">quote (_ : s) = quote s</span></span>
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>isIdentChar :: Char -&gt; Bool
+<span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">isIdentChar c = isAlphaNum c || c == '_' || c == '\''</span></span>
 <span class="lineno">  183 </span>
-<span class="lineno">  184 </span>-- | Generate a completion from a prefix and a name.
-<span class="lineno">  185 </span>nameComp :: String -&gt; String -&gt; Completion
-<span class="lineno">  186 </span><span class="decl"><span class="nottickedoff">nameComp prefix c = Completion</span>
-<span class="lineno">  187 </span><span class="spaces">  </span><span class="nottickedoff">{ replacement = drop (length prefix) c</span>
-<span class="lineno">  188 </span><span class="spaces">  </span><span class="nottickedoff">, display     = c</span>
-<span class="lineno">  189 </span><span class="spaces">  </span><span class="nottickedoff">, isFinished  = True</span>
-<span class="lineno">  190 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  184 </span>-- | Complete a name from the SAWScript value environment.
+<span class="lineno">  185 </span>completeSAWScriptValue :: CompletionFunc REPL
+<span class="lineno">  186 </span><span class="decl"><span class="nottickedoff">completeSAWScriptValue cursor@(l, _) = do</span>
+<span class="lineno">  187 </span><span class="spaces">  </span><span class="nottickedoff">ns1 &lt;- getSAWScriptValueNames</span>
+<span class="lineno">  188 </span><span class="spaces">  </span><span class="nottickedoff">ns2 &lt;- getCryptolExprNames</span>
+<span class="lineno">  189 </span><span class="spaces">  </span><span class="nottickedoff">ns3 &lt;- getCryptolTypeNames</span>
+<span class="lineno">  190 </span><span class="spaces">  </span><span class="nottickedoff">let n = reverse (takeWhile isIdentChar l)</span>
+<span class="lineno">  191 </span><span class="spaces">      </span><span class="nottickedoff">nameComps prefix ns = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)</span>
+<span class="lineno">  192 </span><span class="spaces">  </span><span class="nottickedoff">case lexerMode (reverse l) of</span>
+<span class="lineno">  193 </span><span class="spaces">    </span><span class="nottickedoff">ModeNormal  -&gt; return (l, nameComps n ns1)</span>
+<span class="lineno">  194 </span><span class="spaces">    </span><span class="nottickedoff">ModeCryptol -&gt; return (l, nameComps n ns2)</span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="nottickedoff">ModeCryType -&gt; return (l, nameComps n ns3)</span>
+<span class="lineno">  196 </span><span class="spaces">    </span><span class="nottickedoff">ModeQuote   -&gt; completeFilename cursor</span></span>
+<span class="lineno">  197 </span>
+<span class="lineno">  198 </span>-- | Complete a name from the SAWScript type environment.
+<span class="lineno">  199 </span>completeSAWScriptType :: CompletionFunc REPL
+<span class="lineno">  200 </span><span class="decl"><span class="nottickedoff">completeSAWScriptType (l, _) = do</span>
+<span class="lineno">  201 </span><span class="spaces">  </span><span class="nottickedoff">ns &lt;- getSAWScriptTypeNames</span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">let prefix = reverse (takeWhile isIdentChar l)</span>
+<span class="lineno">  203 </span><span class="spaces">      </span><span class="nottickedoff">nameComps = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)</span>
+<span class="lineno">  204 </span><span class="spaces">  </span><span class="nottickedoff">return (l, nameComps)</span></span>
+<span class="lineno">  205 </span>
+<span class="lineno">  206 </span>-- | Generate a completion from a prefix and a name.
+<span class="lineno">  207 </span>nameComp :: String -&gt; String -&gt; Completion
+<span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">nameComp prefix c = Completion</span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="nottickedoff">{ replacement = drop (length prefix) c</span>
+<span class="lineno">  210 </span><span class="spaces">  </span><span class="nottickedoff">, display     = c</span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">, isFinished  = True</span>
+<span class="lineno">  212 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
 
 </pre>
 </body>
