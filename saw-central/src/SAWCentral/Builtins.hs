@@ -5,19 +5,11 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE NondecreasingIndentation #-}
-{-# LANGUAGE ImplicitParams #-}
 
 module SAWCentral.Builtins where
 

@@ -5,13 +5,10 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE DeriveFunctor,DeriveFoldable,DeriveTraversable #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module SAWCentral.AST
        ( PrimitiveLifecycle(..)

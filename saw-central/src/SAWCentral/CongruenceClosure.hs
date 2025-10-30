@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-{-# LANGUAGE DoAndIfThenElse #-}
 
 module SAWCentral.CongruenceClosure
   ( -- * Functor type classes

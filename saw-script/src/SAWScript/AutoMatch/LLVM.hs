@@ -1,6 +1,4 @@
-{-# LANGUAGE LambdaCase    #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 
 module SAWScript.AutoMatch.LLVM where
 

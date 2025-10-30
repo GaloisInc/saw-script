@@ -9,9 +9,8 @@ Stability   : provisional
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ParallelListComp #-}
 
 module SAWCentral.Proof
   ( Prop

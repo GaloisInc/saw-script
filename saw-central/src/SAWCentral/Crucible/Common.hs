@@ -6,7 +6,6 @@ Maintainer  : langston
 Stability   : provisional
 -}
 
-{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}

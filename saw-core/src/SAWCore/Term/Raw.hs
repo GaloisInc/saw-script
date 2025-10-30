@@ -1,13 +1,3 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveLift #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TypeOperators #-}
-
 {- |
 Module      : SAWCore.Term.Raw
 Copyright   : Galois, Inc. 2012-2025

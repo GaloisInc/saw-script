@@ -5,25 +5,19 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances, MultiParamTypeClasses#-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE EmptyCase #-}
-{-# LANGUAGE LambdaCase #-}
+
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ParallelListComp #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
-
-{-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWCentral.Crucible.LLVM.Builtins
     ( show_cfg

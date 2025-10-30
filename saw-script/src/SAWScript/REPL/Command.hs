@@ -5,10 +5,7 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE CPP, PatternGuards, FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns #-}
 -- TODO RGS: Do better (or at least comment why we do this)
 {-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 

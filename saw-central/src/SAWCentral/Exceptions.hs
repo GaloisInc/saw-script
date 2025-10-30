@@ -1,5 +1,4 @@
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module SAWCentral.Exceptions
   ( TypeErrors(..), failTypecheck

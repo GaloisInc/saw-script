@@ -5,11 +5,9 @@ Maintainer  : jhendrix, atomb
 Stability   : provisional
 -}
 
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module SAWCentral.Utils where
 

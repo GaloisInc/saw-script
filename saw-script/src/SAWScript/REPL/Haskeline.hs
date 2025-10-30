@@ -6,7 +6,6 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module SAWScript.REPL.Haskeline (repl, replBody) where
