@@ -574,7 +574,6 @@ withMethodSpec pathSat lm nm setup action =
               -- execute commands of the method spec
               io $ W4.setCurrentProgramLoc sym setupLoc
 
-              
               setupState  <-
                 (execStateT
                    (runReaderT (runLLVMCrucibleSetupM setup)
@@ -582,6 +581,13 @@ withMethodSpec pathSat lm nm setup action =
                      st0)
               let methodSpec = setupState ^. Setup.csMethodSpec
                   cc1        = setupState ^. Setup.csCrucibleContext
+
+              -- check for missing llvm_execute_func
+              unless (setupState ^. Setup.csPrePost == PostState) $
+                io $ throwMethodSpec methodSpec $ Text.unpack $
+                "Missing llvm_execute_func specification when verifying " <>
+                methodSpec^.csName
+
               io $ checkSpecArgumentTypes cc1 methodSpec
               io $ checkSpecReturnType cc1 methodSpec
 
@@ -909,7 +915,12 @@ checkSpecReturnType cc mspec =
            , "Expected: " <> Text.pack (show retTy)
            , "but given value of type: " <> Text.pack (show retTy')
            ]
-    (Nothing, _) -> return ()
+    (Nothing, Just retTy) ->
+      throwMethodSpec mspec $ Text.unpack $ Text.unlines
+      [ "Missing return value specification for function with non-void return type"
+      , "Expected: " <> Text.pack (show retTy)
+      ]
+    (Nothing, Nothing) -> pure ()
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --

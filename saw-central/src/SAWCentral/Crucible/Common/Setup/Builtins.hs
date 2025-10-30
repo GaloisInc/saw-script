@@ -108,7 +108,10 @@ crucible_execute_func ::
   [MS.SetupValue ext] ->
   CrucibleSetup ext ()
 crucible_execute_func args = do
+  st <- get
   tps <- use (csMethodSpec . MS.csArgs)
+  when (st ^. csPrePost == MS.PostState) $
+    fail "duplicate execute_func declaration"
   csPrePost .= MS.PostState
   csMethodSpec . MS.csArgBindings .= Map.fromList [ (i, (t,a))
                                                   | i <- [0..]
