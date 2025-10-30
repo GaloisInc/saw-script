@@ -6,6 +6,20 @@ This release supports [version
 
 ## Changes
 
+* `llvm_verify` now enforces that an `llvm_return` specification is
+  included for any function with a non-void return type.
+  To write a spec that asserts nothing about the return value,
+  `llvm_return` may be used with a fresh variable declared with
+  `llvm_fresh_var` in the post-state section, like this:
+
+  do {
+    ...
+    llvm_execute_func <args>;
+    ...
+    ret <- llvm_fresh_var "ret" <type>;
+    llvm_return (llvm_term ret);
+  }
+
 * The `cryptol_load` and `cryptol_prims` commands now fail if used
   in a nested scope, instead of behaving strangely.
 
