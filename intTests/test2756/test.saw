@@ -1,0 +1,7 @@
+include "a.saw";
+include "b.saw";
+include "c.saw";
+
+print a;
+print b;
+print c;
