@@ -1,8 +1,9 @@
-{-# Language DataKinds, OverloadedStrings #-}
-{-# Language RankNTypes, TypeOperators #-}
-{-# Language PatternSynonyms #-}
-{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeOperators #-}
 module SAWCentral.X86
   ( Options(..)
   , proof

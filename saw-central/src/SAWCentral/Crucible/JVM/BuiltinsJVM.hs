@@ -9,16 +9,10 @@ Stability   : provisional
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE EmptyCase #-}
-{-# LANGUAGE PackageImports #-}
 
 
-{-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 {-# OPTIONS_GHC -fno-warn-unused-local-binds #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
-
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 
 module SAWCentral.Crucible.JVM.BuiltinsJVM
