@@ -251,6 +251,9 @@ evalTermF cfg lam recEval tf env =
             VCtorMux _ps branches ->
               do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)
                  combineAlts alts
+            VBVToNat{} ->
+              panic "evalTerF / evalRecursor"
+              ["Unsupported symbolic recursor argument of type Nat"]
             _ ->
               panic "evalTermF / evalRecursor"
               ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
