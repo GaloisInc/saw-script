@@ -6,8 +6,6 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 

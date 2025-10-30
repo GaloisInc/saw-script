@@ -9,9 +9,6 @@ Stability   : provisional
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 -- See Note [-Wincomplete-uni-patterns and irrefutable patterns]
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}

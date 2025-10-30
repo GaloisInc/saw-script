@@ -1,5 +1,4 @@
 {
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWScript.Lexer
   ( scan

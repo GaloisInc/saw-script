@@ -5,18 +5,13 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in
 -- SAWScript.Typechecker
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
