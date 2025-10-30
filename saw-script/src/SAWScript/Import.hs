@@ -5,17 +5,15 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
-
 module SAWScript.Import
-  ( loadFile
-  , findAndLoadFile
+  ( findAndLoadFile
   ) where
 
 import qualified Data.Text.IO as TextIO (readFile)
 import qualified Data.Text as Text
 import Control.Exception
 import System.Directory
+import System.FilePath (normalise)
 
 import SAWCentral.Position (Pos)
 import SAWCentral.AST
@@ -24,6 +22,7 @@ import SAWCentral.Options
 import SAWScript.Parser
 import SAWScript.Token (Token)
 
+-- | Load the 'Stmt's in a @.saw@ file.
 loadFile :: Options -> FilePath -> IO [Stmt]
 loadFile opts fname = do
   printOutLn opts Info $ "Loading file " ++ show fname
@@ -53,6 +52,10 @@ parseFile tokens = do
     Left err -> Left err
     Right stmts -> Right stmts
 
+-- | Find a file, potentially looking in a list of multiple search paths (as
+-- specified via the @SAW_IMPORT_PATH@ environment variable or
+-- @-i@/@--import-path@ command-line options). If the file was successfully
+-- found, load it. If not, raise an error.
 findAndLoadFile :: Options -> FilePath -> IO [Stmt]
 findAndLoadFile opts fp = do
   let paths = importPath opts
@@ -62,17 +65,10 @@ findAndLoadFile opts fp = do
         [ "Couldn't find file: " ++ show fp
         , "  Searched in directories:"
         ] ++ map ("    " ++) paths
-    Just fname -> loadFile opts fname
-
-#if __GLASGOW_HASKELL__ < 706
-findFile :: [FilePath] -> String -> IO (Maybe FilePath)
-findFile paths fileName = search paths
-  where
-    search :: [FilePath] -> IO (Maybe FilePath)
-    search [] = return Nothing
-    search (d:ds) = do
-        let path = d </> fileName
-        b <- doesFileExist path
-        if b then return (Just path)
-             else search ds
-#endif
+    Just fname ->
+      -- NB: Normalise the path name. The default SAW_IMPORT_PATH contains ".",
+      -- and the behavior of filepath's 'normalise' function is to prepend a
+      -- search path to the front of the file path that is found, which can
+      -- cause paths like "./foo.saw" to be returned. This looks ugly in error
+      -- messages, where we would rather display "foo.saw" instead.
+      loadFile opts (normalise fname)

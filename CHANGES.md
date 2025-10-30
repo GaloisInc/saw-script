@@ -197,6 +197,9 @@ This release supports [version
 * Fix a bug that would cause SAW to crash when loading an instantiation of a
   parameterized Cryptol module that contains newtypes or enums (#2673).
 
+* Fix a bug that would cause SAW to completely ignore the paths specified in
+  the `SAW_IMPORT_PATH`/`--import-path` options.
+
 # Version 1.4 -- date still TBD
 
 This release supports [version
