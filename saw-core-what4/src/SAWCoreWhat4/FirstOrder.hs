@@ -15,10 +15,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWCoreWhat4.FirstOrder
