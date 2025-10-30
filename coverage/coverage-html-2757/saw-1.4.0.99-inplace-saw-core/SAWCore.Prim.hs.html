@@ -18,354 +18,353 @@ span.spaces    { background: white }
 </pre>
 <pre>
 <span class="lineno">    1 </span>{-# LANGUAGE BangPatterns #-}
-<span class="lineno">    2 </span>{-# LANGUAGE DeriveDataTypeable #-}
-<span class="lineno">    3 </span>
-<span class="lineno">    4 </span>{- |
-<span class="lineno">    5 </span>Module      : SAWCore.Prim
-<span class="lineno">    6 </span>Copyright   : Galois, Inc. 2012-2015
-<span class="lineno">    7 </span>License     : BSD3
-<span class="lineno">    8 </span>Maintainer  : jhendrix@galois.com
-<span class="lineno">    9 </span>Stability   : experimental
-<span class="lineno">   10 </span>Portability : non-portable (language extensions)
-<span class="lineno">   11 </span>-}
-<span class="lineno">   12 </span>
-<span class="lineno">   13 </span>module SAWCore.Prim where
-<span class="lineno">   14 </span>
-<span class="lineno">   15 </span>import qualified Control.Exception as X
-<span class="lineno">   16 </span>import Data.Bits
-<span class="lineno">   17 </span>import Data.Typeable (Typeable)
-<span class="lineno">   18 </span>import Data.Vector (Vector)
-<span class="lineno">   19 </span>import qualified Data.Vector as V
-<span class="lineno">   20 </span>import Numeric.Natural (Natural)
-<span class="lineno">   21 </span>
-<span class="lineno">   22 </span>------------------------------------------------------------
-<span class="lineno">   23 </span>-- Natural numbers
-<span class="lineno">   24 </span>
-<span class="lineno">   25 </span>-- | width(n) = 1 + floor(log_2(n))
-<span class="lineno">   26 </span>widthNat :: Natural -&gt; Natural
-<span class="lineno">   27 </span><span class="decl"><span class="istickedoff">widthNat 0 = 0</span>
-<span class="lineno">   28 </span><span class="spaces"></span><span class="istickedoff">widthNat n = 1 + widthNat (n `div` 2)</span></span>
-<span class="lineno">   29 </span>
-<span class="lineno">   30 </span>-- data Vec :: (n :: Nat) -&gt; sort 0 -&gt; sort 0
-<span class="lineno">   31 </span>data Vec t a = Vec t !(Vector a)
-<span class="lineno">   32 </span>
-<span class="lineno">   33 </span>------------------------------------------------------------
-<span class="lineno">   34 </span>-- Unsigned, variable-width bit vectors
-<span class="lineno">   35 </span>
-<span class="lineno">   36 </span>data BitVector = BV { <span class="istickedoff"><span class="decl"><span class="istickedoff">width</span></span></span> :: !Int, <span class="istickedoff"><span class="decl"><span class="istickedoff">unsigned</span></span></span> :: !Integer }
-<span class="lineno">   37 </span>    deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
-<span class="lineno">   38 </span>-- ^ Invariant: BV w x requires that 0 &lt;= x &lt; 2^w.
-<span class="lineno">   39 </span>
-<span class="lineno">   40 </span>bitMask :: Int -&gt; Integer
-<span class="lineno">   41 </span><span class="decl"><span class="istickedoff">bitMask w = bit w - 1</span></span>
-<span class="lineno">   42 </span>
-<span class="lineno">   43 </span>-- | Smart constructor for bitvectors.
-<span class="lineno">   44 </span>bv :: Int -&gt; Integer -&gt; BitVector
-<span class="lineno">   45 </span><span class="decl"><span class="istickedoff">bv w x = BV w (x .&amp;. bitMask w)</span></span>
-<span class="lineno">   46 </span>
-<span class="lineno">   47 </span>signed :: BitVector -&gt; Integer
-<span class="lineno">   48 </span><span class="decl"><span class="istickedoff">signed (BV w x)</span>
-<span class="lineno">   49 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">w &gt; 0 &amp;&amp; testBit x (w - 1)</span> = x - bit w</span>
-<span class="lineno">   50 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>                  = <span class="nottickedoff">x</span></span></span>
-<span class="lineno">   51 </span>
-<span class="lineno">   52 </span>bvAt :: BitVector -&gt; Int -&gt; Bool
-<span class="lineno">   53 </span><span class="decl"><span class="istickedoff">bvAt (BV w x) i = testBit x (w - 1 - i)</span></span>
-<span class="lineno">   54 </span>
-<span class="lineno">   55 </span>-- | Conversion from list of bits to integer (big-endian)
-<span class="lineno">   56 </span>bvToInteger :: Vector Bool -&gt; Integer
-<span class="lineno">   57 </span><span class="decl"><span class="istickedoff">bvToInteger = V.foldl' (\x b -&gt; if b then 2*x+1 else 2*x) 0</span></span>
-<span class="lineno">   58 </span>
-<span class="lineno">   59 </span>unpackBitVector :: BitVector -&gt; Vector Bool
-<span class="lineno">   60 </span><span class="decl"><span class="nottickedoff">unpackBitVector x = V.generate (width x) (bvAt x)</span></span>
-<span class="lineno">   61 </span>
-<span class="lineno">   62 </span>packBitVector :: Vector Bool -&gt; BitVector
-<span class="lineno">   63 </span><span class="decl"><span class="istickedoff">packBitVector v = BV (V.length v) (bvToInteger v)</span></span>
-<span class="lineno">   64 </span>
-<span class="lineno">   65 </span>------------------------------------------------------------
-<span class="lineno">   66 </span>-- Primitive operations
-<span class="lineno">   67 </span>
-<span class="lineno">   68 </span>-- coerce :: (y x :: sort 0) -&gt; Eq (sort 0) x y -&gt; x -&gt; y;
-<span class="lineno">   69 </span>coerce :: () -&gt; () -&gt; () -&gt; a -&gt; a
-<span class="lineno">   70 </span><span class="decl"><span class="nottickedoff">coerce _ _ _ x = x</span></span>
-<span class="lineno">   71 </span>
-<span class="lineno">   72 </span>-- ite :: ?(a :: sort 1) -&gt; Bool -&gt; a -&gt; a -&gt; a;
-<span class="lineno">   73 </span>ite :: t -&gt; Bool -&gt; a -&gt; a -&gt; a
-<span class="lineno">   74 </span><span class="decl"><span class="nottickedoff">ite _ b x y = if b then x else y</span></span>
-<span class="lineno">   75 </span>
-<span class="lineno">   76 </span>-- Succ :: Nat -&gt; Nat;
-<span class="lineno">   77 </span>succNat :: Integer -&gt; Integer
-<span class="lineno">   78 </span><span class="decl"><span class="nottickedoff">succNat = succ</span></span>
-<span class="lineno">   79 </span>
-<span class="lineno">   80 </span>-- addNat :: Nat -&gt; Nat -&gt; Nat;
-<span class="lineno">   81 </span>addNat :: Integer -&gt; Integer -&gt; Integer
-<span class="lineno">   82 </span><span class="decl"><span class="nottickedoff">addNat = (+)</span></span>
-<span class="lineno">   83 </span>
-<span class="lineno">   84 </span>-- get :: (n :: Nat) -&gt; (e :: sort 0) -&gt; Vec n e -&gt; Fin n -&gt; e;
-<span class="lineno">   85 </span>--get :: Int -&gt; t -&gt; Vec t e -&gt; Fin -&gt; e
-<span class="lineno">   86 </span>--get _ _ (Vec _ v) i = v ! fromEnum i
-<span class="lineno">   87 </span>
-<span class="lineno">   88 </span>-- append :: (m n :: Nat) -&gt; (e :: sort 0) -&gt; Vec m e -&gt; Vec n e -&gt; Vec (addNat m n) e;
-<span class="lineno">   89 </span>append :: Int -&gt; Int -&gt; t -&gt; Vec t e -&gt; Vec t e -&gt; Vec t e
-<span class="lineno">   90 </span><span class="decl"><span class="nottickedoff">append _ _ _ (Vec t xv) (Vec _ yv) = Vec t ((V.++) xv yv)</span></span>
-<span class="lineno">   91 </span>
-<span class="lineno">   92 </span>-- at :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Nat -&gt; a;
-<span class="lineno">   93 </span>at :: Int -&gt; t -&gt; Vec t e -&gt; Int -&gt; e
-<span class="lineno">   94 </span><span class="decl"><span class="istickedoff">at _ _ (Vec _ v) i = v ! i</span></span>
-<span class="lineno">   95 </span>
-<span class="lineno">   96 </span>-- atWithDefault :: (n :: Nat) -&gt; (a :: sort 0) -&gt; a -&gt; Vec n a -&gt; Nat -&gt; a;
-<span class="lineno">   97 </span>atWithDefault :: Int -&gt; t -&gt; e -&gt; Vec t e -&gt; Int -&gt; e
-<span class="lineno">   98 </span><span class="decl"><span class="nottickedoff">atWithDefault _ _ z (Vec _ v) i</span>
-<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">| i &lt; V.length v = v ! i</span>
-<span class="lineno">  100 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = z</span></span>
-<span class="lineno">  101 </span>
-<span class="lineno">  102 </span>-- upd :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Nat -&gt; a -&gt; Vec n a;
-<span class="lineno">  103 </span>upd :: Int -&gt; t -&gt; Vec t e -&gt; Int -&gt; e -&gt; Vec t e
-<span class="lineno">  104 </span><span class="decl"><span class="nottickedoff">upd _ _ (Vec t v) i e = Vec t (v V.// [(i, e)])</span></span>
-<span class="lineno">  105 </span>
-<span class="lineno">  106 </span>(!) :: Vector a -&gt; Int -&gt; a
-<span class="lineno">  107 </span><span class="decl"><span class="istickedoff">(!) v i = case v V.!? i of</span>
-<span class="lineno">  108 </span><span class="spaces">  </span><span class="istickedoff">Just x -&gt; x</span>
-<span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">invalidIndex (toInteger i)</span></span></span>
-<span class="lineno">  110 </span>
-<span class="lineno">  111 </span>----------------------------------------
-<span class="lineno">  112 </span>-- Bitvector operations
-<span class="lineno">  113 </span>
-<span class="lineno">  114 </span>-- bvNat : (n : Nat) -&gt; Nat -&gt; Vec n Bool;
-<span class="lineno">  115 </span>bvNat :: Int -&gt; Integer -&gt; BitVector
-<span class="lineno">  116 </span><span class="decl"><span class="nottickedoff">bvNat w x = bv w x</span></span>
-<span class="lineno">  117 </span>
-<span class="lineno">  118 </span>-- bvAdd : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Vec n Bool;
-<span class="lineno">  119 </span>bvAdd, bvSub, bvMul :: Natural -&gt; BitVector -&gt; BitVector -&gt; BitVector
-<span class="lineno">  120 </span><span class="decl"><span class="istickedoff">bvAdd _ (BV w x) (BV _ y) = bv w (x + y)</span></span>
-<span class="lineno">  121 </span><span class="decl"><span class="istickedoff">bvSub _ (BV w x) (BV _ y) = bv w (x - y)</span></span>
-<span class="lineno">  122 </span><span class="decl"><span class="istickedoff">bvMul _ (BV w x) (BV _ y) = bv w (x * y)</span></span>
-<span class="lineno">  123 </span>
-<span class="lineno">  124 </span>bvNeg :: Natural -&gt; BitVector -&gt; BitVector
-<span class="lineno">  125 </span><span class="decl"><span class="istickedoff">bvNeg _ x@(BV w _) = bv w $ negate $ signed x</span></span>
-<span class="lineno">  126 </span>
-<span class="lineno">  127 </span>bvAnd, bvOr, bvXor :: Int -&gt; BitVector -&gt; BitVector -&gt; BitVector
-<span class="lineno">  128 </span><span class="decl"><span class="istickedoff">bvAnd _ (BV w x) (BV _ y) = BV w (x .&amp;. y)</span></span>
-<span class="lineno">  129 </span><span class="decl"><span class="nottickedoff">bvOr  _ (BV w x) (BV _ y) = BV w (x .|. y)</span></span>
-<span class="lineno">  130 </span><span class="decl"><span class="nottickedoff">bvXor _ (BV w x) (BV _ y) = BV w (x `xor` y)</span></span>
-<span class="lineno">  131 </span>
-<span class="lineno">  132 </span>bvNot :: Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  133 </span><span class="decl"><span class="istickedoff">bvNot _ (BV w x) = BV w (x `xor` bitMask w)</span></span>
-<span class="lineno">  134 </span>
-<span class="lineno">  135 </span>bvEq, bvult, bvule, bvugt, bvuge, bvsgt, bvsge, bvslt, bvsle
-<span class="lineno">  136 </span>    :: Int -&gt; BitVector -&gt; BitVector -&gt; Bool
-<span class="lineno">  137 </span><span class="decl"><span class="istickedoff">bvEq  _ x y = unsigned x == unsigned y</span></span>
-<span class="lineno">  138 </span><span class="decl"><span class="nottickedoff">bvugt _ x y = unsigned x &gt;  unsigned y</span></span>
-<span class="lineno">  139 </span><span class="decl"><span class="nottickedoff">bvuge _ x y = unsigned x &gt;= unsigned y</span></span>
-<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">bvult _ x y = unsigned x &lt;  unsigned y</span></span>
-<span class="lineno">  141 </span><span class="decl"><span class="istickedoff">bvule _ x y = unsigned x &lt;= unsigned y</span></span>
-<span class="lineno">  142 </span><span class="decl"><span class="nottickedoff">bvsgt _ x y = signed x &gt;  signed y</span></span>
-<span class="lineno">  143 </span><span class="decl"><span class="nottickedoff">bvsge _ x y = signed x &gt;= signed y</span></span>
-<span class="lineno">  144 </span><span class="decl"><span class="nottickedoff">bvslt _ x y = signed x &lt;  signed y</span></span>
-<span class="lineno">  145 </span><span class="decl"><span class="nottickedoff">bvsle _ x y = signed x &lt;= signed y</span></span>
-<span class="lineno">  146 </span>
-<span class="lineno">  147 </span>bvPopcount :: Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  148 </span><span class="decl"><span class="nottickedoff">bvPopcount _ (BV w x) = BV w (toInteger (popCount x))</span></span>
-<span class="lineno">  149 </span>
-<span class="lineno">  150 </span>bvCountLeadingZeros :: Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  151 </span><span class="decl"><span class="nottickedoff">bvCountLeadingZeros _ (BV w x) = BV w (toInteger (go 0))</span>
-<span class="lineno">  152 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
-<span class="lineno">  153 </span><span class="spaces"> </span><span class="nottickedoff">go !i</span>
-<span class="lineno">  154 </span><span class="spaces">   </span><span class="nottickedoff">| i &lt; w &amp;&amp; testBit x (w - i - 1) == False = go (i+1)</span>
-<span class="lineno">  155 </span><span class="spaces">   </span><span class="nottickedoff">| otherwise = i</span></span>
-<span class="lineno">  156 </span>
-<span class="lineno">  157 </span>bvCountTrailingZeros :: Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  158 </span><span class="decl"><span class="nottickedoff">bvCountTrailingZeros _ (BV w x) = BV w (toInteger (go 0))</span>
-<span class="lineno">  159 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
-<span class="lineno">  160 </span><span class="spaces"> </span><span class="nottickedoff">go !i</span>
-<span class="lineno">  161 </span><span class="spaces">   </span><span class="nottickedoff">| i &lt; w &amp;&amp; testBit x i == False = go (i+1)</span>
-<span class="lineno">  162 </span><span class="spaces">   </span><span class="nottickedoff">| otherwise = i</span></span>
-<span class="lineno">  163 </span>
-<span class="lineno">  164 </span>-- | @get@ specialized to BitVector (big-endian)
-<span class="lineno">  165 </span>-- get :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Fin n -&gt; a;
-<span class="lineno">  166 </span>--get_bv :: Int -&gt; () -&gt; BitVector -&gt; Fin -&gt; Bool
-<span class="lineno">  167 </span>--get_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromEnum i)
-<span class="lineno">  168 </span>-- little-endian version:
-<span class="lineno">  169 </span>-- get_bv _ _ x i = testBit (unsigned x) (fromEnum i)
-<span class="lineno">  170 </span>
-<span class="lineno">  171 </span>-- | @at@ specialized to BitVector (big-endian)
-<span class="lineno">  172 </span>-- at :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Nat -&gt; a;
-<span class="lineno">  173 </span>at_bv :: Int -&gt; () -&gt; BitVector -&gt; Natural -&gt; Bool
-<span class="lineno">  174 </span><span class="decl"><span class="nottickedoff">at_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromIntegral i)</span></span>
-<span class="lineno">  175 </span>
-<span class="lineno">  176 </span>-- | @set@ specialized to BitVector (big-endian)
-<span class="lineno">  177 </span>-- set :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Fin n -&gt; a -&gt; Vec n a;
-<span class="lineno">  178 </span>--set_bv :: Int -&gt; () -&gt; BitVector -&gt; Fin -&gt; Bool -&gt; BitVector
-<span class="lineno">  179 </span>--set_bv _ _ x i b = BV (width x) $ f (unsigned x) (width x - 1 - fromEnum i)
-<span class="lineno">  180 </span>--  where f = if b then setBit else clearBit
-<span class="lineno">  181 </span>
-<span class="lineno">  182 </span>-- | @append@ specialized to BitVector (big-endian)
-<span class="lineno">  183 </span>-- append :: (m n :: Nat) -&gt; (a :: sort 0) -&gt; Vec m a -&gt; Vec n a -&gt; Vec (addNat m n) a;
-<span class="lineno">  184 </span>append_bv :: Int -&gt; Int -&gt; () -&gt; BitVector -&gt; BitVector -&gt; BitVector
-<span class="lineno">  185 </span><span class="decl"><span class="nottickedoff">append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (shiftL x n .|. y)</span></span>
-<span class="lineno">  186 </span>-- little-endian version:
-<span class="lineno">  187 </span>-- append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (x .|. shiftL y m)
-<span class="lineno">  188 </span>
-<span class="lineno">  189 </span>-- bvToNat : (n : Nat) -&gt; Vec n Bool -&gt; Nat;
-<span class="lineno">  190 </span>bvToNat :: Int -&gt; BitVector -&gt; Integer
-<span class="lineno">  191 </span><span class="decl"><span class="istickedoff">bvToNat _ (BV _ x) = x</span></span>
-<span class="lineno">  192 </span>
-<span class="lineno">  193 </span>-- bvAddWithCarry : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Bool * Vec n Bool;
-<span class="lineno">  194 </span>bvAddWithCarry :: Int -&gt; BitVector -&gt; BitVector -&gt; (Bool, BitVector)
-<span class="lineno">  195 </span><span class="decl"><span class="nottickedoff">bvAddWithCarry _ (BV w x) (BV _ y) = (testBit z w, bv w z)</span>
-<span class="lineno">  196 </span><span class="spaces">    </span><span class="nottickedoff">where z = x + y</span></span>
-<span class="lineno">  197 </span>
-<span class="lineno">  198 </span>bvUDiv :: Int -&gt; BitVector -&gt; BitVector -&gt; Maybe BitVector
-<span class="lineno">  199 </span><span class="decl"><span class="istickedoff">bvUDiv _ (BV w x) (BV _ y)</span>
-<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">y == 0</span>    = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Just (bv w (x `quot` y))</span></span>
-<span class="lineno">  202 </span>
-<span class="lineno">  203 </span>bvURem :: Int -&gt; BitVector -&gt; BitVector -&gt; Maybe BitVector
-<span class="lineno">  204 </span><span class="decl"><span class="nottickedoff">bvURem _ (BV w x) (BV _ y)</span>
-<span class="lineno">  205 </span><span class="spaces">  </span><span class="nottickedoff">| y == 0    = Nothing</span>
-<span class="lineno">  206 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Just (bv w (x `rem` y))</span></span>
-<span class="lineno">  207 </span>
-<span class="lineno">  208 </span>bvSDiv :: Int -&gt; BitVector -&gt; BitVector -&gt; Maybe BitVector
-<span class="lineno">  209 </span><span class="decl"><span class="nottickedoff">bvSDiv _ x y</span>
-<span class="lineno">  210 </span><span class="spaces">  </span><span class="nottickedoff">| unsigned y == 0 = Nothing</span>
-<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise       = Just (bv (width x) (signed x `quot` signed y))</span></span>
-<span class="lineno">  212 </span>
-<span class="lineno">  213 </span>bvSRem :: Int -&gt; BitVector -&gt; BitVector -&gt; Maybe BitVector
-<span class="lineno">  214 </span><span class="decl"><span class="nottickedoff">bvSRem _ x y</span>
-<span class="lineno">  215 </span><span class="spaces">  </span><span class="nottickedoff">| unsigned y == 0 = Nothing</span>
-<span class="lineno">  216 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise       = Just (bv (width x) (signed x `rem` signed y))</span></span>
-<span class="lineno">  217 </span>
-<span class="lineno">  218 </span>bvShl :: Int -&gt; BitVector -&gt; Int -&gt; BitVector
-<span class="lineno">  219 </span><span class="decl"><span class="nottickedoff">bvShl _ (BV w x) i = bv w (x `shiftL` i)</span></span>
-<span class="lineno">  220 </span>
-<span class="lineno">  221 </span>bvShr :: Int -&gt; BitVector -&gt; Int -&gt; BitVector
-<span class="lineno">  222 </span><span class="decl"><span class="nottickedoff">bvShr _ (BV w x) i = bv w (x `shiftR` i)</span></span>
-<span class="lineno">  223 </span>
-<span class="lineno">  224 </span>bvSShr :: Int -&gt; BitVector -&gt; Int -&gt; BitVector
-<span class="lineno">  225 </span><span class="decl"><span class="nottickedoff">bvSShr _ x i = bv (width x) (signed x `shiftR` i)</span></span>
-<span class="lineno">  226 </span>
-<span class="lineno">  227 </span>-- bvTrunc : (m n : Nat) -&gt; Vec (addNat m n) Bool -&gt; Vec n Bool;
-<span class="lineno">  228 </span>bvTrunc :: Int -&gt; Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  229 </span><span class="decl"><span class="istickedoff">bvTrunc _ n (BV _ x) = bv n x</span></span>
-<span class="lineno">  230 </span>
-<span class="lineno">  231 </span>-- bvUExt : (m n : Nat) -&gt; Vec n Bool -&gt; Vec (addNat m n) Bool;
-<span class="lineno">  232 </span>bvUExt :: Int -&gt; Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  233 </span><span class="decl"><span class="nottickedoff">bvUExt m n x = BV (m + n) (unsigned x)</span></span>
-<span class="lineno">  234 </span>
-<span class="lineno">  235 </span>-- bvSExt : (m n : Nat) -&gt; Vec (Succ n) Bool -&gt; Vec (addNat m (Succ n)) Bool;
-<span class="lineno">  236 </span>bvSExt :: Int -&gt; Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  237 </span><span class="decl"><span class="nottickedoff">bvSExt m n x = bv (m + n + 1) (signed x)</span></span>
-<span class="lineno">  238 </span>
-<span class="lineno">  239 </span>-- | @take@ specialized to BitVector (big-endian)
-<span class="lineno">  240 </span>-- take :: (a :: sort 0) -&gt; (m n :: Nat) -&gt; Vec (addNat m n) a -&gt; Vec m a;
-<span class="lineno">  241 </span>take_bv :: () -&gt; Int -&gt; Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  242 </span><span class="decl"><span class="nottickedoff">take_bv _ m n (BV _ x) = bv m (x `shiftR` n)</span></span>
-<span class="lineno">  243 </span>-- little-endian version:
-<span class="lineno">  244 </span>-- take_bv _ m _ (BV _ x) = bv m x
-<span class="lineno">  245 </span>
-<span class="lineno">  246 </span>-- | @vDrop@ specialized to BitVector (big-endian)
-<span class="lineno">  247 </span>-- drop :: (a :: sort 0) -&gt; (m n :: Nat) -&gt; Vec (addNat m n) a -&gt; Vec n a;
-<span class="lineno">  248 </span>drop_bv :: () -&gt; Int -&gt; Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  249 </span><span class="decl"><span class="nottickedoff">drop_bv _ _ n (BV _ x) = bv n x</span></span>
-<span class="lineno">  250 </span>-- little-endian version:
-<span class="lineno">  251 </span>-- drop_bv _ m n (BV _ x) = BV n (x `shiftR` m)
-<span class="lineno">  252 </span>
-<span class="lineno">  253 </span>-- | @slice@ specialized to BitVector
-<span class="lineno">  254 </span>slice_bv :: () -&gt; Int -&gt; Int -&gt; Int -&gt; BitVector -&gt; BitVector
-<span class="lineno">  255 </span><span class="decl"><span class="nottickedoff">slice_bv _ _ n o (BV _ x) = bv n (shiftR x o)</span></span>
-<span class="lineno">  256 </span>-- little-endian version:
-<span class="lineno">  257 </span>-- slice_bv _ i n _ (BV _ x) = bv n (shiftR x i)
-<span class="lineno">  258 </span>
-<span class="lineno">  259 </span>------------------------------------------------------------
-<span class="lineno">  260 </span>-- Base 2 logarithm
-<span class="lineno">  261 </span>
-<span class="lineno">  262 </span>bvLg2 :: BitVector -&gt; BitVector
-<span class="lineno">  263 </span><span class="decl"><span class="nottickedoff">bvLg2 (BV m x) = BV m (if d &gt; 0 then k+1 else k)</span>
-<span class="lineno">  264 </span><span class="spaces">  </span><span class="nottickedoff">where (k, d) = lg2rem x</span></span>
-<span class="lineno">  265 </span>
-<span class="lineno">  266 </span>-- | lg2rem n = (k, d) &lt;--&gt; n = 2^k + d, with d &lt; 2^k.
-<span class="lineno">  267 </span>lg2rem :: Integer -&gt; (Integer, Integer)
-<span class="lineno">  268 </span><span class="decl"><span class="nottickedoff">lg2rem 0 = (0, -1)</span>
-<span class="lineno">  269 </span><span class="spaces"></span><span class="nottickedoff">lg2rem 1 = (0, 0)</span>
-<span class="lineno">  270 </span><span class="spaces"></span><span class="nottickedoff">lg2rem n = (k+1, 2*d+r)</span>
-<span class="lineno">  271 </span><span class="spaces">  </span><span class="nottickedoff">where (q, r) = n `divMod` 2</span>
-<span class="lineno">  272 </span><span class="spaces">        </span><span class="nottickedoff">(k, d) = lg2rem q</span></span>
-<span class="lineno">  273 </span>
-<span class="lineno">  274 </span>------------------------------------------------------------
-<span class="lineno">  275 </span>-- BitVector shift/rotate
-<span class="lineno">  276 </span>
-<span class="lineno">  277 </span>bvRotateL :: BitVector -&gt; Integer -&gt; BitVector
-<span class="lineno">  278 </span><span class="decl"><span class="nottickedoff">bvRotateL (BV w x) i = bv w ((x `shiftL` j) .|. (x `shiftR` (w - j)))</span>
-<span class="lineno">  279 </span><span class="spaces">  </span><span class="nottickedoff">where j = fromInteger (i `mod` toInteger w)</span></span>
-<span class="lineno">  280 </span>
-<span class="lineno">  281 </span>bvRotateR :: BitVector -&gt; Integer -&gt; BitVector
-<span class="lineno">  282 </span><span class="decl"><span class="nottickedoff">bvRotateR w i = bvRotateL w (- i)</span></span>
-<span class="lineno">  283 </span>
-<span class="lineno">  284 </span>bvShiftL ::
-<span class="lineno">  285 </span>  Bool {- ^ bit value to shift in -} -&gt;
-<span class="lineno">  286 </span>  BitVector {- ^ value to shift -} -&gt;
-<span class="lineno">  287 </span>  Integer {- ^ amount to shift by -} -&gt;
-<span class="lineno">  288 </span>  BitVector
-<span class="lineno">  289 </span><span class="decl"><span class="nottickedoff">bvShiftL c (BV w x) i = bv w ((x `shiftL` j) .|. c')</span>
-<span class="lineno">  290 </span><span class="spaces">  </span><span class="nottickedoff">where c' = if c then (1 `shiftL` j) - 1 else 0</span>
-<span class="lineno">  291 </span><span class="spaces">        </span><span class="nottickedoff">j = fromInteger (i `min` toInteger w)</span></span>
-<span class="lineno">  292 </span>
-<span class="lineno">  293 </span>bvShiftR ::
-<span class="lineno">  294 </span>  Bool {- ^ bit value to shift in -} -&gt;
-<span class="lineno">  295 </span>  BitVector {- ^ value to shift -} -&gt;
-<span class="lineno">  296 </span>  Integer {- ^ amount to shift by -} -&gt;
-<span class="lineno">  297 </span>  BitVector
-<span class="lineno">  298 </span><span class="decl"><span class="nottickedoff">bvShiftR c (BV w x) i = bv w (c' .|. (x `shiftR` j))</span>
-<span class="lineno">  299 </span><span class="spaces">  </span><span class="nottickedoff">where c' = if c then (full `shiftL` (w - j)) .&amp;. full else 0</span>
-<span class="lineno">  300 </span><span class="spaces">        </span><span class="nottickedoff">full = (1 `shiftL` w) - 1</span>
-<span class="lineno">  301 </span><span class="spaces">        </span><span class="nottickedoff">j = fromInteger (i `min` toInteger w)</span></span>
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>{- |
+<span class="lineno">    4 </span>Module      : SAWCore.Prim
+<span class="lineno">    5 </span>Copyright   : Galois, Inc. 2012-2015
+<span class="lineno">    6 </span>License     : BSD3
+<span class="lineno">    7 </span>Maintainer  : jhendrix@galois.com
+<span class="lineno">    8 </span>Stability   : experimental
+<span class="lineno">    9 </span>Portability : non-portable (language extensions)
+<span class="lineno">   10 </span>-}
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>module SAWCore.Prim where
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>import qualified Control.Exception as X
+<span class="lineno">   15 </span>import Data.Bits
+<span class="lineno">   16 </span>import Data.Typeable (Typeable)
+<span class="lineno">   17 </span>import Data.Vector (Vector)
+<span class="lineno">   18 </span>import qualified Data.Vector as V
+<span class="lineno">   19 </span>import Numeric.Natural (Natural)
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>------------------------------------------------------------
+<span class="lineno">   22 </span>-- Natural numbers
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>-- | width(n) = 1 + floor(log_2(n))
+<span class="lineno">   25 </span>widthNat :: Natural -&gt; Natural
+<span class="lineno">   26 </span><span class="decl"><span class="istickedoff">widthNat 0 = 0</span>
+<span class="lineno">   27 </span><span class="spaces"></span><span class="istickedoff">widthNat n = 1 + widthNat (n `div` 2)</span></span>
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>-- data Vec :: (n :: Nat) -&gt; sort 0 -&gt; sort 0
+<span class="lineno">   30 </span>data Vec t a = Vec t !(Vector a)
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>------------------------------------------------------------
+<span class="lineno">   33 </span>-- Unsigned, variable-width bit vectors
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>data BitVector = BV { <span class="istickedoff"><span class="decl"><span class="istickedoff">width</span></span></span> :: !Int, <span class="istickedoff"><span class="decl"><span class="istickedoff">unsigned</span></span></span> :: !Integer }
+<span class="lineno">   36 </span>    deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">   37 </span>-- ^ Invariant: BV w x requires that 0 &lt;= x &lt; 2^w.
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>bitMask :: Int -&gt; Integer
+<span class="lineno">   40 </span><span class="decl"><span class="istickedoff">bitMask w = bit w - 1</span></span>
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>-- | Smart constructor for bitvectors.
+<span class="lineno">   43 </span>bv :: Int -&gt; Integer -&gt; BitVector
+<span class="lineno">   44 </span><span class="decl"><span class="istickedoff">bv w x = BV w (x .&amp;. bitMask w)</span></span>
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>signed :: BitVector -&gt; Integer
+<span class="lineno">   47 </span><span class="decl"><span class="istickedoff">signed (BV w x)</span>
+<span class="lineno">   48 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">w &gt; 0 &amp;&amp; testBit x (w - 1)</span> = x - bit w</span>
+<span class="lineno">   49 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>                  = <span class="nottickedoff">x</span></span></span>
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>bvAt :: BitVector -&gt; Int -&gt; Bool
+<span class="lineno">   52 </span><span class="decl"><span class="istickedoff">bvAt (BV w x) i = testBit x (w - 1 - i)</span></span>
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>-- | Conversion from list of bits to integer (big-endian)
+<span class="lineno">   55 </span>bvToInteger :: Vector Bool -&gt; Integer
+<span class="lineno">   56 </span><span class="decl"><span class="istickedoff">bvToInteger = V.foldl' (\x b -&gt; if b then 2*x+1 else 2*x) 0</span></span>
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>unpackBitVector :: BitVector -&gt; Vector Bool
+<span class="lineno">   59 </span><span class="decl"><span class="nottickedoff">unpackBitVector x = V.generate (width x) (bvAt x)</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>packBitVector :: Vector Bool -&gt; BitVector
+<span class="lineno">   62 </span><span class="decl"><span class="istickedoff">packBitVector v = BV (V.length v) (bvToInteger v)</span></span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>------------------------------------------------------------
+<span class="lineno">   65 </span>-- Primitive operations
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>-- coerce :: (y x :: sort 0) -&gt; Eq (sort 0) x y -&gt; x -&gt; y;
+<span class="lineno">   68 </span>coerce :: () -&gt; () -&gt; () -&gt; a -&gt; a
+<span class="lineno">   69 </span><span class="decl"><span class="nottickedoff">coerce _ _ _ x = x</span></span>
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>-- ite :: ?(a :: sort 1) -&gt; Bool -&gt; a -&gt; a -&gt; a;
+<span class="lineno">   72 </span>ite :: t -&gt; Bool -&gt; a -&gt; a -&gt; a
+<span class="lineno">   73 </span><span class="decl"><span class="nottickedoff">ite _ b x y = if b then x else y</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>-- Succ :: Nat -&gt; Nat;
+<span class="lineno">   76 </span>succNat :: Integer -&gt; Integer
+<span class="lineno">   77 </span><span class="decl"><span class="nottickedoff">succNat = succ</span></span>
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>-- addNat :: Nat -&gt; Nat -&gt; Nat;
+<span class="lineno">   80 </span>addNat :: Integer -&gt; Integer -&gt; Integer
+<span class="lineno">   81 </span><span class="decl"><span class="nottickedoff">addNat = (+)</span></span>
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>-- get :: (n :: Nat) -&gt; (e :: sort 0) -&gt; Vec n e -&gt; Fin n -&gt; e;
+<span class="lineno">   84 </span>--get :: Int -&gt; t -&gt; Vec t e -&gt; Fin -&gt; e
+<span class="lineno">   85 </span>--get _ _ (Vec _ v) i = v ! fromEnum i
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>-- append :: (m n :: Nat) -&gt; (e :: sort 0) -&gt; Vec m e -&gt; Vec n e -&gt; Vec (addNat m n) e;
+<span class="lineno">   88 </span>append :: Int -&gt; Int -&gt; t -&gt; Vec t e -&gt; Vec t e -&gt; Vec t e
+<span class="lineno">   89 </span><span class="decl"><span class="nottickedoff">append _ _ _ (Vec t xv) (Vec _ yv) = Vec t ((V.++) xv yv)</span></span>
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>-- at :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Nat -&gt; a;
+<span class="lineno">   92 </span>at :: Int -&gt; t -&gt; Vec t e -&gt; Int -&gt; e
+<span class="lineno">   93 </span><span class="decl"><span class="istickedoff">at _ _ (Vec _ v) i = v ! i</span></span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>-- atWithDefault :: (n :: Nat) -&gt; (a :: sort 0) -&gt; a -&gt; Vec n a -&gt; Nat -&gt; a;
+<span class="lineno">   96 </span>atWithDefault :: Int -&gt; t -&gt; e -&gt; Vec t e -&gt; Int -&gt; e
+<span class="lineno">   97 </span><span class="decl"><span class="nottickedoff">atWithDefault _ _ z (Vec _ v) i</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="nottickedoff">| i &lt; V.length v = v ! i</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = z</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>-- upd :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Nat -&gt; a -&gt; Vec n a;
+<span class="lineno">  102 </span>upd :: Int -&gt; t -&gt; Vec t e -&gt; Int -&gt; e -&gt; Vec t e
+<span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">upd _ _ (Vec t v) i e = Vec t (v V.// [(i, e)])</span></span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>(!) :: Vector a -&gt; Int -&gt; a
+<span class="lineno">  106 </span><span class="decl"><span class="istickedoff">(!) v i = case v V.!? i of</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="istickedoff">Just x -&gt; x</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">invalidIndex (toInteger i)</span></span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>----------------------------------------
+<span class="lineno">  111 </span>-- Bitvector operations
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>-- bvNat : (n : Nat) -&gt; Nat -&gt; Vec n Bool;
+<span class="lineno">  114 </span>bvNat :: Int -&gt; Integer -&gt; BitVector
+<span class="lineno">  115 </span><span class="decl"><span class="nottickedoff">bvNat w x = bv w x</span></span>
+<span class="lineno">  116 </span>
+<span class="lineno">  117 </span>-- bvAdd : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Vec n Bool;
+<span class="lineno">  118 </span>bvAdd, bvSub, bvMul :: Natural -&gt; BitVector -&gt; BitVector -&gt; BitVector
+<span class="lineno">  119 </span><span class="decl"><span class="istickedoff">bvAdd _ (BV w x) (BV _ y) = bv w (x + y)</span></span>
+<span class="lineno">  120 </span><span class="decl"><span class="istickedoff">bvSub _ (BV w x) (BV _ y) = bv w (x - y)</span></span>
+<span class="lineno">  121 </span><span class="decl"><span class="istickedoff">bvMul _ (BV w x) (BV _ y) = bv w (x * y)</span></span>
+<span class="lineno">  122 </span>
+<span class="lineno">  123 </span>bvNeg :: Natural -&gt; BitVector -&gt; BitVector
+<span class="lineno">  124 </span><span class="decl"><span class="istickedoff">bvNeg _ x@(BV w _) = bv w $ negate $ signed x</span></span>
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>bvAnd, bvOr, bvXor :: Int -&gt; BitVector -&gt; BitVector -&gt; BitVector
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">bvAnd _ (BV w x) (BV _ y) = BV w (x .&amp;. y)</span></span>
+<span class="lineno">  128 </span><span class="decl"><span class="nottickedoff">bvOr  _ (BV w x) (BV _ y) = BV w (x .|. y)</span></span>
+<span class="lineno">  129 </span><span class="decl"><span class="nottickedoff">bvXor _ (BV w x) (BV _ y) = BV w (x `xor` y)</span></span>
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>bvNot :: Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">bvNot _ (BV w x) = BV w (x `xor` bitMask w)</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>bvEq, bvult, bvule, bvugt, bvuge, bvsgt, bvsge, bvslt, bvsle
+<span class="lineno">  135 </span>    :: Int -&gt; BitVector -&gt; BitVector -&gt; Bool
+<span class="lineno">  136 </span><span class="decl"><span class="istickedoff">bvEq  _ x y = unsigned x == unsigned y</span></span>
+<span class="lineno">  137 </span><span class="decl"><span class="nottickedoff">bvugt _ x y = unsigned x &gt;  unsigned y</span></span>
+<span class="lineno">  138 </span><span class="decl"><span class="nottickedoff">bvuge _ x y = unsigned x &gt;= unsigned y</span></span>
+<span class="lineno">  139 </span><span class="decl"><span class="istickedoff">bvult _ x y = unsigned x &lt;  unsigned y</span></span>
+<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">bvule _ x y = unsigned x &lt;= unsigned y</span></span>
+<span class="lineno">  141 </span><span class="decl"><span class="nottickedoff">bvsgt _ x y = signed x &gt;  signed y</span></span>
+<span class="lineno">  142 </span><span class="decl"><span class="nottickedoff">bvsge _ x y = signed x &gt;= signed y</span></span>
+<span class="lineno">  143 </span><span class="decl"><span class="nottickedoff">bvslt _ x y = signed x &lt;  signed y</span></span>
+<span class="lineno">  144 </span><span class="decl"><span class="nottickedoff">bvsle _ x y = signed x &lt;= signed y</span></span>
+<span class="lineno">  145 </span>
+<span class="lineno">  146 </span>bvPopcount :: Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  147 </span><span class="decl"><span class="nottickedoff">bvPopcount _ (BV w x) = BV w (toInteger (popCount x))</span></span>
+<span class="lineno">  148 </span>
+<span class="lineno">  149 </span>bvCountLeadingZeros :: Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  150 </span><span class="decl"><span class="nottickedoff">bvCountLeadingZeros _ (BV w x) = BV w (toInteger (go 0))</span>
+<span class="lineno">  151 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
+<span class="lineno">  152 </span><span class="spaces"> </span><span class="nottickedoff">go !i</span>
+<span class="lineno">  153 </span><span class="spaces">   </span><span class="nottickedoff">| i &lt; w &amp;&amp; testBit x (w - i - 1) == False = go (i+1)</span>
+<span class="lineno">  154 </span><span class="spaces">   </span><span class="nottickedoff">| otherwise = i</span></span>
+<span class="lineno">  155 </span>
+<span class="lineno">  156 </span>bvCountTrailingZeros :: Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  157 </span><span class="decl"><span class="nottickedoff">bvCountTrailingZeros _ (BV w x) = BV w (toInteger (go 0))</span>
+<span class="lineno">  158 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
+<span class="lineno">  159 </span><span class="spaces"> </span><span class="nottickedoff">go !i</span>
+<span class="lineno">  160 </span><span class="spaces">   </span><span class="nottickedoff">| i &lt; w &amp;&amp; testBit x i == False = go (i+1)</span>
+<span class="lineno">  161 </span><span class="spaces">   </span><span class="nottickedoff">| otherwise = i</span></span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>-- | @get@ specialized to BitVector (big-endian)
+<span class="lineno">  164 </span>-- get :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Fin n -&gt; a;
+<span class="lineno">  165 </span>--get_bv :: Int -&gt; () -&gt; BitVector -&gt; Fin -&gt; Bool
+<span class="lineno">  166 </span>--get_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromEnum i)
+<span class="lineno">  167 </span>-- little-endian version:
+<span class="lineno">  168 </span>-- get_bv _ _ x i = testBit (unsigned x) (fromEnum i)
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>-- | @at@ specialized to BitVector (big-endian)
+<span class="lineno">  171 </span>-- at :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Nat -&gt; a;
+<span class="lineno">  172 </span>at_bv :: Int -&gt; () -&gt; BitVector -&gt; Natural -&gt; Bool
+<span class="lineno">  173 </span><span class="decl"><span class="nottickedoff">at_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromIntegral i)</span></span>
+<span class="lineno">  174 </span>
+<span class="lineno">  175 </span>-- | @set@ specialized to BitVector (big-endian)
+<span class="lineno">  176 </span>-- set :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Fin n -&gt; a -&gt; Vec n a;
+<span class="lineno">  177 </span>--set_bv :: Int -&gt; () -&gt; BitVector -&gt; Fin -&gt; Bool -&gt; BitVector
+<span class="lineno">  178 </span>--set_bv _ _ x i b = BV (width x) $ f (unsigned x) (width x - 1 - fromEnum i)
+<span class="lineno">  179 </span>--  where f = if b then setBit else clearBit
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>-- | @append@ specialized to BitVector (big-endian)
+<span class="lineno">  182 </span>-- append :: (m n :: Nat) -&gt; (a :: sort 0) -&gt; Vec m a -&gt; Vec n a -&gt; Vec (addNat m n) a;
+<span class="lineno">  183 </span>append_bv :: Int -&gt; Int -&gt; () -&gt; BitVector -&gt; BitVector -&gt; BitVector
+<span class="lineno">  184 </span><span class="decl"><span class="nottickedoff">append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (shiftL x n .|. y)</span></span>
+<span class="lineno">  185 </span>-- little-endian version:
+<span class="lineno">  186 </span>-- append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (x .|. shiftL y m)
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>-- bvToNat : (n : Nat) -&gt; Vec n Bool -&gt; Nat;
+<span class="lineno">  189 </span>bvToNat :: Int -&gt; BitVector -&gt; Integer
+<span class="lineno">  190 </span><span class="decl"><span class="istickedoff">bvToNat _ (BV _ x) = x</span></span>
+<span class="lineno">  191 </span>
+<span class="lineno">  192 </span>-- bvAddWithCarry : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Bool * Vec n Bool;
+<span class="lineno">  193 </span>bvAddWithCarry :: Int -&gt; BitVector -&gt; BitVector -&gt; (Bool, BitVector)
+<span class="lineno">  194 </span><span class="decl"><span class="nottickedoff">bvAddWithCarry _ (BV w x) (BV _ y) = (testBit z w, bv w z)</span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="nottickedoff">where z = x + y</span></span>
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>bvUDiv :: Int -&gt; BitVector -&gt; BitVector -&gt; Maybe BitVector
+<span class="lineno">  198 </span><span class="decl"><span class="istickedoff">bvUDiv _ (BV w x) (BV _ y)</span>
+<span class="lineno">  199 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">y == 0</span>    = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Just (bv w (x `quot` y))</span></span>
+<span class="lineno">  201 </span>
+<span class="lineno">  202 </span>bvURem :: Int -&gt; BitVector -&gt; BitVector -&gt; Maybe BitVector
+<span class="lineno">  203 </span><span class="decl"><span class="nottickedoff">bvURem _ (BV w x) (BV _ y)</span>
+<span class="lineno">  204 </span><span class="spaces">  </span><span class="nottickedoff">| y == 0    = Nothing</span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Just (bv w (x `rem` y))</span></span>
+<span class="lineno">  206 </span>
+<span class="lineno">  207 </span>bvSDiv :: Int -&gt; BitVector -&gt; BitVector -&gt; Maybe BitVector
+<span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">bvSDiv _ x y</span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="nottickedoff">| unsigned y == 0 = Nothing</span>
+<span class="lineno">  210 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise       = Just (bv (width x) (signed x `quot` signed y))</span></span>
+<span class="lineno">  211 </span>
+<span class="lineno">  212 </span>bvSRem :: Int -&gt; BitVector -&gt; BitVector -&gt; Maybe BitVector
+<span class="lineno">  213 </span><span class="decl"><span class="nottickedoff">bvSRem _ x y</span>
+<span class="lineno">  214 </span><span class="spaces">  </span><span class="nottickedoff">| unsigned y == 0 = Nothing</span>
+<span class="lineno">  215 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise       = Just (bv (width x) (signed x `rem` signed y))</span></span>
+<span class="lineno">  216 </span>
+<span class="lineno">  217 </span>bvShl :: Int -&gt; BitVector -&gt; Int -&gt; BitVector
+<span class="lineno">  218 </span><span class="decl"><span class="nottickedoff">bvShl _ (BV w x) i = bv w (x `shiftL` i)</span></span>
+<span class="lineno">  219 </span>
+<span class="lineno">  220 </span>bvShr :: Int -&gt; BitVector -&gt; Int -&gt; BitVector
+<span class="lineno">  221 </span><span class="decl"><span class="nottickedoff">bvShr _ (BV w x) i = bv w (x `shiftR` i)</span></span>
+<span class="lineno">  222 </span>
+<span class="lineno">  223 </span>bvSShr :: Int -&gt; BitVector -&gt; Int -&gt; BitVector
+<span class="lineno">  224 </span><span class="decl"><span class="nottickedoff">bvSShr _ x i = bv (width x) (signed x `shiftR` i)</span></span>
+<span class="lineno">  225 </span>
+<span class="lineno">  226 </span>-- bvTrunc : (m n : Nat) -&gt; Vec (addNat m n) Bool -&gt; Vec n Bool;
+<span class="lineno">  227 </span>bvTrunc :: Int -&gt; Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  228 </span><span class="decl"><span class="istickedoff">bvTrunc _ n (BV _ x) = bv n x</span></span>
+<span class="lineno">  229 </span>
+<span class="lineno">  230 </span>-- bvUExt : (m n : Nat) -&gt; Vec n Bool -&gt; Vec (addNat m n) Bool;
+<span class="lineno">  231 </span>bvUExt :: Int -&gt; Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  232 </span><span class="decl"><span class="nottickedoff">bvUExt m n x = BV (m + n) (unsigned x)</span></span>
+<span class="lineno">  233 </span>
+<span class="lineno">  234 </span>-- bvSExt : (m n : Nat) -&gt; Vec (Succ n) Bool -&gt; Vec (addNat m (Succ n)) Bool;
+<span class="lineno">  235 </span>bvSExt :: Int -&gt; Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  236 </span><span class="decl"><span class="nottickedoff">bvSExt m n x = bv (m + n + 1) (signed x)</span></span>
+<span class="lineno">  237 </span>
+<span class="lineno">  238 </span>-- | @take@ specialized to BitVector (big-endian)
+<span class="lineno">  239 </span>-- take :: (a :: sort 0) -&gt; (m n :: Nat) -&gt; Vec (addNat m n) a -&gt; Vec m a;
+<span class="lineno">  240 </span>take_bv :: () -&gt; Int -&gt; Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  241 </span><span class="decl"><span class="nottickedoff">take_bv _ m n (BV _ x) = bv m (x `shiftR` n)</span></span>
+<span class="lineno">  242 </span>-- little-endian version:
+<span class="lineno">  243 </span>-- take_bv _ m _ (BV _ x) = bv m x
+<span class="lineno">  244 </span>
+<span class="lineno">  245 </span>-- | @vDrop@ specialized to BitVector (big-endian)
+<span class="lineno">  246 </span>-- drop :: (a :: sort 0) -&gt; (m n :: Nat) -&gt; Vec (addNat m n) a -&gt; Vec n a;
+<span class="lineno">  247 </span>drop_bv :: () -&gt; Int -&gt; Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  248 </span><span class="decl"><span class="nottickedoff">drop_bv _ _ n (BV _ x) = bv n x</span></span>
+<span class="lineno">  249 </span>-- little-endian version:
+<span class="lineno">  250 </span>-- drop_bv _ m n (BV _ x) = BV n (x `shiftR` m)
+<span class="lineno">  251 </span>
+<span class="lineno">  252 </span>-- | @slice@ specialized to BitVector
+<span class="lineno">  253 </span>slice_bv :: () -&gt; Int -&gt; Int -&gt; Int -&gt; BitVector -&gt; BitVector
+<span class="lineno">  254 </span><span class="decl"><span class="nottickedoff">slice_bv _ _ n o (BV _ x) = bv n (shiftR x o)</span></span>
+<span class="lineno">  255 </span>-- little-endian version:
+<span class="lineno">  256 </span>-- slice_bv _ i n _ (BV _ x) = bv n (shiftR x i)
+<span class="lineno">  257 </span>
+<span class="lineno">  258 </span>------------------------------------------------------------
+<span class="lineno">  259 </span>-- Base 2 logarithm
+<span class="lineno">  260 </span>
+<span class="lineno">  261 </span>bvLg2 :: BitVector -&gt; BitVector
+<span class="lineno">  262 </span><span class="decl"><span class="nottickedoff">bvLg2 (BV m x) = BV m (if d &gt; 0 then k+1 else k)</span>
+<span class="lineno">  263 </span><span class="spaces">  </span><span class="nottickedoff">where (k, d) = lg2rem x</span></span>
+<span class="lineno">  264 </span>
+<span class="lineno">  265 </span>-- | lg2rem n = (k, d) &lt;--&gt; n = 2^k + d, with d &lt; 2^k.
+<span class="lineno">  266 </span>lg2rem :: Integer -&gt; (Integer, Integer)
+<span class="lineno">  267 </span><span class="decl"><span class="nottickedoff">lg2rem 0 = (0, -1)</span>
+<span class="lineno">  268 </span><span class="spaces"></span><span class="nottickedoff">lg2rem 1 = (0, 0)</span>
+<span class="lineno">  269 </span><span class="spaces"></span><span class="nottickedoff">lg2rem n = (k+1, 2*d+r)</span>
+<span class="lineno">  270 </span><span class="spaces">  </span><span class="nottickedoff">where (q, r) = n `divMod` 2</span>
+<span class="lineno">  271 </span><span class="spaces">        </span><span class="nottickedoff">(k, d) = lg2rem q</span></span>
+<span class="lineno">  272 </span>
+<span class="lineno">  273 </span>------------------------------------------------------------
+<span class="lineno">  274 </span>-- BitVector shift/rotate
+<span class="lineno">  275 </span>
+<span class="lineno">  276 </span>bvRotateL :: BitVector -&gt; Integer -&gt; BitVector
+<span class="lineno">  277 </span><span class="decl"><span class="nottickedoff">bvRotateL (BV w x) i = bv w ((x `shiftL` j) .|. (x `shiftR` (w - j)))</span>
+<span class="lineno">  278 </span><span class="spaces">  </span><span class="nottickedoff">where j = fromInteger (i `mod` toInteger w)</span></span>
+<span class="lineno">  279 </span>
+<span class="lineno">  280 </span>bvRotateR :: BitVector -&gt; Integer -&gt; BitVector
+<span class="lineno">  281 </span><span class="decl"><span class="nottickedoff">bvRotateR w i = bvRotateL w (- i)</span></span>
+<span class="lineno">  282 </span>
+<span class="lineno">  283 </span>bvShiftL ::
+<span class="lineno">  284 </span>  Bool {- ^ bit value to shift in -} -&gt;
+<span class="lineno">  285 </span>  BitVector {- ^ value to shift -} -&gt;
+<span class="lineno">  286 </span>  Integer {- ^ amount to shift by -} -&gt;
+<span class="lineno">  287 </span>  BitVector
+<span class="lineno">  288 </span><span class="decl"><span class="nottickedoff">bvShiftL c (BV w x) i = bv w ((x `shiftL` j) .|. c')</span>
+<span class="lineno">  289 </span><span class="spaces">  </span><span class="nottickedoff">where c' = if c then (1 `shiftL` j) - 1 else 0</span>
+<span class="lineno">  290 </span><span class="spaces">        </span><span class="nottickedoff">j = fromInteger (i `min` toInteger w)</span></span>
+<span class="lineno">  291 </span>
+<span class="lineno">  292 </span>bvShiftR ::
+<span class="lineno">  293 </span>  Bool {- ^ bit value to shift in -} -&gt;
+<span class="lineno">  294 </span>  BitVector {- ^ value to shift -} -&gt;
+<span class="lineno">  295 </span>  Integer {- ^ amount to shift by -} -&gt;
+<span class="lineno">  296 </span>  BitVector
+<span class="lineno">  297 </span><span class="decl"><span class="nottickedoff">bvShiftR c (BV w x) i = bv w (c' .|. (x `shiftR` j))</span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="nottickedoff">where c' = if c then (full `shiftL` (w - j)) .&amp;. full else 0</span>
+<span class="lineno">  299 </span><span class="spaces">        </span><span class="nottickedoff">full = (1 `shiftL` w) - 1</span>
+<span class="lineno">  300 </span><span class="spaces">        </span><span class="nottickedoff">j = fromInteger (i `min` toInteger w)</span></span>
+<span class="lineno">  301 </span>
 <span class="lineno">  302 </span>
-<span class="lineno">  303 </span>
-<span class="lineno">  304 </span>----------------------------------------
-<span class="lineno">  305 </span>-- Errors
-<span class="lineno">  306 </span>
-<span class="lineno">  307 </span>data EvalError
-<span class="lineno">  308 </span>  = InvalidIndex Integer
-<span class="lineno">  309 </span>  | DivideByZero
-<span class="lineno">  310 </span>  | UnsupportedPrimitive String String
-<span class="lineno">  311 </span>  | UserError String
-<span class="lineno">  312 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, Typeable)
-<span class="lineno">  313 </span>
-<span class="lineno">  314 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">X.Exception EvalError</span></span></span></span></span></span>
-<span class="lineno">  315 </span>
-<span class="lineno">  316 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show EvalError</span></span></span></span> where
-<span class="lineno">  317 </span>  <span class="decl"><span class="istickedoff">show e = case e of</span>
-<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">InvalidIndex i -&gt; <span class="nottickedoff">&quot;invalid sequence index: &quot; ++ show i</span></span>
-<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">DivideByZero -&gt; <span class="nottickedoff">&quot;division by 0&quot;</span></span>
-<span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">UnsupportedPrimitive b p -&gt; <span class="nottickedoff">&quot;unsupported primitive &quot; ++ p ++ &quot; in &quot; ++ b ++ &quot; backend&quot;</span></span>
-<span class="lineno">  321 </span><span class="spaces">    </span><span class="istickedoff">UserError msg -&gt; &quot;Run-time error: &quot; ++ msg</span></span>
-<span class="lineno">  322 </span>
-<span class="lineno">  323 </span>-- | A sequencing operation has gotten an invalid index.
-<span class="lineno">  324 </span>invalidIndex :: Integer -&gt; a
-<span class="lineno">  325 </span><span class="decl"><span class="nottickedoff">invalidIndex i = X.throw (InvalidIndex i)</span></span>
-<span class="lineno">  326 </span>
-<span class="lineno">  327 </span>-- | For division by 0.
-<span class="lineno">  328 </span>divideByZero :: a
-<span class="lineno">  329 </span><span class="decl"><span class="nottickedoff">divideByZero = X.throw DivideByZero</span></span>
-<span class="lineno">  330 </span>
-<span class="lineno">  331 </span>-- | A backend with a unsupported primitive.
-<span class="lineno">  332 </span>unsupportedPrimitive :: String -&gt; String -&gt; a
-<span class="lineno">  333 </span><span class="decl"><span class="nottickedoff">unsupportedPrimitive backend primitive =</span>
-<span class="lineno">  334 </span><span class="spaces">  </span><span class="nottickedoff">X.throw $ UnsupportedPrimitive backend primitive</span></span>
-<span class="lineno">  335 </span>
-<span class="lineno">  336 </span>-- | For `error`
-<span class="lineno">  337 </span>userError :: String -&gt; a
-<span class="lineno">  338 </span><span class="decl"><span class="istickedoff">userError msg = X.throw (UserError msg)</span></span>
-<span class="lineno">  339 </span>
-<span class="lineno">  340 </span>-- | Convert asynchronous EvalError exceptions into IO exceptions.
-<span class="lineno">  341 </span>rethrowEvalError :: IO a -&gt; IO a
-<span class="lineno">  342 </span><span class="decl"><span class="istickedoff">rethrowEvalError m = run `X.catch` <span class="nottickedoff">rethrow</span></span>
-<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  344 </span><span class="spaces">    </span><span class="istickedoff">run = do</span>
-<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">a &lt;- m</span>
-<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff">return $! a</span>
-<span class="lineno">  347 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff">rethrow :: EvalError -&gt; IO a</span>
-<span class="lineno">  349 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">rethrow exn = fail (show exn)</span></span></span> -- X.throwIO (EvalError exn)
+<span class="lineno">  303 </span>----------------------------------------
+<span class="lineno">  304 </span>-- Errors
+<span class="lineno">  305 </span>
+<span class="lineno">  306 </span>data EvalError
+<span class="lineno">  307 </span>  = InvalidIndex Integer
+<span class="lineno">  308 </span>  | DivideByZero
+<span class="lineno">  309 </span>  | UnsupportedPrimitive String String
+<span class="lineno">  310 </span>  | UserError String
+<span class="lineno">  311 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, Typeable)
+<span class="lineno">  312 </span>
+<span class="lineno">  313 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">X.Exception EvalError</span></span></span></span></span></span>
+<span class="lineno">  314 </span>
+<span class="lineno">  315 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show EvalError</span></span></span></span> where
+<span class="lineno">  316 </span>  <span class="decl"><span class="istickedoff">show e = case e of</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">InvalidIndex i -&gt; <span class="nottickedoff">&quot;invalid sequence index: &quot; ++ show i</span></span>
+<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">DivideByZero -&gt; <span class="nottickedoff">&quot;division by 0&quot;</span></span>
+<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">UnsupportedPrimitive b p -&gt; <span class="nottickedoff">&quot;unsupported primitive &quot; ++ p ++ &quot; in &quot; ++ b ++ &quot; backend&quot;</span></span>
+<span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">UserError msg -&gt; &quot;Run-time error: &quot; ++ msg</span></span>
+<span class="lineno">  321 </span>
+<span class="lineno">  322 </span>-- | A sequencing operation has gotten an invalid index.
+<span class="lineno">  323 </span>invalidIndex :: Integer -&gt; a
+<span class="lineno">  324 </span><span class="decl"><span class="nottickedoff">invalidIndex i = X.throw (InvalidIndex i)</span></span>
+<span class="lineno">  325 </span>
+<span class="lineno">  326 </span>-- | For division by 0.
+<span class="lineno">  327 </span>divideByZero :: a
+<span class="lineno">  328 </span><span class="decl"><span class="nottickedoff">divideByZero = X.throw DivideByZero</span></span>
+<span class="lineno">  329 </span>
+<span class="lineno">  330 </span>-- | A backend with a unsupported primitive.
+<span class="lineno">  331 </span>unsupportedPrimitive :: String -&gt; String -&gt; a
+<span class="lineno">  332 </span><span class="decl"><span class="nottickedoff">unsupportedPrimitive backend primitive =</span>
+<span class="lineno">  333 </span><span class="spaces">  </span><span class="nottickedoff">X.throw $ UnsupportedPrimitive backend primitive</span></span>
+<span class="lineno">  334 </span>
+<span class="lineno">  335 </span>-- | For `error`
+<span class="lineno">  336 </span>userError :: String -&gt; a
+<span class="lineno">  337 </span><span class="decl"><span class="istickedoff">userError msg = X.throw (UserError msg)</span></span>
+<span class="lineno">  338 </span>
+<span class="lineno">  339 </span>-- | Convert asynchronous EvalError exceptions into IO exceptions.
+<span class="lineno">  340 </span>rethrowEvalError :: IO a -&gt; IO a
+<span class="lineno">  341 </span><span class="decl"><span class="istickedoff">rethrowEvalError m = run `X.catch` <span class="nottickedoff">rethrow</span></span>
+<span class="lineno">  342 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  343 </span><span class="spaces">    </span><span class="istickedoff">run = do</span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">a &lt;- m</span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">return $! a</span>
+<span class="lineno">  346 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="istickedoff">rethrow :: EvalError -&gt; IO a</span>
+<span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">rethrow exn = fail (show exn)</span></span></span> -- X.throwIO (EvalError exn)
 
 </pre>
 </body>
