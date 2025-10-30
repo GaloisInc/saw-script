@@ -1,15 +1,1 @@
  Loading file "err034.saw"
- err034.saw:7:28-7:36: Type mismatch.
-    Mismatch of type constructors. Expected: <Block> but got Int
-    err034.saw:7:18-7:25: The type Int Int arises from this type annotation
-    err034.saw:7:35-7:36: The type Int arises from the type of this term
-
-    Expected: Int Int
-    Found:    Int
-
-    Expected: TopLevel (Int Int)
-    Found:    t.2 Int
-
-    within "x" (err034.saw:7:5-7:6)
-
-FAILED
