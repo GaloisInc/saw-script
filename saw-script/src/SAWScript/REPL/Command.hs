@@ -26,12 +26,11 @@ import qualified SAWSupport.ScopedMap as ScopedMap
 import qualified SAWSupport.Trie as Trie
 import SAWSupport.Trie (Trie)
 
-import SAWCentral.Position (getPos, Pos)
+import SAWCentral.Position (getPos)
 import SAWCentral.Value (Environ(..))
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Data
-import SAWScript.Token (Token)
 
 import Control.Monad (unless, void)
 import Control.Monad.IO.Class (liftIO)
@@ -52,7 +51,6 @@ import qualified Data.Text.IO as TextIO
 import qualified SAWSupport.Pretty as PPS (pShowText)
 
 -- SAWScript imports
-import qualified SAWCentral.Options (Verbosity(..))
 import qualified SAWCentral.Position as SS (Pos)
 import qualified SAWCentral.AST as SS (
      Name,
@@ -64,17 +62,23 @@ import qualified SAWCentral.AST as SS (
 import SAWCentral.Exceptions
 
 import SAWScript.Panic (panic)
+import qualified SAWScript.Import as Import
 import SAWScript.Typechecker (checkDecl, checkSchemaPattern)
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretTopStmt)
-import qualified SAWScript.Lexer (lexSAW)
-import qualified SAWScript.Parser (parseStmtSemi, parseExpression, parseSchemaPattern)
 import SAWCentral.TopLevel (TopLevelRW(..))
 import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable, Rebindable(..))
 
 
 ------------------------------------------------------------
 -- REPL commands
+
+failOn :: [Text] -> REPL a
+failOn errs = case (reverse errs) of
+    [] -> panic "failOn" ["Failure with no error messages"]
+    lastMsg : revRestMsgs -> do
+        liftIO $ mapM_ TextIO.putStrLn (reverse revRestMsgs)
+        fail (Text.unpack lastMsg)
 
 cdCmd :: FilePath -> REPL ()
 cdCmd f | null f = liftIO $ putStrLn $ "[error] :cd requires a path argument"
@@ -144,10 +148,10 @@ searchCmd :: Text -> REPL ()
 searchCmd str
   | Text.null str = liftIO $ putStrLn $ "[error] :search requires at least one argument"
   | otherwise =
-  do tokens <- lexSAW replFileName str
-     pat <- case SAWScript.Parser.parseSchemaPattern tokens of
-       Left err -> fail (show err)
-       Right pat -> return pat
+  do errs_or_pat <- liftIO $ Import.readSchemaPattern replFileName str
+     pat <- case errs_or_pat of
+           Left errs -> failOn errs
+           Right p -> return p
      rw <- getTopLevelRW
 
      -- Always search the entire environment and recognize all type
@@ -281,9 +285,9 @@ typeOfCmd :: Text -> REPL ()
 typeOfCmd str
   | Text.null str = liftIO $ putStrLn "[error] :type requires an argument"
   | otherwise =
-  do tokens <- lexSAW replFileName str
-     expr <- case SAWScript.Parser.parseExpression tokens of
-       Left err -> fail (show err)
+  do errs_or_expr <- liftIO $ Import.readExpression replFileName str
+     expr <- case errs_or_expr of
+       Left errs -> failOn errs
        Right expr -> return expr
      let pos = getPos expr
          decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
@@ -417,18 +421,6 @@ runCommand c = case c of
     TextIO.putStrLn ("\t" <> Text.intercalate ", " cmds)
 
 
-lexSAW :: FilePath -> Text.Text -> REPL [Token Pos]
-lexSAW fileName str = do
-  -- XXX wrap printing of positions in the message-printing infrastructure
-  case SAWScript.Lexer.lexSAW fileName str of
-    Left (_, pos, msg) ->
-         fail $ show pos ++ ": " ++ Text.unpack msg
-    Right (tokens', Nothing) -> pure tokens'
-    Right (_, Just (SAWCentral.Options.Error, pos, msg)) ->
-         fail $ show pos ++ ": " ++ Text.unpack msg
-    Right (tokens', Just _) -> pure tokens'
-
-
 {- Evaluation is fairly straightforward; however, there are a few important
 caveats:
 
@@ -451,9 +443,9 @@ caveats:
      we also hang onto the results and use them to seed the interpreter. -}
 sawScriptCmd :: Text -> REPL ()
 sawScriptCmd str = do
-  tokens <- lexSAW replFileName str
-  case SAWScript.Parser.parseStmtSemi tokens of
-    Left err -> liftIO $ print err
+  errs_or_stmt <- liftIO $ Import.readStmtSemi replFileName str
+  case errs_or_stmt of
+    Left errs -> failOn errs
     Right stmt ->
       do mpst <- getProofState
          case mpst of

@@ -7,8 +7,12 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 
-module SAWScript.Import
-  ( findAndLoadFile
+module SAWScript.Import (
+    readSchema,
+    readSchemaPattern,
+    readStmtSemi,
+    readExpression,
+    findAndLoadFile
   ) where
 
 import qualified Data.Text.IO as TextIO (readFile)
@@ -25,6 +29,75 @@ import SAWScript.Panic (panic)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
 import SAWScript.Token (Token)
+
+lexSAW' :: FilePath -> Text.Text -> IO [Token Pos]
+lexSAW' fileName str = do
+  -- XXX wrap printing of positions in the message-printing infrastructure
+  case lexSAW fileName str of
+    Left (_, pos, msg) ->
+         fail $ show pos ++ ": " ++ Text.unpack msg
+    Right (tokens', Nothing) -> pure tokens'
+    Right (_, Just (SAWCentral.Options.Error, pos, msg)) ->
+         fail $ show pos ++ ": " ++ Text.unpack msg
+    Right (tokens', Just _) -> pure tokens'
+
+-- | Read a type schema from a string. This is used to digest the type
+-- signatures for builtins, and the expansions for builtin typedefs.
+--
+-- The first argument (fakeFileName) is a string to pass as the
+-- filename for the lexer, which (complete with line and column
+-- numbering of dubious value) will go into the positions of the
+-- elements of the resulting type.
+--
+-- FUTURE: we should figure out how to generate more meaningful
+-- positions (like "third argument of concat") but this at least
+-- allows telling the user which builtin the type came from.
+--
+readSchema :: FilePath -> Text -> Schema
+readSchema fakeFileName str =
+  let croak what msg =
+        error (what ++ " error in builtin " ++ Text.unpack str ++ ": " ++ msg)
+      tokens =
+        -- XXX clean this up when we clean out the message printing infrastructure
+        case lexSAW fakeFileName str of
+          Left (_, _, msg) -> croak "Lexer" $ Text.unpack msg
+          Right (tokens', Nothing) -> tokens'
+          Right (_      , Just (Error, _pos, msg)) -> croak "Lexer" $ Text.unpack msg
+          Right (tokens', Just (_, _pos, _msg)) -> tokens'
+  in
+  case parseSchema tokens of
+    Left err -> croak "Parse" $ show err
+    Right schema -> schema
+
+-- | Read a schema pattern from a string. This is used by the
+--   :search REPL command.
+--
+readSchemaPattern :: FilePath -> Text -> IO (Either [Text] SchemaPattern)
+readSchemaPattern fakeFileName str = do
+  tokens <- lexSAW' fakeFileName str
+  let result = case parseSchemaPattern tokens of
+        Left err -> Left [Text.pack $ show err]
+        Right pat -> Right pat
+  pure result
+
+-- | Read an expression from a string. This is used by the
+--   :type REPL command.
+readExpression :: FilePath -> Text -> IO (Either [Text] Expr)
+readExpression fakeFileName str = do
+  tokens <- lexSAW' fakeFileName str
+  let result = case parseExpression tokens of
+        Left err -> Left [Text.pack $ show err]
+        Right e -> Right e
+  pure result
+
+-- | Read a statement from a string. This is used by the REPL evaluator.
+readStmtSemi :: FilePath -> Text -> IO (Either [Text] Stmt)
+readStmtSemi fakeFileName str = do
+  tokens <- lexSAW' fakeFileName str
+  let result = case parseStmtSemi tokens of
+        Left err -> Left [Text.pack $ show err]
+        Right s -> Right s
+  pure result
 
 parseFile :: [Token Pos] -> Either ParseError [Stmt]
 parseFile tokens = do

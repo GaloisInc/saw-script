@@ -80,13 +80,11 @@ import SAWCentral.AST (Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
 import SAWCentral.Exceptions (failTypecheck)
-import qualified SAWScript.Import
+import qualified SAWScript.Import as Import
 import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
-import SAWScript.Lexer (lexSAW)
 import SAWScript.Typechecker (checkStmt, typesMatch)
-import SAWScript.Parser (parseSchema)
 import SAWScript.Panic (panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
@@ -989,7 +987,7 @@ interpretFile file runMain =
   where
     interp = do
       opts <- getOptions
-      errs_or_stmts <- io $ SAWScript.Import.findAndLoadFile opts file
+      errs_or_stmts <- io $ Import.findAndLoadFile opts file
       stmts <- do
         case errs_or_stmts of
           Left errs -> do
@@ -2174,7 +2172,7 @@ print_value v = do
 dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
 dump_file_AST _bic opts filetxt = do
     let file = Text.unpack filetxt
-    errs_or_stmts <- SAWScript.Import.findAndLoadFile opts file
+    errs_or_stmts <- Import.findAndLoadFile opts file
     case errs_or_stmts of
         Left errs ->
             X.throwIO $ userError $ Text.unpack $ Text.unlines errs
@@ -2184,7 +2182,7 @@ dump_file_AST _bic opts filetxt = do
 parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> IO ()
 parser_printer_roundtrip _bic opts filetxt = do
     let file = Text.unpack filetxt
-    errs_or_stmts <- SAWScript.Import.findAndLoadFile opts file
+    errs_or_stmts <- Import.findAndLoadFile opts file
     case errs_or_stmts of
         Left errs ->
             X.throwIO $ userError $ Text.unpack $ Text.unlines errs
@@ -2393,34 +2391,6 @@ do_summarize_verification_json fpath =
 ------------------------------------------------------------
 -- Primitive tables
 
--- | Read a type schema. This is used to digest the type signatures
--- for builtins, and the expansions for builtin typedefs.
---
--- The first argument (fakeFileName) is a string to pass as the
--- filename for the lexer, which (complete with line and column
--- numbering of dubious value) will go into the positions of the
--- elements of the resulting type.
---
--- FUTURE: we should figure out how to generate more meaningful
--- positions (like "third argument of concat") but this at least
--- allows telling the user which builtin the type came from.
---
-readSchema :: FilePath -> Text -> SS.Schema
-readSchema fakeFileName str =
-  let croak what msg =
-        error (what ++ " error in builtin " ++ Text.unpack str ++ ": " ++ msg)
-      tokens =
-        -- XXX clean this up when we clean out the message printing infrastructure
-        case lexSAW fakeFileName str of
-          Left (_, _, msg) -> croak "Lexer" $ Text.unpack msg
-          Right (tokens', Nothing) -> tokens'
-          Right (_      , Just (Error, _pos, msg)) -> croak "Lexer" $ Text.unpack msg
-          Right (tokens', Just (_, _pos, _msg)) -> tokens'
-  in
-  case parseSchema tokens of
-    Left err -> croak "Parse" $ show err
-    Right schema -> schema
-
 data PrimType
   = PrimType
     { primTypeType :: SS.NamedType
@@ -2491,7 +2461,7 @@ primTypes = Map.fromList
           , primTypeLife = lc
           }
         fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
-        ty = case readSchema fakeFileName tystr of
+        ty = case Import.readSchema fakeFileName tystr of
             SS.Forall [] ty' -> ty'
             _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
 
@@ -6434,7 +6404,7 @@ primitives = Map.fromList $
     prim :: Text -> Text -> (Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [Text]
          -> (SS.Name, Primitive)
     prim name ty fn lc doc = (name, Primitive
-                                     { primitiveType = readSchema fakeFileName ty
+                                     { primitiveType = Import.readSchema fakeFileName ty
                                      , primitiveDoc  = doc
                                      , primitiveFn   = fn name
                                      , primitiveLife = lc
