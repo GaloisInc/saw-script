@@ -243,7 +243,7 @@ span.spaces    { background: white }
 <span class="lineno">  224 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvShlInt</span></span></span> :: VBool l -&gt; VWord l -&gt; Integer -&gt; MWord l
 <span class="lineno">  225 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvShrInt</span></span></span> :: VBool l -&gt; VWord l -&gt; Integer -&gt; MWord l
 <span class="lineno">  226 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvRol</span></span></span>    :: VWord l -&gt; VWord l -&gt; MWord l
-<span class="lineno">  227 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvRor</span></span></span>    :: VWord l -&gt; VWord l -&gt; MWord l
+<span class="lineno">  227 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvRor</span></span></span>    :: VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  228 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvShl</span></span></span>    :: VBool l -&gt; VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  229 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvShr</span></span></span>    :: VBool l -&gt; VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  230 </span>    -- Bitvector misc
@@ -365,7 +365,7 @@ span.spaces    { background: white }
 <span class="lineno">  346 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.head&quot;, <span class="nottickedoff">headOp bp</span>)</span>
 <span class="lineno">  347 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.tail&quot;, <span class="nottickedoff">tailOp bp</span>)</span>
 <span class="lineno">  348 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.atWithDefault&quot;, atWithDefaultOp bp)</span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.upd&quot;, <span class="nottickedoff">updOp bp</span>)</span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.upd&quot;, updOp bp)</span>
 <span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.take&quot;, takeOp bp)</span>
 <span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.drop&quot;, dropOp bp)</span>
 <span class="lineno">  352 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.append&quot;, appendOp bp)</span>
@@ -376,7 +376,7 @@ span.spaces    { background: white }
 <span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.foldl&quot;, foldlOp <span class="nottickedoff">(bpUnpack bp)</span>)</span>
 <span class="lineno">  358 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.scanl&quot;, <span class="nottickedoff">scanlOp (bpUnpack bp)</span>)</span>
 <span class="lineno">  359 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.rotateL&quot;, rotateLOp bp)</span>
-<span class="lineno">  360 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.rotateR&quot;, rotateROp <span class="nottickedoff">bp</span>)</span>
+<span class="lineno">  360 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.rotateR&quot;, rotateROp bp)</span>
 <span class="lineno">  361 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.shiftL&quot;, <span class="nottickedoff">shiftLOp bp</span>)</span>
 <span class="lineno">  362 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.shiftR&quot;, <span class="nottickedoff">shiftROp bp</span>)</span>
 <span class="lineno">  363 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.EmptyVec&quot;, <span class="nottickedoff">emptyVec</span>)</span>
@@ -504,13 +504,13 @@ span.spaces    { background: white }
 <span class="lineno">  485 </span>-- lookup, using @mux@ as an if-then-else operator. If the index is
 <span class="lineno">  486 </span>-- greater than @maxValue@, then it returns @valueFn maxValue@.
 <span class="lineno">  487 </span>selectV :: (b -&gt; a -&gt; a -&gt; a) -&gt; Int -&gt; (Int -&gt; a) -&gt; Vector b -&gt; a
-<span class="lineno">  488 </span><span class="decl"><span class="nottickedoff">selectV mux maxValue valueFn v = impl len 0</span>
-<span class="lineno">  489 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  490 </span><span class="spaces">    </span><span class="nottickedoff">len = V.length v</span>
-<span class="lineno">  491 </span><span class="spaces">    </span><span class="nottickedoff">err = panic &quot;selectV&quot; [&quot;Guarded access is out of range&quot;]</span>
-<span class="lineno">  492 </span><span class="spaces">    </span><span class="nottickedoff">impl _ x | x &gt; maxValue || x &lt; 0 = valueFn maxValue</span>
-<span class="lineno">  493 </span><span class="spaces">    </span><span class="nottickedoff">impl 0 x = valueFn x</span>
-<span class="lineno">  494 </span><span class="spaces">    </span><span class="nottickedoff">impl i x = mux (vecIdx err v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1</span></span>
+<span class="lineno">  488 </span><span class="decl"><span class="istickedoff">selectV mux maxValue valueFn v = impl len 0</span>
+<span class="lineno">  489 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  490 </span><span class="spaces">    </span><span class="istickedoff">len = V.length v</span>
+<span class="lineno">  491 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">err = panic &quot;selectV&quot; [&quot;Guarded access is out of range&quot;]</span></span>
+<span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">impl _ x | <span class="tickonlyfalse">x &gt; maxValue || x &lt; 0</span> = <span class="nottickedoff">valueFn maxValue</span></span>
+<span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">impl 0 x = valueFn x</span>
+<span class="lineno">  494 </span><span class="spaces">    </span><span class="istickedoff">impl i x = mux (vecIdx <span class="nottickedoff">err</span> v (len - i)) <span class="nottickedoff">(impl j (x `setBit` j))</span> (impl j x) where j = i - 1</span></span>
 <span class="lineno">  495 </span>
 <span class="lineno">  496 </span>------------------------------------------------------------
 <span class="lineno">  497 </span>-- Values for common primitives
@@ -845,14 +845,14 @@ span.spaces    { background: white }
 <span class="lineno">  826 </span><span class="spaces">          </span><span class="istickedoff">VVector xv -&gt; lift (force (vecIdx d xv (fromIntegral i))) -- FIXME dangerous fromIntegral</span>
 <span class="lineno">  827 </span><span class="spaces">          </span><span class="istickedoff">VWord xw -&gt; lift (bpBvAtWithDefault bp (fromIntegral n) (force d) xw (fromIntegral i)) -- FIXME dangerous fromIntegral</span>
 <span class="lineno">  828 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE &quot;atOp: expected vector&quot;</span></span>
-<span class="lineno">  829 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _sz i | <span class="nottickedoff">bpIsSymbolicEvaluator bp</span> -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  830 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">iv &lt;- lift (toBits (bpUnpack bp) i)</span></span>
-<span class="lineno">  831 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">case x of</span></span>
-<span class="lineno">  832 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">VVector xv -&gt;</span></span>
-<span class="lineno">  833 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">lift $ selectV (lazyMuxValue bp) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral</span></span>
-<span class="lineno">  834 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">VWord xw -&gt;</span></span>
-<span class="lineno">  835 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">lift $ selectV (lazyMuxValue bp) (fromIntegral n - 1) (bpBvAtWithDefault bp (fromIntegral n) (force d) xw) iv -- FIXME dangerous fromIntegral</span></span>
-<span class="lineno">  836 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; throwE &quot;atOp: expected vector&quot;</span></span>
+<span class="lineno">  829 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _sz i | <span class="tickonlytrue">bpIsSymbolicEvaluator bp</span> -&gt; do</span>
+<span class="lineno">  830 </span><span class="spaces">        </span><span class="istickedoff">iv &lt;- lift (toBits (bpUnpack bp) i)</span>
+<span class="lineno">  831 </span><span class="spaces">        </span><span class="istickedoff">case x of</span>
+<span class="lineno">  832 </span><span class="spaces">          </span><span class="istickedoff">VVector xv -&gt;</span>
+<span class="lineno">  833 </span><span class="spaces">            </span><span class="istickedoff">lift $ selectV (lazyMuxValue bp) (fromIntegral n - 1) (force . vecIdx <span class="nottickedoff">d</span> xv) iv -- FIXME dangerous fromIntegral</span>
+<span class="lineno">  834 </span><span class="spaces">          </span><span class="istickedoff">VWord xw -&gt;</span>
+<span class="lineno">  835 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">lift $ selectV (lazyMuxValue bp) (fromIntegral n - 1) (bpBvAtWithDefault bp (fromIntegral n) (force d) xw) iv</span> -- FIXME dangerous fromIntegral</span>
+<span class="lineno">  836 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE &quot;atOp: expected vector&quot;</span></span>
 <span class="lineno">  837 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  838 </span><span class="spaces">      </span><span class="istickedoff">VIntToNat _i | <span class="nottickedoff">bpIsSymbolicEvaluator bp</span> -&gt; <span class="nottickedoff">panic &quot;atWithDefault&quot; [&quot;Got symbolic integer:  TODO&quot;]</span></span>
 <span class="lineno">  839 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -877,33 +877,33 @@ span.spaces    { background: white }
 <span class="lineno">  858 </span>
 <span class="lineno">  859 </span>-- upd :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Nat -&gt; a -&gt; Vec n a;
 <span class="lineno">  860 </span>updOp :: (VMonadLazy l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno">  861 </span><span class="decl"><span class="nottickedoff">updOp bp =</span>
-<span class="lineno">  862 </span><span class="spaces">  </span><span class="nottickedoff">natFun $ \n -&gt;</span>
-<span class="lineno">  863 </span><span class="spaces">  </span><span class="nottickedoff">tvalFun $ \_tp -&gt;</span>
-<span class="lineno">  864 </span><span class="spaces">  </span><span class="nottickedoff">vectorFun (bpUnpack bp) $ \xv -&gt;</span>
-<span class="lineno">  865 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \idx -&gt;</span>
-<span class="lineno">  866 </span><span class="spaces">  </span><span class="nottickedoff">primFun $ \y -&gt;</span>
-<span class="lineno">  867 </span><span class="spaces">  </span><span class="nottickedoff">PrimExcept $</span>
-<span class="lineno">  868 </span><span class="spaces">    </span><span class="nottickedoff">case idx of</span>
-<span class="lineno">  869 </span><span class="spaces">      </span><span class="nottickedoff">VNat i</span>
-<span class="lineno">  870 </span><span class="spaces">        </span><span class="nottickedoff">| toInteger i &lt; toInteger (V.length xv)</span>
-<span class="lineno">  871 </span><span class="spaces">           </span><span class="nottickedoff">-&gt; return (VVector (xv V.// [(fromIntegral i, y)]))</span>
-<span class="lineno">  872 </span><span class="spaces">        </span><span class="nottickedoff">| otherwise                   -&gt; return (VVector xv)</span>
-<span class="lineno">  873 </span><span class="spaces">      </span><span class="nottickedoff">VBVToNat wsize (VWord w) | bpIsSymbolicEvaluator bp -&gt; lift $</span>
-<span class="lineno">  874 </span><span class="spaces">        </span><span class="nottickedoff">do let f i = do b &lt;- bpBvEq bp w =&lt;&lt; bpBvLit bp wsize (toInteger i)</span>
-<span class="lineno">  875 </span><span class="spaces">                        </span><span class="nottickedoff">if wsize &lt; 64 &amp;&amp; toInteger i &gt;= 2 ^ wsize</span>
-<span class="lineno">  876 </span><span class="spaces">                          </span><span class="nottickedoff">then return (xv V.! i)</span>
-<span class="lineno">  877 </span><span class="spaces">                          </span><span class="nottickedoff">else delay (lazyMuxValue bp b (force y) (force (xv V.! i)))</span>
-<span class="lineno">  878 </span><span class="spaces">           </span><span class="nottickedoff">yv &lt;- V.generateM (V.length xv) f</span>
-<span class="lineno">  879 </span><span class="spaces">           </span><span class="nottickedoff">return (VVector yv)</span>
-<span class="lineno">  880 </span><span class="spaces">      </span><span class="nottickedoff">VBVToNat _sz (VVector iv) | bpIsSymbolicEvaluator bp -&gt; lift $</span>
-<span class="lineno">  881 </span><span class="spaces">        </span><span class="nottickedoff">do let update i = return (VVector (xv V.// [(i, y)]))</span>
-<span class="lineno">  882 </span><span class="spaces">           </span><span class="nottickedoff">iv' &lt;- V.mapM (liftM toBool . force) iv</span>
-<span class="lineno">  883 </span><span class="spaces">           </span><span class="nottickedoff">selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral</span>
-<span class="lineno">  884 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  885 </span><span class="spaces">      </span><span class="nottickedoff">VIntToNat _ | bpIsSymbolicEvaluator bp -&gt; panic &quot;updOp&quot; [&quot;Got symbolic integer: TODO&quot;]</span>
-<span class="lineno">  886 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  887 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; throwE $ &quot;updOp: expected Nat, got &quot; &lt;&gt; Text.pack (show idx)</span></span>
+<span class="lineno">  861 </span><span class="decl"><span class="istickedoff">updOp bp =</span>
+<span class="lineno">  862 </span><span class="spaces">  </span><span class="istickedoff">natFun $ \n -&gt;</span>
+<span class="lineno">  863 </span><span class="spaces">  </span><span class="istickedoff">tvalFun $ \_tp -&gt;</span>
+<span class="lineno">  864 </span><span class="spaces">  </span><span class="istickedoff">vectorFun <span class="nottickedoff">(bpUnpack bp)</span> $ \xv -&gt;</span>
+<span class="lineno">  865 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \idx -&gt;</span>
+<span class="lineno">  866 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \y -&gt;</span>
+<span class="lineno">  867 </span><span class="spaces">  </span><span class="istickedoff">PrimExcept $</span>
+<span class="lineno">  868 </span><span class="spaces">    </span><span class="istickedoff">case idx of</span>
+<span class="lineno">  869 </span><span class="spaces">      </span><span class="istickedoff">VNat i</span>
+<span class="lineno">  870 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">toInteger i &lt; toInteger (V.length xv)</span></span>
+<span class="lineno">  871 </span><span class="spaces">           </span><span class="istickedoff">-&gt; return (VVector (xv V.// [(fromIntegral i, y)]))</span>
+<span class="lineno">  872 </span><span class="spaces">        </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>                   -&gt; <span class="nottickedoff">return (VVector xv)</span></span>
+<span class="lineno">  873 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat wsize (VWord w) | <span class="tickonlytrue">bpIsSymbolicEvaluator bp</span> -&gt; lift $</span>
+<span class="lineno">  874 </span><span class="spaces">        </span><span class="istickedoff">do let f i = do b &lt;- bpBvEq bp w =&lt;&lt; bpBvLit bp wsize (toInteger i)</span>
+<span class="lineno">  875 </span><span class="spaces">                        </span><span class="istickedoff">if <span class="tickonlyfalse">wsize &lt; 64 &amp;&amp; <span class="nottickedoff">toInteger i &gt;= 2 ^ wsize</span></span></span>
+<span class="lineno">  876 </span><span class="spaces">                          </span><span class="istickedoff">then <span class="nottickedoff">return (xv V.! i)</span></span>
+<span class="lineno">  877 </span><span class="spaces">                          </span><span class="istickedoff">else delay (lazyMuxValue bp b (force y) (force (xv V.! i)))</span>
+<span class="lineno">  878 </span><span class="spaces">           </span><span class="istickedoff">yv &lt;- V.generateM (V.length xv) f</span>
+<span class="lineno">  879 </span><span class="spaces">           </span><span class="istickedoff">return (VVector yv)</span>
+<span class="lineno">  880 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _sz (VVector iv) | <span class="nottickedoff">bpIsSymbolicEvaluator bp</span> -&gt; <span class="nottickedoff">lift $</span></span>
+<span class="lineno">  881 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do let update i = return (VVector (xv V.// [(i, y)]))</span></span>
+<span class="lineno">  882 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">iv' &lt;- V.mapM (liftM toBool . force) iv</span></span>
+<span class="lineno">  883 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv'</span> -- FIXME dangerous fromIntegral</span>
+<span class="lineno">  884 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  885 </span><span class="spaces">      </span><span class="istickedoff">VIntToNat _ | <span class="nottickedoff">bpIsSymbolicEvaluator bp</span> -&gt; <span class="nottickedoff">panic &quot;updOp&quot; [&quot;Got symbolic integer: TODO&quot;]</span></span>
+<span class="lineno">  886 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  887 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $ &quot;updOp: expected Nat, got &quot; &lt;&gt; Text.pack (show idx)</span></span></span>
 <span class="lineno">  888 </span>
 <span class="lineno">  889 </span>-- primitive EmptyVec :: (a :: sort 0) -&gt; Vec 0 a;
 <span class="lineno">  890 </span>emptyVec :: VMonad l =&gt; Prim l
@@ -1193,7 +1193,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1174 </span><span class="decl"><span class="istickedoff">rotateLOp bp = rotateOp bp <span class="nottickedoff">vRotateL</span> (bpBvRolInt bp) (bpBvRol bp)</span></span>
 <span class="lineno"> 1175 </span>
 <span class="lineno"> 1176 </span>rotateROp :: (VMonadLazy l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno"> 1177 </span><span class="decl"><span class="istickedoff">rotateROp bp = rotateOp <span class="nottickedoff">bp</span> vRotateR <span class="nottickedoff">(bpBvRorInt bp)</span> <span class="nottickedoff">(bpBvRor bp)</span></span></span>
+<span class="lineno"> 1177 </span><span class="decl"><span class="istickedoff">rotateROp bp = rotateOp bp vRotateR <span class="nottickedoff">(bpBvRorInt bp)</span> (bpBvRor bp)</span></span>
 <span class="lineno"> 1178 </span>
 <span class="lineno"> 1179 </span>shiftLOp :: (VMonadLazy l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
 <span class="lineno"> 1180 </span><span class="decl"><span class="nottickedoff">shiftLOp bp = shiftOp bp vShiftL (bpBvShlInt bp) (bpBvShl bp)</span></span>
@@ -1326,8 +1326,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1307 </span>  EvalM l (Value l)
 <span class="lineno"> 1308 </span><span class="decl"><span class="istickedoff">lazyMuxValue bp b x y =</span>
 <span class="lineno"> 1309 </span><span class="spaces">  </span><span class="istickedoff">case bpAsBool bp b of</span>
-<span class="lineno"> 1310 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt; <span class="nottickedoff">x</span></span>
-<span class="lineno"> 1311 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; <span class="nottickedoff">y</span></span>
+<span class="lineno"> 1310 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt; x</span>
+<span class="lineno"> 1311 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; y</span>
 <span class="lineno"> 1312 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 1313 </span><span class="spaces">      </span><span class="istickedoff">do x' &lt;- x</span>
 <span class="lineno"> 1314 </span><span class="spaces">         </span><span class="istickedoff">y' &lt;- y</span>

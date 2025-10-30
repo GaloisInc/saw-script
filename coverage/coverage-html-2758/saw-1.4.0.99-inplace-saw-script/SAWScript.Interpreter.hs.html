@@ -1000,7 +1000,7 @@ span.spaces    { background: white }
 <span class="lineno">  981 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  982 </span><span class="spaces">    </span><span class="istickedoff">interp = do</span>
 <span class="lineno">  983 </span><span class="spaces">      </span><span class="istickedoff">opts &lt;- getOptions</span>
-<span class="lineno">  984 </span><span class="spaces">      </span><span class="istickedoff">stmts &lt;- io $ SAWScript.Import.loadFile opts file</span>
+<span class="lineno">  984 </span><span class="spaces">      </span><span class="istickedoff">stmts &lt;- io $ SAWScript.Import.findAndLoadFile opts file</span>
 <span class="lineno">  985 </span><span class="spaces">      </span><span class="istickedoff">io $ setCurrentDirectory (takeDirectory file)</span>
 <span class="lineno">  986 </span><span class="spaces">      </span><span class="istickedoff">mapM_ stmtWithPrint stmts</span>
 <span class="lineno">  987 </span><span class="spaces">      </span><span class="istickedoff">when runMain interpretMain</span>
@@ -2136,12 +2136,12 @@ span.spaces    { background: white }
 <span class="lineno"> 2117 </span>dump_file_AST :: BuiltinContext -&gt; Options -&gt; Text -&gt; IO ()
 <span class="lineno"> 2118 </span><span class="decl"><span class="istickedoff">dump_file_AST _bic opts filetxt = do</span>
 <span class="lineno"> 2119 </span><span class="spaces">  </span><span class="istickedoff">let file = Text.unpack filetxt</span>
-<span class="lineno"> 2120 </span><span class="spaces">  </span><span class="istickedoff">(SAWScript.Import.loadFile opts &gt;=&gt; mapM_ print) file</span></span>
+<span class="lineno"> 2120 </span><span class="spaces">  </span><span class="istickedoff">(SAWScript.Import.findAndLoadFile opts &gt;=&gt; mapM_ print) file</span></span>
 <span class="lineno"> 2121 </span>
 <span class="lineno"> 2122 </span>parser_printer_roundtrip :: BuiltinContext -&gt; Options -&gt; Text -&gt; IO ()
 <span class="lineno"> 2123 </span><span class="decl"><span class="istickedoff">parser_printer_roundtrip _bic opts filetxt = do</span>
 <span class="lineno"> 2124 </span><span class="spaces">  </span><span class="istickedoff">let file = Text.unpack filetxt</span>
-<span class="lineno"> 2125 </span><span class="spaces">  </span><span class="istickedoff">(SAWScript.Import.loadFile opts &gt;=&gt; PP.putDoc . SS.prettyWholeModule) file</span></span>
+<span class="lineno"> 2125 </span><span class="spaces">  </span><span class="istickedoff">(SAWScript.Import.findAndLoadFile opts &gt;=&gt; PP.putDoc . SS.prettyWholeModule) file</span></span>
 <span class="lineno"> 2126 </span>
 <span class="lineno"> 2127 </span>exec :: Text -&gt; [Text] -&gt; Text -&gt; IO Text
 <span class="lineno"> 2128 </span><span class="decl"><span class="istickedoff">exec name args input = do</span>
