@@ -79,6 +79,7 @@ import Control.Monad (when, forM_)
 import System.Timeout (timeout)
 
 import GHC.Generics (Generic)
+import qualified Data.IntMap as IntMap
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Tuple.Extra (first, firstM)
@@ -116,6 +117,7 @@ import SAWCore.Name (VarName(..))
 import SAWCore.SATQuery
 import SAWCore.ExternalFormat
 import SAWCore.SharedTerm
+import SAWCore.Term.Raw (varTypes)
 
 import SAWCentral.Options
 import SAWCentral.Proof
@@ -300,7 +302,8 @@ mkSolverCacheKey :: SharedContext -> SolverBackendVersions ->
                     [SolverBackendOption] -> SATQuery -> IO SolverCacheKey
 mkSolverCacheKey sc vs opts satq = do
   body <- satQueryAsPropTerm sc satq
-  satVars <- traverse (scFirstOrderType sc) (satVariables satq)
+  let mkVar x _fot = IntMap.lookup (vnIndex x) (varTypes body)
+  let satVars = Map.mapMaybeWithKey mkVar (satVariables satq)
   let vars = Map.toList satVars ++
              filter (\(x, _) -> vnIndex x `elem` satUninterp satq)
                     (getAllVars body)
