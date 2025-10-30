@@ -138,7 +138,8 @@ command-line options:</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-c</span> <span class="pre">path,</span> <span class="pre">--classpath=path</span></code></dt><dd><p>Specify a colon-delimited list of paths to search for Java classes.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">-i</span> <span class="pre">path,</span> <span class="pre">--import-path=path</span></code></dt><dd><p>Specify a colon-delimited list of paths to search for imports.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">-i</span> <span class="pre">path,</span> <span class="pre">--import-path=path</span></code></dt><dd><p>Specify a colon-delimited list of paths to search for imports. Note that
+paths can also be specified using the <code class="docutils literal notranslate"><span class="pre">SAW_IMPORT_PATH</span></code> environment variable.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-t,</span> <span class="pre">--extra-type-checking</span></code></dt><dd><p>Perform extra type checking of intermediate values.</p>
 </dd>
@@ -178,7 +179,9 @@ imports (including the Cryptol prelude).</p>
 <dt><code class="docutils literal notranslate"><span class="pre">PATH</span></code></dt><dd><p>If the <code class="docutils literal notranslate"><span class="pre">--java-bin-dirs</span></code> option is not set, then the <code class="docutils literal notranslate"><span class="pre">PATH</span></code> will be
 searched to find a Java executable.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">SAW_IMPORT_PATH</span></code></dt><dd><p>Specify a colon-delimited list of directory paths to search for imports.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">SAW_IMPORT_PATH</span></code></dt><dd><p>Specify a colon-delimited list of directory paths to search for imports. Note
+that paths can also be specified using the <code class="docutils literal notranslate"><span class="pre">-i</span></code>/<code class="docutils literal notranslate"><span class="pre">--import-path</span></code> command-line
+options.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">SAW_JDK_JAR</span></code></dt><dd><p>Specify the path of the <code class="docutils literal notranslate"><span class="pre">.jar</span></code> file containing the core Java
 libraries. Note that that is not necessary if the <code class="docutils literal notranslate"><span class="pre">--java-bin-dirs</span></code> option
