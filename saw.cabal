@@ -668,9 +668,9 @@ library saw-script
     SAWScript.AutoMatch.LLVM
     SAWScript.AutoMatch.JVM
     SAWScript.AutoMatch.Util
-    SAWScript.Import
     SAWScript.Interpreter
     SAWScript.Lexer
+    SAWScript.Loader
     SAWScript.Parser
     SAWScript.Search
     SAWScript.Token

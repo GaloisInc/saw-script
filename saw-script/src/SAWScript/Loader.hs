@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {- |
-Module      : SAWScript.Import
+Module      : SAWScript.Loader
 Description : Loading and parsing SAW-Script files.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
 
-module SAWScript.Import (
+module SAWScript.Loader (
     readSchemaPure,
     readSchemaPattern,
     readExpression,

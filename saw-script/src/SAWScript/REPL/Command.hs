@@ -53,7 +53,7 @@ import qualified SAWSupport.Pretty as PPS (pShowText)
 import qualified SAWCentral.AST as SS (Name, Schema)
 
 import SAWScript.Panic (panic)
-import qualified SAWScript.Import as Import
+import qualified SAWScript.Loader as Loader
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretTopStmt)
 import SAWCentral.TopLevel (TopLevelRW(..))
@@ -157,7 +157,7 @@ searchCmd str
      rw <- getTopLevelRW
      let environ = rwEnviron rw
          rebindables = rwRebindables rw
-     errs_or_pat <- liftIO $ Import.readSchemaPattern replFileName environ rebindables avail str
+     errs_or_pat <- liftIO $ Loader.readSchemaPattern replFileName environ rebindables avail str
      pat <- case errs_or_pat of
            Left errs -> failOn errs
            Right p -> return p
@@ -281,7 +281,7 @@ typeOfCmd str
      let environ = rwEnviron rw
          rebindables = rwRebindables rw
          avail = rwPrimsAvail rw
-     errs_or_expr <- liftIO $ Import.readExpression replFileName environ rebindables avail str
+     errs_or_expr <- liftIO $ Loader.readExpression replFileName environ rebindables avail str
      (schema, _expr) <- case errs_or_expr of
          Left errs -> failOn errs
          Right info -> return info
@@ -411,7 +411,7 @@ caveats:
      we also hang onto the results and use them to seed the interpreter. -}
 sawScriptCmd :: Text -> REPL ()
 sawScriptCmd str = do
-  errs_or_stmt <- liftIO $ Import.readStmtSemiUnchecked replFileName str
+  errs_or_stmt <- liftIO $ Loader.readStmtSemiUnchecked replFileName str
   case errs_or_stmt of
     Left errs -> failOn errs
     Right stmt ->
