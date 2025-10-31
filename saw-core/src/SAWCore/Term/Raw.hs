@@ -22,7 +22,6 @@ import Data.Hashable
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
-import Data.Typeable (Typeable)
 
 import Instances.TH.Lift () -- for instance TH.Lift Text
 
@@ -68,7 +67,7 @@ data Term
        -- ^ The underlying 'TermF' that this 'Term' wraps. This field "ties the
        -- knot" of the 'Term'/'TermF' recursion scheme.
      }
-  deriving (Show, Typeable)
+  deriving (Show)
 
 instance Hashable Term where
   -- The hash of an 'STApp' depends on its not-necessarily-unique

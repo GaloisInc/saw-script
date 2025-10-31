@@ -40,7 +40,6 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
-import Data.Typeable (Typeable)
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
@@ -48,7 +47,6 @@ import System.Process (readProcess)
 
 import Data.Parameterized.Some
 
-import qualified Data.AIG as AIG
 import qualified Data.AIG.CompactGraph as AIG
 
 import qualified Text.LLVM.AST as LLVM (Type)
@@ -137,8 +135,6 @@ import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
-
-deriving instance Typeable AIG.Proxy
 
 
 ------------------------------------------------------------
