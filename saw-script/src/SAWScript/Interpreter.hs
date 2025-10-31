@@ -987,7 +987,7 @@ interpretFile file runMain =
   where
     interp = do
       opts <- getOptions
-      errs_or_stmts <- io $ Import.findAndLoadFile opts file
+      errs_or_stmts <- io $ Import.findAndLoadFileUnchecked opts file
       stmts <- do
         case errs_or_stmts of
           Left errs -> do
@@ -2172,7 +2172,7 @@ print_value v = do
 dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
 dump_file_AST _bic opts filetxt = do
     let file = Text.unpack filetxt
-    errs_or_stmts <- Import.findAndLoadFile opts file
+    errs_or_stmts <- Import.findAndLoadFileUnchecked opts file
     case errs_or_stmts of
         Left errs ->
             X.throwIO $ userError $ Text.unpack $ Text.unlines errs
@@ -2182,7 +2182,7 @@ dump_file_AST _bic opts filetxt = do
 parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> IO ()
 parser_printer_roundtrip _bic opts filetxt = do
     let file = Text.unpack filetxt
-    errs_or_stmts <- Import.findAndLoadFile opts file
+    errs_or_stmts <- Import.findAndLoadFileUnchecked opts file
     case errs_or_stmts of
         Left errs ->
             X.throwIO $ userError $ Text.unpack $ Text.unlines errs
@@ -2465,7 +2465,7 @@ primTypes = Map.fromList
         -- may need to tsort the entries in the list and then
         -- accumulate the environment with fold so that the types used
         -- in the RHS of typedefs can be found.
-        ty = case Import.readSchemaPureChecked fakeFileName lc Map.empty tystr of
+        ty = case Import.readSchemaPure fakeFileName lc Map.empty tystr of
             SS.Forall [] ty' -> ty'
             _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
 
@@ -6417,7 +6417,7 @@ primitives = Map.fromList $
         -- Beware: errors in the type will only be detected when the
         -- type is actually looked at by something, like :env, :t,
         -- :search, or a direct use of the builtin.
-        ty' = Import.readSchemaPureChecked fakeFileName lc primNamedTypeEnv ty
+        ty' = Import.readSchemaPure fakeFileName lc primNamedTypeEnv ty
         fakeFileName = Text.unpack $ "<type of " <> name <> ">"
 
     pureVal :: forall t. IsValue t => t -> Text -> Options -> BuiltinContext -> Value

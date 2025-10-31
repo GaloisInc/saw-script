@@ -8,11 +8,11 @@ Stability   : provisional
 -}
 
 module SAWScript.Import (
-    readSchemaPureChecked,
-    readSchemaPatternChecked,
-    readExpressionChecked,
-    readStmtSemi,
-    findAndLoadFile
+    readSchemaPure,
+    readSchemaPattern,
+    readExpression,
+    readStmtSemiUnchecked,
+    findAndLoadFileUnchecked
   ) where
 
 import qualified Data.Text.IO as TextIO (readFile)
@@ -142,13 +142,13 @@ dispatchMsgs opts result =
 -- positions (like "third argument of concat") but this at least
 -- allows telling the user which builtin the type came from.
 --
-readSchemaPureChecked ::
+readSchemaPure ::
     FilePath ->
     PrimitiveLifecycle ->
     Map Name (PrimitiveLifecycle, NamedType) ->
     Text ->
     Schema
-readSchemaPureChecked fakeFileName lc tyenv str = do
+readSchemaPure fakeFileName lc tyenv str = do
     let result = readAny fakeFileName str parseSchema
     let result' = case result of
           Left errs -> Left errs
@@ -166,10 +166,10 @@ readSchemaPureChecked fakeFileName lc tyenv str = do
 --
 --   Also runs the typechecker to check the pattern.
 --
-readSchemaPatternChecked ::
+readSchemaPattern ::
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
     IO (Either [Text] SchemaPattern)
-readSchemaPatternChecked fileName environ rbenv avail str = do
+readSchemaPattern fileName environ rbenv avail str = do
   -- XXX: this preserves the original behavior of ignoring the
   -- verbosity setting. We could expect the caller to pass in the
   -- options value to get the verbosity setting, and that's really
@@ -201,8 +201,8 @@ readSchemaPatternChecked fileName environ rbenv avail str = do
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
-readExpressionChecked :: FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text -> IO (Either [Text] (Schema, Expr))
-readExpressionChecked fileName environ rbenv avail str = do
+readExpression :: FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text -> IO (Either [Text] (Schema, Expr))
+readExpression fileName environ rbenv avail str = do
   -- XXX as above
   let opts = Options.defaultOptions
 
@@ -246,8 +246,9 @@ readExpressionChecked fileName environ rbenv avail str = do
   dispatchMsgs opts result'
 
 -- | Read a statement from a string. This is used by the REPL evaluator.
-readStmtSemi :: FilePath -> Text -> IO (Either [Text] Stmt)
-readStmtSemi fileName str = do
+--   Doesn't run the typechecker (yet).
+readStmtSemiUnchecked :: FilePath -> Text -> IO (Either [Text] Stmt)
+readStmtSemiUnchecked fileName str = do
   -- XXX as above
   let opts = Options.defaultOptions
 
@@ -255,8 +256,9 @@ readStmtSemi fileName str = do
   dispatchMsgs opts result
 
 -- | Load the 'Stmt's in a @.saw@ file.
-loadFile :: Options.Options -> FilePath -> IO (Either [Text] [Stmt])
-loadFile opts fname = do
+--   Doesn't run the typechecker (yet).
+loadFileUnchecked :: Options.Options -> FilePath -> IO (Either [Text] [Stmt])
+loadFileUnchecked opts fname = do
   Options.printOutLn opts Options.Info $ "Loading file " ++ show fname
   ftext <- TextIO.readFile fname
 
@@ -267,8 +269,10 @@ loadFile opts fname = do
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
 -- @-i@/@--import-path@ command-line options). If the file was successfully
 -- found, load it. If not, raise an error.
-findAndLoadFile :: Options.Options -> FilePath -> IO (Either [Text] [Stmt])
-findAndLoadFile opts fp = do
+--
+-- Doesn't run the typechecker (yet).
+findAndLoadFileUnchecked :: Options.Options -> FilePath -> IO (Either [Text] [Stmt])
+findAndLoadFileUnchecked opts fp = do
   let paths = Options.importPath opts
   mfname <- findFile paths fp
   case mfname of
@@ -284,4 +288,4 @@ findAndLoadFile opts fp = do
       -- search path to the front of the file path that is found, which can
       -- cause paths like "./foo.saw" to be returned. This looks ugly in error
       -- messages, where we would rather display "foo.saw" instead.
-      loadFile opts (normalise fname)
+      loadFileUnchecked opts (normalise fname)
