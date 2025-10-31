@@ -51,19 +51,17 @@ import qualified Data.Text.IO as TextIO
 import qualified SAWSupport.Pretty as PPS (pShowText)
 
 -- SAWScript imports
-import qualified SAWCentral.Position as SS (Pos)
 import qualified SAWCentral.AST as SS (
      Name,
      Decl(..),
      Pattern(..),
-     Rebindable,
      Schema
  )
 import SAWCentral.Exceptions
 
 import SAWScript.Panic (panic)
 import qualified SAWScript.Import as Import
-import SAWScript.Typechecker (checkDecl, checkSchemaPattern)
+import SAWScript.Typechecker (checkDecl)
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretTopStmt)
 import SAWCentral.TopLevel (TopLevelRW(..))
@@ -147,12 +145,12 @@ stop =
 searchCmd :: Text -> REPL ()
 searchCmd str
   | Text.null str = liftIO $ putStrLn $ "[error] :search requires at least one argument"
-  | otherwise =
-  do errs_or_pat <- liftIO $ Import.readSchemaPattern replFileName str
-     pat <- case errs_or_pat of
-           Left errs -> failOn errs
-           Right p -> return p
-     rw <- getTopLevelRW
+  | otherwise = do
+
+     -- FUTURE: it would be nice to be able to use the words
+     -- "experimental" and "deprecated" in the search term to match
+     -- against the lifecycle, to allow doing stuff like searching
+     -- for deprecated functions that take Terms.
 
      -- Always search the entire environment and recognize all type
      -- names in the user's pattern, regardless of whether
@@ -162,44 +160,46 @@ searchCmd str
      -- of things you didn't intend. It is also better to retrieve
      -- invisible/deprecated items and report their existence than to
      -- hide them from the search.
+     let avail = everythingAvailable
 
-     -- FUTURE: it would be nice to be able to use the words
-     -- "experimental" and "deprecated" in the search term to match
-     -- against the lifecycle, to allow doing stuff like searching
-     -- for deprecated functions that take Terms.
+     rw <- getTopLevelRW
+     let environ = rwEnviron rw
+         rebindables = rwRebindables rw
+     errs_or_pat <- liftIO $ Import.readSchemaPatternChecked replFileName environ rebindables avail str
+     pat <- case errs_or_pat of
+           Left errs -> failOn errs
+           Right p -> return p
 
      let primsAvail = rwPrimsAvail rw
-         -- XXX it should not be necessary to do this munging
-         Environ varenv tyenv _cryenv = rwEnviron rw
-         rbenv = rwRebindables rw
-         squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)
-         varenv' = Map.map squash $ ScopedMap.flatten varenv
-         tyenv' = ScopedMap.flatten tyenv
-         rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)
-         rbenv' = Map.map rbsquash rbenv
-         varenv'' = Map.union varenv' rbenv'
-         (errs_or_results, warns) = checkSchemaPattern everythingAvailable varenv'' tyenv' pat
-     let issueWarning (msgpos, msg) =
-           -- XXX the print functions should be what knows how to show positions...
-           putStrLn (show msgpos ++ ": Warning: " ++ msg)
-     liftIO $ mapM_ issueWarning warns
-     pat' <- either failTypecheck return $ errs_or_results
-     let search = compileSearchPattern tyenv pat'
-         keep (_pos, _lc, _rb, ty) = matchSearchPattern search ty
-         allMatches = Map.filter keep varenv'
+     let Environ varenv tyenv _cryenv = environ
+
+     let search = compileSearchPattern tyenv pat
+         check (_pos, lc, ty, _v, _docs) =
+             if matchSearchPattern search ty then
+                 Just (lc, ty)
+             else
+                 Nothing
+         checkRb (_pos, ty, _v) =
+             if matchSearchPattern search ty then
+                 Just (Current, ty)
+             else
+                 Nothing
+         varMatches = Map.mapMaybe check $ ScopedMap.flatten varenv
+         rbMatches = Map.mapMaybe checkRb rebindables
+         allMatches = Map.union varMatches rbMatches
 
          -- Divide the results into visible, experimental-not-visible,
          -- and deprecated-not-visible.
          inspect ::
              SS.Name ->
-             (SS.Pos, PrimitiveLifecycle, SS.Rebindable, SS.Schema) ->
+             (PrimitiveLifecycle, SS.Schema) ->
              (Map SS.Name (PrimitiveLifecycle, SS.Schema),
               Map SS.Name (PrimitiveLifecycle, SS.Schema),
               Map SS.Name (PrimitiveLifecycle, SS.Schema)) ->
              (Map SS.Name (PrimitiveLifecycle, SS.Schema),
               Map SS.Name (PrimitiveLifecycle, SS.Schema),
               Map SS.Name (PrimitiveLifecycle, SS.Schema))
-         inspect name (_pos, lc, _rb, ty) (vis, ex, dep) =
+         inspect name (lc, ty) (vis, ex, dep) =
              if Set.member lc primsAvail then
                  (Map.insert name (lc, ty) vis, ex, dep)
              else case lc of

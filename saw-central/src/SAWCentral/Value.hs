@@ -48,6 +48,8 @@ module SAWCentral.Value (
     -- used by SAWCentral.Builtins, SAWScript.ValueOps, SAWScript.Interpreter,
     -- SAWScript.REPL.Command, SAWScript.REPL.Monad, SAWServer.SAWServer
     Environ(..),
+    -- used by SAWScript.Import
+    RebindableEnv,
     -- used by SAWScript.Interpreter
     pushScope, popScope,
     -- used by SAWCentral.Builtins, SAWScript.ValueOps, SAWScript.Interpreter,

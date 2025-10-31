@@ -9,7 +9,7 @@ Stability   : provisional
 
 module SAWScript.Import (
     readSchemaPure,
-    readSchemaPattern,
+    readSchemaPatternChecked,
     readStmtSemi,
     readExpression,
     findAndLoadFile
@@ -18,17 +18,26 @@ module SAWScript.Import (
 import qualified Data.Text.IO as TextIO (readFile)
 import qualified Data.Text as Text
 import Data.Text (Text)
+--import qualified Data.Set as Set
+import Data.Set (Set)
+import qualified Data.Map as Map
+--import Data.Map (Map)
 import System.Directory
 import System.FilePath (normalise)
 
+import qualified SAWSupport.ScopedMap as ScopedMap
+--import SAWSupport.ScopedMap (ScopedMap)
+
 import SAWCentral.Position (Pos)
-import SAWCentral.AST
 import qualified SAWCentral.Options as Options
+import SAWCentral.AST
+import SAWCentral.Value (Environ(..), RebindableEnv)
 
 import SAWScript.Panic (panic)
+import SAWScript.Token (Token)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
-import SAWScript.Token (Token)
+import SAWScript.Typechecker (checkSchemaPattern)
 
 
 -- | Type shorthand for an operation that can return warnings and/or
@@ -37,6 +46,16 @@ import SAWScript.Token (Token)
 --   returns a (possibly empty) list of messages, which are all
 --   warnings and not fatal, and a result of type a.
 type WithMsgs a = Either [Text] ([Text], a)
+
+-- | The messages produced by the typechecker are pairs of position and
+--   String. Convert to Text. XXX: the error infrastructure is supposed
+--   to be what knows how to print source positions.
+convertTypeMsg :: (Pos, String) -> Text
+convertTypeMsg (pos, msg) =
+    let pos' = Text.pack (show pos)
+        msg' = Text.pack msg
+    in
+    pos' <> ": " <> msg'
 
 -- | Read some SAWScript text, using the selected parser entry point.
 --
@@ -130,8 +149,12 @@ readSchemaPure fakeFileName str =
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.
 --
-readSchemaPattern :: FilePath -> Text -> IO (Either [Text] SchemaPattern)
-readSchemaPattern fileName str = do
+--   Also runs the typechecker to check the pattern.
+--
+readSchemaPatternChecked ::
+    FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
+    IO (Either [Text] SchemaPattern)
+readSchemaPatternChecked fileName environ rbenv avail str = do
   -- XXX: this preserves the original behavior of ignoring the
   -- verbosity setting. We could expect the caller to pass in the
   -- options value to get the verbosity setting, and that's really
@@ -140,7 +163,26 @@ readSchemaPattern fileName str = do
   let opts = Options.defaultOptions
 
   let result = readAny fileName str parseSchemaPattern
-  dispatchMsgs opts result
+  let result' = case result of
+        Left errs -> Left errs
+        Right (msgs, pat) ->
+          let Environ varenv tyenv _cryenv = environ in
+
+          -- XXX it should not be necessary to do this munging
+          let squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)
+              varenv' = Map.map squash $ ScopedMap.flatten varenv
+              tyenv' = ScopedMap.flatten tyenv
+              rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)
+              rbenv' = Map.map rbsquash rbenv
+              varenv'' = Map.union varenv' rbenv'
+          in
+          let (errs_or_results, warns) = checkSchemaPattern avail varenv'' tyenv' pat
+              warns' = map convertTypeMsg warns
+          in
+          case errs_or_results of
+              Left errs -> Left (msgs ++ warns' ++ map convertTypeMsg errs)
+              Right results -> Right (msgs ++ warns', results)
+  dispatchMsgs opts result'
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
