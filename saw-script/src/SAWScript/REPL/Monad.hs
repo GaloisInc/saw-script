@@ -30,7 +30,10 @@ module SAWScript.REPL.Monad (
   ) where
 
 import Control.Monad (void)
-import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), MonadMask(..), catchJust)
+import Control.Monad.Catch (
+    MonadThrow(..), MonadCatch(..), MonadMask(..),
+    catchJust
+ )
 import Control.Monad.State (MonadState(..), StateT(..), get, gets, modify)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
@@ -42,9 +45,14 @@ import CryptolSAWCore.CryptolEnv
 
 import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..))
-import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
-import SAWCentral.Value (ProofScript(..), showsProofResult,
-                         rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook)
+import SAWCentral.TopLevel (
+    TopLevelRO(..), TopLevelRW(..), TopLevel(..),
+    runTopLevel
+ )
+import SAWCentral.Value (
+    ProofScript(..), showsProofResult,
+    rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook
+ )
 
 import SAWScript.Panic (panic)
 import SAWScript.Interpreter (buildTopLevelEnv)
@@ -64,7 +72,9 @@ data REPLState = REPLState
   }
 
 -- | Create an initial, empty environment.
-initREPL :: Bool -> Options -> TopLevelShellHook -> ProofScriptShellHook -> IO REPLState
+initREPL ::
+    Bool -> Options -> TopLevelShellHook -> ProofScriptShellHook ->
+    IO REPLState
 initREPL isBatch opts tlhook pshook =
   do (ro, rw) <- buildTopLevelEnv opts [] tlhook pshook
      return REPLState
@@ -93,7 +103,9 @@ resumeREPL ro rw mpst =
 
 -- | REPL monad context.
 newtype REPL a = REPL { unREPL :: StateT REPLState IO a }
-  deriving (Applicative, Functor, Monad, MonadThrow, MonadCatch, MonadMask, MonadFail)
+  deriving (
+      Applicative, Functor, Monad, MonadThrow, MonadCatch, MonadMask, MonadFail
+  )
 
 deriving instance MonadState REPLState REPL
 
@@ -119,7 +131,8 @@ liftProofScript m = do
     let pst = case mpst of
           Nothing -> panic "liftProofScript" ["Not in ProofScript mode"]
           Just ps -> ps
-    (result, pst') <- liftTopLevel $ runStateT (runExceptT (unProofScript m)) pst
+    (result, pst') <-
+        liftTopLevel $ runStateT (runExceptT (unProofScript m)) pst
     modify (\st -> st { rProofState = Just pst' })
     liftTopLevel $ case result of
        Left (stats, cex) ->
@@ -157,7 +170,8 @@ catchFail m k = catchJust sel m k
     sel e | isUserError e = Just (ioeGetErrorString e)
           | otherwise     = Nothing
 
--- | Handle any other exception (except that we ignore async exceptions and exitWith)
+-- | Handle any other exception (except that we ignore async
+--   exceptions and exitWith)
 catchOther :: REPL a -> (X.SomeException -> REPL a) -> REPL a
 catchOther m k = catchJust flt m k
  where

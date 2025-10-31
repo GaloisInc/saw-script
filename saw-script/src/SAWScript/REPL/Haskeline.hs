@@ -7,7 +7,8 @@ License     : BSD3
 Maintainer  : saw@galois.com
 Stability   : provisional
 
-Haskeline interface layer with main REPL loop and tab completion support.
+Haskeline interface layer with main REPL loop and tab completion
+support.
 -}
 
 module SAWScript.REPL.Haskeline (repl) where
@@ -335,7 +336,8 @@ completeReplCommand text cursor =
             -- text on the line, the LHS of the return value should
             -- always be the LHS of the input cursor.
 
-            let completion cmd = appendCompletion (Text.length cmdPrefix, cName cmd)
+            let completion cmd =
+                    appendCompletion (Text.length cmdPrefix, cName cmd)
             let completions = map completion $ searchCommandsByPrefix cmdPrefix
             return (cursorLeftRaw cursor, completions)
         cmdName : args ->
@@ -354,8 +356,8 @@ completeReplCommand text cursor =
                     -- but you can only actually give it one. Should
                     -- strengthen the argument schema.
                     case cBody cmd of
-                        ExprArg _     -> completeSAWScriptValue (last args) cursor
-                        TypeArgs _    -> completeSAWScriptType (last args) cursor
+                        ExprArg _   -> completeSAWScriptValue (last args) cursor
+                        TypeArgs _  -> completeSAWScriptType (last args) cursor
                         FilenameArg _ -> completeFilename cursor
                         ShellArg _    -> completeFilename cursor
                         NoArg       _ -> return (cursorLeftRaw cursor, [])

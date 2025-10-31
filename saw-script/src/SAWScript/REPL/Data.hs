@@ -50,13 +50,15 @@ import SAWScript.REPL.Monad
 getCryptolExprNames :: REPL [Text]
 getCryptolExprNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (Text.pack . show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))
+     let keys = Map.keys (MN.namespaceMap NSValue fNames)
+     return (map (Text.pack . show . pp) keys)
 
 -- | Get visible Cryptol type names.
 getCryptolTypeNames :: REPL [Text]
 getCryptolTypeNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (Text.pack . show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
+     let keys = Map.keys (MN.namespaceMap NSType fNames)
+     return (map (Text.pack . show . pp) keys)
 
 -- | Get visible variable names for Haskeline completion.
 getSAWScriptValueNames :: REPL [Text]

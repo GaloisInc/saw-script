@@ -38,11 +38,11 @@ run mfile opts = do
   (_result, _rst') <- runREPL (repl mfile) rst
   return ()
 
--- | Function to enter a nested TopLevel REPL, passed down into the interpreter
---   to avoid cyclic dependencies.
+-- | Function to enter a nested TopLevel REPL, passed down into the
+--   interpreter to avoid cyclic dependencies.
 --
---   Note that there isn't any REPL state that needs to be transferred to the
---   nested instance, only the interpreter state.
+--   Note that there isn't any REPL state that needs to be transferred
+--   to the nested instance, only the interpreter state.
 --
 reenterTopLevel :: TopLevelRO -> TopLevelRW -> IO TopLevelRW
 reenterTopLevel ro rw = do
@@ -50,13 +50,14 @@ reenterTopLevel ro rw = do
     (_result, rst') <- runREPL (repl Nothing) rst
     return $ rTopLevelRW rst'
 
--- | Function to enter a nested ProofScript REPL, passed down into the interpreter
---   to avoid cyclic dependencies.
+-- | Function to enter a nested ProofScript REPL, passed down into the
+--   interpreter to avoid cyclic dependencies.
 --
---   Note that there isn't any REPL state that needs to be transferred to the
---   nested instance, only the interpreter state.
+--   Note that there isn't any REPL state that needs to be transferred
+--   to the nested instance, only the interpreter state.
 --
-reenterProofScript :: TopLevelRO -> TopLevelRW -> ProofState -> IO (TopLevelRW, ProofState)
+reenterProofScript ::
+    TopLevelRO -> TopLevelRW -> ProofState -> IO (TopLevelRW, ProofState)
 reenterProofScript ro rw pst = do
     let rst = resumeREPL ro rw (Just pst)
     (_result, rst') <- runREPL (repl Nothing) rst

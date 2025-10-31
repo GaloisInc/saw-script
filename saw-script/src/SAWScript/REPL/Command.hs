@@ -77,8 +77,10 @@ failOn errs = case (reverse errs) of
         fail (Text.unpack lastMsg)
 
 cdCmd :: FilePath -> REPL ()
-cdCmd f | null f = liftIO $ putStrLn $ "Error: The :cd command requires a path argument"
-        | otherwise = do
+cdCmd f
+    | null f =
+        liftIO $ putStrLn "Error: The :cd command requires a path argument"
+    | otherwise = do
   exists <- liftIO $ doesDirectoryExist f
   if exists
     then liftIO $ setCurrentDirectory f
@@ -141,7 +143,9 @@ quitCmd =
 
 searchCmd :: Text -> REPL ()
 searchCmd str
-  | Text.null str = liftIO $ putStrLn $ "Error: The :search command requires at least one argument"
+  | Text.null str =
+      let msg = "Error: The :search command requires at least one argument" in
+      liftIO $ putStrLn msg
   | otherwise = do
 
      -- FUTURE: it would be nice to be able to use the words
@@ -162,7 +166,8 @@ searchCmd str
      rw <- getTopLevelRW
      let environ = rwEnviron rw
          rebindables = rwRebindables rw
-     errs_or_pat <- liftIO $ Loader.readSchemaPattern replFileName environ rebindables avail str
+     errs_or_pat <- liftIO $
+         Loader.readSchemaPattern replFileName environ rebindables avail str
      pat <- case errs_or_pat of
            Left errs -> failOn errs
            Right p -> return p
@@ -213,7 +218,8 @@ searchCmd str
                      " with unexpected lifecycle " <> Text.pack (show lc)
                  ]
          (visMatches, expMatches, depMatches) =
-             Map.foldrWithKey inspect (Map.empty, Map.empty, Map.empty) allMatches
+             let empty = (Map.empty, Map.empty, Map.empty) in
+             Map.foldrWithKey inspect empty allMatches
 
          printMatch (name, (lc, ty)) = do
            let ty' = PPS.pShowText ty
@@ -252,13 +258,13 @@ searchCmd str
      else do
          liftIO $ putStrLn "No matches."
          if not (Map.null expMatches) then do
-             liftIO $ putStrLn $ "The following experimental matches require " ++
-                             "enable_experimental:"
+             liftIO $ putStrLn $ "The following experimental matches " ++
+                                 "require enable_experimental:"
              printMatches expMatches
              alsoDeprecated
          else if not (Map.null depMatches) then do
              liftIO $ putStrLn $ "The following deprecated matches require " ++
-                             "enable_deprecated:"
+                                 "enable_deprecated:"
              printMatches depMatches
          else
              pure ()
@@ -280,13 +286,15 @@ tenvCmd = do
 
 typeOfCmd :: Text -> REPL ()
 typeOfCmd str
-  | Text.null str = liftIO $ putStrLn "Error: The :type command requires an argument"
+  | Text.null str =
+        liftIO $ putStrLn "Error: The :type command requires an argument"
   | otherwise = do
      rw <- getTopLevelRW
      let environ = rwEnviron rw
          rebindables = rwRebindables rw
          avail = rwPrimsAvail rw
-     errs_or_expr <- liftIO $ Loader.readExpression replFileName environ rebindables avail str
+     errs_or_expr <- liftIO $
+         Loader.readExpression replFileName environ rebindables avail str
      (schema, _expr) <- case errs_or_expr of
          Left errs -> failOn errs
          Right info -> return info
@@ -448,7 +456,8 @@ executeReplCommand cmd args0 =
           [] -> action ""
           [arg] -> action arg
           _ -> do
-              let msg = "The command " <> cName cmd <> " takes only one argument"
+              let msg = "The command " <> cName cmd <>
+                        " takes only one argument"
               liftIO $ TextIO.putStrLn msg
     in
     exceptionProtect $ case cBody cmd of
@@ -467,7 +476,9 @@ executeReplCommand cmd args0 =
 -- | Execute REPL :-command text.
 executeReplCommandText :: Text -> REPL ()
 executeReplCommandText text =
-    let textWords = filter (\w -> not $ Text.null w) $ Text.split isSpace text in
+    let textWords =
+           filter (\w -> not $ Text.null w) $ Text.split isSpace text
+    in
     case textWords of
         [] -> pure ()
         cmdName : args ->
@@ -476,8 +487,9 @@ executeReplCommandText text =
                     -- Historically SAW accepts ":?cmd" without a space
                     if Text.isPrefixOf ":?" cmdName then
                         executeReplCommandText $ ":? " <> Text.drop 2 cmdName
-                    else
-                        liftIO $ TextIO.putStrLn $ "Unknown command: " <> cmdName
+                    else do
+                        let msg = "Unknown command: " <> cmdName
+                        liftIO $ TextIO.putStrLn msg
                 [cmd] ->
                     executeReplCommand cmd args
                 cmds -> liftIO $ do
