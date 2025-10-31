@@ -8,7 +8,7 @@ Stability   : provisional
 -}
 
 module SAWScript.Import (
-    readSchemaPure,
+    readSchemaPureChecked,
     readSchemaPatternChecked,
     readExpressionChecked,
     readStmtSemi,
@@ -21,7 +21,7 @@ import Data.Text (Text)
 --import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
---import Data.Map (Map)
+import Data.Map (Map)
 import System.Directory
 import System.FilePath (normalise)
 
@@ -37,7 +37,7 @@ import SAWScript.Panic (panic)
 import SAWScript.Token (Token)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
-import SAWScript.Typechecker (checkSchemaPattern, checkDecl)
+import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
 
 
 -- | Type shorthand for an operation that can return warnings and/or
@@ -142,9 +142,24 @@ dispatchMsgs opts result =
 -- positions (like "third argument of concat") but this at least
 -- allows telling the user which builtin the type came from.
 --
-readSchemaPure :: FilePath -> Text -> Schema
-readSchemaPure fakeFileName str =
-    panicOnMsgs (Text.pack fakeFileName) $ readAny fakeFileName str parseSchema
+readSchemaPureChecked ::
+    FilePath ->
+    PrimitiveLifecycle ->
+    Map Name (PrimitiveLifecycle, NamedType) ->
+    Text ->
+    Schema
+readSchemaPureChecked fakeFileName lc tyenv str = do
+    let result = readAny fakeFileName str parseSchema
+    let result' = case result of
+          Left errs -> Left errs
+          Right (msgs, schema) ->
+              let (errs_or_results, warns) = checkSchema lc tyenv schema
+                  warns' = map convertTypeMsg warns
+              in
+              case errs_or_results of
+                  Left errs -> Left (msgs ++ warns' ++ map convertTypeMsg errs)
+                  Right () -> Right (msgs ++ warns', schema)
+    panicOnMsgs (Text.pack fakeFileName) result'
 
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.

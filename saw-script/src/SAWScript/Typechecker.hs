@@ -17,6 +17,7 @@ module SAWScript.Typechecker
        ( checkDecl
        , checkStmt
        , typesMatch
+       , checkSchema
        , checkSchemaPattern
        ) where
 
@@ -2005,6 +2006,55 @@ typesMatch avail tenv schema'found schema'expected =
   case evalTIWithEnv avail Map.empty tenv match of
     (Left _errors, _warnings) -> False          -- not actually reachable
     (Right b, _warnings) -> b                   -- return match success/failure
+
+-- | Check a schema (type) as used when constructing the builtins
+--   table. (This is an external interface.)
+--
+-- The first argument is the lifecycle context the type is being used
+-- in. More on that below. The second is the typedef environment to
+-- use. The third argument is the schema to check.
+--
+-- All types found should be of kind *.
+--
+-- Purely a validity check; there's no updates it can make to the
+-- schema that are of use to the caller, on the assumption that the
+-- caller doesn't want to do stuff with the schema before exiting on
+-- errors, which it doesn't. Thus, just return unit and not an updated
+-- schema.
+--
+-- (Otherwise we'd need to rerun `generalize` to build a new schema,
+-- and that's a headache and not worthwhile given that the result
+-- isn't going to be used.)
+--
+-- This is called for the types of objects that may themselves not be
+-- visible, so rather than using the caller's set of visible lifecycle
+-- states, construct the set based on the lifecycle state of the
+-- declaration context. Deprecated objects can see equally or less
+-- deprecated types; experimental objects can see experimental types;
+-- everything can see current types.
+--
+checkSchema :: PrimitiveLifecycle -> TyEnv -> Schema -> Result ()
+checkSchema contextLC tyenv schema = do
+  let check = do
+        let Forall tyvars ty = schema
+        -- Generate unification vars for all the forall-bindings
+        let generate (pos'a, a) = do
+              ty'a <- getFreshTyVar pos'a
+              return (a, (Current, ConcreteType ty'a))
+        substs <- mapM generate tyvars
+        -- Substitute them into the type
+        let ty' = substituteTyVars' everythingAvailable (Map.fromList substs) ty
+        -- The only way checking can return an updated type is if
+        -- there's also an error, so discard the type
+        _ <- checkType kindStar ty'
+        return ()
+
+  let avail = Set.fromList $ case contextLC of
+          Current -> [Current]
+          WarnDeprecated -> [Current, WarnDeprecated]
+          HideDeprecated -> [Current, WarnDeprecated, HideDeprecated]
+          Experimental -> [Current, Experimental]
+  evalTIWithEnv avail Map.empty tyenv check
 
 -- | Check a schema (type) pattern as used by :search. (This is an
 -- external interface.)

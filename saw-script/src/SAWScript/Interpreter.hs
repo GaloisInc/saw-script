@@ -2461,7 +2461,11 @@ primTypes = Map.fromList
           , primTypeLife = lc
           }
         fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
-        ty = case Import.readSchemaPure fakeFileName tystr of
+        -- XXX: Map.empty is a placeholder; if we start using this we
+        -- may need to tsort the entries in the list and then
+        -- accumulate the environment with fold so that the types used
+        -- in the RHS of typedefs can be found.
+        ty = case Import.readSchemaPureChecked fakeFileName lc Map.empty tystr of
             SS.Forall [] ty' -> ty'
             _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
 
@@ -6410,7 +6414,10 @@ primitives = Map.fromList $
                                      , primitiveLife = lc
                                      })
       where
-        ty' = Import.readSchemaPure fakeFileName ty
+        -- Beware: errors in the type will only be detected when the
+        -- type is actually looked at by something, like :env, :t,
+        -- :search, or a direct use of the builtin.
+        ty' = Import.readSchemaPureChecked fakeFileName lc primNamedTypeEnv ty
         fakeFileName = Text.unpack $ "<type of " <> name <> ">"
 
     pureVal :: forall t. IsValue t => t -> Text -> Options -> BuiltinContext -> Value
