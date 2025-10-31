@@ -110,7 +110,7 @@ envCmd = do
 
 helpCmd :: Text -> REPL ()
 helpCmd cmd
-  | Text.null cmd = liftIO (mapM_ TextIO.putStrLn (genHelp commandList))
+  | Text.null cmd = liftIO (mapM_ TextIO.putStrLn genericHelp)
   | otherwise =
     do rw <- getTopLevelRW
        -- Note: there's no rebindable builtins and thus no way to
@@ -303,14 +303,9 @@ data CommandDescr = CommandDescr
   , cHelp :: Text
   }
 
-instance Show CommandDescr where
-  show cd = Text.unpack $ cName cd
-
+-- When we use `nub` on lists of commands, do the comparison by name.
 instance Eq CommandDescr where
   (==) = (==) `on` cName
-
-instance Ord CommandDescr where
-  compare = compare `on` cName
 
 -- | Schema for argument types of REPL commands.
 --
@@ -370,11 +365,11 @@ commandList  =
     "display the current working directory"
   ]
 
-genHelp :: [CommandDescr] -> [Text]
-genHelp cs = map cmdHelp cs
+genericHelp :: [Text]
+genericHelp = map cmdHelp commandList
   where
   cmdHelp cmd = Text.concat [ "  ", cName cmd, pad (cName cmd), cHelp cmd ]
-  padding     = 2 + maximum (map (Text.length . cName) cs)
+  padding     = 2 + maximum (map (Text.length . cName) commandList)
   pad n       = Text.replicate (max 0 (padding - Text.length n)) " "
 
 

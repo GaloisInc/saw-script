@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module SAWScript.REPL.Haskeline (repl) where
@@ -45,14 +44,13 @@ getPrompt =
 
 -- | Haskeline-specific repl implementation.
 repl :: Maybe FilePath -> REPL ()
-repl mbBatchFile =
-  do settings <- liftIO (setHistoryFile replSettings)
-     runInputTBehavior style settings $ withInterrupt loop
+repl mbBatchFile = do
+    let style = case mbBatchFile of
+          Nothing   -> defaultBehavior
+          Just path -> useFile path
+    settings <- liftIO (setHistoryFile replSettings)
+    runInputTBehavior style settings $ withInterrupt loop
   where
-
-  style = case mbBatchFile of
-    Nothing   -> defaultBehavior
-    Just path -> useFile path
 
   loop = do
     prompt <- lift getPrompt
@@ -217,11 +215,13 @@ approxLexerParser text0 = nowhere text0 text0
                 qstring here'
 
 
--- Completion ------------------------------------------------------------------
+------------------------------------------------------------
+-- Completion
 
--- | Haskeline's completion cursors are string-zippers in String, pairs
---   where the LHS is a reverse list of characters behind the cursor,
---   and the RHS is a forward list of characters after the cursor.
+-- | Haskeline's completion cursors are string-zippers in String,
+--   pairs where the LHS is a reverse list of characters behind the
+--   cursor, and the RHS is a forward list of characters after the
+--   cursor.
 type Cursor = (String, String)
 
 -- | Extract the LHS from a Haskeline cursor in its raw form.
