@@ -211,9 +211,13 @@ You may also forall-bind type variables before the patterns using the
 The scope of such bindings is the whole search.</p>
 <p>Complex patterns should be written in parentheses; otherwise they
 become syntactically ambiguous.
-Also, as of this writing parser limitations require you to search for
-monad types by applying <code class="docutils literal notranslate"><span class="pre">_</span></code> to them: <code class="docutils literal notranslate"><span class="pre">(TopLevel</span> <span class="pre">_)</span></code> rather than just
-<code class="docutils literal notranslate"><span class="pre">TopLevel</span></code>.</p>
+Note in particular that parentheses are required to treat a type constructor
+application to another type as a single search term.
+Without parentheses, <code class="docutils literal notranslate"><span class="pre">:search</span></code> would treat the unapplied type constructor and
+the other type as two separate search terms.
+For instance, <code class="docutils literal notranslate"><span class="pre">:search</span> <span class="pre">ProofScript</span> <span class="pre">Int</span></code> will search for objects mentioning both
+<code class="docutils literal notranslate"><span class="pre">ProofScript</span></code> (applied to anything) and <code class="docutils literal notranslate"><span class="pre">Int</span></code>. To search for objects that
+mention the type <code class="docutils literal notranslate"><span class="pre">ProofScript</span> <span class="pre">Int</span></code>, write <code class="docutils literal notranslate"><span class="pre">:search</span> <span class="pre">(ProofScript</span> <span class="pre">Int)</span></code>.</p>
 <p>Type variables in the search patterns are matched as follows:</p>
 <ul>
 <li><p>Already-bound type variables (typedef names, certain builtin types)
