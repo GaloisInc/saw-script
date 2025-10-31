@@ -268,7 +268,7 @@ loadFileUnchecked opts fname = do
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
 -- @-i@/@--import-path@ command-line options). If the file was successfully
--- found, load it. If not, raise an error.
+-- found, load it. If not, fail by returning `Left`.
 --
 -- Doesn't run the typechecker (yet).
 findAndLoadFileUnchecked :: Options.Options -> FilePath -> IO (Either [Text] [Stmt])

@@ -6,6 +6,11 @@ Description :
 License     : BSD3
 Maintainer  : saw@galois.com
 Stability   : provisional
+
+Simple trie implementation, providing a map from strings (as `Text`)
+to values that allows for prefix lookups.
+
+This module is intended to be imported qualified, like @Data.Map@.
 -}
 
 module SAWSupport.Trie (
@@ -28,8 +33,7 @@ import           Data.Maybe (maybeToList)
 import           SAWSupport.Panic (panic)
 
 
--- | Maps string names to values, allowing for partial key matches and
---   querying.
+-- | The type of tries.
 --
 --   Each node contains a map from characters to subnodes, and
 --   possibly also a value corresponding to the characters seen so

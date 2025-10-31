@@ -62,7 +62,32 @@ import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
 ------------------------------------------------------------
 -- REPL state and state monad
 
--- REPL Environment.
+-- | The state maintained by the REPL.
+--
+-- rContinue starts True and remains true until someone runs @:q@,
+-- at which point the main REPL loop exits.
+--
+-- rIsBatch is True if we're executing the REPL from a file in
+-- batch mode (@saw -B@).
+--
+-- rTopLevelRO and rTopLevelRW are the SAWScript interpreter's
+-- TopLevel monad state.
+--
+-- rProofState is the SAWScript interpreter's ProofScript monad state;
+-- it should be `Nothing` when we're running an ordinary TopLevel REPL
+-- and `Just` when we're running a ProofScript REPL.
+--
+-- We carry the state around separately like this (rather than
+-- embedding the interpreter's monads) so we can run in either
+-- context. This could be done with a monad typeclass instead, though
+-- likely that would end up being a lot more complicated, and as we've
+-- seen in the interpreter core, it's very easy to mess up code like
+-- that so it executes some bits in the wrong monad, which will then
+-- generally typecheck and only fail at runtime if you happen to try
+-- the right things. So it's probably better this way, although I'd
+-- prefer that the internal partitioning of the interpreter state
+-- wasn't exposed.
+-- 
 data REPLState = REPLState
   { rContinue   :: Bool
   , rIsBatch    :: Bool
@@ -114,9 +139,11 @@ runREPL :: REPL a -> REPLState -> IO (a, REPLState)
 runREPL m st = do
     runStateT (unREPL m) st
 
+-- | Run an IO action in a REPL context.
 instance MonadIO REPL where
   liftIO m = REPL (liftIO m)
 
+-- | Run a TopLevel action in a REPL context.
 liftTopLevel :: TopLevel a -> REPL a
 liftTopLevel m = do
     ro <- getTopLevelRO
@@ -125,6 +152,7 @@ liftTopLevel m = do
     modify (\st -> st { rTopLevelRW = rw' })
     return result
 
+-- | Run a ProofScript action in a REPL context.
 liftProofScript :: ProofScript a -> REPL a
 liftProofScript m = do
     mpst <- gets rProofState
@@ -162,7 +190,7 @@ getCryptolEnv = do
 ------------------------------------------------------------
 -- Exceptions
 
--- | Handle generic IO exceptions from 'fail in 'REPL' actions.
+-- | Handle generic IO exceptions from `fail` in REPL actions.
 catchFail :: REPL a -> (String -> REPL a) -> REPL a
 catchFail m k = catchJust sel m k
   where
@@ -172,6 +200,9 @@ catchFail m k = catchJust sel m k
 
 -- | Handle any other exception (except that we ignore async
 --   exceptions and exitWith)
+--
+-- XXX: we do not apparently ignore the exceptions that panic throws,
+-- and we probably should.
 catchOther :: REPL a -> (X.SomeException -> REPL a) -> REPL a
 catchOther m k = catchJust flt m k
  where
@@ -180,6 +211,8 @@ catchOther m k = catchJust flt m k
     | Just (_ :: ExitCode)       <- X.fromException e = Nothing
     | otherwise = Just e
 
+-- | Catch the exceptions we expect to catch while running a REPL
+--   action.
 exceptionProtect :: REPL () -> REPL ()
 exceptionProtect cmd =
       do chk <- liftIO . makeCheckpoint =<< getTopLevelRW
