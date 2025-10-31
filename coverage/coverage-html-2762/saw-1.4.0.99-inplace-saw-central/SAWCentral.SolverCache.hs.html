@@ -321,8 +321,8 @@ span.spaces    { background: white }
 <span class="lineno">  302 </span>                    [SolverBackendOption] -&gt; SATQuery -&gt; IO SolverCacheKey
 <span class="lineno">  303 </span><span class="decl"><span class="istickedoff">mkSolverCacheKey sc vs opts satq = do</span>
 <span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">body &lt;- satQueryAsPropTerm sc satq</span>
-<span class="lineno">  305 </span><span class="spaces">  </span><span class="istickedoff">let satVars = Map.mapMaybeWithKey (\x _fot -&gt; IntMap.lookup (vnIndex x) (varTypes body)) (satVariables satq)</span>
-<span class="lineno">  306 </span><span class="spaces">  </span><span class="istickedoff">--satVars &lt;- traverse (scFirstOrderType sc) (satVariables satq)</span>
+<span class="lineno">  305 </span><span class="spaces">  </span><span class="istickedoff">let mkVar x _fot = IntMap.lookup (vnIndex x) (varTypes body)</span>
+<span class="lineno">  306 </span><span class="spaces">  </span><span class="istickedoff">let satVars = Map.mapMaybeWithKey mkVar (satVariables satq)</span>
 <span class="lineno">  307 </span><span class="spaces">  </span><span class="istickedoff">let vars = Map.toList satVars ++</span>
 <span class="lineno">  308 </span><span class="spaces">             </span><span class="istickedoff">filter (\(x, _) -&gt; vnIndex x `elem` satUninterp satq)</span>
 <span class="lineno">  309 </span><span class="spaces">                    </span><span class="istickedoff">(getAllVars body)</span>

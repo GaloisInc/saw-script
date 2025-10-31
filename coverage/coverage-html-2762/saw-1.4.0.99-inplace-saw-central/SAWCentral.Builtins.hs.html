@@ -582,7 +582,7 @@ span.spaces    { background: white }
 <span class="lineno">  563 </span>normalize_term_opaque :: [Text] -&gt; TypedTerm -&gt; TopLevel TypedTerm
 <span class="lineno">  564 </span><span class="decl"><span class="istickedoff">normalize_term_opaque opaque tt =</span>
 <span class="lineno">  565 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  566 </span><span class="spaces">     </span><span class="istickedoff">idxs &lt;- mconcat &lt;$&gt; mapM (resolveName sc) opaque</span>
+<span class="lineno">  566 </span><span class="spaces">     </span><span class="istickedoff">idxs &lt;- mconcat &lt;$&gt; mapM <span class="nottickedoff">(resolveName sc)</span> opaque</span>
 <span class="lineno">  567 </span><span class="spaces">     </span><span class="istickedoff">let opaqueSet = Set.fromList idxs</span>
 <span class="lineno">  568 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- io (scTypeCheckWHNF sc =&lt;&lt; scUnfoldConstantSet sc False opaqueSet (ttTerm tt))</span>
 <span class="lineno">  569 </span><span class="spaces">     </span><span class="istickedoff">pure tt{ ttTerm = tm' }</span></span>

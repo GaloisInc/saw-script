@@ -2808,96 +2808,104 @@ span.spaces    { background: white }
 <span class="lineno"> 2789 </span><span class="spaces">            </span><span class="istickedoff">| Set.member nmidx names == b</span>
 <span class="lineno"> 2790 </span><span class="spaces">            </span><span class="istickedoff">, Just rhs &lt;- getRhs nmidx    -&gt; go rhs</span>
 <span class="lineno"> 2791 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>                   -&gt; return t</span>
-<span class="lineno"> 2792 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; scTermF sc =&lt;&lt; traverse go tf</span>
-<span class="lineno"> 2793 </span><span class="spaces">  </span><span class="istickedoff">go t0</span></span>
-<span class="lineno"> 2794 </span>
-<span class="lineno"> 2795 </span>-- | Unfold one time fixpoint constants.
-<span class="lineno"> 2796 </span>--
-<span class="lineno"> 2797 </span>-- Specifically, if @c = fix a f@, then replace @c@ with @f c@, that is replace
-<span class="lineno"> 2798 </span>-- @(fix a f)@ with @f (fix a f)@ while preserving the constant name.  The
-<span class="lineno"> 2799 </span>-- signature of @fix@ is @primitive fix : (a : sort 1) -&gt; (a -&gt; a) -&gt; a;@.
-<span class="lineno"> 2800 </span>scUnfoldOnceFixConstantSet :: SharedContext
-<span class="lineno"> 2801 </span>                           -&gt; Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
-<span class="lineno"> 2802 </span>                           -&gt; Set VarIndex -- ^ Set of constant names
-<span class="lineno"> 2803 </span>                           -&gt; Term
-<span class="lineno"> 2804 </span>                           -&gt; IO Term
-<span class="lineno"> 2805 </span><span class="decl"><span class="istickedoff">scUnfoldOnceFixConstantSet sc b names t0 = do</span>
-<span class="lineno"> 2806 </span><span class="spaces">  </span><span class="istickedoff">cache &lt;- newCache</span>
-<span class="lineno"> 2807 </span><span class="spaces">  </span><span class="istickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno"> 2808 </span><span class="spaces">  </span><span class="istickedoff">let getRhs v =</span>
-<span class="lineno"> 2809 </span><span class="spaces">        </span><span class="istickedoff">case lookupVarIndexInMap v mm of</span>
-<span class="lineno"> 2810 </span><span class="spaces">          </span><span class="istickedoff">Just (ResolvedDef d) -&gt; defBody d</span>
-<span class="lineno"> 2811 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; Nothing</span>
-<span class="lineno"> 2812 </span><span class="spaces">  </span><span class="istickedoff">let unfold t idx rhs</span>
-<span class="lineno"> 2813 </span><span class="spaces">        </span><span class="istickedoff">| Set.member idx names == b</span>
-<span class="lineno"> 2814 </span><span class="spaces">        </span><span class="istickedoff">, (isGlobalDef &quot;Prelude.fix&quot; -&gt; Just (), [_, f]) &lt;- asApplyAll rhs =</span>
-<span class="lineno"> 2815 </span><span class="spaces">          </span><span class="istickedoff">betaNormalize sc =&lt;&lt; scApply sc f t</span>
-<span class="lineno"> 2816 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno"> 2817 </span><span class="spaces">          </span><span class="istickedoff">return t</span>
-<span class="lineno"> 2818 </span><span class="spaces">  </span><span class="istickedoff">let go :: Term -&gt; IO Term</span>
-<span class="lineno"> 2819 </span><span class="spaces">      </span><span class="istickedoff">go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $</span>
-<span class="lineno"> 2820 </span><span class="spaces">        </span><span class="istickedoff">case tf of</span>
-<span class="lineno"> 2821 </span><span class="spaces">          </span><span class="istickedoff">Constant (Name nmidx _) | Just rhs &lt;- getRhs nmidx -&gt; unfold t nmidx rhs</span>
-<span class="lineno"> 2822 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; scTermF sc =&lt;&lt; traverse go tf</span>
-<span class="lineno"> 2823 </span><span class="spaces">  </span><span class="istickedoff">go t0</span></span>
-<span class="lineno"> 2824 </span>
-<span class="lineno"> 2825 </span>-- | TODO: test whether this version is slower or faster.
-<span class="lineno"> 2826 </span>scUnfoldConstantSet' :: SharedContext
-<span class="lineno"> 2827 </span>                    -&gt; Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
-<span class="lineno"> 2828 </span>                    -&gt; Set VarIndex -- ^ Set of constant names
-<span class="lineno"> 2829 </span>                    -&gt; Term
-<span class="lineno"> 2830 </span>                    -&gt; IO Term
-<span class="lineno"> 2831 </span><span class="decl"><span class="nottickedoff">scUnfoldConstantSet' sc b names t0 = do</span>
-<span class="lineno"> 2832 </span><span class="spaces">  </span><span class="nottickedoff">tcache &lt;- newCacheMap' Map.empty</span>
-<span class="lineno"> 2833 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno"> 2834 </span><span class="spaces">  </span><span class="nottickedoff">let getRhs v =</span>
-<span class="lineno"> 2835 </span><span class="spaces">        </span><span class="nottickedoff">case lookupVarIndexInMap v mm of</span>
-<span class="lineno"> 2836 </span><span class="spaces">          </span><span class="nottickedoff">Just (ResolvedDef d) -&gt; defBody d</span>
-<span class="lineno"> 2837 </span><span class="spaces">          </span><span class="nottickedoff">_ -&gt; Nothing</span>
-<span class="lineno"> 2838 </span><span class="spaces">  </span><span class="nottickedoff">let go :: Term -&gt; ChangeT IO Term</span>
-<span class="lineno"> 2839 </span><span class="spaces">      </span><span class="nottickedoff">go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =</span>
-<span class="lineno"> 2840 </span><span class="spaces">        </span><span class="nottickedoff">case tf of</span>
-<span class="lineno"> 2841 </span><span class="spaces">          </span><span class="nottickedoff">Constant (Name nmidx _)</span>
-<span class="lineno"> 2842 </span><span class="spaces">            </span><span class="nottickedoff">| Set.member nmidx names == b</span>
-<span class="lineno"> 2843 </span><span class="spaces">            </span><span class="nottickedoff">, Just rhs &lt;- getRhs nmidx    -&gt; taint (go rhs)</span>
-<span class="lineno"> 2844 </span><span class="spaces">            </span><span class="nottickedoff">| otherwise                   -&gt; pure t</span>
-<span class="lineno"> 2845 </span><span class="spaces">          </span><span class="nottickedoff">_ -&gt; useChangeCache tcache idx $</span>
-<span class="lineno"> 2846 </span><span class="spaces">                 </span><span class="nottickedoff">whenModified t (scTermF sc) (traverse go tf)</span>
-<span class="lineno"> 2847 </span><span class="spaces">  </span><span class="nottickedoff">commitChangeT (go t0)</span></span>
-<span class="lineno"> 2848 </span>
-<span class="lineno"> 2849 </span>-- | Return the number of DAG nodes used by the given @Term@.
-<span class="lineno"> 2850 </span>scSharedSize :: Term -&gt; Integer
-<span class="lineno"> 2851 </span><span class="decl"><span class="nottickedoff">scSharedSize = fst . scSharedSizeAux (0, Set.empty)</span></span>
-<span class="lineno"> 2852 </span>
-<span class="lineno"> 2853 </span>scSharedSizeMany :: [Term] -&gt; Integer
-<span class="lineno"> 2854 </span><span class="decl"><span class="istickedoff">scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)</span></span>
-<span class="lineno"> 2855 </span>
-<span class="lineno"> 2856 </span>scSharedSizeAux :: (Integer, Set TermIndex) -&gt; Term -&gt; (Integer, Set TermIndex)
-<span class="lineno"> 2857 </span><span class="decl"><span class="istickedoff">scSharedSizeAux = go</span>
-<span class="lineno"> 2858 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2859 </span><span class="spaces">    </span><span class="istickedoff">go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf })</span>
-<span class="lineno"> 2860 </span><span class="spaces">      </span><span class="istickedoff">| Set.member idx seen = (sz, seen)</span>
-<span class="lineno"> 2861 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = foldl' go (strictPair (sz + 1) (Set.insert idx seen)) tf</span></span>
-<span class="lineno"> 2862 </span>
-<span class="lineno"> 2863 </span>strictPair :: a -&gt; b -&gt; (a, b)
-<span class="lineno"> 2864 </span><span class="decl"><span class="istickedoff">strictPair x y = x `seq` y `seq` (x, y)</span></span>
-<span class="lineno"> 2865 </span>
-<span class="lineno"> 2866 </span>-- | Return the number of nodes that would be used by the given
-<span class="lineno"> 2867 </span>-- @Term@ if it were represented as a tree instead of a DAG.
-<span class="lineno"> 2868 </span>scTreeSize :: Term -&gt; Integer
-<span class="lineno"> 2869 </span><span class="decl"><span class="nottickedoff">scTreeSize = fst . scTreeSizeAux (0, Map.empty)</span></span>
+<span class="lineno"> 2792 </span><span class="spaces">          </span><span class="istickedoff">Variable x _</span>
+<span class="lineno"> 2793 </span><span class="spaces">            </span><span class="istickedoff">| IntMap.member (vnIndex x) (varTypes t0) -&gt;</span>
+<span class="lineno"> 2794 </span><span class="spaces">              </span><span class="istickedoff">-- Avoid modifying types of free variables to preserve Term invariant</span>
+<span class="lineno"> 2795 </span><span class="spaces">              </span><span class="istickedoff">pure t</span>
+<span class="lineno"> 2796 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; scTermF sc =&lt;&lt; traverse go tf</span>
+<span class="lineno"> 2797 </span><span class="spaces">  </span><span class="istickedoff">go t0</span></span>
+<span class="lineno"> 2798 </span>
+<span class="lineno"> 2799 </span>-- | Unfold one time fixpoint constants.
+<span class="lineno"> 2800 </span>--
+<span class="lineno"> 2801 </span>-- Specifically, if @c = fix a f@, then replace @c@ with @f c@, that is replace
+<span class="lineno"> 2802 </span>-- @(fix a f)@ with @f (fix a f)@ while preserving the constant name.  The
+<span class="lineno"> 2803 </span>-- signature of @fix@ is @primitive fix : (a : sort 1) -&gt; (a -&gt; a) -&gt; a;@.
+<span class="lineno"> 2804 </span>scUnfoldOnceFixConstantSet :: SharedContext
+<span class="lineno"> 2805 </span>                           -&gt; Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
+<span class="lineno"> 2806 </span>                           -&gt; Set VarIndex -- ^ Set of constant names
+<span class="lineno"> 2807 </span>                           -&gt; Term
+<span class="lineno"> 2808 </span>                           -&gt; IO Term
+<span class="lineno"> 2809 </span><span class="decl"><span class="istickedoff">scUnfoldOnceFixConstantSet sc b names t0 = do</span>
+<span class="lineno"> 2810 </span><span class="spaces">  </span><span class="istickedoff">cache &lt;- newCache</span>
+<span class="lineno"> 2811 </span><span class="spaces">  </span><span class="istickedoff">mm &lt;- scGetModuleMap sc</span>
+<span class="lineno"> 2812 </span><span class="spaces">  </span><span class="istickedoff">let getRhs v =</span>
+<span class="lineno"> 2813 </span><span class="spaces">        </span><span class="istickedoff">case lookupVarIndexInMap v mm of</span>
+<span class="lineno"> 2814 </span><span class="spaces">          </span><span class="istickedoff">Just (ResolvedDef d) -&gt; defBody d</span>
+<span class="lineno"> 2815 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno"> 2816 </span><span class="spaces">  </span><span class="istickedoff">let unfold t idx rhs</span>
+<span class="lineno"> 2817 </span><span class="spaces">        </span><span class="istickedoff">| Set.member idx names == b</span>
+<span class="lineno"> 2818 </span><span class="spaces">        </span><span class="istickedoff">, (isGlobalDef &quot;Prelude.fix&quot; -&gt; Just (), [_, f]) &lt;- asApplyAll rhs =</span>
+<span class="lineno"> 2819 </span><span class="spaces">          </span><span class="istickedoff">betaNormalize sc =&lt;&lt; scApply sc f t</span>
+<span class="lineno"> 2820 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno"> 2821 </span><span class="spaces">          </span><span class="istickedoff">return t</span>
+<span class="lineno"> 2822 </span><span class="spaces">  </span><span class="istickedoff">let go :: Term -&gt; IO Term</span>
+<span class="lineno"> 2823 </span><span class="spaces">      </span><span class="istickedoff">go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $</span>
+<span class="lineno"> 2824 </span><span class="spaces">        </span><span class="istickedoff">case tf of</span>
+<span class="lineno"> 2825 </span><span class="spaces">          </span><span class="istickedoff">Constant (Name nmidx _) | Just rhs &lt;- getRhs nmidx -&gt; unfold t nmidx rhs</span>
+<span class="lineno"> 2826 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; scTermF sc =&lt;&lt; traverse go tf</span>
+<span class="lineno"> 2827 </span><span class="spaces">  </span><span class="istickedoff">go t0</span></span>
+<span class="lineno"> 2828 </span>
+<span class="lineno"> 2829 </span>-- | TODO: test whether this version is slower or faster.
+<span class="lineno"> 2830 </span>scUnfoldConstantSet' :: SharedContext
+<span class="lineno"> 2831 </span>                    -&gt; Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
+<span class="lineno"> 2832 </span>                    -&gt; Set VarIndex -- ^ Set of constant names
+<span class="lineno"> 2833 </span>                    -&gt; Term
+<span class="lineno"> 2834 </span>                    -&gt; IO Term
+<span class="lineno"> 2835 </span><span class="decl"><span class="nottickedoff">scUnfoldConstantSet' sc b names t0 = do</span>
+<span class="lineno"> 2836 </span><span class="spaces">  </span><span class="nottickedoff">tcache &lt;- newCacheMap' Map.empty</span>
+<span class="lineno"> 2837 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
+<span class="lineno"> 2838 </span><span class="spaces">  </span><span class="nottickedoff">let getRhs v =</span>
+<span class="lineno"> 2839 </span><span class="spaces">        </span><span class="nottickedoff">case lookupVarIndexInMap v mm of</span>
+<span class="lineno"> 2840 </span><span class="spaces">          </span><span class="nottickedoff">Just (ResolvedDef d) -&gt; defBody d</span>
+<span class="lineno"> 2841 </span><span class="spaces">          </span><span class="nottickedoff">_ -&gt; Nothing</span>
+<span class="lineno"> 2842 </span><span class="spaces">  </span><span class="nottickedoff">let go :: Term -&gt; ChangeT IO Term</span>
+<span class="lineno"> 2843 </span><span class="spaces">      </span><span class="nottickedoff">go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =</span>
+<span class="lineno"> 2844 </span><span class="spaces">        </span><span class="nottickedoff">case tf of</span>
+<span class="lineno"> 2845 </span><span class="spaces">          </span><span class="nottickedoff">Constant (Name nmidx _)</span>
+<span class="lineno"> 2846 </span><span class="spaces">            </span><span class="nottickedoff">| Set.member nmidx names == b</span>
+<span class="lineno"> 2847 </span><span class="spaces">            </span><span class="nottickedoff">, Just rhs &lt;- getRhs nmidx    -&gt; taint (go rhs)</span>
+<span class="lineno"> 2848 </span><span class="spaces">            </span><span class="nottickedoff">| otherwise                   -&gt; pure t</span>
+<span class="lineno"> 2849 </span><span class="spaces">          </span><span class="nottickedoff">Variable x _</span>
+<span class="lineno"> 2850 </span><span class="spaces">            </span><span class="nottickedoff">| IntMap.member (vnIndex x) (varTypes t0) -&gt;</span>
+<span class="lineno"> 2851 </span><span class="spaces">              </span><span class="nottickedoff">-- Avoid modifying types of free variables to preserve Term invariant</span>
+<span class="lineno"> 2852 </span><span class="spaces">              </span><span class="nottickedoff">pure t</span>
+<span class="lineno"> 2853 </span><span class="spaces">          </span><span class="nottickedoff">_ -&gt; useChangeCache tcache idx $</span>
+<span class="lineno"> 2854 </span><span class="spaces">                 </span><span class="nottickedoff">whenModified t (scTermF sc) (traverse go tf)</span>
+<span class="lineno"> 2855 </span><span class="spaces">  </span><span class="nottickedoff">commitChangeT (go t0)</span></span>
+<span class="lineno"> 2856 </span>
+<span class="lineno"> 2857 </span>-- | Return the number of DAG nodes used by the given @Term@.
+<span class="lineno"> 2858 </span>scSharedSize :: Term -&gt; Integer
+<span class="lineno"> 2859 </span><span class="decl"><span class="nottickedoff">scSharedSize = fst . scSharedSizeAux (0, Set.empty)</span></span>
+<span class="lineno"> 2860 </span>
+<span class="lineno"> 2861 </span>scSharedSizeMany :: [Term] -&gt; Integer
+<span class="lineno"> 2862 </span><span class="decl"><span class="istickedoff">scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)</span></span>
+<span class="lineno"> 2863 </span>
+<span class="lineno"> 2864 </span>scSharedSizeAux :: (Integer, Set TermIndex) -&gt; Term -&gt; (Integer, Set TermIndex)
+<span class="lineno"> 2865 </span><span class="decl"><span class="istickedoff">scSharedSizeAux = go</span>
+<span class="lineno"> 2866 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2867 </span><span class="spaces">    </span><span class="istickedoff">go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf })</span>
+<span class="lineno"> 2868 </span><span class="spaces">      </span><span class="istickedoff">| Set.member idx seen = (sz, seen)</span>
+<span class="lineno"> 2869 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = foldl' go (strictPair (sz + 1) (Set.insert idx seen)) tf</span></span>
 <span class="lineno"> 2870 </span>
-<span class="lineno"> 2871 </span>scTreeSizeMany :: [Term] -&gt; Integer
-<span class="lineno"> 2872 </span><span class="decl"><span class="nottickedoff">scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)</span></span>
+<span class="lineno"> 2871 </span>strictPair :: a -&gt; b -&gt; (a, b)
+<span class="lineno"> 2872 </span><span class="decl"><span class="istickedoff">strictPair x y = x `seq` y `seq` (x, y)</span></span>
 <span class="lineno"> 2873 </span>
-<span class="lineno"> 2874 </span>scTreeSizeAux :: (Integer, Map TermIndex Integer) -&gt; Term -&gt; (Integer, Map TermIndex Integer)
-<span class="lineno"> 2875 </span><span class="decl"><span class="nottickedoff">scTreeSizeAux = go</span>
-<span class="lineno"> 2876 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2877 </span><span class="spaces">    </span><span class="nottickedoff">go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf }) =</span>
-<span class="lineno"> 2878 </span><span class="spaces">      </span><span class="nottickedoff">case Map.lookup idx seen of</span>
-<span class="lineno"> 2879 </span><span class="spaces">        </span><span class="nottickedoff">Just sz' -&gt; (sz + sz', seen)</span>
-<span class="lineno"> 2880 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; (sz + sz', Map.insert idx sz' seen')</span>
-<span class="lineno"> 2881 </span><span class="spaces">          </span><span class="nottickedoff">where (sz', seen') = foldl' go (1, seen) tf</span></span>
+<span class="lineno"> 2874 </span>-- | Return the number of nodes that would be used by the given
+<span class="lineno"> 2875 </span>-- @Term@ if it were represented as a tree instead of a DAG.
+<span class="lineno"> 2876 </span>scTreeSize :: Term -&gt; Integer
+<span class="lineno"> 2877 </span><span class="decl"><span class="nottickedoff">scTreeSize = fst . scTreeSizeAux (0, Map.empty)</span></span>
+<span class="lineno"> 2878 </span>
+<span class="lineno"> 2879 </span>scTreeSizeMany :: [Term] -&gt; Integer
+<span class="lineno"> 2880 </span><span class="decl"><span class="nottickedoff">scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)</span></span>
+<span class="lineno"> 2881 </span>
+<span class="lineno"> 2882 </span>scTreeSizeAux :: (Integer, Map TermIndex Integer) -&gt; Term -&gt; (Integer, Map TermIndex Integer)
+<span class="lineno"> 2883 </span><span class="decl"><span class="nottickedoff">scTreeSizeAux = go</span>
+<span class="lineno"> 2884 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2885 </span><span class="spaces">    </span><span class="nottickedoff">go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf }) =</span>
+<span class="lineno"> 2886 </span><span class="spaces">      </span><span class="nottickedoff">case Map.lookup idx seen of</span>
+<span class="lineno"> 2887 </span><span class="spaces">        </span><span class="nottickedoff">Just sz' -&gt; (sz + sz', seen)</span>
+<span class="lineno"> 2888 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; (sz + sz', Map.insert idx sz' seen')</span>
+<span class="lineno"> 2889 </span><span class="spaces">          </span><span class="nottickedoff">where (sz', seen') = foldl' go (1, seen) tf</span></span>
 
 </pre>
 </body>
