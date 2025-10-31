@@ -6359,7 +6359,7 @@ primitives = Map.fromList $
     ----------------------------------------
     -- A few more misc commands
 
-  , prim "sharpSAT"  "Term -> TopLevel Integer"
+  , prim "sharpSAT"  "Term -> TopLevel Int"
     (pureVal sharpSAT)
     Current
     [ "Use the sharpSAT solver to count the number of solutions to the CNF"
