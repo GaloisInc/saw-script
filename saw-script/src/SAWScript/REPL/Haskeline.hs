@@ -8,7 +8,7 @@ Stability   : provisional
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWScript.REPL.Haskeline (repl, replBody) where
+module SAWScript.REPL.Haskeline (repl) where
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Data
@@ -23,8 +23,8 @@ import Data.List (isPrefixOf)
 import System.Console.Haskeline
 import System.Directory(getAppUserDataDirectory,createDirectoryIfMissing)
 import System.FilePath((</>))
-import qualified Control.Monad.IO.Class as MTL
-import qualified Control.Monad.Trans.Class as MTL
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Class (lift)
 import qualified Control.Exception as X
 
 import SAWCentral.Proof (psGoals)
@@ -42,58 +42,51 @@ getPrompt =
          Just pst ->
              return ("proof ("++show (length (psGoals pst))++")> ")
 
-shouldContinue :: REPL Bool
-shouldContinue =
-    gets rContinue
-
-
-
 -- | Haskeline-specific repl implementation.
---
--- XXX this needs to handle Ctrl-C, which at the moment will just cause
--- haskeline to exit.  See the function 'withInterrupt' for more info on how to
--- handle this.
 repl :: Maybe FilePath -> REPL ()
 repl mbBatchFile =
-  replBody mbBatchFile
-
-
-replBody :: Maybe FilePath -> REPL ()
-replBody mbBatchFile =
-  do settings <- MTL.liftIO (setHistoryFile replSettings)
-     runInputTBehavior style settings body
+  do settings <- liftIO (setHistoryFile replSettings)
+     runInputTBehavior style settings $ withInterrupt loop
   where
-  body = withInterrupt loop
 
   style = case mbBatchFile of
     Nothing   -> defaultBehavior
     Just path -> useFile path
 
   loop = do
-    prompt <- MTL.lift getPrompt
+    prompt <- lift getPrompt
     mb     <- handleInterrupt (return (Just "")) (getInputLines prompt [])
     case mb of
-      Just line
-        | Just cmd <- parseCommand findCommand (Text.pack line) -> do
-          continue <- MTL.lift $ do
-            handleInterrupt handleCtrlC (runCommand cmd)
-            shouldContinue
-          when continue loop
+        Nothing ->
+            -- EOF
+            return ()
+        Just line ->
+            -- XXX why is findCommand passed to parseCommand...?
+            case parseCommand findCommand (Text.pack line) of
+                Nothing ->
+                    loop
+                Just result -> do
+                    lift $ runCommand result
+                    continue <- lift $ gets rContinue
+                    when continue
+                        loop
 
-        | otherwise -> loop
-
-      Nothing -> return ()
-
-  getInputLines prompt ls =
-    do mb <- fmap (filter (/= '\r')) <$> getInputLine prompt
-       let newPrompt = map (\_ -> ' ') prompt
-       case mb of
-          Nothing -> return Nothing
-          Just l | not (null l) && last l == '\\' ->
-                                      getInputLines newPrompt (init l : ls)
-                 | otherwise -> return $ Just $ unlines $ reverse $ l : ls
-
-
+  getInputLines prompt linesSoFar = do
+      mbtext <- getInputLine prompt
+      case mbtext of
+          Nothing ->
+              return Nothing
+          Just text -> do
+              let text' = filter (\c -> c /= '\r') text
+              if not (null text') && last text' == '\\' then do
+                  -- Get more lines
+                  let newPrompt = map (\_ -> ' ') prompt
+                  getInputLines newPrompt (init text' : linesSoFar)
+              else do
+                  -- We accumulated these backwards, so reverse
+                  let linesAll = text : linesSoFar
+                      linetext = unlines $ reverse linesAll
+                  return $ Just linetext
 
 -- | Try to set the history file.
 setHistoryFile :: Settings REPL -> IO (Settings REPL)

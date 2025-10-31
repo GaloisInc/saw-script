@@ -16,7 +16,6 @@ module SAWScript.REPL.Command (
   , findCommand
 
     -- Misc utilities
-  , handleCtrlC
   , sanitize
   ) where
 
@@ -125,13 +124,12 @@ helpCmd cmd
 --                liftIO $ print $ helpDoc ec
 
 pwdCmd :: REPL ()
-pwdCmd = liftIO $ getCurrentDirectory >>= putStrLn
+pwdCmd = liftIO $ do
+    cwd <- getCurrentDirectory
+    putStrLn cwd
 
 quitCmd :: REPL ()
-quitCmd  = stop
-
-stop :: REPL ()
-stop =
+quitCmd =
     modify (\st -> st { rContinue = False })
 
 searchCmd :: Text -> REPL ()
@@ -291,14 +289,14 @@ typeOfCmd str
 ------------------------------------------------------------
 -- Command table
 
--- | Commands.
-data Command
-  = Command (REPL ())         -- ^ Successfully parsed command
-  | Ambiguous Text [Text]     -- ^ Ambiguous command, list of conflicting
-                              --   commands
-  | Unknown Text              -- ^ The unknown command
+-- | Result of searching for a command.
+data SearchResult
+  = Found (REPL ())           -- ^ Successfully parsed command
+  | Ambiguous Text [Text]     -- ^ Ambiguous name with list of
+                              --   possible matches
+  | Unknown Text              -- ^ An unknown command
 
--- | Command builder.
+-- | Command description.
 data CommandDescr = CommandDescr
   { cName :: Text
   , cAliases :: [Text]
@@ -377,16 +375,17 @@ genHelp cs = map cmdHelp cs
 -- Evaluation
 
 -- | Run a command.
-runCommand :: Command -> REPL ()
-runCommand c = case c of
+runCommand :: SearchResult -> REPL ()
+runCommand sr = case sr of
+  Found cmd ->
+      exceptionProtect cmd
 
-  Command cmd -> exceptionProtect cmd
-
-  Unknown cmd -> liftIO (TextIO.putStrLn ("Unknown command: " <> cmd))
+  Unknown cmd ->
+      liftIO $ TextIO.putStrLn $ "Unknown command: " <> cmd
 
   Ambiguous cmd cmds -> liftIO $ do
-    TextIO.putStrLn (cmd <> " is ambiguous; it could mean one of:")
-    TextIO.putStrLn ("\t" <> Text.intercalate ", " cmds)
+      TextIO.putStrLn $ cmd <> " is ambiguous; it could mean one of:"
+      TextIO.putStrLn $ "\t" <> Text.intercalate ", " cmds
 
 
 {- Evaluation is fairly straightforward; however, there are a few important
@@ -422,10 +421,6 @@ sawScriptCmd str = do
 
 replFileName :: FilePath
 replFileName = "<stdin>"
-
--- XXX this should probably do something a bit more specific.
-handleCtrlC :: REPL ()
-handleCtrlC  = liftIO (putStrLn "Ctrl-C")
 
 
 ------------------------------------------------------------
@@ -467,7 +462,7 @@ findCommand :: Text -> [CommandDescr]
 findCommand str = findSomeCommand str commands
 
 -- | Parse a line as a command.
-parseCommand :: (Text -> [CommandDescr]) -> Text -> Maybe Command
+parseCommand :: (Text -> [CommandDescr]) -> Text -> Maybe SearchResult
 parseCommand findCmd line = do
   (cmd,args) <- splitCommand line
   let args' = sanitizeEnd args
@@ -476,15 +471,15 @@ parseCommand findCmd line = do
     [] -> case Text.uncons cmd of
       Nothing -> Nothing
       Just (':', _) -> Just (Unknown cmd)
-      Just _ -> Just (Command (sawScriptCmd line))
+      Just _ -> Just (Found (sawScriptCmd line))
 
     -- matched exactly one command; run it
     [c] -> case cBody c of
-      ExprArg     body -> Just (Command (body args'))
-      TypeArg     body -> Just (Command (body args'))
-      FilenameArg body -> Just (Command (body =<< expandHome args'))
-      ShellArg    body -> Just (Command (body args'))
-      NoArg       body -> Just (Command  body)
+      ExprArg     body -> Just (Found (body args'))
+      TypeArg     body -> Just (Found (body args'))
+      FilenameArg body -> Just (Found (body =<< expandHome args'))
+      ShellArg    body -> Just (Found (body args'))
+      NoArg       body -> Just (Found  body)
 
     -- matched several things; complain
     cs -> Just (Ambiguous cmd (map cName cs))
