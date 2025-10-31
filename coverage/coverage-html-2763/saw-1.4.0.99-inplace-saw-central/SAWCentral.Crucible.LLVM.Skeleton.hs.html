@@ -1,0 +1,238 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Crucible.LLVM.Skeleton
+<span class="lineno">    3 </span>Description : Inferring and using &quot;skeletons&quot; of LLVM specifications
+<span class="lineno">    4 </span>Maintainer  : sbreese
+<span class="lineno">    5 </span>Stability   : provisional
+<span class="lineno">    6 </span>-}
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>{-# Language TemplateHaskell #-}
+<span class="lineno">    9 </span>{-# Language OverloadedStrings #-}
+<span class="lineno">   10 </span>{-# Language RecordWildCards #-}
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>module SAWCentral.Crucible.LLVM.Skeleton
+<span class="lineno">   13 </span>  ( Location(..), locationLine, locationColumn
+<span class="lineno">   14 </span>  , SizeGuess(..), sizeGuessElems, sizeGuessInitialized, sizeGuessSource
+<span class="lineno">   15 </span>  , TypeSkeleton(..), typeSkelLLVMType, typeSkelIsPointer, typeSkelSizeGuesses
+<span class="lineno">   16 </span>  , GlobalSkeleton(..), globSkelName, globSkelLoc, globSkelType, globSkelMutable, globSkelInitialized
+<span class="lineno">   17 </span>  , ArgSkeleton(..), argSkelName, argSkelLoc, argSkelType
+<span class="lineno">   18 </span>  , FunctionSkeleton(..), funSkelName, funSkelLoc, funSkelArgs, funSkelRet, funSkelCalls
+<span class="lineno">   19 </span>  , ModuleSkeleton(..), modSkelGlobals, modSkelFunctions
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>  , moduleSkeleton
+<span class="lineno">   22 </span>  ) where
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import Control.Lens.TH
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>import Control.Arrow
+<span class="lineno">   27 </span>import Control.Monad
+<span class="lineno">   28 </span>import Control.Lens
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>import qualified Data.IntMap.Strict as IntMap
+<span class="lineno">   31 </span>import Data.Maybe
+<span class="lineno">   32 </span>import Data.Text (Text)
+<span class="lineno">   33 </span>import qualified Data.Text as Text
+<span class="lineno">   34 </span>import Data.Map.Strict (Map)
+<span class="lineno">   35 </span>import qualified Data.Map.Strict as Map
+<span class="lineno">   36 </span>import Data.Set (Set)
+<span class="lineno">   37 </span>import qualified Data.Set as Set
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>import qualified Text.LLVM as LLVM
+<span class="lineno">   40 </span>import qualified Text.LLVM.DebugUtils as LLVM
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>import SAWCentral.Panic (panic)
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>--------------------------------------------------------------------------------
+<span class="lineno">   45 </span>-- ** Skeletons
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>data Location = Location
+<span class="lineno">   48 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_locationLine</span></span></span> :: Int
+<span class="lineno">   49 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_locationColumn</span></span></span> :: Maybe Int
+<span class="lineno">   50 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   51 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Location</span></span></span></span></span>
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>data SizeGuess = SizeGuess
+<span class="lineno">   54 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_sizeGuessElems</span></span></span> :: Int
+<span class="lineno">   55 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_sizeGuessInitialized</span></span></span> :: Bool
+<span class="lineno">   56 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_sizeGuessSource</span></span></span> :: Text
+<span class="lineno">   57 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   58 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''SizeGuess</span></span></span></span></span></span></span>
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>data TypeSkeleton = TypeSkeleton
+<span class="lineno">   61 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_typeSkelLLVMType</span></span></span> :: LLVM.Type
+<span class="lineno">   62 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_typeSkelIsPointer</span></span></span> :: Bool
+<span class="lineno">   63 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_typeSkelSizeGuesses</span></span></span> :: [SizeGuess]
+<span class="lineno">   64 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   65 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''TypeSkeleton</span></span></span></span></span></span></span>
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>data GlobalSkeleton = GlobalSkeleton
+<span class="lineno">   68 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_globSkelName</span></span></span> :: Text
+<span class="lineno">   69 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_globSkelLoc</span></span></span> :: Maybe Location
+<span class="lineno">   70 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_globSkelType</span></span></span> :: TypeSkeleton
+<span class="lineno">   71 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_globSkelMutable</span></span></span> :: Bool
+<span class="lineno">   72 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_globSkelInitialized</span></span></span> :: Bool
+<span class="lineno">   73 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   74 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''GlobalSkeleton</span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>data ArgSkeleton = ArgSkeleton
+<span class="lineno">   77 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_argSkelName</span></span></span> :: Maybe Text
+<span class="lineno">   78 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_argSkelLoc</span></span></span> :: Maybe Location
+<span class="lineno">   79 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_argSkelType</span></span></span> :: TypeSkeleton
+<span class="lineno">   80 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   81 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''ArgSkeleton</span></span></span></span></span></span></span>
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>data FunctionSkeleton = FunctionSkeleton
+<span class="lineno">   84 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_funSkelName</span></span></span> :: Text
+<span class="lineno">   85 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_funSkelLoc</span></span></span> :: Maybe Location
+<span class="lineno">   86 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_funSkelArgs</span></span></span> :: [ArgSkeleton]
+<span class="lineno">   87 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_funSkelRet</span></span></span> :: TypeSkeleton
+<span class="lineno">   88 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_funSkelCalls</span></span></span> :: Set Text
+<span class="lineno">   89 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   90 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''FunctionSkeleton</span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>data ModuleSkeleton = ModuleSkeleton
+<span class="lineno">   93 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modSkelGlobals</span></span></span> :: Map Text GlobalSkeleton
+<span class="lineno">   94 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modSkelFunctions</span></span></span> :: Map Text FunctionSkeleton
+<span class="lineno">   95 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   96 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''ModuleSkeleton</span></span></span></span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>--------------------------------------------------------------------------------
+<span class="lineno">   99 </span>-- ** Inferring skeletons
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>parseType :: LLVM.Type -&gt; IO TypeSkeleton
+<span class="lineno">  102 </span><span class="decl"><span class="nottickedoff">parseType (LLVM.PtrTo t) = pure $ TypeSkeleton t True [SizeGuess 1 True &quot;default guess of size 1&quot;]</span>
+<span class="lineno">  103 </span><span class="spaces"></span><span class="nottickedoff">-- It is unclear how to combine opaque pointers with type skeletons due to the</span>
+<span class="lineno">  104 </span><span class="spaces"></span><span class="nottickedoff">-- lack of a pointee type. For now, we simply fail if we encounter one</span>
+<span class="lineno">  105 </span><span class="spaces"></span><span class="nottickedoff">-- (see #1877).</span>
+<span class="lineno">  106 </span><span class="spaces"></span><span class="nottickedoff">parseType LLVM.PtrOpaque =</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">panic &quot;SAWCentral.Crucible.LLVM.Skeleton.parseType&quot;</span>
+<span class="lineno">  108 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Skeleton generation does not support opaque pointers&quot;</span>
+<span class="lineno">  109 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;Please report this at: https://github.com/GaloisInc/saw-script/issues/1877&quot;</span>
+<span class="lineno">  110 </span><span class="spaces">        </span><span class="nottickedoff">]</span>
+<span class="lineno">  111 </span><span class="spaces"></span><span class="nottickedoff">parseType (LLVM.Array i t) = pure $ TypeSkeleton t True</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="nottickedoff">[ SizeGuess (fromIntegral i) True $ &quot;default guess of size &quot; &lt;&gt; Text.pack (show i)</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  114 </span><span class="spaces"></span><span class="nottickedoff">parseType t = pure $ TypeSkeleton t False []</span></span>
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>parseGlobal :: Map String Int -&gt; LLVM.Global -&gt; IO GlobalSkeleton
+<span class="lineno">  117 </span><span class="decl"><span class="nottickedoff">parseGlobal ls LLVM.Global</span>
+<span class="lineno">  118 </span><span class="spaces">  </span><span class="nottickedoff">{ LLVM.globalSym = LLVM.Symbol s</span>
+<span class="lineno">  119 </span><span class="spaces">  </span><span class="nottickedoff">, LLVM.globalType = t</span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="nottickedoff">, LLVM.globalValue = v</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">, LLVM.globalAttrs = LLVM.GlobalAttrs { LLVM.gaConstant = c }</span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">} = do</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="nottickedoff">ty &lt;- parseType t</span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="nottickedoff">pure GlobalSkeleton</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="nottickedoff">{ _globSkelName = Text.pack s</span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="nottickedoff">, _globSkelLoc = flip Location Nothing &lt;$&gt; Map.lookup s ls</span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="nottickedoff">, _globSkelType = ty</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="nottickedoff">, _globSkelMutable = not c</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="nottickedoff">, _globSkelInitialized = isJust v</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>parseArg :: LLVM.Typed LLVM.Ident -&gt; (Maybe String, Maybe Location) -&gt; IO ArgSkeleton
+<span class="lineno">  133 </span><span class="decl"><span class="nottickedoff">parseArg LLVM.Typed { LLVM.typedType = t } (nm, loc) = do</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="nottickedoff">ty &lt;- parseType t</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">pure ArgSkeleton</span>
+<span class="lineno">  136 </span><span class="spaces">    </span><span class="nottickedoff">{ _argSkelName = Text.pack &lt;$&gt; nm</span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="nottickedoff">, _argSkelLoc = loc</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="nottickedoff">, _argSkelType = ty</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>stmtCalls :: [LLVM.Stmt] -&gt; Set Text
+<span class="lineno">  142 </span><span class="decl"><span class="nottickedoff">stmtCalls [] = Set.empty</span>
+<span class="lineno">  143 </span><span class="spaces"></span><span class="nottickedoff">stmtCalls (LLVM.Result _ (LLVM.Call _ _ (LLVM.ValSymbol (LLVM.Symbol s)) _) _ _:stmts) =</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="nottickedoff">Set.insert (Text.pack s) $ stmtCalls stmts</span>
+<span class="lineno">  145 </span><span class="spaces"></span><span class="nottickedoff">stmtCalls (LLVM.Effect (LLVM.Call _ _ (LLVM.ValSymbol (LLVM.Symbol s)) _) _ _:stmts) =</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">Set.insert (Text.pack s) $ stmtCalls stmts</span>
+<span class="lineno">  147 </span><span class="spaces"></span><span class="nottickedoff">stmtCalls (_:stmts) = stmtCalls stmts</span></span>
+<span class="lineno">  148 </span>
+<span class="lineno">  149 </span>stmtDebugDeclares :: [LLVM.Stmt] -&gt; Map Int Location
+<span class="lineno">  150 </span><span class="decl"><span class="nottickedoff">stmtDebugDeclares [] = Map.empty</span>
+<span class="lineno">  151 </span><span class="spaces"></span><span class="nottickedoff">stmtDebugDeclares</span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="nottickedoff">(LLVM.Result _</span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="nottickedoff">(LLVM.Call _ _</span>
+<span class="lineno">  154 </span><span class="spaces">      </span><span class="nottickedoff">(LLVM.ValSymbol (LLVM.Symbol s))</span>
+<span class="lineno">  155 </span><span class="spaces">      </span><span class="nottickedoff">[ _</span>
+<span class="lineno">  156 </span><span class="spaces">      </span><span class="nottickedoff">, LLVM.Typed</span>
+<span class="lineno">  157 </span><span class="spaces">        </span><span class="nottickedoff">{ LLVM.typedValue =</span>
+<span class="lineno">  158 </span><span class="spaces">          </span><span class="nottickedoff">LLVM.ValMd (LLVM.ValMdDebugInfo (LLVM.DebugInfoLocalVariable LLVM.DILocalVariable { LLVM.dilvArg = a }))</span>
+<span class="lineno">  159 </span><span class="spaces">        </span><span class="nottickedoff">}</span>
+<span class="lineno">  160 </span><span class="spaces">      </span><span class="nottickedoff">, _</span>
+<span class="lineno">  161 </span><span class="spaces">      </span><span class="nottickedoff">]) _dr md:stmts) -- TODO RGS: Should we also look into the debug records?</span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="nottickedoff">| s == &quot;llvm.dbg.declare&quot; || s == &quot;llvm.dbg.value&quot;</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="nottickedoff">, Just (LLVM.ValMdLoc LLVM.DebugLoc { LLVM.dlLine = line, LLVM.dlCol = col }) &lt;- lookup &quot;dbg&quot; md</span>
+<span class="lineno">  164 </span><span class="spaces">  </span><span class="nottickedoff">= Map.insert (fromIntegral a) (Location (fromIntegral line) . Just $ fromIntegral col) $ stmtDebugDeclares stmts</span>
+<span class="lineno">  165 </span><span class="spaces"></span><span class="nottickedoff">stmtDebugDeclares</span>
+<span class="lineno">  166 </span><span class="spaces">  </span><span class="nottickedoff">(LLVM.Effect</span>
+<span class="lineno">  167 </span><span class="spaces">    </span><span class="nottickedoff">(LLVM.Call _ _</span>
+<span class="lineno">  168 </span><span class="spaces">      </span><span class="nottickedoff">(LLVM.ValSymbol (LLVM.Symbol s))</span>
+<span class="lineno">  169 </span><span class="spaces">      </span><span class="nottickedoff">[ _</span>
+<span class="lineno">  170 </span><span class="spaces">      </span><span class="nottickedoff">, LLVM.Typed</span>
+<span class="lineno">  171 </span><span class="spaces">        </span><span class="nottickedoff">{ LLVM.typedValue =</span>
+<span class="lineno">  172 </span><span class="spaces">          </span><span class="nottickedoff">LLVM.ValMd (LLVM.ValMdDebugInfo (LLVM.DebugInfoLocalVariable LLVM.DILocalVariable { LLVM.dilvArg = a }))</span>
+<span class="lineno">  173 </span><span class="spaces">        </span><span class="nottickedoff">}</span>
+<span class="lineno">  174 </span><span class="spaces">      </span><span class="nottickedoff">, _</span>
+<span class="lineno">  175 </span><span class="spaces">      </span><span class="nottickedoff">]) _dr md:stmts) -- TODO RGS: Should we also look into the debug records?</span>
+<span class="lineno">  176 </span><span class="spaces">  </span><span class="nottickedoff">| s == &quot;llvm.dbg.declare&quot; || s == &quot;llvm.dbg.value&quot;</span>
+<span class="lineno">  177 </span><span class="spaces">  </span><span class="nottickedoff">, Just (LLVM.ValMdLoc LLVM.DebugLoc { LLVM.dlLine = line, LLVM.dlCol = col }) &lt;- lookup &quot;dbg&quot; md</span>
+<span class="lineno">  178 </span><span class="spaces">  </span><span class="nottickedoff">= Map.insert (fromIntegral a) (Location (fromIntegral line) . Just $ fromIntegral col) $ stmtDebugDeclares stmts</span>
+<span class="lineno">  179 </span><span class="spaces"></span><span class="nottickedoff">stmtDebugDeclares (_:stmts) = stmtDebugDeclares stmts</span></span>
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>defineName :: LLVM.Define -&gt; Text
+<span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">defineName LLVM.Define { LLVM.defName = LLVM.Symbol s } = Text.pack s</span></span>
+<span class="lineno">  183 </span>
+<span class="lineno">  184 </span>parseDefine :: Map String Int -&gt; LLVM.Module -&gt; LLVM.Define -&gt; IO FunctionSkeleton
+<span class="lineno">  185 </span><span class="decl"><span class="nottickedoff">parseDefine _ _ LLVM.Define { LLVM.defVarArgs = True } =</span>
+<span class="lineno">  186 </span><span class="spaces">  </span><span class="nottickedoff">fail &quot;Skeleton generation does not support varargs&quot;</span>
+<span class="lineno">  187 </span><span class="spaces"></span><span class="nottickedoff">parseDefine ls m d@LLVM.Define</span>
+<span class="lineno">  188 </span><span class="spaces">  </span><span class="nottickedoff">{ LLVM.defName = LLVM.Symbol s</span>
+<span class="lineno">  189 </span><span class="spaces">  </span><span class="nottickedoff">, LLVM.defArgs = args</span>
+<span class="lineno">  190 </span><span class="spaces">  </span><span class="nottickedoff">, LLVM.defBody = body</span>
+<span class="lineno">  191 </span><span class="spaces">  </span><span class="nottickedoff">, LLVM.defRetType = ret</span>
+<span class="lineno">  192 </span><span class="spaces">  </span><span class="nottickedoff">} = do</span>
+<span class="lineno">  193 </span><span class="spaces">  </span><span class="nottickedoff">let stmts = mconcat $ LLVM.bbStmts &lt;$&gt; body</span>
+<span class="lineno">  194 </span><span class="spaces">  </span><span class="nottickedoff">let argNames = LLVM.debugInfoArgNames m d</span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="nottickedoff">let debugDeclares = stmtDebugDeclares stmts</span>
+<span class="lineno">  196 </span><span class="spaces">  </span><span class="nottickedoff">argSkels &lt;- zipWithM parseArg args $ (flip IntMap.lookup argNames &amp;&amp;&amp; flip Map.lookup debugDeclares) &lt;$&gt; [1, 2..]</span>
+<span class="lineno">  197 </span><span class="spaces">  </span><span class="nottickedoff">retTy &lt;- parseType ret</span>
+<span class="lineno">  198 </span><span class="spaces">  </span><span class="nottickedoff">pure FunctionSkeleton</span>
+<span class="lineno">  199 </span><span class="spaces">    </span><span class="nottickedoff">{ _funSkelName = Text.pack s</span>
+<span class="lineno">  200 </span><span class="spaces">    </span><span class="nottickedoff">, _funSkelLoc = flip Location Nothing &lt;$&gt; Map.lookup s ls</span>
+<span class="lineno">  201 </span><span class="spaces">    </span><span class="nottickedoff">, _funSkelArgs = argSkels</span>
+<span class="lineno">  202 </span><span class="spaces">    </span><span class="nottickedoff">, _funSkelRet = retTy</span>
+<span class="lineno">  203 </span><span class="spaces">    </span><span class="nottickedoff">, _funSkelCalls = Set.intersection</span>
+<span class="lineno">  204 </span><span class="spaces">      </span><span class="nottickedoff">(Set.fromList $ defineName &lt;$&gt; LLVM.modDefines m)</span>
+<span class="lineno">  205 </span><span class="spaces">      </span><span class="nottickedoff">(stmtCalls stmts)</span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  207 </span>
+<span class="lineno">  208 </span>moduleSkeleton :: LLVM.Module -&gt; IO ModuleSkeleton
+<span class="lineno">  209 </span><span class="decl"><span class="nottickedoff">moduleSkeleton ast = do</span>
+<span class="lineno">  210 </span><span class="spaces">  </span><span class="nottickedoff">globs &lt;- mapM (parseGlobal $ LLVM.debugInfoGlobalLines ast) $ LLVM.modGlobals ast</span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">funs &lt;- mapM (parseDefine (LLVM.debugInfoDefineLines ast) ast) $ LLVM.modDefines ast</span>
+<span class="lineno">  212 </span><span class="spaces">  </span><span class="nottickedoff">pure $ ModuleSkeleton</span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="nottickedoff">{ _modSkelGlobals = Map.fromList $ (\g -&gt; (g ^. globSkelName, g)) &lt;$&gt; globs</span>
+<span class="lineno">  214 </span><span class="spaces">    </span><span class="nottickedoff">, _modSkelFunctions = Map.fromList $ (\f -&gt; (f ^. funSkelName, f)) &lt;$&gt; funs</span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="nottickedoff">}</span></span>
+
+</pre>
+</body>
+</html>
