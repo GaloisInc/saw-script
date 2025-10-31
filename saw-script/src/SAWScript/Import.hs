@@ -10,8 +10,8 @@ Stability   : provisional
 module SAWScript.Import (
     readSchemaPure,
     readSchemaPatternChecked,
+    readExpressionChecked,
     readStmtSemi,
-    readExpression,
     findAndLoadFile
   ) where
 
@@ -28,7 +28,7 @@ import System.FilePath (normalise)
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
 
-import SAWCentral.Position (Pos)
+import SAWCentral.Position (Pos, getPos)
 import qualified SAWCentral.Options as Options
 import SAWCentral.AST
 import SAWCentral.Value (Environ(..), RebindableEnv)
@@ -37,7 +37,7 @@ import SAWScript.Panic (panic)
 import SAWScript.Token (Token)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
-import SAWScript.Typechecker (checkSchemaPattern)
+import SAWScript.Typechecker (checkSchemaPattern, checkDecl)
 
 
 -- | Type shorthand for an operation that can return warnings and/or
@@ -186,13 +186,49 @@ readSchemaPatternChecked fileName environ rbenv avail str = do
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
-readExpression :: FilePath -> Text -> IO (Either [Text] Expr)
-readExpression fileName str = do
+readExpressionChecked :: FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text -> IO (Either [Text] (Schema, Expr))
+readExpressionChecked fileName environ rbenv avail str = do
   -- XXX as above
   let opts = Options.defaultOptions
 
   let result = readAny fileName str parseExpression
-  dispatchMsgs opts result
+  let result' = case result of
+        Left errs -> Left errs
+        Right (msgs, expr) ->
+           let Environ varenv tyenv _cryenvs = environ in
+
+           -- XXX it should not be necessary to do this munging
+           let squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
+               varenv' = Map.map squash $ ScopedMap.flatten varenv
+               tyenv' = ScopedMap.flatten tyenv
+               rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
+               rbenv' = Map.map rbsquash rbenv
+               varenv'' = Map.union varenv' rbenv'
+           in
+           -- XXX: also it shouldn't be necessary to do this wrappery
+           let pos = getPos expr
+               decl = Decl pos (PWild pos Nothing) Nothing expr
+           in
+           let (errs_or_results, warns) = checkDecl avail varenv'' tyenv' decl
+               warns' = map convertTypeMsg warns
+           in
+           case errs_or_results of
+               Left errs -> Left (msgs ++ warns' ++ map convertTypeMsg errs)
+               Right decl' ->
+                   let expr' = dDef decl'
+                       schema = case dType decl' of
+                         Just sch -> sch
+                         Nothing ->
+                             -- If the typechecker didn't insert a type, it's bust,
+                             -- so panic. Not much point in printing the expression
+                             -- or position in panic, since it's what the user just
+                             -- typed.
+                             panic "readExpressionChecked" [
+                                 "Typechecker failed to produce a type"
+                             ]
+                   in
+                   Right (msgs ++ warns', (schema, expr'))
+  dispatchMsgs opts result'
 
 -- | Read a statement from a string. This is used by the REPL evaluator.
 readStmtSemi :: FilePath -> Text -> IO (Either [Text] Stmt)

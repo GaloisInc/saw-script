@@ -26,7 +26,6 @@ import qualified SAWSupport.ScopedMap as ScopedMap
 import qualified SAWSupport.Trie as Trie
 import SAWSupport.Trie (Trie)
 
-import SAWCentral.Position (getPos)
 import SAWCentral.Value (Environ(..))
 
 import SAWScript.REPL.Monad
@@ -51,21 +50,14 @@ import qualified Data.Text.IO as TextIO
 import qualified SAWSupport.Pretty as PPS (pShowText)
 
 -- SAWScript imports
-import qualified SAWCentral.AST as SS (
-     Name,
-     Decl(..),
-     Pattern(..),
-     Schema
- )
-import SAWCentral.Exceptions
+import qualified SAWCentral.AST as SS (Name, Schema)
 
 import SAWScript.Panic (panic)
 import qualified SAWScript.Import as Import
-import SAWScript.Typechecker (checkDecl)
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretTopStmt)
 import SAWCentral.TopLevel (TopLevelRW(..))
-import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable, Rebindable(..))
+import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable)
 
 
 ------------------------------------------------------------
@@ -284,39 +276,15 @@ tenvCmd = do
 typeOfCmd :: Text -> REPL ()
 typeOfCmd str
   | Text.null str = liftIO $ putStrLn "[error] :type requires an argument"
-  | otherwise =
-  do errs_or_expr <- liftIO $ Import.readExpression replFileName str
-     expr <- case errs_or_expr of
-       Left errs -> failOn errs
-       Right expr -> return expr
-     let pos = getPos expr
-         decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
+  | otherwise = do
      rw <- getTopLevelRW
-     decl' <- do
-       let primsAvail = rwPrimsAvail rw
-           -- XXX it should not be necessary to do this munging
-           Environ varenv tyenv _cryenvs = rwEnviron rw
-           squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
-           varenv' = Map.map squash $ ScopedMap.flatten varenv
-           tyenv' = ScopedMap.flatten tyenv
-           rbenv = rwRebindables rw
-           rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
-           rbenv' = Map.map rbsquash rbenv
-           varenv'' = Map.union varenv' rbenv'
-       let (errs_or_results, warns) = checkDecl primsAvail varenv'' tyenv' decl
-       let issueWarning (msgpos, msg) =
-             -- XXX the print functions should be what knows how to show positions...
-             putStrLn (show msgpos ++ ": Warning: " ++ msg)
-       liftIO $ mapM_ issueWarning warns
-       either failTypecheck return errs_or_results
-     let schema = case SS.dType decl' of
-           Just sch -> sch
-           Nothing ->
-               -- If the typechecker didn't insert a type, it's bust,
-               -- so panic. Not much point in printing the expression
-               -- or position in panic, since it's what the user just
-               -- typed.
-               panic "typeOfCmd" ["Typechecker failed to produce a type"]
+     let environ = rwEnviron rw
+         rebindables = rwRebindables rw
+         avail = rwPrimsAvail rw
+     errs_or_expr <- liftIO $ Import.readExpressionChecked replFileName environ rebindables avail str
+     (schema, _expr) <- case errs_or_expr of
+         Left errs -> failOn errs
+         Right info -> return info
      liftIO $ TextIO.putStrLn $ PPS.pShowText schema
 
 
