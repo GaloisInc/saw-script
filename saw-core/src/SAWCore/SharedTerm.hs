@@ -2798,6 +2798,10 @@ scUnfoldConstantSet sc b names t0 = do
             | Set.member nmidx names == b
             , Just rhs <- getRhs nmidx    -> go rhs
             | otherwise                   -> return t
+          Variable x _
+            | IntMap.member (vnIndex x) (varTypes t0) ->
+              -- Avoid modifying types of free variables to preserve Term invariant
+              pure t
           _ -> scTermF sc =<< traverse go tf
   go t0
 
@@ -2851,6 +2855,10 @@ scUnfoldConstantSet' sc b names t0 = do
             | Set.member nmidx names == b
             , Just rhs <- getRhs nmidx    -> taint (go rhs)
             | otherwise                   -> pure t
+          Variable x _
+            | IntMap.member (vnIndex x) (varTypes t0) ->
+              -- Avoid modifying types of free variables to preserve Term invariant
+              pure t
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)
