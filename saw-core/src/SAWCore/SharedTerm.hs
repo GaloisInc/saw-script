@@ -127,7 +127,6 @@ module SAWCore.SharedTerm
   , scConvertible
     -- ** Type checking
   , scTypeOf
-  , scTypeOf'
   , asSort
   , reducePi
   , scTypeOfIdent
@@ -1397,11 +1396,7 @@ scTypeOfName sc nm =
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
 scTypeOf :: SharedContext -> Term -> IO Term
-scTypeOf sc t0 = scTypeOf' sc IntMap.empty t0
-
--- | A version for open terms; the map argument encodes the type environment.
-scTypeOf' :: SharedContext -> IntMap Term -> Term -> IO Term
-scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
+scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: Term -> State.StateT (Map TermIndex Term) IO Term
     memo STApp{ stAppIndex = i, stAppTermF = t} = do
@@ -1428,13 +1423,11 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           tx <- memo x
           lift $ reducePi sc tx y
         Lambda x tp rhs ->
-          do let env' = IntMap.insert (vnIndex x) tp env
-             rtp <- lift $ scTypeOf' sc env' rhs
+          do rtp <- lift $ scTypeOf sc rhs
              lift $ scPi sc x tp rtp
-        Pi x tp rhs ->
+        Pi _x tp rhs ->
           do ltp <- sort tp
-             let env' = IntMap.insert (vnIndex x) tp env
-             rtp <- toSort =<< lift (scTypeOf' sc env' rhs)
+             rtp <- toSort =<< lift (scTypeOf sc rhs)
              -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
              -- when b is a Prop (this is a forall proposition), otherwise it is a
              -- (Type (max (sortOf a) (sortOf b)))
@@ -1444,11 +1437,9 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           do mm <- liftIO $ scGetModuleMap sc
              case lookupVarIndexInMap (nameIndex nm) mm of
                Just r -> pure $ resolvedNameType r
-               _ -> panic "scTypeOf'" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
-        Variable x tp ->
-          case IntMap.lookup (vnIndex x) env of
-            Just tx -> pure tx
-            Nothing -> pure tp
+               _ -> panic "scTypeOf" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
+        Variable _x tp ->
+          pure tp
     ftermf :: FlatTermF Term
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =

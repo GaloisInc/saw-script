@@ -134,7 +134,7 @@ scSubtype sc t1 t2
 -- | Compute the type of a 'Term'.
 scTypeOf :: SharedContext -> Term -> IO Term
 scTypeOf sc (Term ctx _tm tp) =
-  do tp_tp <- Raw.scTypeOf' sc ctx tp
+  do tp_tp <- Raw.scTypeOf sc tp
      -- Shrink typing context if possible
      let ctx' = pruneContext (freeVars tp_tp) ctx
      pure (Term ctx' tp tp_tp)
