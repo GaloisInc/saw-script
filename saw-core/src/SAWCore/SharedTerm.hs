@@ -127,7 +127,6 @@ module SAWCore.SharedTerm
   , scConvertible
     -- ** Type checking
   , scTypeOf
-  , scTypeOf'
   , asSort
   , reducePi
   , scTypeOfIdent
@@ -346,6 +345,13 @@ insertTFM tf x tfm =
       in tfm { appMapTFM = IntMap.alter f i (appMapTFM tfm) }
     _ -> tfm { hashMapTFM = HMap.insert tf x (hashMapTFM tfm) }
 
+type AppCache = TermFMap Term
+
+type AppCacheRef = MVar AppCache
+
+emptyAppCache :: AppCache
+emptyAppCache = emptyTFM
+
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building Terms.
 
@@ -369,6 +375,25 @@ data SharedContext = SharedContext
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scNextVarIndex   :: IORef VarIndex
   }
+
+-- | Internal function to make a 'Term' from a 'TermF' with a given
+-- variable typing context.
+scMakeTerm :: SharedContext -> IntMap Term -> TermF Term -> IO Term
+scMakeTerm sc vt tf =
+  modifyMVar (scAppCache sc) $ \s -> do
+    case lookupTFM tf s of
+      Just term -> return (s, term)
+      Nothing -> do
+        i <- getUniqueInt
+        let term = STApp { stAppIndex = i
+                         , stAppHash = hash tf
+                         , stAppVarTypes = vt
+                         , stAppTermF = tf
+                         }
+            s' = insertTFM tf term s
+        seq s' $ return (s', term)
+
+--------------------------------------------------------------------------------
 
 data SharedContextCheckpoint =
   SCC
@@ -399,13 +424,102 @@ restoreSharedContext scc sc =
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
      return sc
 
+--------------------------------------------------------------------------------
+-- Fundamental term builders
+
+-- | Build a new 'Term' value from the given 'TermF'.
+-- Reuse a 'Term' from the cache if an identical one already exists.
+scTermF :: SharedContext -> TermF Term -> IO Term
+scTermF sc tf =
+  case tf of
+    FTermF ftf -> scFlatTermF sc ftf
+    App t1 t2 -> scApply sc t1 t2
+    Lambda x t1 t2 -> scLambda sc x t1 t2
+    Pi x t1 t2 -> scPi sc x t1 t2
+    Constant nm -> scConst sc nm
+    Variable x t1 -> scVariable sc x t1
+
 -- | Create a new term from a lower-level 'FlatTermF' term.
 scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
-scFlatTermF sc ftf = scTermF sc (FTermF ftf)
+scFlatTermF sc ftf =
+  do vt <- foldM (unifyVarTypes "scFlatTermF") IntMap.empty (fmap varTypes ftf)
+     scMakeTerm sc vt (FTermF ftf)
+
+-- | Create a function application term.
+scApply ::
+  SharedContext ->
+  Term {- ^ The function to apply -} ->
+  Term {- ^ The argument to apply to -} ->
+  IO Term
+scApply sc t1 t2 =
+  do vt <- unifyVarTypes "scApply" (varTypes t1) (varTypes t2)
+     scMakeTerm sc vt (App t1 t2)
+
+-- | Create a lambda term from a parameter name (as a 'VarName'),
+-- parameter type (as a 'Term'), and a body ('Term').
+-- All free variables with the same 'VarName' in the body become
+-- bound.
+scLambda ::
+  SharedContext ->
+  VarName {- ^ The parameter name -} ->
+  Term {- ^ The parameter type -} ->
+  Term {- ^ The body -} ->
+  IO Term
+scLambda sc x t body =
+  do ensureNotFreeInContext x body
+     _ <- unifyVarTypes "scLambda" (IntMap.singleton (vnIndex x) t) (varTypes body)
+     vt <- unifyVarTypes "scLambda" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
+     scMakeTerm sc vt (Lambda x t body)
+
+-- | Create a (possibly dependent) function given a parameter name,
+-- parameter type (as a 'Term'), and a body ('Term').
+-- All free variables with the same 'VarName' in the body become
+-- bound.
+scPi ::
+  SharedContext ->
+  VarName {- ^ The parameter name -} ->
+  Term {- ^ The parameter type -} ->
+  Term {- ^ The body -} ->
+  IO Term
+scPi sc x t body =
+  do ensureNotFreeInContext x body
+     _ <- unifyVarTypes "scPi" (IntMap.singleton (vnIndex x) t) (varTypes body)
+     vt <- unifyVarTypes "scPi" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
+     scMakeTerm sc vt (Pi x t body)
 
 -- | Create a constant 'Term' from a 'Name'.
 scConst :: SharedContext -> Name -> IO Term
-scConst sc nm = scTermF sc (Constant nm)
+scConst sc nm =
+  scMakeTerm sc IntMap.empty (Constant nm)
+
+-- | Create a named variable 'Term' from a 'VarName' and a type.
+scVariable :: SharedContext -> VarName -> Term -> IO Term
+scVariable sc x t =
+  do vt <- unifyVarTypes "scVariable" (IntMap.singleton (vnIndex x) t) (varTypes t)
+     scMakeTerm sc vt (Variable x t)
+
+-- | Check whether the given 'VarName' occurs free in the type of
+-- another variable in the context of the given 'Term', and fail if it
+-- does.
+ensureNotFreeInContext :: VarName -> Term -> IO ()
+ensureNotFreeInContext x body =
+  when (any (IntMap.member (vnIndex x) . varTypes) (varTypes body)) $
+    fail $ "Variable occurs free in typing context: " ++ show (vnName x)
+
+-- | Two typing contexts are unifiable if they agree perfectly on all
+-- entries where they overlap.
+unifyVarTypes :: String -> IntMap Term -> IntMap Term -> IO (IntMap Term)
+unifyVarTypes msg ctx1 ctx2 =
+  do let check i t1 t2 =
+           unless (t1 == t2) $
+           fail $ unlines [msg ++ ": variable typing context mismatch",
+                           "VarIndex: " ++ show i,
+                           "t1: " ++ showTerm t1,
+                           "t2: " ++ showTerm t2]
+     sequence_ (IntMap.intersectionWithKey check ctx1 ctx2)
+     pure (IntMap.union ctx1 ctx2)
+
+--------------------------------------------------------------------------------
 
 -- | Create a function application term from the 'Name' of a global
 -- constant and a list of 'Term' arguments.
@@ -413,10 +527,6 @@ scConstApply :: SharedContext -> Name -> [Term] -> IO Term
 scConstApply sc i ts =
   do c <- scConst sc i
      scApplyAll sc c ts
-
--- | Create a named variable 'Term' from a 'VarName' and a type.
-scVariable :: SharedContext -> VarName -> Term -> IO Term
-scVariable sc nm tp = scTermF sc (Variable nm tp)
 
 -- | Create a list of named variables from a list of names and types.
 scVariables :: Traversable t => SharedContext -> t (VarName, Term) -> IO (t Term)
@@ -519,13 +629,6 @@ scFreshenGlobalIdent sc ident =
   ident : map (mkIdent (identModule ident) .
                Text.append (identBaseName ident) .
                Text.pack . show) [(0::Integer) ..]
-
--- | Create a function application term.
-scApply :: SharedContext
-        -> Term -- ^ The function to apply
-        -> Term -- ^ The argument to apply to
-        -> IO Term
-scApply sc f = scTermF sc . App f
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -704,33 +807,6 @@ scInjectCode ::
   IO ()
 scInjectCode sc mnm ns txt =
   modifyIORef' (scModuleMap sc) $ insInjectCodeInMap mnm ns txt
-
--- SharedContext implementation.
-
-type AppCache = TermFMap Term
-
-type AppCacheRef = MVar AppCache
-
-emptyAppCache :: AppCache
-emptyAppCache = emptyTFM
-
--- | Build a new 'Term' value from the given 'TermF'.
--- Reuse a 'Term' from the cache if an identical one already exists.
-scTermF :: SharedContext -> TermF Term -> IO Term
-scTermF sc termF =
-  modifyMVar (scAppCache sc) $ \s -> do
-    case lookupTFM termF s of
-      Just term -> return (s, term)
-      Nothing -> do
-        i <- getUniqueInt
-        let term = STApp { stAppIndex = i
-                         , stAppHash = hash termF
-                         , stAppFreeVars = freesTermF (fmap freeVars termF)
-                         , stAppTermF = termF
-                         }
-            s' = insertTFM termF term s
-        seq s' $ return (s', term)
-
 
 --------------------------------------------------------------------------------
 -- Recursors
@@ -1232,8 +1308,8 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
          unwrapTermF <$> useCache c idx (eval sc t)
 
        go :: Cache IO TermIndex Term -> IntMap VarIndex -> Term -> Term -> IO Bool
-       go _c vm (STApp{stAppIndex = idx1, stAppFreeVars = vs1}) (STApp{stAppIndex = idx2})
-         | IntSet.disjoint vs1 (IntMap.keysSet vm) && idx1 == idx2 = pure True   -- succeed early case
+       go _c vm (STApp{stAppIndex = idx1, stAppVarTypes = vt1}) (STApp{stAppIndex = idx2})
+         | IntMap.disjoint vt1 vm && idx1 == idx2 = pure True   -- succeed early case
        go c vm t1 t2 = join (goF c vm <$> whnf c t1 <*> whnf c t2)
 
        goF :: Cache IO TermIndex Term -> IntMap VarIndex -> TermF Term -> TermF Term -> IO Bool
@@ -1320,11 +1396,7 @@ scTypeOfName sc nm =
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
 scTypeOf :: SharedContext -> Term -> IO Term
-scTypeOf sc t0 = scTypeOf' sc IntMap.empty t0
-
--- | A version for open terms; the map argument encodes the type environment.
-scTypeOf' :: SharedContext -> IntMap Term -> Term -> IO Term
-scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
+scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: Term -> State.StateT (Map TermIndex Term) IO Term
     memo STApp{ stAppIndex = i, stAppTermF = t} = do
@@ -1351,13 +1423,11 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           tx <- memo x
           lift $ reducePi sc tx y
         Lambda x tp rhs ->
-          do let env' = IntMap.insert (vnIndex x) tp env
-             rtp <- lift $ scTypeOf' sc env' rhs
+          do rtp <- lift $ scTypeOf sc rhs
              lift $ scPi sc x tp rtp
-        Pi x tp rhs ->
+        Pi _x tp rhs ->
           do ltp <- sort tp
-             let env' = IntMap.insert (vnIndex x) tp env
-             rtp <- toSort =<< lift (scTypeOf' sc env' rhs)
+             rtp <- toSort =<< lift (scTypeOf sc rhs)
              -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
              -- when b is a Prop (this is a forall proposition), otherwise it is a
              -- (Type (max (sortOf a) (sortOf b)))
@@ -1367,11 +1437,9 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           do mm <- liftIO $ scGetModuleMap sc
              case lookupVarIndexInMap (nameIndex nm) mm of
                Just r -> pure $ resolvedNameType r
-               _ -> panic "scTypeOf'" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
-        Variable x tp ->
-          case IntMap.lookup (vnIndex x) env of
-            Just tx -> pure tx
-            Nothing -> pure tp
+               _ -> panic "scTypeOf" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
+        Variable _x tp ->
+          pure tp
     ftermf :: FlatTermF Term
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
@@ -1621,17 +1689,6 @@ scFunAll :: SharedContext
          -> IO Term
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
--- | Create a lambda term from a parameter name (as a 'VarName'),
--- parameter type (as a 'Term'), and a body.
--- All free variables with the same 'VarName' in the body become
--- bound.
-scLambda :: SharedContext
-         -> VarName -- ^ The parameter name
-         -> Term   -- ^ The parameter type
-         -> Term   -- ^ The body
-         -> IO Term
-scLambda sc varname ty body = scTermF sc (Lambda varname ty body)
-
 -- | Create a lambda term of multiple arguments (curried) from a list
 -- associating parameter names to types (as 'Term's) and a body.
 -- The parameters are listed outermost first.
@@ -1644,18 +1701,6 @@ scLambdaList :: SharedContext
 scLambdaList _ [] rhs = return rhs
 scLambdaList sc ((nm,tp):r) rhs =
   scLambda sc nm tp =<< scLambdaList sc r rhs
-
--- | Create a (possibly dependent) function given a parameter name, parameter
--- type (as a 'Term'), and a body.
--- All free variables with the same 'VarName' in the body become
--- bound.
-scPi :: SharedContext
-     -> VarName -- ^ The parameter name
-     -> Term   -- ^ The parameter type
-     -> Term   -- ^ The body
-     -> IO Term
-scPi sc nm tp body = scTermF sc (Pi nm tp body)
-
 
 -- | Create a (possibly dependent) function of multiple arguments (curried)
 -- from a list associating parameter names to types (as 'Term's) and a body.
@@ -2580,8 +2625,8 @@ getAllVarsMap :: Term -> Map VarName Term
 getAllVarsMap t = State.evalState (go t) IntMap.empty
   where
     go :: Term -> State.State (IntMap (Map VarName Term)) (Map VarName Term)
-    go STApp{ stAppIndex = i, stAppTermF = tf, stAppFreeVars = fvs }
-      | IntSet.null fvs = pure Map.empty
+    go STApp{ stAppIndex = i, stAppTermF = tf, stAppVarTypes = vt }
+      | IntMap.null vt = pure Map.empty
       | otherwise =
         do memo <- State.get
            case IntMap.lookup i memo of
@@ -2744,6 +2789,10 @@ scUnfoldConstantSet sc b names t0 = do
             | Set.member nmidx names == b
             , Just rhs <- getRhs nmidx    -> go rhs
             | otherwise                   -> return t
+          Variable x _
+            | IntMap.member (vnIndex x) (varTypes t0) ->
+              -- Avoid modifying types of free variables to preserve Term invariant
+              pure t
           _ -> scTermF sc =<< traverse go tf
   go t0
 
@@ -2797,6 +2846,10 @@ scUnfoldConstantSet' sc b names t0 = do
             | Set.member nmidx names == b
             , Just rhs <- getRhs nmidx    -> taint (go rhs)
             | otherwise                   -> pure t
+          Variable x _
+            | IntMap.member (vnIndex x) (varTypes t0) ->
+              -- Avoid modifying types of free variables to preserve Term invariant
+              pure t
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)
