@@ -36,7 +36,7 @@ span.spaces    { background: white }
 <span class="lineno">   17 </span>
 <span class="lineno">   18 </span>-- | Type we use to track the command-line option settings.
 <span class="lineno">   19 </span>data Options = Options
-<span class="lineno">   20 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">importPath</span></span></span>       :: [FilePath]
+<span class="lineno">   20 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">importPath</span></span></span>       :: [FilePath]
 <span class="lineno">   21 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">classPath</span></span></span>        :: [FilePath]
 <span class="lineno">   22 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">jarList</span></span></span>          :: [FilePath]
 <span class="lineno">   23 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">javaBinDirs</span></span></span>      :: [FilePath]
@@ -74,7 +74,7 @@ span.spaces    { background: white }
 <span class="lineno">   55 </span>defaultOptions :: Options
 <span class="lineno">   56 </span><span class="decl"><span class="istickedoff">defaultOptions</span>
 <span class="lineno">   57 </span><span class="spaces">  </span><span class="istickedoff">= Options {</span>
-<span class="lineno">   58 </span><span class="spaces">      </span><span class="istickedoff">importPath = <span class="nottickedoff">[&quot;.&quot;]</span></span>
+<span class="lineno">   58 </span><span class="spaces">      </span><span class="istickedoff">importPath = [&quot;.&quot;]</span>
 <span class="lineno">   59 </span><span class="spaces">    </span><span class="istickedoff">, classPath = [&quot;.&quot;]</span>
 <span class="lineno">   60 </span><span class="spaces">    </span><span class="istickedoff">, jarList = []</span>
 <span class="lineno">   61 </span><span class="spaces">    </span><span class="istickedoff">, javaBinDirs = []</span>
@@ -118,7 +118,7 @@ span.spaces    { background: white }
 <span class="lineno">   99 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">addSawOpt :: (String, String) -&gt; Options -&gt; Options</span>
 <span class="lineno">  101 </span><span class="spaces">    </span><span class="istickedoff">addSawOpt (&quot;SAW_IMPORT_PATH&quot;, p) os =</span>
-<span class="lineno">  102 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">os { importPath = importPath os ++ splitSearchPath p }</span></span>
+<span class="lineno">  102 </span><span class="spaces">      </span><span class="istickedoff">os { importPath = importPath os ++ splitSearchPath p }</span>
 <span class="lineno">  103 </span><span class="spaces">    </span><span class="istickedoff">addSawOpt (&quot;SAW_JDK_JAR&quot;, p) os = <span class="nottickedoff">os { jarList = p : jarList os }</span></span>
 <span class="lineno">  104 </span><span class="spaces">    </span><span class="istickedoff">addSawOpt (&quot;CLASSPATH&quot;, p) os = <span class="nottickedoff">os { jarList = jarList os ++ jars</span></span>
 <span class="lineno">  105 </span><span class="spaces">                                       </span><span class="istickedoff"><span class="nottickedoff">, classPath = classPath os ++ dirs</span></span>

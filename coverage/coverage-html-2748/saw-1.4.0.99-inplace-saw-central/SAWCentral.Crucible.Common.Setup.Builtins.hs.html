@@ -127,44 +127,47 @@ span.spaces    { background: white }
 <span class="lineno">  108 </span>  [MS.SetupValue ext] -&gt;
 <span class="lineno">  109 </span>  CrucibleSetup ext ()
 <span class="lineno">  110 </span><span class="decl"><span class="istickedoff">crucible_execute_func args = do</span>
-<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">tps &lt;- use (csMethodSpec . MS.csArgs)</span>
-<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">csPrePost .= MS.PostState</span>
-<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">csMethodSpec . MS.csArgBindings .= Map.fromList [ (i, (t,a))</span>
-<span class="lineno">  114 </span><span class="spaces">                                                  </span><span class="istickedoff">| i &lt;- [0..]</span>
-<span class="lineno">  115 </span><span class="spaces">                                                  </span><span class="istickedoff">| a &lt;- args</span>
-<span class="lineno">  116 </span><span class="spaces">                                                  </span><span class="istickedoff">| t &lt;- tps</span>
-<span class="lineno">  117 </span><span class="spaces">                                                  </span><span class="istickedoff">]</span></span>
-<span class="lineno">  118 </span>
-<span class="lineno">  119 </span>crucible_equal ::
-<span class="lineno">  120 </span>  W4.ProgramLoc -&gt;
-<span class="lineno">  121 </span>  MS.SetupValue ext -&gt;
-<span class="lineno">  122 </span>  MS.SetupValue ext -&gt;
-<span class="lineno">  123 </span>  CrucibleSetup ext ()
-<span class="lineno">  124 </span><span class="decl"><span class="istickedoff">crucible_equal loc val1 val2 = do</span>
-<span class="lineno">  125 </span><span class="spaces">  </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">croTags</span></span>
-<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
-<span class="lineno">  127 </span><span class="spaces">           </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
-<span class="lineno">  128 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
-<span class="lineno">  129 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;equality specification&quot;</span></span>
-<span class="lineno">  130 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno">  131 </span><span class="spaces">           </span><span class="istickedoff">}</span>
-<span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">addCondition (MS.SetupCond_Equal md val1 val2)</span></span>
-<span class="lineno">  133 </span>
-<span class="lineno">  134 </span>--------------------------------------------------------------------------------
-<span class="lineno">  135 </span>-- ** Shared data types
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">st &lt;- get</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">tps &lt;- use (csMethodSpec . MS.csArgs)</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">when (st ^. csPrePost == MS.PostState) $</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail &quot;duplicate execute_func declaration&quot;</span></span>
+<span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">csPrePost .= MS.PostState</span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">csMethodSpec . MS.csArgBindings .= Map.fromList [ (i, (t,a))</span>
+<span class="lineno">  117 </span><span class="spaces">                                                  </span><span class="istickedoff">| i &lt;- [0..]</span>
+<span class="lineno">  118 </span><span class="spaces">                                                  </span><span class="istickedoff">| a &lt;- args</span>
+<span class="lineno">  119 </span><span class="spaces">                                                  </span><span class="istickedoff">| t &lt;- tps</span>
+<span class="lineno">  120 </span><span class="spaces">                                                  </span><span class="istickedoff">]</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>crucible_equal ::
+<span class="lineno">  123 </span>  W4.ProgramLoc -&gt;
+<span class="lineno">  124 </span>  MS.SetupValue ext -&gt;
+<span class="lineno">  125 </span>  MS.SetupValue ext -&gt;
+<span class="lineno">  126 </span>  CrucibleSetup ext ()
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">crucible_equal loc val1 val2 = do</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">croTags</span></span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno">  130 </span><span class="spaces">           </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
+<span class="lineno">  131 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
+<span class="lineno">  132 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;equality specification&quot;</span></span>
+<span class="lineno">  133 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno">  134 </span><span class="spaces">           </span><span class="istickedoff">}</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff">addCondition (MS.SetupCond_Equal md val1 val2)</span></span>
 <span class="lineno">  136 </span>
-<span class="lineno">  137 </span>-- | When invoking a points-to command, against what should SAW check the type
-<span class="lineno">  138 </span>-- of the RHS value?
-<span class="lineno">  139 </span>data CheckPointsToType ty
-<span class="lineno">  140 </span>  = CheckAgainstPointerType
-<span class="lineno">  141 </span>    -- ^ Check the type of the RHS value against the type that the LHS points to.
-<span class="lineno">  142 </span>    --   Used by commands such as @llvm_{conditional_}points_to@ and
-<span class="lineno">  143 </span>    --   @mir_points_to@.
-<span class="lineno">  144 </span>  | CheckAgainstCastedType ty
-<span class="lineno">  145 </span>    -- ^ Check the type of the RHS value against the provided @ty@, which
-<span class="lineno">  146 </span>    --   the LHS pointer is casted to.
-<span class="lineno">  147 </span>    --   This is currently used by @llvm_{conditional_}points_to_at_type@ only.
-<span class="lineno">  148 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>)
+<span class="lineno">  137 </span>--------------------------------------------------------------------------------
+<span class="lineno">  138 </span>-- ** Shared data types
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>-- | When invoking a points-to command, against what should SAW check the type
+<span class="lineno">  141 </span>-- of the RHS value?
+<span class="lineno">  142 </span>data CheckPointsToType ty
+<span class="lineno">  143 </span>  = CheckAgainstPointerType
+<span class="lineno">  144 </span>    -- ^ Check the type of the RHS value against the type that the LHS points to.
+<span class="lineno">  145 </span>    --   Used by commands such as @llvm_{conditional_}points_to@ and
+<span class="lineno">  146 </span>    --   @mir_points_to@.
+<span class="lineno">  147 </span>  | CheckAgainstCastedType ty
+<span class="lineno">  148 </span>    -- ^ Check the type of the RHS value against the provided @ty@, which
+<span class="lineno">  149 </span>    --   the LHS pointer is casted to.
+<span class="lineno">  150 </span>    --   This is currently used by @llvm_{conditional_}points_to_at_type@ only.
+<span class="lineno">  151 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>)
 
 </pre>
 </body>
