@@ -5,18 +5,13 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in
 -- SAWScript.Typechecker
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
@@ -986,7 +981,7 @@ interpretFile file runMain =
   where
     interp = do
       opts <- getOptions
-      stmts <- io $ SAWScript.Import.loadFile opts file
+      stmts <- io $ SAWScript.Import.findAndLoadFile opts file
       io $ setCurrentDirectory (takeDirectory file)
       mapM_ stmtWithPrint stmts
       when runMain interpretMain
@@ -2122,12 +2117,12 @@ print_value v = do
 dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
 dump_file_AST _bic opts filetxt = do
   let file = Text.unpack filetxt
-  (SAWScript.Import.loadFile opts >=> mapM_ print) file
+  (SAWScript.Import.findAndLoadFile opts >=> mapM_ print) file
 
 parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> IO ()
 parser_printer_roundtrip _bic opts filetxt = do
   let file = Text.unpack filetxt
-  (SAWScript.Import.loadFile opts >=> PP.putDoc . SS.prettyWholeModule) file
+  (SAWScript.Import.findAndLoadFile opts >=> PP.putDoc . SS.prettyWholeModule) file
 
 exec :: Text -> [Text] -> Text -> IO Text
 exec name args input = do

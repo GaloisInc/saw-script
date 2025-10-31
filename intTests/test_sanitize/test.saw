@@ -5,6 +5,9 @@ let f_spec = do {
     x <- llvm_fresh_var "x" (llvm_int 32);
     y <- llvm_fresh_var "y" (llvm_int 32);
     llvm_execute_func [llvm_term x, llvm_term y];
+    // unspecified return value
+    z <- llvm_fresh_var "z" (llvm_int 32);
+    llvm_return (llvm_term z);
 };
 
 llvm_verify m_norm "f" [] false f_spec z3;

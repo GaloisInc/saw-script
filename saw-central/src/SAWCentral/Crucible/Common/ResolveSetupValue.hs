@@ -2,13 +2,12 @@
 -- backends.
 {-# Language DataKinds, TypeOperators, GADTs, TypeApplications #-}
 {-# Language ImplicitParams #-}
-module SAWCentral.Crucible.Common.ResolveSetupValue ( 
+module SAWCentral.Crucible.Common.ResolveSetupValue (
   resolveBoolTerm, resolveBoolTerm',
   resolveBitvectorTerm, resolveBitvectorTerm',
   ResolveRewrite(..),
   ) where
 
-import qualified Data.Map as Map
 import           Data.Set(Set)
 import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Some (Some(..))
@@ -19,7 +18,6 @@ import qualified What4.Interface as W4
 
 
 import SAWCore.SharedTerm
-import SAWCore.Name
 import qualified SAWCore.Prim as Prim
 
 import qualified SAWCore.Simulator.Concrete as Concrete
@@ -32,7 +30,6 @@ import SAWCentral.Crucible.Common
 
 import SAWCentral.Proof (TheoremNonce)
 import SAWCore.Rewriter (Simpset, rewriteSharedTerm)
-import qualified CryptolSAWCore.Simpset as Cryptol
 import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
 
 import Cryptol.TypeCheck.Type (tIsBit, tIsSeq, tIsNum)
@@ -82,21 +79,13 @@ resolveTerm sym unint bt rr tm =
               _ -> fail "resolveTerm: expected `Bool` or bit-vector"
 
         | rrWhat4Eval rr ->
-          do -- Try to use rewrites to simplify the term
-            cryptol_ss <- Cryptol.mkCryptolSimpset @TheoremNonce sc
-            tm''       <- snd <$> rewriteSharedTerm sc cryptol_ss tm'
-            tm'''      <- basicRewrite sc tm''
-            if all isPreludeName (Map.elems (getConstantSet tm''')) then
-              do
-                (_, _, _, p) <- w4EvalAny sym st sc mempty unint tm'''
-                case valueToSymExpr p of
-                  Just (Some y)
-                    | Just Refl <- testEquality bt ty -> pure y
-                    | otherwise -> typeError (show ty)
-                    where ty = W4.exprType y
-                  _ -> fail ("resolveTerm: unexpected w4Eval result " ++ show p)
-              else
-                bindSAWTerm sym st bt tm'''
+          do (_, _, _, p) <- w4EvalAny sym st sc mempty unint tm'
+             case valueToSymExpr p of
+               Just (Some y)
+                 | Just Refl <- testEquality bt ty -> pure y
+                 | otherwise -> typeError (show ty)
+                 where ty = W4.exprType y
+               _ -> fail ("resolveTerm: unexpected w4Eval result " ++ show p)
 
           -- Just bind the term
         | otherwise -> bindSAWTerm sym st bt tm'
@@ -106,11 +95,6 @@ resolveTerm sym unint bt rr tm =
     case rrBasicSS rr of
       Nothing -> pure
       Just ss -> \t -> snd <$> rewriteSharedTerm sc ss t
-
-  isPreludeName nm =
-    case nm of
-      ModuleIdentifier ident -> identModule ident == preludeName
-      _ -> False
 
   checkType sc =
     do
@@ -146,9 +130,8 @@ resolveBoolTerm sym unint = resolveBoolTerm' sym unint noResolveRewrite
 resolveBitvectorTerm' ::
   (1 W4.<= w) => Sym -> Set VarIndex -> W4.NatRepr w -> ResolveRewrite -> Term -> IO (W4.SymBV Sym w)
 resolveBitvectorTerm' sym unint w = resolveTerm sym unint (W4.BaseBVRepr w)
-                  
+
 -- 'resolveTerm' specialized to bit-vectors, without rewriting.
-resolveBitvectorTerm :: 
+resolveBitvectorTerm ::
   (1 W4.<= w) => Sym -> Set VarIndex -> W4.NatRepr w -> Term -> IO (W4.SymBV Sym w)
 resolveBitvectorTerm sym unint w = resolveBitvectorTerm' sym unint w noResolveRewrite
-

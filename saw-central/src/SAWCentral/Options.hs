@@ -1,4 +1,3 @@
-{-# LANGUAGE NamedFieldPuns      #-}
 {- |
 Module      : SAWCentral.Options
 Description : Datatype for saw command-line options.

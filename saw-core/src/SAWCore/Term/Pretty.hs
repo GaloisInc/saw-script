@@ -1,11 +1,8 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : SAWCore.Term.Pretty
@@ -155,7 +152,7 @@ termVarNames t0 = evalState (go t0) IntMap.empty
     go :: Term -> State (IntMap (Set VarName)) (Set VarName)
     go tm =
       case tm of
-        STApp { stAppIndex = i, stAppTermF = tf, stAppFreeVars = _vs } ->
+        STApp { stAppIndex = i, stAppTermF = tf } ->
           do memo <- get
              case IntMap.lookup i memo of
                Just vars -> pure vars

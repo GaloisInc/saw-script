@@ -21,7 +21,8 @@ command-line options:
 : Specify a colon-delimited list of paths to search for Java classes.
 
 `-i path, --import-path=path`
-: Specify a colon-delimited list of paths to search for imports.
+: Specify a colon-delimited list of paths to search for imports. Note that
+  paths can also be specified using the `SAW_IMPORT_PATH` environment variable.
 
 `-t, --extra-type-checking`
 : Perform extra type checking of intermediate values.
@@ -70,7 +71,9 @@ SAW also uses several environment variables for configuration:
   searched to find a Java executable.
 
 `SAW_IMPORT_PATH`
-: Specify a colon-delimited list of directory paths to search for imports.
+: Specify a colon-delimited list of directory paths to search for imports. Note
+  that paths can also be specified using the `-i`/`--import-path` command-line
+  options.
 
 `SAW_JDK_JAR`
 : Specify the path of the `.jar` file containing the core Java

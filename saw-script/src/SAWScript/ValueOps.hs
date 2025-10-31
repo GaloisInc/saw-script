@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : saw@galois.com
 Stability   : provisional
 -}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}

@@ -1,8 +1,4 @@
-{-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
@@ -21,6 +17,7 @@ module SAWCore.Simulator.Concrete
        , toBool
        , toWord
        , runIdentity
+       , constMap
        ) where
 
 import Control.Monad.Identity

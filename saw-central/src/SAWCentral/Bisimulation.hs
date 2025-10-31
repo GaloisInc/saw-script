@@ -68,7 +68,6 @@ may handle more complex proofs.
 
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 
 module SAWCentral.Bisimulation
   ( BisimTheorem, proveBisimulation )

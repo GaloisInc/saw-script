@@ -14,10 +14,10 @@ let f_false_spec = do {
 
 let test_spec = do {
   llvm_execute_func [];
+  crucible_return (crucible_term {{ 0:[32] }});
 };
 
 f_ov <- llvm_unsafe_assume_spec m "f" f_spec;
 f_false_ov <- llvm_unsafe_assume_spec m "f" f_false_spec;
 llvm_verify m "test_f" [f_ov] false test_spec trivial;
 fails (llvm_verify m "test_f" [f_false_ov] false test_spec trivial);
-
