@@ -30,6 +30,7 @@ import qualified SAWSupport.ScopedMap as ScopedMap
 
 import SAWCentral.Position (Pos, getPos)
 import qualified SAWCentral.Options as Options
+import SAWCentral.Options (Options)
 import SAWCentral.AST
 import SAWCentral.Value (Environ(..), RebindableEnv)
 
@@ -111,7 +112,7 @@ panicOnMsgs whoAmI result = case result of
 --   into this file. Prints any warnings, and return just errors or a
 --   result.
 --
-dispatchMsgs :: Options.Options -> WithMsgs a -> IO (Either [Text] a)
+dispatchMsgs :: Options -> WithMsgs a -> IO (Either [Text] a)
 dispatchMsgs opts result =
     let printMsg vrb msg =
           Options.printOutLn opts vrb (Text.unpack msg)
@@ -257,7 +258,7 @@ readStmtSemiUnchecked fileName str = do
 
 -- | Load the 'Stmt's in a @.saw@ file.
 --   Doesn't run the typechecker (yet).
-loadFileUnchecked :: Options.Options -> FilePath -> IO (Either [Text] [Stmt])
+loadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
 loadFileUnchecked opts fname = do
   Options.printOutLn opts Options.Info $ "Loading file " ++ show fname
   ftext <- TextIO.readFile fname
@@ -271,7 +272,7 @@ loadFileUnchecked opts fname = do
 -- found, load it. If not, fail by returning `Left`.
 --
 -- Doesn't run the typechecker (yet).
-findAndLoadFileUnchecked :: Options.Options -> FilePath -> IO (Either [Text] [Stmt])
+findAndLoadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
 findAndLoadFileUnchecked opts fp = do
   let paths = Options.importPath opts
   mfname <- findFile paths fp
