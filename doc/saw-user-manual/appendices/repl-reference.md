@@ -106,9 +106,13 @@ The scope of such bindings is the whole search.
 
 Complex patterns should be written in parentheses; otherwise they
 become syntactically ambiguous.
-Also, as of this writing parser limitations require you to search for
-monad types by applying `_` to them: `(TopLevel _)` rather than just
-`TopLevel`.
+Note in particular that parentheses are required to treat a type constructor
+application to another type as a single search term.
+Without parentheses, `:search` would treat the unapplied type constructor and
+the other type as two separate search terms.
+For instance, `:search ProofScript Int` will search for objects mentioning both
+`ProofScript` (applied to anything) and `Int`. To search for objects that
+mention the type `ProofScript Int`, write `:search (ProofScript Int)`.
 
 Type variables in the search patterns are matched as follows:
 

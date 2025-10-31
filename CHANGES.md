@@ -6,6 +6,10 @@ This release supports [version
 
 ## Changes
 
+* The REPL's `:search` command can now handle unapplied type constructors. For
+  example, one can now write `:search ProofScript` to find objects mentioning
+  `ProofScript` applied to any type.
+
 * `llvm_verify` now enforces that an `llvm_return` specification is
   included for any function with a non-void return type.
   To write a spec that asserts nothing about the return value,

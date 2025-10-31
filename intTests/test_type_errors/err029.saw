@@ -1,7 +1,7 @@
 //
 // Too many arguments for type constructor: Term
 //
-// Currently this is a parser message; the kind mismatch message in
+// Currently this trips on `Block`; the desired kind mismatch message in
 // the typechecker is unreachable.
 
 let x : Term Int = {{ 3 }};

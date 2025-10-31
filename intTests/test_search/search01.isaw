@@ -9,6 +9,10 @@ print "-- (_ Int)"
 :search (_ Int)
 
 print "--------------------------------"
+print "-- JVMSetup"
+:search JVMSetup
+
+print "--------------------------------"
 print "-- (JVMSetup _)"
 :search (JVMSetup _)
 

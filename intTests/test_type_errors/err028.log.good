@@ -1,3 +1,12 @@
  Loading file "err028.saw"
- Parse error at err028.saw:7:16-7:19: Unexpected `Int'
+ err028.saw:7:22-7:27: Type mismatch.
+    Mismatch of type constructors. Expected: <Block> but got String
+    err028.saw:7:9-7:19: The type String Int arises from this type annotation
+    err028.saw:7:22-7:27: The type String arises from the type of this term
+
+    Expected: String Int
+    Found:    String
+
+    within "x" (err028.saw:7:5-7:6)
+
 FAILED
