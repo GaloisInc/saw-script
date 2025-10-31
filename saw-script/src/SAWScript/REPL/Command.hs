@@ -8,15 +8,17 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 
 module SAWScript.REPL.Command (
-    -- * Commands
-    CommandDescr(..), CommandBody(..)
-  , parseCommand
-  , runCommand
-  , splitCommand
-  , findCommand
+    executeText,
+
+    -- Commands
+    CommandDescr(..), CommandBody(..),
+
+    -- Command table access
+    searchCommandsByPrefix,
+    searchExactCommandByPrefix,
 
     -- Misc utilities
-  , sanitize
+    sanitize
   ) where
 
 --import SAWCore.SharedTerm (SharedContext)
@@ -313,6 +315,14 @@ instance Eq CommandDescr where
 instance Ord CommandDescr where
   compare = compare `on` cName
 
+-- | Schema for argument types of REPL commands.
+--
+-- XXX: we could distinguish commands that take directories
+-- (like :cd) from those that take regular files (though we
+-- don't have any)
+--
+-- XXX: should maybe also distinguish "multiple args of this type"
+-- from "one arg of this type".
 data CommandBody
   = ExprArg     (Text     -> REPL ())
   | TypeArg     (Text     -> REPL ())
@@ -434,6 +444,30 @@ sanitize  = Text.dropWhile isSpace
 sanitizeEnd :: Text -> Text
 sanitizeEnd = Text.dropWhileEnd isSpace
 
+-- | Find commands that begin with a given prefix.
+--
+-- If given a string that's both itself a command and a prefix of
+-- something else, choose that command.
+--
+-- Deduplicate the results to avoid silliness with command aliases.
+searchCommandsByPrefix :: Text -> [CommandDescr]
+searchCommandsByPrefix prefix =
+    nub $ Trie.lookupWithExact prefix commands
+
+-- | Find the single command that begins with a given prefix.
+--
+-- If given a string that's both itself a command and a prefix of
+-- something else, choose that command. If given a string that's a
+-- prefix of one thing, choose that thing. If given a string that's a
+-- prefix of multiple things, fail.
+--
+-- Deduplicate the results to avoid silliness with command aliases.
+searchExactCommandByPrefix :: Text -> Maybe CommandDescr
+searchExactCommandByPrefix prefix =
+    case searchCommandsByPrefix prefix of
+        [cmd] -> Just cmd
+        _ -> Nothing
+
 -- | Split at the first word boundary.
 splitCommand :: Text -> Maybe (Text, Text)
 splitCommand txt = do
@@ -490,3 +524,12 @@ parseCommand findCmd line = do
       '~' : c : more | isPathSeparator c -> do dir <- liftIO getHomeDirectory
                                                return (dir </> more)
       path' -> pure path'
+
+executeText :: Text -> REPL ()
+executeText text =
+    -- XXX why is findCommand passed to parseCommand...?
+    case parseCommand findCommand text of
+        Nothing ->
+            pure ()
+        Just result -> do
+            runCommand result

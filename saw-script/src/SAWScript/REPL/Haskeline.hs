@@ -16,10 +16,10 @@ import SAWScript.REPL.Command
 
 import Control.Monad (when)
 import Control.Monad.State (gets)
+import Data.Maybe (mapMaybe)
 import Data.Char (isAlphaNum, isSpace)
 import qualified Data.Text as Text
 import Data.Text (Text)
-import Data.List (isPrefixOf)
 import System.Console.Haskeline
 import System.Directory(getAppUserDataDirectory,createDirectoryIfMissing)
 import System.FilePath((</>))
@@ -28,6 +28,7 @@ import Control.Monad.Trans.Class (lift)
 import qualified Control.Exception as X
 
 import SAWCentral.Proof (psGoals)
+import SAWScript.Panic (panic)
 
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
@@ -60,16 +61,11 @@ repl mbBatchFile =
         Nothing ->
             -- EOF
             return ()
-        Just line ->
-            -- XXX why is findCommand passed to parseCommand...?
-            case parseCommand findCommand (Text.pack line) of
-                Nothing ->
-                    loop
-                Just result -> do
-                    lift $ runCommand result
-                    continue <- lift $ gets rContinue
-                    when continue
-                        loop
+        Just txt -> do
+            lift $ executeText (Text.pack txt)
+            continue <- lift $ gets rContinue
+            when continue
+                loop
 
   getInputLines prompt linesSoFar = do
       mbtext <- getInputLine prompt
@@ -99,106 +95,275 @@ setHistoryFile ss =
 -- | Haskeline settings for the REPL.
 replSettings :: Settings REPL
 replSettings  = Settings
-  { complete       = replComp
+  { complete       = completeReplText
   , historyFile    = Nothing
   , autoAddHistory = True
   }
 
+------------------------------------------------------------
+-- Approximate lexer and parser
+-- (for use in completions)
 
--- Completion ------------------------------------------------------------------
-
--- | Top-level completion for the REPL.
-replComp :: CompletionFunc REPL
-replComp cursor@(l,r)
-  | ":" `Text.isPrefixOf` l'
-  , Just (cmd,rest) <- splitCommand l' = case findCommand cmd of
-
-      [c] | Text.null rest && not (Text.any isSpace l') -> do
-            return (l, [cmdComp cmd c])
-          | otherwise -> do
-            (rest',cs) <- cmdArgument (cBody c) (reverse $ Text.unpack $ sanitize rest, r)
-            -- XXX this drops any leading spaces in l', which is ok but untidy
-            return (unwords [rest', reverse $ Text.unpack cmd], cs)
-
-      cmds ->
-        return (l, [ cmdComp l' c | c <- cmds ])
-
-  | l' == ":" =
-      return (l, [ cmdComp l' c | c <- findCommand "" ])
-  | otherwise = completeSAWScriptValue cursor
-  where
-  l' = sanitize (Text.pack $ reverse l)
-
--- | Generate a completion from a REPL command definition.
-cmdComp :: Text -> CommandDescr -> Completion
-cmdComp prefix c = Completion
-  { replacement = Text.unpack $ Text.drop (Text.length prefix) (cName c)
-  , display     = Text.unpack $ cName c
-  , isFinished  = True
-  }
-
--- | Dispatch to a completion function based on the kind of completion the
--- command is expecting.
-cmdArgument :: CommandBody -> CompletionFunc REPL
-cmdArgument ct cursor@(l,_) = case ct of
-  ExprArg _     -> completeSAWScriptValue cursor
-  TypeArg _     -> completeSAWScriptType cursor
-  FilenameArg _ -> completeFilename cursor
-  ShellArg _    -> completeFilename cursor
-  NoArg       _ -> return (l,[])
-
-data LexerMode = ModeNormal | ModeCryptol | ModeCryType | ModeQuote
-
-lexerMode :: String -> LexerMode
-lexerMode = normal
-  where
-    normal [] = ModeNormal
-    normal ('{' : '{' : s) = cryptol s
-    normal ('{' : '|' : s) = crytype s
-    normal ('\"' : s) = quote s
-    normal (_ : s) = normal s
-
-    cryptol [] = ModeCryptol
-    cryptol ('}' : '}' : s) = normal s
-    cryptol (_ : s) = cryptol s
-
-    crytype [] = ModeCryType
-    crytype ('|' : '}' : s) = normal s
-    crytype (_ : s) = crytype s
-
-    quote [] = ModeQuote
-    quote ('\"' : s) = normal s
-    quote (_ : s) = quote s
+data ALPResult
+    = HaveSAWScriptValue Text
+    | HaveSAWScriptType Text
+    | HaveCryptolValue Text
+    | HaveCryptolType Text
+    | HaveQuotedString
 
 isIdentChar :: Char -> Bool
 isIdentChar c = isAlphaNum c || c == '_' || c == '\''
 
--- | Complete a name from the SAWScript value environment.
-completeSAWScriptValue :: CompletionFunc REPL
-completeSAWScriptValue cursor@(l, _) = do
-  ns1 <- getSAWScriptValueNames
-  ns2 <- getCryptolExprNames
-  ns3 <- getCryptolTypeNames
-  let n = reverse (takeWhile isIdentChar l)
-      nameComps prefix ns = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)
-  case lexerMode (reverse l) of
-    ModeNormal  -> return (l, nameComps n ns1)
-    ModeCryptol -> return (l, nameComps n ns2)
-    ModeCryType -> return (l, nameComps n ns3)
-    ModeQuote   -> completeFilename cursor
+approxLexerParser :: Text -> ALPResult
+approxLexerParser text0 = nowhere text0 text0
+  where
 
--- | Complete a name from the SAWScript type environment.
-completeSAWScriptType :: CompletionFunc REPL
-completeSAWScriptType (l, _) = do
-  ns <- getSAWScriptTypeNames
-  let prefix = reverse (takeWhile isIdentChar l)
-      nameComps = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)
-  return (l, nameComps)
+    -- State for nowhere in particular
+    nowhere start here =
+        case Text.uncons here of
+            Nothing ->
+                HaveSAWScriptValue start
+            Just ('{', here') -> case Text.uncons here' of
+                Nothing ->
+                    -- End of string with a single left-brace.  In an
+                    -- ideal world here we might complete from field
+                    -- names of known record types, and add in another
+                    -- left-brace as an option.  We don't have enough
+                    -- infrastructure for that, though, so assume
+                    -- we're still nowhere in particular.
+                    nowhere here' here'
+                Just ('{', here'') ->
+                    cryexpr here'' here''
+                Just ('|', here'') ->
+                    crytype here'' here''
+                Just (c, here'') ->
+                    nowhere (if isIdentChar c then start else here'') here''
+            Just ('"', here') ->
+                qstring here'
+            Just (':', here') ->
+                sawtypeinit here'
+            Just (c, here') ->
+                nowhere (if isIdentChar c then start else here') here'
 
--- | Generate a completion from a prefix and a name.
-nameComp :: String -> String -> Completion
-nameComp prefix c = Completion
-  { replacement = drop (length prefix) c
-  , display     = c
-  , isFinished  = True
-  }
+    -- State for when we've seen a colon so we probably want a type,
+    -- but we haven't seen anything yet. Accept spaces.
+    sawtypeinit here =
+        case Text.uncons here of
+            Nothing ->
+                HaveSAWScriptType ""
+            Just (' ', here') ->
+                sawtypeinit here'
+            Just (c, here') ->
+                if isIdentChar c then
+                    sawtype here here'
+                else
+                    nowhere here here
+
+    -- State for when we've seen a colon so we probably want a type,
+    -- and we're accumulating a word. Stop on spaces.
+    sawtype start here =
+        case Text.uncons here of
+            Nothing ->
+                HaveSAWScriptType start
+            Just (c, here') ->
+                if isIdentChar c then
+                    sawtype start here'
+                else
+                    nowhere here here
+
+    -- State for Cryptol expressions in {{ }}.
+    cryexpr start here =
+        case Text.uncons here of
+            Nothing ->
+                HaveCryptolValue start
+            Just ('}', here') -> case Text.uncons here' of
+                Nothing ->
+                    HaveCryptolValue ""
+                Just ('}', here'') ->
+                    nowhere here'' here''
+                Just _ ->
+                    cryexpr here' here'
+            Just (c, here') ->
+                cryexpr (if isIdentChar c then start else here') here'
+
+    -- State for Cryptol types in {| |}.
+    crytype start here =
+        case Text.uncons here of
+            Nothing ->
+                HaveCryptolType start
+            Just ('|', here') -> case Text.uncons here' of
+                Nothing ->
+                    HaveCryptolType ""
+                Just ('}', here'') ->
+                    nowhere here'' here''
+                Just _ ->
+                    crytype here' here'
+            Just (c, here') ->
+                crytype (if isIdentChar c then start else here') here'
+
+    -- State for quoted strings.
+    qstring here =
+        case Text.uncons here of
+            Nothing ->
+                HaveQuotedString
+            Just ('\\', here') -> case Text.uncons here' of
+                Nothing ->
+                    HaveQuotedString
+                Just (_, here'') ->
+                    qstring here''
+            Just ('"', here') ->
+                nowhere here' here'
+            Just (_, here') ->
+                qstring here'
+
+
+-- Completion ------------------------------------------------------------------
+
+-- | Haskeline's completion cursors are string-zippers in String, pairs
+--   where the LHS is a reverse list of characters behind the cursor,
+--   and the RHS is a forward list of characters after the cursor.
+type Cursor = (String, String)
+
+-- | Extract the LHS from a Haskeline cursor in its raw form.
+cursorLeftRaw :: Cursor -> String
+cursorLeftRaw (l, _r) = l
+
+-- | Extract the LHS from a Haskeline cursor as Text.
+cursorLeftText :: Cursor -> Text
+cursorLeftText (l, _r) = sanitize (Text.pack $ reverse l)
+
+-- | Construct a completion that appends the rest of `word`
+--   having already seen `prefix`.
+appendCompletion :: (Int, Text) -> Completion
+appendCompletion (prefixlen, word) =
+   Completion {
+       replacement = Text.unpack $ Text.drop prefixlen word,
+       display = Text.unpack word,
+       isFinished = True
+   }
+
+-- | Search a list of names by prefix
+searchNames :: [Text] -> Text -> [(Int, Text)]
+searchNames candidates prefix =
+    let len = Text.length prefix
+        visit candidate =
+          if prefix `Text.isPrefixOf` candidate then
+              Just (len, candidate)
+          else
+              Nothing
+    in
+    mapMaybe visit candidates
+
+-- | Search a list of names by prefix, where we get the
+--   list of names from a REPL action.
+searchNames' :: REPL [Text] -> Text -> REPL [(Int, Text)]
+searchNames' getCandidates prefix = do
+    candidates <- getCandidates
+    return $ searchNames candidates prefix
+
+-- | Search for SAWScript types by prefix
+searchSAWScriptTypes :: Text -> REPL [(Int, Text)]
+searchSAWScriptTypes prefix =
+    searchNames' getSAWScriptTypeNames prefix
+
+-- | Search for SAWScript values/variables by prefix
+searchSAWScriptValues :: Text -> REPL [(Int, Text)]
+searchSAWScriptValues prefix =
+    searchNames' getSAWScriptValueNames prefix
+
+-- | Search for Cryptol types by prefix
+searchCryptolTypes :: Text -> REPL [(Int, Text)]
+searchCryptolTypes prefix =
+    searchNames' getCryptolTypeNames prefix
+
+-- | Search for Cryptol values/variables by prefix
+searchCryptolValues :: Text -> REPL [(Int, Text)]
+searchCryptolValues prefix =
+    searchNames' getCryptolExprNames prefix
+
+-- | Search for SAWScript things based on context.
+searchSAWScriptText :: Text -> REPL (Maybe [(Int, Text)])
+searchSAWScriptText text =
+   -- Run the approximate lexer/parser.
+   --
+   -- Maybe someday alex/happy will give us a completion mode so we
+   -- can run the real lexer and parser...
+   --
+   case approxLexerParser text of
+       HaveSAWScriptValue word -> Just <$> searchSAWScriptValues word
+       HaveSAWScriptType word -> Just <$> searchSAWScriptTypes word
+       HaveCryptolValue word -> Just <$> searchCryptolValues word
+       HaveCryptolType word -> Just <$> searchCryptolTypes word
+       HaveQuotedString -> return Nothing
+
+-- | Completion for SAWScript types
+completeSAWScriptType :: Text -> CompletionFunc REPL
+completeSAWScriptType text cursor = do
+    candidates <- searchSAWScriptTypes text
+    let completions = map appendCompletion candidates 
+    return (cursorLeftRaw cursor, completions)
+
+-- | Completion for general SAWScript text / values
+completeSAWScriptValue :: Text -> CompletionFunc REPL
+completeSAWScriptValue text cursor = do
+    mbCandidates <- searchSAWScriptText text
+    case mbCandidates of
+        Nothing ->
+            completeFilename cursor
+        Just candidates -> do
+            let completions = map appendCompletion candidates
+            return (cursorLeftRaw cursor, completions)
+
+-- | Completion for REPL :-commands
+completeReplCommand :: Text -> CompletionFunc REPL
+completeReplCommand text cursor =
+    -- Split into words by spaces
+    case Text.split isSpace text of
+        [] ->
+            -- Impossible: there's a colon in the string
+            panic "replComp" ["The colon disappeared!"] 
+        [cmdPrefix] -> do
+            -- We have one word, which is a partial or full command
+            -- name. Search for everything that begins with that
+            -- prefix, then construct an append-completion for each.
+            --
+            -- Because we don't want to replace any of the existing
+            -- text on the line, the LHS of the return value should
+            -- always be the LHS of the input cursor.
+
+            let completion cmd = appendCompletion (Text.length cmdPrefix, cName cmd)
+            let completions = map completion $ searchCommandsByPrefix cmdPrefix
+            return (cursorLeftRaw cursor, completions)
+        cmdName : args ->
+            -- We have at least one partial argument
+            case searchExactCommandByPrefix cmdName of
+                Nothing ->
+                    -- It's not a valid command so there's no completions
+                    return (cursorLeftRaw cursor, [])
+                Just cmd ->
+                    -- Complete from whatever namespace the argument
+                    -- type is in. XXX: this assumes that all commands
+                    -- take either zero (NoArg) or one or more uniform
+                    -- (other cases) of arguments. This isn't actually
+                    -- true.  For example, completing for :cd will
+                    -- cheerfully add any number of directory names,
+                    -- but you can only actually give it one. Should
+                    -- strengthen the argument schema.
+                    case cBody cmd of
+                        ExprArg _     -> completeSAWScriptValue (last args) cursor
+                        TypeArg _     -> completeSAWScriptType (last args) cursor
+                        FilenameArg _ -> completeFilename cursor
+                        ShellArg _    -> completeFilename cursor
+                        NoArg       _ -> return (cursorLeftRaw cursor, [])
+
+-- | Top-level completion for the REPL.
+--
+completeReplText :: CompletionFunc REPL
+completeReplText cursor = do
+  let text = cursorLeftText cursor
+  if Text.null text then
+      completeSAWScriptValue "" cursor
+  else if Text.isPrefixOf ":" text then do
+      completeReplCommand text cursor
+  else
+      completeSAWScriptValue text cursor

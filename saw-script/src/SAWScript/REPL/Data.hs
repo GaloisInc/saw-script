@@ -44,19 +44,19 @@ import SAWScript.REPL.Monad
 
 
 -- | Get visible Cryptol variable names.
-getCryptolExprNames :: REPL [String]
+getCryptolExprNames :: REPL [Text]
 getCryptolExprNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))
+     return (map (Text.pack . show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))
 
 -- | Get visible Cryptol type names.
-getCryptolTypeNames :: REPL [String]
+getCryptolTypeNames :: REPL [Text]
 getCryptolTypeNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
+     return (map (Text.pack . show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
 
 -- | Get visible variable names for Haskeline completion.
-getSAWScriptValueNames :: REPL [String]
+getSAWScriptValueNames :: REPL [Text]
 getSAWScriptValueNames = do
   rw <- getTopLevelRW
   let avail = rwPrimsAvail rw
@@ -65,17 +65,17 @@ getSAWScriptValueNames = do
       rbenv = rwRebindables rw
   let rnames1 = ScopedMap.allKeys $ ScopedMap.filter visible valenv
       rnames2 = Map.keys rbenv
-  return (map Text.unpack (rnames1 ++ rnames2))
+  return (rnames1 ++ rnames2)
 
 -- | Get visible type names for Haskeline completion.
-getSAWScriptTypeNames :: REPL [String]
+getSAWScriptTypeNames :: REPL [Text]
 getSAWScriptTypeNames = do
   rw <- getTopLevelRW
   let avail = rwPrimsAvail rw
       visible (lc, _) = Set.member lc avail
       Environ _valenv tyenv _cryenv = rwEnviron rw
   let rnames = ScopedMap.allKeys $ ScopedMap.filter visible tyenv
-  return (map Text.unpack rnames)
+  return rnames
 
 -- Type shorthand for list of pairs of names and types.
 type VarEnvList = [(Text, AST.Schema)]
