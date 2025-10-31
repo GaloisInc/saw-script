@@ -67,6 +67,10 @@ data Term
      , stAppTermF    :: !(TermF Term)
        -- ^ The underlying 'TermF' that this 'Term' wraps. This field "ties the
        -- knot" of the 'Term'/'TermF' recursion scheme.
+     , stAppType     :: !(Either Sort Term)
+       -- ^ The type of this term, represented a 'Sort' or another 'Term'.
+       -- Invariant: This field must never contain a 'Right' with a term
+       -- that is a 'Sort'; if the type is a 'Sort' then 'Left' is required.
      }
   deriving (Show)
 
@@ -102,9 +106,9 @@ instance Eq Term where
   (==) = equalTerm
 
 equalTerm :: Term -> Term -> Bool
-equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
-          (STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) =
-  i1 == i2 || (h1 == h2 && tf1 == tf2)
+equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1, stAppType = mty1})
+          (STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2, stAppType = mty2}) =
+  i1 == i2 || (h1 == h2 && tf1 == tf2 && mty1 == mty2)
   -- The hash check (^) is merely an optimization that enables us to
   -- quickly return 'False' in most cases. Since we're assuming the
   -- contract of 'hashWithSalt' holds, then we know @tf1 == tf2@
@@ -116,6 +120,7 @@ equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
 
 -- | Return 'True' iff the given terms are equal modulo alpha equivalence (i.e.
 -- 'VarName's in 'Lambda' and 'Pi' expressions).
+-- The types of the terms are not inspected.
 alphaEquiv :: Term -> Term -> Bool
 alphaEquiv = term IntMap.empty
   where

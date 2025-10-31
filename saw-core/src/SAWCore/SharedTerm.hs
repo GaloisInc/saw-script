@@ -244,18 +244,16 @@ module SAWCore.SharedTerm
 
 import Control.Applicative
 -- ((<$>), pure, (<*>))
-import Control.Concurrent.MVar
 import Control.Exception
 import Control.Lens
 import Control.Monad (foldM, forM, forM_, join, unless, when)
-import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Bits
 import Data.List (find)
 import Data.Maybe
 import qualified Data.Foldable as Fold
-import Data.Foldable (foldl', foldlM, foldrM, maximum)
+import Data.Foldable (foldl', foldlM, foldrM {-, maximum-})
 import Data.Hashable (Hashable(hash))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
@@ -322,35 +320,80 @@ import SAWCore.Unique
 ------------------------------------------------------------
 -- TermFMaps
 
+{-
+
+Hash-consing story:
+
+For scApply, we do a hash-consing lookup in 'appMapTFM' *before*
+computing the result type (because computing the type may be expensive
+in some cases). Terms in 'appMapTFM' must have the default type that
+would normally be computed by scApply.
+
+If we don't find the pair of keys in 'appMapTFM', only then do we
+compute the result type, generate a new TermIndex, create a Term, and
+then add it to appMapTFM.
+
+For anything other than Apply nodes, we compute the type first.
+(For non-Apply this should usually be fairly cheap to compute.)
+Then we look up the pair of TermF and type together in hashMapTFM.
+
+Terms may have types ascribed to them that are convertible (but not
+equal) to the type that would have been computed by the typing rules.
+When constructing an application term with a possibly-modified type,
+we should do the following:
+
+* Look up the TermF and type in hashMapTFM; if an entry is found,
+  return it.
+
+* Look up the two subterms in appMapTFM; if an entry is found *and the
+  type matches*, then return it.
+
+* If an entry with the wrong type was found in appMapTFM, then obtain
+  a new TermIndex, add a new entry to hashMapTFM, and return the new
+  term.
+
+* If no entry was found in either table, we *could* compute the
+  expected type for scApply and compare it to the given type to see
+  which table the new term should go in. This is probably a very
+  uncommon case.
+
+In any case, a type-ascription operation should test for whether the
+new type is identical to the old type and return the original term if
+so.
+
+-}
+
 -- | A TermFMap is a data structure used for hash-consing of terms.
 data TermFMap a
   = TermFMap
   { appMapTFM :: !(IntMap (IntMap a))
-  , hashMapTFM :: !(HashMap (TermF Term) a)
+  , hashMapTFM :: !(HashMap (TermF Term, Either Sort Term) a)
   }
 
 emptyTFM :: TermFMap a
 emptyTFM = TermFMap mempty mempty
 
-lookupTFM :: TermF Term -> TermFMap a -> Maybe a
-lookupTFM tf tfm =
-  case tf of
-    App (STApp{ stAppIndex = i }) (STApp{ stAppIndex = j}) ->
-      IntMap.lookup i (appMapTFM tfm) >>= IntMap.lookup j
-    _ -> HMap.lookup tf (hashMapTFM tfm)
+lookupAppTFM :: Term -> Term -> TermFMap a -> Maybe a
+lookupAppTFM STApp{stAppIndex = i} STApp{stAppIndex = j} tfm =
+  IntMap.lookup i (appMapTFM tfm) >>= IntMap.lookup j
 
-insertTFM :: TermF Term -> a -> TermFMap a -> TermFMap a
-insertTFM tf x tfm =
-  case tf of
-    App (STApp{ stAppIndex = i }) (STApp{ stAppIndex = j}) ->
-      let f Nothing = Just (IntMap.singleton j x)
-          f (Just m) = Just (IntMap.insert j x m)
-      in tfm { appMapTFM = IntMap.alter f i (appMapTFM tfm) }
-    _ -> tfm { hashMapTFM = HMap.insert tf x (hashMapTFM tfm) }
+insertAppTFM :: Term -> Term -> a -> TermFMap a -> TermFMap a
+insertAppTFM STApp{stAppIndex = i} STApp{stAppIndex = j} x tfm =
+  let f Nothing = Just (IntMap.singleton j x)
+      f (Just m) = Just (IntMap.insert j x m)
+  in tfm { appMapTFM = IntMap.alter f i (appMapTFM tfm) }
+
+lookupTFM :: TermF Term -> Either Sort Term -> TermFMap a -> Maybe a
+lookupTFM tf mty tfm =
+  HMap.lookup (tf, mty) (hashMapTFM tfm)
+
+insertTFM :: TermF Term -> Either Sort Term -> a -> TermFMap a -> TermFMap a
+insertTFM tf mty x tfm =
+  tfm { hashMapTFM = HMap.insert (tf, mty) x (hashMapTFM tfm) }
 
 type AppCache = TermFMap Term
 
-type AppCacheRef = MVar AppCache
+type AppCacheRef = IORef AppCache
 
 emptyAppCache :: AppCache
 emptyAppCache = emptyTFM
@@ -380,21 +423,24 @@ data SharedContext = SharedContext
   }
 
 -- | Internal function to make a 'Term' from a 'TermF' with a given
--- variable typing context.
-scMakeTerm :: SharedContext -> IntMap Term -> TermF Term -> IO Term
-scMakeTerm sc vt tf =
-  modifyMVar (scAppCache sc) $ \s -> do
-    case lookupTFM tf s of
-      Just term -> return (s, term)
-      Nothing -> do
-        i <- getUniqueInt
-        let term = STApp { stAppIndex = i
-                         , stAppHash = hash tf
-                         , stAppVarTypes = vt
-                         , stAppTermF = tf
-                         }
-            s' = insertTFM tf term s
-        seq s' $ return (s', term)
+-- variable typing context and type.
+-- Precondition: The 'Either' argument should never have 'Right'
+-- applied to a 'Sort'.
+scMakeTerm :: SharedContext -> IntMap Term -> TermF Term -> Either Sort Term -> IO Term
+scMakeTerm sc vt tf mty =
+  do s <- readIORef (scAppCache sc)
+     case lookupTFM tf mty s of
+       Just term -> pure term
+       Nothing ->
+         do i <- getUniqueInt
+            let term = STApp { stAppIndex = i
+                             , stAppHash = hash tf
+                             , stAppVarTypes = vt
+                             , stAppTermF = tf
+                             , stAppType = mty
+                             }
+            modifyIORef' (scAppCache sc) (insertTFM tf mty term)
+            pure term
 
 --------------------------------------------------------------------------------
 
@@ -445,8 +491,20 @@ scTermF sc tf =
 -- | Create a new term from a lower-level 'FlatTermF' term.
 scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
 scFlatTermF sc ftf =
-  do vt <- foldM (unifyVarTypes "scFlatTermF") IntMap.empty (fmap varTypes ftf)
-     scMakeTerm sc vt (FTermF ftf)
+  case ftf of
+    UnitValue -> scUnitValue sc
+    UnitType -> scUnitType sc
+    PairValue t1 t2 -> scPairValue sc t1 t2
+    PairType t1 t2 -> scPairType sc t1 t2
+    PairLeft t -> scPairLeft sc t
+    PairRight t -> scPairRight sc t
+    Recursor crec -> scRecursor sc (recursorDataType crec) (recursorSort crec)
+    RecordType fs -> scRecordType sc fs
+    RecordValue fs -> scRecord sc (Map.fromList fs)
+    RecordProj t fname -> scRecordSelect sc t fname
+    Sort s flags -> scSortWithFlags sc s flags
+    ArrayValue t ts -> scVector sc t (V.toList ts)
+    StringLit s -> scString sc s
 
 -- | Create a function application term.
 scApply ::
@@ -455,8 +513,36 @@ scApply ::
   Term {- ^ The argument to apply to -} ->
   IO Term
 scApply sc t1 t2 =
-  do vt <- unifyVarTypes "scApply" (varTypes t1) (varTypes t2)
-     scMakeTerm sc vt (App t1 t2)
+  -- Look up this application in the hash table first; if it is
+  -- already there we can avoid recomputing the result type.
+  do tfm <- readIORef (scAppCache sc)
+     case lookupAppTFM t1 t2 tfm of
+       Just term -> pure term
+       Nothing ->
+         do vt <- unifyVarTypes "scApply" (varTypes t1) (varTypes t2)
+            ty1 <- scTypeOf sc t1
+            (x, ty1a, ty1b) <- ensurePi sc ty1
+            ty2 <- scTypeOf sc t2
+            ok <- scSubtype sc ty2 ty1a
+            unless ok $ fail $ unlines $
+              ["Not a subtype", "expected: " ++ showTerm ty1a, "got: " ++ showTerm ty2]
+            -- Computing the result type with scInstantiateBeta may
+            -- lead to other calls to scApply, but these should be at
+            -- simpler types, so it should always terminate.
+            ty <- scInstantiateBeta sc (IntMap.singleton (vnIndex x) t2) ty1b
+            let mty = maybe (Right ty) Left (asSort ty)
+            i <- getUniqueInt
+            let tf = App t1 t2
+            let term =
+                  STApp
+                  { stAppIndex = i
+                  , stAppHash = hash tf
+                  , stAppVarTypes = vt
+                  , stAppTermF = tf
+                  , stAppType = mty
+                  }
+            modifyIORef' (scAppCache sc) (insertAppTFM t1 t2 term)
+            pure term
 
 -- | Create a lambda term from a parameter name (as a 'VarName'),
 -- parameter type (as a 'Term'), and a body ('Term').
@@ -472,7 +558,9 @@ scLambda sc x t body =
   do ensureNotFreeInContext x body
      _ <- unifyVarTypes "scLambda" (IntMap.singleton (vnIndex x) t) (varTypes body)
      vt <- unifyVarTypes "scLambda" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
-     scMakeTerm sc vt (Lambda x t body)
+     rty <- scTypeOf sc body
+     ty <- scPi sc x t rty
+     scMakeTerm sc vt (Lambda x t body) (Right ty)
 
 -- | Create a (possibly dependent) function given a parameter name,
 -- parameter type (as a 'Term'), and a body ('Term').
@@ -488,18 +576,24 @@ scPi sc x t body =
   do ensureNotFreeInContext x body
      _ <- unifyVarTypes "scPi" (IntMap.singleton (vnIndex x) t) (varTypes body)
      vt <- unifyVarTypes "scPi" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
-     scMakeTerm sc vt (Pi x t body)
+     s1 <- either pure (ensureSort sc) (stAppType t)
+     s2 <- either pure (ensureSort sc) (stAppType body)
+     scMakeTerm sc vt (Pi x t body) (Left (piSort s1 s2))
 
 -- | Create a constant 'Term' from a 'Name'.
 scConst :: SharedContext -> Name -> IO Term
 scConst sc nm =
-  scMakeTerm sc IntMap.empty (Constant nm)
+  do ty <- scTypeOfName sc nm
+     let mty = maybe (Right ty) Left (asSort ty)
+     scMakeTerm sc IntMap.empty (Constant nm) mty
 
 -- | Create a named variable 'Term' from a 'VarName' and a type.
 scVariable :: SharedContext -> VarName -> Term -> IO Term
 scVariable sc x t =
   do vt <- unifyVarTypes "scVariable" (IntMap.singleton (vnIndex x) t) (varTypes t)
-     scMakeTerm sc vt (Variable x t)
+     _s <- either pure (ensureSort sc) (stAppType t)
+     let mty = maybe (Right t) Left (asSort t)
+     scMakeTerm sc vt (Variable x t) mty
 
 -- | Check whether the given 'VarName' occurs free in the type of
 -- another variable in the context of the given 'Term', and fail if it
@@ -521,6 +615,32 @@ unifyVarTypes msg ctx1 ctx2 =
                            "t2: " ++ showTerm t2]
      sequence_ (IntMap.intersectionWithKey check ctx1 ctx2)
      pure (IntMap.union ctx1 ctx2)
+
+ensureRecognizer :: String -> SharedContext -> (Term -> Maybe a) -> Term -> IO a
+ensureRecognizer s sc f trm =
+  case f trm of
+    Just a -> pure a
+    Nothing ->
+      do trm' <- scWhnf sc trm
+         case f trm' of
+           Just a -> pure a
+           Nothing ->
+             fail $ "ensureRecognizer: Expected " ++ s ++ ", found: " ++ showTerm trm'
+
+ensureSort :: SharedContext -> Term -> IO Sort
+ensureSort sc tp = ensureRecognizer "Sort" sc asSort tp
+
+ensurePi :: SharedContext -> Term -> IO (VarName, Term, Term)
+ensurePi sc tp = ensureRecognizer "Pi" sc asPi tp
+
+ensurePairType :: SharedContext -> Term -> IO (Term, Term)
+ensurePairType sc tp = ensureRecognizer "PairType" sc asPairType tp
+
+ensureRecordType :: SharedContext -> Term -> IO (Map FieldName Term)
+ensureRecordType sc tp = ensureRecognizer "RecordType" sc asRecordType tp
+
+piSort :: Sort -> Sort -> Sort
+piSort s1 s2 = if s2 == propSort then propSort else max s1 s2
 
 --------------------------------------------------------------------------------
 
@@ -813,6 +933,24 @@ scInjectCode sc mnm ns txt =
 
 --------------------------------------------------------------------------------
 -- Recursors
+
+scRecursor :: SharedContext -> Name -> Sort -> IO Term
+scRecursor sc nm s =
+  do mm <- scGetModuleMap sc
+     case lookupVarIndexInMap (nameIndex nm) mm of
+       Just (ResolvedDataType dt) ->
+         do unless (allowedElimSort dt s) $ fail "Disallowed propositional elimination"
+            let d = dtName dt
+            let nparams = length (dtParams dt)
+            let nixs = length (dtIndices dt)
+            let ctorOrder = map ctorName (dtCtors dt)
+            let crec = CompiledRecursor d s nparams nixs ctorOrder
+            let vt = IntMap.empty
+            let tf = FTermF (Recursor crec)
+            ty <- scRecursorType sc dt s
+            scMakeTerm sc vt tf (Right ty)
+       _ ->
+         fail "datatype not found"
 
 -- | Test whether a 'DataType' can be eliminated to the given sort. The rules
 -- are that you can only eliminate propositional datatypes to the proposition
@@ -1304,6 +1442,30 @@ scConvertible :: SharedContext
               -> IO Bool
 scConvertible sc = scConvertibleEval sc scWhnf
 
+-- | Check whether one type is a subtype of another: Either they are
+-- convertible, or they are both Pi types with convertible argument
+-- types and result sorts @s1@ and @s2@ with @s1 <= s2@.
+scSubtype :: SharedContext -> Term -> Term -> IO Bool
+scSubtype sc t1 t2
+  | alphaEquiv t1 t2 = pure True
+  | otherwise =
+    do t1' <- scWhnf sc t1
+       t2' <- scWhnf sc t2
+       case (t1', t2') of
+         (asSort -> Just s1, asSort -> Just s2) ->
+           pure (s1 <= s2)
+         (unwrapTermF -> Pi x1 a1 b1, unwrapTermF -> Pi x2 a2 b2)
+           | x1 == x2 ->
+             (&&) <$> scConvertible sc True a1 a2 <*> scSubtype sc b1 b2
+           | otherwise ->
+             do conv1 <- scConvertible sc True a1 a2
+                var1 <- scVariable sc x1 a1
+                b2' <- scInstantiate sc (IntMap.singleton (vnIndex x2) var1) b2
+                conv2 <- scSubtype sc b1 b2'
+                pure (conv1 && conv2)
+         _ ->
+           scConvertible sc True t1' t2'
+
 
 --------------------------------------------------------------------------------
 -- Type checking
@@ -1336,101 +1498,12 @@ scTypeOfName sc nm =
        Just r -> pure (resolvedNameType r)
        Nothing -> fail ("scTypeOfName: Name not found: " ++ show nm)
 
--- | Computes the type of a term as quickly as possible, assuming that
--- the term is well-typed.
+-- | Return the type of a term.
 scTypeOf :: SharedContext -> Term -> IO Term
-scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
-  where
-    memo :: Term -> State.StateT (Map TermIndex Term) IO Term
-    memo STApp{ stAppIndex = i, stAppTermF = t} = do
-      table <- State.get
-      case Map.lookup i table of
-        Just x  -> return x
-        Nothing -> do
-          x <- termf t
-          State.modify (Map.insert i x)
-          return x
-    toSort :: Term -> State.StateT (Map TermIndex Term) IO Sort
-    toSort t =
-      do t' <- liftIO (scWhnf sc t)
-         case asSort t' of
-           Just s -> return s
-           Nothing -> fail "scTypeOf: type error: expected sort"
-    sort :: Term -> State.StateT (Map TermIndex Term) IO Sort
-    sort t = toSort =<< memo t
-    termf :: TermF Term -> State.StateT (Map TermIndex Term) IO Term
-    termf tf =
-      case tf of
-        FTermF ftf -> ftermf ftf
-        App x y -> do
-          tx <- memo x
-          lift $ reducePi sc tx y
-        Lambda x tp rhs ->
-          do rtp <- lift $ scTypeOf sc rhs
-             lift $ scPi sc x tp rtp
-        Pi _x tp rhs ->
-          do ltp <- sort tp
-             rtp <- toSort =<< lift (scTypeOf sc rhs)
-             -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
-             -- when b is a Prop (this is a forall proposition), otherwise it is a
-             -- (Type (max (sortOf a) (sortOf b)))
-             let srt = if rtp == propSort then propSort else max ltp rtp
-             lift $ scSort sc srt
-        Constant nm ->
-          do mm <- liftIO $ scGetModuleMap sc
-             case lookupVarIndexInMap (nameIndex nm) mm of
-               Just r -> pure $ resolvedNameType r
-               _ -> panic "scTypeOf" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
-        Variable _x tp ->
-          pure tp
-    ftermf :: FlatTermF Term
-           -> State.StateT (Map TermIndex Term) IO Term
-    ftermf tf =
-      case tf of
-        UnitValue -> lift $ scUnitType sc
-        UnitType -> lift $ scSort sc (mkSort 0)
-        PairValue x y -> do
-          tx <- memo x
-          ty <- memo y
-          lift $ scPairType sc tx ty
-        PairType x y -> do
-          sx <- sort x
-          sy <- sort y
-          lift $ scSort sc (max sx sy)
-        PairLeft t -> do
-          tp <- (liftIO . scWhnf sc) =<< memo t
-          case asPairType tp of
-            Just (t1, _) -> return t1
-            Nothing -> fail "scTypeOf: type error: expected pair type"
-        PairRight t -> do
-          tp <- (liftIO . scWhnf sc) =<< memo t
-          case asPairType tp of
-            Just (_, t2) -> return t2
-            Nothing -> fail "scTypeOf: type error: expected pair type"
-        Recursor crec ->
-          do mm <- liftIO $ scGetModuleMap sc
-             let d = recursorDataType crec
-             case lookupVarIndexInMap (nameIndex d) mm of
-               Just (ResolvedDataType dt) ->
-                 liftIO $ scRecursorType sc dt (recursorSort crec)
-               _ -> fail $ "scTypeOf: Could not find datatype: " ++ show d
-        RecordType elems ->
-          do max_s <- maximum <$> mapM (sort . snd) elems
-             lift $ scSort sc max_s
-        RecordValue elems ->
-          do elem_tps <- mapM (\(fld,t) -> (fld,) <$> memo t) elems
-             lift $ scRecordType sc elem_tps
-        RecordProj t fld ->
-          do tp <- (liftIO . scWhnf sc) =<< memo t
-             case asRecordType tp of
-               Just (Map.lookup fld -> Just f_tp) -> return f_tp
-               Just _ -> fail "Record field not in record type"
-               Nothing -> fail "Record project of non-record type"
-        Sort s _ -> lift $ scSort sc (sortOf s)
-        ArrayValue tp vs -> lift $ do
-          n <- scNat sc (fromIntegral (V.length vs))
-          scVecType sc n tp
-        StringLit{} -> lift $ scStringType sc
+scTypeOf sc t =
+  case stAppType t of
+    Right ty -> pure ty
+    Left s -> scSort sc s
 
 --------------------------------------------------------------------------------
 
@@ -1627,11 +1700,12 @@ scApplyAll sc = foldlM (scApply sc)
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term
-scSort sc s = scFlatTermF sc (Sort s noFlags)
+scSort sc s = scSortWithFlags sc s noFlags
 
 -- | Create a term from a 'Sort', and set the given advisory flags
 scSortWithFlags :: SharedContext -> Sort -> SortFlags -> IO Term
-scSortWithFlags sc s h = scFlatTermF sc (Sort s h)
+scSortWithFlags sc s flags =
+  scMakeTerm sc IntMap.empty (FTermF (Sort s flags)) (Left (sortOf s))
 
 -- | Create a term from a 'Sort', and set the advisory "inhabited" flag
 scISort :: SharedContext -> Sort -> IO Term
@@ -1654,7 +1728,9 @@ scPos sc n
 
 -- | Create a literal term (of saw-core type @String@) from a 'Text'.
 scString :: SharedContext -> Text -> IO Term
-scString sc s = scFlatTermF sc (StringLit s)
+scString sc s =
+  do ty <- scStringType sc
+     scMakeTerm sc IntMap.empty (FTermF (StringLit s)) (Right ty)
 
 -- | Create a term representing the primitive saw-core type @String@.
 scStringType :: SharedContext -> IO Term
@@ -1663,37 +1739,74 @@ scStringType sc = scGlobalDef sc preludeStringIdent
 -- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
 -- that type.
 scVector :: SharedContext -> Term -> [Term] -> IO Term
-scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
+scVector sc e xs =
+  do vt <- foldM (unifyVarTypes "scVector") (varTypes e) (map varTypes xs)
+     let check x =
+           do xty <- scTypeOf sc x
+              ok <- scSubtype sc xty e
+              unless ok $ fail $ unlines $
+                ["Not a subtype", "expected: " ++ showTerm e, "got: " ++ showTerm xty]
+     mapM_ check xs
+     n <- scNat sc (fromIntegral (length xs))
+     let tf = FTermF (ArrayValue e (V.fromList xs))
+     ty <- scVecType sc n e
+     scMakeTerm sc vt tf (Right ty)
 
 -- | Create a record term from a 'Map' from 'FieldName's to 'Term's.
 scRecord :: SharedContext -> Map FieldName Term -> IO Term
-scRecord sc m = scFlatTermF sc (RecordValue $ Map.assocs m)
+scRecord sc (Map.toList -> fields) =
+  do vt <- foldM (unifyVarTypes "scRecord") IntMap.empty (map (varTypes . snd) fields)
+     let tf = FTermF (RecordValue fields)
+     field_tys <- traverse (traverse (scTypeOf sc)) fields
+     ty <- scRecordType sc field_tys
+     scMakeTerm sc vt tf (Right ty)
 
 -- | Create a record field access term from a 'Term' representing a record and
 -- a 'FieldName'.
 scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
-scRecordSelect sc t fname = scFlatTermF sc (RecordProj t fname)
+scRecordSelect sc t fname =
+  do let vt = varTypes t
+     let tf = FTermF (RecordProj t fname)
+     field_tys <- ensureRecordType sc =<< scTypeOf sc t
+     case Map.lookup fname field_tys of
+       Nothing -> fail "scRecordSelect: field name not found"
+       Just ty' -> scMakeTerm sc vt tf (Right ty')
 
 -- | Create a term representing the type of a record from a list associating
 -- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
 -- the given list is irrelevant, as record fields are not ordered.
 scRecordType :: SharedContext -> [(FieldName, Term)] -> IO Term
-scRecordType sc elem_tps = scFlatTermF sc (RecordType elem_tps)
+scRecordType sc field_tys =
+  do vt <- foldM (unifyVarTypes "scRecordType") IntMap.empty (map (varTypes . snd) field_tys)
+     let tf = FTermF (RecordType field_tys)
+     let field_sort (_, t) = either pure (ensureSort sc) (stAppType t)
+     sorts <- traverse field_sort field_tys
+     let s = foldl max (mkSort 0) sorts
+     scMakeTerm sc vt tf (Left s)
 
 -- | Create a unit-valued term.
 scUnitValue :: SharedContext -> IO Term
-scUnitValue sc = scFlatTermF sc UnitValue
+scUnitValue sc =
+  do ty <- scUnitType sc
+     scMakeTerm sc IntMap.empty (FTermF UnitValue) (Right ty)
 
 -- | Create a term representing the unit type.
 scUnitType :: SharedContext -> IO Term
-scUnitType sc = scFlatTermF sc UnitType
+scUnitType sc =
+  scMakeTerm sc IntMap.empty (FTermF UnitType) (Left (TypeSort 0))
 
 -- | Create a pair term from two terms.
 scPairValue :: SharedContext
             -> Term -- ^ The left projection
             -> Term -- ^ The right projection
             -> IO Term
-scPairValue sc x y = scFlatTermF sc (PairValue x y)
+scPairValue sc t1 t2 =
+  do vt <- unifyVarTypes "scPairValue" (varTypes t1) (varTypes t2)
+     let tf = FTermF (PairValue t1 t2)
+     ty1 <- scTypeOf sc t1
+     ty2 <- scTypeOf sc t2
+     ty <- scPairType sc ty1 ty2
+     scMakeTerm sc vt tf (Right ty)
 
 -- | Create a term representing a pair type from two other terms, each
 -- representing a type.
@@ -1701,7 +1814,12 @@ scPairType :: SharedContext
            -> Term -- ^ Left projection type
            -> Term -- ^ Right projection type
            -> IO Term
-scPairType sc x y = scFlatTermF sc (PairType x y)
+scPairType sc t1 t2 =
+  do vt <- unifyVarTypes "scPairType" (varTypes t1) (varTypes t2)
+     let tf = FTermF (PairType t1 t2)
+     s1 <- either pure (ensureSort sc) (stAppType t1)
+     s2 <- either pure (ensureSort sc) (stAppType t2)
+     scMakeTerm sc vt tf (Left (max s1 s2))
 
 -- | Create an n-place tuple from a list (of length n) of 'Term's.
 -- Note that tuples are nested pairs, associating to the right e.g.
@@ -1720,11 +1838,17 @@ scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 
 -- | Create a term giving the left projection of a 'Term' representing a pair.
 scPairLeft :: SharedContext -> Term -> IO Term
-scPairLeft sc t = scFlatTermF sc (PairLeft t)
+scPairLeft sc t =
+  do (ty, _) <- ensurePairType sc =<< scTypeOf sc t
+     let mty = maybe (Right ty) Left (asSort ty)
+     scMakeTerm sc (varTypes t) (FTermF (PairLeft t)) mty
 
 -- | Create a term giving the right projection of a 'Term' representing a pair.
 scPairRight :: SharedContext -> Term -> IO Term
-scPairRight sc t = scFlatTermF sc (PairRight t)
+scPairRight sc t =
+  do (_, ty) <- ensurePairType sc =<< scTypeOf sc t
+     let mty = maybe (Right ty) Left (asSort ty)
+     scMakeTerm sc (varTypes t) (FTermF (PairRight t)) mty
 
 -- | Create a term representing either the left or right projection of the
 -- given 'Term', depending on the given 'Bool': left if @False@, right if @True@.
@@ -1752,7 +1876,7 @@ scFun :: SharedContext
       -> Term -- ^ The parameter type
       -> Term -- ^ The result type
       -> IO Term
-scFun sc a b = scTermF sc (Pi wildcardVarName a b)
+scFun sc a b = scPi sc wildcardVarName a b
 
 -- | Create a term representing the type of a non-dependent n-ary function,
 -- given a list of parameter types and a result type (as terms).
@@ -2634,7 +2758,7 @@ scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a,
 mkSharedContext :: IO SharedContext
 mkSharedContext = do
   vr <- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.
-  cr <- newMVar emptyAppCache
+  cr <- newIORef emptyAppCache
   gr <- newIORef HMap.empty
   mod_map_ref <- newIORef emptyModuleMap
   dr <- newIORef emptyDisplayNameEnv
