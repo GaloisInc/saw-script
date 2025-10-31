@@ -1,11 +1,14 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 {- |
 Module      : SAWScript.REPL.Command
 Description :
 License     : BSD3
-Maintainer  : huffman
+Maintainer  : saw@galois.com
 Stability   : provisional
+
+REPL :-commands and execution of REPL text.
 -}
-{-# LANGUAGE OverloadedStrings #-}
 
 module SAWScript.REPL.Command (
     executeText,
@@ -21,44 +24,42 @@ module SAWScript.REPL.Command (
     sanitize
   ) where
 
---import SAWCore.SharedTerm (SharedContext)
+import Control.Monad (unless, void)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.State (modify)
+import Data.Char (isSpace)
+import Data.Function (on)
+import Data.List (intersperse, nub)
+import qualified Data.Map as Map
+import Data.Map (Map)
+import qualified Data.Set as Set
+import qualified Data.Text as Text
+import Data.Text (Text)
+import qualified Data.Text.IO as TextIO
+import System.FilePath ((</>), isPathSeparator)
+import System.Directory (
+    getHomeDirectory,
+    getCurrentDirectory,
+    setCurrentDirectory,
+    doesDirectoryExist
+ )
 
+import qualified SAWSupport.Pretty as PPS (pShowText)
 import qualified SAWSupport.ScopedMap as ScopedMap
 import qualified SAWSupport.Trie as Trie
 import SAWSupport.Trie (Trie)
 
-import SAWCentral.Value (Environ(..))
-
-import SAWScript.REPL.Monad
-import SAWScript.REPL.Data
-
-import Control.Monad (unless, void)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.State (modify)
-
-import Data.Char (isSpace)
-import Data.Function (on)
-import Data.List (intersperse, nub)
-import qualified Data.Text as Text
-import Data.Text (Text)
-import System.FilePath((</>), isPathSeparator)
-import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
-import qualified Data.Map as Map
-import Data.Map (Map)
-import qualified Data.Set as Set
-import qualified Data.Text.IO as TextIO
-
-import qualified SAWSupport.Pretty as PPS (pShowText)
-
--- SAWScript imports
 import qualified SAWCentral.AST as SS (Name, Schema)
+import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable)
+import SAWCentral.Value (Environ(..), TopLevelRW(..))
 
 import SAWScript.Panic (panic)
 import qualified SAWScript.Loader as Loader
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretTopStmt)
-import SAWCentral.TopLevel (TopLevelRW(..))
-import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable)
+
+import SAWScript.REPL.Monad
+import SAWScript.REPL.Data
 
 
 replFileName :: FilePath

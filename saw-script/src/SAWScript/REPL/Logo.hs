@@ -1,16 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 {- |
 Module      : SAWScript.REPL.Logo
 Description :
 License     : BSD3
-Maintainer  : huffman
+Maintainer  : saw@galois.com
 Stability   : provisional
+
+The SAW banner logo.
 -}
+
 module SAWScript.REPL.Logo (displayLogo) where
+
+import System.Console.ANSI
 
 import SAWScript.Panic (panic)
 import SAWVersion.Version (versionText)
-import System.Console.ANSI
+
 
 type Logo = [String]
 

@@ -1,10 +1,3 @@
-{- |
-Module      : SAWScript.REPL.Data
-Description :
-License     : BSD3
-Maintainer  : saw@galois.com
-Stability   : provisional
--}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
@@ -13,6 +6,16 @@ Stability   : provisional
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+
+{- |
+Module      : SAWScript.REPL.Data
+Description :
+License     : BSD3
+Maintainer  : saw@galois.com
+Stability   : provisional
+
+Data extraction supporting REPL commands.
+-}
 
 module SAWScript.REPL.Data (
     getCryptolExprNames,

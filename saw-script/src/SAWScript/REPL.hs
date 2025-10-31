@@ -1,11 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 {- |
 Module      : SAWScript.REPL
 Description :
 License     : BSD3
-Maintainer  : huffman
+Maintainer  : saw@galois.com
 Stability   : provisional
 -}
+
 module SAWScript.REPL (run, reenterTopLevel, reenterProofScript) where
 
 import Control.Monad (unless)
@@ -19,6 +21,7 @@ import SAWScript.Panic (panic)
 import SAWScript.REPL.Logo (displayLogo)
 import SAWScript.REPL.Monad (initREPL, resumeREPL, runREPL, REPLState(..))
 import SAWScript.REPL.Haskeline (repl)
+
 
 -- | Startup function, called from main.
 --

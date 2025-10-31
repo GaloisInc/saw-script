@@ -1,10 +1,3 @@
-{- |
-Module      : SAWScript.REPL.Monad
-Description :
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
@@ -12,6 +5,16 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+
+{- |
+Module      : SAWScript.REPL.Monad
+Description :
+License     : BSD3
+Maintainer  : saw@galois.com
+Stability   : provisional
+
+Definitions for the REPL's monad and state types.
+-}
 
 module SAWScript.REPL.Monad (
     REPL(..), runREPL
@@ -25,7 +28,6 @@ module SAWScript.REPL.Monad (
   , getTopLevelRW
   , getProofState
   ) where
-
 
 import Control.Monad (void)
 import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), MonadMask(..), catchJust)

@@ -1,33 +1,37 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 {- |
 Module      : SAWScript.REPL.Haskeline
 Description :
 License     : BSD3
-Maintainer  : huffman
+Maintainer  : saw@galois.com
 Stability   : provisional
+
+Haskeline interface layer with main REPL loop and tab completion support.
 -}
-{-# LANGUAGE OverloadedStrings #-}
 
 module SAWScript.REPL.Haskeline (repl) where
 
-import SAWScript.REPL.Monad
-import SAWScript.REPL.Data
-import SAWScript.REPL.Command
-
 import Control.Monad (when)
 import Control.Monad.State (gets)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Class (lift)
+import qualified Control.Exception as X
 import Data.Maybe (mapMaybe)
 import Data.Char (isAlphaNum, isSpace)
 import qualified Data.Text as Text
 import Data.Text (Text)
-import System.Console.Haskeline
 import System.Directory(getAppUserDataDirectory,createDirectoryIfMissing)
 import System.FilePath((</>))
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Class (lift)
-import qualified Control.Exception as X
+
+import System.Console.Haskeline
 
 import SAWCentral.Proof (psGoals)
 import SAWScript.Panic (panic)
+import SAWScript.REPL.Monad
+import SAWScript.REPL.Data
+import SAWScript.REPL.Command
+
 
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
