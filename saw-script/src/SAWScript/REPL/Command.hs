@@ -36,7 +36,7 @@ import Control.Monad (unless, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (modify)
 
-import Data.Char (isSpace,isPunctuation,isSymbol)
+import Data.Char (isSpace)
 import Data.Function (on)
 import Data.List (intersperse, nub)
 import qualified Data.Text as Text
@@ -61,6 +61,10 @@ import SAWCentral.TopLevel (TopLevelRW(..))
 import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable)
 
 
+replFileName :: FilePath
+replFileName = "<stdin>"
+
+
 ------------------------------------------------------------
 -- REPL commands
 
@@ -72,7 +76,7 @@ failOn errs = case (reverse errs) of
         fail (Text.unpack lastMsg)
 
 cdCmd :: FilePath -> REPL ()
-cdCmd f | null f = liftIO $ putStrLn $ "[error] :cd requires a path argument"
+cdCmd f | null f = liftIO $ putStrLn $ "Error: The :cd command requires a path argument"
         | otherwise = do
   exists <- liftIO $ doesDirectoryExist f
   if exists
@@ -136,7 +140,7 @@ quitCmd =
 
 searchCmd :: Text -> REPL ()
 searchCmd str
-  | Text.null str = liftIO $ putStrLn $ "[error] :search requires at least one argument"
+  | Text.null str = liftIO $ putStrLn $ "Error: The :search command requires at least one argument"
   | otherwise = do
 
      -- FUTURE: it would be nice to be able to use the words
@@ -275,7 +279,7 @@ tenvCmd = do
 
 typeOfCmd :: Text -> REPL ()
 typeOfCmd str
-  | Text.null str = liftIO $ putStrLn "[error] :type requires an argument"
+  | Text.null str = liftIO $ putStrLn "Error: The :type command requires an argument"
   | otherwise = do
      rw <- getTopLevelRW
      let environ = rwEnviron rw
@@ -290,13 +294,6 @@ typeOfCmd str
 
 ------------------------------------------------------------
 -- Command table
-
--- | Result of searching for a command.
-data SearchResult
-  = Found (REPL ())           -- ^ Successfully parsed command
-  | Ambiguous Text [Text]     -- ^ Ambiguous name with list of
-                              --   possible matches
-  | Unknown Text              -- ^ An unknown command
 
 -- | Command description.
 data CommandDescr = CommandDescr
@@ -325,7 +322,7 @@ instance Ord CommandDescr where
 -- from "one arg of this type".
 data CommandBody
   = ExprArg     (Text     -> REPL ())
-  | TypeArg     (Text     -> REPL ())
+  | TypeArgs    (Text     -> REPL ())
   | FilenameArg (FilePath -> REPL ())
   | ShellArg    (Text     -> REPL ())
   | NoArg       (REPL ())
@@ -350,7 +347,7 @@ nbCommandList :: [CommandDescr]
 nbCommandList  =
   [ CommandDescr ":env"  []      (NoArg envCmd)
     "display the current sawscript environment"
-  , CommandDescr ":search" []    (TypeArg searchCmd)
+  , CommandDescr ":search" []    (TypeArgs searchCmd)
     "search the environment by type"
   , CommandDescr ":tenv" []      (NoArg tenvCmd)
     "display the current sawscript type environment"
@@ -382,67 +379,27 @@ genHelp cs = map cmdHelp cs
 
 
 ------------------------------------------------------------
--- Evaluation
+-- SAWScript execution
 
--- | Run a command.
-runCommand :: SearchResult -> REPL ()
-runCommand sr = case sr of
-  Found cmd ->
-      exceptionProtect cmd
-
-  Unknown cmd ->
-      liftIO $ TextIO.putStrLn $ "Unknown command: " <> cmd
-
-  Ambiguous cmd cmds -> liftIO $ do
-      TextIO.putStrLn $ cmd <> " is ambiguous; it could mean one of:"
-      TextIO.putStrLn $ "\t" <> Text.intercalate ", " cmds
-
-
-{- Evaluation is fairly straightforward; however, there are a few important
-caveats:
-
-  1. 'return' is type-polymorphic.  This means that 'return "foo"' will produce
-     a type-polymorphic function 'm -> m String', for any monad 'm'.  It also
-     means that if you type 'return "foo"' into a naively-written interpreter,
-     you won't see 'foo'!  The solution is to force each statement that comes
-     into the REPL to have type 'TopLevel t' ('TopLevel' is the SAWScript
-     version of 'IO').  This gets done as soon as the statement is parsed.
-
-  2. Handling binding variables to values is somewhat tricky.  When you're
-     allowed to bind variables in the REPL, you're basically working in the
-     context of a partially evaluated module: all the results of all the old
-     computations are in scope, and you're allowed to add new computations that
-     depend on them.  It's insufficient to merely hang onto the AST for the
-     old computations, as that could cause them to be evaluated multiple times;
-     it could also cause their type to be inferred differently several times,
-     which is bad.  Instead, we hang onto the inferred types of previous
-     computations and use them to seed the name resolver and the typechecker;
-     we also hang onto the results and use them to seed the interpreter. -}
-sawScriptCmd :: Text -> REPL ()
-sawScriptCmd str = do
+-- | Execute some SAWScript text.
+executeSAWScriptText :: Text -> REPL ()
+executeSAWScriptText str = exceptionProtect $ do
   errs_or_stmt <- liftIO $ Loader.readStmtSemiUnchecked replFileName str
   case errs_or_stmt of
     Left errs -> failOn errs
-    Right stmt ->
-      do mpst <- getProofState
-         case mpst of
+    Right stmt -> do
+         mbPst <- getProofState
+         case mbPst of
            Nothing -> void $ liftTopLevel (interpretTopStmt True stmt)
            Just _  -> void $ liftProofScript (interpretTopStmt True stmt)
 
-replFileName :: FilePath
-replFileName = "<stdin>"
-
 
 ------------------------------------------------------------
--- Command parsing
+-- Command execution
 
 -- | Strip leading space.
 sanitize :: Text -> Text
 sanitize  = Text.dropWhile isSpace
-
--- | Strip trailing space.
-sanitizeEnd :: Text -> Text
-sanitizeEnd = Text.dropWhileEnd isSpace
 
 -- | Find commands that begin with a given prefix.
 --
@@ -468,68 +425,80 @@ searchExactCommandByPrefix prefix =
         [cmd] -> Just cmd
         _ -> Nothing
 
--- | Split at the first word boundary.
-splitCommand :: Text -> Maybe (Text, Text)
-splitCommand txt = do
-  (c, more) <- Text.uncons (sanitize txt) 
-  case c of
-    ':'
-      | (as,bs) <- Text.span (\x -> isPunctuation x || isSymbol x) more
-      , not (Text.null as) -> Just (Text.cons ':' as, sanitize bs)
+-- | Do tilde-expansion on filenames.
+expandHome :: Text -> REPL FilePath
+expandHome path =
+    case Text.uncons path of
+        Nothing -> pure ""
+        Just ('~', more) -> case Text.uncons more of
+            Just (c, more') | isPathSeparator c -> do
+                dir <- liftIO getHomeDirectory
+                return (dir </> Text.unpack more')
+            _ ->
+                pure $ Text.unpack path
+        Just _ ->
+            pure $ Text.unpack path
 
-      | (as,bs) <- Text.break isSpace more
-      , not (Text.null as) -> Just (Text.cons ':' as, sanitize bs)
+-- | Execute a REPL :-command.
+executeReplCommand :: CommandDescr -> [Text] -> REPL ()
+executeReplCommand cmd args0 =
+    let noargs action args = case args of
+          [] -> action
+          _ -> do
+              let msg = "The command " <> cName cmd <> " takes no arguments"
+              liftIO $ TextIO.putStrLn msg
+    in
+    let onearg action args = case args of
+          [] -> action ""
+          [arg] -> action arg
+          _ -> do
+              let msg = "The command " <> cName cmd <> " takes only one argument"
+              liftIO $ TextIO.putStrLn msg
+    in
+    exceptionProtect $ case cBody cmd of
+        ExprArg action ->
+            onearg action args0
+        TypeArgs action ->
+            action (Text.intercalate " " args0)
+        FilenameArg action -> do
+            args' <- mapM expandHome args0
+            onearg action args'
+        ShellArg action ->
+            onearg action args0
+        NoArg action ->
+            noargs action args0
 
-      | otherwise -> Nothing
+-- | Execute REPL :-command text.
+executeReplCommandText :: Text -> REPL ()
+executeReplCommandText text =
+    let textWords = filter (\w -> not $ Text.null w) $ Text.split isSpace text in
+    case textWords of
+        [] -> pure ()
+        cmdName : args ->
+            case searchCommandsByPrefix cmdName of
+                [] ->
+                    -- Historically SAW accepts ":?cmd" without a space
+                    if Text.isPrefixOf ":?" cmdName then
+                        executeReplCommandText $ ":? " <> Text.drop 2 cmdName
+                    else
+                        liftIO $ TextIO.putStrLn $ "Unknown command: " <> cmdName
+                [cmd] ->
+                    executeReplCommand cmd args
+                cmds -> liftIO $ do
+                    let msg1 = cmdName <> " is ambiguous; it could mean one of:"
+                        msg2 = Text.intercalate ", " $ map cName cmds
+                    TextIO.putStrLn $ msg1
+                    TextIO.putStrLn $ "\t" <> msg2
 
-    _ -> Just (Text.cons c more, "")
-
--- | Look up a string in a command list. If given a string that's both
--- itself a command and a prefix of something else, choose that
--- command; otherwise such commands are inaccessible. Also, deduplicate
--- the list of results to avoid silliness with command aliases.
-findSomeCommand :: Text -> CommandMap -> [CommandDescr]
-findSomeCommand str commandTable = nub $ Trie.lookupWithExact str commandTable
-
--- | Look up a string in the command list.
-findCommand :: Text -> [CommandDescr]
-findCommand str = findSomeCommand str commands
-
--- | Parse a line as a command.
-parseCommand :: (Text -> [CommandDescr]) -> Text -> Maybe SearchResult
-parseCommand findCmd line = do
-  (cmd,args) <- splitCommand line
-  let args' = sanitizeEnd args
-  case findCmd cmd of
-    -- nothing matched; if it doesn't begin with a colon, eval it
-    [] -> case Text.uncons cmd of
-      Nothing -> Nothing
-      Just (':', _) -> Just (Unknown cmd)
-      Just _ -> Just (Found (sawScriptCmd line))
-
-    -- matched exactly one command; run it
-    [c] -> case cBody c of
-      ExprArg     body -> Just (Found (body args'))
-      TypeArg     body -> Just (Found (body args'))
-      FilenameArg body -> Just (Found (body =<< expandHome args'))
-      ShellArg    body -> Just (Found (body args'))
-      NoArg       body -> Just (Found  body)
-
-    -- matched several things; complain
-    cs -> Just (Ambiguous cmd (map cName cs))
-
-  where
-  expandHome path =
-    case Text.unpack path of
-      '~' : c : more | isPathSeparator c -> do dir <- liftIO getHomeDirectory
-                                               return (dir </> more)
-      path' -> pure path'
-
+-- | Execute some text typed at the REPL.
 executeText :: Text -> REPL ()
-executeText text =
-    -- XXX why is findCommand passed to parseCommand...?
-    case parseCommand findCommand text of
+executeText text = do
+    -- skip whitespace
+    let text' = sanitize text
+    case Text.uncons text' of
         Nothing ->
             pure ()
-        Just result -> do
-            runCommand result
+        Just (':', _) ->
+            executeReplCommandText text'
+        Just _ ->
+            executeSAWScriptText text'
