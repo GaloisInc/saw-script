@@ -26,454 +26,440 @@ span.spaces    { background: white }
 <span class="lineno">    7 </span>Stability   : provisional
 <span class="lineno">    8 </span>-}
 <span class="lineno">    9 </span>
-<span class="lineno">   10 </span>{-# LANGUAGE DataKinds #-}
-<span class="lineno">   11 </span>{-# LANGUAGE DeriveFunctor #-}
-<span class="lineno">   12 </span>{-# LANGUAGE DoAndIfThenElse #-}
-<span class="lineno">   13 </span>{-# LANGUAGE EmptyDataDecls #-}
-<span class="lineno">   14 </span>{-# LANGUAGE FlexibleContexts #-}
-<span class="lineno">   15 </span>{-# LANGUAGE GADTs #-}
-<span class="lineno">   16 </span>{-# LANGUAGE ImplicitParams #-}
-<span class="lineno">   17 </span>{-# LANGUAGE LambdaCase #-}
-<span class="lineno">   18 </span>{-# LANGUAGE NamedFieldPuns #-}
-<span class="lineno">   19 </span>{-# LANGUAGE PatternGuards #-}
-<span class="lineno">   20 </span>{-# LANGUAGE PatternSynonyms #-}
-<span class="lineno">   21 </span>{-# LANGUAGE PolyKinds #-}
-<span class="lineno">   22 </span>{-# LANGUAGE Rank2Types #-}
-<span class="lineno">   23 </span>{-# LANGUAGE ScopedTypeVariables #-}
-<span class="lineno">   24 </span>{-# LANGUAGE StandaloneDeriving #-}
-<span class="lineno">   25 </span>{-# LANGUAGE TemplateHaskell #-}
-<span class="lineno">   26 </span>{-# LANGUAGE TypeFamilies #-}
-<span class="lineno">   27 </span>{-# LANGUAGE ViewPatterns #-}
-<span class="lineno">   28 </span>{-# OPTIONS_GHC -fno-warn-orphans  #-}
-<span class="lineno">   29 </span>
-<span class="lineno">   30 </span>module SAWCentral.Crucible.LLVM.MethodSpecIR
-<span class="lineno">   31 </span>  ( LLVM
-<span class="lineno">   32 </span>    -- * LLVMMethodId
-<span class="lineno">   33 </span>  , LLVMMethodId(..)
-<span class="lineno">   34 </span>  , llvmMethodParent
-<span class="lineno">   35 </span>  , llvmMethodName
-<span class="lineno">   36 </span>  , ppLLVMMethodId
-<span class="lineno">   37 </span>  , csName
-<span class="lineno">   38 </span>  , csParentName
-<span class="lineno">   39 </span>    -- * LLVMAllocSpec
-<span class="lineno">   40 </span>  , LLVMAllocSpec(..)
-<span class="lineno">   41 </span>  , LLVMAllocSpecInit(..)
-<span class="lineno">   42 </span>  , allocSpecType
-<span class="lineno">   43 </span>  , allocSpecAlign
-<span class="lineno">   44 </span>  , allocSpecMut
-<span class="lineno">   45 </span>  , allocSpecMd
-<span class="lineno">   46 </span>  , allocSpecBytes
-<span class="lineno">   47 </span>  , allocSpecFresh
-<span class="lineno">   48 </span>  , allocSpecInit
-<span class="lineno">   49 </span>  , mutIso
-<span class="lineno">   50 </span>  , isMut
-<span class="lineno">   51 </span>    -- * LLVMModule
-<span class="lineno">   52 </span>  , LLVMModule -- abstract
-<span class="lineno">   53 </span>  , modFilePath
-<span class="lineno">   54 </span>  , modAST
-<span class="lineno">   55 </span>  , modTrans
-<span class="lineno">   56 </span>  , loadLLVMModule
-<span class="lineno">   57 </span>  , showLLVMModule
-<span class="lineno">   58 </span>    -- * CrucibleContext
-<span class="lineno">   59 </span>  , LLVMCrucibleContext(..)
-<span class="lineno">   60 </span>  , ccLLVMSimContext
-<span class="lineno">   61 </span>  , ccLLVMModule
-<span class="lineno">   62 </span>  , ccLLVMGlobals
-<span class="lineno">   63 </span>  , ccBasicSS
-<span class="lineno">   64 </span>  , ccBackend
-<span class="lineno">   65 </span>  , ccLLVMModuleAST
-<span class="lineno">   66 </span>  , ccLLVMModuleTrans
-<span class="lineno">   67 </span>  , ccLLVMContext
-<span class="lineno">   68 </span>  , ccTypeCtx
-<span class="lineno">   69 </span>  , ccWithBackend
-<span class="lineno">   70 </span>  , ccSym
-<span class="lineno">   71 </span>    -- * PointsTo
-<span class="lineno">   72 </span>  , LLVMPointsTo(..)
-<span class="lineno">   73 </span>  , LLVMPointsToValue(..)
-<span class="lineno">   74 </span>  , llvmPointsToProgramLoc
-<span class="lineno">   75 </span>  , ppPointsTo
-<span class="lineno">   76 </span>    -- * AllocGlobal
-<span class="lineno">   77 </span>  , LLVMAllocGlobal(..)
-<span class="lineno">   78 </span>  , ppAllocGlobal
-<span class="lineno">   79 </span>    -- * Intrinsics
-<span class="lineno">   80 </span>  , intrinsics
-<span class="lineno">   81 </span>    -- * Initial CrucibleSetupMethodSpec
-<span class="lineno">   82 </span>  , SetupError(..)
-<span class="lineno">   83 </span>  , ppSetupError
-<span class="lineno">   84 </span>  , resolveArgs
-<span class="lineno">   85 </span>  , resolveRetTy
-<span class="lineno">   86 </span>  , initialDefCrucibleMethodSpecIR
-<span class="lineno">   87 </span>  , initialDeclCrucibleMethodSpecIR
-<span class="lineno">   88 </span>  , initialCrucibleSetupState
-<span class="lineno">   89 </span>  , initialCrucibleSetupStateDecl
-<span class="lineno">   90 </span>    -- * AllLLVM
-<span class="lineno">   91 </span>  , AllLLVM
-<span class="lineno">   92 </span>  , mkAllLLVM
-<span class="lineno">   93 </span>  , getAllLLVM
-<span class="lineno">   94 </span>  , anySetupTerm
-<span class="lineno">   95 </span>  , anySetupArray
-<span class="lineno">   96 </span>  , anySetupCast
-<span class="lineno">   97 </span>  , anySetupStruct
-<span class="lineno">   98 </span>  , anySetupElem
-<span class="lineno">   99 </span>  , anySetupField
-<span class="lineno">  100 </span>  , anySetupUnion
-<span class="lineno">  101 </span>  , anySetupNull
-<span class="lineno">  102 </span>  , anySetupGlobal
-<span class="lineno">  103 </span>  , anySetupGlobalInitializer
-<span class="lineno">  104 </span>    -- * SomeLLVM
-<span class="lineno">  105 </span>  , SomeLLVM
-<span class="lineno">  106 </span>  , pattern SomeLLVM
-<span class="lineno">  107 </span>  , mkSomeLLVM
-<span class="lineno">  108 </span>  , getSomeLLVM
-<span class="lineno">  109 </span>    -- * ResolvedState
-<span class="lineno">  110 </span>  , LLVMResolvedState
-<span class="lineno">  111 </span>  , ResolvedPath
-<span class="lineno">  112 </span>  , ResolvedPathItem(..)
-<span class="lineno">  113 </span>  , emptyResolvedState
-<span class="lineno">  114 </span>  , rsAllocs
-<span class="lineno">  115 </span>  , rsGlobals
-<span class="lineno">  116 </span>  , markResolved
-<span class="lineno">  117 </span>  , testResolved
-<span class="lineno">  118 </span>  ) where
+<span class="lineno">   10 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">   11 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   12 </span>{-# LANGUAGE PatternSynonyms #-}
+<span class="lineno">   13 </span>{-# LANGUAGE Rank2Types #-}
+<span class="lineno">   14 </span>{-# OPTIONS_GHC -fno-warn-orphans  #-}
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>module SAWCentral.Crucible.LLVM.MethodSpecIR
+<span class="lineno">   17 </span>  ( LLVM
+<span class="lineno">   18 </span>    -- * LLVMMethodId
+<span class="lineno">   19 </span>  , LLVMMethodId(..)
+<span class="lineno">   20 </span>  , llvmMethodParent
+<span class="lineno">   21 </span>  , llvmMethodName
+<span class="lineno">   22 </span>  , ppLLVMMethodId
+<span class="lineno">   23 </span>  , csName
+<span class="lineno">   24 </span>  , csParentName
+<span class="lineno">   25 </span>    -- * LLVMAllocSpec
+<span class="lineno">   26 </span>  , LLVMAllocSpec(..)
+<span class="lineno">   27 </span>  , LLVMAllocSpecInit(..)
+<span class="lineno">   28 </span>  , allocSpecType
+<span class="lineno">   29 </span>  , allocSpecAlign
+<span class="lineno">   30 </span>  , allocSpecMut
+<span class="lineno">   31 </span>  , allocSpecMd
+<span class="lineno">   32 </span>  , allocSpecBytes
+<span class="lineno">   33 </span>  , allocSpecFresh
+<span class="lineno">   34 </span>  , allocSpecInit
+<span class="lineno">   35 </span>  , mutIso
+<span class="lineno">   36 </span>  , isMut
+<span class="lineno">   37 </span>    -- * LLVMModule
+<span class="lineno">   38 </span>  , LLVMModule -- abstract
+<span class="lineno">   39 </span>  , modFilePath
+<span class="lineno">   40 </span>  , modAST
+<span class="lineno">   41 </span>  , modTrans
+<span class="lineno">   42 </span>  , loadLLVMModule
+<span class="lineno">   43 </span>  , showLLVMModule
+<span class="lineno">   44 </span>    -- * CrucibleContext
+<span class="lineno">   45 </span>  , LLVMCrucibleContext(..)
+<span class="lineno">   46 </span>  , ccLLVMSimContext
+<span class="lineno">   47 </span>  , ccLLVMModule
+<span class="lineno">   48 </span>  , ccLLVMGlobals
+<span class="lineno">   49 </span>  , ccBasicSS
+<span class="lineno">   50 </span>  , ccBackend
+<span class="lineno">   51 </span>  , ccLLVMModuleAST
+<span class="lineno">   52 </span>  , ccLLVMModuleTrans
+<span class="lineno">   53 </span>  , ccLLVMContext
+<span class="lineno">   54 </span>  , ccTypeCtx
+<span class="lineno">   55 </span>  , ccWithBackend
+<span class="lineno">   56 </span>  , ccSym
+<span class="lineno">   57 </span>    -- * PointsTo
+<span class="lineno">   58 </span>  , LLVMPointsTo(..)
+<span class="lineno">   59 </span>  , LLVMPointsToValue(..)
+<span class="lineno">   60 </span>  , llvmPointsToProgramLoc
+<span class="lineno">   61 </span>  , ppPointsTo
+<span class="lineno">   62 </span>    -- * AllocGlobal
+<span class="lineno">   63 </span>  , LLVMAllocGlobal(..)
+<span class="lineno">   64 </span>  , ppAllocGlobal
+<span class="lineno">   65 </span>    -- * Intrinsics
+<span class="lineno">   66 </span>  , intrinsics
+<span class="lineno">   67 </span>    -- * Initial CrucibleSetupMethodSpec
+<span class="lineno">   68 </span>  , SetupError(..)
+<span class="lineno">   69 </span>  , ppSetupError
+<span class="lineno">   70 </span>  , resolveArgs
+<span class="lineno">   71 </span>  , resolveRetTy
+<span class="lineno">   72 </span>  , initialDefCrucibleMethodSpecIR
+<span class="lineno">   73 </span>  , initialDeclCrucibleMethodSpecIR
+<span class="lineno">   74 </span>  , initialCrucibleSetupState
+<span class="lineno">   75 </span>  , initialCrucibleSetupStateDecl
+<span class="lineno">   76 </span>    -- * AllLLVM
+<span class="lineno">   77 </span>  , AllLLVM
+<span class="lineno">   78 </span>  , mkAllLLVM
+<span class="lineno">   79 </span>  , getAllLLVM
+<span class="lineno">   80 </span>  , anySetupTerm
+<span class="lineno">   81 </span>  , anySetupArray
+<span class="lineno">   82 </span>  , anySetupCast
+<span class="lineno">   83 </span>  , anySetupStruct
+<span class="lineno">   84 </span>  , anySetupElem
+<span class="lineno">   85 </span>  , anySetupField
+<span class="lineno">   86 </span>  , anySetupUnion
+<span class="lineno">   87 </span>  , anySetupNull
+<span class="lineno">   88 </span>  , anySetupGlobal
+<span class="lineno">   89 </span>  , anySetupGlobalInitializer
+<span class="lineno">   90 </span>    -- * SomeLLVM
+<span class="lineno">   91 </span>  , SomeLLVM
+<span class="lineno">   92 </span>  , pattern SomeLLVM
+<span class="lineno">   93 </span>  , mkSomeLLVM
+<span class="lineno">   94 </span>  , getSomeLLVM
+<span class="lineno">   95 </span>    -- * ResolvedState
+<span class="lineno">   96 </span>  , LLVMResolvedState
+<span class="lineno">   97 </span>  , ResolvedPath
+<span class="lineno">   98 </span>  , ResolvedPathItem(..)
+<span class="lineno">   99 </span>  , emptyResolvedState
+<span class="lineno">  100 </span>  , rsAllocs
+<span class="lineno">  101 </span>  , rsGlobals
+<span class="lineno">  102 </span>  , markResolved
+<span class="lineno">  103 </span>  , testResolved
+<span class="lineno">  104 </span>  ) where
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>import           Control.Lens
+<span class="lineno">  107 </span>import           Data.Functor.Compose (Compose(..))
+<span class="lineno">  108 </span>import           Data.Text (Text)
+<span class="lineno">  109 </span>import qualified Data.Text as Text
+<span class="lineno">  110 </span>import qualified Data.Map as Map
+<span class="lineno">  111 </span>import qualified Prettyprinter as PPL
+<span class="lineno">  112 </span>import qualified Text.LLVM.AST as L
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>import           Data.Parameterized.All (All(All))
+<span class="lineno">  115 </span>import           Data.Parameterized.Some (Some(Some))
+<span class="lineno">  116 </span>import qualified Data.Parameterized.Map as MapF
+<span class="lineno">  117 </span>
+<span class="lineno">  118 </span>import           What4.ProgramLoc (ProgramLoc)
 <span class="lineno">  119 </span>
-<span class="lineno">  120 </span>import           Control.Lens
-<span class="lineno">  121 </span>import           Data.Functor.Compose (Compose(..))
-<span class="lineno">  122 </span>import           Data.Text (Text)
-<span class="lineno">  123 </span>import qualified Data.Text as Text
-<span class="lineno">  124 </span>import qualified Data.Map as Map
-<span class="lineno">  125 </span>import qualified Prettyprinter as PPL
-<span class="lineno">  126 </span>import qualified Text.LLVM.AST as L
-<span class="lineno">  127 </span>
-<span class="lineno">  128 </span>import           Data.Parameterized.All (All(All))
-<span class="lineno">  129 </span>import           Data.Parameterized.Some (Some(Some))
-<span class="lineno">  130 </span>import qualified Data.Parameterized.Map as MapF
+<span class="lineno">  120 </span>import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
+<span class="lineno">  121 </span>import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
+<span class="lineno">  122 </span>  (IntrinsicMuxFn(IntrinsicMuxFn))
+<span class="lineno">  123 </span>import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>import           SAWCentral.Crucible.Common
+<span class="lineno">  126 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+<span class="lineno">  127 </span>import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span>import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
+<span class="lineno">  130 </span>import           SAWCentral.Crucible.LLVM.Setup.Value
 <span class="lineno">  131 </span>
-<span class="lineno">  132 </span>import           What4.ProgramLoc (ProgramLoc)
+<span class="lineno">  132 </span>import           CryptolSAWCore.TypedTerm
 <span class="lineno">  133 </span>
-<span class="lineno">  134 </span>import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
-<span class="lineno">  135 </span>import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
-<span class="lineno">  136 </span>  (IntrinsicMuxFn(IntrinsicMuxFn))
-<span class="lineno">  137 </span>import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
-<span class="lineno">  138 </span>
-<span class="lineno">  139 </span>import           SAWCentral.Crucible.Common
-<span class="lineno">  140 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
-<span class="lineno">  141 </span>import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
-<span class="lineno">  142 </span>
-<span class="lineno">  143 </span>import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
-<span class="lineno">  144 </span>import           SAWCentral.Crucible.LLVM.Setup.Value
-<span class="lineno">  145 </span>
-<span class="lineno">  146 </span>import           CryptolSAWCore.TypedTerm
-<span class="lineno">  147 </span>
-<span class="lineno">  148 </span>
-<span class="lineno">  149 </span>--------------------------------------------------------------------------------
-<span class="lineno">  150 </span>-- *** LLVMMethodId
-<span class="lineno">  151 </span>
-<span class="lineno">  152 </span>csName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) Text
-<span class="lineno">  153 </span><span class="decl"><span class="istickedoff">csName = MS.csMethod . llvmMethodName</span></span>
-<span class="lineno">  154 </span>
-<span class="lineno">  155 </span>csParentName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) (Maybe Text)
-<span class="lineno">  156 </span><span class="decl"><span class="istickedoff">csParentName = MS.csMethod . llvmMethodParent</span></span>
-<span class="lineno">  157 </span>
-<span class="lineno">  158 </span>--------------------------------------------------------------------------------
-<span class="lineno">  159 </span>-- *** LLVMAllocSpec
-<span class="lineno">  160 </span>
-<span class="lineno">  161 </span>mutIso :: Iso' CL.Mutability Bool
-<span class="lineno">  162 </span><span class="decl"><span class="istickedoff">mutIso =</span>
-<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">iso</span>
-<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">(\case</span>
-<span class="lineno">  165 </span><span class="spaces">      </span><span class="istickedoff">CL.Mutable -&gt; True</span>
-<span class="lineno">  166 </span><span class="spaces">      </span><span class="istickedoff">CL.Immutable -&gt; False)</span>
-<span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(\case</span></span>
-<span class="lineno">  168 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">True -&gt; CL.Mutable</span></span>
-<span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">False -&gt; CL.Immutable)</span></span></span>
-<span class="lineno">  170 </span>
-<span class="lineno">  171 </span>isMut :: Lens' LLVMAllocSpec Bool
-<span class="lineno">  172 </span><span class="decl"><span class="istickedoff">isMut = allocSpecMut . mutIso</span></span>
-<span class="lineno">  173 </span>
-<span class="lineno">  174 </span>--------------------------------------------------------------------------------
-<span class="lineno">  175 </span>-- ** CrucibleContext
-<span class="lineno">  176 </span>
-<span class="lineno">  177 </span>ccLLVMModuleAST :: LLVMCrucibleContext arch -&gt; L.Module
-<span class="lineno">  178 </span><span class="decl"><span class="istickedoff">ccLLVMModuleAST = modAST . _ccLLVMModule</span></span>
-<span class="lineno">  179 </span>
-<span class="lineno">  180 </span>ccLLVMModuleTrans :: LLVMCrucibleContext arch -&gt; CL.ModuleTranslation arch
-<span class="lineno">  181 </span><span class="decl"><span class="istickedoff">ccLLVMModuleTrans = modTrans . _ccLLVMModule</span></span>
-<span class="lineno">  182 </span>
-<span class="lineno">  183 </span>ccLLVMContext :: LLVMCrucibleContext arch -&gt; CL.LLVMContext arch
-<span class="lineno">  184 </span><span class="decl"><span class="istickedoff">ccLLVMContext = view CL.transContext . ccLLVMModuleTrans</span></span>
-<span class="lineno">  185 </span>
-<span class="lineno">  186 </span>ccTypeCtx :: LLVMCrucibleContext arch -&gt; CL.TypeContext
-<span class="lineno">  187 </span><span class="decl"><span class="istickedoff">ccTypeCtx = view CL.llvmTypeCtx . ccLLVMContext</span></span>
-<span class="lineno">  188 </span>
-<span class="lineno">  189 </span>ccWithBackend ::
-<span class="lineno">  190 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno">  191 </span>  (forall solver. OnlineSolver solver =&gt; Backend solver -&gt; a) -&gt;
-<span class="lineno">  192 </span>  a
-<span class="lineno">  193 </span><span class="decl"><span class="istickedoff">ccWithBackend cc k =</span>
-<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">case cc^.ccBackend of SomeOnlineBackend bak -&gt; k bak</span></span>
-<span class="lineno">  195 </span>
-<span class="lineno">  196 </span>ccSym :: Getter (LLVMCrucibleContext arch) Sym
-<span class="lineno">  197 </span><span class="decl"><span class="istickedoff">ccSym = to (\cc -&gt; ccWithBackend cc backendGetSym)</span></span>
-<span class="lineno">  198 </span>
-<span class="lineno">  199 </span>--------------------------------------------------------------------------------
-<span class="lineno">  200 </span>-- ** PointsTo
-<span class="lineno">  201 </span>
-<span class="lineno">  202 </span>-- | Return the 'ProgramLoc' corresponding to an 'LLVMPointsTo' statement.
-<span class="lineno">  203 </span>llvmPointsToProgramLoc :: LLVMPointsTo arch -&gt; ProgramLoc
-<span class="lineno">  204 </span><span class="decl"><span class="nottickedoff">llvmPointsToProgramLoc (LLVMPointsTo md _ _ _) = MS.conditionLoc md</span>
-<span class="lineno">  205 </span><span class="spaces"></span><span class="nottickedoff">llvmPointsToProgramLoc (LLVMPointsToBitfield md _ _ _) = MS.conditionLoc md</span></span>
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>--------------------------------------------------------------------------------
+<span class="lineno">  136 </span>-- *** LLVMMethodId
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>csName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) Text
+<span class="lineno">  139 </span><span class="decl"><span class="istickedoff">csName = MS.csMethod . llvmMethodName</span></span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>csParentName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) (Maybe Text)
+<span class="lineno">  142 </span><span class="decl"><span class="istickedoff">csParentName = MS.csMethod . llvmMethodParent</span></span>
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>--------------------------------------------------------------------------------
+<span class="lineno">  145 </span>-- *** LLVMAllocSpec
+<span class="lineno">  146 </span>
+<span class="lineno">  147 </span>mutIso :: Iso' CL.Mutability Bool
+<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">mutIso =</span>
+<span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">iso</span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">(\case</span>
+<span class="lineno">  151 </span><span class="spaces">      </span><span class="istickedoff">CL.Mutable -&gt; True</span>
+<span class="lineno">  152 </span><span class="spaces">      </span><span class="istickedoff">CL.Immutable -&gt; False)</span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(\case</span></span>
+<span class="lineno">  154 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">True -&gt; CL.Mutable</span></span>
+<span class="lineno">  155 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">False -&gt; CL.Immutable)</span></span></span>
+<span class="lineno">  156 </span>
+<span class="lineno">  157 </span>isMut :: Lens' LLVMAllocSpec Bool
+<span class="lineno">  158 </span><span class="decl"><span class="istickedoff">isMut = allocSpecMut . mutIso</span></span>
+<span class="lineno">  159 </span>
+<span class="lineno">  160 </span>--------------------------------------------------------------------------------
+<span class="lineno">  161 </span>-- ** CrucibleContext
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>ccLLVMModuleAST :: LLVMCrucibleContext arch -&gt; L.Module
+<span class="lineno">  164 </span><span class="decl"><span class="istickedoff">ccLLVMModuleAST = modAST . _ccLLVMModule</span></span>
+<span class="lineno">  165 </span>
+<span class="lineno">  166 </span>ccLLVMModuleTrans :: LLVMCrucibleContext arch -&gt; CL.ModuleTranslation arch
+<span class="lineno">  167 </span><span class="decl"><span class="istickedoff">ccLLVMModuleTrans = modTrans . _ccLLVMModule</span></span>
+<span class="lineno">  168 </span>
+<span class="lineno">  169 </span>ccLLVMContext :: LLVMCrucibleContext arch -&gt; CL.LLVMContext arch
+<span class="lineno">  170 </span><span class="decl"><span class="istickedoff">ccLLVMContext = view CL.transContext . ccLLVMModuleTrans</span></span>
+<span class="lineno">  171 </span>
+<span class="lineno">  172 </span>ccTypeCtx :: LLVMCrucibleContext arch -&gt; CL.TypeContext
+<span class="lineno">  173 </span><span class="decl"><span class="istickedoff">ccTypeCtx = view CL.llvmTypeCtx . ccLLVMContext</span></span>
+<span class="lineno">  174 </span>
+<span class="lineno">  175 </span>ccWithBackend ::
+<span class="lineno">  176 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  177 </span>  (forall solver. OnlineSolver solver =&gt; Backend solver -&gt; a) -&gt;
+<span class="lineno">  178 </span>  a
+<span class="lineno">  179 </span><span class="decl"><span class="istickedoff">ccWithBackend cc k =</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">case cc^.ccBackend of SomeOnlineBackend bak -&gt; k bak</span></span>
+<span class="lineno">  181 </span>
+<span class="lineno">  182 </span>ccSym :: Getter (LLVMCrucibleContext arch) Sym
+<span class="lineno">  183 </span><span class="decl"><span class="istickedoff">ccSym = to (\cc -&gt; ccWithBackend cc backendGetSym)</span></span>
+<span class="lineno">  184 </span>
+<span class="lineno">  185 </span>--------------------------------------------------------------------------------
+<span class="lineno">  186 </span>-- ** PointsTo
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>-- | Return the 'ProgramLoc' corresponding to an 'LLVMPointsTo' statement.
+<span class="lineno">  189 </span>llvmPointsToProgramLoc :: LLVMPointsTo arch -&gt; ProgramLoc
+<span class="lineno">  190 </span><span class="decl"><span class="nottickedoff">llvmPointsToProgramLoc (LLVMPointsTo md _ _ _) = MS.conditionLoc md</span>
+<span class="lineno">  191 </span><span class="spaces"></span><span class="nottickedoff">llvmPointsToProgramLoc (LLVMPointsToBitfield md _ _ _) = MS.conditionLoc md</span></span>
+<span class="lineno">  192 </span>
+<span class="lineno">  193 </span>ppPointsTo :: LLVMPointsTo arch -&gt; PPL.Doc ann
+<span class="lineno">  194 </span><span class="decl"><span class="nottickedoff">ppPointsTo (LLVMPointsTo _md cond ptr val) =</span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="nottickedoff">MS.ppSetupValue ptr</span>
+<span class="lineno">  196 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to&quot;</span>
+<span class="lineno">  197 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty val</span>
+<span class="lineno">  198 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; maybe PPL.emptyDoc (\tt -&gt; PPL.pretty &quot;if&quot; PPL.&lt;+&gt; ppTypedTerm tt) cond</span>
+<span class="lineno">  199 </span><span class="spaces"></span><span class="nottickedoff">ppPointsTo (LLVMPointsToBitfield _md ptr fieldName val) =</span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="nottickedoff">MS.ppSetupValue ptr &lt;&gt; PPL.pretty (&quot;.&quot; ++ fieldName)</span>
+<span class="lineno">  201 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to (bitfield)&quot;</span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; MS.ppSetupValue val</span></span>
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>instance <span class="decl"><span class="nottickedoff">PPL.Pretty (LLVMPointsTo arch)</span></span> where
+<span class="lineno">  205 </span>  <span class="decl"><span class="nottickedoff">pretty = ppPointsTo</span></span>
 <span class="lineno">  206 </span>
-<span class="lineno">  207 </span>ppPointsTo :: LLVMPointsTo arch -&gt; PPL.Doc ann
-<span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">ppPointsTo (LLVMPointsTo _md cond ptr val) =</span>
-<span class="lineno">  209 </span><span class="spaces">  </span><span class="nottickedoff">MS.ppSetupValue ptr</span>
-<span class="lineno">  210 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to&quot;</span>
-<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty val</span>
-<span class="lineno">  212 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; maybe PPL.emptyDoc (\tt -&gt; PPL.pretty &quot;if&quot; PPL.&lt;+&gt; ppTypedTerm tt) cond</span>
-<span class="lineno">  213 </span><span class="spaces"></span><span class="nottickedoff">ppPointsTo (LLVMPointsToBitfield _md ptr fieldName val) =</span>
-<span class="lineno">  214 </span><span class="spaces">  </span><span class="nottickedoff">MS.ppSetupValue ptr &lt;&gt; PPL.pretty (&quot;.&quot; ++ fieldName)</span>
-<span class="lineno">  215 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to (bitfield)&quot;</span>
-<span class="lineno">  216 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; MS.ppSetupValue val</span></span>
-<span class="lineno">  217 </span>
-<span class="lineno">  218 </span>instance <span class="decl"><span class="nottickedoff">PPL.Pretty (LLVMPointsTo arch)</span></span> where
-<span class="lineno">  219 </span>  <span class="decl"><span class="nottickedoff">pretty = ppPointsTo</span></span>
-<span class="lineno">  220 </span>
-<span class="lineno">  221 </span>instance <span class="decl"><span class="nottickedoff">PPL.Pretty (LLVMPointsToValue arch)</span></span> where
-<span class="lineno">  222 </span>  <span class="decl"><span class="nottickedoff">pretty = \case</span>
-<span class="lineno">  223 </span><span class="spaces">    </span><span class="nottickedoff">ConcreteSizeValue val -&gt; MS.ppSetupValue val</span>
-<span class="lineno">  224 </span><span class="spaces">    </span><span class="nottickedoff">SymbolicSizeValue arr sz -&gt;</span>
-<span class="lineno">  225 </span><span class="spaces">      </span><span class="nottickedoff">ppTypedTerm arr PPL.&lt;+&gt; PPL.pretty &quot;[&quot; PPL.&lt;+&gt; ppTypedTerm sz PPL.&lt;+&gt; PPL.pretty &quot;]&quot;</span></span>
-<span class="lineno">  226 </span>
-<span class="lineno">  227 </span>--------------------------------------------------------------------------------
-<span class="lineno">  228 </span>-- ** SAW LLVM intrinsics
-<span class="lineno">  229 </span>
-<span class="lineno">  230 </span>-- | The default LLVM intrinsics extended with the 'MS.GhostValue' intrinsic,
-<span class="lineno">  231 </span>-- which powers ghost state.
-<span class="lineno">  232 </span>intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
-<span class="lineno">  233 </span><span class="decl"><span class="istickedoff">intrinsics =</span>
-<span class="lineno">  234 </span><span class="spaces">  </span><span class="istickedoff">MapF.insert</span>
-<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">(Crucible.knownSymbol :: Crucible.SymbolRepr MS.GhostValue)</span>
-<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">Crucible.IntrinsicMuxFn</span>
-<span class="lineno">  237 </span><span class="spaces">    </span><span class="istickedoff">CL.llvmIntrinsicTypes</span></span>
-<span class="lineno">  238 </span>
-<span class="lineno">  239 </span>-------------------------------------------------------------------------------
-<span class="lineno">  240 </span>-- ** Initial CrucibleSetupMethodSpec
+<span class="lineno">  207 </span>instance <span class="decl"><span class="nottickedoff">PPL.Pretty (LLVMPointsToValue arch)</span></span> where
+<span class="lineno">  208 </span>  <span class="decl"><span class="nottickedoff">pretty = \case</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="nottickedoff">ConcreteSizeValue val -&gt; MS.ppSetupValue val</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="nottickedoff">SymbolicSizeValue arr sz -&gt;</span>
+<span class="lineno">  211 </span><span class="spaces">      </span><span class="nottickedoff">ppTypedTerm arr PPL.&lt;+&gt; PPL.pretty &quot;[&quot; PPL.&lt;+&gt; ppTypedTerm sz PPL.&lt;+&gt; PPL.pretty &quot;]&quot;</span></span>
+<span class="lineno">  212 </span>
+<span class="lineno">  213 </span>--------------------------------------------------------------------------------
+<span class="lineno">  214 </span>-- ** SAW LLVM intrinsics
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>-- | The default LLVM intrinsics extended with the 'MS.GhostValue' intrinsic,
+<span class="lineno">  217 </span>-- which powers ghost state.
+<span class="lineno">  218 </span>intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
+<span class="lineno">  219 </span><span class="decl"><span class="istickedoff">intrinsics =</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">MapF.insert</span>
+<span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">(Crucible.knownSymbol :: Crucible.SymbolRepr MS.GhostValue)</span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">Crucible.IntrinsicMuxFn</span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">CL.llvmIntrinsicTypes</span></span>
+<span class="lineno">  224 </span>
+<span class="lineno">  225 </span>-------------------------------------------------------------------------------
+<span class="lineno">  226 </span>-- ** Initial CrucibleSetupMethodSpec
+<span class="lineno">  227 </span>
+<span class="lineno">  228 </span>data SetupError
+<span class="lineno">  229 </span>  = InvalidReturnType L.Type
+<span class="lineno">  230 </span>  | InvalidArgTypes [L.Type]
+<span class="lineno">  231 </span>
+<span class="lineno">  232 </span>ppSetupError :: SetupError -&gt; PPL.Doc ann
+<span class="lineno">  233 </span><span class="decl"><span class="nottickedoff">ppSetupError (InvalidReturnType t) =</span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;Can't lift return type&quot; PPL.&lt;+&gt;</span>
+<span class="lineno">  235 </span><span class="spaces">  </span><span class="nottickedoff">PPL.viaShow (Crucible.LLVM.ppType t) PPL.&lt;+&gt;</span>
+<span class="lineno">  236 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;to a Crucible type.&quot;</span>
+<span class="lineno">  237 </span><span class="spaces"></span><span class="nottickedoff">ppSetupError (InvalidArgTypes ts) =</span>
+<span class="lineno">  238 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;Can't lift argument types &quot; PPL.&lt;+&gt;</span>
+<span class="lineno">  239 </span><span class="spaces">  </span><span class="nottickedoff">PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.viaShow . Crucible.LLVM.ppType) ts) PPL.&lt;+&gt;</span>
+<span class="lineno">  240 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;to Crucible types.&quot;</span></span>
 <span class="lineno">  241 </span>
-<span class="lineno">  242 </span>data SetupError
-<span class="lineno">  243 </span>  = InvalidReturnType L.Type
-<span class="lineno">  244 </span>  | InvalidArgTypes [L.Type]
-<span class="lineno">  245 </span>
-<span class="lineno">  246 </span>ppSetupError :: SetupError -&gt; PPL.Doc ann
-<span class="lineno">  247 </span><span class="decl"><span class="nottickedoff">ppSetupError (InvalidReturnType t) =</span>
-<span class="lineno">  248 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;Can't lift return type&quot; PPL.&lt;+&gt;</span>
-<span class="lineno">  249 </span><span class="spaces">  </span><span class="nottickedoff">PPL.viaShow (Crucible.LLVM.ppType t) PPL.&lt;+&gt;</span>
-<span class="lineno">  250 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;to a Crucible type.&quot;</span>
-<span class="lineno">  251 </span><span class="spaces"></span><span class="nottickedoff">ppSetupError (InvalidArgTypes ts) =</span>
-<span class="lineno">  252 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;Can't lift argument types &quot; PPL.&lt;+&gt;</span>
-<span class="lineno">  253 </span><span class="spaces">  </span><span class="nottickedoff">PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.viaShow . Crucible.LLVM.ppType) ts) PPL.&lt;+&gt;</span>
-<span class="lineno">  254 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;to Crucible types.&quot;</span></span>
-<span class="lineno">  255 </span>
-<span class="lineno">  256 </span>resolveArgs ::
-<span class="lineno">  257 </span>  (?lc :: CL.TypeContext) =&gt;
-<span class="lineno">  258 </span>  [L.Type] -&gt;
-<span class="lineno">  259 </span>  Either SetupError [CL.MemType]
-<span class="lineno">  260 </span><span class="decl"><span class="istickedoff">resolveArgs args = do</span>
-<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">-- TODO: make sure we resolve aliases</span>
-<span class="lineno">  262 </span><span class="spaces">  </span><span class="istickedoff">let mtys = traverse CL.liftMemType args</span>
-<span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">-- TODO: should the error message be propagated?</span>
-<span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">either <span class="nottickedoff">(\_ -&gt; Left (InvalidArgTypes args))</span> Right mtys</span></span>
-<span class="lineno">  265 </span>
-<span class="lineno">  266 </span>resolveRetTy ::
-<span class="lineno">  267 </span>  (?lc :: CL.TypeContext) =&gt;
-<span class="lineno">  268 </span>  L.Type -&gt;
-<span class="lineno">  269 </span>  Either SetupError (Maybe CL.MemType)
-<span class="lineno">  270 </span><span class="decl"><span class="istickedoff">resolveRetTy ty = do</span>
-<span class="lineno">  271 </span><span class="spaces">  </span><span class="istickedoff">-- TODO: make sure we resolve aliases</span>
-<span class="lineno">  272 </span><span class="spaces">  </span><span class="istickedoff">let ret = CL.liftRetType ty</span>
-<span class="lineno">  273 </span><span class="spaces">  </span><span class="istickedoff">-- TODO: should the error message be propagated?</span>
-<span class="lineno">  274 </span><span class="spaces">  </span><span class="istickedoff">either <span class="nottickedoff">(\_ -&gt; Left (InvalidReturnType ty))</span> Right ret</span></span>
+<span class="lineno">  242 </span>resolveArgs ::
+<span class="lineno">  243 </span>  (?lc :: CL.TypeContext) =&gt;
+<span class="lineno">  244 </span>  [L.Type] -&gt;
+<span class="lineno">  245 </span>  Either SetupError [CL.MemType]
+<span class="lineno">  246 </span><span class="decl"><span class="istickedoff">resolveArgs args = do</span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">-- TODO: make sure we resolve aliases</span>
+<span class="lineno">  248 </span><span class="spaces">  </span><span class="istickedoff">let mtys = traverse CL.liftMemType args</span>
+<span class="lineno">  249 </span><span class="spaces">  </span><span class="istickedoff">-- TODO: should the error message be propagated?</span>
+<span class="lineno">  250 </span><span class="spaces">  </span><span class="istickedoff">either <span class="nottickedoff">(\_ -&gt; Left (InvalidArgTypes args))</span> Right mtys</span></span>
+<span class="lineno">  251 </span>
+<span class="lineno">  252 </span>resolveRetTy ::
+<span class="lineno">  253 </span>  (?lc :: CL.TypeContext) =&gt;
+<span class="lineno">  254 </span>  L.Type -&gt;
+<span class="lineno">  255 </span>  Either SetupError (Maybe CL.MemType)
+<span class="lineno">  256 </span><span class="decl"><span class="istickedoff">resolveRetTy ty = do</span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="istickedoff">-- TODO: make sure we resolve aliases</span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">let ret = CL.liftRetType ty</span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">-- TODO: should the error message be propagated?</span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">either <span class="nottickedoff">(\_ -&gt; Left (InvalidReturnType ty))</span> Right ret</span></span>
+<span class="lineno">  261 </span>
+<span class="lineno">  262 </span>initialDefCrucibleMethodSpecIR ::
+<span class="lineno">  263 </span>  (?lc :: CL.TypeContext) =&gt;
+<span class="lineno">  264 </span>  LLVMModule arch -&gt;
+<span class="lineno">  265 </span>  L.Define -&gt;
+<span class="lineno">  266 </span>  ProgramLoc -&gt;
+<span class="lineno">  267 </span>  Maybe Text -&gt;
+<span class="lineno">  268 </span>  Either SetupError (MS.CrucibleMethodSpecIR (LLVM arch))
+<span class="lineno">  269 </span><span class="decl"><span class="istickedoff">initialDefCrucibleMethodSpecIR llvmModule def loc parent = do</span>
+<span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- resolveArgs (L.typedType &lt;$&gt; L.defArgs def)</span>
+<span class="lineno">  271 </span><span class="spaces">  </span><span class="istickedoff">ret &lt;- resolveRetTy (L.defRetType def)</span>
+<span class="lineno">  272 </span><span class="spaces">  </span><span class="istickedoff">let L.Symbol nm = L.defName def</span>
+<span class="lineno">  273 </span><span class="spaces">  </span><span class="istickedoff">let methId = LLVMMethodId (Text.pack nm) parent</span>
+<span class="lineno">  274 </span><span class="spaces">  </span><span class="istickedoff">return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule</span></span>
 <span class="lineno">  275 </span>
-<span class="lineno">  276 </span>initialDefCrucibleMethodSpecIR ::
+<span class="lineno">  276 </span>initialDeclCrucibleMethodSpecIR ::
 <span class="lineno">  277 </span>  (?lc :: CL.TypeContext) =&gt;
 <span class="lineno">  278 </span>  LLVMModule arch -&gt;
-<span class="lineno">  279 </span>  L.Define -&gt;
+<span class="lineno">  279 </span>  L.Declare -&gt;
 <span class="lineno">  280 </span>  ProgramLoc -&gt;
 <span class="lineno">  281 </span>  Maybe Text -&gt;
 <span class="lineno">  282 </span>  Either SetupError (MS.CrucibleMethodSpecIR (LLVM arch))
-<span class="lineno">  283 </span><span class="decl"><span class="istickedoff">initialDefCrucibleMethodSpecIR llvmModule def loc parent = do</span>
-<span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- resolveArgs (L.typedType &lt;$&gt; L.defArgs def)</span>
-<span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">ret &lt;- resolveRetTy (L.defRetType def)</span>
-<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">let L.Symbol nm = L.defName def</span>
+<span class="lineno">  283 </span><span class="decl"><span class="istickedoff">initialDeclCrucibleMethodSpecIR llvmModule dec loc parent = do</span>
+<span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- resolveArgs (L.decArgs dec)</span>
+<span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">ret &lt;- resolveRetTy (L.decRetType dec)</span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">let L.Symbol nm = L.decName dec</span>
 <span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">let methId = LLVMMethodId (Text.pack nm) parent</span>
 <span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule</span></span>
 <span class="lineno">  289 </span>
-<span class="lineno">  290 </span>initialDeclCrucibleMethodSpecIR ::
+<span class="lineno">  290 </span>initialCrucibleSetupState ::
 <span class="lineno">  291 </span>  (?lc :: CL.TypeContext) =&gt;
-<span class="lineno">  292 </span>  LLVMModule arch -&gt;
-<span class="lineno">  293 </span>  L.Declare -&gt;
+<span class="lineno">  292 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  293 </span>  L.Define -&gt;
 <span class="lineno">  294 </span>  ProgramLoc -&gt;
 <span class="lineno">  295 </span>  Maybe Text -&gt;
-<span class="lineno">  296 </span>  Either SetupError (MS.CrucibleMethodSpecIR (LLVM arch))
-<span class="lineno">  297 </span><span class="decl"><span class="istickedoff">initialDeclCrucibleMethodSpecIR llvmModule dec loc parent = do</span>
-<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- resolveArgs (L.decArgs dec)</span>
-<span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">ret &lt;- resolveRetTy (L.decRetType dec)</span>
-<span class="lineno">  300 </span><span class="spaces">  </span><span class="istickedoff">let L.Symbol nm = L.decName dec</span>
-<span class="lineno">  301 </span><span class="spaces">  </span><span class="istickedoff">let methId = LLVMMethodId (Text.pack nm) parent</span>
-<span class="lineno">  302 </span><span class="spaces">  </span><span class="istickedoff">return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule</span></span>
-<span class="lineno">  303 </span>
-<span class="lineno">  304 </span>initialCrucibleSetupState ::
-<span class="lineno">  305 </span>  (?lc :: CL.TypeContext) =&gt;
-<span class="lineno">  306 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno">  307 </span>  L.Define -&gt;
-<span class="lineno">  308 </span>  ProgramLoc -&gt;
-<span class="lineno">  309 </span>  Maybe Text -&gt;
-<span class="lineno">  310 </span>  Either SetupError (Setup.CrucibleSetupState (LLVM arch))
-<span class="lineno">  311 </span><span class="decl"><span class="istickedoff">initialCrucibleSetupState cc def loc parent = do</span>
-<span class="lineno">  312 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def loc parent</span>
-<span class="lineno">  313 </span><span class="spaces">  </span><span class="istickedoff">return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms</span></span>
+<span class="lineno">  296 </span>  Either SetupError (Setup.CrucibleSetupState (LLVM arch))
+<span class="lineno">  297 </span><span class="decl"><span class="istickedoff">initialCrucibleSetupState cc def loc parent = do</span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def loc parent</span>
+<span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms</span></span>
+<span class="lineno">  300 </span>
+<span class="lineno">  301 </span>initialCrucibleSetupStateDecl ::
+<span class="lineno">  302 </span>  (?lc :: CL.TypeContext) =&gt;
+<span class="lineno">  303 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  304 </span>  L.Declare -&gt;
+<span class="lineno">  305 </span>  ProgramLoc -&gt;
+<span class="lineno">  306 </span>  Maybe Text -&gt;
+<span class="lineno">  307 </span>  Either SetupError (Setup.CrucibleSetupState (LLVM arch))
+<span class="lineno">  308 </span><span class="decl"><span class="istickedoff">initialCrucibleSetupStateDecl cc dec loc parent = do</span>
+<span class="lineno">  309 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec loc parent</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms</span></span>
+<span class="lineno">  311 </span>
+<span class="lineno">  312 </span>--------------------------------------------------------------------------------
+<span class="lineno">  313 </span>-- ** AllLLVM/SomeLLVM
 <span class="lineno">  314 </span>
-<span class="lineno">  315 </span>initialCrucibleSetupStateDecl ::
-<span class="lineno">  316 </span>  (?lc :: CL.TypeContext) =&gt;
-<span class="lineno">  317 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno">  318 </span>  L.Declare -&gt;
-<span class="lineno">  319 </span>  ProgramLoc -&gt;
-<span class="lineno">  320 </span>  Maybe Text -&gt;
-<span class="lineno">  321 </span>  Either SetupError (Setup.CrucibleSetupState (LLVM arch))
-<span class="lineno">  322 </span><span class="decl"><span class="istickedoff">initialCrucibleSetupStateDecl cc dec loc parent = do</span>
-<span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec loc parent</span>
-<span class="lineno">  324 </span><span class="spaces">  </span><span class="istickedoff">return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms</span></span>
-<span class="lineno">  325 </span>
-<span class="lineno">  326 </span>--------------------------------------------------------------------------------
-<span class="lineno">  327 </span>-- ** AllLLVM/SomeLLVM
+<span class="lineno">  315 </span>--------------------------------------------------------------------------------
+<span class="lineno">  316 </span>-- *** AllLLVM
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>-- | Universal/polymorphic quantification over an 'LLVMArch'
+<span class="lineno">  319 </span>--
+<span class="lineno">  320 </span>-- The following type synonym and associated constructor/destructor are
+<span class="lineno">  321 </span>-- equivalent to this definition:
+<span class="lineno">  322 </span>-- @
+<span class="lineno">  323 </span>-- data AllLLVM t =
+<span class="lineno">  324 </span>--   MkAllLLVM { getAllLLVM :: forall arch. t (LLVM arch) }
+<span class="lineno">  325 </span>-- @
+<span class="lineno">  326 </span>-- But they preserve the instances from 'All' and 'Compose'.
+<span class="lineno">  327 </span>type AllLLVM t = All (Compose t LLVM)
 <span class="lineno">  328 </span>
-<span class="lineno">  329 </span>--------------------------------------------------------------------------------
-<span class="lineno">  330 </span>-- *** AllLLVM
-<span class="lineno">  331 </span>
-<span class="lineno">  332 </span>-- | Universal/polymorphic quantification over an 'LLVMArch'
-<span class="lineno">  333 </span>--
-<span class="lineno">  334 </span>-- The following type synonym and associated constructor/destructor are
-<span class="lineno">  335 </span>-- equivalent to this definition:
-<span class="lineno">  336 </span>-- @
-<span class="lineno">  337 </span>-- data AllLLVM t =
-<span class="lineno">  338 </span>--   MkAllLLVM { getAllLLVM :: forall arch. t (LLVM arch) }
-<span class="lineno">  339 </span>-- @
-<span class="lineno">  340 </span>-- But they preserve the instances from 'All' and 'Compose'.
-<span class="lineno">  341 </span>type AllLLVM t = All (Compose t LLVM)
-<span class="lineno">  342 </span>
-<span class="lineno">  343 </span>-- This doesn't work :(
-<span class="lineno">  344 </span>--
-<span class="lineno">  345 </span>-- pattern AllLLVM :: (forall arch. t (LLVM arch)) -&gt; AllLLVM t
-<span class="lineno">  346 </span>-- pattern AllLLVM x = All (Compose x)
+<span class="lineno">  329 </span>-- This doesn't work :(
+<span class="lineno">  330 </span>--
+<span class="lineno">  331 </span>-- pattern AllLLVM :: (forall arch. t (LLVM arch)) -&gt; AllLLVM t
+<span class="lineno">  332 </span>-- pattern AllLLVM x = All (Compose x)
+<span class="lineno">  333 </span>
+<span class="lineno">  334 </span>mkAllLLVM :: forall t. (forall arch. t (LLVM arch)) -&gt; AllLLVM t
+<span class="lineno">  335 </span><span class="decl"><span class="istickedoff">mkAllLLVM x = All (Compose x)</span></span>
+<span class="lineno">  336 </span>
+<span class="lineno">  337 </span>getAllLLVM :: forall t. AllLLVM t -&gt; (forall arch. t (LLVM arch))
+<span class="lineno">  338 </span><span class="decl"><span class="istickedoff">getAllLLVM (All (Compose x)) = x</span></span>
+<span class="lineno">  339 </span>
+<span class="lineno">  340 </span>-- Constructors for 'SetupValue' which are architecture-polymorphic
+<span class="lineno">  341 </span>
+<span class="lineno">  342 </span>anySetupTerm :: TypedTerm -&gt; AllLLVM MS.SetupValue
+<span class="lineno">  343 </span><span class="decl"><span class="istickedoff">anySetupTerm typedTerm = mkAllLLVM (MS.SetupTerm typedTerm)</span></span>
+<span class="lineno">  344 </span>
+<span class="lineno">  345 </span>anySetupArray :: [AllLLVM MS.SetupValue] -&gt; AllLLVM MS.SetupValue
+<span class="lineno">  346 </span><span class="decl"><span class="istickedoff">anySetupArray vals = mkAllLLVM (MS.SetupArray () $ map (\a -&gt; getAllLLVM a) vals)</span></span>
 <span class="lineno">  347 </span>
-<span class="lineno">  348 </span>mkAllLLVM :: forall t. (forall arch. t (LLVM arch)) -&gt; AllLLVM t
-<span class="lineno">  349 </span><span class="decl"><span class="istickedoff">mkAllLLVM x = All (Compose x)</span></span>
+<span class="lineno">  348 </span>anySetupStruct :: Bool -&gt; [AllLLVM MS.SetupValue] -&gt; AllLLVM MS.SetupValue
+<span class="lineno">  349 </span><span class="decl"><span class="istickedoff">anySetupStruct b vals = mkAllLLVM (MS.SetupStruct b $ map (\a -&gt; getAllLLVM a) vals)</span></span>
 <span class="lineno">  350 </span>
-<span class="lineno">  351 </span>getAllLLVM :: forall t. AllLLVM t -&gt; (forall arch. t (LLVM arch))
-<span class="lineno">  352 </span><span class="decl"><span class="istickedoff">getAllLLVM (All (Compose x)) = x</span></span>
+<span class="lineno">  351 </span>anySetupElem :: AllLLVM MS.SetupValue -&gt; Int -&gt; AllLLVM MS.SetupValue
+<span class="lineno">  352 </span><span class="decl"><span class="istickedoff">anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)</span></span>
 <span class="lineno">  353 </span>
-<span class="lineno">  354 </span>-- Constructors for 'SetupValue' which are architecture-polymorphic
-<span class="lineno">  355 </span>
-<span class="lineno">  356 </span>anySetupTerm :: TypedTerm -&gt; AllLLVM MS.SetupValue
-<span class="lineno">  357 </span><span class="decl"><span class="istickedoff">anySetupTerm typedTerm = mkAllLLVM (MS.SetupTerm typedTerm)</span></span>
-<span class="lineno">  358 </span>
-<span class="lineno">  359 </span>anySetupArray :: [AllLLVM MS.SetupValue] -&gt; AllLLVM MS.SetupValue
-<span class="lineno">  360 </span><span class="decl"><span class="istickedoff">anySetupArray vals = mkAllLLVM (MS.SetupArray () $ map (\a -&gt; getAllLLVM a) vals)</span></span>
-<span class="lineno">  361 </span>
-<span class="lineno">  362 </span>anySetupStruct :: Bool -&gt; [AllLLVM MS.SetupValue] -&gt; AllLLVM MS.SetupValue
-<span class="lineno">  363 </span><span class="decl"><span class="istickedoff">anySetupStruct b vals = mkAllLLVM (MS.SetupStruct b $ map (\a -&gt; getAllLLVM a) vals)</span></span>
-<span class="lineno">  364 </span>
-<span class="lineno">  365 </span>anySetupElem :: AllLLVM MS.SetupValue -&gt; Int -&gt; AllLLVM MS.SetupValue
-<span class="lineno">  366 </span><span class="decl"><span class="istickedoff">anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)</span></span>
-<span class="lineno">  367 </span>
-<span class="lineno">  368 </span>anySetupCast :: AllLLVM MS.SetupValue -&gt; L.Type -&gt; AllLLVM MS.SetupValue
-<span class="lineno">  369 </span><span class="decl"><span class="nottickedoff">anySetupCast val ty = mkAllLLVM (MS.SetupCast ty (getAllLLVM val))</span></span>
-<span class="lineno">  370 </span>
-<span class="lineno">  371 </span>anySetupField :: AllLLVM MS.SetupValue -&gt; Text -&gt; AllLLVM MS.SetupValue
-<span class="lineno">  372 </span><span class="decl"><span class="istickedoff">anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)</span></span>
-<span class="lineno">  373 </span>
-<span class="lineno">  374 </span>anySetupUnion :: AllLLVM MS.SetupValue -&gt; Text -&gt; AllLLVM MS.SetupValue
-<span class="lineno">  375 </span><span class="decl"><span class="istickedoff">anySetupUnion val uname = mkAllLLVM (MS.SetupUnion () (getAllLLVM val) uname)</span></span>
-<span class="lineno">  376 </span>
-<span class="lineno">  377 </span>anySetupNull :: AllLLVM MS.SetupValue
-<span class="lineno">  378 </span><span class="decl"><span class="istickedoff">anySetupNull = mkAllLLVM (MS.SetupNull ())</span></span>
-<span class="lineno">  379 </span>
-<span class="lineno">  380 </span>anySetupGlobal :: Text -&gt; AllLLVM MS.SetupValue
-<span class="lineno">  381 </span><span class="decl"><span class="istickedoff">anySetupGlobal globalName = mkAllLLVM (MS.SetupGlobal () globalName)</span></span>
-<span class="lineno">  382 </span>
-<span class="lineno">  383 </span>anySetupGlobalInitializer :: Text -&gt; AllLLVM MS.SetupValue
-<span class="lineno">  384 </span><span class="decl"><span class="istickedoff">anySetupGlobalInitializer globalName =</span>
-<span class="lineno">  385 </span><span class="spaces">  </span><span class="istickedoff">mkAllLLVM (MS.SetupGlobalInitializer () globalName)</span></span>
-<span class="lineno">  386 </span>
-<span class="lineno">  387 </span>--------------------------------------------------------------------------------
-<span class="lineno">  388 </span>-- *** SomeLLVM
+<span class="lineno">  354 </span>anySetupCast :: AllLLVM MS.SetupValue -&gt; L.Type -&gt; AllLLVM MS.SetupValue
+<span class="lineno">  355 </span><span class="decl"><span class="nottickedoff">anySetupCast val ty = mkAllLLVM (MS.SetupCast ty (getAllLLVM val))</span></span>
+<span class="lineno">  356 </span>
+<span class="lineno">  357 </span>anySetupField :: AllLLVM MS.SetupValue -&gt; Text -&gt; AllLLVM MS.SetupValue
+<span class="lineno">  358 </span><span class="decl"><span class="istickedoff">anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)</span></span>
+<span class="lineno">  359 </span>
+<span class="lineno">  360 </span>anySetupUnion :: AllLLVM MS.SetupValue -&gt; Text -&gt; AllLLVM MS.SetupValue
+<span class="lineno">  361 </span><span class="decl"><span class="istickedoff">anySetupUnion val uname = mkAllLLVM (MS.SetupUnion () (getAllLLVM val) uname)</span></span>
+<span class="lineno">  362 </span>
+<span class="lineno">  363 </span>anySetupNull :: AllLLVM MS.SetupValue
+<span class="lineno">  364 </span><span class="decl"><span class="istickedoff">anySetupNull = mkAllLLVM (MS.SetupNull ())</span></span>
+<span class="lineno">  365 </span>
+<span class="lineno">  366 </span>anySetupGlobal :: Text -&gt; AllLLVM MS.SetupValue
+<span class="lineno">  367 </span><span class="decl"><span class="istickedoff">anySetupGlobal globalName = mkAllLLVM (MS.SetupGlobal () globalName)</span></span>
+<span class="lineno">  368 </span>
+<span class="lineno">  369 </span>anySetupGlobalInitializer :: Text -&gt; AllLLVM MS.SetupValue
+<span class="lineno">  370 </span><span class="decl"><span class="istickedoff">anySetupGlobalInitializer globalName =</span>
+<span class="lineno">  371 </span><span class="spaces">  </span><span class="istickedoff">mkAllLLVM (MS.SetupGlobalInitializer () globalName)</span></span>
+<span class="lineno">  372 </span>
+<span class="lineno">  373 </span>--------------------------------------------------------------------------------
+<span class="lineno">  374 </span>-- *** SomeLLVM
+<span class="lineno">  375 </span>
+<span class="lineno">  376 </span>-- | Existential quantification over an 'LLVMArch'
+<span class="lineno">  377 </span>--
+<span class="lineno">  378 </span>-- The following type synonym and associated constructor/destructor are
+<span class="lineno">  379 </span>-- equivalent to this definition:
+<span class="lineno">  380 </span>-- @
+<span class="lineno">  381 </span>-- data SomeLLVM t = forall arch. MkSomeLLVM (t (LLVM arch))
+<span class="lineno">  382 </span>-- @
+<span class="lineno">  383 </span>-- But they preserve the instances from 'Some' and 'Compose'.
+<span class="lineno">  384 </span>type SomeLLVM t = Some (Compose t LLVM)
+<span class="lineno">  385 </span>
+<span class="lineno">  386 </span>pattern SomeLLVM :: t (LLVM arch) -&gt; SomeLLVM t
+<span class="lineno">  387 </span>pattern SomeLLVM x = <span class="istickedoff">Some (Compose x)</span>
+<span class="lineno">  388 </span>{-# COMPLETE SomeLLVM #-}
 <span class="lineno">  389 </span>
-<span class="lineno">  390 </span>-- | Existential quantification over an 'LLVMArch'
-<span class="lineno">  391 </span>--
-<span class="lineno">  392 </span>-- The following type synonym and associated constructor/destructor are
-<span class="lineno">  393 </span>-- equivalent to this definition:
-<span class="lineno">  394 </span>-- @
-<span class="lineno">  395 </span>-- data SomeLLVM t = forall arch. MkSomeLLVM (t (LLVM arch))
-<span class="lineno">  396 </span>-- @
-<span class="lineno">  397 </span>-- But they preserve the instances from 'Some' and 'Compose'.
-<span class="lineno">  398 </span>type SomeLLVM t = Some (Compose t LLVM)
-<span class="lineno">  399 </span>
-<span class="lineno">  400 </span>pattern SomeLLVM :: t (LLVM arch) -&gt; SomeLLVM t
-<span class="lineno">  401 </span>pattern SomeLLVM x = <span class="istickedoff">Some (Compose x)</span>
-<span class="lineno">  402 </span>{-# COMPLETE SomeLLVM #-}
-<span class="lineno">  403 </span>
-<span class="lineno">  404 </span>mkSomeLLVM :: t (LLVM arch) -&gt; SomeLLVM t
-<span class="lineno">  405 </span><span class="decl"><span class="nottickedoff">mkSomeLLVM x = Some (Compose x)</span></span>
-<span class="lineno">  406 </span>
-<span class="lineno">  407 </span>getSomeLLVM :: forall t. (forall arch. t (LLVM arch)) -&gt; AllLLVM t
-<span class="lineno">  408 </span><span class="decl"><span class="nottickedoff">getSomeLLVM x = All (Compose x)</span></span>
-<span class="lineno">  409 </span>
-<span class="lineno">  410 </span>--------------------------------------------------------------------------------
-<span class="lineno">  411 </span>-- *** ResolvedState
-<span class="lineno">  412 </span>
-<span class="lineno">  413 </span>-- | Record the initialization of the pointer represented by the given
-<span class="lineno">  414 </span>-- SetupValue.
-<span class="lineno">  415 </span>markResolved ::
-<span class="lineno">  416 </span>  MS.SetupValue (LLVM arch) -&gt;
-<span class="lineno">  417 </span>  ResolvedPath {-^ path within this object (if any) -} -&gt;
-<span class="lineno">  418 </span>  LLVMResolvedState -&gt;
-<span class="lineno">  419 </span>  LLVMResolvedState
-<span class="lineno">  420 </span><span class="decl"><span class="istickedoff">markResolved val0 path0 rs = go path0 val0</span>
-<span class="lineno">  421 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  422 </span><span class="spaces">    </span><span class="istickedoff">go path val =</span>
-<span class="lineno">  423 </span><span class="spaces">      </span><span class="istickedoff">case val of</span>
-<span class="lineno">  424 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupVar n         -&gt; rs &amp; rsAllocs %~ Map.alter (ins path) n</span>
-<span class="lineno">  425 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupGlobal _ name -&gt; rs &amp; rsGlobals %~ Map.alter (ins <span class="nottickedoff">path</span>) name</span>
-<span class="lineno">  426 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupElem _ v idx  -&gt; go (ResolvedElem idx : path) v</span>
-<span class="lineno">  427 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupField _ v fld -&gt; go (ResolvedField fld : path) v</span>
-<span class="lineno">  428 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupCast tp v     -&gt; go (ResolvedCast tp : path) v</span>
-<span class="lineno">  429 </span><span class="spaces">        </span><span class="istickedoff">_                     -&gt; <span class="nottickedoff">rs</span></span>
-<span class="lineno">  430 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff">ins path Nothing = Just [path]</span>
-<span class="lineno">  432 </span><span class="spaces">    </span><span class="istickedoff">ins path (Just paths) = Just (path : paths)</span></span>
-<span class="lineno">  433 </span>
-<span class="lineno">  434 </span>-- | Test whether the pointer represented by the given SetupValue has
-<span class="lineno">  435 </span>-- been initialized already.
-<span class="lineno">  436 </span>testResolved ::
-<span class="lineno">  437 </span>  MS.SetupValue (LLVM arch) -&gt;
-<span class="lineno">  438 </span>  ResolvedPath {-^ path within this object (if any) -} -&gt;
-<span class="lineno">  439 </span>  LLVMResolvedState -&gt;
-<span class="lineno">  440 </span>  Bool
-<span class="lineno">  441 </span><span class="decl"><span class="istickedoff">testResolved val0 path0 rs = go path0 val0</span>
-<span class="lineno">  442 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">go path val =</span>
-<span class="lineno">  444 </span><span class="spaces">      </span><span class="istickedoff">case val of</span>
-<span class="lineno">  445 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupVar n         -&gt; test path (Map.lookup n (_rsAllocs rs))</span>
-<span class="lineno">  446 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupGlobal _ c    -&gt; test <span class="nottickedoff">path</span> (Map.lookup c (_rsGlobals rs))</span>
-<span class="lineno">  447 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupElem _ v idx  -&gt; go (ResolvedElem idx : path) v</span>
-<span class="lineno">  448 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupField _ v fld -&gt; go (ResolvedField fld : path) v</span>
-<span class="lineno">  449 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupCast tp v     -&gt; go (ResolvedCast tp : path) v</span>
-<span class="lineno">  450 </span><span class="spaces">        </span><span class="istickedoff">_                     -&gt; False</span>
-<span class="lineno">  451 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  452 </span><span class="spaces">    </span><span class="istickedoff">test _ Nothing = False</span>
-<span class="lineno">  453 </span><span class="spaces">    </span><span class="istickedoff">test path (Just paths) = any (overlap path) paths</span>
-<span class="lineno">  454 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  455 </span><span class="spaces">    </span><span class="istickedoff">overlap (x : xs) (y : ys) = x == y &amp;&amp; overlap xs ys</span>
-<span class="lineno">  456 </span><span class="spaces">    </span><span class="istickedoff">overlap [] _ = True</span>
-<span class="lineno">  457 </span><span class="spaces">    </span><span class="istickedoff">overlap _ [] = <span class="nottickedoff">True</span></span></span>
+<span class="lineno">  390 </span>mkSomeLLVM :: t (LLVM arch) -&gt; SomeLLVM t
+<span class="lineno">  391 </span><span class="decl"><span class="nottickedoff">mkSomeLLVM x = Some (Compose x)</span></span>
+<span class="lineno">  392 </span>
+<span class="lineno">  393 </span>getSomeLLVM :: forall t. (forall arch. t (LLVM arch)) -&gt; AllLLVM t
+<span class="lineno">  394 </span><span class="decl"><span class="nottickedoff">getSomeLLVM x = All (Compose x)</span></span>
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>--------------------------------------------------------------------------------
+<span class="lineno">  397 </span>-- *** ResolvedState
+<span class="lineno">  398 </span>
+<span class="lineno">  399 </span>-- | Record the initialization of the pointer represented by the given
+<span class="lineno">  400 </span>-- SetupValue.
+<span class="lineno">  401 </span>markResolved ::
+<span class="lineno">  402 </span>  MS.SetupValue (LLVM arch) -&gt;
+<span class="lineno">  403 </span>  ResolvedPath {-^ path within this object (if any) -} -&gt;
+<span class="lineno">  404 </span>  LLVMResolvedState -&gt;
+<span class="lineno">  405 </span>  LLVMResolvedState
+<span class="lineno">  406 </span><span class="decl"><span class="istickedoff">markResolved val0 path0 rs = go path0 val0</span>
+<span class="lineno">  407 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  408 </span><span class="spaces">    </span><span class="istickedoff">go path val =</span>
+<span class="lineno">  409 </span><span class="spaces">      </span><span class="istickedoff">case val of</span>
+<span class="lineno">  410 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupVar n         -&gt; rs &amp; rsAllocs %~ Map.alter (ins path) n</span>
+<span class="lineno">  411 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupGlobal _ name -&gt; rs &amp; rsGlobals %~ Map.alter (ins <span class="nottickedoff">path</span>) name</span>
+<span class="lineno">  412 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupElem _ v idx  -&gt; go (ResolvedElem idx : path) v</span>
+<span class="lineno">  413 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupField _ v fld -&gt; go (ResolvedField fld : path) v</span>
+<span class="lineno">  414 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupCast tp v     -&gt; go (ResolvedCast tp : path) v</span>
+<span class="lineno">  415 </span><span class="spaces">        </span><span class="istickedoff">_                     -&gt; <span class="nottickedoff">rs</span></span>
+<span class="lineno">  416 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  417 </span><span class="spaces">    </span><span class="istickedoff">ins path Nothing = Just [path]</span>
+<span class="lineno">  418 </span><span class="spaces">    </span><span class="istickedoff">ins path (Just paths) = Just (path : paths)</span></span>
+<span class="lineno">  419 </span>
+<span class="lineno">  420 </span>-- | Test whether the pointer represented by the given SetupValue has
+<span class="lineno">  421 </span>-- been initialized already.
+<span class="lineno">  422 </span>testResolved ::
+<span class="lineno">  423 </span>  MS.SetupValue (LLVM arch) -&gt;
+<span class="lineno">  424 </span>  ResolvedPath {-^ path within this object (if any) -} -&gt;
+<span class="lineno">  425 </span>  LLVMResolvedState -&gt;
+<span class="lineno">  426 </span>  Bool
+<span class="lineno">  427 </span><span class="decl"><span class="istickedoff">testResolved val0 path0 rs = go path0 val0</span>
+<span class="lineno">  428 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  429 </span><span class="spaces">    </span><span class="istickedoff">go path val =</span>
+<span class="lineno">  430 </span><span class="spaces">      </span><span class="istickedoff">case val of</span>
+<span class="lineno">  431 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupVar n         -&gt; test path (Map.lookup n (_rsAllocs rs))</span>
+<span class="lineno">  432 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupGlobal _ c    -&gt; test <span class="nottickedoff">path</span> (Map.lookup c (_rsGlobals rs))</span>
+<span class="lineno">  433 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupElem _ v idx  -&gt; go (ResolvedElem idx : path) v</span>
+<span class="lineno">  434 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupField _ v fld -&gt; go (ResolvedField fld : path) v</span>
+<span class="lineno">  435 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupCast tp v     -&gt; go (ResolvedCast tp : path) v</span>
+<span class="lineno">  436 </span><span class="spaces">        </span><span class="istickedoff">_                     -&gt; False</span>
+<span class="lineno">  437 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">test _ Nothing = False</span>
+<span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">test path (Just paths) = any (overlap path) paths</span>
+<span class="lineno">  440 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  441 </span><span class="spaces">    </span><span class="istickedoff">overlap (x : xs) (y : ys) = x == y &amp;&amp; overlap xs ys</span>
+<span class="lineno">  442 </span><span class="spaces">    </span><span class="istickedoff">overlap [] _ = True</span>
+<span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">overlap _ [] = <span class="nottickedoff">True</span></span></span>
 
 </pre>
 </body>
