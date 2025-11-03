@@ -226,7 +226,7 @@ Type :: { Type }
 
 AppliedType :: { Type }
  : BaseType                             { $1                            }
- | BaseType AppliedType                 { tBlock (maxSpan' $1 $2) $1 $2 }
+ | AppliedType BaseType                 { tBlock (maxSpan' $1 $2) $1 $2 }
 
 -- special case of function type that can be followed by more base types
 -- without requiring parens
