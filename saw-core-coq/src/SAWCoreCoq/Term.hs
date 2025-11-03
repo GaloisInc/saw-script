@@ -411,7 +411,6 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                          "is mapped to an arbitrary Coq term")
 
     Sort s _h -> pure (Coq.Sort (translateSort s))
-    NatLit i -> pure (Coq.NatLit (toInteger i))
     ArrayValue (asBoolType -> Just ()) (traverse asBool -> Just bits)
       | Pair w bv <- BV.bitsBE (Vector.toList bits)
       , Left LeqProof <- decideLeq (knownNat @1) w -> do

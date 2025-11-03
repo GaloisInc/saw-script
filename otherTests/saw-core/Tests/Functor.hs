@@ -173,7 +173,7 @@ instance TestIt Term where
       when (depth < 2) $ do
         let depth' = depth + 1
             unit = shared 103 $ FTermF $ UnitValue
-            zero = shared 104 $ FTermF $ NatLit 0
+            zero = shared 104 $ FTermF $ StringLit "0"
             localvar = shared 105 $ Variable vnBar t
         testOne depth' $ PairValue t t
         testOne depth' $ PairValue t zero
@@ -209,8 +209,8 @@ tests :: Result
 tests = do
   let unit, zero, one :: FlatTermF Term
       unit = UnitValue
-      zero = NatLit 0
-      one = NatLit 1
+      zero = StringLit "0"
+      one = StringLit "1"
   testOne 0 unit
   testOne 0 one
   seedTwo zero one

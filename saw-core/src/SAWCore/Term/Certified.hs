@@ -11,11 +11,10 @@ module SAWCore.Term.Certified
   ( Term -- abstract
   , rawTerm
   , rawType
-  , scTypeCheckWHNF
   , scTypeOf
   , scTypeConvertible
   , scSubtype
-  , scWHNF
+  , scWhnf
     -- * Building certified terms
   , scApply
   , scLambda
@@ -50,11 +49,9 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 
-import SAWCore.Conversion (natConversions)
 import SAWCore.Module (Ctor(..), DataType(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Name
 import SAWCore.Recognizer
-import SAWCore.Rewriter
 import SAWCore.SharedTerm (SharedContext)
 import qualified SAWCore.SharedTerm as Raw
 import SAWCore.Term.Functor
@@ -82,17 +79,10 @@ rawType (Term _ typ) = typ
 
 --------------------------------------------------------------------------------
 
--- | Reduce the given 'Raw.Term' to WHNF, using all reductions allowed by
--- the SAWCore type system.
-scTypeCheckWHNF :: SharedContext -> Raw.Term -> IO Raw.Term
-scTypeCheckWHNF sc t =
-  do (_, t') <- rewriteSharedTermTypeSafe sc (addConvs natConversions emptySimpset :: Simpset ()) t
-     Raw.scWhnf sc t'
-
 -- | Check if two terms are "convertible for type-checking", meaning that they
 -- are convertible up to 'natConversions'.
 scTypeConvertible :: SharedContext -> Raw.Term -> Raw.Term -> IO Bool
-scTypeConvertible sc t1 t2 = Raw.scConvertibleEval sc scTypeCheckWHNF True t1 t2
+scTypeConvertible sc t1 t2 = Raw.scConvertibleEval sc Raw.scWhnf True t1 t2
 
 -- | Check whether one type is a subtype of another: Either they are
 -- convertible, or they are both Pi types with convertible argument
@@ -127,10 +117,10 @@ scTypeOf sc (Term _ tp) =
   do tp_tp <- Raw.scTypeOf sc tp
      pure (Term tp tp_tp)
 
--- | Reduce a 'Cterm' to WHNF (see also 'scTypeCheckWHNF').
-scWHNF :: SharedContext -> Term -> IO Term
-scWHNF sc (Term tm tp) =
-  do tm' <- scTypeCheckWHNF sc tm
+-- | Reduce a 'Cterm' to weak head-normal form..
+scWhnf :: SharedContext -> Term -> IO Term
+scWhnf sc (Term tm tp) =
+  do tm' <- Raw.scWhnf sc tm
      pure (Term tm' tp)
 
 scGlobal :: SharedContext -> Ident -> IO Term
@@ -341,7 +331,7 @@ ensureRecognizer s sc f trm =
   case f trm of
     Just a -> pure a
     Nothing ->
-      do trm' <- scTypeCheckWHNF sc trm
+      do trm' <- Raw.scWhnf sc trm
          case f trm' of
            Just a -> pure a
            Nothing ->

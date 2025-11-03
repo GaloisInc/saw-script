@@ -30,6 +30,7 @@ import qualified Text.URI as URI
 
 import qualified SAWCore.Cache as SC
 import qualified SAWCore.Name as SC
+import qualified SAWCore.Prelude.Constants as SC (preludeModuleName)
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
 import qualified SAWCore.Recognizer as R
@@ -170,7 +171,10 @@ applyOverride sc thm t = do
   tidx <- liftIO (SC.scResolveNameByURI sc $ thm ^. theoremURI) >>= \case
     Nothing -> throw . YosysErrorOverrideNameNotFound . URI.render $ thm ^. theoremURI
     Just i -> pure i
-  let unfold nm = SC.nameIndex nm /= tidx
+  -- unfold everything except for theoremURI and prelude constants
+  let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName
+      isPreludeName _ = False
+  let unfold nm = SC.nameIndex nm /= tidx && not (isPreludeName (SC.nameInfo nm))
   unfolded <- liftIO $ SC.scUnfoldConstants sc unfold t
   cache <- liftIO SC.newCache
   let

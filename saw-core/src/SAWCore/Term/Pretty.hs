@@ -446,7 +446,6 @@ ppFlatTermF prec tf =
       ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
     Sort s h -> return (viaShow h <> viaShow s)
-    NatLit i -> prettyNat <$> (ppOpts <$> ask) <*> return (toInteger i)
     ArrayValue (asBoolType -> Just _) args
       | Just bits <- mapM asBool $ V.toList args ->
         if length bits `mod` 4 == 0 then
@@ -508,6 +507,7 @@ ppTermF _ (Variable vn _tp) = annotate PPS.VariableStyle <$> ppVarName vn
 -- | Internal function to recursively pretty-print a term
 ppTerm' :: Prec -> Term -> PPM PPS.Doc
 ppTerm' prec = atNextDepthM "..." . ppTerm'' where
+  ppTerm'' (asNat -> Just n) = prettyNat <$> asks ppOpts <*> pure (toInteger n)
   ppTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
     do maybe_memo_var <- memoLookupM idx
        case maybe_memo_var of
@@ -570,11 +570,14 @@ shouldMemoizeTerm t =
     FTermF UnitValue -> False
     FTermF UnitType -> False
     FTermF Sort{} -> False
-    FTermF NatLit{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
     FTermF StringLit{} -> False
+    FTermF Recursor{} -> False
     Constant{} -> False
     Variable{} -> False
+    App (isGlobalDef "Prelude.NatPos" -> Just ()) _ -> False
+    App (isGlobalDef "Prelude.Bit0" -> Just ()) _ -> False
+    App (isGlobalDef "Prelude.Bit1" -> Just ()) _ -> False
     _ -> True
 
 -- | Compute a memoization table for a term, and pretty-print the term using the

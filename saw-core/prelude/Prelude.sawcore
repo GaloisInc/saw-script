@@ -794,19 +794,360 @@ maybe a b f1 f2 m = Maybe__rec a (\ (m':Maybe a) -> b) f1 f2 m;
 
 
 --------------------------------------------------------------------------------
+-- Positive Natural Numbers
+
+-- | A binary representation for the positive natural numbers.
+data Pos : sort 0 where {
+    One : Pos;         -- 1
+    Bit0 : Pos -> Pos; -- 2*n
+    Bit1 : Pos -> Pos; -- 2*n+1
+  }
+
+Pos_cases : (a : sort 0) -> a -> (Pos -> a -> a) -> (Pos -> a -> a) -> Pos -> a;
+Pos_cases a = Pos#rec (\ (_ : Pos) -> a);
+
+-- posInc One = Bit0 One
+-- posInc (Bit0 x) = Bit1 x
+-- posInc (Bit1 x) = Bit0 (posInc x)
+
+posInc : Pos -> Pos;
+posInc =
+  Pos_cases Pos
+  (Bit0 One)
+  (\ (x : Pos) (r : Pos) -> Bit1 x)
+  (\ (x : Pos) (r : Pos) -> Bit0 r);
+
+-- One + y         = posInc y
+-- Bit0 x + One    = Bit1 x
+-- Bit0 x + Bit0 y = Bit0 (x + y)
+-- Bit0 x + Bit1 y = Bit1 (x + y)
+-- Bit1 x + One    = Bit0 (posInc x)
+-- Bit1 x + Bit0 y = Bit1 (x + y)
+-- Bit1 x + Bit1 y = Bit0 (posInc (x + y))
+
+posAdd : Pos -> Pos -> Pos;
+posAdd =
+  Pos_cases (Pos -> Pos)
+  posInc
+  (\ (x : Pos) (rx : Pos -> Pos) ->
+   Pos_cases Pos
+   (Bit1 x)
+   (\ (y : Pos) (_ : Pos) -> Bit0 (rx y))
+   (\ (y : Pos) (_ : Pos) -> Bit1 (rx y))
+  )
+  (\ (x : Pos) (rx : Pos -> Pos) ->
+   Pos_cases Pos
+   (Bit0 (posInc x))
+   (\ (y : Pos) (_ : Pos) -> Bit1 (rx y))
+   (\ (y : Pos) (_ : Pos) -> Bit0 (posInc (rx y)))
+  );
+
+-- x * One = x
+-- x * Bit0 y = Bit0 (x * y)
+-- x * Bit1 y = posAdd x (Bit0 (x * y))
+
+posMul : Pos -> Pos -> Pos;
+posMul x =
+  Pos_cases Pos
+  x
+  (\ (y : Pos) (r : Pos) -> Bit0 r)
+  (\ (y : Pos) (r : Pos) -> posAdd x (Bit0 r));
+
+posExp : Pos -> Pos -> Pos;
+posExp x =
+  Pos_cases Pos
+  x
+  (\ (y : Pos) (r : Pos) -> posMul r r)
+  (\ (y : Pos) (r : Pos) -> posMul x (posMul r r));
+
+posEq : Pos -> Pos -> Bool;
+posEq =
+  Pos_cases (Pos -> Bool)
+  (Pos_cases Bool
+   True
+   (\ (y : Pos) (_ : Bool) -> False)
+   (\ (y : Pos) (_ : Bool) -> False)
+  )
+  (\ (x : Pos) (rx : Pos -> Bool) ->
+   Pos_cases Bool
+   True
+   (\ (y : Pos) (_ : Bool) -> rx y)
+   (\ (y : Pos) (_ : Bool) -> False)
+  )
+  (\ (x : Pos) (rx : Pos -> Bool) ->
+   Pos_cases Bool
+   True
+   (\ (y : Pos) (_ : Bool) -> False)
+   (\ (y : Pos) (_ : Bool) -> rx y)
+  );
+
+-- posCmp One      One      k = k
+-- posCmp One      (Bit0 y) k = True
+-- posCmp One      (Bit1 y) k = True
+-- posCmp (Bit0 x) One      k = False
+-- posCmp (Bit0 x) (Bit0 y) k = posCmp x y k
+-- posCmp (Bit0 x) (Bit1 y) k = posCmp x y True
+-- posCmp (Bit1 x) One      k = False
+-- posCmp (Bit1 x) (Bit0 y) k = posCmp x y False
+-- posCmp (Bit1 x) (Bit1 y) k = posCmp x y k
+
+-- | `posCmp x y k` computes `if k then x <= y else x < y`.
+posCmp : Pos -> Pos -> Bool -> Bool;
+posCmp =
+  Pos_cases (Pos -> Bool -> Bool)
+  (Pos_cases (Bool -> Bool)
+   (\ (k : Bool) -> k)
+   (\ (y : Pos) (_ : Bool -> Bool) (k : Bool) -> True)
+   (\ (y : Pos) (_ : Bool -> Bool) (k : Bool) -> True)
+  )
+  (\ (x : Pos) (rx : Pos -> Bool -> Bool) ->
+   Pos_cases (Bool -> Bool)
+   (\ (k : Bool) -> False)
+   (\ (y : Pos) (_ : Bool -> Bool) (k : Bool) -> rx y k)
+   (\ (y : Pos) (_ : Bool -> Bool) (k : Bool) -> rx y True)
+  )
+  (\ (x : Pos) (rx : Pos -> Bool -> Bool) ->
+   Pos_cases (Bool -> Bool)
+   (\ (k : Bool) -> False)
+   (\ (y : Pos) (_ : Bool -> Bool) (k : Bool) -> rx y False)
+   (\ (y : Pos) (_ : Bool -> Bool) (k : Bool) -> rx y k)
+  );
+
+posLe : Pos -> Pos -> Bool;
+posLe x y = posCmp x y True;
+
+posLt : Pos -> Pos -> Bool;
+posLt x y = posCmp x y False;
+
+--------------------------------------------------------------------------------
 -- Nat
 
 data Nat : sort 0 where {
     Zero : Nat;
-    Succ : Nat -> Nat;
+    NatPos : Pos -> Nat;
   }
 
-Nat__rec : (p : Nat -> sort 1) ->
-           p Zero ->
-           ((n:Nat) -> p n -> p (Succ n)) ->
-           (n:Nat) ->
-           p n;
-Nat__rec p f1 f2 n = Nat#rec1 p f1 f2 n;
+Succ : Nat -> Nat;
+Succ n = NatPos (Nat#rec (\ (_ : Nat) -> Pos) One posInc n);
+
+-- | Addition
+addNat : Nat -> Nat -> Nat;
+addNat =
+  Nat#rec (\ (_ : Nat) -> Nat -> Nat)
+  (\ (y : Nat) -> y)
+  (\ (x : Pos) ->
+   Nat#rec (\ (_ : Nat) -> Nat)
+   (NatPos x)
+   (\ (y : Pos) -> NatPos (posAdd x y))
+  );
+
+-- | Multiplication
+mulNat : Nat -> Nat -> Nat;
+mulNat =
+  Nat#rec (\ (_ : Nat) -> Nat -> Nat)
+  (\ (y : Nat) -> Zero)
+  (\ (x : Pos) ->
+   Nat#rec (\ (_ : Nat) -> Nat)
+   Zero
+   (\ (y : Pos) -> NatPos (posMul x y))
+  );
+
+-- | Natural exponentiation
+expNat : Nat -> Nat -> Nat;
+expNat =
+  Nat#rec (\ (_ : Nat) -> Nat -> Nat)
+  (\ (_ : Nat) -> Zero)
+  (\ (x : Pos) ->
+   Nat#rec (\ (_ : Nat) -> Nat)
+   (NatPos One)
+   (\ (y : Pos) -> NatPos (posExp x y))
+  );
+
+equalNat : Nat -> Nat -> Bool;
+equalNat =
+  Nat#rec (\ (_ : Nat) -> Nat -> Bool)
+  (Nat#rec (\ (_ : Nat) -> Bool) True (\ (y : Pos) -> False))
+  (\ (x : Pos) -> Nat#rec (\ (_ : Nat) -> Bool) False (posEq x));
+
+ltNat : Nat -> Nat -> Bool;
+ltNat =
+  Nat#rec (\ (_ : Nat) -> Nat -> Bool)
+  (Nat#rec (\ (_ : Nat) -> Bool) False (\ (y : Pos) -> True))
+  (\ (x : Pos) -> Nat#rec (\ (_ : Nat) -> Bool) False (posLt x));
+
+leNat : Nat -> Nat -> Bool;
+leNat =
+  Nat#rec (\ (_ : Nat) -> Nat -> Bool)
+  (Nat#rec (\ (_ : Nat) -> Bool) True (\ (y : Pos) -> True))
+  (\ (x : Pos) -> Nat#rec (\ (_ : Nat) -> Bool) False (posLe x));
+
+-- | Minimum
+minNat : Nat -> Nat -> Nat;
+minNat x y = ite Nat (ltNat x y) x y;
+
+-- | Maximum
+maxNat : Nat -> Nat -> Nat;
+maxNat x y = ite Nat (ltNat x y) y x;
+
+-- | Width(n) = 1 + floor(log_2(n))
+widthNat : Nat -> Nat;
+widthNat =
+  Nat#rec (\ (_ : Nat) -> Nat)
+  Zero
+  (Pos#rec (\ (_ : Pos) -> Nat)
+   (Succ Zero)
+   (\ (_ : Pos) -> Succ)
+   (\ (_ : Pos) -> Succ)
+  );
+
+--------------------------------------------------------------------------------
+-- Subtraction on Nat
+
+data Z : sort 0 where {
+    ZZero : Z;
+    ZPos : Pos -> Z;
+    ZNeg : Pos -> Z;
+  }
+
+Z_cases : (a : sort 0) -> a -> (Pos -> a) -> (Pos -> a) -> Z -> a;
+Z_cases a = Z#rec (\ (_ : Z) -> a);
+
+-- Bit "minus one", i.e. \n -> 2*n-1
+-- BitM One = One
+-- BitM (Bit0 x) = Bit1 (BitM x)
+-- BitM (Bit1 x) = Bit1 (Bit0 x)
+BitM : Pos -> Pos;
+BitM =
+  Pos#rec (\ (_ : Pos) -> Pos)
+  One
+  (\ (x : Pos) (r : Pos) -> Bit1 r)
+  (\ (x : Pos) (r : Pos) -> Bit1 (Bit0 x));
+
+dblZ : Z -> Z;
+dblZ =
+  Z_cases Z
+  ZZero
+  (\ (x : Pos) -> ZPos (Bit0 x))
+  (\ (x : Pos) -> ZNeg (Bit0 x));
+
+dblZinc : Z -> Z;
+dblZinc =
+  Z_cases Z
+  (ZPos One)
+  (\ (x : Pos) -> ZPos (Bit1 x))
+  (\ (x : Pos) -> ZNeg (BitM x));
+
+dblZdec : Z -> Z;
+dblZdec =
+  Z_cases Z
+  (ZNeg One)
+  (\ (x : Pos) -> ZPos (BitM x))
+  (\ (x : Pos) -> ZNeg (Bit1 x));
+
+-- One - One = ZZero
+-- One - Bit0 y = ZNeg (BitM y)
+-- One - Bit1 y = ZNeg (Bit0 y)
+-- Bit0 x - One = ZPos (BitM x)
+-- Bit0 x - Bit0 y = dblZ (x - y)
+-- Bit0 x - Bit1 y = dblZdec (x - y)
+-- Bit1 x - One = ZPos (Bit0 x)
+-- Bit1 x - Bit0 y = dblZinc (x - y)
+-- Bit1 x - Bit1 y = dblZ (x - y)
+
+posSub : Pos -> Pos -> Z;
+posSub =
+  Pos_cases (Pos -> Z)
+  (Pos_cases Z
+   ZZero
+   (\ (y : Pos) (_ : Z) -> ZNeg (BitM y))
+   (\ (y : Pos) (_ : Z) -> ZNeg (Bit0 y))
+  )
+  (\ (x : Pos) (rx : Pos -> Z) ->
+   Pos_cases Z
+   (ZPos (BitM x))
+   (\ (y : Pos) (_ : Z) -> dblZ (rx y))
+   (\ (y : Pos) (_ : Z) -> dblZdec (rx y))
+  )
+  (\ (x : Pos) (rx : Pos -> Z) ->
+   Pos_cases Z
+   (ZPos (Bit0 x))
+   (\ (y : Pos) (_ : Z) -> dblZinc (rx y))
+   (\ (y : Pos) (_ : Z) -> dblZ (rx y))
+  );
+
+subNZ : Nat -> Nat -> Z;
+subNZ =
+  Nat#rec (\ (_ : Nat) -> Nat -> Z)
+  (Nat#rec (\ (_ : Nat) -> Z) ZZero ZNeg)
+  (\ (x : Pos) -> Nat#rec (\ (_ : Nat) -> Z) (ZPos x) (posSub x));
+
+ZtoNat : Z -> Nat;
+ZtoNat = Z_cases Nat Zero NatPos (\ (_ : Pos) -> Zero);
+
+subNat : Nat -> Nat -> Nat;
+subNat x y = ZtoNat (subNZ x y);
+
+--------------------------------------------------------------------------------
+-- Induction on Natural Numbers
+
+data AccessiblePos : Pos -> sort 0 where {
+    AccessiblePos_One : AccessiblePos One;
+    AccessiblePos_Inc : (x : Pos) -> AccessiblePos x -> AccessiblePos (posInc x);
+  }
+
+AccessiblePos_Bit0 : (x : Pos) -> AccessiblePos x -> AccessiblePos (Bit0 x);
+AccessiblePos_Bit0 =
+  AccessiblePos#rec
+  (\ (x : Pos) (_ : AccessiblePos x) -> AccessiblePos (Bit0 x))
+  (AccessiblePos_Inc One AccessiblePos_One)
+  (\ (x : Pos) (_ : AccessiblePos x) (ih : AccessiblePos (Bit0 x)) ->
+    AccessiblePos_Inc (Bit1 x) (AccessiblePos_Inc (Bit0 x) ih)
+  );
+
+AccessiblePos_Bit1 : (x : Pos) -> AccessiblePos x -> AccessiblePos (Bit1 x);
+AccessiblePos_Bit1 =
+  AccessiblePos#rec
+  (\ (x : Pos) (_ : AccessiblePos x) -> AccessiblePos (Bit1 x))
+  (AccessiblePos_Inc (Bit0 One) (AccessiblePos_Inc One AccessiblePos_One))
+  (\ (x : Pos) (ap : AccessiblePos x) (ih : AccessiblePos (Bit1 x)) ->
+    AccessiblePos_Inc (Bit0 (posInc x)) (AccessiblePos_Inc (Bit1 x) ih)
+  );
+
+AccessiblePos_all : (x : Pos) -> AccessiblePos x;
+AccessiblePos_all =
+  Pos#rec (\ (x : Pos) -> AccessiblePos x)
+  AccessiblePos_One
+  AccessiblePos_Bit0
+  AccessiblePos_Bit1;
+
+data AccessibleNat : Nat -> sort 0 where {
+    AccessibleNat_Zero : AccessibleNat Zero;
+    AccessibleNat_Succ : (n : Nat) -> AccessibleNat n -> AccessibleNat (Succ n);
+  }
+
+AccessibleNat_NatPos : (x : Pos) -> AccessiblePos x -> AccessibleNat (NatPos x);
+AccessibleNat_NatPos =
+  AccessiblePos#rec
+  (\ (x : Pos) (_ : AccessiblePos x) -> AccessibleNat (NatPos x))
+  (AccessibleNat_Succ Zero AccessibleNat_Zero)
+  (\ (x : Pos) (_ : AccessiblePos x) -> AccessibleNat_Succ (NatPos x));
+
+AccessibleNat_all : (n : Nat) -> AccessibleNat n;
+AccessibleNat_all =
+  Nat#rec AccessibleNat
+  AccessibleNat_Zero
+  (\ (x : Pos) -> AccessibleNat_NatPos x (AccessiblePos_all x));
+
+Nat__rec :
+  (p : Nat -> sort 1) ->
+  (p Zero) ->
+  ((n : Nat) -> p n -> p (Succ n)) ->
+  (n : Nat) -> p n;
+Nat__rec p z s n =
+  AccessibleNat#rec1 (\ (n : Nat) (_ : AccessibleNat n) -> p n) z
+  (\ (n : Nat) (_ : AccessibleNat n) -> s n) n (AccessibleNat_all n);
+
+--------------------------------------------------------------------------------
 
 Nat_cases : (a:sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
 Nat_cases a f1 f2 n = Nat__rec (\ (n:Nat) -> a) f1 f2 n;
@@ -833,9 +1174,7 @@ eqNatSucc x y eq = eq_cong Nat x y eq Nat (\ (n:Nat) -> Succ n);
 pred : Nat -> Nat;
 pred x = Nat_cases Nat Zero (\ (n:Nat) -> \ (m:Nat) -> n) x;
 
-eqNatPrec : (x y : Nat) -> eqNat (Succ x) (Succ y) -> eqNat x y;
-eqNatPrec x y eq' =
-  eq_cong Nat (Succ x) (Succ y) eq' Nat pred;
+axiom eqNatPrec : (x y : Nat) -> eqNat (Succ x) (Succ y) -> eqNat x y;
 
 -- | Propositional less than or equal to; defined the same way as in Coq
 data IsLeNat (n:Nat) : Nat -> Prop where {
@@ -886,66 +1225,16 @@ proveLtNat : (x y : Nat) -> Maybe (IsLtNat x y);
 proveLtNat x y = proveLeNat (Succ x) y;
 
 
--- | Addition
-addNat : Nat -> Nat -> Nat;
-addNat x y =
-  Nat_cases Nat y (\ (_:Nat) -> \ (prev_sum:Nat) -> Succ prev_sum) x;
+axiom eqNatAdd0 : (x : Nat) -> eqNat (addNat x 0) x;
 
-eqNatAdd0 (x : Nat) : eqNat (addNat x 0) x =
-  Nat__rec (\ (n:Nat) -> eqNat (addNat n 0) n)
-           (Refl Nat 0)
-           (\ (n:Nat) -> eqNatSucc (addNat n 0) n)
-           x;
+axiom eqNatAddS : (x y : Nat) -> eqNat (addNat x (Succ y)) (Succ (addNat x y));
 
-eqNatAddS (x y : Nat) : eqNat (addNat x (Succ y)) (Succ (addNat x y)) =
-  Nat__rec (\ (x':Nat) -> (y':Nat) ->
-              eqNat (addNat x' (Succ y')) (Succ (addNat x' y')))
-           (\ (y':Nat) -> Refl Nat (Succ y'))
-           (\ (x':Nat) ->
-            \ (eqF : (y':Nat) ->
-                      eqNat (addNat x' (Succ y')) (Succ (addNat x' y'))) ->
-            \ (y':Nat) ->
-              eqNatSucc (addNat x' (Succ y')) (Succ (addNat x' y')) (eqF y'))
-           x y;
+axiom eqNatAddComm : (x y : Nat) -> eqNat (addNat x y) (addNat y x);
 
-eqNatAddComm (x y : Nat) : eqNat (addNat x y) (addNat y x) =
-  Nat__rec (\ (y':Nat) -> (x':Nat) -> eqNat (addNat x' y') (addNat y' x'))
-           (\ (x':Nat) -> eqNatAdd0 x')
-           (\ (y':Nat) ->
-            \ (eqF : (x':Nat) -> eqNat (addNat x' y') (addNat y' x')) ->
-            \ (x':Nat) ->
-              trans Nat
-                    (addNat x' (Succ y'))
-                    (Succ (addNat x' y'))
-                    (Succ (addNat y' x'))
-                    (eqNatAddS x' y')
-                    (eqNatSucc (addNat x' y') (addNat y' x') (eqF x')))
-           y x;
-
-addNat_assoc (x y z : Nat) : eqNat (addNat x (addNat y z)) (addNat (addNat x y) z) =
-  Nat__rec (\ (x':Nat) -> eqNat (addNat x' (addNat y z)) (addNat (addNat x' y) z))
-           (Refl Nat (addNat y z))
-           (\ (x':Nat) ->
-            \ (eq : eqNat (addNat x' (addNat y z)) (addNat (addNat x' y) z)) ->
-              eqNatSucc (addNat x' (addNat y z)) (addNat (addNat x' y) z) eq)
-           x;
-
--- | Multiplication
-mulNat : Nat -> Nat -> Nat;
-mulNat x y =
-  Nat__rec (\ (x':Nat) -> Nat) 0
-           (\ (x':Nat) -> \ (prod:Nat) -> addNat y prod) x;
+axiom addNat_assoc : (x y z : Nat) -> eqNat (addNat x (addNat y z)) (addNat (addNat x y) z);
 
 equal0Nat : Nat -> Bool;
-equal0Nat n =
-  Nat_cases Bool True (\ (n:Nat) -> \ (b:Bool) -> False) n;
-
-equalNat : Nat -> Nat -> Bool;
-equalNat x y =
-  Nat_cases (Nat -> Bool) equal0Nat
-            (\ (n':Nat) -> \ (eqN : Nat -> Bool) -> \ (m:Nat) ->
-               Nat_cases Bool False
-                         (\ (m':Nat) -> \ (b:Bool) -> eqN m') m) x y;
+equal0Nat = equalNat Zero;
 
 -- Convert a equalNat equality to an equality of Nats
 -- FIXME: Implement this in the same way as proveEqNat
@@ -957,41 +1246,6 @@ ifEqNatWithProof : (a : sort 0) -> (m n : Nat) -> a -> (eqNat m n -> a) -> a;
 ifEqNatWithProof a m n x f =
   ifWithProof a (equalNat m n) x
     (\ (pf:Eq Bool (equalNat m n) True) -> f (equalNatToEqNat m n pf));
-
-ltNat : Nat -> Nat -> Bool;
-ltNat x y =
-  Nat_cases2 Bool (\ (x':Nat) -> False)
-             (\ (y':Nat) -> True)
-             (\ (y':Nat) -> \ (x':Nat) -> \ (lt_mn:Bool) -> lt_mn) y x;
-
--- | Subtraction
-subNat : Nat -> Nat -> Nat;
-subNat x y =
-  Nat_cases2 Nat (\ (x':Nat) -> x')
-             (\ (y':Nat) -> Zero)
-             (\ (y':Nat) -> \ (x':Nat) -> \ (sub_xy:Nat) -> sub_xy) y x;
-
--- | Minimum
-minNat : Nat -> Nat -> Nat;
-minNat x y =
-  Nat_cases2 Nat (\ (y':Nat) -> Zero)
-             (\ (x':Nat) -> Zero)
-             (\ (x':Nat) -> \ (y':Nat) -> \ (min_xy:Nat) -> Succ min_xy) x y;
-
--- | Maximum
-maxNat : Nat -> Nat -> Nat;
-maxNat x y =
-  Nat_cases2 Nat (\ (y':Nat) -> y')
-             (\ (x':Nat) -> Succ x')
-             (\ (x':Nat) -> \ (y':Nat) -> \ (max_xy:Nat) -> Succ max_xy) x y;
-
--- | Width(n) = 1 + floor(log_2(n))
-primitive widthNat : Nat -> Nat;
-
--- | Natural exponentiation
-expNat : Nat -> Nat -> Nat;
-expNat b e =
-  Nat_cases Nat 1 (\ (e':Nat) -> \ (exp_b_e:Nat) -> mulNat b exp_b_e) e;
 
 -- | Natural division and modulus
 primitive divModNat : Nat -> Nat -> Nat * Nat;
@@ -1011,7 +1265,7 @@ natCase p z s = Nat__rec p z (\ (n:Nat) -> \ (r:p n) -> s n);
 
 -- An if-then-else for whether a Nat = 0
 if0Nat : (a : sort 0) -> Nat -> a -> a -> a;
-if0Nat a n x y = natCase (\ (_:Nat) -> a) x (\ (_:Nat) -> y) n;
+if0Nat a n x y = Nat#rec (\ (_ : Nat) -> a) x (\ (_ : Pos) -> y) n;
 
 -- An exponentation operation on arbitrary types.
 --
@@ -1035,36 +1289,16 @@ IsLeNat_transitive n m o Hnm Hmo =
   o Hmo;
 
 -- No Nat is strictly less than zero
-IsLtNat_Zero_absurd :
+axiom IsLtNat_Zero_absurd :
   (p:Prop) ->
   (m:Nat) ->
   IsLtNat m Zero ->
   p;
-IsLtNat_Zero_absurd p m HSmZ =
-  IsLeNat__rec (Succ m)
-    ( \ (x : Nat) -> \ (H:IsLeNat (Succ m) x) -> if0Nat Prop x p TrueProp)
-    TrueI
-    ( \ (x : Nat) -> \ (H1:IsLeNat (Succ m) x) -> \ (H2 : if0Nat Prop x p TrueProp) -> TrueI)
-    Zero HSmZ;
 
-IsLeNat_SuccSucc :
+axiom IsLeNat_SuccSucc :
   (n m:Nat) ->
   IsLeNat (Succ n) (Succ m) ->
   IsLeNat n m;
-IsLeNat_SuccSucc n m HSS =
-  IsLeNat__rec (Succ n)
-    ( \ (x : Nat) -> \ (H:IsLeNat (Succ n) x) -> IsLeNat n (pred x))
-    (IsLeNat_base n)
-    (Nat__rec
-      ( \ (x : Nat) -> IsLeNat (Succ n) x -> IsLeNat n (pred x) -> IsLeNat n x)
-      ( \ (H1 : IsLeNat (Succ n) Zero) -> \ (H2 : IsLeNat n (pred Zero)) -> H2)
-      ( \ (x : Nat) ->
-        \ (Hind : IsLeNat (Succ n) x -> IsLeNat n (pred x) -> IsLeNat n x) ->
-        \ (H1 : IsLeNat (Succ n) (Succ x)) ->
-	\ (H2 : IsLeNat n (pred (Succ x))) ->
-	IsLeNat_succ n x H2)
-    )
-  (Succ m) HSS;
 
 -- | The complete induction principle on natural numbers
 Nat_complete_induction :

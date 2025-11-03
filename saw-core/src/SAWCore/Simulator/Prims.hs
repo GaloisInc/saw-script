@@ -114,8 +114,6 @@ boolFun = PrimFilterFun "expected Bool" r
 natFun :: VMonad l => (Natural -> Prim l) -> Prim l
 natFun = PrimFilterFun "expected Nat" r
   where r (VNat n) = pure n
-        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Zero") _ [] [])  = pure 0
-        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Succ") _ [] [x]) = succ <$> (r =<< lift (force x))
         r _ = mzero
 
 -- | A primitive that requires an integer argument
@@ -312,7 +310,12 @@ constMap bp = Map.fromList
     )
 
   -- Nat
+  , ("Prelude.Zero", PrimValue (VNat 0))
   , ("Prelude.Succ", succOp bp)
+  , ("Prelude.NatPos", natPosOp bp)
+  , ("Prelude.One", PrimValue (VNat 1))
+  , ("Prelude.Bit0", bit0Op bp)
+  , ("Prelude.Bit1", bit1Op bp)
   , ("Prelude.addNat", addNatOp bp)
   , ("Prelude.subNat", subNatOp bp)
   , ("Prelude.mulNat", mulNatOp bp)
@@ -322,6 +325,7 @@ constMap bp = Map.fromList
   , ("Prelude.expNat", expNatOp)
   , ("Prelude.widthNat", widthNatOp)
   , ("Prelude.natCase", natCaseOp)
+  , ("Prelude.Nat__rec", natRecOp)
   , ("Prelude.equalNat", equalNatOp bp)
   , ("Prelude.ltNat", ltNatOp bp)
   -- Integers
@@ -648,6 +652,22 @@ succOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
 succOp bp = unaryNatToNatOp bp succ succ (\w x -> do o <- bpBvLit bp w 1
                                                      bpBvAdd bp x o)
 
+-- NatPos :: Pos -> Nat;
+natPosOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+natPosOp bp = unaryNatToNatOp bp id id (\_w x -> pure x)
+
+-- Bit0 :: Pos -> Pos;
+bit0Op :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+bit0Op bp =
+  unaryNatToNatOp bp succ (\n -> n*2)
+  (\_w x -> bpBvJoin bp x =<< bpBvLit bp 1 0)
+
+-- Bit1 :: Pos -> Pos;
+bit1Op :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+bit1Op bp =
+  unaryNatToNatOp bp succ (\n -> n*2+1)
+  (\_w x -> bpBvJoin bp x =<< bpBvLit bp 1 1)
+
 -- addNat :: Nat -> Nat -> Nat;
 addNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
 addNatOp bp = binNatToNatOp bp (\w1 w2 -> succ (max w1 w2))
@@ -721,6 +741,24 @@ natCaseOp =
     then force z
     else do s' <- force s
             apply s' (ready (VNat (n - 1)))
+
+-- Nat__rec :
+--   (p : Nat -> sort 1) ->
+--   (p Zero) ->
+--   ((n : Nat) -> p n -> p (Succ n)) ->
+--   (n : Nat) -> p n;
+natRecOp :: (VMonadLazy l, Show (Extra l)) => Prim l
+natRecOp =
+  constFun $
+  primFun $ \z ->
+  primFun $ \s ->
+  let loop n =
+        if n == 0
+        then force z
+        else do s' <- force s
+                r <- delay (loop (n - 1))
+                applyAll s' [ready (VNat (n - 1)), r]
+  in natFun $ \n -> Prim (loop n)
 
 --------------------------------------------------------------------------------
 -- Strings

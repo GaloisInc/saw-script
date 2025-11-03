@@ -81,7 +81,6 @@ module SAWCore.Conversion
   , natConversions
   , vecConversions
   , bvConversions
-  , zero_NatLit
   , succ_NatLit
   , addNat_NatLit
   , append_VecLit
@@ -133,7 +132,6 @@ termFPat tf =
     Constant nm               -> Net.Atom (toShortName (nameInfo nm))
     App t1 t2                 -> Net.App (termPat t1) (termPat t2)
     FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
-    FTermF (NatLit _)         -> Net.Var
     _                         -> Net.Var
 
 ----------------------------------------------------------------------
@@ -278,7 +276,7 @@ asSort s = Matcher (termFPat (FTermF (Sort s noFlags))) fn
 
 -- | Match a Nat literal
 asAnyNatLit :: Matcher Natural
-asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return i
+asAnyNatLit = asVar $ \t -> R.asNat t
 
 -- | Match a Vec literal
 asAnyVecLit :: Matcher (Term, V.Vector Term)
@@ -391,7 +389,14 @@ mkCtor i paramsB argsB =
   foldl mkApp (mkTermF (Constant i)) (paramsB ++ argsB)
 
 mkNatLit :: Natural -> TermBuilder Term
-mkNatLit n = mkTermF (FTermF (NatLit n))
+mkNatLit 0 = mkGlobalDef "Prelude.Zero"
+mkNatLit n = mkGlobalDef "Prelude.NatPos" `mkApp` mkPosLit n
+
+mkPosLit :: Natural -> TermBuilder Term
+mkPosLit n
+  | n <= 1    = mkGlobalDef "Prelude.One"
+  | even n    = mkGlobalDef "Prelude.Bit0" `mkApp` mkPosLit (div n 2)
+  | otherwise = mkGlobalDef "Prelude.Bit1" `mkApp` mkPosLit (div n 2)
 
 mkVecLit :: Term -> V.Vector Term -> TermBuilder Term
 mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
@@ -555,15 +560,10 @@ eq_Record = Conversion False $ thenMatcher matcher action
 
 -- | Conversions for operations on Nat literals
 natConversions :: [Conversion]
-natConversions = [ zero_NatLit, succ_NatLit, addNat_NatLit, subNat_NatLit
+natConversions = [ succ_NatLit, addNat_NatLit, subNat_NatLit
                  , mulNat_NatLit, expNat_NatLit, divNat_NatLit, remNat_NatLit
                  , equalNat_NatLit
                  ]
-
-zero_NatLit :: Conversion
-zero_NatLit =
-    Conversion True $
-    thenMatcher (asCtor "Prelude.Zero" asEmpty) (\_ -> return $ mkNatLit 0)
 
 succ_NatLit :: Conversion
 succ_NatLit =
