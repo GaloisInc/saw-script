@@ -107,4 +107,4 @@ write_saig' : String -> Term -> Int -> TopLevel ()
 6 more matches tagged experimental; use enable_experimental to see them
  --------------------------------
  -- (TopLevel Int)
-No matches.
+sharpSAT : Term -> TopLevel Int

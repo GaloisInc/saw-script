@@ -13,7 +13,6 @@ module SAWCore.Prim where
 
 import qualified Control.Exception as X
 import Data.Bits
-import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
@@ -308,7 +307,7 @@ data EvalError
   | DivideByZero
   | UnsupportedPrimitive String String
   | UserError String
-  deriving (Eq, Typeable)
+  deriving (Eq)
 
 instance X.Exception EvalError
 

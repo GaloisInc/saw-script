@@ -31,13 +31,9 @@ import SAWCentral.Options
 import SAWCentral.Utils
 import SAWScript.Interpreter (processFile)
 import qualified SAWScript.REPL as REPL
-import qualified SAWScript.REPL.Haskeline as REPL
-import qualified SAWScript.REPL.Monad as REPL
-import SAWCentral.Value (AIGProxy(..))
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
 import SAWVersion.Version (shortVersionText)
-import qualified Data.AIG.CompactGraph as AIG
 
 
 pathDesc, pathDelim :: String
@@ -341,10 +337,7 @@ warn opts msg = do
 -- Load (and run) a saw-script file.
 loadFile :: Options -> FilePath -> [Text] -> IO ()
 loadFile opts file scriptArgv = do
-  let aigProxy = AIGProxy AIG.compactProxy
-      subsh = REPL.subshell (REPL.replBody Nothing (return ()))
-      proofSubsh = REPL.proof_subshell (REPL.replBody Nothing (return ()))
-  processFile aigProxy opts file scriptArgv (Just subsh) (Just proofSubsh)
+  processFile opts file scriptArgv REPL.reenterTopLevel REPL.reenterProofScript
     `catch`
     (\(ErrorCall msg) -> err opts msg)
 
@@ -413,9 +406,9 @@ main = do
                 -- because there's no way to retrieve the context from
                 -- loading a file and then feed it to the repl.
                 warn opts "Warning: files loaded along with -I are ignored"
-            REPL.run opts
+            REPL.run Nothing opts
        | [] <- scriptArgv ->
-            REPL.run opts
+            REPL.run Nothing opts
        | file : _ <- scriptArgv ->
             loadFile opts file (map Text.pack scriptArgv)
       Just f -> do
@@ -424,4 +417,4 @@ main = do
             when (scriptArgv /= []) $
                 err opts $ "Error: cannot load ordinary saw-script files" ++
                            " along with -B"
-            REPL.runFromFile f opts
+            REPL.run (Just f) opts

@@ -204,6 +204,12 @@ This release supports [version
 
 ## Bug Fixes
 
+* Under some combinations of circumstances you would sometimes get
+  messages of the form "Subshells not supported" or "Proof subshells
+  not supported" when trying to start an interactive subshell /
+  sub-REPL.
+  This no longer happens.
+
 * `jvm_verify` and `mir_verify` now honor their respective parameters that
   enable or disable path satisfiability checking. As discovered in #2740, these
   parameters had been ignored.

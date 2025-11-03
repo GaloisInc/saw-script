@@ -1,3 +1,6 @@
  Loading file "parser006.saw"
- Parse error at parser006.saw:3:5-3:15: Unexpected `rebindable'
+ Stack trace:
+   (builtin) (at top level)
+Parse error at parser006.saw:3:5-3:15: Unexpected `rebindable'
+
 FAILED

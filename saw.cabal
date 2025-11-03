@@ -88,6 +88,7 @@ library saw-support
     SAWSupport.PanicSupport
     SAWSupport.Pretty
     SAWSupport.ScopedMap
+    SAWSupport.Trie
   other-modules:
     SAWSupport.Panic
 
@@ -626,7 +627,7 @@ library saw-script
     extra,
     filepath,
     free,
-    haskeline,
+    haskeline >= 0.8.0.0,
     IfElse,
     lens,
     mtl >= 2.1,
@@ -667,9 +668,9 @@ library saw-script
     SAWScript.AutoMatch.LLVM
     SAWScript.AutoMatch.JVM
     SAWScript.AutoMatch.Util
-    SAWScript.Import
     SAWScript.Interpreter
     SAWScript.Lexer
+    SAWScript.Loader
     SAWScript.Parser
     SAWScript.Search
     SAWScript.Token
@@ -678,10 +679,10 @@ library saw-script
 
     SAWScript.REPL
     SAWScript.REPL.Command
+    SAWScript.REPL.Data
     SAWScript.REPL.Haskeline
     SAWScript.REPL.Logo
     SAWScript.REPL.Monad
-    SAWScript.REPL.Trie
   other-modules:
     SAWScript.Panic
 

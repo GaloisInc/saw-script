@@ -48,6 +48,8 @@ module SAWCentral.Value (
     -- used by SAWCentral.Builtins, SAWScript.ValueOps, SAWScript.Interpreter,
     -- SAWScript.REPL.Command, SAWScript.REPL.Monad, SAWServer.SAWServer
     Environ(..),
+    -- used by SAWScript.Import
+    RebindableEnv,
     -- used by SAWScript.Interpreter
     pushScope, popScope,
     -- used by SAWCentral.Builtins, SAWScript.ValueOps, SAWScript.Interpreter,
@@ -73,6 +75,8 @@ module SAWCentral.Value (
     rwSetCryptolEnvStack,
     -- used by SAWScript.REPL.Monad, SAWServer.SAWServer, SAWServer.Yosys
     rwModifyCryptolEnv,
+    -- used by SAWScript.Interpreter, and implicitly by SAWScript.REPL and Main
+    TopLevelShellHook, ProofScriptShellHook,
     -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
     --    SAWServer.SAWServer
     TopLevelRO(..),
@@ -942,6 +946,17 @@ cryptolPop (CryptolEnvStack _ ces) =
         [] -> panic "cryptolPop" ["Cryptol environment scope stack ran out"]
         ce : ces' -> CryptolEnvStack ce ces'
 
+-- | Type for the function to start a new REPL in TopLevel.
+--
+--   Passed down from the REPL code to avoid circular references.
+type TopLevelShellHook = TopLevelRO -> TopLevelRW -> IO TopLevelRW
+
+-- | Type for the function to start a new REPL in ProofScript.
+--
+--   Passed down from the REPL code to avoid circular references.
+type ProofScriptShellHook =
+    TopLevelRO -> TopLevelRW -> ProofState ->
+    IO (TopLevelRW, ProofState)
 
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
@@ -952,12 +967,12 @@ data TopLevelRO =
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: SAWSimpset
-  , roSubshell      :: TopLevel ()
+  , roSubshell      :: TopLevelShellHook
     -- ^ An action for entering a subshell.  This
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)
 
-  , roProofSubshell :: ProofScript ()
+  , roProofSubshell :: ProofScriptShellHook
     -- ^ An action for entering a subshell in proof mode.  This
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)
