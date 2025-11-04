@@ -607,7 +607,7 @@ showTypeDetails ty =
         show pos ++ ": The type " ++ pShow ty ++ " arises from " ++ what
   in
   case getPos ty of
-    PosInferred InfFresh pos -> pr pos "fresh type variable introduced here"
+    PosInferred InfFresh pos -> pr pos "a fresh type variable introduced here"
     PosInferred InfTerm pos -> pr pos "the type of this term"
     PosInferred InfContext pos -> pr pos "the context of the term"
     pos -> pr pos "this type annotation"
@@ -641,7 +641,9 @@ ppFailMGU (FailMGU start eflines lastfunlines) =
 -- We've found a substitution for unification var i.
 --
 -- Create the substitution, but first check that this doesn't result
--- in an invalid type.
+-- in an invalid type. If it does, return Nothing. The caller handles
+-- reporting the problem because we don't quite have enough context
+-- here to do an adequate job.
 --
 -- Does not handle the case where t _is_ TyUnifyVar i; the caller
 -- handles that.
@@ -650,16 +652,11 @@ ppFailMGU (FailMGU start eflines lastfunlines) =
 -- fine as far as it goes but there doesn't seem to be any logic to
 -- prohibit also resolving TyUnifyVar j to TyUnifyVar i and creating
 -- cycles.
-resolveUnificationVar :: Pos -> TypeIndex -> Type -> Either FailMGU Subst
-resolveUnificationVar pos i t =
-  case Map.lookup i $ unifyVars t of
-     Just otherpos ->
-       -- FIXME/XXX: this error message is better than the one that was here before
-       -- but still lacks a certain something
-       failMGU' $ "Occurs check failure: the type at " ++ show otherpos ++
-                  " appears within the type at " ++ show pos
-     Nothing ->
-       return (singletonSubst i t)
+resolveUnificationVar :: TypeIndex -> Type -> Maybe Subst
+resolveUnificationVar i t2 =
+  case Map.lookup i $ unifyVars t2 of
+     Just _otherpos -> Nothing
+     Nothing -> Just $ singletonSubst i t2
 
 -- Guts of unification.
 --
@@ -675,13 +672,29 @@ mgu t1 t2 = case (t1, t2) of
       -- same unification var, nothing to do
       return emptySubst
 
-  (TyUnifyVar pos i, _) ->
+  (TyUnifyVar _ i, _) ->
       -- one side is a unification var, resolve it
-      resolveUnificationVar pos i t2
+      case resolveUnificationVar i t2 of
+          Just someSubst -> return someSubst
+          Nothing -> do
+              let t1' = pShow t1
+                  t2' = pShow t2
+              let msg = "Occurs check failure: cannot unify " ++ t1' ++
+                        " with " ++ t2' ++ " because " ++ t1' ++
+                        " appears within " ++ t2'
+              failMGU msg t1 t2
 
-  (_, TyUnifyVar pos i) ->
-      -- one side is a unification var, resolve it
-      resolveUnificationVar pos i t1
+  (_, TyUnifyVar _ i) ->
+      -- the other side is a unification var, resolve it
+      case resolveUnificationVar i t1 of
+          Just someSubst -> return someSubst
+          Nothing -> do
+              let t1' = pShow t1
+                  t2' = pShow t2
+              let msg = "Occurs check failure: cannot unify " ++ t1' ++
+                        " with " ++ t2' ++ " because " ++ t2' ++
+                        " appears within " ++ t1'
+              failMGU msg t1 t2
 
   (TyRecord _ ts1, TyRecord _ ts2)
     | Map.keys ts1 /= Map.keys ts2 ->
