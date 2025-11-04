@@ -25,8 +25,6 @@ module SAWCore.SCTypeCheck
   , throwTCError
   , TCM
   , runTCM
-  , withVar
-  , withCtx
   , rethrowTCError
   , withEmptyTCState
   , atPos
@@ -99,23 +97,6 @@ runTCM ::
 runTCM (TCM m) sc =
   runExceptT $ evalStateT (runReaderT m sc) IntMap.empty
 
--- | Run a type-checking computation in a typing context extended with a new
--- variable with the given type. This throws away the memoization table while
--- running the sub-computation, as memoization tables are tied to specific sets
--- of bindings.
---
--- NOTE: the type given for the variable should be in WHNF, so that we do not
--- have to normalize the types of variables each time we see them.
-withVar :: VarName -> Term -> TCM a -> TCM a
-withVar x tp m =
-  rethrowTCError (ErrorCtx (vnName x) tp) $
-  withEmptyTCState m
-
--- | Run a type-checking computation in a typing context extended by a list of
--- variables and their types. See 'withVar'.
-withCtx :: [(VarName, Term)] -> TCM a -> TCM a
-withCtx = flip (foldr (\(x,tp) -> withVar x tp))
-
 -- | Augment and rethrow any 'TCError' thrown by the given computation.
 rethrowTCError :: (MonadError TCError m) => (TCError -> TCError) -> m a -> m a
 rethrowTCError f m = catchError m (throwError . f)
@@ -186,7 +167,6 @@ data TCError
   | MalformedRecursor NameInfo Sort String
   | DeclError Text String
   | ErrorPos Pos TCError
-  | ErrorCtx LocalName Term TCError
   | ErrorTerm Term TCError
   | ExpectedRecursor SC.Term
 
@@ -195,16 +175,16 @@ data TCError
 throwTCError :: (MonadError TCError m) => TCError -> m a
 throwTCError e = throwError e
 
-type PPErrM = Reader ([LocalName], Maybe Pos)
+type PPErrM = Reader (Maybe Pos)
 
 -- | Pretty-print a type-checking error
 prettyTCError :: TCError -> [String]
-prettyTCError e = runReader (helper e) ([], Nothing) where
+prettyTCError e = runReader (helper e) Nothing where
 
   ppWithPos :: [PPErrM String] -> PPErrM [String]
   ppWithPos str_ms =
     do strs <- mapM id str_ms
-       (_, maybe_p) <- ask
+       maybe_p <- ask
        case maybe_p of
          Just p -> return (ppPos p : strs)
          Nothing -> return strs
@@ -256,9 +236,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (DeclError nm reason) =
     ppWithPos [ return ("Malformed declaration for " ++ show nm), return reason ]
   helper (ErrorPos p err) =
-    local (\(ctx,_) -> (ctx, Just p)) $ helper err
-  helper (ErrorCtx x _ err) =
-    local (\(ctx,p) -> (x:ctx, p)) $ helper err
+    local (\_ -> Just p) $ helper err
   helper (ErrorTerm tm err) = do
     info <- ppWithPos [ return ("While typechecking term:")
                       , ishow tm ]
@@ -274,7 +252,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   ishow :: Term -> PPErrM String
   ishow tm =
     -- return $ show tm
-    (\(_ctx,_) -> indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm) <$> ask
+    pure $ indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm
 
   sortSuffix :: Sort -> String
   sortSuffix s =
@@ -366,11 +344,11 @@ instance TypeInfer (TermF Term) where
            inferTermF (App t1t t2t)
       Lambda x t1 t2 ->
         do t1t <- typeInferComplete t1
-           t2t <- withVar x (SC.rawTerm t1t) $ typeInferComplete t2
+           t2t <- typeInferComplete t2
            inferTermF (Lambda x t1t t2t)
       Pi x t1 t2 ->
         do t1t <- typeInferComplete t1
-           t2t <- withVar x (SC.rawTerm t1t) $ typeInferComplete t2
+           t2t <- typeInferComplete t2
            inferTermF (Pi x t1t t2t)
       Constant nm ->
         do inferTermF (Constant nm)
@@ -537,13 +515,13 @@ checkSubtype arg req_tp =
 isSubtype :: Term -> Term -> TCM Bool
 isSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi x2 a2 b2)
   | x1 == x2 =
-    (&&) <$> areConvertible a1 a2 <*> withVar x1 a1 (isSubtype b1 b2)
+    (&&) <$> areConvertible a1 a2 <*> isSubtype b1 b2
   | otherwise =
     do conv1 <- areConvertible a1 a2
        var1 <- liftTCM scVariable x1 a1
        let sub = IntMap.singleton (vnIndex x2) var1
        b2' <- liftTCM scInstantiate sub b2
-       conv2 <- withVar x1 a1 (isSubtype b1 b2')
+       conv2 <- isSubtype b1 b2'
        pure (conv1 && conv2)
 isSubtype (asSort -> Just s1) (asSort -> Just s2) | s1 <= s2 = return True
 isSubtype t1' t2' = areConvertible t1' t2'

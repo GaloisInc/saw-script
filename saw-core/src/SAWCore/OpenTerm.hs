@@ -38,10 +38,8 @@ can be built with the 'OpenTerm' expression
 > lambdaOpenTerm "x" (globalOpenTerm "Prelude.Bool") $ \x ->
 > applyOpenTerm f x
 
-Existing SAW core 'Term's can be used in 'OpenTerm' by applying 'closedOpenTerm'
-if the 'Term' is closed (meaning it has no free variables) or 'openOpenTerm' if
-it does, where the latter requires the context of free variables to be
-specified. At the top level, 'completeOpenTerm' then "completes" an 'OpenTerm'
+Existing SAW core 'Term's can be used in 'OpenTerm' by applying 'mkOpenTerm'.
+At the top level, 'completeOpenTerm' then "completes" an 'OpenTerm'
 by running its underlying 'IO' computation to build and type-check the resulting
 SAW core 'Term'.
 -}
@@ -50,7 +48,7 @@ module SAWCore.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  closedOpenTerm, openOpenTerm, failOpenTerm,
+  mkOpenTerm, failOpenTerm,
   bindTCMOpenTerm, bindPPOpenTerm, openTermType,
   flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
@@ -117,19 +115,8 @@ completeOpenTermType sc (OpenTerm termM) =
   runTCM (SC.rawType <$> termM) sc
 
 -- | Embed a closed 'Term' into an 'OpenTerm'
-closedOpenTerm :: Term -> OpenTerm
-closedOpenTerm t = OpenTerm $ typeInferComplete t
-
--- | Embed a 'Term' in the given typing context into an 'OpenTerm'
-openOpenTerm :: [(VarName, Term)] -> Term -> OpenTerm
-openOpenTerm ctx t =
-  -- Extend the local type-checking context, wherever this OpenTerm gets used,
-  -- by appending ctx to the end, so that variables 0..length ctx-1 all get
-  -- type-checked with ctx. If these are really the only free variables, then it
-  -- won't matter what the rest of the ambient context is.
-  --
-  -- FIXME: we should check that the free variables of t are all < length ctx
-  OpenTerm $ withCtx ctx $ typeInferComplete t
+mkOpenTerm :: Term -> OpenTerm
+mkOpenTerm t = OpenTerm $ typeInferComplete t
 
 -- | Build an 'OpenTerm' that 'fail's in the underlying monad when completed
 failOpenTerm :: String -> OpenTerm

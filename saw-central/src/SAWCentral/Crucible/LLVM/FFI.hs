@@ -165,7 +165,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
           ffiArgTypes
         (llvmOutArgs, post) <- setupRet tenv ffiRetType
         llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)
-        post $ applyOpenTermMulti (closedOpenTerm appTerm) cryArgs
+        post $ applyOpenTermMulti (mkOpenTerm appTerm) cryArgs
       Just (CallAbstract (FFIFunType{})) ->
         -- CallAbstract uses ordinary Cryptol types instead of FFIType,
         -- and while the logic above might be generalized to support that
@@ -209,7 +209,7 @@ mkSizeArg tyArgTerm = do
   -}
   openToSetupTerm $
     applyGlobalOpenTerm "Cryptol.ecNumber"
-      [ closedOpenTerm tyArgTerm
+      [ mkOpenTerm tyArgTerm
       , vectorTypeOpenTerm sizeBitSize boolTypeOpenTerm
       , applyGlobalOpenTerm "Cryptol.PLiteralSeqBool"
           [ctorOpenTerm "Cryptol.TCNum" [sizeBitSize]]
@@ -580,7 +580,7 @@ openToSetupTerm :: Ctx => OpenTerm -> IO (AllLLVM SetupValue)
 openToSetupTerm openTerm = anySetupTerm <$> openToTypedTerm openTerm
 
 typedToOpenTerm :: TypedTerm -> OpenTerm
-typedToOpenTerm = closedOpenTerm . ttTerm
+typedToOpenTerm = mkOpenTerm . ttTerm
 
 lll :: TopLevel a -> LLVMCrucibleSetupM a
 lll x = LLVMCrucibleSetupM $ lift $ lift x

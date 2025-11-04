@@ -481,16 +481,9 @@ matchPiWithNames (var : vars) tp =
          pure ((var, vn, arg_tp) : ctx, body)
 
 -- | Run a type-checking computation in a typing context extended with a new
--- variable with the given type. This throws away the memoization table while
--- running the sub-computation, as memoization tables are tied to specific sets
--- of bindings.
---
--- NOTE: the type given for the variable should be in WHNF, so that we do not
--- have to normalize the types of variables each time we see them.
+-- variable with the given name and type.
 withVar :: LocalName -> VarName -> Term -> CheckM a -> CheckM a
 withVar x vn tp m =
-  TC.rethrowTCError (ErrorCtx x tp) $
-  TC.withEmptyTCState $
   local (\env -> env { tcLocals = Map.insert x (vn, tp) (tcLocals env) }) m
 
 -- | Run a type-checking computation in a typing context extended by a list of
