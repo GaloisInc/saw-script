@@ -222,11 +222,11 @@ instance Positioned Decl where
 
 -- Type Level {{{
 
+-- | Type for the hardwired monad types. Note that these days the
+--   @LLVMSetup@, @JVMSetup@, and @MIRSetup@ monad types are ordinary
+--   abstract types defined in the builtin types list.
 data Context
-  = JavaSetup
-  | LLVMSetup
-  | MIRSetup
-  | ProofScript
+  = ProofScript
   | TopLevel
   deriving (Eq, Ord, Show)
 
@@ -482,9 +482,6 @@ instance PPS.PrettyPrec TyCon where
 
 instance PPS.PrettyPrec Context where
   prettyPrec _ c = case c of
-    JavaSetup    -> "JavaSetup"
-    LLVMSetup    -> "LLVMSetup"
-    MIRSetup     -> "MIRSetup"
     ProofScript  -> "ProofScript"
     TopLevel     -> "TopLevel"
 

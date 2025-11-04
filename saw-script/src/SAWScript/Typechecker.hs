@@ -1327,15 +1327,28 @@ addTypedef a ty = do
 --    monadType (TopLevel Int) gives Just (TopLevel, Int)
 --    monadType Int gives Nothing
 --
-monadType  :: Type -> Maybe (Type, Type)
+monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
   TyCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
       Just (ctx, valty)
-  -- We don't currently ever generate this type, but be future-proof
+  TyCon _ BlockCon [ctx@(TyVar _ name), valty] | isMonad name ->
+      Just (ctx, valty)
+  -- We don't currently ever generate these types, but be future-proof
   TyCon pos (ContextCon ctx) [valty] ->
       Just (TyCon pos (ContextCon ctx) [], valty)
+  -- and this one can't even be represented yet
+--TyVar pos name [valty] | isMonad name ->
+--    Just (TyVar pos name, valty)
   _ ->
       Nothing
+  where
+    -- Baking in these strings is untidy. I'd worry more about it if
+    -- this code were being used for real rather than as part of a
+    -- temporary accomodation for compatibility purposes.
+    isMonad "LLVMSetup" = True
+    isMonad "JVMSetup" = True
+    isMonad "MIRSetup" = True
+    isMonad _ = False
 
 -- wrap an expression in "return"
 wrapReturn :: Expr -> Expr
@@ -1988,7 +2001,6 @@ checkStmt avail env tenv ctx stmt =
         cname = case ctx of
             TopLevel -> ContextName pos "<toplevel>"
             ProofScript -> ContextName pos "<proofscript>"
-            _ -> panic "checkStmt" ["Invalid monad context " <> Text.pack (pShow ctx)]
         ctxtype = TyCon pos (ContextCon ctx) []
     in
     evalTIWithEnv avail env tenv (inferSingleStmt cname pos ctxtype stmt)
