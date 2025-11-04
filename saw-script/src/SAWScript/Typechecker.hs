@@ -26,7 +26,7 @@ import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
 import qualified Data.Text as Text
-import Data.List (genericTake)
+import Data.List (genericTake, genericLength)
 import Data.Either (partitionEithers)
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -1799,8 +1799,8 @@ checkType kind ty = case ty of
   TyCon pos tycon args -> do
       -- First, look up the constructor.
       let params = lookupTyCon tycon
-      let nparams = length params
-          nargs = length args
+      let nparams = genericLength params
+          nargs = genericLength args
           argsleft = kindNumArgs kind
 
       -- XXX: the failures are all currently unreachable, because the

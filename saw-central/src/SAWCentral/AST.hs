@@ -44,6 +44,7 @@ import qualified SAWSupport.Pretty as PPS (PrettyPrec(..), prettyTypeSig, commaS
 import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
 
 import Data.Text (Text)
+import Data.List (genericReplicate)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -320,7 +321,7 @@ data NamedType = ConcreteType Type | AbstractType Kind
 -- representation easily enough.
 --
 
-newtype Kind = Kind { kindNumArgs :: Int }
+newtype Kind = Kind { kindNumArgs :: Word }
   deriving Eq
 
 kindStar :: Kind
@@ -336,7 +337,7 @@ kindStar = Kind 0
 
 instance PPS.PrettyPrec Kind where
   prettyPrec _ (Kind n) =
-     PP.viaShow $ intercalate " -> " $ take (n + 1) $ repeat "*"
+     PP.viaShow $ intercalate " -> " $ genericReplicate (n + 1) "*"
 
 
 -- }}}
