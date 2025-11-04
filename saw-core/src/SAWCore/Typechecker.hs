@@ -109,21 +109,19 @@ inferApplyAll t (arg:args) =
   do app1 <- typeInferComplete (App t arg)
      inferApplyAll app1 args
 
--- | Resolve a name in the current module and apply it to some arguments
-inferResolveNameApp :: Text -> [SC.Term] -> CheckM SC.Term
-inferResolveNameApp n args =
+-- | Resolve a name.
+inferResolveName :: Text -> CheckM SC.Term
+inferResolveName n =
   do nctx <- askLocals
      mnm <- getModuleName
      mm <- lift $ TC.liftTCM scGetModuleMap
      let ident = mkIdent mnm n
      case (Map.lookup n nctx, resolveNameInMap mm ident) of
        (Just (vn, tp), _) ->
-         do t <- typeInferComplete (Variable vn tp)
-            inferApplyAll t args
+         typeInferComplete (Variable vn tp)
        (_, Just rn) ->
          do let c = resolvedNameName rn
-            t <- typeInferComplete (Constant c :: TermF SC.Term)
-            inferApplyAll t args
+            typeInferComplete (Constant c :: TermF SC.Term)
        (Nothing, Nothing) ->
          throwTCError $ UnboundName n
 
@@ -166,11 +164,13 @@ typeInferCompleteTerm :: Un.UTerm -> CheckM SC.Term
 
 -- Names
 typeInferCompleteTerm (matchAppliedName -> Just (n, args)) =
-  mapM typeInferCompleteUTerm args >>= inferResolveNameApp n
+  do t <- inferResolveName n
+     ts <- traverse typeInferCompleteUTerm args
+     inferApplyAll t ts
 typeInferCompleteTerm (Un.Name (PosPair _ n)) =
   -- NOTE: this is actually covered by the previous case, but we put it here
   -- so GHC doesn't complain about coverage
-  inferResolveNameApp n []
+  inferResolveName n
 
 -- Sorts
 typeInferCompleteTerm (Un.Sort _ srt h) =
