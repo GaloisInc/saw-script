@@ -2439,14 +2439,14 @@ primTypes = Map.fromList
   , abstype "FunctionProfile" Experimental
   , abstype "FunctionSkeleton" Experimental
   , abstype "Ghost" Current
-  , abstype "JVMSetup" Current
+  , abstype' SS.kindStar "JVMSetup" Current  -- prep for fixing #2764
   , abstype "JVMValue" Current
   , abstype "JavaClass" Current
   , abstype "JavaType" Current
-  , abstype "LLVMSetup" Current
+  , abstype' SS.kindStar "LLVMSetup" Current  -- prep for fixing #2764
   , abstype "LLVMModule" Current
   , abstype "LLVMType" Current
-  , abstype "MIRSetup" Current
+  , abstype' SS.kindStar "MIRSetup" Current  -- prep for fixing #2764
   , abstype "MIRAdt" Experimental
   , abstype "MIRModule" Experimental
   , abstype "MIRType" Experimental
@@ -2463,14 +2463,18 @@ primTypes = Map.fromList
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
-    -- abstract type
-    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
-    abstype name lc = (name, info)
+    -- abstract type of arbitrary kind
+    abstype' :: SS.Kind -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype' kind name lc = (name, info)
       where
         info = PrimType
-          { primTypeType = SS.AbstractType
+          { primTypeType = SS.AbstractType kind
           , primTypeLife = lc
           }
+
+    -- abstract type of kind *
+    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype name lc = abstype' SS.kindStar name lc
 
     -- concrete type (not currently used)
     _conctype :: Text -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)

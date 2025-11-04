@@ -97,7 +97,7 @@ instance SubstituteTyVars Type where
                         "Lifecycle setting: " <> Text.pack (show lc)
                     ]
                 else case expansion of
-                    AbstractType -> ty
+                    AbstractType _kind  -> ty
                     ConcreteType ty' -> ty'
 
 --
@@ -135,7 +135,7 @@ instance SubstituteTyVars' Type where
                         "Lifecycle setting: " <> Text.pack (show lc)
                     ]
                 else case expansion of
-                    AbstractType -> ty
+                    AbstractType _kind -> ty
                     ConcreteType ty' -> ty'
 
 -- }}}
