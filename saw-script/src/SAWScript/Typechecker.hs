@@ -840,38 +840,46 @@ matches t1 t2 = do
 --    let f (x: a) = \(y: b) -> (a, b)
 --
 -- We extract the type variables with the position of their
--- initial mention.
+-- initial mention, and the kind that appears to apply.
+--
+-- If the kind usage is inconsistent, the declaration involved will
+-- fail kind-checking downstream. So it doesn't matter which of the
+-- multiple usages we return, and we'll leave that unspecified.
 
 -- Get the free type variables found in a Type.
-inspectTypeFTVs :: Type -> TI (Map Name Pos)
-inspectTypeFTVs ty = case ty of
-    TyCon _pos _ctor args -> Map.unions <$> mapM inspectTypeFTVs args
-    TyRecord _pos fields -> Map.unions <$> traverse inspectTypeFTVs fields
-    TyUnifyVar _pos _x -> return Map.empty
+inspectTypeFTVs :: Kind -> Type -> TI (Map Name (Pos, Kind))
+inspectTypeFTVs kind ty = case ty of
+    TyCon _pos ctor args -> do
+        let kinds = lookupTyCon ctor
+        Map.unions <$> zipWithM inspectTypeFTVs kinds args
+    TyRecord _pos fields ->
+        Map.unions <$> traverse (inspectTypeFTVs kindStar) fields
+    TyUnifyVar _pos _x ->
+        return Map.empty
     TyVar pos x -> do
         tyenv <- gets tyEnv
         case Map.lookup x tyenv of
-            Nothing -> return $ Map.singleton x pos
+            Nothing -> return $ Map.singleton x (pos, kind)
             Just _ -> return $ Map.empty
 
 -- Get the free type variables found in a Maybe Type.
-inspectMaybeTypeFTVs :: Maybe Type -> TI (Map Name Pos)
-inspectMaybeTypeFTVs mty = case mty of
+inspectMaybeTypeFTVs :: Kind -> Maybe Type -> TI (Map Name (Pos, Kind))
+inspectMaybeTypeFTVs kind mty = case mty of
     Nothing -> return Map.empty
-    Just ty -> inspectTypeFTVs ty
+    Just ty -> inspectTypeFTVs kind ty
 
 -- Get the free type variables found in a Pattern.
-inspectPatternFTVs :: Pattern -> TI (Map Name Pos)
+inspectPatternFTVs :: Pattern -> TI (Map Name (Pos, Kind))
 inspectPatternFTVs pat = case pat of
-    PWild _pos mty -> inspectMaybeTypeFTVs mty
-    PVar _allpos _xpos _x mty -> inspectMaybeTypeFTVs mty
+    PWild _pos mty -> inspectMaybeTypeFTVs kindStar mty
+    PVar _allpos _xpos _x mty -> inspectMaybeTypeFTVs kindStar mty
     PTuple _pos subpats ->
         Map.unions <$> mapM inspectPatternFTVs subpats
 
 -- Get the free type variables found in a chain of Lambda Exprs.
 -- Also return the body expression found on the inside of the chain
 -- for possible further analysis.
-inspectLambdaFTVs :: Expr -> TI (Expr, Map Name Pos)
+inspectLambdaFTVs :: Expr -> TI (Expr, Map Name (Pos, Kind))
 inspectLambdaFTVs e0 = case e0 of
     Lambda _fpos _mname pat e1 -> do
         hereFTVs <- inspectPatternFTVs pat
@@ -881,12 +889,12 @@ inspectLambdaFTVs e0 = case e0 of
         return (e0, Map.empty)
 
 -- Get the free type variables found in a Decl.
-inspectDeclFTVs :: Decl -> TI (Map Name Pos)
+inspectDeclFTVs :: Decl -> TI (Map Name (Pos, Kind))
 inspectDeclFTVs (Decl _dpos pat _mty e0) = do
     nameFTVs <- inspectPatternFTVs pat
     (e1, argFTVs) <- inspectLambdaFTVs e0
     retFTVs <- case e1 of
-        TSig _tspos _e2 ty -> inspectTypeFTVs ty
+        TSig _tspos _e2 ty -> inspectTypeFTVs kindStar ty
         _ -> return Map.empty
     return $ Map.unions [nameFTVs, argFTVs, retFTVs]
 
@@ -1002,10 +1010,12 @@ withDeclGroup (NonRecursive d) m = withDecl d m
 withDeclGroup (Recursive ds) m = foldr withDecl m ds
 
 -- Wrap the action m with some abstract type variables.
-withAbstractTyVars :: Map Name Pos -> Kind -> TI a -> TI a
-withAbstractTyVars vars kind m = do
-    let insertOne x _pos tyenv = Map.insert x (Current, AbstractType kind) tyenv
-        insertAll tyenv = Map.foldrWithKey insertOne tyenv vars
+withAbstractTyVars :: Map Name (Pos, Kind) -> TI a -> TI a
+withAbstractTyVars vars m = do
+    let insertOne x (_pos, kind) tyenv =
+            Map.insert x (Current, AbstractType kind) tyenv
+        insertAll tyenv =
+            Map.foldrWithKey insertOne tyenv vars
     tyenv <- gets tyEnv
     let tyenv' = insertAll tyenv
     modify (\rw -> rw { tyEnv = tyenv' })
@@ -1672,20 +1682,18 @@ inferDecl rebindable d@(Decl pos pat _ e) = do
 
     -- collect the free type variables
     foralls <- inspectDeclFTVs d
+    let foralls' = Map.map (\(typos, _kind) -> typos) foralls
 
     -- Add abstract type variables for the foralls while we check the body.
     -- Note: this is a variable declaration. It doesn't add types; the types
     -- get forall-bound in the type scheme by the `generalize` call.
-    --
-    -- XXX: for the moment assume all the vars should have kind *. Should
-    -- probably do some kind inference.
-    withAbstractTyVars foralls kindStar $ do
+    withAbstractTyVars foralls $ do
         -- Check the body and check the pattern against the body.
         (e', t) <- inferExpr (cname, e)
         pat' <- checkPattern rebindable cname t pat
 
         -- Use `generalize` to build the type scheme.
-        ~[(pat'', e1, s)] <- generalize foralls [pat'] [e'] [t]
+        ~[(pat'', e1, s)] <- generalize foralls' [pat'] [e'] [t]
 
         -- Return the updated `Decl`
         return (Decl pos pat'' (Just s) e1)
@@ -1714,13 +1722,11 @@ inferRecDecls ds = do
 
     -- Collect the free type variables.
     foralls <- Map.unions <$> mapM inspectDeclFTVs ds
+    let foralls' = Map.map (\(typos, _kind) -> typos) foralls
 
     -- Add abstract type variables for the foralls while we check the
     -- bodies.
-    --
-    -- XXX: for the moment assume all the vars should have kind *. Should
-    -- probably do some kind inference.
-    withAbstractTyVars foralls kindStar $ do
+    withAbstractTyVars foralls $ do
       -- Check the patterns first to get types.
       (_ts, pats') <- unzip <$> mapM (inferPattern cname ReadOnlyVar) pats
 
@@ -1740,7 +1746,7 @@ inferRecDecls ds = do
 
       -- Run generalize and get back a list of updated expressions and
       -- type schemes.
-      patetys <- generalize foralls pats' es tys
+      patetys <- generalize foralls' pats' es tys
 
       -- Generate the updated declarations.
       let rebuild pos (pat, e1, ty) = Decl pos pat (Just ty) e1
@@ -1779,18 +1785,13 @@ lookupTyCon tycon = case tycon of
     TypeCon -> []
     BoolCon -> []
     IntCon -> []
-    BlockCon -> [kindStar, kindStar]
+    BlockCon -> [kindStarToStar, kindStar]
     AIGCon -> []
     CFGCon -> []
     JVMSpecCon -> []
     LLVMSpecCon -> []
     MIRSpecCon -> []
-    ContextCon _ctx ->
-      -- XXX: while BlockCon exists, ContextCon has kind * and you
-      -- have to use BlockCon to paste a result type to a ContextCon.
-      -- (BlockCon should be removed. Then ContextCon has kind * -> *
-      -- like you'd expect.)
-      []
+    ContextCon _ctx -> [kindStar]
 
 -- Check a type for validity and also for having the
 -- correct kinding.
@@ -1802,12 +1803,6 @@ checkType kind ty = case ty of
       let nparams = genericLength params
           nargs = genericLength args
           argsleft = kindNumArgs kind
-
-      -- XXX: the failures are all currently unreachable, because the
-      -- parser does not permit writing mis-kinded types. This should
-      -- probably be changed, both for ergonomic reasons (messages
-      -- about wrong type arguments are better than syntax errors) and
-      -- also because all the special cases in the parser are ugly.
 
       if nargs > nparams then do
           -- XXX special case for BlockCon (remove along with BlockCon)
@@ -1834,8 +1829,6 @@ checkType kind ty = case ty of
           return $ TyCon pos tycon args'
 
   TyRecord pos fields -> do
-      -- XXX as with TyCon the failure is currently unreachable
-      -- because the parser can't be made to produce mis-kinded types.
       if kind /= kindStar then do
           recordError pos ("Kind mismatch: expected " ++ pShow kind ++
                            " but found " ++ pShow kindStar)

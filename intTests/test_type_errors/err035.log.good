@@ -1,12 +1,15 @@
  Loading file "err035.saw"
- err035.saw:7:26-7:35: Type mismatch.
+ Type errors:
+  err035.saw:5:9-5:19: Kind mismatch: expected "* -> *" but found "*"
+  err035.saw:5:26-5:35: Type mismatch.
     Mismatch of types.
-    err035.saw:7:9-7:23: The type {a : Int} Int arises from this type annotation
-    err035.saw:7:26-7:35: The type {a : Int} arises from the type of this term
+    err035.saw:5:9-5:23: The type t.0 Int arises from this type annotation
+    err035.saw:5:26-5:35: The type {a : Int} arises from the type of this term
 
-    Expected: {a : Int} Int
+    Expected: t.0 Int
     Found:    {a : Int}
 
-    within "x" (err035.saw:7:5-7:6)
+    within "x" (err035.saw:5:5-5:6)
+
 
 FAILED

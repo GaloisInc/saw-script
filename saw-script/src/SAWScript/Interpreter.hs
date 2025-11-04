@@ -2439,14 +2439,14 @@ primTypes = Map.fromList
   , abstype "FunctionProfile" Experimental
   , abstype "FunctionSkeleton" Experimental
   , abstype "Ghost" Current
-  , abstype' SS.kindStar "JVMSetup" Current  -- prep for fixing #2764
+  , abstype' SS.kindStarToStar "JVMSetup" Current
   , abstype "JVMValue" Current
   , abstype "JavaClass" Current
   , abstype "JavaType" Current
-  , abstype' SS.kindStar "LLVMSetup" Current  -- prep for fixing #2764
+  , abstype' SS.kindStarToStar "LLVMSetup" Current
   , abstype "LLVMModule" Current
   , abstype "LLVMType" Current
-  , abstype' SS.kindStar "MIRSetup" Current  -- prep for fixing #2764
+  , abstype' SS.kindStarToStar "MIRSetup" Current
   , abstype "MIRAdt" Experimental
   , abstype "MIRModule" Experimental
   , abstype "MIRType" Experimental
