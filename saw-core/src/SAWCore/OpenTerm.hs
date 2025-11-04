@@ -10,18 +10,15 @@ License     : BSD3
 Stability   : experimental
 Portability : non-portable (language extensions)
 
-This module defines an interface to building SAW core terms in an incrementally
-type-checked way, meaning that type-checking is performed as the terms are
-built. The interface provides a convenient DSL for building terms in a pure way,
-where sub-terms can be freely composed and combined into super-terms without
-monadic sequencing or 'IO' computations; the 'IO' computation is only run at the
-top level when all the term-building is complete. Users of this interface can
-also build binding constructs like lambda- and pi-abstractions without worrying
-about deBruijn indices, lifting, and free variables. Instead, a key feature of
-this interface is that it uses higher-order abstract syntax for lambda- and
-pi-abstractions, meaning that the bodies of these term constructs are specified
-as Haskell functions that take in terms for the bound variables. The library
-takes care of all the deBruijn indices under the hood.
+This module defines a convenient DSL for building terms in a pure way,
+where sub-terms can be freely composed and combined into super-terms
+without monadic sequencing or 'IO' computations; the 'IO' computation
+is only run at the top level when all the term-building is complete.
+
+Users of this interface can also build binding constructs like lambda-
+and pi-abstractions using higher-order abstract syntax, meaning that
+the bodies of these term constructs are specified as Haskell functions
+that take in terms for the bound variables.
 
 To use the 'OpenTerm' API, the caller builds up 'OpenTerm's using a variety of
 combinators that mirror the SAW core 'Term' structure. As some useful examples
