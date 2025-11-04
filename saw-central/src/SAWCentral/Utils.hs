@@ -55,7 +55,7 @@ mapInsertKeys keys val m = foldr (\i -> Map.insert i val) m keys
 mapLookupAny :: Ord k => [k] -> Map k a -> Maybe a
 mapLookupAny keys m = listToMaybe $ catMaybes $ map (\k -> Map.lookup k m) keys
 
--- ExecException {{{1
+-- ExecException
 
 -- | Class of exceptions thrown by SBV parser.
 data ExecException = ExecException Pos          -- Position
@@ -73,7 +73,7 @@ throwIOExecException site errorMsg resolution = liftIO $ throwIO (ExecException 
 throwExecException :: Pos -> Doc Void -> String -> m a
 throwExecException site errorMsg resolution = throw (ExecException site errorMsg resolution)
 
--- Timing {{{1
+-- Timing
 
 -- | Return a string representation of the elapsed time since start
 timeIt :: (NFData a, MonadIO m) => m a -> m (a, String)
@@ -99,7 +99,7 @@ showDuration n = printf "%02d:%s" m (show s)
         m :: Int
         m = floor ((toRational n) * (1 % 60))
 
--- Java lookup functions {{{1
+-- Java lookup functions
 
 -- | Atempt to find class with given name, or throw ExecException if no class
 -- with that name exists. Class name should be in slash-separated form.

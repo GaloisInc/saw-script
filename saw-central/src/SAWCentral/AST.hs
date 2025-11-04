@@ -57,7 +57,7 @@ import           Prettyprinter (Pretty)
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
 import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
 
--- Lifecycle / Deprecation {{{
+-- Lifecycle / Deprecation
 
 -- | Position in the life cycle of a primitive.
 data PrimitiveLifecycle
@@ -78,15 +78,13 @@ everythingAvailable = Set.fromList [minBound .. maxBound]
 defaultAvailable :: Set PrimitiveLifecycle
 defaultAvailable = Set.fromList [Current, WarnDeprecated]
 
--- }}}
 
--- Names {{{
+-- Names
 
 type Name = Text
 
--- }}}
 
--- Expr Level {{{
+-- Expr Level
 
 data Import = Import
   { iIsSubmodule :: Bool
@@ -221,9 +219,8 @@ data Decl
 instance Positioned Decl where
   getPos = dPos
 
--- }}}
 
--- Type Level {{{
+-- Type Level
 
 -- | Type for the hardwired monad types. Note that these days the
 --   @LLVMSetup@, @JVMSetup@, and @MIRSetup@ monad types are ordinary
@@ -305,10 +302,9 @@ data SchemaPattern = SchemaPattern [(Pos, Name)] [Type]
 -- carry the kind information.
 data NamedType = ConcreteType Type | AbstractType Kind
 
--- }}}
 
 ------------------------------------------------------------
--- Kinds {{{
+-- Kinds
 
 --
 -- For the time being we can handle kinds using the number of expected
@@ -339,10 +335,7 @@ instance PPS.PrettyPrec Kind where
      PP.viaShow $ intercalate " -> " $ genericReplicate (n + 1) "*"
 
 
--- }}}
-
-
--- Pretty Printing {{{
+-- Pretty Printing
 
 prettyWholeModule :: [Stmt] -> PP.Doc ann
 prettyWholeModule = (PP.<> PP.line') . vcatWithSemi . map PP.pretty
@@ -532,9 +525,8 @@ instance PPS.PrettyPrec NamedType where
     ConcreteType ty' -> PPS.prettyPrec par ty'
     AbstractType kind -> "<opaque " PP.<> PPS.prettyPrec 0 kind PP.<> ">"
 
--- }}}
 
--- Type Constructors {{{
+-- Type Constructors
 
 tMono :: Type -> Schema
 tMono = Forall []
@@ -596,9 +588,8 @@ tContext pos c = TyCon pos (ContextCon c) []
 tVar :: Pos -> Name -> Type
 tVar pos n = TyVar pos n
 
--- }}}
 
--- Type Classifiers {{{
+-- Type Classifiers
 
 -- The idea is that calling these is/should be less messy than direct
 -- pattern matching, and also help a little to avoid splattering the
@@ -612,5 +603,3 @@ isContext ::
 isContext c ty = case ty of
   TyCon _pos (ContextCon c') [] | c' == c -> True
   _ -> False
-
--- }}}

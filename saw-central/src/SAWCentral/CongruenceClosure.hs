@@ -47,7 +47,7 @@ import Data.Traversable
 import Prelude hiding (const, mapM)
 
 
--- Functor typeclass extensions {{{1
+-- Functor typeclass extensions
 
 class EqFoldable f where
   -- | Compares equality of arguments.
@@ -63,7 +63,7 @@ class ShowFoldable f where
   fshows :: Show x => f x -> ShowS
   fshows x = (fshow x ++)
 
--- Term {{{1
+-- Term
 
 -- | A term with the given operator.
 newtype Term f = Term { unTerm :: f (Term f) }
@@ -86,12 +86,12 @@ foldTerm :: Functor f => (f r -> r) -> Term f -> r
 foldTerm f = go
   where go (Term x) = f (fmap go x)
 
--- Class {{{1
+-- Class
 
 newtype Class = Class Integer
   deriving (Eq, Ord)
 
--- ClassApp {{{1
+-- ClassApp
 
 newtype ClassApp f = ClassApp (f Class)
 
@@ -101,7 +101,7 @@ instance EqFoldable f => Eq (ClassApp f) where
 instance OrdFoldable f => Ord (ClassApp f) where
   (ClassApp x) `compare` (ClassApp y) = x `fcompare` y
 
--- CCSet {{{1
+-- CCSet
 
 data CCSet f = CC {
          -- | Number of classes added so far.
@@ -201,7 +201,7 @@ fromList = foldl' (flip insertEquivalenceClass) empty
 toList :: OrdFoldable f => CCSet f -> [[Term f]]
 toList = map Set.toList . Set.toList . toSet
 
--- CCSet implementation {{{1
+-- CCSet implementation
 
 -- | Returns a class for term if one exists.
 getExistingClass :: (OrdFoldable f, Traversable f) => CCSet f -> Term f -> Maybe Class

@@ -21,7 +21,7 @@ import SAWCentral.Position
 import SAWCentral.AST
 
 ------------------------------------------------------------
--- NamedTyVars {{{
+-- NamedTyVars
 
 --
 -- namedTyVars is a type-class-polymorphic function for extracting named
@@ -52,7 +52,7 @@ instance NamedTyVars Schema where
 
 
 ------------------------------------------------------------
--- SubstituteTyVars {{{
+-- SubstituteTyVars
 
 --
 -- substituteTyVars is a typeclass-polymorphic function for
@@ -138,11 +138,9 @@ instance SubstituteTyVars' Type where
                     AbstractType _kind -> ty
                     ConcreteType ty' -> ty'
 
--- }}}
-
 
 ------------------------------------------------------------
--- Deprecation {{{
+-- Deprecation
 
 isDeprecated :: PrimitiveLifecycle -> Bool
 isDeprecated lc = case lc of
@@ -150,6 +148,3 @@ isDeprecated lc = case lc of
     WarnDeprecated -> True
     HideDeprecated -> True
     Experimental -> False
-
-
--- }}}

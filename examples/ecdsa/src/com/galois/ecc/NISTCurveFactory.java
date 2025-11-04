@@ -10,7 +10,7 @@ Copyright 2012 Galois, Inc.  All rights reserved.
 
 package com.galois.ecc;
 
-// NIST32 subclass {{{1
+// NIST32 subclass
 
 /**
  * Defines arithmetic routines for ECC over prime fields using only 32-bit
@@ -49,7 +49,7 @@ abstract class NIST32 extends ECCProvider {
     super.cleanup();
   }
 
-  // Bitvector operations {{{3
+  // Bitvector operations
   static final int INT_MASK = 0xFFFF;
 
   protected int add(int[] z, int[] x, int[] y) {
@@ -303,7 +303,7 @@ abstract class NIST32 extends ECCProvider {
     return c;
   }
 
-  // Underlying field operations {{{3
+  // Underlying field operations
 
   protected void field_mul(int[] z, int[] x, int[] y) {
     imul(a, 0, x, 0, y, 0, x.length);
@@ -315,7 +315,7 @@ abstract class NIST32 extends ECCProvider {
     field_red(z, a);
   }
 
-  // Group Field operations {{{3
+  // Group Field operations
 
   /**
    * Reduces bit vector (r + x * (2 ** 384)) modulo group_order
@@ -381,7 +381,7 @@ abstract class NIST32 extends ECCProvider {
   }
 }
 
-// NIST64 subclass {{{1
+// NIST64 subclass
 
 /**
  * Defines arithmetic routines for ECC over prime fields using a mix of
@@ -409,7 +409,7 @@ abstract class NIST64 extends ECCProvider {
     super.cleanup();
   }
 
-  // Bitvector operations {{{2
+  // Bitvector operations
 
   static final long LONG_MASK = 0xFFFFFFFFL;
 
@@ -564,7 +564,7 @@ abstract class NIST64 extends ECCProvider {
     return (int) b;
   }
 
-  // Underlying field operations {{{2
+  // Underlying field operations
 
   protected void field_mul(int[] z, int[] x, int[] y) {
     mul(a, x, y);
@@ -576,7 +576,7 @@ abstract class NIST64 extends ECCProvider {
     field_red(z, a);
   }
 
-  // Underlying group scalar operations {{{3
+  // Underlying group scalar operations
 
   private long group_red_aux(int[] r, int aj, int j, long c, long b) {
     long m = c * (aj & LONG_MASK);
@@ -645,7 +645,7 @@ abstract class NIST64 extends ECCProvider {
   }
 }
 
-// P384 specific constants {{{1
+// P384 specific constants
 
 /**
  * Defines constants for P384 curve used by both 32 and 64-bit implementations.
@@ -668,7 +668,7 @@ class P384Constants {
       0x289a147c, 0xf8f41dbd, 0x9292dc29, 0x5d9e98bf, 0x96262c6f, 0x3617de4a });
 }
 
-// P384ECC32 subclass {{{1
+// P384ECC32 subclass
 class P384ECC32 extends NIST32 {
 
   P384ECC32() {
@@ -884,7 +884,7 @@ class P384ECC32 extends NIST32 {
   }
 }
 
-// P384ECC64 subclass {{{1
+// P384ECC64 subclass
 class P384ECC64 extends NIST64 {
   P384ECC64() {
     super(12,
@@ -1057,7 +1057,7 @@ class P384ECC64 extends NIST64 {
   }
 }
 
-// NISTCurveFactory {{{1
+// NISTCurveFactory
 
 /**
  * Provides static methods for constructing <code>ECCProviders</code>
