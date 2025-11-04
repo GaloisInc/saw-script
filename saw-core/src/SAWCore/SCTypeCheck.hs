@@ -25,7 +25,6 @@ module SAWCore.SCTypeCheck
   , throwTCError
   , TCM
   , runTCM
-  , askCtx
   , withVar
   , withCtx
   , rethrowTCError
@@ -45,7 +44,7 @@ import Control.Applicative
 import Control.Monad (forM_, mapM, unless, void)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
+import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
 import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 
 import Data.IntMap (IntMap)
@@ -80,16 +79,11 @@ import SAWCore.Term.Raw
 type TCState = IntMap SC.Term
 
 -- | The 'ReaderT' environment for a type-checking computation.
-data TCEnv =
-  TCEnv
-  { tcSharedContext :: SharedContext -- ^ the SAW context
-  , tcCtx :: IntMap Term             -- ^ the type environment for variables
-  }
+type TCEnv = SharedContext
 
 -- | The monad for type checking and inference, which:
 --
--- * Maintains a 'SharedContext' and a variable context, where the
---   latter assigns types to the deBruijn indices in scope;
+-- * Maintains a 'SharedContext';
 --
 -- * Memoizes the most general type inferred for each expression; AND
 --
@@ -101,13 +95,9 @@ newtype TCM a = TCM (ReaderT TCEnv (StateT TCState (ExceptT TCError IO)) a)
 -- | Run a type-checking computation in a given context, starting from the empty
 -- memoization table
 runTCM ::
-  TCM a -> SharedContext -> IntMap Term -> IO (Either TCError a)
-runTCM (TCM m) sc ctx =
-  runExceptT $ evalStateT (runReaderT m (TCEnv sc ctx)) IntMap.empty
-
--- | Read the current typing context
-askCtx :: TCM (IntMap Term)
-askCtx = asks tcCtx
+  TCM a -> SharedContext -> IO (Either TCError a)
+runTCM (TCM m) sc =
+  runExceptT $ evalStateT (runReaderT m sc) IntMap.empty
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given type. This throws away the memoization table while
@@ -119,8 +109,7 @@ askCtx = asks tcCtx
 withVar :: VarName -> Term -> TCM a -> TCM a
 withVar x tp m =
   rethrowTCError (ErrorCtx (vnName x) tp) $
-  withEmptyTCState $
-  local (\env -> env { tcCtx = IntMap.insert (vnIndex x) tp (tcCtx env) }) m
+  withEmptyTCState m
 
 -- | Run a type-checking computation in a typing context extended by a list of
 -- variables and their types. See 'withVar'.
@@ -171,7 +160,7 @@ class LiftTCM a where
 instance LiftTCM (IO a) where
   type TCMLifted (IO a) = TCM a
   liftTCM f =
-    do sc <- asks tcSharedContext
+    do sc <- ask
        liftIO (f sc)
 
 instance LiftTCM b => LiftTCM (a -> b) where
@@ -306,14 +295,7 @@ scTypeCheckError sc t0 =
 -- well-formed and that all internal type annotations are correct. Types are
 -- evaluated to WHNF as necessary, and the returned type is in WHNF.
 scTypeCheck :: TypeInfer a => SharedContext -> a -> IO (Either TCError Term)
-scTypeCheck sc = scTypeCheckInCtx sc IntMap.empty
-
--- | Like 'scTypeCheck', but type-check the term relative to a typing context,
--- which assigns types to free variables in the term
-scTypeCheckInCtx ::
-  TypeInfer a => SharedContext ->
-  IntMap Term -> a -> IO (Either TCError Term)
-scTypeCheckInCtx sc ctx t0 = runTCM (typeInfer t0) sc ctx
+scTypeCheck sc t0 = runTCM (typeInfer t0) sc
 
 -- | Infer the type of an @a@ and complete it to a term using
 -- 'scTypeCheckComplete', calling 'fail' on failure
@@ -329,22 +311,14 @@ scTypeCheckCompleteError sc t0 =
 -- returned type is in WHNF, though the returned term may not be.
 scTypeCheckComplete ::
   TypeInfer a => SharedContext -> a -> IO (Either TCError SC.Term)
-scTypeCheckComplete sc = scTypeCheckCompleteInCtx sc IntMap.empty
-
--- | Like 'scTypeCheckComplete', but type-check the term relative to a typing
--- context, which assigns types to free variables in the term
-scTypeCheckCompleteInCtx :: TypeInfer a => SharedContext ->
-                            IntMap Term -> a ->
-                            IO (Either TCError SC.Term)
-scTypeCheckCompleteInCtx sc ctx t0 =
-  runTCM (typeInferComplete t0) sc ctx
+scTypeCheckComplete sc t0 = runTCM (typeInferComplete t0) sc
 
 -- | Check that one type is a subtype of another using 'checkSubtype', calling
 -- 'fail' on failure
 scCheckSubtype :: SharedContext -> SC.Term -> Term -> IO ()
 scCheckSubtype sc arg req_tp =
   either (fail . unlines . prettyTCError) return =<<
-  runTCM (checkSubtype arg req_tp) sc IntMap.empty
+  runTCM (checkSubtype arg req_tp) sc
 
 -- | The class of things that we can infer types of. The 'typeInfer' method
 -- returns the most general (with respect to subtyping) type of its input.

@@ -108,13 +108,13 @@ newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SC.Term }
 completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
 completeOpenTerm sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (SC.rawTerm <$> termM) sc mempty
+  runTCM (SC.rawTerm <$> termM) sc
 
 -- | \"Complete\" an 'OpenTerm' to a closed term for its type
 completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
 completeOpenTermType sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (SC.rawType <$> termM) sc mempty
+  runTCM (SC.rawType <$> termM) sc
 
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm

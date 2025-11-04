@@ -12,7 +12,6 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Typechecker
   ( inferCompleteTerm
-  , inferCompleteTermCtx
   , tcInsertModule
   ) where
 
@@ -20,8 +19,6 @@ import Control.Monad (forM, forM_, mzero, void, unless)
 import Control.Monad.Trans.Maybe
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), asks, lift, local)
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -57,24 +54,15 @@ import qualified SAWCore.SCTypeCheck as TC
 
 import Debug.Trace
 
--- | Infer the type of an untyped term and complete it to a 'Term', all in the
--- empty typing context
-inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.UTerm ->
-                     IO (Either PPS.Doc Term)
-inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm IntMap.empty t
-
--- | Infer the type of an untyped term and complete it to a 'Term' in a given
--- typing context
-inferCompleteTermCtx ::
-  SharedContext -> Maybe ModuleName -> IntMap Term ->
-  Un.UTerm -> IO (Either PPS.Doc Term)
-inferCompleteTermCtx sc mnm ctx t =
-  do res <- runCheckM (typeInferCompleteUTerm t) sc mnm ctx
+-- | Infer the type of an untyped term and complete it to a 'Term'.
+inferCompleteTerm ::
+  SharedContext -> Maybe ModuleName -> Un.UTerm -> IO (Either PPS.Doc Term)
+inferCompleteTerm sc mnm t =
+  do res <- runCheckM (typeInferCompleteUTerm t) sc mnm
      case res of
        -- TODO: avoid intermediate 'String's from 'prettyTCError'
        Left err -> return $ Left $ vsep $ map pretty $ TC.prettyTCError err
        Right t' -> return $ Right $ SC.rawTerm t'
-
 
 -- | The 'ReaderT' environment for a computation to typecheck a
 -- SAWCore parser AST.
@@ -88,10 +76,9 @@ data CheckEnv =
 type CheckM = ReaderT CheckEnv TC.TCM
 
 runCheckM ::
-  CheckM a -> SharedContext -> Maybe ModuleName -> IntMap Term ->
-  IO (Either TC.TCError a)
-runCheckM m sc mnm ctx =
-  TC.runTCM (runReaderT m (CheckEnv mnm Map.empty)) sc ctx
+  CheckM a -> SharedContext -> Maybe ModuleName -> IO (Either TC.TCError a)
+runCheckM m sc mnm =
+  TC.runTCM (runReaderT m (CheckEnv mnm Map.empty)) sc
 
 -- | Read the current module name
 askModName :: CheckM (Maybe ModuleName)
@@ -465,7 +452,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
        unless i_exists $ fail $ "Imported module not found: " ++ show imn
        scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . Text.unpack) imn mnm
   -- Finally, process all the decls
-  decls_res <- runCheckM (processDecls decls) sc (Just mnm) IntMap.empty
+  decls_res <- runCheckM (processDecls decls) sc (Just mnm)
   case decls_res of
     Left err -> fail $ unlines $ TC.prettyTCError err
     Right _ -> return ()
