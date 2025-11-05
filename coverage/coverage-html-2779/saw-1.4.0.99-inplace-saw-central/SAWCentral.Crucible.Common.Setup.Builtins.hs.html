@@ -1,0 +1,174 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Crucible.Common.Builtins
+<span class="lineno">    3 </span>Description : User-facing operations in the CrucibleSetup monad
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : langston
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>{-# LANGUAGE DeriveTraversable #-}
+<span class="lineno">   10 </span>{-# LANGUAGE ParallelListComp #-}
+<span class="lineno">   11 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>module SAWCentral.Crucible.Common.Setup.Builtins
+<span class="lineno">   14 </span>  ( crucible_precond
+<span class="lineno">   15 </span>  , crucible_postcond
+<span class="lineno">   16 </span>  , crucible_return
+<span class="lineno">   17 </span>  , crucible_execute_func
+<span class="lineno">   18 </span>  , crucible_equal
+<span class="lineno">   19 </span>  , declare_unint
+<span class="lineno">   20 </span>  , CheckPointsToType(..)
+<span class="lineno">   21 </span>  ) where
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>import           Control.Lens
+<span class="lineno">   24 </span>import           Control.Monad (when)
+<span class="lineno">   25 </span>import           Control.Monad.State (get)
+<span class="lineno">   26 </span>import qualified Data.Map as Map
+<span class="lineno">   27 </span>import           Data.Set(Set)
+<span class="lineno">   28 </span>import qualified Data.Set as Set
+<span class="lineno">   29 </span>import           Data.Text(Text)
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import qualified What4.ProgramLoc as W4
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>import           SAWCore.Name(VarIndex)
+<span class="lineno">   34 </span>import           CryptolSAWCore.TypedTerm (TypedTerm)
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>import           SAWCentral.Value
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+<span class="lineno">   39 </span>import           SAWCentral.Crucible.Common.Setup.Type
+<span class="lineno">   40 </span>import           SAWCentral.Builtins(resolveNames)
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>--------------------------------------------------------------------------------
+<span class="lineno">   43 </span>-- ** Builtins
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>-- TODO: crucible_fresh_var?
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>-- | Declare a particular name as opaque
+<span class="lineno">   48 </span>declare_unint ::
+<span class="lineno">   49 </span>  String {- ^ Name of command for error messages -} -&gt;
+<span class="lineno">   50 </span>  Setter' (MS.CrucibleContext ext) (Set VarIndex) {-^ Keep uninterpreted names here -} -&gt;
+<span class="lineno">   51 </span>  [Text] {- ^ Names for the things to be left uninterpreted -} -&gt;
+<span class="lineno">   52 </span>  CrucibleSetup ext ()
+<span class="lineno">   53 </span><span class="decl"><span class="istickedoff">declare_unint cmd unintF names = </span>
+<span class="lineno">   54 </span><span class="spaces">  </span><span class="istickedoff">do</span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="istickedoff">prePost &lt;- use csPrePost</span>
+<span class="lineno">   56 </span><span class="spaces">    </span><span class="istickedoff">case prePost of</span>
+<span class="lineno">   57 </span><span class="spaces">      </span><span class="istickedoff">MS.PreState -&gt;</span>
+<span class="lineno">   58 </span><span class="spaces">        </span><span class="istickedoff">do</span>
+<span class="lineno">   59 </span><span class="spaces">          </span><span class="istickedoff">ns &lt;- crucibleSetupTopLevel (resolveNames names)</span>
+<span class="lineno">   60 </span><span class="spaces">          </span><span class="istickedoff">csCrucibleContext . unintF %= Set.union ns</span>
+<span class="lineno">   61 </span><span class="spaces">      </span><span class="istickedoff">MS.PostState -&gt;</span>
+<span class="lineno">   62 </span><span class="spaces">        </span><span class="istickedoff">fail (&quot;`&quot; ++ cmd ++ &quot;` works only in the pre-condition of a specification.&quot;)</span></span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>crucible_precond ::
+<span class="lineno">   65 </span>  W4.ProgramLoc -&gt;
+<span class="lineno">   66 </span>  TypedTerm -&gt;
+<span class="lineno">   67 </span>  CrucibleSetup ext ()
+<span class="lineno">   68 </span><span class="decl"><span class="istickedoff">crucible_precond loc p = do</span>
+<span class="lineno">   69 </span><span class="spaces">  </span><span class="istickedoff">st &lt;- get</span>
+<span class="lineno">   70 </span><span class="spaces">  </span><span class="istickedoff">tags &lt;- view croTags</span>
+<span class="lineno">   71 </span><span class="spaces">  </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno">   72 </span><span class="spaces">           </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
+<span class="lineno">   73 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionTags = tags</span>
+<span class="lineno">   74 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionType = &quot;specification assertion&quot;</span>
+<span class="lineno">   75 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionContext = &quot;&quot;</span>
+<span class="lineno">   76 </span><span class="spaces">           </span><span class="istickedoff">}</span>
+<span class="lineno">   77 </span><span class="spaces">  </span><span class="istickedoff">when (st ^. csPrePost == MS.PostState) $</span>
+<span class="lineno">   78 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail &quot;attempt to use `crucible_precond` in post state&quot;</span></span>
+<span class="lineno">   79 </span><span class="spaces">  </span><span class="istickedoff">addCondition (MS.SetupCond_Pred md p)</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>crucible_postcond ::
+<span class="lineno">   82 </span>  W4.ProgramLoc -&gt;
+<span class="lineno">   83 </span>  TypedTerm -&gt;
+<span class="lineno">   84 </span>  CrucibleSetup ext ()
+<span class="lineno">   85 </span><span class="decl"><span class="istickedoff">crucible_postcond loc p = do</span>
+<span class="lineno">   86 </span><span class="spaces">  </span><span class="istickedoff">st &lt;- get</span>
+<span class="lineno">   87 </span><span class="spaces">  </span><span class="istickedoff">tags &lt;- view croTags</span>
+<span class="lineno">   88 </span><span class="spaces">  </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno">   89 </span><span class="spaces">           </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
+<span class="lineno">   90 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionTags = tags</span>
+<span class="lineno">   91 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionType = &quot;specification assertion&quot;</span>
+<span class="lineno">   92 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionContext = &quot;&quot;</span>
+<span class="lineno">   93 </span><span class="spaces">           </span><span class="istickedoff">}</span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="istickedoff">when (st ^. csPrePost == MS.PreState) $</span>
+<span class="lineno">   95 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail &quot;attempt to use `crucible_postcond` in pre state&quot;</span></span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="istickedoff">addCondition (MS.SetupCond_Pred md p)</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>crucible_return ::
+<span class="lineno">   99 </span>  MS.SetupValue ext -&gt;
+<span class="lineno">  100 </span>  CrucibleSetup ext ()
+<span class="lineno">  101 </span><span class="decl"><span class="istickedoff">crucible_return retval = do</span>
+<span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">ret &lt;- use (csMethodSpec . MS.csRetValue)</span>
+<span class="lineno">  103 </span><span class="spaces">  </span><span class="istickedoff">case ret of</span>
+<span class="lineno">  104 </span><span class="spaces">    </span><span class="istickedoff">Just _ -&gt; fail &quot;crucible_return: duplicate return value specification&quot;</span>
+<span class="lineno">  105 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; csMethodSpec . MS.csRetValue .= Just retval</span></span>
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>crucible_execute_func ::
+<span class="lineno">  108 </span>  [MS.SetupValue ext] -&gt;
+<span class="lineno">  109 </span>  CrucibleSetup ext ()
+<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">crucible_execute_func args = do</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">st &lt;- get</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">tps &lt;- use (csMethodSpec . MS.csArgs)</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">when (st ^. csPrePost == MS.PostState) $</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail &quot;duplicate execute_func declaration&quot;</span></span>
+<span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">csPrePost .= MS.PostState</span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">csMethodSpec . MS.csArgBindings .= Map.fromList [ (i, (t,a))</span>
+<span class="lineno">  117 </span><span class="spaces">                                                  </span><span class="istickedoff">| i &lt;- [0..]</span>
+<span class="lineno">  118 </span><span class="spaces">                                                  </span><span class="istickedoff">| a &lt;- args</span>
+<span class="lineno">  119 </span><span class="spaces">                                                  </span><span class="istickedoff">| t &lt;- tps</span>
+<span class="lineno">  120 </span><span class="spaces">                                                  </span><span class="istickedoff">]</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>crucible_equal ::
+<span class="lineno">  123 </span>  W4.ProgramLoc -&gt;
+<span class="lineno">  124 </span>  MS.SetupValue ext -&gt;
+<span class="lineno">  125 </span>  MS.SetupValue ext -&gt;
+<span class="lineno">  126 </span>  CrucibleSetup ext ()
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">crucible_equal loc val1 val2 = do</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">croTags</span></span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno">  130 </span><span class="spaces">           </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
+<span class="lineno">  131 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
+<span class="lineno">  132 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;equality specification&quot;</span></span>
+<span class="lineno">  133 </span><span class="spaces">           </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno">  134 </span><span class="spaces">           </span><span class="istickedoff">}</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff">addCondition (MS.SetupCond_Equal md val1 val2)</span></span>
+<span class="lineno">  136 </span>
+<span class="lineno">  137 </span>--------------------------------------------------------------------------------
+<span class="lineno">  138 </span>-- ** Shared data types
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>-- | When invoking a points-to command, against what should SAW check the type
+<span class="lineno">  141 </span>-- of the RHS value?
+<span class="lineno">  142 </span>data CheckPointsToType ty
+<span class="lineno">  143 </span>  = CheckAgainstPointerType
+<span class="lineno">  144 </span>    -- ^ Check the type of the RHS value against the type that the LHS points to.
+<span class="lineno">  145 </span>    --   Used by commands such as @llvm_{conditional_}points_to@ and
+<span class="lineno">  146 </span>    --   @mir_points_to@.
+<span class="lineno">  147 </span>  | CheckAgainstCastedType ty
+<span class="lineno">  148 </span>    -- ^ Check the type of the RHS value against the provided @ty@, which
+<span class="lineno">  149 </span>    --   the LHS pointer is casted to.
+<span class="lineno">  150 </span>    --   This is currently used by @llvm_{conditional_}points_to_at_type@ only.
+<span class="lineno">  151 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>)
+
+</pre>
+</body>
+</html>
