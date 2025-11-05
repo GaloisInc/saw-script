@@ -110,13 +110,13 @@ competition
 using the <code class="docutils literal notranslate"><span class="pre">external_cnf_solver</span></code> tactic. For example, you can use
 <a class="reference external" href="http://fmv.jku.at/picosat/">PicoSAT</a> to prove the theorem <code class="docutils literal notranslate"><span class="pre">thm</span></code> from
 the last example, with the following commands:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">picosat</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">external_cnf_solver</span><span class="w"> </span><span class="s2">&quot;picosat&quot;</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;%f&quot;</span><span class="p">];</span>
-<span class="n">prove_print</span><span class="w"> </span><span class="n">picosat</span><span class="w"> </span><span class="n">thm</span><span class="p">;</span><span class="n">x</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">picosat</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">external_cnf_solver</span><span class="w"> </span><span class="s2">&quot;picosat&quot;</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;%f&quot;</span><span class="p">];</span>
+<span class="nb">prove_print</span><span class="w"> </span><span class="n">picosat</span><span class="w"> </span><span class="n">thm</span><span class="p">;</span><span class="n">x</span>
 </pre></div>
 </div>
 <p>The use of <code class="docutils literal notranslate"><span class="pre">let</span></code> is simply a convenient abbreviation. The following
 would be equivalent:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">prove_print</span><span class="w"> </span><span class="p">(</span><span class="n">external_cnf_solver</span><span class="w"> </span><span class="s2">&quot;picosat&quot;</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;%f&quot;</span><span class="p">])</span><span class="w"> </span><span class="n">thm</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">prove_print</span><span class="w"> </span><span class="p">(</span><span class="n">external_cnf_solver</span><span class="w"> </span><span class="s2">&quot;picosat&quot;</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;%f&quot;</span><span class="p">])</span><span class="w"> </span><span class="n">thm</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>The first argument to <code class="docutils literal notranslate"><span class="pre">external_cnf_solver</span></code> is the name of the

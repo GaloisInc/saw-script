@@ -134,15 +134,15 @@ have a notion of reference values, but <code class="docutils literal notranslate
 embed the result of a call to <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> in a Cryptol expression.</p>
 <p><code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> must be used with some care. Here is a first, not-quite-correct
 attempt at writing a spec for <code class="docutils literal notranslate"><span class="pre">read_ref</span></code> using <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">read_ref_fail_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">r</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">r</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">read_ref_fail_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">r</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">r</span><span class="p">];</span>
 <span class="w">  </span><span class="c c-Singleline">// mir_return ??;</span>
 <span class="p">};</span>
 
-<span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_load_module</span><span class="w"> </span><span class="s2">&quot;ref-basics.linked-mir.json&quot;</span><span class="p">;</span>
+<span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_load_module</span><span class="w"> </span><span class="s2">&quot;ref-basics.linked-mir.json&quot;</span><span class="p">;</span>
 
-<span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;ref_basics::read_ref&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">read_ref_fail_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;ref_basics::read_ref&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">read_ref_fail_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>As the comment suggests, it’s not entirely clear what this spec should return.
@@ -182,12 +182,12 @@ point to:</p>
 second <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> argument represents the value that the reference should point
 to. In our spec for <code class="docutils literal notranslate"><span class="pre">read_ref</span></code>, we can declare that the reference should point
 to a symbolic <code class="docutils literal notranslate"><span class="pre">u32</span></code> value like so:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">read_ref_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">r_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">r_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;r_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">r_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">r_val</span><span class="p">);</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">r_ref</span><span class="p">];</span>
-<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">r_val</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">read_ref_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">r_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">r_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;r_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">r_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">r_val</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">r_ref</span><span class="p">];</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">r_val</span><span class="p">);</span>
 <span class="p">};</span>
 </pre></div>
 </div>
@@ -214,19 +214,19 @@ memory, as seen in this <code class="docutils literal notranslate"><span class="
 </pre></div>
 </div>
 <p>A corresponding spec for <code class="docutils literal notranslate"><span class="pre">swap</span></code> is:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">swap_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">swap_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 
-<span class="w">  </span><span class="n">b_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">b_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;b_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">b_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">b_val</span><span class="p">);</span>
+<span class="w">  </span><span class="n">b_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">b_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;b_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">b_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">b_val</span><span class="p">);</span>
 
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">a_ref</span><span class="p">,</span><span class="w"> </span><span class="n">b_ref</span><span class="p">];</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">a_ref</span><span class="p">,</span><span class="w"> </span><span class="n">b_ref</span><span class="p">];</span>
 
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">b_val</span><span class="p">);</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">b_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">b_val</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">b_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 <span class="p">};</span>
 </pre></div>
 </div>

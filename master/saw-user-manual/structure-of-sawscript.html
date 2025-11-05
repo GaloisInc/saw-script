@@ -128,7 +128,7 @@ commands to be executed in order. Each command is terminated with a
 semicolon. For example, the <code class="docutils literal notranslate"><span class="pre">print</span></code> command displays a textual
 representation of its argument. Suppose the following text is stored in
 the file <code class="docutils literal notranslate"><span class="pre">print.saw</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">print</span><span class="w"> </span><span class="mi">3</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="w"> </span><span class="mi">3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>The command <code class="docutils literal notranslate"><span class="pre">saw</span> <span class="pre">print.saw</span></code> will then yield output similar to the
@@ -189,18 +189,18 @@ for instance the C program that adds its two arguments together:</p>
 </pre></div>
 </div>
 <p>We can specify this function’s expected behavior as follows:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">add_setup</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="p">(</span><span class="n">llvm_int</span><span class="w"> </span><span class="mi">32</span><span class="p">);</span>
-<span class="w">    </span><span class="n">y</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="w"> </span><span class="p">(</span><span class="n">llvm_int</span><span class="w"> </span><span class="mi">32</span><span class="p">);</span>
-<span class="w">    </span><span class="n">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">llvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">llvm_term</span><span class="w"> </span><span class="n">y</span><span class="p">];</span>
-<span class="w">    </span><span class="n">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="n">llvm_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nf">y</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">add_setup</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">32</span><span class="p">);</span>
+<span class="w">    </span><span class="n">y</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">32</span><span class="p">);</span>
+<span class="w">    </span><span class="nb">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">y</span><span class="p">];</span>
+<span class="w">    </span><span class="nb">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nf">y</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
 </pre></div>
 </div>
 <p>We can then compile the C file <code class="docutils literal notranslate"><span class="pre">add.c</span></code> into the bitcode file <code class="docutils literal notranslate"><span class="pre">add.bc</span></code>
 and verify it with ABC:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_load_module</span><span class="w"> </span><span class="s2">&quot;add.bc&quot;</span><span class="p">;</span>
-<span class="n">add_ms</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;add&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">add_setup</span><span class="w"> </span><span class="n">abc</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_load_module</span><span class="w"> </span><span class="s2">&quot;add.bc&quot;</span><span class="p">;</span>
+<span class="n">add_ms</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;add&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">add_setup</span><span class="w"> </span><span class="n">abc</span><span class="p">;</span>
 </pre></div>
 </div>
 </section>
@@ -387,17 +387,17 @@ returned by a <code class="docutils literal notranslate"><span class="pre">do</s
 example, say we wanted to write a function that would print a message
 before and after running some arbitrary command and then return the
 result of that command. We could write:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">run_with_message</span><span class="w"> </span><span class="n">msg</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="ow">=</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">run_with_message</span><span class="w"> </span><span class="n">msg</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="ow">=</span>
 <span class="w">  </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="n">print</span><span class="w"> </span><span class="s2">&quot;Starting.&quot;</span><span class="p">;</span>
-<span class="w">    </span><span class="n">print</span><span class="w"> </span><span class="n">msg</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Starting.&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">print</span><span class="w"> </span><span class="n">msg</span><span class="p">;</span>
 <span class="w">    </span><span class="n">res</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">c</span><span class="p">;</span>
-<span class="w">    </span><span class="n">print</span><span class="w"> </span><span class="s2">&quot;Done.&quot;</span><span class="p">;</span>
-<span class="w">    </span><span class="n">return</span><span class="w"> </span><span class="n">res</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Done.&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">return</span><span class="w"> </span><span class="n">res</span><span class="p">;</span>
 <span class="w">  </span><span class="p">};</span>
 
-<span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">run_with_message</span><span class="w"> </span><span class="s2">&quot;Hello&quot;</span><span class="w"> </span><span class="p">(</span><span class="n">return</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span>
-<span class="n">print</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
+<span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">run_with_message</span><span class="w"> </span><span class="s2">&quot;Hello&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">return</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span>
+<span class="nb">print</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>If we put this script in <code class="docutils literal notranslate"><span class="pre">run.saw</span></code> and run it with <code class="docutils literal notranslate"><span class="pre">saw</span></code>, we get

@@ -132,10 +132,10 @@ a program that uses immutable static data:</p>
 </div>
 <p>This function will return <code class="docutils literal notranslate"><span class="pre">ANSWER</span></code>, i.e., <code class="docutils literal notranslate"><span class="pre">42</span></code>. We can write a spec that says
 as much:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">answer_to_the_ultimate_question_spec1</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">answer_to_the_ultimate_question_spec1</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
 
-<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">42</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">42</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
 </pre></div>
 </div>
@@ -150,10 +150,10 @@ the initial value of a static item at the start of the program:</p>
 </div>
 <p>In this case, <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span> <span class="pre">&quot;statics::ANSWER&quot;</span></code> is equivalent to
 writing <code class="docutils literal notranslate"><span class="pre">mir_term</span> <span class="pre">{{</span> <span class="pre">42</span> <span class="pre">:</span> <span class="pre">[32]</span> <span class="pre">}}</span></code>, so this spec is also valid:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">answer_to_the_ultimate_question_spec2</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">answer_to_the_ultimate_question_spec2</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
 
-<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="s2">&quot;statics::ANSWER&quot;</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="s2">&quot;statics::ANSWER&quot;</span><span class="p">);</span>
 <span class="p">};</span>
 </pre></div>
 </div>
@@ -175,10 +175,10 @@ item (which <code class="docutils literal notranslate"><span class="pre">mir_sta
 </pre></div>
 </div>
 <p>A spec for this function would look like this:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">answer_in_ref_form_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">answer_in_ref_form_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
 
-<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static</span><span class="w"> </span><span class="s2">&quot;statics::ANSWER&quot;</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="s2">&quot;statics::ANSWER&quot;</span><span class="p">);</span>
 <span class="p">};</span>
 </pre></div>
 </div>
@@ -205,10 +205,10 @@ however, as SAW is pickier when it comes to specifying the initial values of
 mutable static items. For example, here is naïve attempt at porting the spec
 for <code class="docutils literal notranslate"><span class="pre">answer_to_the_ultimate_question</span></code> over to its mutable static counterpart,
 <code class="docutils literal notranslate"><span class="pre">mut_answer_to_the_ultimate_question</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
 
-<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="s2">&quot;statics::MUT_ANSWER&quot;</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="s2">&quot;statics::MUT_ANSWER&quot;</span><span class="p">);</span>
 <span class="p">};</span>
 </pre></div>
 </div>
@@ -233,27 +233,27 @@ time when it attempts to read from the uninitialized memory.</p>
 <p>The solution to this problem is to perform this initialization explicitly using
 <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> in the preconditions of the spec. For example, this is a valid
 spec:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="kr">let</span><span class="w"> </span><span class="n">mut_answer</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;statics::MUT_ANSWER&quot;</span><span class="p">;</span>
-<span class="w">  </span><span class="kr">let</span><span class="w"> </span><span class="n">mut_answer_init</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">mut_answer</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static</span><span class="w"> </span><span class="n">mut_answer</span><span class="p">)</span><span class="w"> </span><span class="n">mut_answer_init</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;statics::MUT_ANSWER&quot;</span><span class="p">;</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer_init</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">mut_answer</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">mut_answer</span><span class="p">)</span><span class="w"> </span><span class="n">mut_answer_init</span><span class="p">;</span>
 
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
 
-<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="n">mut_answer_init</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">mut_answer_init</span><span class="p">;</span>
 <span class="p">};</span>
 </pre></div>
 </div>
 <p>We don’t necessarily have to use <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span></code> as the starting value
 for <code class="docutils literal notranslate"><span class="pre">MUT_ANSWER</span></code>, however. This spec, which uses <code class="docutils literal notranslate"><span class="pre">27</span></code> as the starting value, is
 equally valid:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_alt_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="kr">let</span><span class="w"> </span><span class="n">alt_answer</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">27</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static</span><span class="w"> </span><span class="s2">&quot;statics::MUT_ANSWER&quot;</span><span class="p">)</span><span class="w"> </span><span class="n">alt_answer</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_alt_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">alt_answer</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">27</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="s2">&quot;statics::MUT_ANSWER&quot;</span><span class="p">)</span><span class="w"> </span><span class="n">alt_answer</span><span class="p">;</span>
 
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
 
-<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="n">alt_answer</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">alt_answer</span><span class="p">;</span>
 <span class="p">};</span>
 </pre></div>
 </div>
@@ -314,22 +314,22 @@ are also subject to the same pitfalls. Let’s see an example of this:</p>
 reference as an argument to <code class="docutils literal notranslate"><span class="pre">side_effect</span></code>, we instead declare a mutable static
 item <code class="docutils literal notranslate"><span class="pre">A</span></code> that is shared between <code class="docutils literal notranslate"><span class="pre">side_effect</span></code> and <code class="docutils literal notranslate"><span class="pre">foo</span></code>. We could potentially
 write SAW specs for <code class="docutils literal notranslate"><span class="pre">side_effect</span></code> and <code class="docutils literal notranslate"><span class="pre">foo</span></code> like these:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;statics_compositional::A&quot;</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;statics_compositional::A&quot;</span><span class="p">;</span>
 
-<span class="kr">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">);</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
 <span class="p">};</span>
 
-<span class="kr">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="kr">let</span><span class="w"> </span><span class="n">a_init</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="n">a_init</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
-<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="n">a_init</span><span class="p">;</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">a_init</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="n">a_init</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">a_init</span><span class="p">;</span>
 <span class="p">};</span>
 
-<span class="n">side_effect_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;statics_compositional::side_effect&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-<span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;statics_compositional::foo&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">side_effect_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+<span class="n">side_effect_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;statics_compositional::side_effect&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;statics_compositional::foo&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">side_effect_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>Note that we have once again underspecified the behavior of <code class="docutils literal notranslate"><span class="pre">side_effect</span></code>, as
@@ -352,23 +352,23 @@ incorrect. Thankfully, SAW can also catch this sort of mistake:</p>
 </div>
 <p>To repair this proof, add a <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> statement in the postconditions of
 <code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">);</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
 
 <span class="w">  </span><span class="c c-Singleline">// This is new</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
 </pre></div>
 </div>
 <p>And then correct the behavior of <code class="docutils literal notranslate"><span class="pre">foo_spec</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="kr">let</span><span class="w"> </span><span class="n">a_init</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="n">a_init</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">a_init</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="n">a_init</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
 
 <span class="w">  </span><span class="c c-Singleline">// This is new</span>
-<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
 </pre></div>
 </div>
