@@ -76,8 +76,6 @@ module SAWCore.Conversion
     -- ** Prelude conversions
   , tupleConversion
   , recordConversion
-  , eq_Tuple
-  , eq_Record
   , natConversions
   , vecConversions
   , bvConversions
@@ -378,12 +376,6 @@ mkTuple :: [TermBuilder Term] -> TermBuilder Term
 mkTuple []       = mkTermF (FTermF UnitValue)
 mkTuple (t : ts) = mkTermF . FTermF =<< (PairValue <$> t <*> mkTuple ts)
 
-mkTupleSelector :: Int -> Term -> TermBuilder Term
-mkTupleSelector i t
-  | i == 1 = mkTermF (FTermF (PairLeft t))
-  | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
-  | otherwise = panic "mkTupleSelector" ["non-positive index: " <> Text.pack (show i)]
-
 mkCtor :: Name -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
   foldl mkApp (mkTermF (Constant i)) (paramsB ++ argsB)
@@ -528,35 +520,6 @@ tupleConversion = Conversion False $ thenMatcher (asTupleSelector asAnyTupleValu
 recordConversion :: Conversion
 recordConversion = Conversion False $ thenMatcher (asRecordSelector asAnyRecordValue) action
   where action (m, i) = fmap return (Map.lookup i m)
-
--- | Conversion for equality on tuple types
-eq_Tuple :: Conversion
-eq_Tuple = Conversion False $ thenMatcher matcher action
-  where
-    matcher = asGlobalDef "Prelude.eq" <:> asAnyTupleType <:> asAny <:> asAny
-    action (_ :*: ts :*: x :*: y) =
-      Just (foldr mkAnd (mkBool True) (map mkEq (zip [1 ..] ts)))
-      where
-        mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
-        mkEq (i, t) = mkGlobalDef "Prelude.eq"
-                      `mkApp` return t
-                      `mkApp` mkTupleSelector i x
-                      `mkApp` mkTupleSelector i y
-
--- | Conversion for equality on record types
-eq_Record :: Conversion
-eq_Record = Conversion False $ thenMatcher matcher action
-  where
-    matcher = asGlobalDef "Prelude.eq" <:> asAnyRecordType <:> asAny <:> asAny
-    action (_ :*: tm :*: x :*: y) =
-      Just (foldr mkAnd (mkBool True) (map mkEq (Map.assocs tm)))
-      where
-        mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
-        sel t i = mkTermF (FTermF (RecordProj t i))
-        mkEq (i, t) = mkGlobalDef "Prelude.eq"
-                      `mkApp` return t
-                      `mkApp` sel x i
-                      `mkApp` sel y i
 
 -- | Conversions for operations on Nat literals
 natConversions :: [Conversion]
