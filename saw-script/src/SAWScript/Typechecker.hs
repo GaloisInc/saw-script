@@ -1555,10 +1555,13 @@ inferSingleStmt cname pos ctx s = do
 --
 -- The "foralls" argument is a set of tyvars that were mentioned
 -- explicitly and should be forall-bound.
-generalize :: Map Name Pos -> [OutExpr] -> [Type] -> TI [(OutExpr,Schema)]
-generalize foralls es0 ts0 = do
+generalize ::
+    Map Name Pos -> [Pattern] -> [OutExpr] -> [Type] ->
+    TI [(Pattern, OutExpr, Schema)]
+generalize foralls pats0 es0 ts0 = do
     -- first, substitute away any resolved unification variables
     -- in both the expressions and types.
+    pats <- applyCurrentSubst pats0
     es <- applyCurrentSubst es0
     ts <- applyCurrentSubst ts0
 
@@ -1631,9 +1634,14 @@ generalize foralls es0 ts0 = do
     let inames = [ (pos, n) | (_i, pos, n) <- is3 ]
     let bnames = [ (pos, x) | (x, pos) <- bs2 ]
 
-    let mk e t = (appSubst s e, Forall (inames ++ bnames) (appSubst s t))
+    let mk pat e t =
+          let pat' = appSubst s pat
+              e' = appSubst s e
+              t' = appSubst s t
+          in
+          (pat', e', Forall (inames ++ bnames) t')
 
-    return $ zipWith mk es ts
+    return $ zipWith3 mk pats es ts
 
 
 -- Check that a type is a function and isn't a plain value, in order
@@ -1699,10 +1707,10 @@ inferDecl rebindable d@(Decl pos pat _ e) = do
         pat' <- checkPattern rebindable cname t pat
 
         -- Use `generalize` to build the type scheme.
-        ~[(e1,s)] <- generalize foralls [e'] [t]
+        ~[(pat'', e1, s)] <- generalize foralls [pat'] [e'] [t]
 
         -- Return the updated `Decl`
-        return (Decl pos pat' (Just s) e1)
+        return (Decl pos pat'' (Just s) e1)
 
 -- | Type inference for a system of mutually recursive declarations.
 --
@@ -1751,11 +1759,11 @@ inferRecDecls ds = do
 
       -- Run generalize and get back a list of updated expressions and
       -- type schemes.
-      etys <- generalize foralls es tys
+      patetys <- generalize foralls pats' es tys
 
       -- Generate the updated declarations.
-      let rebuild pos pat (e1, ty) = Decl pos pat (Just ty) e1
-          ds' = zipWith3 rebuild (map getPos ds) pats' etys
+      let rebuild pos (pat, e1, ty) = Decl pos pat (Just ty) e1
+          ds' = zipWith rebuild (map getPos ds) patetys
 
       return ds'
 
