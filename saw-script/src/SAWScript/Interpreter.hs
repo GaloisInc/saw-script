@@ -287,6 +287,14 @@ propagateRefChain chain1 v =
 --
 -- XXX: at some point clean this up further.
 --
+-- Update: there _is_ something weird going on. The typechecker wasn't
+-- updating the types in patterns after doing its generalize step, so
+-- for polymorphic bindings the types in patterns weren't usable. But
+-- even after fixing that, using the types in the patterns produces
+-- the wrong results -- they are not the same tyvars as the ones that
+-- appear in the the schema. There's still something going on in
+-- there that I don't understand.
+--
 bindPattern :: SS.Rebindable -> SS.Pattern -> Maybe SS.Schema -> Value -> TopLevel ()
 bindPattern rb pat ms v =
   case pat of
@@ -581,29 +589,33 @@ interpretDeclGroup rebindable dg = case dg of
             -- declarations _into_ all the declarations, which is a
             -- circular knot that can only be constructed in very
             -- specific ways.
-            extractFunction e0 = case e0 of
+            extractFunction x e0 = case e0 of
                 SS.Lambda _ mname pat e1 ->
                     \env -> VLambda env mname pat e1
                 SS.TSig _ e1 _ ->
-                    extractFunction e1
+                    extractFunction x e1
                 _ ->
                     panic "interpretDeclGroup" [
                         "Found non-function in a recursive declaration group",
-                        -- XXX should print the name here!
+                        "Name: " <> x,
                         "Expression found: " <> PPS.pShowText e0
                     ]
 
-            -- Get the name (and type) for one of the declarations.
+            -- Get the type (scheme) for one of the declarations.
+            extractType x mty = case mty of
+                Nothing ->
+                    panic "interpretDeclGroup" [
+                        "Found declaration with no type in a recursive decl group",
+                        "Variable: " <> x
+                    ]
+                Just ty -> ty
+
+            -- Get the name for one of the declarations.
             -- Recursive declaration sets are only allowed to contain
             -- functions, so the pattern cannot be a tuple.
             extractName pat = case pat of
                 SS.PWild _ _ -> Nothing
-                SS.PVar _ xpos x (Just ty) -> Just (xpos, x, ty)
-                SS.PVar _ _ x Nothing ->
-                    panic "interpretDeclGroup" [
-                        "Found variable with no type in a recursive decl group",
-                        "Variable: " <> x
-                    ]
+                SS.PVar _ xpos x _mty -> Just (xpos, x)
                 SS.PTuple{} ->
                     panic "interpretDeclGroup" [
                         "Found tuple pattern in a recursive declaration group",
@@ -611,12 +623,14 @@ interpretDeclGroup rebindable dg = case dg of
                     ]
 
             -- Get all the info for a decl.
-            extractBoth (SS.Decl _ pat _mty e) =
+            extractBoth (SS.Decl _ pat mty e) =
                 case extractName pat of
                     Nothing -> Nothing
-                    Just (xpos, x, ty) ->
-                        let fv = extractFunction e in
-                        Just (xpos, x, rebindable, SS.tMono ty, Nothing, fv)
+                    Just (xpos, x) ->
+                        let ty = extractType x mty
+                            fv = extractFunction x e
+                        in
+                        Just (xpos, x, rebindable, ty, Nothing, fv)
 
             -- Extract all the info for all decls.
             ds' = mapMaybe extractBoth ds
