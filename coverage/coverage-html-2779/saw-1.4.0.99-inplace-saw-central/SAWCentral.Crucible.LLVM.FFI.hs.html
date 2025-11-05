@@ -184,7 +184,7 @@ span.spaces    { background: white }
 <span class="lineno">  165 </span><span class="spaces">          </span><span class="istickedoff">ffiArgTypes</span>
 <span class="lineno">  166 </span><span class="spaces">        </span><span class="istickedoff">(llvmOutArgs, post) &lt;- setupRet tenv ffiRetType</span>
 <span class="lineno">  167 </span><span class="spaces">        </span><span class="istickedoff">llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)</span>
-<span class="lineno">  168 </span><span class="spaces">        </span><span class="istickedoff">post $ applyOpenTermMulti (closedOpenTerm appTerm) cryArgs</span>
+<span class="lineno">  168 </span><span class="spaces">        </span><span class="istickedoff">post $ applyOpenTermMulti (mkOpenTerm appTerm) cryArgs</span>
 <span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff">Just (CallAbstract (FFIFunType{})) -&gt;</span>
 <span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff">-- CallAbstract uses ordinary Cryptol types instead of FFIType,</span>
 <span class="lineno">  171 </span><span class="spaces">        </span><span class="istickedoff">-- and while the logic above might be generalized to support that</span>
@@ -228,7 +228,7 @@ span.spaces    { background: white }
 <span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">-}</span>
 <span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">openToSetupTerm $</span>
 <span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff">applyGlobalOpenTerm &quot;Cryptol.ecNumber&quot;</span>
-<span class="lineno">  212 </span><span class="spaces">      </span><span class="istickedoff">[ closedOpenTerm tyArgTerm</span>
+<span class="lineno">  212 </span><span class="spaces">      </span><span class="istickedoff">[ mkOpenTerm tyArgTerm</span>
 <span class="lineno">  213 </span><span class="spaces">      </span><span class="istickedoff">, vectorTypeOpenTerm sizeBitSize boolTypeOpenTerm</span>
 <span class="lineno">  214 </span><span class="spaces">      </span><span class="istickedoff">, applyGlobalOpenTerm &quot;Cryptol.PLiteralSeqBool&quot;</span>
 <span class="lineno">  215 </span><span class="spaces">          </span><span class="istickedoff">[ctorOpenTerm &quot;Cryptol.TCNum&quot; [sizeBitSize]]</span>
@@ -599,7 +599,7 @@ span.spaces    { background: white }
 <span class="lineno">  580 </span><span class="decl"><span class="istickedoff">openToSetupTerm openTerm = anySetupTerm &lt;$&gt; openToTypedTerm openTerm</span></span>
 <span class="lineno">  581 </span>
 <span class="lineno">  582 </span>typedToOpenTerm :: TypedTerm -&gt; OpenTerm
-<span class="lineno">  583 </span><span class="decl"><span class="istickedoff">typedToOpenTerm = closedOpenTerm . ttTerm</span></span>
+<span class="lineno">  583 </span><span class="decl"><span class="istickedoff">typedToOpenTerm = mkOpenTerm . ttTerm</span></span>
 <span class="lineno">  584 </span>
 <span class="lineno">  585 </span>lll :: TopLevel a -&gt; LLVMCrucibleSetupM a
 <span class="lineno">  586 </span><span class="decl"><span class="istickedoff">lll x = LLVMCrucibleSetupM $ lift $ lift x</span></span>

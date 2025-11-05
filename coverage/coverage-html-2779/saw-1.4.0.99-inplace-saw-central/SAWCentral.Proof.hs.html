@@ -1236,7 +1236,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1217 </span><span class="spaces">         </span><span class="nottickedoff">constructTheorem sc what4PushMuxOps db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0</span></span>
 <span class="lineno"> 1218 </span>
 <span class="lineno"> 1219 </span>specializeProp :: SharedContext -&gt; Prop -&gt; [Term] -&gt; IO (Either TC.TCError Prop)
-<span class="lineno"> 1220 </span><span class="decl"><span class="istickedoff">specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) <span class="nottickedoff">sc</span> <span class="nottickedoff">mempty</span></span>
+<span class="lineno"> 1220 </span><span class="decl"><span class="istickedoff">specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) <span class="nottickedoff">sc</span></span>
 <span class="lineno"> 1221 </span><span class="spaces"> </span><span class="istickedoff">where</span>
 <span class="lineno"> 1222 </span><span class="spaces">  </span><span class="istickedoff">loop p [] = return (Prop p)</span>
 <span class="lineno"> 1223 </span><span class="spaces">  </span><span class="istickedoff">loop p (t:ts) =</span>
@@ -1563,7 +1563,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1544 </span><span class="spaces">                    </span><span class="istickedoff">p_typed &lt;- TC.typeInferComplete p</span>
 <span class="lineno"> 1545 </span><span class="spaces">                    </span><span class="istickedoff">let <span class="nottickedoff">err = TC.NotFuncTypeInApp p_typed tm'</span></span>
 <span class="lineno"> 1546 </span><span class="spaces">                    </span><span class="istickedoff">TC.applyPiTyped <span class="nottickedoff">err</span> p tm'</span>
-<span class="lineno"> 1547 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- TC.runTCM m sc <span class="nottickedoff">mempty</span></span>
+<span class="lineno"> 1547 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- TC.runTCM m sc</span>
 <span class="lineno"> 1548 </span><span class="spaces">         </span><span class="istickedoff">case res of</span>
 <span class="lineno"> 1549 </span><span class="spaces">           </span><span class="istickedoff">Left msg -&gt; <span class="nottickedoff">fail (unlines (TC.prettyTCError msg))</span></span>
 <span class="lineno"> 1550 </span><span class="spaces">           </span><span class="istickedoff">Right p' -&gt; checkApply <span class="nottickedoff">nenv</span> mkSqt (Prop p') es</span>
@@ -1877,7 +1877,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1858 </span><span class="spaces">                      </span><span class="istickedoff">do let (es1, es2) = splitAt (length gs') es</span>
 <span class="lineno"> 1859 </span><span class="spaces">                         </span><span class="istickedoff">e &lt;- buildTacticEvidence es1</span>
 <span class="lineno"> 1860 </span><span class="spaces">                         </span><span class="istickedoff">evidenceCont (e:es2)</span>
-<span class="lineno"> 1861 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') timeout evidenceCont' <span class="nottickedoff">start</span></span>
+<span class="lineno"> 1861 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') <span class="nottickedoff">timeout</span> evidenceCont' <span class="nottickedoff">start</span></span>
 <span class="lineno"> 1862 </span><span class="spaces">              </span><span class="istickedoff">seq ps' (return (Right (<span class="nottickedoff">x</span>, ps')))</span></span>
 <span class="lineno"> 1863 </span>
 <span class="lineno"> 1864 </span>predicateToSATQuery :: SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO SATQuery
@@ -1950,7 +1950,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1931 </span><span class="spaces">    </span><span class="istickedoff">filterFirstOrderVars mmap fovars absvars ((x, t) : es) =</span>
 <span class="lineno"> 1932 </span><span class="spaces">      </span><span class="istickedoff">case evalFOT mmap t of</span>
 <span class="lineno"> 1933 </span><span class="spaces">         </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">filterFirstOrderVars mmap fovars (Set.insert (vnIndex x) absvars) es</span></span>
-<span class="lineno"> 1934 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert x fot fovars) absvars es</span>
+<span class="lineno"> 1934 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert x <span class="nottickedoff">fot</span> fovars) absvars es</span>
 <span class="lineno"> 1935 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1936 </span><span class="spaces">    </span><span class="istickedoff">processAssert mmap tp =</span>
 <span class="lineno"> 1937 </span><span class="spaces">      </span><span class="istickedoff">case asEqTrue tp of</span>
@@ -1967,7 +1967,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1948 </span><span class="spaces">                </span><span class="istickedoff">let tp' = tp</span>
 <span class="lineno"> 1949 </span><span class="spaces">                </span><span class="istickedoff">case evalFOT mmap tp' of</span>
 <span class="lineno"> 1950 </span><span class="spaces">                  </span><span class="istickedoff">Just fot -&gt;</span>
-<span class="lineno"> 1951 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((nm, fot) : vars) xs body</span>
+<span class="lineno"> 1951 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((nm, <span class="nottickedoff">fot</span>) : vars) xs body</span>
 <span class="lineno"> 1952 </span><span class="spaces">                  </span><span class="istickedoff">Nothing</span>
 <span class="lineno"> 1953 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">IntSet.null (foldr IntSet.delete (freeVars body) (map (vnIndex . fst) vars))</span> -&gt;</span>
 <span class="lineno"> 1954 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">case asEqTrue tp' of</span></span>
