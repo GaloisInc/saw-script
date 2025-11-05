@@ -1217,7 +1217,7 @@ specializeTheorem sc what4PushMuxOps db loc rsn thm ts =
          constructTheorem sc what4PushMuxOps db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
 
 specializeProp :: SharedContext -> Prop -> [Term] -> IO (Either TC.TCError Prop)
-specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc mempty
+specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc
  where
   loop p [] = return (Prop p)
   loop p (t:ts) =
@@ -1544,7 +1544,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                     p_typed <- TC.typeInferComplete p
                     let err = TC.NotFuncTypeInApp p_typed tm'
                     TC.applyPiTyped err p tm'
-         res <- TC.runTCM m sc mempty
+         res <- TC.runTCM m sc
          case res of
            Left msg -> fail (unlines (TC.prettyTCError msg))
            Right p' -> checkApply nenv mkSqt (Prop p') es
