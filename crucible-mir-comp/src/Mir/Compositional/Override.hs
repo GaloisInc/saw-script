@@ -22,7 +22,6 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import qualified Data.ByteString as BS
-import Data.Foldable
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IORef
@@ -90,7 +89,22 @@ printSpec ::
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = do
     let str = show $ MS.ppMethodSpec (ms ^. msSpec)
-    let bytes = Text.encodeUtf8 $ Text.pack str
+    let pre = ms ^. msSpec . MS.csPreState
+    let post = ms ^. msSpec . MS.csPostState
+    -- The formatting here is not very readable, but it includes most of the
+    -- info that's useful for debugging.
+    let str2 = unlines
+          [ str
+          , "pre allocs = " ++ show (pre ^. MS.csAllocs)
+          , "pre pointsto = " ++ show (pre ^. MS.csPointsTos)
+          , "pre conds = " ++ show (pre ^. MS.csConditions)
+          , "pre vars = " ++ show (pre ^. MS.csFreshVars)
+          , "post allocs = " ++ show (post ^. MS.csAllocs)
+          , "post pointsto = " ++ show (post ^. MS.csPointsTos)
+          , "post conds = " ++ show (post ^. MS.csConditions)
+          , "post vars = " ++ show (post ^. MS.csFreshVars)
+          ]
+    let bytes = Text.encodeUtf8 $ Text.pack str2
 
     sym <- getSymInterface
     len <- liftIO $ W4.bvLit sym knownRepr (BV.mkBV knownRepr $ fromIntegral $ BS.length bytes)
@@ -101,7 +115,7 @@ printSpec ms = do
 
     let vec = MirVector_Vector $ V.fromList byteVals
     let vecRef = newConstMirRef sym (MirVectorRepr (BVRepr w8)) vec
-    ptr <- subindexMirRefSim MirReferenceRepr vecRef =<<
+    ptr <- subindexMirRefSim (BVRepr w8) vecRef =<<
         liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
     return $ Empty :> RV ptr :> RV len
 
@@ -400,12 +414,9 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go (TupleShape _ elems) ag (MS.SetupTuple () svs) =
       void $ accessMirAggregate' sym elems svs ag $
         \_off _sz shp rv sv -> go shp rv sv
-    go (ArrayShape _ _ shp) vec (MS.SetupArray _ svs) = case vec of
-        MirVector_Vector v -> zipWithM_ (\x y -> go shp x y) (toList v) svs
-        MirVector_PartialVector pv -> forM_ (zip (toList pv) svs) $ \(p, sv) -> do
-            let rv = readMaybeType sym "vector element" (shapeType shp) p
-            go shp rv sv
-        MirVector_Array _ -> error $ "matchArg: MirVector_Array NYI"
+    go (ArrayShape _ _ sz shp len) ag (MS.SetupArray _ svs) =
+      void $ accessMirAggregateArray' sym sz shp len svs ag $
+        \_off rv sv -> go shp rv sv
     go (StructShape _ _ flds) rvs (MS.SetupStruct _ svs) = goFields flds rvs svs
     go (TransparentShape _ shp) rv sv = go shp rv sv
     go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupVar alloc) =
@@ -533,9 +544,8 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
         return expr
     go (TupleShape _ elems) (MS.SetupTuple _ svs) =
         buildMirAggregate sym elems svs $ \_off _sz shp sv -> go shp sv
-    go (ArrayShape _ _ shp) (MS.SetupArray _ svs) = do
-        rvs <- mapM (go shp) svs
-        return $ MirVector_Vector $ V.fromList rvs
+    go (ArrayShape _ _ sz shp len) (MS.SetupArray _ svs) = do
+        buildMirAggregateArray sym sz shp len svs $ \_off sv -> go shp sv
     go (StructShape _ _ flds) (MS.SetupStruct _ svs) =
         goFields flds svs
     go (TransparentShape _ shp) sv = go shp sv
