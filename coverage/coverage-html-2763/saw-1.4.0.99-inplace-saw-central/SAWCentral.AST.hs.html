@@ -83,11 +83,11 @@ span.spaces    { background: white }
 <span class="lineno">   64 </span>                         requested. -}
 <span class="lineno">   65 </span>  | Experimental    {- ^ Will be made @Current@ soon, but available only by
 <span class="lineno">   66 </span>                         request at the moment. -}
-<span class="lineno">   67 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Enum</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Bounded</span></span></span></span>)
+<span class="lineno">   67 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Enum</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Bounded</span></span></span></span>)
 <span class="lineno">   68 </span>
 <span class="lineno">   69 </span>-- | Set of all lifecycle values.
 <span class="lineno">   70 </span>everythingAvailable :: Set PrimitiveLifecycle
-<span class="lineno">   71 </span><span class="decl"><span class="nottickedoff">everythingAvailable = Set.fromList [minBound .. maxBound]</span></span>
+<span class="lineno">   71 </span><span class="decl"><span class="istickedoff">everythingAvailable = Set.fromList [minBound .. maxBound]</span></span>
 <span class="lineno">   72 </span>
 <span class="lineno">   73 </span>-- | Default set of lifecycle values.
 <span class="lineno">   74 </span>--   Keep this with its type to make sure it stays current.
@@ -156,7 +156,7 @@ span.spaces    { background: white }
 <span class="lineno">  137 </span><span class="spaces">  </span><span class="istickedoff">getPos (Array pos _) = pos</span>
 <span class="lineno">  138 </span><span class="spaces">  </span><span class="istickedoff">getPos (Block pos _) = pos</span>
 <span class="lineno">  139 </span><span class="spaces">  </span><span class="istickedoff">getPos (Tuple pos _) = pos</span>
-<span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">getPos (Record pos _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">getPos (Record pos _) = pos</span>
 <span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">getPos (Index pos _ _) = <span class="nottickedoff">pos</span></span>
 <span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">getPos (Lookup pos _ _) = <span class="nottickedoff">pos</span></span>
 <span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">getPos (TLookup pos _ _) = <span class="nottickedoff">pos</span></span>
@@ -279,7 +279,7 @@ span.spaces    { background: white }
 <span class="lineno">  260 </span>  <span class="decl"><span class="istickedoff">getPos (TyCon pos _ _) = pos</span>
 <span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">getPos (TyRecord pos _) = pos</span>
 <span class="lineno">  262 </span><span class="spaces">  </span><span class="istickedoff">getPos (TyVar pos _) = pos</span>
-<span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">getPos (TyUnifyVar pos _) = <span class="nottickedoff">pos</span></span></span>
+<span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">getPos (TyUnifyVar pos _) = pos</span></span>
 <span class="lineno">  264 </span>
 <span class="lineno">  265 </span>type TypeIndex = Integer
 <span class="lineno">  266 </span>
@@ -541,10 +541,10 @@ span.spaces    { background: white }
 <span class="lineno">  522 </span><span class="decl"><span class="istickedoff">tString pos = TyCon pos StringCon []</span></span>
 <span class="lineno">  523 </span>
 <span class="lineno">  524 </span>tTerm :: Pos -&gt; Type
-<span class="lineno">  525 </span><span class="decl"><span class="istickedoff">tTerm pos = TyCon <span class="nottickedoff">pos</span> TermCon []</span></span>
+<span class="lineno">  525 </span><span class="decl"><span class="istickedoff">tTerm pos = TyCon pos TermCon []</span></span>
 <span class="lineno">  526 </span>
 <span class="lineno">  527 </span>tType :: Pos -&gt; Type
-<span class="lineno">  528 </span><span class="decl"><span class="istickedoff">tType pos = TyCon <span class="nottickedoff">pos</span> TypeCon []</span></span>
+<span class="lineno">  528 </span><span class="decl"><span class="istickedoff">tType pos = TyCon pos TypeCon []</span></span>
 <span class="lineno">  529 </span>
 <span class="lineno">  530 </span>tBool :: Pos -&gt; Type
 <span class="lineno">  531 </span><span class="decl"><span class="istickedoff">tBool pos = TyCon pos BoolCon []</span></span>

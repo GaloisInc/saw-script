@@ -1236,7 +1236,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1217 </span><span class="spaces">         </span><span class="nottickedoff">constructTheorem sc what4PushMuxOps db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0</span></span>
 <span class="lineno"> 1218 </span>
 <span class="lineno"> 1219 </span>specializeProp :: SharedContext -&gt; Prop -&gt; [Term] -&gt; IO (Either TC.TCError Prop)
-<span class="lineno"> 1220 </span><span class="decl"><span class="istickedoff">specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) <span class="nottickedoff">sc</span> <span class="nottickedoff">mempty</span></span>
+<span class="lineno"> 1220 </span><span class="decl"><span class="istickedoff">specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) <span class="nottickedoff">sc</span></span>
 <span class="lineno"> 1221 </span><span class="spaces"> </span><span class="istickedoff">where</span>
 <span class="lineno"> 1222 </span><span class="spaces">  </span><span class="istickedoff">loop p [] = return (Prop p)</span>
 <span class="lineno"> 1223 </span><span class="spaces">  </span><span class="istickedoff">loop p (t:ts) =</span>
@@ -1563,7 +1563,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1544 </span><span class="spaces">                    </span><span class="istickedoff">p_typed &lt;- TC.typeInferComplete p</span>
 <span class="lineno"> 1545 </span><span class="spaces">                    </span><span class="istickedoff">let <span class="nottickedoff">err = TC.NotFuncTypeInApp p_typed tm'</span></span>
 <span class="lineno"> 1546 </span><span class="spaces">                    </span><span class="istickedoff">TC.applyPiTyped <span class="nottickedoff">err</span> p tm'</span>
-<span class="lineno"> 1547 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- TC.runTCM m sc <span class="nottickedoff">mempty</span></span>
+<span class="lineno"> 1547 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- TC.runTCM m sc</span>
 <span class="lineno"> 1548 </span><span class="spaces">         </span><span class="istickedoff">case res of</span>
 <span class="lineno"> 1549 </span><span class="spaces">           </span><span class="istickedoff">Left msg -&gt; <span class="nottickedoff">fail (unlines (TC.prettyTCError msg))</span></span>
 <span class="lineno"> 1550 </span><span class="spaces">           </span><span class="istickedoff">Right p' -&gt; checkApply <span class="nottickedoff">nenv</span> mkSqt (Prop p') es</span>

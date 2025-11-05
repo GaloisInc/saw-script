@@ -90,7 +90,7 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span>import SAWCore.Recognizer
 <span class="lineno">   72 </span>import SAWCore.Prelude (scEq)
 <span class="lineno">   73 </span>import SAWCore.SharedTerm
-<span class="lineno">   74 </span>import SAWCore.Typechecker (tcInsertModule, inferCompleteTermCtx)
+<span class="lineno">   74 </span>import SAWCore.Typechecker (tcInsertModule, inferCompleteTerm)
 <span class="lineno">   75 </span>import SAWCore.Term.Functor
 <span class="lineno">   76 </span>import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 <span class="lineno">   77 </span>import SAWCore.Term.Raw
@@ -1965,7 +1965,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1946 </span><span class="spaces">     </span><span class="istickedoff">let mnm =</span>
 <span class="lineno"> 1947 </span><span class="spaces">           </span><span class="istickedoff">mkModuleName $ Text.splitOn &quot;.&quot; mnm_str</span>
 <span class="lineno"> 1948 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- io $ scFindModule sc mnm -- Check that mnm exists</span>
-<span class="lineno"> 1949 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTermCtx sc (Just mnm) <span class="nottickedoff">mempty</span> uterm</span>
+<span class="lineno"> 1949 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTerm sc (Just mnm) uterm</span>
 <span class="lineno"> 1950 </span><span class="spaces">     </span><span class="istickedoff">case err_or_t of</span>
 <span class="lineno"> 1951 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; fail (show err)</span>
 <span class="lineno"> 1952 </span><span class="spaces">       </span><span class="istickedoff">Right x -&gt; pure x</span></span>

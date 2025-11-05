@@ -331,7 +331,7 @@ span.spaces    { background: white }
 <span class="lineno">  312 </span><span class="spaces">  </span><span class="istickedoff">show (Range f sl sc el ec) = f ++ &quot;:&quot; ++ show sl ++ &quot;:&quot; ++ show sc ++ &quot;-&quot; ++ show el ++ &quot;:&quot; ++ show ec</span>
 <span class="lineno">  313 </span><span class="spaces">  </span><span class="istickedoff">show (FileOnlyPos f)          = <span class="nottickedoff">f</span></span>
 <span class="lineno">  314 </span><span class="spaces">  </span><span class="istickedoff">show (FileAndFunctionPos f fn)  = <span class="nottickedoff">f ++ &quot;:&quot; ++ fn</span></span>
-<span class="lineno">  315 </span><span class="spaces">  </span><span class="istickedoff">show (PosInferred InfFresh p)   = show p ++ &quot;: Fresh type for this term&quot;</span>
+<span class="lineno">  315 </span><span class="spaces">  </span><span class="istickedoff">show (PosInferred InfFresh p)   = <span class="nottickedoff">show p ++ &quot;: Fresh type for this term&quot;</span></span>
 <span class="lineno">  316 </span><span class="spaces">  </span><span class="istickedoff">show (PosInferred InfTerm p)    = <span class="nottickedoff">show p ++ &quot;: Inferred from this term&quot;</span></span>
 <span class="lineno">  317 </span><span class="spaces">  </span><span class="istickedoff">show (PosInferred InfContext p) = <span class="nottickedoff">show p ++ &quot;: Inferred from this context&quot;</span></span>
 <span class="lineno">  318 </span><span class="spaces">  </span><span class="istickedoff">show Unknown               = <span class="nottickedoff">&quot;unknown&quot;</span></span>
