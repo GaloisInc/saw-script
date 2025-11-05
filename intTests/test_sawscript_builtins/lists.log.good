@@ -61,10 +61,21 @@ tail: empty list
  ("defgabc","defgabc")
  ("","")
  ("abc","abc")
- ***
- ***
+ *** for (empty) ***
+ *** for (one) ***
  1
- ***
+ *** for (two) ***
  1
  2
- ***
+ *** end for ***
+ **** map ****
+ []
+ [2,3]
+ **** foldl ****
+ zero
+ zeroalpha
+ zeroalphabeta
+ **** foldr ****
+ zero
+ alphazero
+ alphabetazero
