@@ -5933,6 +5933,13 @@ primitives = Map.fromList $
     , "be found in the MIRModule, this will raise an error."
     ]
 
+  , prim "mir_find_name" "MIRModule -> String -> [MIRType] -> String"
+    (funVal3 mir_find_name)
+    Experimental
+    [ "Find the name of a polymorphic function."
+    , "Throws an error if the name is unknown or ambiguous."
+    ]
+
   , prim "mir_find_mangled_adt" "MIRModule -> String -> MIRAdt"
     (funVal2 mir_find_mangled_adt)
     Experimental
@@ -6293,6 +6300,9 @@ primitives = Map.fromList $
     (pureVal mir_usize)
     Experimental
     [ "The type of MIR pointer-sized unsigned integers." ]
+
+
+
 
     ----------------------------------------
     -- Yosys commands

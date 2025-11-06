@@ -1,0 +1,8 @@
+enable_experimental;
+m <- mir_load_module "test.linked-mir.json";
+
+f8 <- mir_extract m (mir_find_name m "test::f" [mir_u8]);
+f16 <- mir_extract m (mir_find_name m "test::f" [mir_u16]);
+
+if eval_bool {{ (zero # f8 5) == f16 5 }}
+  then return () else fail "Test failed";

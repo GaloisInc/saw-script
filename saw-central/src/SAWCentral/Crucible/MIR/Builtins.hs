@@ -23,6 +23,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_equal
   , mir_extract
   , mir_find_adt
+  , mir_find_name
   , mir_find_mangled_adt
   , mir_fresh_cryptol_var
   , mir_fresh_expanded_value
@@ -380,6 +381,14 @@ mir_find_adt rm origName substs = do
       col = cs ^. Mir.collection
   origDid <- findDefId cs origName
   findAdt col origDid (Mir.Substs substs)
+
+mir_find_name :: Mir.RustModule -> Text -> [Mir.Ty] -> TopLevel Text
+mir_find_name rm origName tys =
+  do
+    let cs = rm ^. Mir.rmCS
+        col = cs ^. Mir.collection
+    origId <- findDefId cs origName
+    findPolyFn col origId (Mir.Substs tys)
 
 -- | Generate a fresh term of the given Cryptol type. The name will be used when
 -- pretty-printing the variable in debug output.
@@ -1731,6 +1740,22 @@ findAdt col origName substs =
         Nothing -> fail $ "Unknown ADT: " ++ show (origName, substs)
   where
     insts = col ^. Mir.adtsOrig . at origName . to (fromMaybe [])
+
+findPolyFn :: Mir.Collection -> Mir.DefId -> Mir.Substs -> TopLevel Text
+findPolyFn col origName substs =
+  case matches of
+    [one] -> pure (Mir.idText one)
+    [] -> fail "Could not fine name"
+    _  -> fail "Name is ambiguous"
+  where
+  matches = [ i ^. Mir.intrName
+            | i <- Map.elems (col ^. Mir.intrinsics)
+            , let inst = i ^. Mir.intrInst
+            , case inst ^. Mir.inKind of
+                Mir.IkItem -> inst ^. Mir.inDefId == origName && inst ^. Mir.inSubsts == substs
+                _ -> False
+             ]
+
 
 -- | Find the ADT definition corresponding to a mangled identifier (i.e., an
 -- identifier for an ADT that is already instantiated with type arguments). See
