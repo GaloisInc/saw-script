@@ -125,7 +125,6 @@ goal_eval_unint : [String] -> ProofScript ()
 goal_num : ProofScript Int
 head : {a} [a] -> a
 hoist_ifs : Term -> TopLevel Term
-include : String -> TopLevel ()
 int_to_term : Int -> Term
 is_convertible : Term -> Term -> TopLevel Bool
 java_array : Int -> JavaType -> JavaType

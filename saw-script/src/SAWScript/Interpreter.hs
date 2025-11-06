@@ -792,6 +792,9 @@ interpretDoStmt stmt =
             setCryptolEnv ce'
       SS.StmtImport _ _ ->
           fail "block-level import unimplemented"
+      SS.StmtInclude _ file -> do
+          let file' :: FilePath = Text.unpack file
+          liftTopLevel $ interpretFile file' False
       SS.StmtTypedef _ _ name ty -> do
           liftTopLevel $ addTypedef name ty
 
@@ -976,6 +979,10 @@ interpretTopStmt printBinds stmt = do
          cenv' <- io $ CEnv.importCryptolModule sc cenv mLoc qual CEnv.PublicAndPrivate spec
          setCryptolEnv cenv'
          --showCryptolEnv
+
+    SS.StmtInclude _ file -> do
+      let file' :: FilePath = Text.unpack file
+      liftTopLevel $ interpretFile file' False
 
     SS.StmtTypedef _ _ name ty ->
       liftTopLevel $ addTypedef name ty
@@ -2104,11 +2111,6 @@ set_crucible_timeout t = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwCrucibleTimeout = t }
 
-include_value :: Text -> TopLevel ()
-include_value file = do
-  let file' :: FilePath = Text.unpack file
-  interpretFile file' False
-
 set_ascii :: Bool -> TopLevel ()
 set_ascii b = do
   rw <- getTopLevelRW
@@ -2552,11 +2554,6 @@ primitives = Map.fromList $
     , "would. Works in any of the SAWScript monads."
     , "Note: not a control-flow operator."
     ]
-
-  , prim "include"             "String -> TopLevel ()"
-    (pureVal include_value)
-    Current
-    [ "Load and execute the given SAWScript file." ]
 
   , prim "undefined"           "{a} a"
     -- In order to work as expected this has to be "error" in place of

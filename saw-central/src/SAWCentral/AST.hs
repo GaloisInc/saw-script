@@ -181,6 +181,7 @@ data Stmt
   | StmtLet      Pos Rebindable DeclGroup
   | StmtCode     Pos Pos Text
   | StmtImport   Pos Import
+  | StmtInclude  Pos Text
   | StmtTypedef  Pos Pos Text Type
   deriving Show
 
@@ -195,6 +196,7 @@ instance Positioned Stmt where
   getPos (StmtLet pos _ _)       = pos
   getPos (StmtCode allpos _spos _str) = allpos
   getPos (StmtImport pos _)    = pos
+  getPos (StmtInclude pos _)    = pos
   getPos (StmtTypedef allpos _apos _a _ty) = allpos
 
 -- | Systems of mutually recursive declarations.
@@ -447,6 +449,8 @@ instance Pretty Stmt where
             Just (P.Only names) ->
                PP.space PP.<> PP.tupled (map ppIdent names)
             Nothing -> PP.emptyDoc)
+      StmtInclude _ name ->
+          "include" PP.<+> PP.dquotes (PP.pretty name)
       StmtTypedef _ _ name ty ->
          "typedef" PP.<+> PP.pretty name PP.<+> PPS.prettyPrec 0 ty
       --expr -> PP.cyan . PP.viaShow expr

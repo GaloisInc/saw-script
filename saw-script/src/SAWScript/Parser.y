@@ -45,6 +45,7 @@ import Control.Exception
 %token
   'import'       { TReserved _ "import"         }
   'submodule'    { TReserved _ "submodule"      }
+  'include'      { TReserved _ "include"        }
   'and'          { TReserved _ "and"            }
   'as'           { TReserved _ "as"             }
   'hiding'       { TReserved _ "hiding"         }
@@ -150,6 +151,7 @@ Stmt :: { Stmt }
  | 'let' 'rebindable' Declaration       { buildLetRB (maxSpan [tokPos $1, getPos $3]) $3 }
  | 'let' code                           { StmtCode (maxSpan [tokPos $1, tokPos $2]) (tokPos $2) (tokStr $2) }
  | 'import' Import                      { StmtImport (maxSpan [tokPos $1, getPos $2]) $2 }
+ | 'include' string                     { StmtInclude (maxSpan [tokPos $1, tokPos $2]) (tokStr $2) }
  | 'typedef' name '=' Type              { StmtTypedef (maxSpan [tokPos $1, getPos $4]) (tokPos $2) (tokStr $2) $4 }
 
 Declaration :: { Decl }
