@@ -2433,7 +2433,7 @@ data Primitive
 -- the ones there have no special syntax or semantics and should
 -- probably be moved here at some point.
 primTypes :: Map SS.Name PrimType
-primTypes = Map.fromList
+primTypes = foldl doadd Map.empty
   [ abstype "BisimTheorem" Experimental
   , abstype "CryptolModule" Current
   , abstype "FunctionProfile" Experimental
@@ -2463,9 +2463,21 @@ primTypes = Map.fromList
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
+    -- Thread the map through as we add entries so we can
+    -- use it to check the right hand side of any typedefs.
+    doadd ::
+        Map SS.Name PrimType ->
+        (Map SS.Name PrimType -> (SS.Name, PrimType)) ->
+        Map SS.Name PrimType
+    doadd tyenv constructor =
+        let (name, entry) = constructor tyenv in
+        Map.insert name entry tyenv
+
     -- abstract type of arbitrary kind
-    abstype' :: SS.Kind -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
-    abstype' kind name lc = (name, info)
+    abstype' ::
+        SS.Kind -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType ->
+        (SS.Name, PrimType)
+    abstype' kind name lc _tyenv = (name, info)
       where
         info = PrimType
           { primTypeType = SS.AbstractType kind
@@ -2473,25 +2485,35 @@ primTypes = Map.fromList
           }
 
     -- abstract type of kind *
-    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
-    abstype name lc = abstype' SS.kindStar name lc
+    abstype :: Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> (SS.Name, PrimType)
+    abstype name lc tyenv = abstype' SS.kindStar name lc tyenv
 
     -- concrete type (not currently used)
-    _conctype :: Text -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
-    _conctype name tystr lc = (name, info)
+    _conctype ::
+        Text -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType ->
+        (SS.Name, PrimType)
+    _conctype name tystr lc tyenv = (name, info)
       where
         info = PrimType
           { primTypeType = SS.ConcreteType ty
           , primTypeLife = lc
           }
         fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
-        -- XXX: Map.empty is a placeholder; if we start using this we
-        -- may need to tsort the entries in the list and then
-        -- accumulate the environment with fold so that the types used
-        -- in the RHS of typedefs can be found.
-        ty = case Loader.readSchemaPure fakeFileName lc Map.empty tystr of
-            SS.Forall [] ty' -> ty'
-            _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
+
+        -- We need a Map Name (PrimitiveLifecycle, NamedType) to feed
+        -- to readSchemaPure. Construct one from the Map Name PrimType
+        -- that we've got. FUTURE: there are too many isomorphic types
+        -- floating around in the builtins handling (not just here)
+        -- and they should all be simplified away.
+        tyenv' = Map.map (\pt -> (primTypeLife pt, primTypeType pt)) tyenv
+
+        ty = case Loader.readSchemaPure fakeFileName lc tyenv' tystr of
+            SS.Forall [] ty' ->
+                ty'
+            _ ->
+                panic "primTypes" [
+                    "Builtin typedef " <> name <> " not monomorphic"
+                ]
 
 
 primitives :: Map SS.Name Primitive
