@@ -6,8 +6,6 @@ This release supports [version
 
 ## Changes
 
-* We have a new command `mir_find_name : MIRModule -> String -> [MIRType] -> String`
-  which can be used to find the name of the instantiation of a polymorphic function.
 
 * The `LLVMSetup` and `MIRSetup` monad types are now just ordinary builtin
   types; their names are no longer reserved words.
@@ -165,6 +163,9 @@ This release supports [version
        - referring to ambiguous (qualified) symbols is an error.
 
 ## New Features
+
+* SAW has a new command `mir_find_name : MIRModule -> String -> [MIRType] -> String`
+  which can be used to find the name of the instantiation of a polymorphic function.
 
 * SAW has new commands `llvm_unint: [String] -> LLVMSetup ()` and
   and analogous commands for JVM and MIR, which can be used to declare that some
