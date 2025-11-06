@@ -1,0 +1,3 @@
+ Loading file "err061.saw"
+ err061.saw:4:1-4:19: Redefinition of type Foo
+FAILED

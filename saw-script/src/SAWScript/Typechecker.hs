@@ -1474,9 +1474,32 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
             return s
         StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
-            let s' = StmtTypedef allpos apos a ty'
-            addTypedef a ty'
-            return s'
+            tyenv <- gets tyEnv
+            case Map.lookup a tyenv of
+                Nothing -> do
+                    let s' = StmtTypedef allpos apos a ty'
+                    addTypedef a ty'
+                    return s'
+                Just (lc, _expansion) -> do
+                    -- Prohibit redefining any type, even ones that
+                    -- aren't visible. In principle it is ok to
+                    -- redefine a type that isn't visible, since
+                    -- existing references to it shouldn't be visible
+                    -- either. But (a) that's not always true, there
+                    -- have been bugs in the builtin list before; and
+                    -- (b) it would require remembering permanently
+                    -- that any corresponding future use of
+                    -- enable_experimental or enable_deprecated must
+                    -- be blocked.
+                    avail <- asks primsAvail
+                    let addendum =
+                          if Set.member lc avail then ""
+                          else " (which is not currently visible)"
+                    recordError allpos $ "Redefinition of type " ++
+                                         Text.unpack a ++ addendum
+                    -- FUTURE: print the position of the previous definition
+                    -- (currently we don't keep it around)
+                    return s
 
 -- Inference for a do-block.
 --
