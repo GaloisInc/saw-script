@@ -113,7 +113,7 @@ Where:
   consult the MIR JSON file for your program.
 
   The Rust compiler generates a separate instance for each use of a polymorphic
-  function at a different type.   These instances have a compiler generated
+  function at a different type.   These instances have a compiler-generated
   name, so the easiest way to refer to them is by using the command
   `mir_find_name : MIRModule -> String -> [MIRType] -> String`.
   Given a Rust module, the name of a polymorphic function, and a list of types,
