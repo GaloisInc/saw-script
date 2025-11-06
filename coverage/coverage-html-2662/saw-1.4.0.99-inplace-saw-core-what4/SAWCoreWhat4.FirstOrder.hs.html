@@ -34,159 +34,155 @@ span.spaces    { background: white }
 <span class="lineno">   15 </span>{-# LANGUAGE CPP #-}
 <span class="lineno">   16 </span>{-# LANGUAGE GADTs #-}
 <span class="lineno">   17 </span>{-# LANGUAGE TypeOperators #-}
-<span class="lineno">   18 </span>{-# LANGUAGE DataKinds #-}
-<span class="lineno">   19 </span>{-# LANGUAGE TypeApplications #-}
-<span class="lineno">   20 </span>{-# LANGUAGE ScopedTypeVariables #-}
-<span class="lineno">   21 </span>{-# LANGUAGE PatternGuards #-}
-<span class="lineno">   22 </span>{-# LANGUAGE ViewPatterns #-}
-<span class="lineno">   23 </span>
-<span class="lineno">   24 </span>module SAWCoreWhat4.FirstOrder
-<span class="lineno">   25 </span>  (
-<span class="lineno">   26 </span>    fotToBaseType,
-<span class="lineno">   27 </span>    typeReprToFOT,
-<span class="lineno">   28 </span>    groundToFOV
-<span class="lineno">   29 </span>  ) where
-<span class="lineno">   30 </span>
-<span class="lineno">   31 </span>import qualified Data.BitVector.Sized as BV
-<span class="lineno">   32 </span>import qualified Data.Map as Map
-<span class="lineno">   33 </span>import Data.Foldable.WithIndex (ifoldlM)
-<span class="lineno">   34 </span>import Data.Parameterized.TraversableFC (FoldableFC(..))
-<span class="lineno">   35 </span>import Data.Parameterized.Some(Some(..))
-<span class="lineno">   36 </span>import Data.Parameterized.Context hiding (replicate)
+<span class="lineno">   18 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>module SAWCoreWhat4.FirstOrder
+<span class="lineno">   21 </span>  (
+<span class="lineno">   22 </span>    fotToBaseType,
+<span class="lineno">   23 </span>    typeReprToFOT,
+<span class="lineno">   24 </span>    groundToFOV
+<span class="lineno">   25 </span>  ) where
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>import qualified Data.BitVector.Sized as BV
+<span class="lineno">   28 </span>import qualified Data.Map as Map
+<span class="lineno">   29 </span>import Data.Foldable.WithIndex (ifoldlM)
+<span class="lineno">   30 </span>import Data.Parameterized.TraversableFC (FoldableFC(..))
+<span class="lineno">   31 </span>import Data.Parameterized.Some(Some(..))
+<span class="lineno">   32 </span>import Data.Parameterized.Context hiding (replicate)
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>import SAWCoreWhat4.PosNat
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>import SAWCore.FiniteValue (FirstOrderType(..),FirstOrderValue(..))
 <span class="lineno">   37 </span>
-<span class="lineno">   38 </span>import SAWCoreWhat4.PosNat
-<span class="lineno">   39 </span>
-<span class="lineno">   40 </span>import SAWCore.FiniteValue (FirstOrderType(..),FirstOrderValue(..))
+<span class="lineno">   38 </span>import What4.BaseTypes
+<span class="lineno">   39 </span>import What4.IndexLit
+<span class="lineno">   40 </span>import What4.Expr.GroundEval
 <span class="lineno">   41 </span>
-<span class="lineno">   42 </span>import What4.BaseTypes
-<span class="lineno">   43 </span>import What4.IndexLit
-<span class="lineno">   44 </span>import What4.Expr.GroundEval
-<span class="lineno">   45 </span>
-<span class="lineno">   46 </span>---------------------------------------------------------------------
-<span class="lineno">   47 </span>
-<span class="lineno">   48 </span>-- | Convert a type expression from SAW-core to What4
-<span class="lineno">   49 </span>fotToBaseType :: FirstOrderType -&gt; Maybe (Some BaseTypeRepr)
-<span class="lineno">   50 </span><span class="decl"><span class="istickedoff">fotToBaseType FOTBit</span>
-<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some BaseBoolRepr)</span>
-<span class="lineno">   52 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType FOTInt</span>
-<span class="lineno">   53 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some BaseIntegerRepr)</span>
-<span class="lineno">   54 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTIntMod _n)</span>
-<span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseIntegerRepr)</span></span>
-<span class="lineno">   56 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTVec nat FOTBit)</span>
-<span class="lineno">   57 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some (PosNat nr)) &lt;- somePosNat nat</span>
-<span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some (BaseBVRepr nr))</span>
-<span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">   60 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">   61 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTVec nat fot)</span>
-<span class="lineno">   62 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some assn) &lt;- <span class="nottickedoff">listToAssn (replicate (fromIntegral nat) fot)</span></span>
-<span class="lineno">   63 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseStructRepr assn))</span></span>
-<span class="lineno">   64 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTArray fot1 fot2)</span>
-<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some ty1) &lt;- fotToBaseType fot1</span>
-<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some ty2) &lt;- fotToBaseType fot2</span>
-<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some (BaseArrayRepr (Empty :&gt; ty1) ty2))</span>
-<span class="lineno">   68 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTTuple fots)</span>
-<span class="lineno">   69 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some assn) &lt;- <span class="nottickedoff">listToAssn fots</span></span>
-<span class="lineno">   70 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseStructRepr assn))</span></span>
-<span class="lineno">   71 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">   72 </span><span class="spaces"></span><span class="istickedoff">-- TODO: convert to What4 records ?!</span>
-<span class="lineno">   73 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType _ = <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">   74 </span>
-<span class="lineno">   75 </span>listToAssn :: [FirstOrderType] -&gt; Maybe (Some (Assignment BaseTypeRepr))
-<span class="lineno">   76 </span><span class="decl"><span class="nottickedoff">listToAssn [] = Just (Some empty)</span>
-<span class="lineno">   77 </span><span class="spaces"></span><span class="nottickedoff">listToAssn (fot:rest) =</span>
-<span class="lineno">   78 </span><span class="spaces">  </span><span class="nottickedoff">case (fotToBaseType fot, listToAssn rest) of</span>
-<span class="lineno">   79 </span><span class="spaces">    </span><span class="nottickedoff">(Just (Some bt), Just (Some assn)) -&gt; Just (Some (extend assn bt))</span>
-<span class="lineno">   80 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
-<span class="lineno">   81 </span>
-<span class="lineno">   82 </span>---------------------------------------------------------------------
-<span class="lineno">   83 </span>-- | Convert a type expression from What4 to SAW-core
-<span class="lineno">   84 </span>
-<span class="lineno">   85 </span>typeReprToFOT :: BaseTypeRepr ty -&gt; Either String FirstOrderType
-<span class="lineno">   86 </span><span class="decl"><span class="istickedoff">typeReprToFOT BaseBoolRepr            = <span class="nottickedoff">pure FOTBit</span></span>
-<span class="lineno">   87 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT BaseIntegerRepr         = <span class="nottickedoff">pure FOTInt</span></span>
-<span class="lineno">   88 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (natValue w) FOTBit</span>
-<span class="lineno">   89 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT BaseRealRepr            = <span class="nottickedoff">Left &quot;No FO Real&quot;</span></span>
-<span class="lineno">   90 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT BaseComplexRepr         = <span class="nottickedoff">Left &quot;No FO Complex&quot;</span></span>
-<span class="lineno">   91 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseStringRepr _)      = <span class="nottickedoff">Left &quot;No FO String&quot;</span></span>
-<span class="lineno">   92 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseArrayRepr (Empty :&gt; ty) b)</span>
-<span class="lineno">   93 </span><span class="spaces">  </span><span class="istickedoff">| Right fot1 &lt;- <span class="nottickedoff">typeReprToFOT ty</span></span>
-<span class="lineno">   94 </span><span class="spaces">  </span><span class="istickedoff">, Right fot2 &lt;- <span class="nottickedoff">typeReprToFOT b</span></span>
-<span class="lineno">   95 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">pure $ FOTArray fot1 fot2</span></span>
-<span class="lineno">   96 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT ty@(BaseArrayRepr _ctx _b) = <span class="nottickedoff">Left $ &quot;Unsupported FO Array: &quot; ++ show ty</span></span>
-<span class="lineno">   97 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseFloatRepr _)       = <span class="nottickedoff">Left &quot;No FO Floating point&quot;</span></span>
-<span class="lineno">   98 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseStructRepr ctx)    = <span class="nottickedoff">FOTTuple &lt;$&gt; assnToList ctx</span></span></span>
-<span class="lineno">   99 </span>
-<span class="lineno">  100 </span>assnToList :: Assignment BaseTypeRepr ctx -&gt; Either String [FirstOrderType]
-<span class="lineno">  101 </span><span class="decl"><span class="nottickedoff">assnToList = foldrFC g (Right []) where</span>
-<span class="lineno">  102 </span><span class="spaces">  </span><span class="nottickedoff">g :: BaseTypeRepr x -&gt; Either String [FirstOrderType] -&gt; Either String [FirstOrderType]</span>
-<span class="lineno">  103 </span><span class="spaces">  </span><span class="nottickedoff">g ty l = (:) &lt;$&gt; typeReprToFOT ty &lt;*&gt; l</span></span>
+<span class="lineno">   42 </span>---------------------------------------------------------------------
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>-- | Convert a type expression from SAW-core to What4
+<span class="lineno">   45 </span>fotToBaseType :: FirstOrderType -&gt; Maybe (Some BaseTypeRepr)
+<span class="lineno">   46 </span><span class="decl"><span class="istickedoff">fotToBaseType FOTBit</span>
+<span class="lineno">   47 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseBoolRepr)</span></span>
+<span class="lineno">   48 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType FOTInt</span>
+<span class="lineno">   49 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseIntegerRepr)</span></span>
+<span class="lineno">   50 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTIntMod _n)</span>
+<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseIntegerRepr)</span></span>
+<span class="lineno">   52 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTVec nat FOTBit)</span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some (PosNat nr)) &lt;- somePosNat nat</span>
+<span class="lineno">   54 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some (BaseBVRepr nr))</span>
+<span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">   56 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   57 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTVec nat fot)</span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some assn) &lt;- <span class="nottickedoff">listToAssn (replicate (fromIntegral nat) fot)</span></span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseStructRepr assn))</span></span>
+<span class="lineno">   60 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTArray fot1 fot2)</span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some ty1) &lt;- <span class="nottickedoff">fotToBaseType fot1</span></span>
+<span class="lineno">   62 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some ty2) &lt;- <span class="nottickedoff">fotToBaseType fot2</span></span>
+<span class="lineno">   63 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseArrayRepr (Empty :&gt; ty1) ty2))</span></span>
+<span class="lineno">   64 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTTuple fots)</span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some assn) &lt;- <span class="nottickedoff">listToAssn fots</span></span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseStructRepr assn))</span></span>
+<span class="lineno">   67 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   68 </span><span class="spaces"></span><span class="istickedoff">-- TODO: convert to What4 records ?!</span>
+<span class="lineno">   69 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>listToAssn :: [FirstOrderType] -&gt; Maybe (Some (Assignment BaseTypeRepr))
+<span class="lineno">   72 </span><span class="decl"><span class="nottickedoff">listToAssn [] = Just (Some empty)</span>
+<span class="lineno">   73 </span><span class="spaces"></span><span class="nottickedoff">listToAssn (fot:rest) =</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="nottickedoff">case (fotToBaseType fot, listToAssn rest) of</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="nottickedoff">(Just (Some bt), Just (Some assn)) -&gt; Just (Some (extend assn bt))</span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>---------------------------------------------------------------------
+<span class="lineno">   79 </span>-- | Convert a type expression from What4 to SAW-core
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>typeReprToFOT :: BaseTypeRepr ty -&gt; Either String FirstOrderType
+<span class="lineno">   82 </span><span class="decl"><span class="nottickedoff">typeReprToFOT BaseBoolRepr            = pure FOTBit</span>
+<span class="lineno">   83 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT BaseIntegerRepr         = pure FOTInt</span>
+<span class="lineno">   84 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (natValue w) FOTBit</span>
+<span class="lineno">   85 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT BaseRealRepr            = Left &quot;No FO Real&quot;</span>
+<span class="lineno">   86 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT BaseComplexRepr         = Left &quot;No FO Complex&quot;</span>
+<span class="lineno">   87 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseStringRepr _)      = Left &quot;No FO String&quot;</span>
+<span class="lineno">   88 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseArrayRepr (Empty :&gt; ty) b)</span>
+<span class="lineno">   89 </span><span class="spaces">  </span><span class="nottickedoff">| Right fot1 &lt;- typeReprToFOT ty</span>
+<span class="lineno">   90 </span><span class="spaces">  </span><span class="nottickedoff">, Right fot2 &lt;- typeReprToFOT b</span>
+<span class="lineno">   91 </span><span class="spaces">  </span><span class="nottickedoff">= pure $ FOTArray fot1 fot2</span>
+<span class="lineno">   92 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT ty@(BaseArrayRepr _ctx _b) = Left $ &quot;Unsupported FO Array: &quot; ++ show ty</span>
+<span class="lineno">   93 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseFloatRepr _)       = Left &quot;No FO Floating point&quot;</span>
+<span class="lineno">   94 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseStructRepr ctx)    = FOTTuple &lt;$&gt; assnToList ctx</span></span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>assnToList :: Assignment BaseTypeRepr ctx -&gt; Either String [FirstOrderType]
+<span class="lineno">   97 </span><span class="decl"><span class="nottickedoff">assnToList = foldrFC g (Right []) where</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="nottickedoff">g :: BaseTypeRepr x -&gt; Either String [FirstOrderType] -&gt; Either String [FirstOrderType]</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">g ty l = (:) &lt;$&gt; typeReprToFOT ty &lt;*&gt; l</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>---------------------------------------------------------------------
+<span class="lineno">  103 </span>-- | Convert between What4 GroundValues and saw-core FirstOrderValues
 <span class="lineno">  104 </span>
-<span class="lineno">  105 </span>
-<span class="lineno">  106 </span>---------------------------------------------------------------------
-<span class="lineno">  107 </span>-- | Convert between What4 GroundValues and saw-core FirstOrderValues
-<span class="lineno">  108 </span>
-<span class="lineno">  109 </span>groundToFOV :: BaseTypeRepr ty -&gt; GroundValue ty -&gt; Either String FirstOrderValue
-<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">groundToFOV BaseBoolRepr    b         = pure $ FOVBit b</span>
-<span class="lineno">  111 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseIntegerRepr i         = <span class="nottickedoff">pure $ FOVInt i</span></span>
-<span class="lineno">  112 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) (BV.asUnsigned bv)</span>
-<span class="lineno">  113 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseRealRepr    _         = <span class="nottickedoff">Left &quot;Real is not FOV&quot;</span></span>
-<span class="lineno">  114 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseComplexRepr         _ = <span class="nottickedoff">Left &quot;Complex is not FOV&quot;</span></span>
-<span class="lineno">  115 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseStringRepr _)      _ = <span class="nottickedoff">Left &quot;String is not FOV&quot;</span></span>
-<span class="lineno">  116 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseFloatRepr _)       _ = <span class="nottickedoff">Left &quot;Floating point is not FOV&quot;</span></span>
-<span class="lineno">  117 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseArrayRepr (Empty :&gt; ty_idx) ty_val) (ArrayMapping _) = <span class="nottickedoff">do</span></span>
-<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- ArrayMapping is an array represented as a function call we can</span></span>
-<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- use to extract values. We can't do anything useful with this</span></span>
-<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- because we don't have any clue what key values to look at and</span></span>
-<span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- no good way to figure that out either. So return a placeholder</span></span>
-<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- value in FirstOrderValue.</span></span>
-<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">--</span></span>
-<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- (The frustrating part is that in many cases the _user_ will</span></span>
-<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- know what key values to look at, but has no way to tell us.)</span></span>
-<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">--</span></span>
-<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- In principle we could change groundToFOV to return any of an</span></span>
-<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- error, a FirstOrderValue, or a separate FunctionArrayValue</span></span>
-<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- type, and use that channel to return the actual function</span></span>
-<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- handle. (Including the function handle in a FirstOrderValue</span></span>
-<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- value is problematic as things stand.) However, there's nothing</span></span>
-<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- to be gained by doing this without a way to figure out what</span></span>
-<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- key values to look at. And realistically, if we ever _do_</span></span>
-<span class="lineno">  134 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- come up with a way to figure out what key values to look at,</span></span>
-<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- it should be implemented in What4 so What4 never returns</span></span>
-<span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- ArrayMapping.</span></span>
-<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">--</span></span>
-<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- (See Note [FOVArray] in SAWCore.FiniteValue</span></span>
-<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- where FirstOrderValue is defined.)</span></span>
+<span class="lineno">  105 </span>groundToFOV :: BaseTypeRepr ty -&gt; GroundValue ty -&gt; Either String FirstOrderValue
+<span class="lineno">  106 </span><span class="decl"><span class="istickedoff">groundToFOV BaseBoolRepr    b         = <span class="nottickedoff">pure $ FOVBit b</span></span>
+<span class="lineno">  107 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseIntegerRepr i         = <span class="nottickedoff">pure $ FOVInt i</span></span>
+<span class="lineno">  108 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) (BV.asUnsigned bv)</span>
+<span class="lineno">  109 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseRealRepr    _         = <span class="nottickedoff">Left &quot;Real is not FOV&quot;</span></span>
+<span class="lineno">  110 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseComplexRepr         _ = <span class="nottickedoff">Left &quot;Complex is not FOV&quot;</span></span>
+<span class="lineno">  111 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseStringRepr _)      _ = <span class="nottickedoff">Left &quot;String is not FOV&quot;</span></span>
+<span class="lineno">  112 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseFloatRepr _)       _ = <span class="nottickedoff">Left &quot;Floating point is not FOV&quot;</span></span>
+<span class="lineno">  113 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseArrayRepr (Empty :&gt; ty_idx) ty_val) (ArrayMapping _) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- ArrayMapping is an array represented as a function call we can</span></span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- use to extract values. We can't do anything useful with this</span></span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- because we don't have any clue what key values to look at and</span></span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- no good way to figure that out either. So return a placeholder</span></span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- value in FirstOrderValue.</span></span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">--</span></span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- (The frustrating part is that in many cases the _user_ will</span></span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- know what key values to look at, but has no way to tell us.)</span></span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">--</span></span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- In principle we could change groundToFOV to return any of an</span></span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- error, a FirstOrderValue, or a separate FunctionArrayValue</span></span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- type, and use that channel to return the actual function</span></span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- handle. (Including the function handle in a FirstOrderValue</span></span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- value is problematic as things stand.) However, there's nothing</span></span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- to be gained by doing this without a way to figure out what</span></span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- key values to look at. And realistically, if we ever _do_</span></span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- come up with a way to figure out what key values to look at,</span></span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- it should be implemented in What4 so What4 never returns</span></span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- ArrayMapping.</span></span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">--</span></span>
+<span class="lineno">  134 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- (See Note [FOVArray] in SAWCore.FiniteValue</span></span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- where FirstOrderValue is defined.)</span></span>
+<span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ty_idx' &lt;- typeReprToFOT ty_idx</span></span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ty_val' &lt;- typeReprToFOT ty_val</span></span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure $ FOVOpaqueArray ty_idx' ty_val'</span></span>
+<span class="lineno">  139 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseArrayRepr (Empty :&gt; ty_idx) ty_val) (ArrayConcrete dfl values) = <span class="nottickedoff">do</span></span>
 <span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ty_idx' &lt;- typeReprToFOT ty_idx</span></span>
-<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ty_val' &lt;- typeReprToFOT ty_val</span></span>
-<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure $ FOVOpaqueArray ty_idx' ty_val'</span></span>
-<span class="lineno">  143 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseArrayRepr (Empty :&gt; ty_idx) ty_val) (ArrayConcrete dfl values) = do</span>
-<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">ty_idx' &lt;- typeReprToFOT ty_idx</span>
-<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff">dfl' &lt;- groundToFOV ty_val dfl</span>
-<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">let convert idx values' v = do</span>
-<span class="lineno">  147 </span><span class="spaces">          </span><span class="istickedoff">let idx' = indexToFOV idx</span>
-<span class="lineno">  148 </span><span class="spaces">          </span><span class="istickedoff">v' &lt;- groundToFOV ty_val v</span>
-<span class="lineno">  149 </span><span class="spaces">          </span><span class="istickedoff">return $ Map.insert idx' v' values'</span>
-<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">values' &lt;- ifoldlM convert Map.empty values</span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">pure $ FOVArray ty_idx' dfl' values'</span>
-<span class="lineno">  152 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseArrayRepr _ _) _ =</span>
-<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Left &quot;Unsupported FOV array (unexpected key type)&quot;</span></span>
-<span class="lineno">  154 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseStructRepr ctx) tup  = <span class="nottickedoff">FOVTuple &lt;$&gt; tupleToList ctx tup</span></span></span>
-<span class="lineno">  155 </span>
-<span class="lineno">  156 </span>indexToFOV :: Assignment IndexLit (EmptyCtx ::&gt; ty) -&gt; FirstOrderValue
-<span class="lineno">  157 </span><span class="decl"><span class="istickedoff">indexToFOV (Empty :&gt; IntIndexLit k) =</span>
-<span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">FOVInt k</span></span>
-<span class="lineno">  159 </span><span class="spaces"></span><span class="istickedoff">indexToFOV (Empty :&gt; BVIndexLit w k) =</span>
-<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">FOVWord (natValue w) (BV.asUnsigned k)</span></span>
-<span class="lineno">  161 </span>
-<span class="lineno">  162 </span>
-<span class="lineno">  163 </span>tupleToList :: Assignment BaseTypeRepr ctx -&gt;
-<span class="lineno">  164 </span>             Assignment GroundValueWrapper ctx -&gt; Either String [FirstOrderValue]
-<span class="lineno">  165 </span><span class="decl"><span class="nottickedoff">tupleToList (viewAssign -&gt; AssignEmpty) (viewAssign -&gt; AssignEmpty) = Right []</span>
-<span class="lineno">  166 </span><span class="spaces"></span><span class="nottickedoff">tupleToList (viewAssign -&gt; AssignExtend rs r) (viewAssign -&gt; AssignExtend gvs gv) =</span>
-<span class="lineno">  167 </span><span class="spaces">  </span><span class="nottickedoff">(:) &lt;$&gt; groundToFOV r (unGVW gv) &lt;*&gt; tupleToList rs gvs</span></span>
-<span class="lineno">  168 </span>#if !MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
-<span class="lineno">  169 </span>tupleToList _ _ = error &quot;GADTs should rule this out.&quot;
-<span class="lineno">  170 </span>#endif
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">dfl' &lt;- groundToFOV ty_val dfl</span></span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let convert idx values' v = do</span></span>
+<span class="lineno">  143 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">let idx' = indexToFOV idx</span></span>
+<span class="lineno">  144 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">v' &lt;- groundToFOV ty_val v</span></span>
+<span class="lineno">  145 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">return $ Map.insert idx' v' values'</span></span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">values' &lt;- ifoldlM convert Map.empty values</span></span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure $ FOVArray ty_idx' dfl' values'</span></span>
+<span class="lineno">  148 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseArrayRepr _ _) _ =</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Left &quot;Unsupported FOV array (unexpected key type)&quot;</span></span>
+<span class="lineno">  150 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseStructRepr ctx) tup  = <span class="nottickedoff">FOVTuple &lt;$&gt; tupleToList ctx tup</span></span></span>
+<span class="lineno">  151 </span>
+<span class="lineno">  152 </span>indexToFOV :: Assignment IndexLit (EmptyCtx ::&gt; ty) -&gt; FirstOrderValue
+<span class="lineno">  153 </span><span class="decl"><span class="nottickedoff">indexToFOV (Empty :&gt; IntIndexLit k) =</span>
+<span class="lineno">  154 </span><span class="spaces">    </span><span class="nottickedoff">FOVInt k</span>
+<span class="lineno">  155 </span><span class="spaces"></span><span class="nottickedoff">indexToFOV (Empty :&gt; BVIndexLit w k) =</span>
+<span class="lineno">  156 </span><span class="spaces">    </span><span class="nottickedoff">FOVWord (natValue w) (BV.asUnsigned k)</span></span>
+<span class="lineno">  157 </span>
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>tupleToList :: Assignment BaseTypeRepr ctx -&gt;
+<span class="lineno">  160 </span>             Assignment GroundValueWrapper ctx -&gt; Either String [FirstOrderValue]
+<span class="lineno">  161 </span><span class="decl"><span class="nottickedoff">tupleToList (viewAssign -&gt; AssignEmpty) (viewAssign -&gt; AssignEmpty) = Right []</span>
+<span class="lineno">  162 </span><span class="spaces"></span><span class="nottickedoff">tupleToList (viewAssign -&gt; AssignExtend rs r) (viewAssign -&gt; AssignExtend gvs gv) =</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="nottickedoff">(:) &lt;$&gt; groundToFOV r (unGVW gv) &lt;*&gt; tupleToList rs gvs</span></span>
+<span class="lineno">  164 </span>#if !MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+<span class="lineno">  165 </span>tupleToList _ _ = error &quot;GADTs should rule this out.&quot;
+<span class="lineno">  166 </span>#endif
 
 </pre>
 </body>

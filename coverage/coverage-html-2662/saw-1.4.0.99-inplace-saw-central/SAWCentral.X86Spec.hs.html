@@ -1077,7 +1077,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1058 </span>-- entry (established in 'setupGlobals') is for 0.
 <span class="lineno"> 1059 </span>mkGlobalMap ::
 <span class="lineno"> 1060 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
-<span class="lineno"> 1061 </span>  Map.Map RegionIndex (LLVMPtr Sym 64) -&gt;
+<span class="lineno"> 1061 </span>  Map RegionIndex (LLVMPtr Sym 64) -&gt;
 <span class="lineno"> 1062 </span>  GlobalMap Sym Crucible.Mem 64
 <span class="lineno"> 1063 </span><span class="decl"><span class="istickedoff">mkGlobalMap rmap = GlobalMap $ \bak mem region off -&gt;</span>
 <span class="lineno"> 1064 </span><span class="spaces">  </span><span class="istickedoff">let</span>

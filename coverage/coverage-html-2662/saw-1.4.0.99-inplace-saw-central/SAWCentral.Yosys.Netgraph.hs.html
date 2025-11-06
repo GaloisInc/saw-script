@@ -209,45 +209,44 @@ span.spaces    { background: white }
 <span class="lineno">  190 </span><span class="spaces">    </span><span class="istickedoff">)</span>
 <span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">inputRecordType &lt;- cryptolRecordType sc inputFields</span>
 <span class="lineno">  192 </span><span class="spaces">  </span><span class="istickedoff">outputRecordType &lt;- cryptolRecordType sc outputFields</span>
-<span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">inputRecordEC &lt;- liftIO $ SC.scFreshEC sc &quot;input&quot; inputRecordType</span>
-<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">inputRecord &lt;- liftIO $ SC.scVariable sc inputRecordEC</span>
-<span class="lineno">  195 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">derivedInputs &lt;- forM (Map.assocs inputPorts) $ \(nm, inp) -&gt; do</span>
-<span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- liftIO $ cryptolRecordSelect sc inputFields inputRecord nm</span>
-<span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff">deriveTermsByIndices <span class="nottickedoff">sc</span> inp t</span>
-<span class="lineno">  199 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">oneBitType &lt;- liftIO $ SC.scBitvector sc 1</span>
-<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">xMsg &lt;- liftIO $ SC.scString sc &quot;Attempted to read X bit&quot;</span>
-<span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">xTerm &lt;- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName &quot;error&quot;) [oneBitType, xMsg]</span>
-<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">zMsg &lt;- liftIO $ SC.scString sc &quot;Attempted to read Z bit&quot;</span>
-<span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">zTerm &lt;- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName &quot;error&quot;) [oneBitType, zMsg]</span>
-<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">let inputs = Map.unions $ mconcat</span>
-<span class="lineno">  206 </span><span class="spaces">        </span><span class="istickedoff">[ [ Map.fromList</span>
-<span class="lineno">  207 </span><span class="spaces">            </span><span class="istickedoff">[ ( [BitrepZero], PretermBvNat 1 0 )</span>
-<span class="lineno">  208 </span><span class="spaces">            </span><span class="istickedoff">, ( [BitrepOne], <span class="nottickedoff">PretermBvNat 1 1</span> )</span>
-<span class="lineno">  209 </span><span class="spaces">            </span><span class="istickedoff">, ( [BitrepX], <span class="nottickedoff">PretermSlice 0 1 0 xTerm</span> )</span>
-<span class="lineno">  210 </span><span class="spaces">            </span><span class="istickedoff">, ( [BitrepZ], <span class="nottickedoff">PretermSlice 0 1 0 zTerm</span> )</span>
-<span class="lineno">  211 </span><span class="spaces">            </span><span class="istickedoff">]</span>
-<span class="lineno">  212 </span><span class="spaces">          </span><span class="istickedoff">]</span>
-<span class="lineno">  213 </span><span class="spaces">        </span><span class="istickedoff">, derivedInputs</span>
-<span class="lineno">  214 </span><span class="spaces">        </span><span class="istickedoff">]</span>
-<span class="lineno">  215 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">terms &lt;- netgraphToTerms sc env ng inputs</span>
-<span class="lineno">  217 </span><span class="spaces">  </span><span class="istickedoff">outputRecord &lt;- cryptolRecord sc =&lt;&lt; mapForWithKeyM outputPorts</span>
-<span class="lineno">  218 </span><span class="spaces">    </span><span class="istickedoff">(\onm out -&gt; lookupPatternTerm sc <span class="nottickedoff">(YosysBitvecConsumerOutputPort onm)</span> out terms)</span>
-<span class="lineno">  219 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- liftIO $ SC.scAbstractExts sc [inputRecordEC] outputRecord</span>
-<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">ty &lt;- liftIO $ SC.scFun sc inputRecordType outputRecordType</span>
-<span class="lineno">  222 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)</span>
-<span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">let cty = C.tFun</span>
-<span class="lineno">  225 </span><span class="spaces">        </span><span class="istickedoff">(C.tRec . C.recordFromFields $ toCryptol &lt;$&gt; Map.assocs inputPorts)</span>
-<span class="lineno">  226 </span><span class="spaces">        </span><span class="istickedoff">(C.tRec . C.recordFromFields $ toCryptol &lt;$&gt; Map.assocs outputPorts)</span>
-<span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">pure ConvertedModule</span>
-<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">{ _convertedModuleTerm = t</span>
-<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">, _convertedModuleType = ty</span>
-<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">, _convertedModuleCryptolType = cty</span>
-<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
+<span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">inputRecord &lt;- liftIO $ SC.scFreshVariable sc &quot;input&quot; inputRecordType</span>
+<span class="lineno">  194 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">derivedInputs &lt;- forM (Map.assocs inputPorts) $ \(nm, inp) -&gt; do</span>
+<span class="lineno">  196 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- liftIO $ cryptolRecordSelect sc inputFields inputRecord nm</span>
+<span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">deriveTermsByIndices <span class="nottickedoff">sc</span> inp t</span>
+<span class="lineno">  198 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  199 </span><span class="spaces">  </span><span class="istickedoff">oneBitType &lt;- liftIO $ SC.scBitvector sc 1</span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">xMsg &lt;- liftIO $ SC.scString sc &quot;Attempted to read X bit&quot;</span>
+<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">xTerm &lt;- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName &quot;error&quot;) [oneBitType, xMsg]</span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">zMsg &lt;- liftIO $ SC.scString sc &quot;Attempted to read Z bit&quot;</span>
+<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">zTerm &lt;- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName &quot;error&quot;) [oneBitType, zMsg]</span>
+<span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">let inputs = Map.unions $ mconcat</span>
+<span class="lineno">  205 </span><span class="spaces">        </span><span class="istickedoff">[ [ Map.fromList</span>
+<span class="lineno">  206 </span><span class="spaces">            </span><span class="istickedoff">[ ( [BitrepZero], PretermBvNat 1 0 )</span>
+<span class="lineno">  207 </span><span class="spaces">            </span><span class="istickedoff">, ( [BitrepOne], <span class="nottickedoff">PretermBvNat 1 1</span> )</span>
+<span class="lineno">  208 </span><span class="spaces">            </span><span class="istickedoff">, ( [BitrepX], <span class="nottickedoff">PretermSlice 0 1 0 xTerm</span> )</span>
+<span class="lineno">  209 </span><span class="spaces">            </span><span class="istickedoff">, ( [BitrepZ], <span class="nottickedoff">PretermSlice 0 1 0 zTerm</span> )</span>
+<span class="lineno">  210 </span><span class="spaces">            </span><span class="istickedoff">]</span>
+<span class="lineno">  211 </span><span class="spaces">          </span><span class="istickedoff">]</span>
+<span class="lineno">  212 </span><span class="spaces">        </span><span class="istickedoff">, derivedInputs</span>
+<span class="lineno">  213 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno">  214 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  215 </span><span class="spaces">  </span><span class="istickedoff">terms &lt;- netgraphToTerms sc env ng inputs</span>
+<span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">outputRecord &lt;- cryptolRecord sc =&lt;&lt; mapForWithKeyM outputPorts</span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">(\onm out -&gt; lookupPatternTerm sc <span class="nottickedoff">(YosysBitvecConsumerOutputPort onm)</span> out terms)</span>
+<span class="lineno">  218 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  219 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- liftIO $ SC.scAbstractTerms sc [inputRecord] outputRecord</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">ty &lt;- liftIO $ SC.scFun sc inputRecordType outputRecordType</span>
+<span class="lineno">  221 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  222 </span><span class="spaces">  </span><span class="istickedoff">let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)</span>
+<span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">let cty = C.tFun</span>
+<span class="lineno">  224 </span><span class="spaces">        </span><span class="istickedoff">(C.tRec . C.recordFromFields $ toCryptol &lt;$&gt; Map.assocs inputPorts)</span>
+<span class="lineno">  225 </span><span class="spaces">        </span><span class="istickedoff">(C.tRec . C.recordFromFields $ toCryptol &lt;$&gt; Map.assocs outputPorts)</span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">pure ConvertedModule</span>
+<span class="lineno">  227 </span><span class="spaces">    </span><span class="istickedoff">{ _convertedModuleTerm = t</span>
+<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">, _convertedModuleType = ty</span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">, _convertedModuleCryptolType = cty</span>
+<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
 
 </pre>
 </body>

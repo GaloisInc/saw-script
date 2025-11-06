@@ -24,80 +24,73 @@ span.spaces    { background: white }
 <span class="lineno">    5 </span>Maintainer  : atomb
 <span class="lineno">    6 </span>Stability   : provisional
 <span class="lineno">    7 </span>-}
-<span class="lineno">    8 </span>{-# LANGUAGE DoAndIfThenElse #-}
-<span class="lineno">    9 </span>{-# LANGUAGE OverloadedStrings #-}
-<span class="lineno">   10 </span>{-# LANGUAGE ScopedTypeVariables #-}
-<span class="lineno">   11 </span>{-# LANGUAGE DeriveDataTypeable #-}
-<span class="lineno">   12 </span>{-# LANGUAGE ConstraintKinds #-}
-<span class="lineno">   13 </span>{-# LANGUAGE ViewPatterns #-}
-<span class="lineno">   14 </span>{-# LANGUAGE TypeFamilies #-}
-<span class="lineno">   15 </span>{-# LANGUAGE ImplicitParams #-}
-<span class="lineno">   16 </span>{-# LANGUAGE TupleSections #-}
-<span class="lineno">   17 </span>{-# LANGUAGE LambdaCase #-}
-<span class="lineno">   18 </span>
-<span class="lineno">   19 </span>module SAWCentral.LLVMBuiltins where
+<span class="lineno">    8 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">    9 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   10 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>module SAWCentral.LLVMBuiltins where
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>import Data.String
+<span class="lineno">   15 </span>import Data.Text (Text)
+<span class="lineno">   16 </span>import qualified Data.Text as Text
+<span class="lineno">   17 </span>import Data.Parameterized.Some
+<span class="lineno">   18 </span>import Control.Monad (unless)
+<span class="lineno">   19 </span>import Control.Monad.State (gets)
 <span class="lineno">   20 </span>
-<span class="lineno">   21 </span>import Data.String
-<span class="lineno">   22 </span>import Data.Text (Text)
-<span class="lineno">   23 </span>import qualified Data.Text as Text
-<span class="lineno">   24 </span>import Data.Parameterized.Some
-<span class="lineno">   25 </span>import Control.Monad (unless)
-<span class="lineno">   26 </span>import Control.Monad.State (gets)
-<span class="lineno">   27 </span>
-<span class="lineno">   28 </span>import qualified Text.LLVM.AST as LLVM
-<span class="lineno">   29 </span>import qualified Data.LLVM.BitCode as LLVM
-<span class="lineno">   30 </span>import qualified Text.LLVM.Parser as LLVM (parseType)
-<span class="lineno">   31 </span>
-<span class="lineno">   32 </span>import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
-<span class="lineno">   33 </span>import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule)
-<span class="lineno">   34 </span>import SAWCentral.Options
-<span class="lineno">   35 </span>import SAWCentral.Value as SV
-<span class="lineno">   36 </span>
-<span class="lineno">   37 </span>llvm_load_module :: FilePath -&gt; TopLevel (Some CMS.LLVMModule)
-<span class="lineno">   38 </span><span class="decl"><span class="istickedoff">llvm_load_module file =</span>
-<span class="lineno">   39 </span><span class="spaces">  </span><span class="istickedoff">do laxArith &lt;- gets rwLaxArith</span>
-<span class="lineno">   40 </span><span class="spaces">     </span><span class="istickedoff">debugIntrinsics &lt;- gets rwDebugIntrinsics</span>
-<span class="lineno">   41 </span><span class="spaces">     </span><span class="istickedoff">let ?transOpts = CL.defaultTranslationOptions</span>
-<span class="lineno">   42 </span><span class="spaces">                        </span><span class="istickedoff">{ CL.laxArith = laxArith</span>
-<span class="lineno">   43 </span><span class="spaces">                        </span><span class="istickedoff">, CL.debugIntrinsics = debugIntrinsics</span>
-<span class="lineno">   44 </span><span class="spaces">                        </span><span class="istickedoff">}</span>
-<span class="lineno">   45 </span><span class="spaces">     </span><span class="istickedoff">halloc &lt;- getHandleAlloc</span>
-<span class="lineno">   46 </span><span class="spaces">     </span><span class="istickedoff">io (CMS.loadLLVMModule file <span class="nottickedoff">halloc</span>) &gt;&gt;= \case</span>
-<span class="lineno">   47 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail (LLVM.formatError err)</span></span>
-<span class="lineno">   48 </span><span class="spaces">       </span><span class="istickedoff">Right (llvm_mod, warnings) -&gt; do</span>
-<span class="lineno">   49 </span><span class="spaces">         </span><span class="istickedoff">unless (null warnings) $</span>
-<span class="lineno">   50 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Warn $ show $ LLVM.ppParseWarnings warnings</span></span>
-<span class="lineno">   51 </span><span class="spaces">         </span><span class="istickedoff">return llvm_mod</span></span>
-<span class="lineno">   52 </span>
-<span class="lineno">   53 </span>llvm_type :: Text -&gt; TopLevel LLVM.Type
-<span class="lineno">   54 </span><span class="decl"><span class="istickedoff">llvm_type str =</span>
-<span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">case LLVM.parseType (Text.unpack str) of</span>
-<span class="lineno">   56 </span><span class="spaces">    </span><span class="istickedoff">Left e -&gt; <span class="nottickedoff">fail (show e)</span></span>
-<span class="lineno">   57 </span><span class="spaces">    </span><span class="istickedoff">Right t -&gt; return t</span></span>
-<span class="lineno">   58 </span>
-<span class="lineno">   59 </span>llvm_int :: Int -&gt; LLVM.Type
-<span class="lineno">   60 </span><span class="decl"><span class="istickedoff">llvm_int n = LLVM.PrimType (LLVM.Integer (fromIntegral n))</span></span>
-<span class="lineno">   61 </span>
-<span class="lineno">   62 </span>llvm_float :: LLVM.Type
-<span class="lineno">   63 </span><span class="decl"><span class="nottickedoff">llvm_float = LLVM.PrimType (LLVM.FloatType LLVM.Float)</span></span>
-<span class="lineno">   64 </span>
-<span class="lineno">   65 </span>llvm_double :: LLVM.Type
-<span class="lineno">   66 </span><span class="decl"><span class="nottickedoff">llvm_double = LLVM.PrimType (LLVM.FloatType LLVM.Double)</span></span>
-<span class="lineno">   67 </span>
-<span class="lineno">   68 </span>llvm_array :: Int -&gt; LLVM.Type -&gt; LLVM.Type
-<span class="lineno">   69 </span><span class="decl"><span class="istickedoff">llvm_array n t = LLVM.Array (fromIntegral n) t</span></span>
-<span class="lineno">   70 </span>
-<span class="lineno">   71 </span>llvm_alias :: Text -&gt; LLVM.Type
-<span class="lineno">   72 </span><span class="decl"><span class="istickedoff">llvm_alias n = LLVM.Alias (fromString $ Text.unpack n)</span></span>
-<span class="lineno">   73 </span>
-<span class="lineno">   74 </span>llvm_packed_struct_type :: [LLVM.Type] -&gt; LLVM.Type
-<span class="lineno">   75 </span><span class="decl"><span class="istickedoff">llvm_packed_struct_type = LLVM.PackedStruct</span></span>
-<span class="lineno">   76 </span>
-<span class="lineno">   77 </span>llvm_pointer :: LLVM.Type -&gt; LLVM.Type
-<span class="lineno">   78 </span><span class="decl"><span class="istickedoff">llvm_pointer = LLVM.PtrTo</span></span>
-<span class="lineno">   79 </span>
-<span class="lineno">   80 </span>llvm_struct_type :: [LLVM.Type] -&gt; LLVM.Type
-<span class="lineno">   81 </span><span class="decl"><span class="istickedoff">llvm_struct_type = LLVM.Struct</span></span>
+<span class="lineno">   21 </span>import qualified Text.LLVM.AST as LLVM
+<span class="lineno">   22 </span>import qualified Data.LLVM.BitCode as LLVM
+<span class="lineno">   23 </span>import qualified Text.LLVM.Parser as LLVM (parseType)
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
+<span class="lineno">   26 </span>import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule)
+<span class="lineno">   27 </span>import SAWCentral.Options
+<span class="lineno">   28 </span>import SAWCentral.Value as SV
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>llvm_load_module :: FilePath -&gt; TopLevel (Some CMS.LLVMModule)
+<span class="lineno">   31 </span><span class="decl"><span class="istickedoff">llvm_load_module file =</span>
+<span class="lineno">   32 </span><span class="spaces">  </span><span class="istickedoff">do laxArith &lt;- gets rwLaxArith</span>
+<span class="lineno">   33 </span><span class="spaces">     </span><span class="istickedoff">debugIntrinsics &lt;- gets rwDebugIntrinsics</span>
+<span class="lineno">   34 </span><span class="spaces">     </span><span class="istickedoff">let ?transOpts = CL.defaultTranslationOptions</span>
+<span class="lineno">   35 </span><span class="spaces">                        </span><span class="istickedoff">{ CL.laxArith = laxArith</span>
+<span class="lineno">   36 </span><span class="spaces">                        </span><span class="istickedoff">, CL.debugIntrinsics = debugIntrinsics</span>
+<span class="lineno">   37 </span><span class="spaces">                        </span><span class="istickedoff">}</span>
+<span class="lineno">   38 </span><span class="spaces">     </span><span class="istickedoff">halloc &lt;- getHandleAlloc</span>
+<span class="lineno">   39 </span><span class="spaces">     </span><span class="istickedoff">io (CMS.loadLLVMModule file <span class="nottickedoff">halloc</span>) &gt;&gt;= \case</span>
+<span class="lineno">   40 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail (LLVM.formatError err)</span></span>
+<span class="lineno">   41 </span><span class="spaces">       </span><span class="istickedoff">Right (llvm_mod, warnings) -&gt; do</span>
+<span class="lineno">   42 </span><span class="spaces">         </span><span class="istickedoff">unless (null warnings) $</span>
+<span class="lineno">   43 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Warn $ show $ LLVM.ppParseWarnings warnings</span></span>
+<span class="lineno">   44 </span><span class="spaces">         </span><span class="istickedoff">return llvm_mod</span></span>
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>llvm_type :: Text -&gt; TopLevel LLVM.Type
+<span class="lineno">   47 </span><span class="decl"><span class="istickedoff">llvm_type str =</span>
+<span class="lineno">   48 </span><span class="spaces">  </span><span class="istickedoff">case LLVM.parseType (Text.unpack str) of</span>
+<span class="lineno">   49 </span><span class="spaces">    </span><span class="istickedoff">Left e -&gt; <span class="nottickedoff">fail (show e)</span></span>
+<span class="lineno">   50 </span><span class="spaces">    </span><span class="istickedoff">Right t -&gt; return t</span></span>
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>llvm_int :: Int -&gt; LLVM.Type
+<span class="lineno">   53 </span><span class="decl"><span class="istickedoff">llvm_int n = LLVM.PrimType (LLVM.Integer (fromIntegral n))</span></span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>llvm_float :: LLVM.Type
+<span class="lineno">   56 </span><span class="decl"><span class="nottickedoff">llvm_float = LLVM.PrimType (LLVM.FloatType LLVM.Float)</span></span>
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>llvm_double :: LLVM.Type
+<span class="lineno">   59 </span><span class="decl"><span class="nottickedoff">llvm_double = LLVM.PrimType (LLVM.FloatType LLVM.Double)</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>llvm_array :: Int -&gt; LLVM.Type -&gt; LLVM.Type
+<span class="lineno">   62 </span><span class="decl"><span class="istickedoff">llvm_array n t = LLVM.Array (fromIntegral n) t</span></span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>llvm_alias :: Text -&gt; LLVM.Type
+<span class="lineno">   65 </span><span class="decl"><span class="istickedoff">llvm_alias n = LLVM.Alias (fromString $ Text.unpack n)</span></span>
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>llvm_packed_struct_type :: [LLVM.Type] -&gt; LLVM.Type
+<span class="lineno">   68 </span><span class="decl"><span class="istickedoff">llvm_packed_struct_type = LLVM.PackedStruct</span></span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>llvm_pointer :: LLVM.Type -&gt; LLVM.Type
+<span class="lineno">   71 </span><span class="decl"><span class="istickedoff">llvm_pointer = LLVM.PtrTo</span></span>
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>llvm_struct_type :: [LLVM.Type] -&gt; LLVM.Type
+<span class="lineno">   74 </span><span class="decl"><span class="istickedoff">llvm_struct_type = LLVM.Struct</span></span>
 
 </pre>
 </body>
