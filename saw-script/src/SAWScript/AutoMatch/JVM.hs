@@ -1,5 +1,4 @@
-{-# LANGUAGE LambdaCase    #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 
 module SAWScript.AutoMatch.JVM where
 

@@ -1,13 +1,3 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveLift #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TypeOperators #-}
-
 {- |
 Module      : SAWCore.Term.Raw
 Copyright   : Galois, Inc. 2012-2025
@@ -22,6 +12,7 @@ module SAWCore.Term.Raw
   , TermIndex
   , unwrapTermF
   , alphaEquiv
+  , varTypes
   , freeVars
   , closedTerm
   ) where
@@ -31,8 +22,6 @@ import Data.Hashable
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
-import qualified Data.IntSet as IntSet
-import Data.Typeable (Typeable)
 
 import Instances.TH.Lift () -- for instance TH.Lift Text
 
@@ -69,14 +58,16 @@ data Term
        -- ^ The hash, according to 'hash', of the 'stAppTermF' field associated
        -- with this 'Term'. This should be as unique as a hash can be, but is
        -- not guaranteed unique as 'stAppIndex' is.
-     , stAppFreeVars :: !IntSet
-       -- ^ A set containing the 'VarIndex' of each of the free named
-       -- variables from 'Variable' constructors in the term.
+     , stAppVarTypes :: !(IntMap Term)
+       -- ^ A map relating the 'VarIndex' of each free 'Variable' in
+       -- the term to the type attached to the 'Variable' constructor.
+       -- As an invariant, all free occurrences of the same variable
+       -- must be tagged with the same type.
      , stAppTermF    :: !(TermF Term)
        -- ^ The underlying 'TermF' that this 'Term' wraps. This field "ties the
        -- knot" of the 'Term'/'TermF' recursion scheme.
      }
-  deriving (Show, Typeable)
+  deriving (Show)
 
 instance Hashable Term where
   -- The hash of an 'STApp' depends on its not-necessarily-unique
@@ -129,9 +120,9 @@ alphaEquiv = term IntMap.empty
   where
     term :: IntMap VarIndex -> Term -> Term -> Bool
     term vm
-      (STApp{stAppIndex = i1, stAppTermF = tf1, stAppFreeVars = vs1})
+      (STApp{stAppIndex = i1, stAppTermF = tf1, stAppVarTypes = vt1})
       (STApp{stAppIndex = i2, stAppTermF = tf2}) =
-      (IntSet.disjoint vs1 (IntMap.keysSet vm) && i1 == i2) || termf vm tf1 tf2
+      (IntMap.disjoint vt1 vm && i1 == i2) || termf vm tf1 tf2
 
     termf :: IntMap VarIndex -> TermF Term -> TermF Term -> Bool
     termf vm (FTermF ftf1) (FTermF ftf2) = ftermf vm ftf1 ftf2
@@ -169,11 +160,16 @@ instance Ord Term where
 
 -- Free Variables --------------------------------------------------------------
 
+-- | Return an 'IntMap' relating the 'VarIndex' of each free variable
+-- of a term to its type.
+varTypes :: Term -> IntMap Term
+varTypes STApp{ stAppVarTypes = vt } = vt
+
 -- | Return an 'IntSet' containing the 'VarIndex' of all free
 -- variables in the 'Term'.
 freeVars :: Term -> IntSet
-freeVars STApp{ stAppFreeVars = s } = s
+freeVars t = IntMap.keysSet (varTypes t)
 
 -- | Test whether a 'Term' is closed, i.e., it has no free variables.
 closedTerm :: Term -> Bool
-closedTerm t = IntSet.null (freeVars t)
+closedTerm t = IntMap.null (varTypes t)

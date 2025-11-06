@@ -1,15 +1,6 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns #-}
 
 {- |
 Module      : SAWCore.Rewriter
@@ -730,9 +721,25 @@ rewriteSharedTerm sc ss t0 =
     rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
         useCache ?cache tidx (traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop)
 
-    traverseTF :: forall b. (b -> IO b) -> TermF b -> IO (TermF b)
-    traverseTF _ tf@(Constant {}) = pure tf
-    traverseTF f tf = traverse f tf
+    traverseTF :: (Term -> IO Term) -> TermF Term -> IO (TermF Term)
+    traverseTF f tf =
+      case tf of
+        -- Maintain invariant that types on Lambda/Pi binders should
+        -- exactly match types on the bound variables in the body.
+        Variable {} -> pure tf
+        Lambda x t1 t2 ->
+          do t1' <- f t1
+             var <- scVariable sc x t1'
+             t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
+             t2'' <- f t2'
+             pure (Lambda x t1' t2'')
+        Pi x t1 t2 ->
+          do t1' <- f t1
+             var <- scVariable sc x t1'
+             t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
+             t2'' <- f t2'
+             pure (Pi x t1' t2'')
+        _ -> traverse f tf
 
     rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) => Term -> IO Term
     rewriteTop t =

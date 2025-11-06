@@ -1,3 +1,6 @@
  Loading file "err026.saw"
- err026.saw:3:9-5:2: do block must end with expression
+ Stack trace:
+   (builtin) (at top level)
+err026.saw:3:9-5:2: do block must end with expression
+
 FAILED

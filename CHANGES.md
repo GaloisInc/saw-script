@@ -6,6 +6,37 @@ This release supports [version
 
 ## Changes
 
+* The `LLVMSetup` and `MIRSetup` monad types are now just ordinary builtin
+  types; their names are no longer reserved words.
+  (The `JVMSetup` type was already this way.
+  A bogus unused `JavaSetup` reserved word has been removed.
+  See #2768.)
+  The legacy name `CrucibleSetup` remains a reserved word for the time being.
+
+* The REPL's `:search` command can now handle unapplied type constructors. For
+  example, one can now write `:search ProofScript` to find objects mentioning
+  `ProofScript` applied to any type.
+
+* `llvm_verify` now enforces that an `llvm_return` specification is
+  included for any function with a non-void return type.
+  To write a spec that asserts nothing about the return value,
+  `llvm_return` may be used with a fresh variable declared with
+  `llvm_fresh_var` in the post-state section, like this:
+
+  do {
+    ...
+    llvm_execute_func <args>;
+    ...
+    ret <- llvm_fresh_var "ret" <type>;
+    llvm_return (llvm_term ret);
+  }
+
+* `jvm_verify` now enforces that a `jvm_return` specification is
+  included for any method with a non-void return type.
+  To write a spec that asserts nothing about the return value,
+  `jvm_return` may be used with a fresh variable declared with
+  `jvm_fresh_var` in the post-state section.
+
 * The `cryptol_load` and `cryptol_prims` commands now fail if used
   in a nested scope, instead of behaving strangely.
 
@@ -180,6 +211,12 @@ This release supports [version
 
 ## Bug Fixes
 
+* Under some combinations of circumstances you would sometimes get
+  messages of the form "Subshells not supported" or "Proof subshells
+  not supported" when trying to start an interactive subshell /
+  sub-REPL.
+  This no longer happens.
+
 * `jvm_verify` and `mir_verify` now honor their respective parameters that
   enable or disable path satisfiability checking. As discovered in #2740, these
   parameters had been ignored.
@@ -196,6 +233,9 @@ This release supports [version
 
 * Fix a bug that would cause SAW to crash when loading an instantiation of a
   parameterized Cryptol module that contains newtypes or enums (#2673).
+
+* Fix a bug that would cause SAW to completely ignore the paths specified in
+  the `SAW_IMPORT_PATH`/`--import-path` options.
 
 # Version 1.4 -- date still TBD
 

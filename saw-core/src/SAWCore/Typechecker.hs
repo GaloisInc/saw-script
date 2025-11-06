@@ -1,17 +1,5 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs  #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE RecordWildCards #-}
 
 {- |
 Module      : SAWCore.Typechecker
@@ -24,7 +12,6 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Typechecker
   ( inferCompleteTerm
-  , inferCompleteTermCtx
   , tcInsertModule
   ) where
 
@@ -32,8 +19,6 @@ import Control.Monad (forM, forM_, mzero, void, unless)
 import Control.Monad.Trans.Maybe
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), asks, lift, local)
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -69,24 +54,15 @@ import qualified SAWCore.SCTypeCheck as TC
 
 import Debug.Trace
 
--- | Infer the type of an untyped term and complete it to a 'Term', all in the
--- empty typing context
-inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.UTerm ->
-                     IO (Either PPS.Doc Term)
-inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm IntMap.empty t
-
--- | Infer the type of an untyped term and complete it to a 'Term' in a given
--- typing context
-inferCompleteTermCtx ::
-  SharedContext -> Maybe ModuleName -> IntMap Term ->
-  Un.UTerm -> IO (Either PPS.Doc Term)
-inferCompleteTermCtx sc mnm ctx t =
-  do res <- runCheckM (typeInferCompleteUTerm t) sc mnm ctx
+-- | Infer the type of an untyped term and complete it to a 'Term'.
+inferCompleteTerm ::
+  SharedContext -> Maybe ModuleName -> Un.UTerm -> IO (Either PPS.Doc Term)
+inferCompleteTerm sc mnm t =
+  do res <- runCheckM (typeInferCompleteUTerm t) sc mnm
      case res of
        -- TODO: avoid intermediate 'String's from 'prettyTCError'
        Left err -> return $ Left $ vsep $ map pretty $ TC.prettyTCError err
        Right t' -> return $ Right $ SC.rawTerm t'
-
 
 -- | The 'ReaderT' environment for a computation to typecheck a
 -- SAWCore parser AST.
@@ -100,10 +76,9 @@ data CheckEnv =
 type CheckM = ReaderT CheckEnv TC.TCM
 
 runCheckM ::
-  CheckM a -> SharedContext -> Maybe ModuleName -> IntMap Term ->
-  IO (Either TC.TCError a)
-runCheckM m sc mnm ctx =
-  TC.runTCM (runReaderT m (CheckEnv mnm Map.empty)) sc ctx
+  CheckM a -> SharedContext -> Maybe ModuleName -> IO (Either TC.TCError a)
+runCheckM m sc mnm =
+  TC.runTCM (runReaderT m (CheckEnv mnm Map.empty)) sc
 
 -- | Read the current module name
 askModName :: CheckM (Maybe ModuleName)
@@ -134,21 +109,19 @@ inferApplyAll t (arg:args) =
   do app1 <- typeInferComplete (App t arg)
      inferApplyAll app1 args
 
--- | Resolve a name in the current module and apply it to some arguments
-inferResolveNameApp :: Text -> [SC.Term] -> CheckM SC.Term
-inferResolveNameApp n args =
+-- | Resolve a name.
+inferResolveName :: Text -> CheckM SC.Term
+inferResolveName n =
   do nctx <- askLocals
      mnm <- getModuleName
      mm <- lift $ TC.liftTCM scGetModuleMap
      let ident = mkIdent mnm n
      case (Map.lookup n nctx, resolveNameInMap mm ident) of
        (Just (vn, tp), _) ->
-         do t <- typeInferComplete (Variable vn tp)
-            inferApplyAll t args
+         typeInferComplete (Variable vn tp)
        (_, Just rn) ->
          do let c = resolvedNameName rn
-            t <- typeInferComplete (Constant c :: TermF SC.Term)
-            inferApplyAll t args
+            typeInferComplete (Constant c :: TermF SC.Term)
        (Nothing, Nothing) ->
          throwTCError $ UnboundName n
 
@@ -191,11 +164,13 @@ typeInferCompleteTerm :: Un.UTerm -> CheckM SC.Term
 
 -- Names
 typeInferCompleteTerm (matchAppliedName -> Just (n, args)) =
-  mapM typeInferCompleteUTerm args >>= inferResolveNameApp n
+  do t <- inferResolveName n
+     ts <- traverse typeInferCompleteUTerm args
+     inferApplyAll t ts
 typeInferCompleteTerm (Un.Name (PosPair _ n)) =
   -- NOTE: this is actually covered by the previous case, but we put it here
   -- so GHC doesn't complain about coverage
-  inferResolveNameApp n []
+  inferResolveName n
 
 -- Sorts
 typeInferCompleteTerm (Un.Sort _ srt h) =
@@ -477,7 +452,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
        unless i_exists $ fail $ "Imported module not found: " ++ show imn
        scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . Text.unpack) imn mnm
   -- Finally, process all the decls
-  decls_res <- runCheckM (processDecls decls) sc (Just mnm) IntMap.empty
+  decls_res <- runCheckM (processDecls decls) sc (Just mnm)
   case decls_res of
     Left err -> fail $ unlines $ TC.prettyTCError err
     Right _ -> return ()
@@ -506,16 +481,9 @@ matchPiWithNames (var : vars) tp =
          pure ((var, vn, arg_tp) : ctx, body)
 
 -- | Run a type-checking computation in a typing context extended with a new
--- variable with the given type. This throws away the memoization table while
--- running the sub-computation, as memoization tables are tied to specific sets
--- of bindings.
---
--- NOTE: the type given for the variable should be in WHNF, so that we do not
--- have to normalize the types of variables each time we see them.
+-- variable with the given name and type.
 withVar :: LocalName -> VarName -> Term -> CheckM a -> CheckM a
 withVar x vn tp m =
-  TC.rethrowTCError (ErrorCtx x tp) $
-  TC.withEmptyTCState $
   local (\env -> env { tcLocals = Map.insert x (vn, tp) (tcLocals env) }) m
 
 -- | Run a type-checking computation in a typing context extended by a list of

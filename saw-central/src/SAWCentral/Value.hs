@@ -5,24 +5,16 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module SAWCentral.Value (
@@ -56,6 +48,8 @@ module SAWCentral.Value (
     -- used by SAWCentral.Builtins, SAWScript.ValueOps, SAWScript.Interpreter,
     -- SAWScript.REPL.Command, SAWScript.REPL.Monad, SAWServer.SAWServer
     Environ(..),
+    -- used by SAWScript.Import
+    RebindableEnv,
     -- used by SAWScript.Interpreter
     pushScope, popScope,
     -- used by SAWCentral.Builtins, SAWScript.ValueOps, SAWScript.Interpreter,
@@ -81,6 +75,8 @@ module SAWCentral.Value (
     rwSetCryptolEnvStack,
     -- used by SAWScript.REPL.Monad, SAWServer.SAWServer, SAWServer.Yosys
     rwModifyCryptolEnv,
+    -- used by SAWScript.Interpreter, and implicitly by SAWScript.REPL and Main
+    TopLevelShellHook, ProofScriptShellHook,
     -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
     --    SAWServer.SAWServer
     TopLevelRO(..),
@@ -512,6 +508,29 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   their own type. If things become more regular, it might be worth
 --   revisiting that proposition.
 --
+--   In addition to all of the above, VLambda and VDo carry an
+--   environment (the interpreter's name -> value environment) which
+--   closes in the naming environment they're run against. This
+--   environment is collected when the corresponding lambda or do
+--   expression is evaluated (basically, where it appears in the input
+--   source), and arguments get added to it as they're applied. This
+--   produces the expected lexical scoping behavior.
+--
+--   VBuiltin, even though it's effectively also a lambda, does _not_
+--   carry an environment. Closing in a copy of the partly-built
+--   default environment that exists when the VBuiltin values are
+--   constructed, or even the whole default environment, wouldn't
+--   serve any purpose.
+
+--   Furthermore, VBuiltin is used to bind in Haskell functions, which
+--   don't themselves run in SAWScript and don't need or use the
+--   naming environment; they just need their arguments. The exception
+--   is the subshell and proof_subshell builtins, which intentionally
+--   inherit the SAWScript environment they're invoked in. Any
+--   otherwise pointless environment capturing we indulged in for
+--   uniformity's sake would break that behavior.
+
+--
 data Value
   = VBool Bool
   | VString Text
@@ -927,6 +946,17 @@ cryptolPop (CryptolEnvStack _ ces) =
         [] -> panic "cryptolPop" ["Cryptol environment scope stack ran out"]
         ce : ces' -> CryptolEnvStack ce ces'
 
+-- | Type for the function to start a new REPL in TopLevel.
+--
+--   Passed down from the REPL code to avoid circular references.
+type TopLevelShellHook = TopLevelRO -> TopLevelRW -> IO TopLevelRW
+
+-- | Type for the function to start a new REPL in ProofScript.
+--
+--   Passed down from the REPL code to avoid circular references.
+type ProofScriptShellHook =
+    TopLevelRO -> TopLevelRW -> ProofState ->
+    IO (TopLevelRW, ProofState)
 
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
@@ -937,12 +967,12 @@ data TopLevelRO =
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: SAWSimpset
-  , roSubshell      :: TopLevel ()
+  , roSubshell      :: TopLevelShellHook
     -- ^ An action for entering a subshell.  This
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)
 
-  , roProofSubshell :: ProofScript ()
+  , roProofSubshell :: ProofScriptShellHook
     -- ^ An action for entering a subshell in proof mode.  This
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)

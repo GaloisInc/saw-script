@@ -9,9 +9,6 @@ Stability   : provisional
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 -- See Note [-Wincomplete-uni-patterns and irrefutable patterns]
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
@@ -20,6 +17,7 @@ module SAWScript.Typechecker
        ( checkDecl
        , checkStmt
        , typesMatch
+       , checkSchema
        , checkSchemaPattern
        ) where
 
@@ -28,17 +26,14 @@ import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
 import qualified Data.Text as Text
-import Data.List (intercalate, genericTake)
+import Data.List (genericTake, genericLength)
 import Data.Either (partitionEithers)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 
-import qualified Prettyprinter as PP
-
 import SAWSupport.Pretty (pShow)
-import qualified SAWSupport.Pretty as PPS
 
 import SAWCentral.AST
 import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars'(..), isDeprecated)
@@ -89,7 +84,7 @@ instance UnifyVars Schema where
 instance UnifyVars NamedType where
   unifyVars nt = case nt of
     ConcreteType ty -> unifyVars ty
-    AbstractType -> Map.empty
+    AbstractType _kind -> Map.empty
 
 -- }}}
 
@@ -252,42 +247,7 @@ instance AppSubst Schema where
 instance AppSubst NamedType where
   appSubst s nt = case nt of
     ConcreteType ty -> ConcreteType $ appSubst s ty
-    AbstractType -> AbstractType
-
--- }}}
-
-
-------------------------------------------------------------
--- Kinds {{{
-
---
--- For the time being we can handle kinds using the number of expected
--- type arguments. That is, Kind 0 is *. Apart from tuples the only
--- things we have are of kinds *, * -> *, and * -> * -> *, but we do
--- have tuples of arbitrary arity.
---
--- If we ever want additional structure (e.g. distinguishing the
--- monad/context types from other types) we can extend this
--- representation easily enough.
---
-
-newtype Kind = Kind { kindNumArgs :: Int }
-  deriving Eq
-
-kindStar :: Kind
-kindStar = Kind 0
-
--- these aren't currently used
---kindStarToStar :: Kind
---kindStarToStar = Kind 1
---
---kindStarToStarToStar :: Kind
---kindStarToStarToStar = Kind 2
-
-instance PPS.PrettyPrec Kind where
-  prettyPrec _ (Kind n) =
-     PP.viaShow $ intercalate " -> " $ take (n + 1) $ repeat "*"
-
+    AbstractType kind -> AbstractType kind
 
 -- }}}
 
@@ -609,7 +569,7 @@ showTypeDetails ty =
         show pos ++ ": The type " ++ pShow ty ++ " arises from " ++ what
   in
   case getPos ty of
-    PosInferred InfFresh pos -> pr pos "fresh type variable introduced here"
+    PosInferred InfFresh pos -> pr pos "a fresh type variable introduced here"
     PosInferred InfTerm pos -> pr pos "the type of this term"
     PosInferred InfContext pos -> pr pos "the context of the term"
     pos -> pr pos "this type annotation"
@@ -643,7 +603,9 @@ ppFailMGU (FailMGU start eflines lastfunlines) =
 -- We've found a substitution for unification var i.
 --
 -- Create the substitution, but first check that this doesn't result
--- in an invalid type.
+-- in an invalid type. If it does, return Nothing. The caller handles
+-- reporting the problem because we don't quite have enough context
+-- here to do an adequate job.
 --
 -- Does not handle the case where t _is_ TyUnifyVar i; the caller
 -- handles that.
@@ -652,16 +614,11 @@ ppFailMGU (FailMGU start eflines lastfunlines) =
 -- fine as far as it goes but there doesn't seem to be any logic to
 -- prohibit also resolving TyUnifyVar j to TyUnifyVar i and creating
 -- cycles.
-resolveUnificationVar :: Pos -> TypeIndex -> Type -> Either FailMGU Subst
-resolveUnificationVar pos i t =
-  case Map.lookup i $ unifyVars t of
-     Just otherpos ->
-       -- FIXME/XXX: this error message is better than the one that was here before
-       -- but still lacks a certain something
-       failMGU' $ "Occurs check failure: the type at " ++ show otherpos ++
-                  " appears within the type at " ++ show pos
-     Nothing ->
-       return (singletonSubst i t)
+resolveUnificationVar :: TypeIndex -> Type -> Maybe Subst
+resolveUnificationVar i t2 =
+  case Map.lookup i $ unifyVars t2 of
+     Just _otherpos -> Nothing
+     Nothing -> Just $ singletonSubst i t2
 
 -- Guts of unification.
 --
@@ -677,13 +634,29 @@ mgu t1 t2 = case (t1, t2) of
       -- same unification var, nothing to do
       return emptySubst
 
-  (TyUnifyVar pos i, _) ->
+  (TyUnifyVar _ i, _) ->
       -- one side is a unification var, resolve it
-      resolveUnificationVar pos i t2
+      case resolveUnificationVar i t2 of
+          Just someSubst -> return someSubst
+          Nothing -> do
+              let t1' = pShow t1
+                  t2' = pShow t2
+              let msg = "Occurs check failure: cannot unify " ++ t1' ++
+                        " with " ++ t2' ++ " because " ++ t1' ++
+                        " appears within " ++ t2'
+              failMGU msg t1 t2
 
-  (_, TyUnifyVar pos i) ->
-      -- one side is a unification var, resolve it
-      resolveUnificationVar pos i t1
+  (_, TyUnifyVar _ i) ->
+      -- the other side is a unification var, resolve it
+      case resolveUnificationVar i t1 of
+          Just someSubst -> return someSubst
+          Nothing -> do
+              let t1' = pShow t1
+                  t2' = pShow t2
+              let msg = "Occurs check failure: cannot unify " ++ t1' ++
+                        " with " ++ t2' ++ " because " ++ t2' ++
+                        " appears within " ++ t1'
+              failMGU msg t1 t2
 
   (TyRecord _ ts1, TyRecord _ ts2)
     | Map.keys ts1 /= Map.keys ts2 ->
@@ -1029,9 +1002,9 @@ withDeclGroup (NonRecursive d) m = withDecl d m
 withDeclGroup (Recursive ds) m = foldr withDecl m ds
 
 -- Wrap the action m with some abstract type variables.
-withAbstractTyVars :: Map Name Pos -> TI a -> TI a
-withAbstractTyVars vars m = do
-    let insertOne x _pos tyenv = Map.insert x (Current, AbstractType) tyenv
+withAbstractTyVars :: Map Name Pos -> Kind -> TI a -> TI a
+withAbstractTyVars vars kind m = do
+    let insertOne x _pos tyenv = Map.insert x (Current, AbstractType kind) tyenv
         insertAll tyenv = Map.foldrWithKey insertOne tyenv vars
     tyenv <- gets tyEnv
     let tyenv' = insertAll tyenv
@@ -1316,15 +1289,28 @@ addTypedef a ty = do
 --    monadType (TopLevel Int) gives Just (TopLevel, Int)
 --    monadType Int gives Nothing
 --
-monadType  :: Type -> Maybe (Type, Type)
+monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
   TyCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
       Just (ctx, valty)
-  -- We don't currently ever generate this type, but be future-proof
+  TyCon _ BlockCon [ctx@(TyVar _ name), valty] | isMonad name ->
+      Just (ctx, valty)
+  -- We don't currently ever generate these types, but be future-proof
   TyCon pos (ContextCon ctx) [valty] ->
       Just (TyCon pos (ContextCon ctx) [], valty)
+  -- and this one can't even be represented yet
+--TyVar pos name [valty] | isMonad name ->
+--    Just (TyVar pos name, valty)
   _ ->
       Nothing
+  where
+    -- Baking in these strings is untidy. I'd worry more about it if
+    -- this code were being used for real rather than as part of a
+    -- temporary accomodation for compatibility purposes.
+    isMonad "LLVMSetup" = True
+    isMonad "JVMSetup" = True
+    isMonad "MIRSetup" = True
+    isMonad _ = False
 
 -- wrap an expression in "return"
 wrapReturn :: Expr -> Expr
@@ -1544,10 +1530,13 @@ inferSingleStmt cname pos ctx s = do
 --
 -- The "foralls" argument is a set of tyvars that were mentioned
 -- explicitly and should be forall-bound.
-generalize :: Map Name Pos -> [OutExpr] -> [Type] -> TI [(OutExpr,Schema)]
-generalize foralls es0 ts0 = do
+generalize ::
+    Map Name Pos -> [Pattern] -> [OutExpr] -> [Type] ->
+    TI [(Pattern, OutExpr, Schema)]
+generalize foralls pats0 es0 ts0 = do
     -- first, substitute away any resolved unification variables
     -- in both the expressions and types.
+    pats <- applyCurrentSubst pats0
     es <- applyCurrentSubst es0
     ts <- applyCurrentSubst ts0
 
@@ -1620,9 +1609,14 @@ generalize foralls es0 ts0 = do
     let inames = [ (pos, n) | (_i, pos, n) <- is3 ]
     let bnames = [ (pos, x) | (x, pos) <- bs2 ]
 
-    let mk e t = (appSubst s e, Forall (inames ++ bnames) (appSubst s t))
+    let mk pat e t =
+          let pat' = appSubst s pat
+              e' = appSubst s e
+              t' = appSubst s t
+          in
+          (pat', e', Forall (inames ++ bnames) t')
 
-    return $ zipWith mk es ts
+    return $ zipWith3 mk pats es ts
 
 
 -- Check that a type is a function and isn't a plain value, in order
@@ -1682,16 +1676,19 @@ inferDecl rebindable d@(Decl pos pat _ e) = do
     -- Add abstract type variables for the foralls while we check the body.
     -- Note: this is a variable declaration. It doesn't add types; the types
     -- get forall-bound in the type scheme by the `generalize` call.
-    withAbstractTyVars foralls $ do
+    --
+    -- XXX: for the moment assume all the vars should have kind *. Should
+    -- probably do some kind inference.
+    withAbstractTyVars foralls kindStar $ do
         -- Check the body and check the pattern against the body.
         (e', t) <- inferExpr (cname, e)
         pat' <- checkPattern rebindable cname t pat
 
         -- Use `generalize` to build the type scheme.
-        ~[(e1,s)] <- generalize foralls [e'] [t]
+        ~[(pat'', e1, s)] <- generalize foralls [pat'] [e'] [t]
 
         -- Return the updated `Decl`
-        return (Decl pos pat' (Just s) e1)
+        return (Decl pos pat'' (Just s) e1)
 
 -- | Type inference for a system of mutually recursive declarations.
 --
@@ -1720,7 +1717,10 @@ inferRecDecls ds = do
 
     -- Add abstract type variables for the foralls while we check the
     -- bodies.
-    withAbstractTyVars foralls $ do
+    --
+    -- XXX: for the moment assume all the vars should have kind *. Should
+    -- probably do some kind inference.
+    withAbstractTyVars foralls kindStar $ do
       -- Check the patterns first to get types.
       (_ts, pats') <- unzip <$> mapM (inferPattern cname ReadOnlyVar) pats
 
@@ -1740,11 +1740,11 @@ inferRecDecls ds = do
 
       -- Run generalize and get back a list of updated expressions and
       -- type schemes.
-      etys <- generalize foralls es tys
+      patetys <- generalize foralls pats' es tys
 
       -- Generate the updated declarations.
-      let rebuild pos pat (e1, ty) = Decl pos pat (Just ty) e1
-          ds' = zipWith3 rebuild (map getPos ds) pats' etys
+      let rebuild pos (pat, e1, ty) = Decl pos pat (Just ty) e1
+          ds' = zipWith rebuild (map getPos ds) patetys
 
       return ds'
 
@@ -1799,8 +1799,8 @@ checkType kind ty = case ty of
   TyCon pos tycon args -> do
       -- First, look up the constructor.
       let params = lookupTyCon tycon
-      let nparams = length params
-          nargs = length args
+      let nparams = genericLength params
+          nargs = genericLength args
           argsleft = kindNumArgs kind
 
       -- XXX: the failures are all currently unreachable, because the
@@ -1854,11 +1854,15 @@ checkType kind ty = case ty of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ Text.unpack x)
               getErrorTyVar pos
-          Just (lc, _ty')
+          Just (lc, ty')
            | Set.member lc avail -> do
               when (isDeprecated lc) $
                   recordWarning pos $ "Type is deprecated: " <> Text.unpack x
-              -- Assume ty' was checked when it was entered.
+
+              -- For typedefs, which appear here as ConcreteType
+              -- expansions, assume ty' was checked when it was
+              -- entered.
+              --
               -- (If we entered it that's true, if it was in the
               -- initial environment we were given that depends on the
               -- interpreter not doing unfortunate things. This isn't
@@ -1869,11 +1873,16 @@ checkType kind ty = case ty of
               -- restricted) so just fail if we use one in a context
               -- expecting something else.
               --
-              -- The same holds for abstract types, so we don't need
-              -- separate cases.
-              if kind /= kindStar then do
+              -- Abstract types may have any kind, because some are
+              -- monads; we carry the kind around.
+              -- 
+              let kindFound = case ty' of
+                    ConcreteType _ -> kindStar
+                    AbstractType kf -> kf
+
+              if kind /= kindFound then do
                   recordError pos ("Kind mismatch: expected " ++ pShow kind ++
-                                   " but found " ++ pShow kindStar)
+                                   " but found " ++ pShow kindFound)
                   getErrorTyVar pos
               else
                   -- We do _not_ want to expand typedefs when checking,
@@ -1969,7 +1978,6 @@ checkStmt avail env tenv ctx stmt =
         cname = case ctx of
             TopLevel -> ContextName pos "<toplevel>"
             ProofScript -> ContextName pos "<proofscript>"
-            _ -> panic "checkStmt" ["Invalid monad context " <> Text.pack (pShow ctx)]
         ctxtype = TyCon pos (ContextCon ctx) []
     in
     evalTIWithEnv avail env tenv (inferSingleStmt cname pos ctxtype stmt)
@@ -2008,6 +2016,55 @@ typesMatch avail tenv schema'found schema'expected =
   case evalTIWithEnv avail Map.empty tenv match of
     (Left _errors, _warnings) -> False          -- not actually reachable
     (Right b, _warnings) -> b                   -- return match success/failure
+
+-- | Check a schema (type) as used when constructing the builtins
+--   table. (This is an external interface.)
+--
+-- The first argument is the lifecycle context the type is being used
+-- in. More on that below. The second is the typedef environment to
+-- use. The third argument is the schema to check.
+--
+-- All types found should be of kind *.
+--
+-- Purely a validity check; there's no updates it can make to the
+-- schema that are of use to the caller, on the assumption that the
+-- caller doesn't want to do stuff with the schema before exiting on
+-- errors, which it doesn't. Thus, just return unit and not an updated
+-- schema.
+--
+-- (Otherwise we'd need to rerun `generalize` to build a new schema,
+-- and that's a headache and not worthwhile given that the result
+-- isn't going to be used.)
+--
+-- This is called for the types of objects that may themselves not be
+-- visible, so rather than using the caller's set of visible lifecycle
+-- states, construct the set based on the lifecycle state of the
+-- declaration context. Deprecated objects can see equally or less
+-- deprecated types; experimental objects can see experimental types;
+-- everything can see current types.
+--
+checkSchema :: PrimitiveLifecycle -> TyEnv -> Schema -> Result ()
+checkSchema contextLC tyenv schema = do
+  let check = do
+        let Forall tyvars ty = schema
+        -- Generate unification vars for all the forall-bindings
+        let generate (pos'a, a) = do
+              ty'a <- getFreshTyVar pos'a
+              return (a, (Current, ConcreteType ty'a))
+        substs <- mapM generate tyvars
+        -- Substitute them into the type
+        let ty' = substituteTyVars' everythingAvailable (Map.fromList substs) ty
+        -- The only way checking can return an updated type is if
+        -- there's also an error, so discard the type
+        _ <- checkType kindStar ty'
+        return ()
+
+  let avail = Set.fromList $ case contextLC of
+          Current -> [Current]
+          WarnDeprecated -> [Current, WarnDeprecated]
+          HideDeprecated -> [Current, WarnDeprecated, HideDeprecated]
+          Experimental -> [Current, Experimental]
+  evalTIWithEnv avail Map.empty tyenv check
 
 -- | Check a schema (type) pattern as used by :search. (This is an
 -- external interface.)

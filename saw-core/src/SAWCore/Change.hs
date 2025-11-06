@@ -1,8 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE UndecidableInstances #-}
-
 {- |
 Module      : SAWCore.Change
 Copyright   : Galois, Inc. 2012-2015

@@ -21,7 +21,8 @@ command-line options:
 : Specify a colon-delimited list of paths to search for Java classes.
 
 `-i path, --import-path=path`
-: Specify a colon-delimited list of paths to search for imports.
+: Specify a colon-delimited list of paths to search for imports. Note that
+  paths can also be specified using the `SAW_IMPORT_PATH` environment variable.
 
 `-t, --extra-type-checking`
 : Perform extra type checking of intermediate values.
@@ -70,7 +71,9 @@ SAW also uses several environment variables for configuration:
   searched to find a Java executable.
 
 `SAW_IMPORT_PATH`
-: Specify a colon-delimited list of directory paths to search for imports.
+: Specify a colon-delimited list of directory paths to search for imports. Note
+  that paths can also be specified using the `-i`/`--import-path` command-line
+  options.
 
 `SAW_JDK_JAR`
 : Specify the path of the `.jar` file containing the core Java
@@ -103,9 +106,13 @@ The scope of such bindings is the whole search.
 
 Complex patterns should be written in parentheses; otherwise they
 become syntactically ambiguous.
-Also, as of this writing parser limitations require you to search for
-monad types by applying `_` to them: `(TopLevel _)` rather than just
-`TopLevel`.
+Note in particular that parentheses are required to treat a type constructor
+application to another type as a single search term.
+Without parentheses, `:search` would treat the unapplied type constructor and
+the other type as two separate search terms.
+For instance, `:search ProofScript Int` will search for objects mentioning both
+`ProofScript` (applied to anything) and `Int`. To search for objects that
+mention the type `ProofScript Int`, write `:search (ProofScript Int)`.
 
 Type variables in the search patterns are matched as follows:
 

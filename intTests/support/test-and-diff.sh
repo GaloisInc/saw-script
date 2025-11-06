@@ -31,6 +31,11 @@
 #
 # Don't use the same names for *.saw and *.isaw files.
 #
+# If a file named T.saw exists and a file named T.stdin _also_ exists,
+# it will run "saw T.saw < T.stdin". This is a special-case hack for
+# providing input to certain tests that exercise interactive subshells
+# and shouldn't be used otherwise.
+#
 # These steps are "run-tests". It will always run all tests before
 # checking any of the outputs. If SAW itself fails (exits non-zero)
 # that fact is logged, and if unexpected will cause a diff, but will
@@ -117,7 +122,11 @@ run-tests() {
 
         # run the test
         # (do not fail if saw does, instead log it)
-        if [ -f "$TEST.saw" ]; then
+        if [ -f "$TEST.saw" ] && [ -f "$TEST.stdin" ]; then
+            echo "$SAW $TEST.saw < $TEST.stdin"
+            $SAW $TEST.saw < $TEST.stdin\
+                 > $TEST.rawlog 2>&1 || echo FAILED >> $TEST.rawlog
+        elif [ -f "$TEST.saw" ]; then
             echo "$SAW $TEST.saw"
             $SAW $TEST.saw > $TEST.rawlog 2>&1 || echo FAILED >> $TEST.rawlog
         else
@@ -125,7 +134,19 @@ run-tests() {
             $SAW -B $TEST.isaw > $TEST.rawlog 2>&1 || echo FAILED >> $TEST.rawlog
         fi
 
-        # Prune the timestamps from the log since they'll never match.
+        # Prune any "sawscript> " or "proof (N)> " prompt from the
+        # beginnings of lines first. These will appear when feeding
+        # stdin to interactive subshells, and removing them up front
+        # avoids needing further special-case logic below. Sometimes
+        # more than one appears, if we match one try again. I
+        # apologize for writing a sed script that branches (the ':'
+        # command is a label, and the 't' command branches to a label
+        # if any substitution has happened on this input line since
+        # the last 't'), but just adding the g flag to the
+        # substitution isn't good enough.
+        #
+        # Then, prune the timestamps from the log since they'll never
+        # match.
         #
         # Furthermore, prune the line number from the results of
         # hitting the Haskell "error" function. SAW isn't supposed to
@@ -134,6 +155,11 @@ run-tests() {
         # super aggravating because it changes all the time, usually
         # when you aren't expecting it.
         sed < $TEST.rawlog '
+            :again
+            /^sawscript> /s/^sawscript> //
+            /^proof ([0-9][0-9]*)> /s/^proof ([0-9][0-9]*)> //
+            tagain
+
             /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\] /{
                 s/^..............//
             }

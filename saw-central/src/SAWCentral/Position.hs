@@ -6,12 +6,10 @@ Stability   : provisional
 -}
 
 {-# LANGUAGE DeriveDataTypeable  #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module SAWCentral.Position where
 

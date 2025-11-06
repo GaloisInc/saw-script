@@ -1,8 +1,204 @@
  --------------------------------
  -- ProofScript
-
-Parse error at <stdin>:1:1-1:12: Unexpected `ProofScript'
+abc : ProofScript ()
+admit : String -> ProofScript ()
+assume_unsat : ProofScript ()
+assume_valid : ProofScript ()
+beta_reduce_goal : ProofScript ()
+bitwuzla : ProofScript ()
+boolector : ProofScript ()
+check_goal : ProofScript ()
+crucible_llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+cvc4 : ProofScript ()
+cvc5 : ProofScript ()
+external_aig_solver : String -> [String] -> ProofScript ()
+external_cnf_solver : String -> [String] -> ProofScript ()
+goal_eval : ProofScript ()
+goal_eval_unint : [String] -> ProofScript ()
+goal_num : ProofScript Int
+jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
+llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+mathsat : ProofScript ()
+offline_aig : String -> ProofScript ()
+offline_aig_external : String -> ProofScript ()
+offline_cnf : String -> ProofScript ()
+offline_cnf_external : String -> ProofScript ()
+offline_extcore : String -> ProofScript ()
+offline_smtlib2 : String -> ProofScript ()
+offline_unint_smtlib2 : [String] -> String -> ProofScript ()
+offline_w4_unint_bitwuzla : [String] -> String -> ProofScript ()
+offline_w4_unint_cvc4 : [String] -> String -> ProofScript ()
+offline_w4_unint_cvc5 : [String] -> String -> ProofScript ()
+offline_w4_unint_yices : [String] -> String -> ProofScript ()
+offline_w4_unint_z3 : [String] -> String -> ProofScript ()
+print_goal : ProofScript ()
+print_goal_consts : ProofScript ()
+print_goal_depth : Int -> ProofScript ()
+print_goal_inline : [Int] -> ProofScript ()
+print_goal_size : ProofScript ()
+print_goal_summary : ProofScript ()
+prove : ProofScript () -> Term -> TopLevel ProofResult
+prove_core : ProofScript () -> String -> TopLevel Theorem
+prove_extcore : ProofScript () -> Term -> TopLevel Theorem
+prove_print : ProofScript () -> Term -> TopLevel Theorem
+quickcheck : Int -> ProofScript ()
+rme : ProofScript ()
+sat : ProofScript () -> Term -> TopLevel SatResult
+sat_print : ProofScript () -> Term -> TopLevel ()
+sbv_abc : ProofScript ()
+sbv_bitwuzla : ProofScript ()
+sbv_boolector : ProofScript ()
+sbv_cvc4 : ProofScript ()
+sbv_cvc5 : ProofScript ()
+sbv_mathsat : ProofScript ()
+sbv_unint_bitwuzla : [String] -> ProofScript ()
+sbv_unint_cvc4 : [String] -> ProofScript ()
+sbv_unint_cvc5 : [String] -> ProofScript ()
+sbv_unint_yices : [String] -> ProofScript ()
+sbv_unint_z3 : [String] -> ProofScript ()
+sbv_yices : ProofScript ()
+sbv_z3 : ProofScript ()
+simplify : Simpset -> ProofScript ()
+simplify_local : [Int] -> Simpset -> ProofScript ()
+trivial : ProofScript ()
+unfolding : [String] -> ProofScript ()
+unfolding_fix_once : [String] -> ProofScript ()
+unint_bitwuzla : [String] -> ProofScript ()
+unint_cvc4 : [String] -> ProofScript ()
+unint_cvc5 : [String] -> ProofScript ()
+unint_yices : [String] -> ProofScript ()
+unint_z3 : [String] -> ProofScript ()
+w4 : ProofScript ()
+w4_abc_aiger : ProofScript ()
+w4_abc_smtlib2 : ProofScript ()
+w4_abc_verilog : ProofScript ()
+w4_offline_smtlib2 : String -> ProofScript ()
+w4_unint_bitwuzla : [String] -> ProofScript ()
+w4_unint_cvc4 : [String] -> ProofScript ()
+w4_unint_cvc5 : [String] -> ProofScript ()
+w4_unint_rme : [String] -> ProofScript ()
+w4_unint_yices : [String] -> ProofScript ()
+w4_unint_z3 : [String] -> ProofScript ()
+w4_unint_z3_using : String -> [String] -> ProofScript ()
+write_goal : String -> ProofScript ()
+yices : ProofScript ()
+z3 : ProofScript ()
+46 more matches tagged experimental; use enable_experimental to see them
  --------------------------------
  -- (ProofScript)
-
-Parse error at <stdin>:1:13-1:14: Unexpected `)'
+abc : ProofScript ()
+admit : String -> ProofScript ()
+assume_unsat : ProofScript ()
+assume_valid : ProofScript ()
+beta_reduce_goal : ProofScript ()
+bitwuzla : ProofScript ()
+boolector : ProofScript ()
+check_goal : ProofScript ()
+crucible_llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+cvc4 : ProofScript ()
+cvc5 : ProofScript ()
+external_aig_solver : String -> [String] -> ProofScript ()
+external_cnf_solver : String -> [String] -> ProofScript ()
+goal_eval : ProofScript ()
+goal_eval_unint : [String] -> ProofScript ()
+goal_num : ProofScript Int
+jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
+llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+mathsat : ProofScript ()
+offline_aig : String -> ProofScript ()
+offline_aig_external : String -> ProofScript ()
+offline_cnf : String -> ProofScript ()
+offline_cnf_external : String -> ProofScript ()
+offline_extcore : String -> ProofScript ()
+offline_smtlib2 : String -> ProofScript ()
+offline_unint_smtlib2 : [String] -> String -> ProofScript ()
+offline_w4_unint_bitwuzla : [String] -> String -> ProofScript ()
+offline_w4_unint_cvc4 : [String] -> String -> ProofScript ()
+offline_w4_unint_cvc5 : [String] -> String -> ProofScript ()
+offline_w4_unint_yices : [String] -> String -> ProofScript ()
+offline_w4_unint_z3 : [String] -> String -> ProofScript ()
+print_goal : ProofScript ()
+print_goal_consts : ProofScript ()
+print_goal_depth : Int -> ProofScript ()
+print_goal_inline : [Int] -> ProofScript ()
+print_goal_size : ProofScript ()
+print_goal_summary : ProofScript ()
+prove : ProofScript () -> Term -> TopLevel ProofResult
+prove_core : ProofScript () -> String -> TopLevel Theorem
+prove_extcore : ProofScript () -> Term -> TopLevel Theorem
+prove_print : ProofScript () -> Term -> TopLevel Theorem
+quickcheck : Int -> ProofScript ()
+rme : ProofScript ()
+sat : ProofScript () -> Term -> TopLevel SatResult
+sat_print : ProofScript () -> Term -> TopLevel ()
+sbv_abc : ProofScript ()
+sbv_bitwuzla : ProofScript ()
+sbv_boolector : ProofScript ()
+sbv_cvc4 : ProofScript ()
+sbv_cvc5 : ProofScript ()
+sbv_mathsat : ProofScript ()
+sbv_unint_bitwuzla : [String] -> ProofScript ()
+sbv_unint_cvc4 : [String] -> ProofScript ()
+sbv_unint_cvc5 : [String] -> ProofScript ()
+sbv_unint_yices : [String] -> ProofScript ()
+sbv_unint_z3 : [String] -> ProofScript ()
+sbv_yices : ProofScript ()
+sbv_z3 : ProofScript ()
+simplify : Simpset -> ProofScript ()
+simplify_local : [Int] -> Simpset -> ProofScript ()
+trivial : ProofScript ()
+unfolding : [String] -> ProofScript ()
+unfolding_fix_once : [String] -> ProofScript ()
+unint_bitwuzla : [String] -> ProofScript ()
+unint_cvc4 : [String] -> ProofScript ()
+unint_cvc5 : [String] -> ProofScript ()
+unint_yices : [String] -> ProofScript ()
+unint_z3 : [String] -> ProofScript ()
+w4 : ProofScript ()
+w4_abc_aiger : ProofScript ()
+w4_abc_smtlib2 : ProofScript ()
+w4_abc_verilog : ProofScript ()
+w4_offline_smtlib2 : String -> ProofScript ()
+w4_unint_bitwuzla : [String] -> ProofScript ()
+w4_unint_cvc4 : [String] -> ProofScript ()
+w4_unint_cvc5 : [String] -> ProofScript ()
+w4_unint_rme : [String] -> ProofScript ()
+w4_unint_yices : [String] -> ProofScript ()
+w4_unint_z3 : [String] -> ProofScript ()
+w4_unint_z3_using : String -> [String] -> ProofScript ()
+write_goal : String -> ProofScript ()
+yices : ProofScript ()
+z3 : ProofScript ()
+46 more matches tagged experimental; use enable_experimental to see them
+ --------------------------------
+ -- ProofScript Int
+goal_num : ProofScript Int
+print_goal_depth : Int -> ProofScript ()
+print_goal_inline : [Int] -> ProofScript ()
+quickcheck : Int -> ProofScript ()
+simplify_local : [Int] -> Simpset -> ProofScript ()
+17 more matches tagged experimental; use enable_experimental to see them
+ --------------------------------
+ -- (ProofScript Int)
+goal_num : ProofScript Int
+ --------------------------------
+ -- ProofScript Int String
+No matches.
+The following experimental matches require enable_experimental:
+crucible_llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+llvm_verify_fixpoint_chc_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+llvm_verify_fixpoint_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+llvm_verify_x86_with_invariant : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Int, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+ --------------------------------
+ -- (ProofScript Int) String
+No matches.
+ --------------------------------
+ -- Int String ProofScript
+No matches.
+The following experimental matches require enable_experimental:
+crucible_llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+llvm_verify_fixpoint_chc_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+llvm_verify_fixpoint_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+llvm_verify_x86_with_invariant : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Int, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)

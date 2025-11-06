@@ -1,3 +1,12 @@
  Loading file "err029.saw"
- Parse error at err029.saw:7:14-7:17: Unexpected `Int'
+ err029.saw:7:20-7:27: Type mismatch.
+    Mismatch of type constructors. Expected: <Block> but got Term
+    err029.saw:7:9-7:17: The type Term Int arises from this type annotation
+    err029.saw:7:20-7:27: The type Term arises from the type of this term
+
+    Expected: Term Int
+    Found:    Term
+
+    within "x" (err029.saw:7:5-7:6)
+
 FAILED

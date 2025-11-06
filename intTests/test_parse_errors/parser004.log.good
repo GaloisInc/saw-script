@@ -1,3 +1,6 @@
  Loading file "parser004.saw"
- Parse error at parser004.saw:2:22-2:24: Unexpected `in'
+ Stack trace:
+   (builtin) (at top level)
+Parse error at parser004.saw:2:22-2:24: Unexpected `in'
+
 FAILED

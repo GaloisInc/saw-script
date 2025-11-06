@@ -5,34 +5,30 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in
 -- SAWScript.Typechecker
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
   ( interpretTopStmt
-  , interpretFile
   , processFile
   , buildTopLevelEnv
   )
   where
 
 import qualified Control.Exception as X
-import Control.Monad (unless, (>=>), when)
-import Control.Monad.Reader (ask, asks)
-import Control.Monad.State (gets)
+import Control.Monad (unless, when)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Reader (ask)
+import Control.Monad.State (gets, get, put)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.List (genericLength)
@@ -50,6 +46,8 @@ import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
 import Data.Parameterized.Some
+
+import qualified Data.AIG.CompactGraph as AIG
 
 import qualified Text.LLVM.AST as LLVM (Type)
 
@@ -80,13 +78,11 @@ import SAWCentral.AST (Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
 import SAWCentral.Exceptions (failTypecheck)
-import qualified SAWScript.Import
+import qualified SAWScript.Loader as Loader
 import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
-import SAWScript.Lexer (lexSAW)
 import SAWScript.Typechecker (checkStmt, typesMatch)
-import SAWScript.Parser (parseSchema)
 import SAWScript.Panic (panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
@@ -138,6 +134,7 @@ import qualified Prettyprinter.Render.Text as PP (putDoc)
 import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
+
 
 
 ------------------------------------------------------------
@@ -290,6 +287,14 @@ propagateRefChain chain1 v =
 --
 -- XXX: at some point clean this up further.
 --
+-- Update: there _is_ something weird going on. The typechecker wasn't
+-- updating the types in patterns after doing its generalize step, so
+-- for polymorphic bindings the types in patterns weren't usable. But
+-- even after fixing that, using the types in the patterns produces
+-- the wrong results -- they are not the same tyvars as the ones that
+-- appear in the the schema. There's still something going on in
+-- there that I don't understand.
+--
 bindPattern :: SS.Rebindable -> SS.Pattern -> Maybe SS.Schema -> Value -> TopLevel ()
 bindPattern rb pat ms v =
   case pat of
@@ -328,6 +333,14 @@ bindPattern rb pat ms v =
 
 -- Monad class to allow the interpreter to run in the Haskell
 -- projection of the five SAWScript monads.
+--
+-- Note that `getMonadContext` is only used when interpreting at the
+-- syntactic top level and thus only applies to the `TopLevel` and
+-- `ProofScript` monads. In fact, it used to be that if anything other
+-- than one of those was passed down into the typechecker from where
+-- `getMonadContext` is called, it would panic. Therefore, it's ok for
+-- `getMonadContext` itself to panic for the three Setup cases
+-- instead.
 
 class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
@@ -360,7 +373,7 @@ instance InterpreterMonad LLVMCrucibleSetupM where
   liftTopLevel m = llvmTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VLLVMCrucibleSetup pos chain m
-  getMonadContext = return SS.LLVMSetup
+  getMonadContext = panic "getMonadContext" ["Called in LLVMSetup"]
   pushScopeAny = llvmTopLevel pushScope
   popScopeAny = llvmTopLevel popScope
   withEnvironAny = withEnvironLLVM
@@ -369,7 +382,7 @@ instance InterpreterMonad JVMSetupM where
   liftTopLevel m = jvmTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VJVMSetup pos chain m
-  getMonadContext = return SS.JavaSetup
+  getMonadContext = panic "getMonadContext" ["Called in JVMSetup"]
   pushScopeAny = jvmTopLevel pushScope
   popScopeAny = jvmTopLevel popScope
   withEnvironAny = withEnvironJVM
@@ -378,7 +391,7 @@ instance InterpreterMonad MIRSetupM where
   liftTopLevel m = mirTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VMIRSetup pos chain m
-  getMonadContext = return SS.MIRSetup
+  getMonadContext = panic "getMonadContext" ["Called in MIRSetup"]
   pushScopeAny = mirTopLevel pushScope
   popScopeAny = mirTopLevel popScope
   withEnvironAny = withEnvironMIR
@@ -584,29 +597,33 @@ interpretDeclGroup rebindable dg = case dg of
             -- declarations _into_ all the declarations, which is a
             -- circular knot that can only be constructed in very
             -- specific ways.
-            extractFunction e0 = case e0 of
+            extractFunction x e0 = case e0 of
                 SS.Lambda _ mname pat e1 ->
                     \env -> VLambda env mname pat e1
                 SS.TSig _ e1 _ ->
-                    extractFunction e1
+                    extractFunction x e1
                 _ ->
                     panic "interpretDeclGroup" [
                         "Found non-function in a recursive declaration group",
-                        -- XXX should print the name here!
+                        "Name: " <> x,
                         "Expression found: " <> PPS.pShowText e0
                     ]
 
-            -- Get the name (and type) for one of the declarations.
+            -- Get the type (scheme) for one of the declarations.
+            extractType x mty = case mty of
+                Nothing ->
+                    panic "interpretDeclGroup" [
+                        "Found declaration with no type in a recursive decl group",
+                        "Variable: " <> x
+                    ]
+                Just ty -> ty
+
+            -- Get the name for one of the declarations.
             -- Recursive declaration sets are only allowed to contain
             -- functions, so the pattern cannot be a tuple.
             extractName pat = case pat of
                 SS.PWild _ _ -> Nothing
-                SS.PVar _ xpos x (Just ty) -> Just (xpos, x, ty)
-                SS.PVar _ _ x Nothing ->
-                    panic "interpretDeclGroup" [
-                        "Found variable with no type in a recursive decl group",
-                        "Variable: " <> x
-                    ]
+                SS.PVar _ xpos x _mty -> Just (xpos, x)
                 SS.PTuple{} ->
                     panic "interpretDeclGroup" [
                         "Found tuple pattern in a recursive declaration group",
@@ -614,12 +631,14 @@ interpretDeclGroup rebindable dg = case dg of
                     ]
 
             -- Get all the info for a decl.
-            extractBoth (SS.Decl _ pat _mty e) =
+            extractBoth (SS.Decl _ pat mty e) =
                 case extractName pat of
                     Nothing -> Nothing
-                    Just (xpos, x, ty) ->
-                        let fv = extractFunction e in
-                        Just (xpos, x, rebindable, SS.tMono ty, Nothing, fv)
+                    Just (xpos, x) ->
+                        let ty = extractType x mty
+                            fv = extractFunction x e
+                        in
+                        Just (xpos, x, rebindable, ty, Nothing, fv)
 
             -- Extract all the info for all decls.
             ds' = mapMaybe extractBoth ds
@@ -986,7 +1005,15 @@ interpretFile file runMain =
   where
     interp = do
       opts <- getOptions
-      stmts <- io $ SAWScript.Import.loadFile opts file
+      errs_or_stmts <- io $ Loader.findAndLoadFileUnchecked opts file
+      stmts <- do
+        case errs_or_stmts of
+          Left errs -> do
+            -- Don't use Text.unlines here; it inserts a newline at
+            -- the end and that produces extra blank lines in the
+            -- output.
+            throwTopLevel $ Text.unpack $ Text.intercalate "\n" errs
+          Right stmts -> pure stmts
       io $ setCurrentDirectory (takeDirectory file)
       mapM_ stmtWithPrint stmts
       when runMain interpretMain
@@ -1060,12 +1087,14 @@ interpretMain = do
       ]
 
 
-buildTopLevelEnv :: AIGProxy
-                 -> Options
+buildTopLevelEnv :: Options
                  -> [Text]
-                 -> IO (BuiltinContext, TopLevelRO, TopLevelRW)
-buildTopLevelEnv proxy opts scriptArgv =
-    do let mn = mkModuleName ["SAWScript"]
+                 -> TopLevelShellHook
+                 -> ProofScriptShellHook
+                 -> IO (TopLevelRO, TopLevelRW)
+buildTopLevelEnv opts scriptArgv tlhook pshook = do
+       let proxy = AIGProxy AIG.compactProxy
+       let mn = mkModuleName ["SAWScript"]
        sc <- mkSharedContext
        let ?fileReader = BS.readFile
        CryptolSAW.scLoadPreludeModule sc
@@ -1084,8 +1113,8 @@ buildTopLevelEnv proxy opts scriptArgv =
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
-                   , roSubshell = fail "Subshells not supported"
-                   , roProofSubshell = fail "Proof subshells not supported"
+                   , roSubshell = tlhook
+                   , roProofSubshell = pshook
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -1130,25 +1159,18 @@ buildTopLevelEnv proxy opts scriptArgv =
                    , rwSequentGoals = False
                    , rwJavaCodebase = JavaUninitialized
                    }
-       return (bic, ro0, rw0)
+       return (ro0, rw0)
 
 processFile ::
-  AIGProxy ->
   Options ->
   FilePath ->
   [Text] ->
-  Maybe (TopLevel ()) ->
-  Maybe (ProofScript ()) ->
+  TopLevelShellHook ->
+  ProofScriptShellHook ->
   IO ()
-processFile proxy opts file scriptArgv mbSubshell mbProofSubshell = do
-  (_, ro, rw) <- buildTopLevelEnv proxy opts scriptArgv
-  let ro' = case mbSubshell of
-              Nothing -> ro
-              Just m  -> ro{ roSubshell = m }
-  let ro'' = case mbProofSubshell of
-              Nothing -> ro'
-              Just m  -> ro'{ roProofSubshell = m }
-  _ <- runTopLevel (interpretFile file True) ro'' rw
+processFile opts file scriptArgv tlhook pshook = do
+  (ro, rw) <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  _ <- runTopLevel (interpretFile file True) ro rw
             `X.catch` (handleException opts)
   return ()
 
@@ -1712,15 +1734,61 @@ add_primitives lc _bic _opts = do
     rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
 
+-- The subshell command.
+--
+-- The SubshellHook is an IO action that takes interpreter state and
+-- runs the REPL. (Because it recurses back into the repl, it has to
+-- be passed down to us as a closure; it's stored in TopLevelRO while
+-- we execute.)
+--
+-- This function is bound into the interpreter with `pureVal`, which
+-- means the returned TopLevel action gets wrapped in a `Value` and is
+-- not bound into the Haskell-level monad sequencing until the
+-- interpreter unwraps it. (That happens when the value is monad-bound
+-- in SAWScript and not, in particular, just when the () is applied to
+-- the SAWScript name "subshell".)
+--
+-- This should prevent former weirdnesses like x not appearing in the
+-- subshell context in:
+--
+--    do { let s = subshell (); let x = 3; s; return (); };
+--
+-- because the TopLevelRW got fetched at the wrong point.
+--
+-- But note that because the SAWScript interpreter is very fragile it
+-- is very easy for these things to regress.
+--
 toplevelSubshell :: () -> TopLevel Value
 toplevelSubshell () = do
-     m <- roSubshell <$> ask
-     toValue "subshell" <$> m
+    pushScope
+    ro <- ask
+    rw <- get
+    let hook = roSubshell ro
+    rw' <- liftIO $ hook ro rw
+    put rw'
+    popScope
+    return $ toValue "subshell" ()
 
+-- The proof_subshell command.
+--
+-- Much the same as an ordinary subshell, except it runs in the
+-- ProofScript monad and handles the additional ProofScript state.
+--
 proofScriptSubshell :: () -> ProofScript Value
 proofScriptSubshell () = do
-     m <- scriptTopLevel $ asks roProofSubshell
-     toValue "proof_subshell" <$> m
+    (ro, rw) <- scriptTopLevel $ do
+        pushScope
+        ro_ <- ask
+        rw_ <- get
+        return (ro_, rw_)
+    pst <- get
+    let hook = roProofSubshell ro
+    (rw', pst') <- liftIO $ hook ro rw pst
+    put pst'
+    scriptTopLevel $ do
+        put rw'
+        popScope
+    return $ toValue "proof_subshell" ()
 
 -- The "for" builtin.
 --
@@ -2121,13 +2189,23 @@ print_value v = do
 
 dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
 dump_file_AST _bic opts filetxt = do
-  let file = Text.unpack filetxt
-  (SAWScript.Import.loadFile opts >=> mapM_ print) file
+    let file = Text.unpack filetxt
+    errs_or_stmts <- Loader.findAndLoadFileUnchecked opts file
+    case errs_or_stmts of
+        Left errs ->
+            X.throwIO $ userError $ Text.unpack $ Text.unlines errs
+        Right stmts ->
+            mapM_ print stmts
 
 parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> IO ()
 parser_printer_roundtrip _bic opts filetxt = do
-  let file = Text.unpack filetxt
-  (SAWScript.Import.loadFile opts >=> PP.putDoc . SS.prettyWholeModule) file
+    let file = Text.unpack filetxt
+    errs_or_stmts <- Loader.findAndLoadFileUnchecked opts file
+    case errs_or_stmts of
+        Left errs ->
+            X.throwIO $ userError $ Text.unpack $ Text.unlines errs
+        Right stmts ->
+            PP.putDoc $ SS.prettyWholeModule stmts
 
 exec :: Text -> [Text] -> Text -> IO Text
 exec name args input = do
@@ -2331,34 +2409,6 @@ do_summarize_verification_json fpath =
 ------------------------------------------------------------
 -- Primitive tables
 
--- | Read a type schema. This is used to digest the type signatures
--- for builtins, and the expansions for builtin typedefs.
---
--- The first argument (fakeFileName) is a string to pass as the
--- filename for the lexer, which (complete with line and column
--- numbering of dubious value) will go into the positions of the
--- elements of the resulting type.
---
--- FUTURE: we should figure out how to generate more meaningful
--- positions (like "third argument of concat") but this at least
--- allows telling the user which builtin the type came from.
---
-readSchema :: FilePath -> Text -> SS.Schema
-readSchema fakeFileName str =
-  let croak what msg =
-        error (what ++ " error in builtin " ++ Text.unpack str ++ ": " ++ msg)
-      tokens =
-        -- XXX clean this up when we clean out the message printing infrastructure
-        case lexSAW fakeFileName str of
-          Left (_, _, msg) -> croak "Lexer" $ Text.unpack msg
-          Right (tokens', Nothing) -> tokens'
-          Right (_      , Just (Error, _pos, msg)) -> croak "Lexer" $ Text.unpack msg
-          Right (tokens', Just (_, _pos, _msg)) -> tokens'
-  in
-  case parseSchema tokens of
-    Left err -> croak "Parse" $ show err
-    Right schema -> schema
-
 data PrimType
   = PrimType
     { primTypeType :: SS.NamedType
@@ -2389,12 +2439,14 @@ primTypes = Map.fromList
   , abstype "FunctionProfile" Experimental
   , abstype "FunctionSkeleton" Experimental
   , abstype "Ghost" Current
-  , abstype "JVMSetup" Current
+  , abstype' SS.kindStar "JVMSetup" Current  -- prep for fixing #2764
   , abstype "JVMValue" Current
   , abstype "JavaClass" Current
   , abstype "JavaType" Current
+  , abstype' SS.kindStar "LLVMSetup" Current  -- prep for fixing #2764
   , abstype "LLVMModule" Current
   , abstype "LLVMType" Current
+  , abstype' SS.kindStar "MIRSetup" Current  -- prep for fixing #2764
   , abstype "MIRAdt" Experimental
   , abstype "MIRModule" Experimental
   , abstype "MIRType" Experimental
@@ -2411,14 +2463,18 @@ primTypes = Map.fromList
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
-    -- abstract type
-    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
-    abstype name lc = (name, info)
+    -- abstract type of arbitrary kind
+    abstype' :: SS.Kind -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype' kind name lc = (name, info)
       where
         info = PrimType
-          { primTypeType = SS.AbstractType
+          { primTypeType = SS.AbstractType kind
           , primTypeLife = lc
           }
+
+    -- abstract type of kind *
+    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype name lc = abstype' SS.kindStar name lc
 
     -- concrete type (not currently used)
     _conctype :: Text -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
@@ -2429,7 +2485,11 @@ primTypes = Map.fromList
           , primTypeLife = lc
           }
         fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
-        ty = case readSchema fakeFileName tystr of
+        -- XXX: Map.empty is a placeholder; if we start using this we
+        -- may need to tsort the entries in the list and then
+        -- accumulate the environment with fold so that the types used
+        -- in the RHS of typedefs can be found.
+        ty = case Loader.readSchemaPure fakeFileName lc Map.empty tystr of
             SS.Forall [] ty' -> ty'
             _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
 
@@ -6327,7 +6387,7 @@ primitives = Map.fromList $
     ----------------------------------------
     -- A few more misc commands
 
-  , prim "sharpSAT"  "Term -> TopLevel Integer"
+  , prim "sharpSAT"  "Term -> TopLevel Int"
     (pureVal sharpSAT)
     Current
     [ "Use the sharpSAT solver to count the number of solutions to the CNF"
@@ -6372,12 +6432,17 @@ primitives = Map.fromList $
     prim :: Text -> Text -> (Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [Text]
          -> (SS.Name, Primitive)
     prim name ty fn lc doc = (name, Primitive
-                                     { primitiveType = readSchema fakeFileName ty
+                                     { primitiveType = ty'
                                      , primitiveDoc  = doc
                                      , primitiveFn   = fn name
                                      , primitiveLife = lc
                                      })
-      where fakeFileName = Text.unpack $ "<type of " <> name <> ">"
+      where
+        -- Beware: errors in the type will only be detected when the
+        -- type is actually looked at by something, like :env, :t,
+        -- :search, or a direct use of the builtin.
+        ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty
+        fakeFileName = Text.unpack $ "<type of " <> name <> ">"
 
     pureVal :: forall t. IsValue t => t -> Text -> Options -> BuiltinContext -> Value
     pureVal x name _ _ = toValue name x

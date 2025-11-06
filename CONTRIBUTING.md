@@ -81,6 +81,9 @@ set of solvers, which at some times and in some cases includes
 multiple versions of some solvers.
 The easiest way to get this is to download a
 [what4-solvers binary snapshot](https://github.com/GaloisInc/what4-solvers).
+Note that the solver versions in what4-solvers are the ones used in the
+CI runs; using other solver versions (either older or newer) can
+sometimes lead to failures or unexpected behavior.
 
 If you use haskell-language-server, SAW ships with a `hie.yaml` that
 should be sufficient to get it to understand the project structure.

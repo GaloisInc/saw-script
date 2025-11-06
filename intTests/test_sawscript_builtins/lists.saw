@@ -48,11 +48,30 @@ print ("", str_concats ["", "", ""]);
 print ("abc", str_concats ["a", "b", "c"]);
 
 // for
-print "***";
+print "*** for (empty) ***";
 for [] print;
-print "***";
+print "*** for (one) ***";
 for [1] print;
-print "***";
+print "*** for (two) ***";
 for [1, 2] print;
-print "***";
+print "*** end for ***";
 
+// implement fold and map (uses the Haskell argument orderings)
+rec foldl f z xs = if null xs then z else foldl f (f z (head xs)) (tail xs);
+rec foldr f z xs = if null xs then z else f (head xs) (foldr f z (tail xs));
+let map f xs = foldl (\acc x -> concat acc [f x]) [] xs;
+
+print "**** map ****";
+let inc x = eval_size {| x + 1 |};
+print (map inc []);
+print (map inc [1, 2]);
+
+print "**** foldl ****";
+print (foldl str_concat "zero" []);
+print (foldl str_concat "zero" ["alpha"]);
+print (foldl str_concat "zero" ["alpha", "beta"]);
+
+print "**** foldr ****";
+print (foldr str_concat "zero" []);
+print (foldr str_concat "zero" ["alpha"]);
+print (foldr str_concat "zero" ["alpha", "beta"]);

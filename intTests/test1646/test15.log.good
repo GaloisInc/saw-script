@@ -293,7 +293,7 @@ set_memoization_incremental : TopLevel ()
 set_min_sharing : Int -> TopLevel ()
 set_solver_cache_path : String -> TopLevel ()
 set_solver_cache_timeout : Int -> TopLevel ()
-sharpSAT : Term -> TopLevel Integer
+sharpSAT : Term -> TopLevel Int
 show : {a} a -> String
 show_cfg : CFG -> String
 show_term : Term -> String

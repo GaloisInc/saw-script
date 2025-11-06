@@ -7,8 +7,6 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-{-# LANGUAGE TemplateHaskell #-}
-
 module SAWCore.SAWCore
   ( module SAWCore.SharedTerm
   , module SAWCore.ExternalFormat

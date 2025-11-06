@@ -5,11 +5,9 @@ Maintainer  : jhendrix, atomb
 Stability   : provisional
 -}
 
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module SAWCentral.Utils where
 
@@ -18,7 +16,6 @@ import Control.Monad.State
 import Control.Monad.Trans.Except
 import Control.DeepSeq(rnf, NFData(..))
 import Data.Char(isSpace)
-import Data.Data
 import Data.Function (on)
 import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
@@ -45,8 +42,6 @@ import SAWCentral.Position
 bullets :: Char -> [PP.Doc ann] -> PP.Doc ann
 bullets c = PP.vcat . map (PP.hang 2 . (PP.pretty c PP.<+>))
 
-data SSMode = Verify | Blif | CBlif deriving (Eq, Show, Data, Typeable)
-
 -- | Convert a string to a paragraph formatted document.
 ftext :: String -> Doc ann
 ftext msg = fillSep (map pretty $ words msg)
@@ -66,7 +61,7 @@ mapLookupAny keys m = listToMaybe $ catMaybes $ map (\k -> Map.lookup k m) keys
 data ExecException = ExecException Pos          -- Position
                                    (Doc Void)   -- Error message
                                    String       -- Resolution tip
-  deriving (Show, Typeable)
+  deriving (Show)
 
 instance Exception ExecException
 

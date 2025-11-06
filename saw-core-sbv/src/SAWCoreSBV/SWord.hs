@@ -1,7 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-
 {- |
 Module      : SAWCoreSBV.SWord
 Copyright   : Galois, Inc. 2012-2015

@@ -11,3 +11,11 @@ print "-- {a} (a -> String)"
 print "--------------------------------"
 print "-- {m} (a -> m b)"
 :search {m} (a -> m b)
+
+print "--------------------------------"
+print "-- {a} ProofScript a"
+:search {a} ProofScript a
+
+print "--------------------------------"
+print "-- {a} a ProofScript"
+:search {a} a ProofScript

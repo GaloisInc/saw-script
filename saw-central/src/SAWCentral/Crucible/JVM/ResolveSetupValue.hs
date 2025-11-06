@@ -6,12 +6,8 @@ Stability   : provisional
 -}
 
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
 module SAWCentral.Crucible.JVM.ResolveSetupValue
   ( JVMVal(..)

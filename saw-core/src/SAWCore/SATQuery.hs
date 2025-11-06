@@ -6,13 +6,16 @@ module SAWCore.SATQuery
 , satQueryAsPropTerm
 ) where
 
+import qualified Data.IntMap as IntMap
 import Data.Map (Map)
+import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import Data.Foldable (foldrM)
 
 import SAWCore.Name
 import SAWCore.FiniteValue
 import SAWCore.SharedTerm
+import SAWCore.Term.Raw (varTypes)
 
 -- | This datatype represents a satisfiability query that might
 --   be dispatched to a solver.  It carries a series of assertions
@@ -96,6 +99,7 @@ satQueryAsPropTerm sc satq =
   scTupleType sc =<< mapM assertAsPropTerm (satAsserts satq)
   where assertAsPropTerm (BoolAssert b) = scEqTrue sc b
         assertAsPropTerm (UniversalAssert vars hs g) =
-          do vars' <- traverse (traverse (scFirstOrderType sc)) vars
-             scPiList sc vars' =<<
-               scEqTrue sc =<< foldrM (scImplies sc) g hs
+          do body <- scEqTrue sc =<< foldrM (scImplies sc) g hs
+             let varType x = fmap ((,) x) $ IntMap.lookup (vnIndex x) (varTypes body)
+             let vars' = mapMaybe (varType . fst) vars
+             scPiList sc vars' body

@@ -1,0 +1,16 @@
+// The subshell environment should be captured when the subshell
+// command is monad-bound and thus executed, not when it's named.
+// (ProofScript version)
+//
+// The subshell should print 6 and not complain about x being unbound.
+
+enable_experimental;
+
+let f () = do {
+   let sh = proof_subshell ();
+   let x = 6;
+   sh;
+   trivial;
+   return ();
+};
+prove_print (f ()) {{ True }};

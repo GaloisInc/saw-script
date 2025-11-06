@@ -5,19 +5,11 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE NondecreasingIndentation #-}
-{-# LANGUAGE ImplicitParams #-}
 
 module SAWCentral.Builtins where
 
@@ -33,6 +25,7 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf, isInfixOf, sort, intersperse)
 import qualified Data.Map as Map
+import Data.Maybe (catMaybes)
 import Data.Parameterized.Classes (KnownRepr(..))
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -71,13 +64,14 @@ import SAWCore.ExternalFormat
 import SAWCore.FiniteValue
   ( FiniteType(..), readFiniteValue
   )
-import SAWCore.Name (ModuleName, VarName(..), mkModuleName)
+import SAWCore.Name (ModuleName, VarName(..), mkModuleName, moduleIdentToURI)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
+import SAWCore.Simulator.Concrete (constMap)
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
-import SAWCore.Typechecker (tcInsertModule, inferCompleteTermCtx)
+import SAWCore.Typechecker (tcInsertModule, inferCompleteTerm)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import SAWCore.Term.Raw
@@ -579,7 +573,10 @@ goal_normalize opaque =
   execTactic $ tacticChange $ \goal ->
     do sc <- getSharedContext
        idxs <- mconcat <$> mapM (resolveName sc) opaque
-       let opaqueSet = Set.fromList idxs
+       -- Also exclude defined SAWCore constants that are implemented as primitives
+       let primURIs = map moduleIdentToURI (Map.keys constMap)
+       primIdxs <- io $ traverse (scResolveNameByURI sc) primURIs
+       let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)
        sqt' <- io $ traverseSequentWithFocus (normalizeProp sc opaqueSet) (goalSequent goal)
        return (sqt', NormalizePropEvidence opaqueSet)
 
@@ -1949,7 +1946,7 @@ parseCoreMod mnm_str input =
      let mnm =
            mkModuleName $ Text.splitOn "." mnm_str
      _ <- io $ scFindModule sc mnm -- Check that mnm exists
-     err_or_t <- io $ inferCompleteTermCtx sc (Just mnm) mempty uterm
+     err_or_t <- io $ inferCompleteTerm sc (Just mnm) uterm
      case err_or_t of
        Left err -> fail (show err)
        Right x -> pure x

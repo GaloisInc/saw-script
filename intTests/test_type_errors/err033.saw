@@ -1,7 +1,7 @@
 //
 // Not enough arguments for type constructor: monads
 //
-// Currently this is a parser message; the kind mismatch message in
-// the typechecker is unreachable.
+// Currently this produces a type constructor mismatch error, rather than the
+// desired kind mismatch error.
 
 let x : TopLevel = false;

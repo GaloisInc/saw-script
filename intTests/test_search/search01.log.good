@@ -7,6 +7,31 @@ llvm_spec_solvers : LLVMSpec -> [String]
  --------------------------------
  -- (_ Int)
 goal_num : ProofScript Int
+sharpSAT : Term -> TopLevel Int
+ --------------------------------
+ -- JVMSetup
+jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue
+jvm_alloc_object : String -> JVMSetup JVMValue
+jvm_array_is : JVMValue -> Term -> JVMSetup ()
+jvm_assert : Term -> JVMSetup ()
+jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()
+jvm_equal : JVMValue -> JVMValue -> JVMSetup ()
+jvm_execute_func : [JVMValue] -> JVMSetup ()
+jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()
+jvm_fresh_var : String -> JavaType -> JVMSetup Term
+jvm_ghost_value : Ghost -> Term -> JVMSetup ()
+jvm_modifies_array : JVMValue -> JVMSetup ()
+jvm_modifies_elem : JVMValue -> Int -> JVMSetup ()
+jvm_modifies_field : JVMValue -> String -> JVMSetup ()
+jvm_modifies_static_field : String -> JVMSetup ()
+jvm_postcond : Term -> JVMSetup ()
+jvm_precond : Term -> JVMSetup ()
+jvm_return : JVMValue -> JVMSetup ()
+jvm_static_field_is : String -> JVMValue -> JVMSetup ()
+jvm_unint : [String] -> JVMSetup ()
+jvm_unsafe_assume_spec : JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec
+jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
+2 more matches tagged experimental; use enable_experimental to see them
  --------------------------------
  -- (JVMSetup _)
 jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue
