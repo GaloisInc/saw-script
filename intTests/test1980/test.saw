@@ -1,8 +1,11 @@
 enable_experimental;
 m <- mir_load_module "test.linked-mir.json";
 
-f8 <- mir_extract m (mir_find_name m "test::f" [mir_u8]);
-f16 <- mir_extract m (mir_find_name m "test::f" [mir_u16]);
+f8  <- mir_extract m (mir_find_name m "test::f" [mir_u8]);     // find instance
+f16 <- mir_extract m (mir_find_name m "test::f" [mir_u16]);    // find instance
+g   <- mir_extract m (mir_find_name m "test::g" []);           // mono function
+fails (do { mir_extract m (mir_find_name m "test::g1" []); }); // bad function
+fails (do { mir_extract m (mir_find_name m "test::f" []); });  // bad instance 
 
 if eval_bool {{ (zero # f8 5) == f16 5 }}
   then return () else fail "Test failed";

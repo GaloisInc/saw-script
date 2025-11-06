@@ -382,14 +382,15 @@ mir_find_adt rm origName substs = do
   origDid <- findDefId cs origName
   findAdt col origDid (Mir.Substs substs)
 
-mir_find_name :: Mir.RustModule -> Text -> [Mir.Ty] -> TopLevel Text
+-- | Find an instantiation of a polymorphic function.
+mir_find_name :: MonadFail m => Mir.RustModule -> Text -> [Mir.Ty] -> m Text
 mir_find_name rm origName tys =
   do
-    let cs = rm ^. Mir.rmCS
+    let cs  = rm ^. Mir.rmCS
         col = cs ^. Mir.collection
     origId <- findDefId cs origName
-    findPolyFn col origId (Mir.Substs tys)
-
+    findFnInstance col origId (Mir.Substs tys)
+    
 -- | Generate a fresh term of the given Cryptol type. The name will be used when
 -- pretty-printing the variable in debug output.
 mir_fresh_cryptol_var ::
@@ -1741,20 +1742,26 @@ findAdt col origName substs =
   where
     insts = col ^. Mir.adtsOrig . at origName . to (fromMaybe [])
 
-findPolyFn :: Mir.Collection -> Mir.DefId -> Mir.Substs -> TopLevel Text
-findPolyFn col origName substs =
-  case matches of
-    [one] -> pure (Mir.idText one)
-    [] -> fail "Could not fine name"
-    _  -> fail "Name is ambiguous"
+findFnInstance :: MonadFail m => Mir.Collection -> Mir.DefId -> Mir.Substs -> m Text
+findFnInstance col origName substs =
+  case found of
+    Just i -> pure (Mir.idText i)
+    Nothing
+      | hasInstances -> fail ("Could not find function instance: " ++ show (Mir.cleanVariantName origName))
+      | origName `Map.member` (col ^. Mir.functions) -> pure (Mir.idText origName)
+      | otherwise -> fail ("Could not find function " ++ show (Mir.cleanVariantName origName))
   where
-  matches = [ i ^. Mir.intrName
-            | i <- Map.elems (col ^. Mir.intrinsics)
-            , let inst = i ^. Mir.intrInst
-            , case inst ^. Mir.inKind of
-                Mir.IkItem -> inst ^. Mir.inDefId == origName && inst ^. Mir.inSubsts == substs
-                _ -> False
-             ]
+  (hasInstances, found) = foldr check (False, Nothing) (col ^. Mir.intrinsics)
+  check i (hasIs, rest) =
+    let inst = i ^. Mir.intrInst
+    in case inst ^. Mir.inKind of
+          Mir.IkItem
+            | inst ^. Mir.inDefId == origName ->
+              (True, if inst ^. Mir.inSubsts == substs
+                       then Just (i ^. Mir.intrName)
+                       else rest)
+          _ -> (hasIs, rest)
+
 
 
 -- | Find the ADT definition corresponding to a mangled identifier (i.e., an
