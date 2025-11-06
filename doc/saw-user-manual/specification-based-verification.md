@@ -112,6 +112,15 @@ Where:
   If you are in doubt about what the full identifier for a given function is,
   consult the MIR JSON file for your program.
 
+  The Rust compiler generates a separate instance for each use of a polymorphic
+  function at a different type.   These instances have a compiler generated
+  name, so the easiest way to refer to them is by using the command
+  `mir_find_name : MIRModule -> String -> [MIRType] -> String`.
+  Given a Rust module, the name of a polymorhic function, and a list of types,
+  `mir_find_name` will return the name of the corresponding instantion.
+  It throws an exception if the polymorphic function or the given
+  instantiation are not found.
+
 -----
 
 Now we describe how to construct a value of type `LLVMSetup ()`, `JVMSetup ()`,
@@ -229,7 +238,8 @@ typically corresponds to `llvm_int 1`, but if a `bool` is a member of a
 composite type such as a pointer, array, or struct, then it corresponds to
 `llvm_int 8`. This is due to a peculiarity in the way Clang compiles `bool`
 down to LLVM.  When in doubt about how a `bool` is represented, check the LLVM
-bitcode by compiling your code with `clang -S -emit-llvm`.
+bit
+ by compiling your code with `clang -S -emit-llvm`.
 
 LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.
