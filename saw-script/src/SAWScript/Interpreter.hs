@@ -6195,6 +6195,22 @@ primitives = Map.fromList $
     Experimental
     [ "The type of MIR characters." ]
 
+  , prim "mir_const" "MIRType -> Term -> MIRType"
+    (funVal2 mir_const)
+    Experimental
+    [ "A constant value used to instantiate a const generic parameter."
+    , "This is intended to be used in conjunction with `mir_find_adt` to look"
+    , "up instantiations of const generic ADTs. This is never used to"
+    , "represent the type of a value in its own right, so using this in"
+    , "conjunction with`mir_alloc`, `mir_fresh_var`, etc. will raise an error."
+    , ""
+    , "The MIRType argument represents the type of the constant, and the Term"
+    , "argument represents the value of the constant. At present, only a"
+    , "subset of MIR primitive types are supported in `mir_const`. See the"
+    , "SAW manual for a more detailed description of which types are"
+    , "supported, along with restrictions on what forms the Terms can have."
+    ]
+
   , prim "mir_i8" "MIRType"
     (pureVal mir_i8)
     Experimental

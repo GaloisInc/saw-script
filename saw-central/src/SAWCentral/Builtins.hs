@@ -1743,36 +1743,58 @@ failsPrim m = do
       do liftIO $ fail "Expected failure, but succeeded instead!"
 
 eval_bool :: TypedTerm -> TopLevel Bool
-eval_bool t = do
+eval_bool = eval_bool_inner "eval_bool"
+
+-- | The workhorse for @eval_bool@ and @mir_const@'s @mir_bool@ case. This is
+-- parameterized by a 'String', which is intended to represent the name of the
+-- caller function. This 'String' is only used for error message purposes.
+eval_bool_inner :: String -> TypedTerm -> TopLevel Bool
+eval_bool_inner funName t = do
   sc <- getSharedContext
   case ttType t of
     TypedTermSchema (C.Forall [] [] (C.tIsBit -> True)) -> return ()
-    _ -> fail "eval_bool: not type Bit"
+    _ -> malformed "not type Bit"
   unless (closedTerm (ttTerm t)) $
-    fail "eval_bool: term contains symbolic variables"
+    malformed "term contains symbolic variables"
   v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t
   return (C.fromVBit v)
+  where
+    malformed :: String -> TopLevel a
+    malformed msg = fail $ funName ++ ": " ++ msg
 
 eval_int :: TypedTerm -> TopLevel Integer
-eval_int t = do
-  sc <- getSharedContext
-  cenv <- SV.getCryptolEnv
-  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
-  unless (closedTerm (ttTerm t)) $
-    fail "term contains symbolic variables"
-  opts <- getOptions
-  t' <- io $ defaultTypedTerm opts sc cfg t
-  case ttType t' of
-    TypedTermSchema (C.Forall [] [] (isInteger -> True)) -> return ()
-    _ -> fail "eval_int: argument is not a finite bitvector"
-  v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
-  io $ C.runEval mempty (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
+eval_int t = snd <$> eval_int_inner "eval_int" t
 
--- Predicate on Cryptol types true of integer types, i.e. types
--- @[n]Bit@ for *finite* @n@.
-isInteger :: C.Type -> Bool
-isInteger (C.tIsSeq -> Just (C.tIsNum -> Just _, C.tIsBit -> True)) = True
-isInteger _ = False
+-- | The workhorse for @eval_int@ and @mir_const@ (when its @MIRType@ argument
+-- is @mir_char@ or a primitive integer type). This is parameterized by a
+-- 'String', which is intended to represent the name of the caller function.
+-- This 'String' is only used for error message purposes.
+--
+-- This returns two 'Integer' values, where the first 'Integer' represents the
+-- width of the finite bitvector type, and the second 'Integer' represents the
+-- bitvector's value.
+eval_int_inner :: String -> TypedTerm -> TopLevel (Integer, Integer)
+eval_int_inner funName t = do
+  sc <- getSharedContext
+  unless (closedTerm (ttTerm t)) $
+    malformed "term contains symbolic variables"
+  t' <- default_typed_term t
+  width <-
+    case ttType t' of
+      TypedTermSchema (C.Forall [] [] (isBitvector -> Just width)) -> return width
+      _ -> malformed "argument is not a finite bitvector"
+  v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
+  val <- io $ C.runEval mempty (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
+  pure (width, val)
+  where
+    malformed :: String -> TopLevel a
+    malformed msg = fail $ funName ++ ": " ++ msg
+
+-- | Predicate on Cryptol types which returns @'Just' n@ for bitvector types,
+-- i.e., types @[n]Bit@ for *finite* @n@.
+isBitvector :: C.Type -> Maybe Integer
+isBitvector (C.tIsSeq -> Just (C.tIsNum -> Just n, C.tIsBit -> True)) = Just n
+isBitvector _ = Nothing
 
 list_term :: [TypedTerm] -> TopLevel TypedTerm
 list_term [] = fail "list_term: invalid empty list"

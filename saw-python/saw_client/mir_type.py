@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from cryptol import cryptoltypes
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Union, overload
 
@@ -36,6 +37,16 @@ class MIRBoolType(MIRType):
 class MIRCharType(MIRType):
     def to_json(self) -> Any:
         return { 'type': 'char' }
+
+class MIRConstType(MIRType):
+    def __init__(self, constant_type : 'MIRType', constant_value : cryptoltypes.CryptolJSON) -> None:
+        self.constant_type = constant_type
+        self.constant_value = constant_value
+
+    def to_json(self) -> Any:
+        return { 'type': 'const',
+                 'constant type': self.constant_type.to_json(),
+                 'constant value': cryptoltypes.to_cryptol(self.constant_value) }
 
 class MIRI8Type(MIRType):
     def to_json(self) -> Any:
