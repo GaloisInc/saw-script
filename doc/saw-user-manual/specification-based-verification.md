@@ -117,7 +117,7 @@ Where:
   name, so the easiest way to refer to them is by using the command
   `mir_find_name : MIRModule -> String -> [MIRType] -> String`.
   Given a Rust module, the name of a polymorphic function, and a list of types,
-  `mir_find_name` will return the name of the corresponding instantion.
+  `mir_find_name` will return the name of the corresponding instantiation.
   It throws an exception if the polymorphic function or the given
   instantiation are not found.
 
