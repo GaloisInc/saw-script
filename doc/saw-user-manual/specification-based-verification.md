@@ -238,8 +238,7 @@ typically corresponds to `llvm_int 1`, but if a `bool` is a member of a
 composite type such as a pointer, array, or struct, then it corresponds to
 `llvm_int 8`. This is due to a peculiarity in the way Clang compiles `bool`
 down to LLVM.  When in doubt about how a `bool` is represented, check the LLVM
-bit
- by compiling your code with `clang -S -emit-llvm`.
+bitcode by compiling your code with `clang -S -emit-llvm`.
 
 LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.
