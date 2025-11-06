@@ -57,9 +57,6 @@ import Control.Exception
   'else'         { TReserved _ "else"           }
   'typedef'      { TReserved _ "typedef"        }
   'rebindable'   { TReserved _ "rebindable"     }
-  'JavaSetup'    { TReserved _ "JavaSetup"      }
-  'LLVMSetup'    { TReserved _ "LLVMSetup"      }
-  'MIRSetup'     { TReserved _ "MIRSetup"       }
   'ProofScript'  { TReserved _ "ProofScript"    }
   'TopLevel'     { TReserved _ "TopLevel"       }
   'CrucibleSetup'{ TReserved _ "CrucibleSetup"  }
@@ -248,12 +245,9 @@ BaseType :: { Type }
  | 'JVMMethodSpec'                      { tJVMSpec (getPos $1)             }
  | 'JVMSpec'                            { tJVMSpec (getPos $1)             }
  | 'MIRSpec'                            { tMIRSpec (getPos $1)             }
- | 'JavaSetup'                          { tContext (getPos $1) JavaSetup   }
- | 'LLVMSetup'                          { tContext (getPos $1) LLVMSetup   }
- | 'MIRSetup'                           { tContext (getPos $1) MIRSetup    }
  | 'ProofScript'                        { tContext (getPos $1) ProofScript }
  | 'TopLevel'                           { tContext (getPos $1) TopLevel    }
- | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup   }
+ | 'CrucibleSetup'                      { tVar (getPos $1) "LLVMSetup"     }
  | '(' Type ')'                         { $2                               }
  | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2     }
  | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2     }

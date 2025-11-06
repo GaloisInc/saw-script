@@ -26,17 +26,14 @@ import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
 import qualified Data.Text as Text
-import Data.List (intercalate, genericTake)
+import Data.List (genericTake, genericLength)
 import Data.Either (partitionEithers)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 
-import qualified Prettyprinter as PP
-
 import SAWSupport.Pretty (pShow)
-import qualified SAWSupport.Pretty as PPS
 
 import SAWCentral.AST
 import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars'(..), isDeprecated)
@@ -87,7 +84,7 @@ instance UnifyVars Schema where
 instance UnifyVars NamedType where
   unifyVars nt = case nt of
     ConcreteType ty -> unifyVars ty
-    AbstractType -> Map.empty
+    AbstractType _kind -> Map.empty
 
 -- }}}
 
@@ -250,42 +247,7 @@ instance AppSubst Schema where
 instance AppSubst NamedType where
   appSubst s nt = case nt of
     ConcreteType ty -> ConcreteType $ appSubst s ty
-    AbstractType -> AbstractType
-
--- }}}
-
-
-------------------------------------------------------------
--- Kinds {{{
-
---
--- For the time being we can handle kinds using the number of expected
--- type arguments. That is, Kind 0 is *. Apart from tuples the only
--- things we have are of kinds *, * -> *, and * -> * -> *, but we do
--- have tuples of arbitrary arity.
---
--- If we ever want additional structure (e.g. distinguishing the
--- monad/context types from other types) we can extend this
--- representation easily enough.
---
-
-newtype Kind = Kind { kindNumArgs :: Int }
-  deriving Eq
-
-kindStar :: Kind
-kindStar = Kind 0
-
--- these aren't currently used
---kindStarToStar :: Kind
---kindStarToStar = Kind 1
---
---kindStarToStarToStar :: Kind
---kindStarToStarToStar = Kind 2
-
-instance PPS.PrettyPrec Kind where
-  prettyPrec _ (Kind n) =
-     PP.viaShow $ intercalate " -> " $ take (n + 1) $ repeat "*"
-
+    AbstractType kind -> AbstractType kind
 
 -- }}}
 
@@ -1040,9 +1002,9 @@ withDeclGroup (NonRecursive d) m = withDecl d m
 withDeclGroup (Recursive ds) m = foldr withDecl m ds
 
 -- Wrap the action m with some abstract type variables.
-withAbstractTyVars :: Map Name Pos -> TI a -> TI a
-withAbstractTyVars vars m = do
-    let insertOne x _pos tyenv = Map.insert x (Current, AbstractType) tyenv
+withAbstractTyVars :: Map Name Pos -> Kind -> TI a -> TI a
+withAbstractTyVars vars kind m = do
+    let insertOne x _pos tyenv = Map.insert x (Current, AbstractType kind) tyenv
         insertAll tyenv = Map.foldrWithKey insertOne tyenv vars
     tyenv <- gets tyEnv
     let tyenv' = insertAll tyenv
@@ -1327,15 +1289,28 @@ addTypedef a ty = do
 --    monadType (TopLevel Int) gives Just (TopLevel, Int)
 --    monadType Int gives Nothing
 --
-monadType  :: Type -> Maybe (Type, Type)
+monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
   TyCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
       Just (ctx, valty)
-  -- We don't currently ever generate this type, but be future-proof
+  TyCon _ BlockCon [ctx@(TyVar _ name), valty] | isMonad name ->
+      Just (ctx, valty)
+  -- We don't currently ever generate these types, but be future-proof
   TyCon pos (ContextCon ctx) [valty] ->
       Just (TyCon pos (ContextCon ctx) [], valty)
+  -- and this one can't even be represented yet
+--TyVar pos name [valty] | isMonad name ->
+--    Just (TyVar pos name, valty)
   _ ->
       Nothing
+  where
+    -- Baking in these strings is untidy. I'd worry more about it if
+    -- this code were being used for real rather than as part of a
+    -- temporary accomodation for compatibility purposes.
+    isMonad "LLVMSetup" = True
+    isMonad "JVMSetup" = True
+    isMonad "MIRSetup" = True
+    isMonad _ = False
 
 -- wrap an expression in "return"
 wrapReturn :: Expr -> Expr
@@ -1701,7 +1676,10 @@ inferDecl rebindable d@(Decl pos pat _ e) = do
     -- Add abstract type variables for the foralls while we check the body.
     -- Note: this is a variable declaration. It doesn't add types; the types
     -- get forall-bound in the type scheme by the `generalize` call.
-    withAbstractTyVars foralls $ do
+    --
+    -- XXX: for the moment assume all the vars should have kind *. Should
+    -- probably do some kind inference.
+    withAbstractTyVars foralls kindStar $ do
         -- Check the body and check the pattern against the body.
         (e', t) <- inferExpr (cname, e)
         pat' <- checkPattern rebindable cname t pat
@@ -1739,7 +1717,10 @@ inferRecDecls ds = do
 
     -- Add abstract type variables for the foralls while we check the
     -- bodies.
-    withAbstractTyVars foralls $ do
+    --
+    -- XXX: for the moment assume all the vars should have kind *. Should
+    -- probably do some kind inference.
+    withAbstractTyVars foralls kindStar $ do
       -- Check the patterns first to get types.
       (_ts, pats') <- unzip <$> mapM (inferPattern cname ReadOnlyVar) pats
 
@@ -1818,8 +1799,8 @@ checkType kind ty = case ty of
   TyCon pos tycon args -> do
       -- First, look up the constructor.
       let params = lookupTyCon tycon
-      let nparams = length params
-          nargs = length args
+      let nparams = genericLength params
+          nargs = genericLength args
           argsleft = kindNumArgs kind
 
       -- XXX: the failures are all currently unreachable, because the
@@ -1873,11 +1854,15 @@ checkType kind ty = case ty of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ Text.unpack x)
               getErrorTyVar pos
-          Just (lc, _ty')
+          Just (lc, ty')
            | Set.member lc avail -> do
               when (isDeprecated lc) $
                   recordWarning pos $ "Type is deprecated: " <> Text.unpack x
-              -- Assume ty' was checked when it was entered.
+
+              -- For typedefs, which appear here as ConcreteType
+              -- expansions, assume ty' was checked when it was
+              -- entered.
+              --
               -- (If we entered it that's true, if it was in the
               -- initial environment we were given that depends on the
               -- interpreter not doing unfortunate things. This isn't
@@ -1888,11 +1873,16 @@ checkType kind ty = case ty of
               -- restricted) so just fail if we use one in a context
               -- expecting something else.
               --
-              -- The same holds for abstract types, so we don't need
-              -- separate cases.
-              if kind /= kindStar then do
+              -- Abstract types may have any kind, because some are
+              -- monads; we carry the kind around.
+              -- 
+              let kindFound = case ty' of
+                    ConcreteType _ -> kindStar
+                    AbstractType kf -> kf
+
+              if kind /= kindFound then do
                   recordError pos ("Kind mismatch: expected " ++ pShow kind ++
-                                   " but found " ++ pShow kindStar)
+                                   " but found " ++ pShow kindFound)
                   getErrorTyVar pos
               else
                   -- We do _not_ want to expand typedefs when checking,
@@ -1988,7 +1978,6 @@ checkStmt avail env tenv ctx stmt =
         cname = case ctx of
             TopLevel -> ContextName pos "<toplevel>"
             ProofScript -> ContextName pos "<proofscript>"
-            _ -> panic "checkStmt" ["Invalid monad context " <> Text.pack (pShow ctx)]
         ctxtype = TyCon pos (ContextCon ctx) []
     in
     evalTIWithEnv avail env tenv (inferSingleStmt cname pos ctxtype stmt)

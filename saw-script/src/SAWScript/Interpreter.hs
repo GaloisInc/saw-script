@@ -333,6 +333,14 @@ bindPattern rb pat ms v =
 
 -- Monad class to allow the interpreter to run in the Haskell
 -- projection of the five SAWScript monads.
+--
+-- Note that `getMonadContext` is only used when interpreting at the
+-- syntactic top level and thus only applies to the `TopLevel` and
+-- `ProofScript` monads. In fact, it used to be that if anything other
+-- than one of those was passed down into the typechecker from where
+-- `getMonadContext` is called, it would panic. Therefore, it's ok for
+-- `getMonadContext` itself to panic for the three Setup cases
+-- instead.
 
 class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
@@ -365,7 +373,7 @@ instance InterpreterMonad LLVMCrucibleSetupM where
   liftTopLevel m = llvmTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VLLVMCrucibleSetup pos chain m
-  getMonadContext = return SS.LLVMSetup
+  getMonadContext = panic "getMonadContext" ["Called in LLVMSetup"]
   pushScopeAny = llvmTopLevel pushScope
   popScopeAny = llvmTopLevel popScope
   withEnvironAny = withEnvironLLVM
@@ -374,7 +382,7 @@ instance InterpreterMonad JVMSetupM where
   liftTopLevel m = jvmTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VJVMSetup pos chain m
-  getMonadContext = return SS.JavaSetup
+  getMonadContext = panic "getMonadContext" ["Called in JVMSetup"]
   pushScopeAny = jvmTopLevel pushScope
   popScopeAny = jvmTopLevel popScope
   withEnvironAny = withEnvironJVM
@@ -383,7 +391,7 @@ instance InterpreterMonad MIRSetupM where
   liftTopLevel m = mirTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VMIRSetup pos chain m
-  getMonadContext = return SS.MIRSetup
+  getMonadContext = panic "getMonadContext" ["Called in MIRSetup"]
   pushScopeAny = mirTopLevel pushScope
   popScopeAny = mirTopLevel popScope
   withEnvironAny = withEnvironMIR
@@ -2431,12 +2439,14 @@ primTypes = Map.fromList
   , abstype "FunctionProfile" Experimental
   , abstype "FunctionSkeleton" Experimental
   , abstype "Ghost" Current
-  , abstype "JVMSetup" Current
+  , abstype' SS.kindStar "JVMSetup" Current  -- prep for fixing #2764
   , abstype "JVMValue" Current
   , abstype "JavaClass" Current
   , abstype "JavaType" Current
+  , abstype' SS.kindStar "LLVMSetup" Current  -- prep for fixing #2764
   , abstype "LLVMModule" Current
   , abstype "LLVMType" Current
+  , abstype' SS.kindStar "MIRSetup" Current  -- prep for fixing #2764
   , abstype "MIRAdt" Experimental
   , abstype "MIRModule" Experimental
   , abstype "MIRType" Experimental
@@ -2453,14 +2463,18 @@ primTypes = Map.fromList
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
-    -- abstract type
-    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
-    abstype name lc = (name, info)
+    -- abstract type of arbitrary kind
+    abstype' :: SS.Kind -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype' kind name lc = (name, info)
       where
         info = PrimType
-          { primTypeType = SS.AbstractType
+          { primTypeType = SS.AbstractType kind
           , primTypeLife = lc
           }
+
+    -- abstract type of kind *
+    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype name lc = abstype' SS.kindStar name lc
 
     -- concrete type (not currently used)
     _conctype :: Text -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
