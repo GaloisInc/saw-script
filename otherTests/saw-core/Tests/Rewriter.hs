@@ -51,6 +51,6 @@ prelude_bveq_sameL_test =
             `pureApp` n
             `mkApp` (mkGlobalDef "Prelude.bvNat" `pureApp` n `mkApp` mkNatLit 0)
             `pureApp` z
-    (_, lhs_term) <- rewriteSharedTermConvertibility sc ss =<< scMkTerm sc lhs
-    (_, rhs_term) <- rewriteSharedTermConvertibility sc ss =<< scMkTerm sc rhs
+    (_, lhs_term) <- rewriteSharedTermTypeSafe sc ss =<< scMkTerm sc lhs
+    (_, rhs_term) <- rewriteSharedTermTypeSafe sc ss =<< scMkTerm sc rhs
     assertEqual "Incorrect conversion\n" lhs_term rhs_term

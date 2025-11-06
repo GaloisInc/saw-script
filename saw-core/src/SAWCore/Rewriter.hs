@@ -50,7 +50,6 @@ module SAWCore.Rewriter
   -- * Term rewriting
   , rewriteSharedTerm
   , rewriteSharedTermTypeSafe
-  , rewriteSharedTermConvertibility
   -- * Matching
   , scMatch
   -- * Miscellaneous
@@ -106,8 +105,8 @@ data RewriteRule a
     , rhs :: Term
     , permutative :: Bool
     , shallow :: Bool
-    , annotation :: Maybe a
     , convertible :: Bool -- ^ flag is true if the rule's LHS and RHS are convertible in SAWcore type system
+    , annotation :: Maybe a
     }
   deriving (Show)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
@@ -786,95 +785,11 @@ rewriteSharedTerm sc ss t0 =
              Nothing -> apply rules t
              Just tb -> rewriteAll =<< runTermBuilder tb (scGlobalDef sc) (scTermF sc)
 
--- | Type-safe rewriter for shared terms
-rewriteSharedTermTypeSafe :: forall a. Ord a =>
-  SharedContext -> Simpset a -> Term -> IO (Set a, Term)
-rewriteSharedTermTypeSafe sc ss t0 =
-    do cache <- newCache
-       let ?cache = cache
-       annRef <- newIORef mempty
-       let ?annSet = annRef
-       t <- rewriteAll t0
-       anns <- readIORef annRef
-       return (anns, t)
-
-  where
-    rewriteAll :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
-                  Term -> IO Term
-    rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
-        -- putStrLn "Rewriting term:" >> print t >>
-        useCache ?cache tidx (rewriteTermF tf >>= scTermF sc >>= rewriteTop)
-
-    rewriteTermF :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
-                    TermF Term -> IO (TermF Term)
-    rewriteTermF tf =
-        case tf of
-          FTermF ftf -> FTermF <$> rewriteFTermF ftf
-          App e1 e2 ->
-              do t1 <- scTypeOf sc e1
-                 case unwrapTermF t1 of
-                   -- We only rewrite e2 if type of e1 is not a dependent type.
-                   -- This prevents rewriting e2 from changing type of @App e1 e2@.
-                   Pi x _ t
-                     | IntSet.notMember (vnIndex x) (freeVars t) ->
-                         App <$> rewriteAll e1 <*> rewriteAll e2
-                   _ -> App <$> rewriteAll e1 <*> pure e2
-          Lambda pat t e -> Lambda pat t <$> rewriteAll e
-          Constant{}     -> return tf
-          Variable{}     -> return tf
-          _ -> return tf -- traverse rewriteAll tf
-
-    rewriteFTermF :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
-                     FlatTermF Term -> IO (FlatTermF Term)
-    rewriteFTermF ftf =
-        case ftf of
-          UnitValue        -> return ftf
-          UnitType         -> return ftf
-          PairValue{}      -> traverse rewriteAll ftf
-          PairType{}       -> return ftf -- doesn't matter
-          PairLeft{}       -> traverse rewriteAll ftf
-          PairRight{}      -> traverse rewriteAll ftf
-
-          -- NOTE: we don't rewrite arguments of constructors, datatypes, or
-          -- recursors because of dependent types, as we could potentially cause
-          -- a term to become ill-typed
-          Recursor{}       -> return ftf
-
-          RecordType{}     -> traverse rewriteAll ftf
-          RecordValue{}    -> traverse rewriteAll ftf
-          RecordProj{}     -> traverse rewriteAll ftf
-          Sort{}           -> return ftf -- doesn't matter
-          NatLit{}         -> return ftf -- doesn't matter
-          ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
-          StringLit{}      -> return ftf
-
-    rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
-                  Term -> IO Term
-    rewriteTop t = apply (Net.match_term ss (termPat t)) t
-
-    recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> IO ()
-    recordAnn Nothing  = return ()
-    recordAnn (Just a) = modifyIORef' ?annSet (Set.insert a)
-
-    apply :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
-             [Either (RewriteRule a) Conversion] ->
-             Term -> IO Term
-    apply [] t = return t
-    apply (Left rule : rules) t =
-      case firstOrderMatch (ctxt rule) (lhs rule) t of
-        Nothing -> apply rules t
-        Just inst ->
-          do recordAnn (annotation rule)
-             rewriteAll =<< scInstantiate sc inst (rhs rule)
-    apply (Right conv : rules) t =
-      case runConversion conv t of
-        Nothing -> apply rules t
-        Just tb -> rewriteAll =<< runTermBuilder tb (scGlobalDef sc) (scTermF sc)
-
 data Convertibility = AllRules | ConvertibleRulesOnly
 
-rewriteSharedTermConvertibility :: forall a. Ord a => SharedContext -> Simpset a -> Term -> IO (Set a, Term)
-rewriteSharedTermConvertibility sc ss t0 =
+-- | Type-safe rewriter for shared terms
+rewriteSharedTermTypeSafe :: forall a. Ord a => SharedContext -> Simpset a -> Term -> IO (Set a, Term)
+rewriteSharedTermTypeSafe sc ss t0 =
     do cache <- newCache
        let ?cache = cache
        setRef <- newIORef mempty
@@ -886,7 +801,6 @@ rewriteSharedTermConvertibility sc ss t0 =
   where
 
     rewriteAll :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) => Convertibility -> Term  -> IO Term
-
     rewriteAll convertibleFlag STApp{ stAppIndex = tidx, stAppTermF = tf } =
         useCache ?cache tidx (rewriteTermF convertibleFlag tf >>= scTermF sc >>= rewriteTop convertibleFlag)
 
@@ -921,12 +835,7 @@ rewriteSharedTermConvertibility sc ss t0 =
           PairType{}       -> traverse (rewriteAll convertibleFlag) ftf
           PairLeft{}       -> traverse (rewriteAll convertibleFlag) ftf
           PairRight{}      -> traverse (rewriteAll convertibleFlag) ftf
-
-          -- NOTE: we don't rewrite arguments of constructors, datatypes, or
-          -- recursors because of dependent types, as we could potentially cause
-          -- a term to become ill-typed
-          Recursor{}       -> return ftf -- just a function, atomic thus no subterms
-
+          Recursor{}       -> return ftf
           RecordType{}     -> traverse (rewriteAll convertibleFlag) ftf
           RecordValue{}    -> traverse (rewriteAll convertibleFlag) ftf
           RecordProj{}     -> traverse (rewriteAll convertibleFlag) ftf
@@ -946,7 +855,8 @@ rewriteSharedTermConvertibility sc ss t0 =
     rewriteTop convertibleFlag t =
       do mt <- reduceSharedTerm sc t
          case mt of
-           Nothing -> apply convertibleFlag (filter (filterRules convertibleFlag) (Net.unify_term ss (termPat t))) t
+           Nothing -> let filteredRules = filter (filterRules convertibleFlag) (Net.unify_term ss (termPat t)) in
+              apply convertibleFlag filteredRules t
            Just t' -> rewriteAll convertibleFlag t'
 
     recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> IO ()
@@ -983,16 +893,12 @@ rewriteSharedTermConvertibility sc ss t0 =
             do recordAnn annotation
                scInstantiate sc inst rhs
           | otherwise ->
-            do -- putStrLn "REWRITING:"
-               -- print lhs
-               recordAnn annotation
+            do recordAnn annotation
                rewriteAll convertibleFlag =<< scInstantiate sc inst rhs
     -- instead of syntactic rhs, has a bit of code that rewrites lhs (Term -> Maybe Term)
-    -- for now, assume all conversions are convertible, maybe check later
     apply convertibleFlag (Right conv : rules) t =
-        do -- putStrLn "REWRITING:"
-           -- print (Net.toPat conv)
-           case runConversion conv t of
+        do 
+          case runConversion conv t of
              Nothing -> apply convertibleFlag rules t
              Just tb -> rewriteAll convertibleFlag =<< runTermBuilder tb (scGlobalDef sc) (scTermF sc)
 
@@ -1052,7 +958,7 @@ hoistIfs sc t = do
               ]
    let ss :: Simpset () = addRules rules emptySimpset
 
-   (t', conds) <- doHoistIfs sc ss cache . snd =<< rewriteSharedTermConvertibility sc ss t
+   (t', conds) <- doHoistIfs sc ss cache . snd =<< rewriteSharedTermTypeSafe sc ss t
 
    -- remove duplicate conditions from the list, as muxing in SAW can result in
    -- many copies of the same condition, which cause a performance issue
