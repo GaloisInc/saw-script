@@ -116,7 +116,7 @@ span.spaces    { background: white }
 <span class="lineno">   97 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;Lifecycle setting: &quot; &lt;&gt; Text.pack (show lc)</span></span>
 <span class="lineno">   98 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">   99 </span><span class="spaces">                </span><span class="istickedoff">else case expansion of</span>
-<span class="lineno">  100 </span><span class="spaces">                    </span><span class="istickedoff">AbstractType -&gt; <span class="nottickedoff">ty</span></span>
+<span class="lineno">  100 </span><span class="spaces">                    </span><span class="istickedoff">AbstractType _kind  -&gt; <span class="nottickedoff">ty</span></span>
 <span class="lineno">  101 </span><span class="spaces">                    </span><span class="istickedoff">ConcreteType ty' -&gt; ty'</span></span>
 <span class="lineno">  102 </span>
 <span class="lineno">  103 </span>--
@@ -154,7 +154,7 @@ span.spaces    { background: white }
 <span class="lineno">  135 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;Lifecycle setting: &quot; &lt;&gt; Text.pack (show lc)</span></span>
 <span class="lineno">  136 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  137 </span><span class="spaces">                </span><span class="istickedoff">else case expansion of</span>
-<span class="lineno">  138 </span><span class="spaces">                    </span><span class="istickedoff">AbstractType -&gt; ty</span>
+<span class="lineno">  138 </span><span class="spaces">                    </span><span class="istickedoff">AbstractType _kind -&gt; ty</span>
 <span class="lineno">  139 </span><span class="spaces">                    </span><span class="istickedoff">ConcreteType ty' -&gt; ty'</span></span>
 <span class="lineno">  140 </span>
 <span class="lineno">  141 </span>-- }}}
