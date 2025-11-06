@@ -29,12 +29,7 @@ import SAWCoreWhat4.ReturnTrip
 import SAWCentral.Crucible.Common
 
 import SAWCentral.Proof (TheoremNonce)
-<<<<<<< HEAD
 import SAWCore.Rewriter (Simpset, rewriteSharedTermTypeSafe)
-import qualified CryptolSAWCore.Simpset as Cryptol
-=======
-import SAWCore.Rewriter (Simpset, rewriteSharedTerm)
->>>>>>> origin
 import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
 
 import Cryptol.TypeCheck.Type (tIsBit, tIsSeq, tIsNum)
