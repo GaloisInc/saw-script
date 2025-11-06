@@ -246,18 +246,20 @@ later) an arbitrary value, without specifying what that value should be.
 To express such a pattern, you can also run `llvm_fresh_var` from
 the post state (i.e., after `llvm_execute_func`).
 
-## The SetupValue, JVMValue, and MIRValue Types
+## The LLVMValue, JVMValue, and MIRValue Types
 
 Many specifications require reasoning about both pure values and about
-the configuration of the heap. The `SetupValue` type corresponds to
+the configuration of the heap.
+The "setup value" types (`LLVMValue`, `JVMValue`, and `MIRValue`)
+correspond to
 values that can occur during symbolic execution, which includes both
 `Term` values, pointers, and composite types consisting of either of
 these (both structures and arrays).
 
-The `llvm_term`, `jvm_term`, and `mir_term` functions create a `SetupValue`,
+The `llvm_term`, `jvm_term`, and `mir_term` functions create a `LLVMValue`,
 `JVMValue`, or `MIRValue`, respectively, from a `Term`:
 
-- `llvm_term : Term -> SetupValue`
+- `llvm_term : Term -> LLVMValue`
 - `jvm_term : Term -> JVMValue`
 - `mir_term : Term -> MIRValue`
 
@@ -348,7 +350,7 @@ Once the initial state has been configured, the `{llvm,jvm,mir}_execute_func`
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.
 
-- `llvm_execute_func : [SetupValue] -> LLVMSetup ()`
+- `llvm_execute_func : [LLVMValue] -> LLVMSetup ()`
 - `jvm_execute_func : [JVMValue] -> JVMSetup ()`
 - `mir_execute_func : [MIRValue] -> MIRSetup ()`
 
@@ -357,7 +359,7 @@ of the state elements already configured.
 To specify the value that should be returned by the function being
 verified use the `{llvm,jvm,mir}_return` command.
 
-- `llvm_return : SetupValue -> LLVMSetup ()`
+- `llvm_return : LLVMValue -> LLVMSetup ()`
 - `jvm_return : JVMValue -> JVMSetup ()`
 - `mir_return : MIRValue -> MIRSetup ()`
 
@@ -724,11 +726,11 @@ point to allocated memory before they are called. The `llvm_alloc`
 command allows you to specify that a function expects a particular
 pointer to refer to an allocated region appropriate for a specific type.
 
-- `llvm_alloc : LLVMType -> LLVMSetup SetupValue`
+- `llvm_alloc : LLVMType -> LLVMSetup LLVMValue`
 
-This command returns a `SetupValue` consisting of a pointer to the
+This command returns a `LLVMValue` consisting of a pointer to the
 allocated space, which can be used wherever a pointer-valued
-`SetupValue` can be used.
+`LLVMValue` can be used.
 
 In the initial state, `llvm_alloc` specifies that the function
 expects a pointer to allocated space to exist. In the final state, it
@@ -738,17 +740,17 @@ In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
 
-- `llvm_fresh_pointer : LLVMType -> LLVMSetup SetupValue`
+- `llvm_fresh_pointer : LLVMType -> LLVMSetup LLVMValue`
 
 The NULL pointer is called `llvm_null` in LLVM and `jvm_null` in
 JVM:
 
-- `llvm_null : SetupValue`
+- `llvm_null : LLVMValue`
 - `jvm_null : JVMValue`
 
 One final, slightly more obscure command is the following:
 
-- `llvm_alloc_readonly : LLVMType -> LLVMSetup SetupValue`
+- `llvm_alloc_readonly : LLVMType -> LLVMSetup LLVMValue`
 
 This works like `llvm_alloc` except that writes to the space
 allocated are forbidden. This can be useful for specifying that a
@@ -825,11 +827,11 @@ can do with the _points-to_ family of commands.
 
 LLVM verification primarily uses the `llvm_points_to` command:
 
-- `llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()`
-takes two `SetupValue` arguments, the first of which must be a pointer,
+- `llvm_points_to : LLVMValue -> LLVMValue -> LLVMSetup ()`
+takes two `LLVMValue` arguments, the first of which must be a pointer,
 and states that the memory specified by that pointer should contain the
 value given in the second argument (which may be any type of
-`SetupValue`).
+`LLVMValue`).
 
 When used in the final state, `llvm_points_to` specifies that the
 given pointer _should_ point to the given value when the function
@@ -839,7 +841,7 @@ Occasionally, because C programs frequently reinterpret memory of one
 type as another through casts, it can be useful to specify that a
 pointer points to a value that does not agree with its static type.
 
-- `llvm_points_to_untyped : SetupValue -> SetupValue ->
+- `llvm_points_to_untyped : LLVMValue -> LLVMValue ->
 LLVMSetup ()` works like `llvm_points_to` but omits type
 checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
@@ -939,11 +941,11 @@ The commands mentioned so far give us no way to specify the values of
 compound types (arrays or `struct`s). Compound values can be dealt with
 either piecewise or in their entirety.
 
-- `llvm_elem : SetupValue -> Int -> SetupValue` yields a pointer to
+- `llvm_elem : LLVMValue -> Int -> LLVMValue` yields a pointer to
 an internal element of a compound value. For arrays, the `Int` parameter
 is the array index. For `struct` values, it is the field index.
 
-- `llvm_field : SetupValue -> String -> SetupValue` yields a pointer
+- `llvm_field : LLVMValue -> String -> LLVMValue` yields a pointer
 to a particular named `struct` field, if debugging information is
 available in the bitcode.
 
@@ -953,8 +955,8 @@ Sometimes, however, it is more convenient to specify all array elements
 or field values at once. The `llvm_array_value` and `llvm_struct_value`
 functions construct compound values from lists of element values.
 
-- `llvm_array_value : [SetupValue] -> SetupValue`
-- `llvm_struct_value : [SetupValue] -> SetupValue`
+- `llvm_array_value : [LLVMValue] -> LLVMValue`
+- `llvm_struct_value : [LLVMValue] -> LLVMValue`
 
 To specify an array or struct in which each element or field is
 symbolic, it would be possible, but tedious, to use a large combination
@@ -962,7 +964,7 @@ of `llvm_fresh_var` and `llvm_elem` or `llvm_field` commands.
 However, the following function can simplify the common case
 where you want every element or field to have a fresh value.
 
-- `llvm_fresh_expanded_val : LLVMType -> LLVMSetup SetupValue`
+- `llvm_fresh_expanded_val : LLVMType -> LLVMSetup LLVMValue`
 
 The `llvm_struct_value` function normally creates a `struct` whose layout
 obeys the alignment rules of the platform specified in the LLVM file
@@ -970,14 +972,14 @@ being analyzed. Structs in LLVM can explicitly be "packed", however, so
 that every field immediately follows the previous in memory. The
 following command will create values of such types:
 
-- `llvm_packed_struct_value : [SetupValue] -> SetupValue`
+- `llvm_packed_struct_value : [LLVMValue] -> LLVMValue`
 
 C programs will sometimes make use of pointer casting to implement
 various kinds of polymorphic behaviors, either via direct pointer
 casts, or by using `union` types to codify the pattern. To reason
 about such cases, the following operation is useful.
 
-- `llvm_cast_pointer : SetupValue -> LLVMType -> SetupValue`
+- `llvm_cast_pointer : LLVMValue -> LLVMType -> LLVMValue`
 
 This function function casts the type of the input value (which must be a
 pointer) so that it points to values of the given type.  This mainly
@@ -990,7 +992,7 @@ cases.
 We can automate the process of applying pointer casts if we have debug
 information avaliable:
 
-- `llvm_union : SetupValue -> String -> SetupValue`
+- `llvm_union : LLVMValue -> String -> LLVMValue`
 
 Given a pointer setup value, this attempts to select the named union
 branch and cast the type of the pointer. For this to work, debug
@@ -1531,7 +1533,7 @@ special care is required to write SAW specifications involving bitfields. For
 this reason, there is a dedicated `llvm_points_to_bitfield` function for this
 purpose:
 
-- `llvm_points_to_bitfield : SetupValue -> String -> SetupValue -> LLVMSetup ()`
+- `llvm_points_to_bitfield : LLVMValue -> String -> LLVMValue -> LLVMSetup ()`
 
 The type of `llvm_points_to_bitfield` is similar that of `llvm_points_to`,
 except that it takes the name of a field within a bitfield as an additional
@@ -1608,7 +1610,7 @@ require a call to `llvm_alloc_global`.
 Pointers to global variables or functions can be accessed with
 `llvm_global`:
 
-- `llvm_global : String -> SetupValue`
+- `llvm_global : String -> LLVMValue`
 
 Like the pointers returned by `llvm_alloc`, however, these aren't
 initialized at the beginning of symbolic -- setting global variables may
@@ -1660,7 +1662,7 @@ z + 3` for all `z`, because both `f` and `g` modify the global variable
 
 To deal with this, we can use the following function:
 
-- `llvm_global_initializer : String -> SetupValue` returns the value
+- `llvm_global_initializer : String -> LLVMValue` returns the value
   of the constant global initializer for the named global variable.
 
 Given this function, the specifications for `f` and `g` can make this
@@ -1789,7 +1791,7 @@ invariants that make sense in both phases.  The `{llvm,jvm,mir}_equal` commands
 state that two values should be equal, and can be used in either the initial or
 the final state.
 
-- `llvm_equal : SetupValue -> SetupValue -> LLVMSetup ()`
+- `llvm_equal : LLVMValue -> LLVMValue -> LLVMSetup ()`
 - `jvm_equal : JVMValue -> JVMValue -> JVMSetup ()`
 - `mir_equal : MIRValue -> MIRValue -> MIRSetup ()`
 
@@ -1994,9 +1996,9 @@ above.
 #### Utility Functions
 
 We first define the function
-`alloc_init : LLVMType -> Term -> LLVMSetup SetupValue`.
+`alloc_init : LLVMType -> Term -> LLVMSetup LLVMValue`.
 
-`alloc_init ty v` returns a `SetupValue` consisting of a pointer to memory
+`alloc_init ty v` returns a `LLVMValue` consisting of a pointer to memory
 allocated and initialized to a value `v` of type `ty`. `alloc_init_readonly`
 does the same, except the memory allocated cannot be written to.
 
@@ -2017,7 +2019,7 @@ let alloc_init_readonly ty v = do {
 :::
 
 We now define
-`ptr_to_fresh : String -> LLVMType -> LLVMSetup (Term, SetupValue)`.
+`ptr_to_fresh : String -> LLVMType -> LLVMSetup (Term, LLVMValue)`.
 
 `ptr_to_fresh n ty` returns a pair `(x, p)` consisting of a fresh symbolic
 variable `x` of type `ty` and a pointer `p` to it. `n` specifies the
