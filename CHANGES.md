@@ -6,7 +6,6 @@ This release supports [version
 
 ## Changes
 
-
 * The `LLVMSetup` and `MIRSetup` monad types are now just ordinary builtin
   types; their names are no longer reserved words.
   (The `JVMSetup` type was already this way.

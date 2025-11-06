@@ -6317,9 +6317,6 @@ primitives = Map.fromList $
     Experimental
     [ "The type of MIR pointer-sized unsigned integers." ]
 
-
-
-
     ----------------------------------------
     -- Yosys commands
 
