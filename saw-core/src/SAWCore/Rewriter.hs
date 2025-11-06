@@ -105,7 +105,7 @@ data RewriteRule a
 
 -- NB, exclude the annotation from equality tests
 instance Eq (RewriteRule a) where
-  RewriteRule c1 l1 r1 p1 s1 _a1 co1 == RewriteRule c2 l2 r2 p2 s2 _a2 co2 =
+  RewriteRule c1 l1 r1 p1 s1 co1 _a1 == RewriteRule c2 l2 r2 p2 s2 co2 _a2 =
     c1 == c2 && l1 == l2 && r1 == r2 && p1 == p2 && s1 == s2 && co1 == co2
 
 ctxtRewriteRule :: RewriteRule a -> [(VarName, Term)]
@@ -346,7 +346,7 @@ ruleOfTerm :: Term -> Maybe a -> RewriteRule a
 ruleOfTerm t ann =
   do let (vars, body) = R.asPiList t
      case R.asGlobalApply eqIdent body of
-       Just [_, x, y] -> mkRewriteRule vars x y False ann False
+       Just [_, x, y] -> mkRewriteRule vars x y False False ann
        _ -> panic "ruleOfTerm" ["Illegal argument"]
 
 -- Test whether a rewrite rule is permutative
@@ -360,22 +360,22 @@ rulePermutes ctxt lhs rhs =
             Nothing -> False -- but here we have a looping rule, not good!
             Just _ -> True
 
-mkRewriteRule :: [(VarName, Term)] -> Term -> Term -> Bool -> Maybe a -> Bool -> RewriteRule a
-mkRewriteRule c l r shallow ann convFlag =
+mkRewriteRule :: [(VarName, Term)] -> Term -> Term -> Bool -> Bool -> Maybe a -> RewriteRule a
+mkRewriteRule c l r shallow convFlag ann =
     RewriteRule
     { ctxt = c
     , lhs = l
     , rhs = r
     , permutative = rulePermutes c l r
     , shallow = shallow
-    , annotation = ann
     , convertible = convFlag
+    , annotation = ann
     }
 
 -- | Converts a universally quantified equality proposition between the
 -- two given terms to a RewriteRule.
 ruleOfTerms :: Term -> Term -> RewriteRule a
-ruleOfTerms l r = mkRewriteRule [] l r False Nothing False
+ruleOfTerms l r = mkRewriteRule [] l r False False Nothing
 
 -- | Converts a parameterized equality predicate to a RewriteRule,
 -- returning 'Nothing' if the predicate is not an equation.
@@ -418,7 +418,7 @@ ruleOfProp sc term ann =
         _ -> pure Nothing
 
   where
-    eqRule x y = pure $ Just $ mkRewriteRule [] x y False ann False
+    eqRule x y = pure $ Just $ mkRewriteRule [] x y False False ann
 
 -- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
 scEqRewriteRule :: SharedContext -> Ident -> IO (RewriteRule a)
@@ -435,19 +435,19 @@ scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 -- * If the rhs is a recursor, then split into a separate rule for each constructor.
 -- * If the rhs is a record, then split into a separate rule for each accessor.
 scExpandRewriteRule :: SharedContext -> RewriteRule a -> IO (Maybe [RewriteRule a])
-scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann convFlag) =
+scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow convFlag ann) =
   case R.asLambda rhs of
   Just (nm, tp, body) ->
     do let ctxt' = ctxt ++ [(nm, tp)]
        var0 <- scVariable sc nm tp
        lhs' <- scApply sc lhs var0
-       pure $ Just [mkRewriteRule ctxt' lhs' body shallow ann convFlag]
+       pure $ Just [mkRewriteRule ctxt' lhs' body shallow convFlag ann]
   Nothing ->
     case rhs of
     (R.asRecordValue -> Just m) ->
       do let mkRule (k, x) =
                do l <- scRecordSelect sc lhs k
-                  return (mkRewriteRule ctxt l x shallow ann convFlag)
+                  return (mkRewriteRule ctxt l x shallow convFlag ann)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
      (R.asRecursorApp -> Just (r, crec),
@@ -488,9 +488,9 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann convFlag) =
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
-                  let ss = addRule (mkRewriteRule ctxt rhs lhs shallow Nothing convFlag) emptySimpset
+                  let ss = addRule (mkRewriteRule ctxt rhs lhs shallow convFlag Nothing) emptySimpset
                   (_,rhs') <- rewriteSharedTerm sc (ss :: Simpset ()) rhs3
-                  return (mkRewriteRule ctxt' lhs' rhs' shallow ann convFlag)
+                  return (mkRewriteRule ctxt' lhs' rhs' shallow convFlag ann)
          let d = recursorDataType crec
          mm <- scGetModuleMap sc
          dt <-
@@ -550,7 +550,7 @@ scDefRewriteRules sc d =
   case defBody d of
     Just rhs ->
       do lhs <- scConst sc (defName d)
-         scExpandRewriteRules sc [mkRewriteRule [] lhs rhs False Nothing True]
+         scExpandRewriteRules sc [mkRewriteRule [] lhs rhs False True Nothing]
     Nothing ->
       pure []
 
