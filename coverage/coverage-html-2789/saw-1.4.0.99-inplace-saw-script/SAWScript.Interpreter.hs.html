@@ -452,7 +452,7 @@ span.spaces    { background: white }
 <span class="lineno">  433 </span><span class="spaces">  </span><span class="istickedoff">in</span>
 <span class="lineno">  434 </span><span class="spaces">  </span><span class="istickedoff">case v1 of</span>
 <span class="lineno">  435 </span><span class="spaces">    </span><span class="istickedoff">VLambda env mname pat e -&gt; do</span>
-<span class="lineno">  436 </span><span class="spaces">        </span><span class="istickedoff">let name = fromMaybe <span class="nottickedoff">&quot;(lambda)&quot;</span> mname</span>
+<span class="lineno">  436 </span><span class="spaces">        </span><span class="istickedoff">let name = fromMaybe &quot;(lambda)&quot; mname</span>
 <span class="lineno">  437 </span><span class="spaces">        </span><span class="istickedoff">enter name</span>
 <span class="lineno">  438 </span><span class="spaces">        </span><span class="istickedoff">r &lt;- withEnviron env $ do</span>
 <span class="lineno">  439 </span><span class="spaces">            </span><span class="istickedoff">pushScope</span>
@@ -6233,374 +6233,390 @@ span.spaces    { background: white }
 <span class="lineno"> 6214 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR booleans.&quot; ]</span></span>
 <span class="lineno"> 6215 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6216 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_char&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6217 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_char)</span></span>
+<span class="lineno"> 6217 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_char)</span>
 <span class="lineno"> 6218 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 6219 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR characters.&quot; ]</span></span>
 <span class="lineno"> 6220 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6221 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i8&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6222 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_i8)</span>
+<span class="lineno"> 6221 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_const&quot; &quot;MIRType -&gt; Term -&gt; MIRType&quot;</span>
+<span class="lineno"> 6222 </span><span class="spaces">    </span><span class="istickedoff">(funVal2 mir_const)</span>
 <span class="lineno"> 6223 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6224 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 8-bit signed integers.&quot; ]</span></span>
-<span class="lineno"> 6225 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6226 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i16&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6227 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_i16)</span>
-<span class="lineno"> 6228 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6229 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 16-bit signed integers.&quot; ]</span></span>
-<span class="lineno"> 6230 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6231 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i32&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6232 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_i32)</span>
-<span class="lineno"> 6233 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6234 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 32-bit signed integers.&quot; ]</span></span>
-<span class="lineno"> 6235 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6236 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i64&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6237 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_i64)</span>
-<span class="lineno"> 6238 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6239 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 64-bit signed integers.&quot; ]</span></span>
-<span class="lineno"> 6240 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6241 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i128&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6242 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_i128)</span></span>
-<span class="lineno"> 6243 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6244 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 128-bit signed integers.&quot; ]</span></span>
-<span class="lineno"> 6245 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6246 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_isize&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6247 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_isize)</span>
-<span class="lineno"> 6248 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6249 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR pointer-sized signed integers.&quot; ]</span></span>
-<span class="lineno"> 6250 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6251 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_f32&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6252 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_f32)</span></span>
-<span class="lineno"> 6253 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6254 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR single-precision floating-point values.&quot; ]</span></span>
-<span class="lineno"> 6255 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6256 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_f64&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6257 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_f64)</span></span>
-<span class="lineno"> 6258 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6259 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR double-precision floating-point values.&quot; ]</span></span>
-<span class="lineno"> 6260 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6261 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_lifetime&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6262 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_lifetime)</span>
-<span class="lineno"> 6263 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6264 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR lifetimes.&quot; ]</span></span>
-<span class="lineno"> 6265 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6266 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_raw_ptr_const&quot; &quot;MIRType -&gt; MIRType&quot;</span>
-<span class="lineno"> 6267 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_raw_ptr_const)</span></span>
-<span class="lineno"> 6268 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6269 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR immutable raw pointers.&quot; ]</span></span>
-<span class="lineno"> 6270 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6271 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_raw_ptr_mut&quot; &quot;MIRType -&gt; MIRType&quot;</span>
-<span class="lineno"> 6272 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_raw_ptr_mut)</span></span>
-<span class="lineno"> 6273 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6274 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR mutable raw pointers.&quot; ]</span></span>
-<span class="lineno"> 6275 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6276 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_ref&quot; &quot;MIRType -&gt; MIRType&quot;</span>
-<span class="lineno"> 6277 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_ref)</span>
-<span class="lineno"> 6278 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6279 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR immutable references.&quot; ]</span></span>
-<span class="lineno"> 6280 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6281 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_ref_mut&quot; &quot;MIRType -&gt; MIRType&quot;</span>
-<span class="lineno"> 6282 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_ref_mut)</span>
-<span class="lineno"> 6283 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6284 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR mutable references.&quot; ]</span></span>
-<span class="lineno"> 6285 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6286 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_slice&quot; &quot;MIRType -&gt; MIRType&quot;</span>
-<span class="lineno"> 6287 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_slice)</span>
-<span class="lineno"> 6288 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6289 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR slices, i.e., dynamically sized views into a&quot;</span></span>
-<span class="lineno"> 6290 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;contiguous sequence of the given type. Currently, SAW can only&quot;</span></span>
-<span class="lineno"> 6291 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;handle references to slices (&amp;[T]).&quot; ]</span></span>
-<span class="lineno"> 6292 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6293 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_str&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6294 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_str)</span>
-<span class="lineno"> 6295 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6296 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR strings, which are a particular kind of slice.&quot;</span></span>
-<span class="lineno"> 6297 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Currently, SAW can only handle references to strings (&amp;str).&quot; ]</span></span>
-<span class="lineno"> 6298 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6299 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_tuple&quot; &quot;[MIRType] -&gt; MIRType&quot;</span>
-<span class="lineno"> 6300 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_tuple)</span>
-<span class="lineno"> 6301 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6302 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR tuples of the given types.&quot; ]</span></span>
-<span class="lineno"> 6303 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6304 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u8&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6305 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u8)</span>
-<span class="lineno"> 6306 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6307 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 8-bit unsigned integers.&quot; ]</span></span>
+<span class="lineno"> 6224 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;A constant value used to instantiate a const generic parameter.&quot;</span></span>
+<span class="lineno"> 6225 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This is intended to be used in conjunction with `mir_find_adt` to look&quot;</span></span>
+<span class="lineno"> 6226 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;up instantiations of const generic ADTs. This is never used to&quot;</span></span>
+<span class="lineno"> 6227 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;represent the type of a value in its own right, so using this in&quot;</span></span>
+<span class="lineno"> 6228 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;conjunction with`mir_alloc`, `mir_fresh_var`, etc. will raise an error.&quot;</span></span>
+<span class="lineno"> 6229 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 6230 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The MIRType argument represents the type of the constant, and the Term&quot;</span></span>
+<span class="lineno"> 6231 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;argument represents the value of the constant. At present, only a&quot;</span></span>
+<span class="lineno"> 6232 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;subset of MIR primitive types are supported in `mir_const`. See the&quot;</span></span>
+<span class="lineno"> 6233 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;SAW manual for a more detailed description of which types are&quot;</span></span>
+<span class="lineno"> 6234 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;supported, along with restrictions on what forms the Terms can have.&quot;</span></span>
+<span class="lineno"> 6235 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6236 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6237 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i8&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6238 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_i8)</span>
+<span class="lineno"> 6239 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6240 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 8-bit signed integers.&quot; ]</span></span>
+<span class="lineno"> 6241 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6242 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i16&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6243 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_i16)</span>
+<span class="lineno"> 6244 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6245 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 16-bit signed integers.&quot; ]</span></span>
+<span class="lineno"> 6246 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6247 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i32&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6248 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_i32)</span>
+<span class="lineno"> 6249 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6250 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 32-bit signed integers.&quot; ]</span></span>
+<span class="lineno"> 6251 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6252 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i64&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6253 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_i64)</span>
+<span class="lineno"> 6254 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6255 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 64-bit signed integers.&quot; ]</span></span>
+<span class="lineno"> 6256 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6257 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_i128&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6258 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_i128)</span>
+<span class="lineno"> 6259 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6260 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 128-bit signed integers.&quot; ]</span></span>
+<span class="lineno"> 6261 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6262 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_isize&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6263 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_isize)</span>
+<span class="lineno"> 6264 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6265 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR pointer-sized signed integers.&quot; ]</span></span>
+<span class="lineno"> 6266 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6267 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_f32&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6268 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_f32)</span></span>
+<span class="lineno"> 6269 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6270 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR single-precision floating-point values.&quot; ]</span></span>
+<span class="lineno"> 6271 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6272 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_f64&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6273 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_f64)</span></span>
+<span class="lineno"> 6274 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6275 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR double-precision floating-point values.&quot; ]</span></span>
+<span class="lineno"> 6276 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6277 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_lifetime&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6278 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_lifetime)</span>
+<span class="lineno"> 6279 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6280 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR lifetimes.&quot; ]</span></span>
+<span class="lineno"> 6281 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6282 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_raw_ptr_const&quot; &quot;MIRType -&gt; MIRType&quot;</span>
+<span class="lineno"> 6283 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_raw_ptr_const)</span></span>
+<span class="lineno"> 6284 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6285 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR immutable raw pointers.&quot; ]</span></span>
+<span class="lineno"> 6286 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6287 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_raw_ptr_mut&quot; &quot;MIRType -&gt; MIRType&quot;</span>
+<span class="lineno"> 6288 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_raw_ptr_mut)</span></span>
+<span class="lineno"> 6289 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6290 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR mutable raw pointers.&quot; ]</span></span>
+<span class="lineno"> 6291 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6292 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_ref&quot; &quot;MIRType -&gt; MIRType&quot;</span>
+<span class="lineno"> 6293 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_ref)</span>
+<span class="lineno"> 6294 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6295 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR immutable references.&quot; ]</span></span>
+<span class="lineno"> 6296 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6297 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_ref_mut&quot; &quot;MIRType -&gt; MIRType&quot;</span>
+<span class="lineno"> 6298 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_ref_mut)</span>
+<span class="lineno"> 6299 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6300 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR mutable references.&quot; ]</span></span>
+<span class="lineno"> 6301 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6302 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_slice&quot; &quot;MIRType -&gt; MIRType&quot;</span>
+<span class="lineno"> 6303 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_slice)</span>
+<span class="lineno"> 6304 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6305 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR slices, i.e., dynamically sized views into a&quot;</span></span>
+<span class="lineno"> 6306 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;contiguous sequence of the given type. Currently, SAW can only&quot;</span></span>
+<span class="lineno"> 6307 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;handle references to slices (&amp;[T]).&quot; ]</span></span>
 <span class="lineno"> 6308 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6309 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u16&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6310 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u16)</span>
+<span class="lineno"> 6309 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_str&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6310 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_str)</span>
 <span class="lineno"> 6311 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6312 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 16-bit unsigned integers.&quot; ]</span></span>
-<span class="lineno"> 6313 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6314 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u32&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6315 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u32)</span>
-<span class="lineno"> 6316 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6317 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 32-bit unsigned integers.&quot; ]</span></span>
-<span class="lineno"> 6318 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6319 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u64&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6320 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u64)</span>
-<span class="lineno"> 6321 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6322 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 64-bit unsigned integers.&quot; ]</span></span>
-<span class="lineno"> 6323 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6324 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u128&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6325 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u128)</span>
-<span class="lineno"> 6326 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6327 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 128-bit unsigned integers.&quot; ]</span></span>
-<span class="lineno"> 6328 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6329 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_usize&quot; &quot;MIRType&quot;</span>
-<span class="lineno"> 6330 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_usize)</span>
-<span class="lineno"> 6331 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6332 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR pointer-sized unsigned integers.&quot; ]</span></span>
-<span class="lineno"> 6333 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6334 </span><span class="spaces">    </span><span class="istickedoff">----------------------------------------</span>
-<span class="lineno"> 6335 </span><span class="spaces">    </span><span class="istickedoff">-- Yosys commands</span>
-<span class="lineno"> 6336 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6337 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_import&quot;  &quot;String -&gt; TopLevel Term&quot;</span>
-<span class="lineno"> 6338 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_yosys_import)</span>
-<span class="lineno"> 6339 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6340 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Produces a `Term` given the path to a JSON file produced by the Yosys `write_json` command.&quot;</span></span>
-<span class="lineno"> 6341 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.&quot;</span></span>
-<span class="lineno"> 6342 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Each HDL module is in turn represented by a function from a record of input port values to a record of output port values.&quot;</span></span>
-<span class="lineno"> 6343 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6312 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR strings, which are a particular kind of slice.&quot;</span></span>
+<span class="lineno"> 6313 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Currently, SAW can only handle references to strings (&amp;str).&quot; ]</span></span>
+<span class="lineno"> 6314 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6315 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_tuple&quot; &quot;[MIRType] -&gt; MIRType&quot;</span>
+<span class="lineno"> 6316 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_tuple)</span>
+<span class="lineno"> 6317 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6318 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR tuples of the given types.&quot; ]</span></span>
+<span class="lineno"> 6319 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6320 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u8&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6321 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u8)</span>
+<span class="lineno"> 6322 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6323 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 8-bit unsigned integers.&quot; ]</span></span>
+<span class="lineno"> 6324 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6325 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u16&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6326 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u16)</span>
+<span class="lineno"> 6327 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6328 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 16-bit unsigned integers.&quot; ]</span></span>
+<span class="lineno"> 6329 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6330 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u32&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6331 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u32)</span>
+<span class="lineno"> 6332 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6333 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 32-bit unsigned integers.&quot; ]</span></span>
+<span class="lineno"> 6334 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6335 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u64&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6336 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u64)</span>
+<span class="lineno"> 6337 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6338 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 64-bit unsigned integers.&quot; ]</span></span>
+<span class="lineno"> 6339 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6340 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_u128&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6341 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_u128)</span>
+<span class="lineno"> 6342 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6343 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR 128-bit unsigned integers.&quot; ]</span></span>
 <span class="lineno"> 6344 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6345 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_verify&quot;  &quot;Term -&gt; [Term] -&gt; Term -&gt; [YosysTheorem] -&gt; ProofScript () -&gt; TopLevel YosysTheorem&quot;</span>
-<span class="lineno"> 6346 </span><span class="spaces">    </span><span class="istickedoff">(pureVal yosys_verify)</span>
+<span class="lineno"> 6345 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_usize&quot; &quot;MIRType&quot;</span>
+<span class="lineno"> 6346 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_usize)</span>
 <span class="lineno"> 6347 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6348 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Proves equality between a combinational HDL module and a specification.&quot;</span></span>
-<span class="lineno"> 6349 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The first parameter is the HDL module - given a record m from yosys_import, this will typically look something like `{{ m.foo }}`.&quot;</span></span>
-<span class="lineno"> 6350 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The second parameter is a list of preconditions for the equality.&quot;</span></span>
-<span class="lineno"> 6351 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The third parameter is the specification, a term of the same type as the HDL module, which will typically be some Cryptol function or another HDL module.&quot;</span></span>
-<span class="lineno"> 6352 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The fourth parameter is a list of overrides, which witness the results of previous yosys_verify proofs.&quot;</span></span>
-<span class="lineno"> 6353 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;These overrides can be used to simplify terms by replacing use sites of submodules with their specifications.&quot;</span></span>
-<span class="lineno"> 6354 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Note that terms derived from HDL modules are first class, and are not restricted to yosys_verify: they may also be used with SAW's typical Term infrastructure like sat, prove_print, term rewriting, etc.&quot;</span></span>
-<span class="lineno"> 6355 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;yosys_verify simply provides a convenient and familiar interface, similar to llvm_verify or jvm_verify.&quot;</span></span>
-<span class="lineno"> 6356 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6357 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6358 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_import_sequential&quot;  &quot;String -&gt; String -&gt; TopLevel YosysSequential&quot;</span>
-<span class="lineno"> 6359 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_yosys_import_sequential)</span>
-<span class="lineno"> 6360 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6361 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Imports a particular sequential HDL module.&quot;</span></span>
-<span class="lineno"> 6362 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The first parameter is the module name, the second is the path to the Yosys JSON file.&quot;</span></span>
-<span class="lineno"> 6363 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The resulting value is an opaque representation of the sequential circuit that can be extracted to a Term or sent to solvers in various ways.&quot;</span></span>
-<span class="lineno"> 6364 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;SAW expects the sequential module to exist entirely within a single Yosys module - the Yosys \&quot;flatten\&quot; command will collapse the module hierarchy into a single module.&quot;</span></span>
-<span class="lineno"> 6365 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The only supported sequential element is the basic $dff cell.&quot;</span></span>
-<span class="lineno"> 6366 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Memory cells and more complex flip-flops can be translated into $dff using the \&quot;memory\&quot; and \&quot;dffunmap\&quot; Yosys commands.&quot;</span></span>
-<span class="lineno"> 6367 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6368 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6369 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_extract_sequential&quot;  &quot;YosysSequential -&gt; Int -&gt; TopLevel Term&quot;</span>
-<span class="lineno"> 6370 </span><span class="spaces">    </span><span class="istickedoff">(pureVal yosys_extract_sequential)</span>
-<span class="lineno"> 6371 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6372 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Extracts a term from the given sequential module with the state eliminated by iterating the term over the given concrete number of cycles.&quot;</span></span>
-<span class="lineno"> 6373 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The resulting term has no state field in the inputs or outputs, and each input and output field is replaced with an array of that field's type (array length being the number of cycles).&quot;</span></span>
-<span class="lineno"> 6374 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This term can be used like a normal SAW term - it may be embedded in Cryptol expressions, used in prove and sat, etc.&quot;</span></span>
-<span class="lineno"> 6375 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6376 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6377 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_extract_sequential_with_state&quot;  &quot;YosysSequential -&gt; Int -&gt; TopLevel Term&quot;</span>
-<span class="lineno"> 6378 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal yosys_extract_sequential_with_state)</span></span>
-<span class="lineno"> 6379 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6380 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Like yosys_extract_sequential, but the resulting term has an additional parameter to specify the initial state.&quot;</span></span>
-<span class="lineno"> 6381 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6382 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6383 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_extract_sequential_raw&quot;  &quot;YosysSequential -&gt; TopLevel Term&quot;</span>
-<span class="lineno"> 6384 </span><span class="spaces">    </span><span class="istickedoff">(pureVal yosys_extract_sequential_raw)</span>
-<span class="lineno"> 6385 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6386 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Extracts a term from the given sequential module.&quot;</span></span>
-<span class="lineno"> 6387 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This term has explicit fields for the state of the circuit in the input and output record types.&quot;</span></span>
-<span class="lineno"> 6388 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6389 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6390 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_verify_sequential_offline_sally&quot;  &quot;YosysSequential -&gt; String -&gt; Term -&gt; [String] -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 6391 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_yosys_verify_sequential_sally)</span>
-<span class="lineno"> 6392 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6393 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Export a query over the given sequential module to an input file for the Sally model checker.&quot;</span></span>
-<span class="lineno"> 6394 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The first parameter is the sequential module.&quot;</span></span>
-<span class="lineno"> 6395 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The second parameter is the path to write the resulting Sally input.&quot;</span></span>
-<span class="lineno"> 6396 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The third parameter is the query, which should be a boolean function of three parameters: an 8-bit cycle counter, a record of \&quot;fixed\&quot; inputs, and a record of circuit outputs.&quot;</span></span>
-<span class="lineno"> 6397 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The fourth parameter is a list of strings specifying certain circuit inputs as fixed - these inputs are assumed to remain unchanged across cycles, and are therefore accesible from the query function.&quot;</span></span>
-<span class="lineno"> 6398 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6399 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6400 </span><span class="spaces">    </span><span class="istickedoff">----------------------------------------</span>
-<span class="lineno"> 6401 </span><span class="spaces">    </span><span class="istickedoff">-- SAWCore loading command</span>
-<span class="lineno"> 6402 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6403 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;load_sawcore_from_file&quot;</span>
-<span class="lineno"> 6404 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 6405 </span><span class="spaces">    </span><span class="istickedoff">(bicVal do_load_sawcore_from_file)</span>
-<span class="lineno"> 6406 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6407 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Load a SAW core module from a file&quot;</span></span>
-<span class="lineno"> 6408 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6409 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6410 </span><span class="spaces">    </span><span class="istickedoff">----------------------------------------</span>
-<span class="lineno"> 6411 </span><span class="spaces">    </span><span class="istickedoff">-- A few more misc commands</span>
-<span class="lineno"> 6412 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6413 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;sharpSAT&quot;  &quot;Term -&gt; TopLevel Int&quot;</span>
-<span class="lineno"> 6414 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal sharpSAT)</span></span>
-<span class="lineno"> 6415 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 6416 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Use the sharpSAT solver to count the number of solutions to the CNF&quot;</span></span>
-<span class="lineno"> 6417 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;representation of the given Term.&quot;</span></span>
-<span class="lineno"> 6418 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6419 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6420 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;approxmc&quot;  &quot;Term -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 6421 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal approxmc)</span></span>
-<span class="lineno"> 6422 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 6423 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Use the approxmc solver to approximate the number of solutions to the&quot;</span></span>
-<span class="lineno"> 6424 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;CNF representation of the given Term.&quot;</span></span>
-<span class="lineno"> 6425 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6426 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6427 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;enable_crucible_profiling&quot; &quot;String -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 6428 </span><span class="spaces">    </span><span class="istickedoff">(pureVal enable_crucible_profiling)</span>
-<span class="lineno"> 6429 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 6430 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Record profiling information from symbolic execution and solver&quot;</span></span>
-<span class="lineno"> 6431 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;invocation to the given directory.&quot;</span></span>
-<span class="lineno"> 6432 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6433 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6434 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;disable_crucible_profiling&quot; &quot;TopLevel ()&quot;</span>
-<span class="lineno"> 6435 </span><span class="spaces">    </span><span class="istickedoff">(pureVal disable_crucible_profiling)</span>
-<span class="lineno"> 6436 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 6437 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[&quot;Stop recording profiling information.&quot;]</span></span>
-<span class="lineno"> 6438 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6439 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;summarize_verification&quot; &quot;TopLevel ()&quot;</span>
-<span class="lineno"> 6440 </span><span class="spaces">    </span><span class="istickedoff">(pureVal summarize_verification)</span>
-<span class="lineno"> 6441 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6442 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Print a human-readable summary of all verifications performed&quot;</span></span>
-<span class="lineno"> 6443 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;so far.&quot;</span></span>
-<span class="lineno"> 6444 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6445 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6446 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;summarize_verification_json&quot; &quot;String -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 6447 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal do_summarize_verification_json)</span></span>
-<span class="lineno"> 6448 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 6449 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Print a JSON summary of all verifications performed&quot;</span></span>
-<span class="lineno"> 6450 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;so far into the named file.&quot;</span></span>
-<span class="lineno"> 6451 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6452 </span><span class="spaces">  </span><span class="istickedoff">]</span>
-<span class="lineno"> 6453 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6454 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 6455 </span><span class="spaces">    </span><span class="istickedoff">prim :: Text -&gt; Text -&gt; (Text -&gt; Options -&gt; BuiltinContext -&gt; Value) -&gt; PrimitiveLifecycle -&gt; [Text]</span>
-<span class="lineno"> 6456 </span><span class="spaces">         </span><span class="istickedoff">-&gt; (SS.Name, Primitive)</span>
-<span class="lineno"> 6457 </span><span class="spaces">    </span><span class="istickedoff">prim name ty fn lc doc = (name, Primitive</span>
-<span class="lineno"> 6458 </span><span class="spaces">                                     </span><span class="istickedoff">{ primitiveType = ty'</span>
-<span class="lineno"> 6459 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveDoc  = <span class="nottickedoff">doc</span></span>
-<span class="lineno"> 6460 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveFn   = fn name</span>
-<span class="lineno"> 6461 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveLife = lc</span>
-<span class="lineno"> 6462 </span><span class="spaces">                                     </span><span class="istickedoff">})</span>
-<span class="lineno"> 6463 </span><span class="spaces">      </span><span class="istickedoff">where</span>
-<span class="lineno"> 6464 </span><span class="spaces">        </span><span class="istickedoff">-- Beware: errors in the type will only be detected when the</span>
-<span class="lineno"> 6465 </span><span class="spaces">        </span><span class="istickedoff">-- type is actually looked at by something, like :env, :t,</span>
-<span class="lineno"> 6466 </span><span class="spaces">        </span><span class="istickedoff">-- :search, or a direct use of the builtin.</span>
-<span class="lineno"> 6467 </span><span class="spaces">        </span><span class="istickedoff">ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty</span>
-<span class="lineno"> 6468 </span><span class="spaces">        </span><span class="istickedoff">fakeFileName = Text.unpack $ &quot;&lt;type of &quot; &lt;&gt; name &lt;&gt; &quot;&gt;&quot;</span>
+<span class="lineno"> 6348 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The type of MIR pointer-sized unsigned integers.&quot; ]</span></span>
+<span class="lineno"> 6349 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6350 </span><span class="spaces">    </span><span class="istickedoff">----------------------------------------</span>
+<span class="lineno"> 6351 </span><span class="spaces">    </span><span class="istickedoff">-- Yosys commands</span>
+<span class="lineno"> 6352 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6353 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_import&quot;  &quot;String -&gt; TopLevel Term&quot;</span>
+<span class="lineno"> 6354 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_yosys_import)</span>
+<span class="lineno"> 6355 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6356 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Produces a `Term` given the path to a JSON file produced by the Yosys `write_json` command.&quot;</span></span>
+<span class="lineno"> 6357 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.&quot;</span></span>
+<span class="lineno"> 6358 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Each HDL module is in turn represented by a function from a record of input port values to a record of output port values.&quot;</span></span>
+<span class="lineno"> 6359 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6360 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6361 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_verify&quot;  &quot;Term -&gt; [Term] -&gt; Term -&gt; [YosysTheorem] -&gt; ProofScript () -&gt; TopLevel YosysTheorem&quot;</span>
+<span class="lineno"> 6362 </span><span class="spaces">    </span><span class="istickedoff">(pureVal yosys_verify)</span>
+<span class="lineno"> 6363 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6364 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Proves equality between a combinational HDL module and a specification.&quot;</span></span>
+<span class="lineno"> 6365 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The first parameter is the HDL module - given a record m from yosys_import, this will typically look something like `{{ m.foo }}`.&quot;</span></span>
+<span class="lineno"> 6366 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The second parameter is a list of preconditions for the equality.&quot;</span></span>
+<span class="lineno"> 6367 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The third parameter is the specification, a term of the same type as the HDL module, which will typically be some Cryptol function or another HDL module.&quot;</span></span>
+<span class="lineno"> 6368 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The fourth parameter is a list of overrides, which witness the results of previous yosys_verify proofs.&quot;</span></span>
+<span class="lineno"> 6369 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;These overrides can be used to simplify terms by replacing use sites of submodules with their specifications.&quot;</span></span>
+<span class="lineno"> 6370 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Note that terms derived from HDL modules are first class, and are not restricted to yosys_verify: they may also be used with SAW's typical Term infrastructure like sat, prove_print, term rewriting, etc.&quot;</span></span>
+<span class="lineno"> 6371 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;yosys_verify simply provides a convenient and familiar interface, similar to llvm_verify or jvm_verify.&quot;</span></span>
+<span class="lineno"> 6372 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6373 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6374 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_import_sequential&quot;  &quot;String -&gt; String -&gt; TopLevel YosysSequential&quot;</span>
+<span class="lineno"> 6375 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_yosys_import_sequential)</span>
+<span class="lineno"> 6376 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6377 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Imports a particular sequential HDL module.&quot;</span></span>
+<span class="lineno"> 6378 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The first parameter is the module name, the second is the path to the Yosys JSON file.&quot;</span></span>
+<span class="lineno"> 6379 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The resulting value is an opaque representation of the sequential circuit that can be extracted to a Term or sent to solvers in various ways.&quot;</span></span>
+<span class="lineno"> 6380 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;SAW expects the sequential module to exist entirely within a single Yosys module - the Yosys \&quot;flatten\&quot; command will collapse the module hierarchy into a single module.&quot;</span></span>
+<span class="lineno"> 6381 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The only supported sequential element is the basic $dff cell.&quot;</span></span>
+<span class="lineno"> 6382 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Memory cells and more complex flip-flops can be translated into $dff using the \&quot;memory\&quot; and \&quot;dffunmap\&quot; Yosys commands.&quot;</span></span>
+<span class="lineno"> 6383 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6384 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6385 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_extract_sequential&quot;  &quot;YosysSequential -&gt; Int -&gt; TopLevel Term&quot;</span>
+<span class="lineno"> 6386 </span><span class="spaces">    </span><span class="istickedoff">(pureVal yosys_extract_sequential)</span>
+<span class="lineno"> 6387 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6388 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Extracts a term from the given sequential module with the state eliminated by iterating the term over the given concrete number of cycles.&quot;</span></span>
+<span class="lineno"> 6389 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The resulting term has no state field in the inputs or outputs, and each input and output field is replaced with an array of that field's type (array length being the number of cycles).&quot;</span></span>
+<span class="lineno"> 6390 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This term can be used like a normal SAW term - it may be embedded in Cryptol expressions, used in prove and sat, etc.&quot;</span></span>
+<span class="lineno"> 6391 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6392 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6393 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_extract_sequential_with_state&quot;  &quot;YosysSequential -&gt; Int -&gt; TopLevel Term&quot;</span>
+<span class="lineno"> 6394 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal yosys_extract_sequential_with_state)</span></span>
+<span class="lineno"> 6395 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6396 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Like yosys_extract_sequential, but the resulting term has an additional parameter to specify the initial state.&quot;</span></span>
+<span class="lineno"> 6397 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6398 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6399 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_extract_sequential_raw&quot;  &quot;YosysSequential -&gt; TopLevel Term&quot;</span>
+<span class="lineno"> 6400 </span><span class="spaces">    </span><span class="istickedoff">(pureVal yosys_extract_sequential_raw)</span>
+<span class="lineno"> 6401 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6402 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Extracts a term from the given sequential module.&quot;</span></span>
+<span class="lineno"> 6403 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This term has explicit fields for the state of the circuit in the input and output record types.&quot;</span></span>
+<span class="lineno"> 6404 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6405 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6406 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;yosys_verify_sequential_offline_sally&quot;  &quot;YosysSequential -&gt; String -&gt; Term -&gt; [String] -&gt; TopLevel ()&quot;</span>
+<span class="lineno"> 6407 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_yosys_verify_sequential_sally)</span>
+<span class="lineno"> 6408 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6409 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Export a query over the given sequential module to an input file for the Sally model checker.&quot;</span></span>
+<span class="lineno"> 6410 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The first parameter is the sequential module.&quot;</span></span>
+<span class="lineno"> 6411 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The second parameter is the path to write the resulting Sally input.&quot;</span></span>
+<span class="lineno"> 6412 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The third parameter is the query, which should be a boolean function of three parameters: an 8-bit cycle counter, a record of \&quot;fixed\&quot; inputs, and a record of circuit outputs.&quot;</span></span>
+<span class="lineno"> 6413 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The fourth parameter is a list of strings specifying certain circuit inputs as fixed - these inputs are assumed to remain unchanged across cycles, and are therefore accesible from the query function.&quot;</span></span>
+<span class="lineno"> 6414 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6415 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6416 </span><span class="spaces">    </span><span class="istickedoff">----------------------------------------</span>
+<span class="lineno"> 6417 </span><span class="spaces">    </span><span class="istickedoff">-- SAWCore loading command</span>
+<span class="lineno"> 6418 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6419 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;load_sawcore_from_file&quot;</span>
+<span class="lineno"> 6420 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; TopLevel ()&quot;</span>
+<span class="lineno"> 6421 </span><span class="spaces">    </span><span class="istickedoff">(bicVal do_load_sawcore_from_file)</span>
+<span class="lineno"> 6422 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6423 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Load a SAW core module from a file&quot;</span></span>
+<span class="lineno"> 6424 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6425 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6426 </span><span class="spaces">    </span><span class="istickedoff">----------------------------------------</span>
+<span class="lineno"> 6427 </span><span class="spaces">    </span><span class="istickedoff">-- A few more misc commands</span>
+<span class="lineno"> 6428 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6429 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;sharpSAT&quot;  &quot;Term -&gt; TopLevel Int&quot;</span>
+<span class="lineno"> 6430 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal sharpSAT)</span></span>
+<span class="lineno"> 6431 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 6432 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Use the sharpSAT solver to count the number of solutions to the CNF&quot;</span></span>
+<span class="lineno"> 6433 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;representation of the given Term.&quot;</span></span>
+<span class="lineno"> 6434 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6435 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6436 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;approxmc&quot;  &quot;Term -&gt; TopLevel ()&quot;</span>
+<span class="lineno"> 6437 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal approxmc)</span></span>
+<span class="lineno"> 6438 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 6439 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Use the approxmc solver to approximate the number of solutions to the&quot;</span></span>
+<span class="lineno"> 6440 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;CNF representation of the given Term.&quot;</span></span>
+<span class="lineno"> 6441 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6442 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6443 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;enable_crucible_profiling&quot; &quot;String -&gt; TopLevel ()&quot;</span>
+<span class="lineno"> 6444 </span><span class="spaces">    </span><span class="istickedoff">(pureVal enable_crucible_profiling)</span>
+<span class="lineno"> 6445 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 6446 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Record profiling information from symbolic execution and solver&quot;</span></span>
+<span class="lineno"> 6447 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;invocation to the given directory.&quot;</span></span>
+<span class="lineno"> 6448 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6449 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6450 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;disable_crucible_profiling&quot; &quot;TopLevel ()&quot;</span>
+<span class="lineno"> 6451 </span><span class="spaces">    </span><span class="istickedoff">(pureVal disable_crucible_profiling)</span>
+<span class="lineno"> 6452 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 6453 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[&quot;Stop recording profiling information.&quot;]</span></span>
+<span class="lineno"> 6454 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6455 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;summarize_verification&quot; &quot;TopLevel ()&quot;</span>
+<span class="lineno"> 6456 </span><span class="spaces">    </span><span class="istickedoff">(pureVal summarize_verification)</span>
+<span class="lineno"> 6457 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6458 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Print a human-readable summary of all verifications performed&quot;</span></span>
+<span class="lineno"> 6459 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;so far.&quot;</span></span>
+<span class="lineno"> 6460 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6461 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6462 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;summarize_verification_json&quot; &quot;String -&gt; TopLevel ()&quot;</span>
+<span class="lineno"> 6463 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal do_summarize_verification_json)</span></span>
+<span class="lineno"> 6464 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6465 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Print a JSON summary of all verifications performed&quot;</span></span>
+<span class="lineno"> 6466 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;so far into the named file.&quot;</span></span>
+<span class="lineno"> 6467 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6468 </span><span class="spaces">  </span><span class="istickedoff">]</span>
 <span class="lineno"> 6469 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6470 </span><span class="spaces">    </span><span class="istickedoff">pureVal :: forall t. IsValue t =&gt; t -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 6471 </span><span class="spaces">    </span><span class="istickedoff">pureVal x name _ _ = toValue name x</span>
-<span class="lineno"> 6472 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6473 </span><span class="spaces">    </span><span class="istickedoff">-- pureVal can be used for anything with an IsValue instance,</span>
-<span class="lineno"> 6474 </span><span class="spaces">    </span><span class="istickedoff">-- including functions. However, functions in TopLevel need to use</span>
-<span class="lineno"> 6475 </span><span class="spaces">    </span><span class="istickedoff">-- funVal* instead; the IsValue instances capture incorrectly and</span>
-<span class="lineno"> 6476 </span><span class="spaces">    </span><span class="istickedoff">-- you get a function that returns a VTopLevel instead of executing</span>
-<span class="lineno"> 6477 </span><span class="spaces">    </span><span class="istickedoff">-- in TopLevel. (There isn't a special-case IsValue instance for</span>
-<span class="lineno"> 6478 </span><span class="spaces">    </span><span class="istickedoff">-- a -&gt; TopLevel t, because that would require overlapping instances;</span>
-<span class="lineno"> 6479 </span><span class="spaces">    </span><span class="istickedoff">-- but there is an IsValue instance for TopLevel t by itself (that</span>
-<span class="lineno"> 6480 </span><span class="spaces">    </span><span class="istickedoff">-- produces VTopLevel) so use of pureVal matches that and the</span>
-<span class="lineno"> 6481 </span><span class="spaces">    </span><span class="istickedoff">-- generic IsValue instance for a -&gt; t.)</span>
-<span class="lineno"> 6482 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno"> 6483 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?</span>
-<span class="lineno"> 6484 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6485 </span><span class="spaces">    </span><span class="istickedoff">funVal1 :: forall a t. (FromValue a, IsValue t) =&gt; (a -&gt; TopLevel t)</span>
-<span class="lineno"> 6486 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 6487 </span><span class="spaces">    </span><span class="istickedoff">funVal1 f name _ _ =</span>
-<span class="lineno"> 6488 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> $</span>
-<span class="lineno"> 6489 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \a -&gt;</span>
-<span class="lineno"> 6490 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue FromArgument a)</span>
-<span class="lineno"> 6491 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6492 </span><span class="spaces">    </span><span class="istickedoff">funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) =&gt; (a -&gt; b -&gt; TopLevel t)</span>
-<span class="lineno"> 6493 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 6494 </span><span class="spaces">    </span><span class="istickedoff">funVal2 f name _ _ =</span>
-<span class="lineno"> 6495 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> $</span>
-<span class="lineno"> 6496 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \a -&gt; return $</span>
-<span class="lineno"> 6497 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \b -&gt;</span>
-<span class="lineno"> 6498 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b)</span>
-<span class="lineno"> 6499 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6500 </span><span class="spaces">    </span><span class="istickedoff">funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) =&gt; (a -&gt; b -&gt; c -&gt; TopLevel t)</span>
-<span class="lineno"> 6501 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 6502 </span><span class="spaces">    </span><span class="istickedoff">funVal3 f name _ _ =</span>
-<span class="lineno"> 6503 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin <span class="nottickedoff">name</span> <span class="nottickedoff">Seq.empty</span> $</span>
-<span class="lineno"> 6504 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \a -&gt; return $</span>
-<span class="lineno"> 6505 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \b -&gt; return $</span>
-<span class="lineno"> 6506 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \c -&gt;</span>
-<span class="lineno"> 6507 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b) (fromValue <span class="nottickedoff">FromArgument</span> c)</span>
-<span class="lineno"> 6508 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6509 </span><span class="spaces">    </span><span class="istickedoff">scVal :: forall t. IsValue t =&gt;</span>
-<span class="lineno"> 6510 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 6511 </span><span class="spaces">    </span><span class="istickedoff">scVal f name _ bic = toValue <span class="nottickedoff">name</span> (f (biSharedContext bic))</span>
-<span class="lineno"> 6512 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6513 </span><span class="spaces">    </span><span class="istickedoff">scVal' :: forall t. IsValue t =&gt;</span>
-<span class="lineno"> 6514 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; Options -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 6515 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">scVal' f name opts bic = toValue name (f (biSharedContext bic) opts)</span></span>
-<span class="lineno"> 6516 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6517 </span><span class="spaces">    </span><span class="istickedoff">bicVal :: forall t. IsValue t =&gt;</span>
-<span class="lineno"> 6518 </span><span class="spaces">              </span><span class="istickedoff">(BuiltinContext -&gt; Options -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 6519 </span><span class="spaces">    </span><span class="istickedoff">bicVal f name opts bic = toValue name (f bic opts)</span></span>
-<span class="lineno"> 6520 </span>
-<span class="lineno"> 6521 </span>
-<span class="lineno"> 6522 </span>
-<span class="lineno"> 6523 </span>-- FUTURE: extract here is now functionally a nop, so if things don't
-<span class="lineno"> 6524 </span>-- change going forward we should consider simplifying so primTypes
-<span class="lineno"> 6525 </span>-- uses the same type as the interpreter environment this function
-<span class="lineno"> 6526 </span>-- seeds, instead of its own.
-<span class="lineno"> 6527 </span>primNamedTypeEnv :: Map SS.Name (PrimitiveLifecycle, SS.NamedType)
-<span class="lineno"> 6528 </span><span class="decl"><span class="istickedoff">primNamedTypeEnv = fmap extract primTypes</span>
-<span class="lineno"> 6529 </span><span class="spaces">   </span><span class="istickedoff">where extract pt = (primTypeLife pt, primTypeType pt)</span></span>
-<span class="lineno"> 6530 </span>
-<span class="lineno"> 6531 </span>-- | Initial value environment for the interpreter.
-<span class="lineno"> 6532 </span>--
-<span class="lineno"> 6533 </span>--   Contains the lifecycle state, the type, the value, and the
-<span class="lineno"> 6534 </span>--   documentation for each builtin.
-<span class="lineno"> 6535 </span>--
-<span class="lineno"> 6536 </span>--   Note: all builtins have documentation; the environment type
-<span class="lineno"> 6537 </span>--   includes a Maybe for the documentation so it can also be used for
-<span class="lineno"> 6538 </span>--   user definitions.
-<span class="lineno"> 6539 </span>--
-<span class="lineno"> 6540 </span>--   FUTURE: extract here is now functionally a nop, so we should
-<span class="lineno"> 6541 </span>--   consider simplifying so `primitives` uses the same type as the
-<span class="lineno"> 6542 </span>--   interpreter environment this function seeds, instead of its own.
-<span class="lineno"> 6543 </span>--
-<span class="lineno"> 6544 </span>primValueEnv ::
-<span class="lineno"> 6545 </span>   Options -&gt;
-<span class="lineno"> 6546 </span>   BuiltinContext -&gt;
-<span class="lineno"> 6547 </span>   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
-<span class="lineno"> 6548 </span><span class="decl"><span class="istickedoff">primValueEnv opts bic = Map.mapWithKey extract primitives</span>
-<span class="lineno"> 6549 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 6550 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">header = [</span></span>
-<span class="lineno"> 6551 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Description&quot;,</span></span>
-<span class="lineno"> 6552 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;-----------&quot;,</span></span>
-<span class="lineno"> 6553 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 6554 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6555 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">tag p = case primitiveLife p of</span></span>
-<span class="lineno"> 6556 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Current -&gt; []</span></span>
-<span class="lineno"> 6557 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">WarnDeprecated -&gt; [&quot;DEPRECATED AND WILL WARN&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 6558 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated -&gt; [&quot;DEPRECATED AND UNAVAILABLE BY DEFAULT&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 6559 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Experimental -&gt; [&quot;EXPERIMENTAL&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 6560 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">name n p = [</span></span>
-<span class="lineno"> 6561 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;    &quot; &lt;&gt; n &lt;&gt; &quot; : &quot; &lt;&gt; PPS.pShowText (primitiveType p),</span></span>
-<span class="lineno"> 6562 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 6563 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 6564 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">doc n p =</span></span>
-<span class="lineno"> 6565 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">header &lt;&gt; tag p &lt;&gt; name n p &lt;&gt; primitiveDoc p</span></span>
-<span class="lineno"> 6566 </span><span class="spaces">      </span><span class="istickedoff">extract n p =</span>
-<span class="lineno"> 6567 </span><span class="spaces">          </span><span class="istickedoff">let pos = SS.PosInternal &quot;&lt;&lt;builtin&gt;&gt;&quot; in</span>
-<span class="lineno"> 6568 </span><span class="spaces">          </span><span class="istickedoff">(pos, primitiveLife p, primitiveType p,</span>
-<span class="lineno"> 6569 </span><span class="spaces">           </span><span class="istickedoff">(primitiveFn p) opts bic, <span class="nottickedoff">Just $ doc n p</span>)</span></span>
-<span class="lineno"> 6570 </span>
-<span class="lineno"> 6571 </span>primEnviron :: Options -&gt; BuiltinContext -&gt; CryptolEnvStack -&gt; Environ
-<span class="lineno"> 6572 </span><span class="decl"><span class="istickedoff">primEnviron opts bic cryenvs =</span>
-<span class="lineno"> 6573 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6574 </span><span class="spaces">    </span><span class="istickedoff">-- Do a scope push so the builtins live by themselves in their own</span>
-<span class="lineno"> 6575 </span><span class="spaces">    </span><span class="istickedoff">-- scope layer. This has the result of separating them from the</span>
-<span class="lineno"> 6576 </span><span class="spaces">    </span><span class="istickedoff">-- user's variables in the :env output (which is now grouped by</span>
-<span class="lineno"> 6577 </span><span class="spaces">    </span><span class="istickedoff">-- scope) and, because the builtin layer is readonly, might be</span>
-<span class="lineno"> 6578 </span><span class="spaces">    </span><span class="istickedoff">-- marginally more efficient as the user's globals are added.</span>
-<span class="lineno"> 6579 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 6580 </span><span class="spaces">    </span><span class="istickedoff">let tyenv = ScopedMap.push $ ScopedMap.seed primNamedTypeEnv</span>
-<span class="lineno"> 6581 </span><span class="spaces">        </span><span class="istickedoff">varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic</span>
-<span class="lineno"> 6582 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno"> 6583 </span><span class="spaces">    </span><span class="istickedoff">Environ varenv tyenv cryenvs</span></span>
-<span class="lineno"> 6584 </span>
+<span class="lineno"> 6470 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 6471 </span><span class="spaces">    </span><span class="istickedoff">prim :: Text -&gt; Text -&gt; (Text -&gt; Options -&gt; BuiltinContext -&gt; Value) -&gt; PrimitiveLifecycle -&gt; [Text]</span>
+<span class="lineno"> 6472 </span><span class="spaces">         </span><span class="istickedoff">-&gt; (SS.Name, Primitive)</span>
+<span class="lineno"> 6473 </span><span class="spaces">    </span><span class="istickedoff">prim name ty fn lc doc = (name, Primitive</span>
+<span class="lineno"> 6474 </span><span class="spaces">                                     </span><span class="istickedoff">{ primitiveType = ty'</span>
+<span class="lineno"> 6475 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveDoc  = <span class="nottickedoff">doc</span></span>
+<span class="lineno"> 6476 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveFn   = fn name</span>
+<span class="lineno"> 6477 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveLife = lc</span>
+<span class="lineno"> 6478 </span><span class="spaces">                                     </span><span class="istickedoff">})</span>
+<span class="lineno"> 6479 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno"> 6480 </span><span class="spaces">        </span><span class="istickedoff">-- Beware: errors in the type will only be detected when the</span>
+<span class="lineno"> 6481 </span><span class="spaces">        </span><span class="istickedoff">-- type is actually looked at by something, like :env, :t,</span>
+<span class="lineno"> 6482 </span><span class="spaces">        </span><span class="istickedoff">-- :search, or a direct use of the builtin.</span>
+<span class="lineno"> 6483 </span><span class="spaces">        </span><span class="istickedoff">ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty</span>
+<span class="lineno"> 6484 </span><span class="spaces">        </span><span class="istickedoff">fakeFileName = Text.unpack $ &quot;&lt;type of &quot; &lt;&gt; name &lt;&gt; &quot;&gt;&quot;</span>
+<span class="lineno"> 6485 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6486 </span><span class="spaces">    </span><span class="istickedoff">pureVal :: forall t. IsValue t =&gt; t -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 6487 </span><span class="spaces">    </span><span class="istickedoff">pureVal x name _ _ = toValue name x</span>
+<span class="lineno"> 6488 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6489 </span><span class="spaces">    </span><span class="istickedoff">-- pureVal can be used for anything with an IsValue instance,</span>
+<span class="lineno"> 6490 </span><span class="spaces">    </span><span class="istickedoff">-- including functions. However, functions in TopLevel need to use</span>
+<span class="lineno"> 6491 </span><span class="spaces">    </span><span class="istickedoff">-- funVal* instead; the IsValue instances capture incorrectly and</span>
+<span class="lineno"> 6492 </span><span class="spaces">    </span><span class="istickedoff">-- you get a function that returns a VTopLevel instead of executing</span>
+<span class="lineno"> 6493 </span><span class="spaces">    </span><span class="istickedoff">-- in TopLevel. (There isn't a special-case IsValue instance for</span>
+<span class="lineno"> 6494 </span><span class="spaces">    </span><span class="istickedoff">-- a -&gt; TopLevel t, because that would require overlapping instances;</span>
+<span class="lineno"> 6495 </span><span class="spaces">    </span><span class="istickedoff">-- but there is an IsValue instance for TopLevel t by itself (that</span>
+<span class="lineno"> 6496 </span><span class="spaces">    </span><span class="istickedoff">-- produces VTopLevel) so use of pureVal matches that and the</span>
+<span class="lineno"> 6497 </span><span class="spaces">    </span><span class="istickedoff">-- generic IsValue instance for a -&gt; t.)</span>
+<span class="lineno"> 6498 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno"> 6499 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?</span>
+<span class="lineno"> 6500 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6501 </span><span class="spaces">    </span><span class="istickedoff">funVal1 :: forall a t. (FromValue a, IsValue t) =&gt; (a -&gt; TopLevel t)</span>
+<span class="lineno"> 6502 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 6503 </span><span class="spaces">    </span><span class="istickedoff">funVal1 f name _ _ =</span>
+<span class="lineno"> 6504 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> $</span>
+<span class="lineno"> 6505 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \a -&gt;</span>
+<span class="lineno"> 6506 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue FromArgument a)</span>
+<span class="lineno"> 6507 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6508 </span><span class="spaces">    </span><span class="istickedoff">funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) =&gt; (a -&gt; b -&gt; TopLevel t)</span>
+<span class="lineno"> 6509 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 6510 </span><span class="spaces">    </span><span class="istickedoff">funVal2 f name _ _ =</span>
+<span class="lineno"> 6511 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> $</span>
+<span class="lineno"> 6512 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \a -&gt; return $</span>
+<span class="lineno"> 6513 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \b -&gt;</span>
+<span class="lineno"> 6514 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b)</span>
+<span class="lineno"> 6515 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6516 </span><span class="spaces">    </span><span class="istickedoff">funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) =&gt; (a -&gt; b -&gt; c -&gt; TopLevel t)</span>
+<span class="lineno"> 6517 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 6518 </span><span class="spaces">    </span><span class="istickedoff">funVal3 f name _ _ =</span>
+<span class="lineno"> 6519 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin <span class="nottickedoff">name</span> <span class="nottickedoff">Seq.empty</span> $</span>
+<span class="lineno"> 6520 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \a -&gt; return $</span>
+<span class="lineno"> 6521 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \b -&gt; return $</span>
+<span class="lineno"> 6522 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \c -&gt;</span>
+<span class="lineno"> 6523 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b) (fromValue <span class="nottickedoff">FromArgument</span> c)</span>
+<span class="lineno"> 6524 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6525 </span><span class="spaces">    </span><span class="istickedoff">scVal :: forall t. IsValue t =&gt;</span>
+<span class="lineno"> 6526 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 6527 </span><span class="spaces">    </span><span class="istickedoff">scVal f name _ bic = toValue <span class="nottickedoff">name</span> (f (biSharedContext bic))</span>
+<span class="lineno"> 6528 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6529 </span><span class="spaces">    </span><span class="istickedoff">scVal' :: forall t. IsValue t =&gt;</span>
+<span class="lineno"> 6530 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; Options -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 6531 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">scVal' f name opts bic = toValue name (f (biSharedContext bic) opts)</span></span>
+<span class="lineno"> 6532 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6533 </span><span class="spaces">    </span><span class="istickedoff">bicVal :: forall t. IsValue t =&gt;</span>
+<span class="lineno"> 6534 </span><span class="spaces">              </span><span class="istickedoff">(BuiltinContext -&gt; Options -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 6535 </span><span class="spaces">    </span><span class="istickedoff">bicVal f name opts bic = toValue name (f bic opts)</span></span>
+<span class="lineno"> 6536 </span>
+<span class="lineno"> 6537 </span>
+<span class="lineno"> 6538 </span>
+<span class="lineno"> 6539 </span>-- FUTURE: extract here is now functionally a nop, so if things don't
+<span class="lineno"> 6540 </span>-- change going forward we should consider simplifying so primTypes
+<span class="lineno"> 6541 </span>-- uses the same type as the interpreter environment this function
+<span class="lineno"> 6542 </span>-- seeds, instead of its own.
+<span class="lineno"> 6543 </span>primNamedTypeEnv :: Map SS.Name (PrimitiveLifecycle, SS.NamedType)
+<span class="lineno"> 6544 </span><span class="decl"><span class="istickedoff">primNamedTypeEnv = fmap extract primTypes</span>
+<span class="lineno"> 6545 </span><span class="spaces">   </span><span class="istickedoff">where extract pt = (primTypeLife pt, primTypeType pt)</span></span>
+<span class="lineno"> 6546 </span>
+<span class="lineno"> 6547 </span>-- | Initial value environment for the interpreter.
+<span class="lineno"> 6548 </span>--
+<span class="lineno"> 6549 </span>--   Contains the lifecycle state, the type, the value, and the
+<span class="lineno"> 6550 </span>--   documentation for each builtin.
+<span class="lineno"> 6551 </span>--
+<span class="lineno"> 6552 </span>--   Note: all builtins have documentation; the environment type
+<span class="lineno"> 6553 </span>--   includes a Maybe for the documentation so it can also be used for
+<span class="lineno"> 6554 </span>--   user definitions.
+<span class="lineno"> 6555 </span>--
+<span class="lineno"> 6556 </span>--   FUTURE: extract here is now functionally a nop, so we should
+<span class="lineno"> 6557 </span>--   consider simplifying so `primitives` uses the same type as the
+<span class="lineno"> 6558 </span>--   interpreter environment this function seeds, instead of its own.
+<span class="lineno"> 6559 </span>--
+<span class="lineno"> 6560 </span>primValueEnv ::
+<span class="lineno"> 6561 </span>   Options -&gt;
+<span class="lineno"> 6562 </span>   BuiltinContext -&gt;
+<span class="lineno"> 6563 </span>   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
+<span class="lineno"> 6564 </span><span class="decl"><span class="istickedoff">primValueEnv opts bic = Map.mapWithKey extract primitives</span>
+<span class="lineno"> 6565 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 6566 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">header = [</span></span>
+<span class="lineno"> 6567 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Description&quot;,</span></span>
+<span class="lineno"> 6568 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;-----------&quot;,</span></span>
+<span class="lineno"> 6569 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno"> 6570 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6571 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">tag p = case primitiveLife p of</span></span>
+<span class="lineno"> 6572 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Current -&gt; []</span></span>
+<span class="lineno"> 6573 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">WarnDeprecated -&gt; [&quot;DEPRECATED AND WILL WARN&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 6574 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated -&gt; [&quot;DEPRECATED AND UNAVAILABLE BY DEFAULT&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 6575 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Experimental -&gt; [&quot;EXPERIMENTAL&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 6576 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">name n p = [</span></span>
+<span class="lineno"> 6577 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;    &quot; &lt;&gt; n &lt;&gt; &quot; : &quot; &lt;&gt; PPS.pShowText (primitiveType p),</span></span>
+<span class="lineno"> 6578 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno"> 6579 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 6580 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">doc n p =</span></span>
+<span class="lineno"> 6581 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">header &lt;&gt; tag p &lt;&gt; name n p &lt;&gt; primitiveDoc p</span></span>
+<span class="lineno"> 6582 </span><span class="spaces">      </span><span class="istickedoff">extract n p =</span>
+<span class="lineno"> 6583 </span><span class="spaces">          </span><span class="istickedoff">let pos = SS.PosInternal &quot;&lt;&lt;builtin&gt;&gt;&quot; in</span>
+<span class="lineno"> 6584 </span><span class="spaces">          </span><span class="istickedoff">(pos, primitiveLife p, primitiveType p,</span>
+<span class="lineno"> 6585 </span><span class="spaces">           </span><span class="istickedoff">(primitiveFn p) opts bic, <span class="nottickedoff">Just $ doc n p</span>)</span></span>
+<span class="lineno"> 6586 </span>
+<span class="lineno"> 6587 </span>primEnviron :: Options -&gt; BuiltinContext -&gt; CryptolEnvStack -&gt; Environ
+<span class="lineno"> 6588 </span><span class="decl"><span class="istickedoff">primEnviron opts bic cryenvs =</span>
+<span class="lineno"> 6589 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6590 </span><span class="spaces">    </span><span class="istickedoff">-- Do a scope push so the builtins live by themselves in their own</span>
+<span class="lineno"> 6591 </span><span class="spaces">    </span><span class="istickedoff">-- scope layer. This has the result of separating them from the</span>
+<span class="lineno"> 6592 </span><span class="spaces">    </span><span class="istickedoff">-- user's variables in the :env output (which is now grouped by</span>
+<span class="lineno"> 6593 </span><span class="spaces">    </span><span class="istickedoff">-- scope) and, because the builtin layer is readonly, might be</span>
+<span class="lineno"> 6594 </span><span class="spaces">    </span><span class="istickedoff">-- marginally more efficient as the user's globals are added.</span>
+<span class="lineno"> 6595 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 6596 </span><span class="spaces">    </span><span class="istickedoff">let tyenv = ScopedMap.push $ ScopedMap.seed primNamedTypeEnv</span>
+<span class="lineno"> 6597 </span><span class="spaces">        </span><span class="istickedoff">varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic</span>
+<span class="lineno"> 6598 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno"> 6599 </span><span class="spaces">    </span><span class="istickedoff">Environ varenv tyenv cryenvs</span></span>
+<span class="lineno"> 6600 </span>
 
 </pre>
 </body>
