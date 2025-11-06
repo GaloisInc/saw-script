@@ -218,7 +218,7 @@ tutorial.)
 Proof scripts are more robust if we avoid direct mentions of compiler generated
 names, such as `id::_instaddce72e1232152c[0]`.  To help with this, SAW provides
 the command `mir_find_name : MIRModule -> String -> [MIRType] -> String`,
-which may be used to lookup the compiler generated name in the intrinsics table
+which may be used to lookup the compiler-generated name in the intrinsics table
 mentioned above.   For example, we could give a stable name to the compiler
 generated name like this:
 
