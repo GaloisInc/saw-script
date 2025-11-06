@@ -1393,26 +1393,26 @@ span.spaces    { background: white }
 <span class="lineno"> 1374 </span><span class="spaces">     </span><span class="istickedoff">-- Be sure to insert v' (rather than v) so the panic check is</span>
 <span class="lineno"> 1375 </span><span class="spaces">     </span><span class="istickedoff">-- actually performed.</span>
 <span class="lineno"> 1376 </span><span class="spaces">     </span><span class="istickedoff">let insert (pos, name, rb, ty, doc, fv) tmpenv =</span>
-<span class="lineno"> 1377 </span><span class="spaces">             </span><span class="istickedoff">let <span class="nottickedoff">v = fv environ'</span></span>
-<span class="lineno"> 1378 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">v' = case v of</span></span>
-<span class="lineno"> 1379 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">VLambda{} -&gt; v</span></span>
-<span class="lineno"> 1380 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">_ -&gt;</span></span>
+<span class="lineno"> 1377 </span><span class="spaces">             </span><span class="istickedoff">let v = fv environ'</span>
+<span class="lineno"> 1378 </span><span class="spaces">                 </span><span class="istickedoff">v' = case v of</span>
+<span class="lineno"> 1379 </span><span class="spaces">                     </span><span class="istickedoff">VLambda{} -&gt; v</span>
+<span class="lineno"> 1380 </span><span class="spaces">                     </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno"> 1381 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">panic &quot;extendEnvMulti&quot; [</span></span>
 <span class="lineno"> 1382 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">&quot;Non-lambda value: &quot; &lt;&gt; Text.pack (show v),</span></span>
 <span class="lineno"> 1383 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">&quot;Source position: &quot; &lt;&gt; Text.pack (show pos)</span></span>
 <span class="lineno"> 1384 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1385 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">v'' = case rb of</span></span>
-<span class="lineno"> 1386 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">SS.ReadOnlyVar -&gt; v'</span></span>
-<span class="lineno"> 1387 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">SS.RebindableVar -&gt;</span></span>
-<span class="lineno"> 1388 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">-- &quot;rec&quot; declarations can't be rebindable</span></span>
+<span class="lineno"> 1385 </span><span class="spaces">                 </span><span class="istickedoff">v'' = case rb of</span>
+<span class="lineno"> 1386 </span><span class="spaces">                     </span><span class="istickedoff">SS.ReadOnlyVar -&gt; v'</span>
+<span class="lineno"> 1387 </span><span class="spaces">                     </span><span class="istickedoff">SS.RebindableVar -&gt;</span>
+<span class="lineno"> 1388 </span><span class="spaces">                         </span><span class="istickedoff">-- &quot;rec&quot; declarations can't be rebindable</span>
 <span class="lineno"> 1389 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">panic &quot;extendEnvMulti&quot; [</span></span>
 <span class="lineno"> 1390 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">&quot;Rebindable variable: &quot; &lt;&gt; name,</span></span>
 <span class="lineno"> 1391 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">&quot;Source position: &quot; &lt;&gt; Text.pack (show pos)</span></span>
 <span class="lineno"> 1392 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 1393 </span><span class="spaces">             </span><span class="istickedoff">in</span>
-<span class="lineno"> 1394 </span><span class="spaces">             </span><span class="istickedoff">ScopedMap.insert name <span class="nottickedoff">(pos, SS.Current, ty, v'', doc)</span> tmpenv</span>
+<span class="lineno"> 1394 </span><span class="spaces">             </span><span class="istickedoff">ScopedMap.insert name (<span class="nottickedoff">pos</span>, SS.Current, ty, v'', <span class="nottickedoff">doc</span>) tmpenv</span>
 <span class="lineno"> 1395 </span><span class="spaces">         </span><span class="istickedoff">varenv' = foldr insert varenv bindings</span>
-<span class="lineno"> 1396 </span><span class="spaces">         </span><span class="istickedoff">environ' = Environ varenv' <span class="nottickedoff">tyenv</span> <span class="nottickedoff">cryenv</span></span>
+<span class="lineno"> 1396 </span><span class="spaces">         </span><span class="istickedoff">environ' = Environ varenv' tyenv cryenv</span>
 <span class="lineno"> 1397 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1398 </span><span class="spaces">     </span><span class="istickedoff">-- Drop the new bits into place.</span>
 <span class="lineno"> 1399 </span><span class="spaces">     </span><span class="istickedoff">modify (\rw -&gt; rw { rwEnviron = environ' })</span></span>
