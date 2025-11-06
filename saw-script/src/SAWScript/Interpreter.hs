@@ -2454,12 +2454,13 @@ primTypes = foldl doadd Map.empty
   , abstype "ModuleSkeleton" Experimental
   , abstype "ProofResult" Current
   , abstype "SatResult" Current
-  , abstype "SetupValue" Current
+  , abstype "LLVMValue" Current
   , abstype "Simpset" Current
   , abstype "SkeletonState" Experimental
   , abstype "Theorem" Current
   , abstype "YosysSequential" Experimental
   , abstype "YosysTheorem" Experimental
+  , conctype "SetupValue" "LLVMValue" Current
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
@@ -2489,10 +2490,10 @@ primTypes = foldl doadd Map.empty
     abstype name lc tyenv = abstype' SS.kindStar name lc tyenv
 
     -- concrete type (not currently used)
-    _conctype ::
+    conctype ::
         Text -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType ->
         (SS.Name, PrimType)
-    _conctype name tystr lc tyenv = (name, info)
+    conctype name tystr lc tyenv = (name, info)
       where
         info = PrimType
           { primTypeType = SS.ConcreteType ty

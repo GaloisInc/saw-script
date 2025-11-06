@@ -6,6 +6,12 @@ This release supports [version
 
 ## Changes
 
+* The `SetupValue` associated with LLVM verification has been renamed to
+  `LLVMValue` to match the corresponding `JVMValue` and `MIRValue` types.
+  The name `SetupValue` remains as an alias.
+  Eventually it will be marked deprecated, but probably not until at least
+  after the next release.
+
 * The `LLVMSetup` and `MIRSetup` monad types are now just ordinary builtin
   types; their names are no longer reserved words.
   (The `JVMSetup` type was already this way.
