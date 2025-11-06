@@ -4489,14 +4489,14 @@ primitives = Map.fromList $
     [ "Retrieve the argument value of the given name from the given 'SkeletonState'."
     ]
 
-  , prim "skeleton_arg_index_pointer" "SkeletonState -> Int -> LLVMSetup SetupValue"
+  , prim "skeleton_arg_index_pointer" "SkeletonState -> Int -> LLVMSetup LLVMValue"
     (pureVal skeleton_arg_index_pointer)
     Experimental
     [ "Retrieve the argument pointer at the given indexfrom the given 'SkeletonState'."
     , "Fails if the specified argument is not a pointer."
     ]
 
-  , prim "skeleton_arg_pointer" "SkeletonState -> String -> LLVMSetup SetupValue"
+  , prim "skeleton_arg_pointer" "SkeletonState -> String -> LLVMSetup LLVMValue"
     (pureVal skeleton_arg_pointer)
     Experimental
     [ "Retrieve the argument pointer of the given name from the given 'SkeletonState'."
@@ -4799,7 +4799,7 @@ primitives = Map.fromList $
     Experimental
     [ "Legacy alternative name for `llvm_fresh_cryptol_var`." ]
 
-  , prim "llvm_alloc" "LLVMType -> LLVMSetup SetupValue"
+  , prim "llvm_alloc" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc)
     Current
     [ "Declare that an object of the given type should be allocated in an"
@@ -4808,12 +4808,12 @@ primitives = Map.fromList $
     , "After `llvm_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
     ]
-  , prim "crucible_alloc" "LLVMType -> LLVMSetup SetupValue"
+  , prim "crucible_alloc" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc)
     Current
     [ "Legacy alternative name for `llvm_alloc`." ]
 
-  , prim "llvm_alloc_aligned" "Int -> LLVMType -> LLVMSetup SetupValue"
+  , prim "llvm_alloc_aligned" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_aligned)
     Current
     [ "Declare that a memory region of the given type should be allocated in"
@@ -4821,12 +4821,12 @@ primitives = Map.fromList $
     , "should be aligned to a multiple of the specified number of bytes (which"
     , "must be a power of 2)."
     ]
-  , prim "crucible_alloc_aligned" "Int -> LLVMType -> LLVMSetup SetupValue"
+  , prim "crucible_alloc_aligned" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_aligned)
     Current
     [ "Legacy alternative name for `llvm_alloc_aligned`." ]
 
-  , prim "llvm_alloc_readonly" "LLVMType -> LLVMSetup SetupValue"
+  , prim "llvm_alloc_readonly" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_readonly)
     Current
     [ "Declare that a read-only memory region of the given type should be"
@@ -4835,12 +4835,12 @@ primitives = Map.fromList $
     , "allocated with `llvm_alloc_readonly` are allowed to alias other"
     , "read-only regions."
     ]
-  , prim "crucible_alloc_readonly" "LLVMType -> LLVMSetup SetupValue"
+  , prim "crucible_alloc_readonly" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_readonly)
     Current
     [ "Legacy alternative name for `llvm_alloc_readonly`." ]
 
-  , prim "llvm_alloc_readonly_aligned" "Int -> LLVMType -> LLVMSetup SetupValue"
+  , prim "llvm_alloc_readonly_aligned" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_readonly_aligned)
     Current
     [ "Declare that a read-only memory region of the given type should be"
@@ -4851,30 +4851,30 @@ primitives = Map.fromList $
     , "regions allocated with `llvm_alloc_readonly_aligned` are allowed to"
     , "alias other read-only regions."
     ]
-  , prim "crucible_alloc_readonly_aligned" "Int -> LLVMType -> LLVMSetup SetupValue"
+  , prim "crucible_alloc_readonly_aligned" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_readonly_aligned)
     Current
     [ "Legacy alternative name for `llvm_alloc_readonly_aligned`." ]
 
-  , prim "llvm_alloc_with_size" "Int -> LLVMType -> LLVMSetup SetupValue"
+  , prim "llvm_alloc_with_size" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_with_size)
     Experimental
     [ "Like `llvm_alloc`, but with a user-specified size (given in bytes)."
     , "The specified size must be greater than the size of the LLVM type."
     ]
-  , prim "crucible_alloc_with_size" "Int -> LLVMType -> LLVMSetup SetupValue"
+  , prim "crucible_alloc_with_size" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_with_size)
     Experimental
     [ "Legacy alternative name for `llvm_alloc_with_size`." ]
 
-  , prim "llvm_alloc_sym_init" "LLVMType -> LLVMSetup SetupValue"
+  , prim "llvm_alloc_sym_init" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_sym_init)
     Experimental
     [ "Like `llvm_alloc`, but assume that the allocation is initialized with"
     , "symbolic bytes."
     ]
 
-  , prim "llvm_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup SetupValue"
+  , prim "llvm_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup LLVMValue"
     (pureVal llvm_symbolic_alloc)
     Current
     [ "Like `llvm_alloc`, but with a (symbolic) size instead of an LLVM type."
@@ -4882,7 +4882,7 @@ primitives = Map.fromList $
     , "second argument specifies the alignment in bytes (which must be a power"
     , "of 2). The third argument specifies the size in bytes."
     ]
-  , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup SetupValue"
+  , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup LLVMValue"
     (pureVal llvm_symbolic_alloc)
     Current
     [ "Legacy alternative name for `llvm_symbolic_alloc`." ]
@@ -4899,19 +4899,19 @@ primitives = Map.fromList $
     Current
     [ "Legacy alternative name for `llvm_alloc_global`." ]
 
-  , prim "llvm_fresh_pointer" "LLVMType -> LLVMSetup SetupValue"
+  , prim "llvm_fresh_pointer" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_fresh_pointer)
     Current
     [ "Create a fresh pointer value for use in an LLVM specification."
     , "This works like `llvm_alloc` except that the pointer is not"
     , "required to point to allocated memory."
     ]
-  , prim "crucible_fresh_pointer" "LLVMType -> LLVMSetup SetupValue"
+  , prim "crucible_fresh_pointer" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_fresh_pointer)
     Current
     [ "Legacy alternative name for `llvm_fresh_pointer`." ]
 
-  , prim "llvm_fresh_expanded_val" "LLVMType -> LLVMSetup SetupValue"
+  , prim "llvm_fresh_expanded_val" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_fresh_expanded_val)
     Current
     [ "Create a compound type entirely populated with fresh symbolic variables."
@@ -4919,12 +4919,12 @@ primitives = Map.fromList $
     , "explicitly setting each field or element to contain a fresh symbolic"
     , "variable."
     ]
-  , prim "crucible_fresh_expanded_val" "LLVMType -> LLVMSetup SetupValue"
+  , prim "crucible_fresh_expanded_val" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_fresh_expanded_val)
     Current
     [ "Legacy alternative name for `llvm_fresh_expanded_val`." ]
 
-  , prim "llvm_points_to" "SetupValue -> SetupValue -> LLVMSetup ()"
+  , prim "llvm_points_to" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (first"
@@ -4935,12 +4935,12 @@ primitives = Map.fromList $
     , "section (after `llvm_execute_func`), this specifies an assertion"
     , "about the final memory state after running the function."
     ]
-    , prim "crucible_points_to" "SetupValue -> SetupValue -> LLVMSetup ()"
+    , prim "crucible_points_to" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to True))
     Current
     [ "Legacy alternative name for `llvm_points_to`." ]
 
-  , prim "llvm_conditional_points_to" "Term -> SetupValue -> SetupValue -> LLVMSetup ()"
+  , prim "llvm_conditional_points_to" "Term -> LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_conditional_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (second"
@@ -4952,12 +4952,12 @@ primitives = Map.fromList $
     , "section (after `llvm_execute_func`), this specifies an assertion"
     , "about the final memory state after running the function."
     ]
-  , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> LLVMSetup ()"
+  , prim "crucible_conditional_points_to" "Term -> LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_conditional_points_to True))
     Current
     [ "Legacy alternative name for `llvm_conditional_points_to`." ]
 
-  , prim "llvm_points_to_at_type" "SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()"
+  , prim "llvm_points_to_at_type" "LLVMValue -> LLVMType -> LLVMValue -> LLVMSetup ()"
     (pureVal llvm_points_to_at_type)
     Current
     [ "A variant of `llvm_points_to` that casts the pointer to another type."
@@ -4965,7 +4965,7 @@ primitives = Map.fromList $
     , "for example."
     ]
 
-  , prim "llvm_conditional_points_to_at_type" "Term -> SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()"
+  , prim "llvm_conditional_points_to_at_type" "Term -> LLVMValue -> LLVMType -> LLVMValue -> LLVMSetup ()"
     (pureVal llvm_conditional_points_to_at_type)
     Current
     [ "A variant of `llvm_conditional_points_to` that casts the pointer to"
@@ -4973,31 +4973,31 @@ primitives = Map.fromList $
     , "of larger array, for example."
     ]
 
-  , prim "llvm_points_to_untyped" "SetupValue -> SetupValue -> LLVMSetup ()"
+  , prim "llvm_points_to_untyped" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to False))
     Current
     [ "A variant of `llvm_points_to` that does not check for compatibility"
     , "between the pointer type and the value type. This may be useful when"
     , "reading or writing a prefix of larger array, for example."
     ]
-  , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> LLVMSetup ()"
+  , prim "crucible_points_to_untyped" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to False))
     Current
     [ "Legacy alternative name for `llvm_points_to`." ]
 
-  , prim "llvm_conditional_points_to_untyped" "Term -> SetupValue -> SetupValue -> LLVMSetup ()"
+  , prim "llvm_conditional_points_to_untyped" "Term -> LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_conditional_points_to False))
     Current
     [ "A variant of `llvm_conditional_points_to` that does not check for"
     , "compatibility between the pointer type and the value type. This may"
     , "be useful when reading or writing a prefix of larger array, for example."
     ]
-  , prim "crucible_conditional_points_to_untyped" "Term -> SetupValue -> SetupValue -> LLVMSetup ()"
+  , prim "crucible_conditional_points_to_untyped" "Term -> LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_conditional_points_to False))
     Current
     [ "Legacy alternative name for `llvm_conditional_points_to`." ]
 
-  , prim "llvm_points_to_array_prefix" "SetupValue -> Term -> Term -> LLVMSetup ()"
+  , prim "llvm_points_to_array_prefix" "LLVMValue -> Term -> Term -> LLVMSetup ()"
     (pureVal llvm_points_to_array_prefix)
     Experimental
     [ "Declare that the memory location indicated by the given pointer (first"
@@ -5009,12 +5009,12 @@ primitives = Map.fromList $
     , "section (after `llvm_execute_func`), this specifies an assertion"
     , "about the final memory state after running the function."
     ]
-  , prim "crucible_points_to_array_prefix" "SetupValue -> Term -> Term -> LLVMSetup ()"
+  , prim "crucible_points_to_array_prefix" "LLVMValue -> Term -> Term -> LLVMSetup ()"
     (pureVal llvm_points_to_array_prefix)
     Experimental
     [ "Legacy alternative name for `llvm_points_to_array_prefix`." ]
 
-  , prim "llvm_points_to_bitfield" "SetupValue -> String -> SetupValue -> LLVMSetup ()"
+  , prim "llvm_points_to_bitfield" "LLVMValue -> String -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to_bitfield))
     Experimental
     [ "A variant of `llvm_points_to` that is meant to be used on struct fields"
@@ -5028,7 +5028,7 @@ primitives = Map.fromList $
     , "operates."
     ]
 
-  , prim "llvm_equal" "SetupValue -> SetupValue -> LLVMSetup ()"
+  , prim "llvm_equal" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal llvm_equal)
     Current
     [ "State that two LLVM values should be equal. Can be used as either a"
@@ -5036,7 +5036,7 @@ primitives = Map.fromList $
     , "an `llvm_precond` or `llvm_postcond` statement which is an equality"
     , "predicate, but potentially more efficient."
     ]
-  , prim "crucible_equal" "SetupValue -> SetupValue -> LLVMSetup ()"
+  , prim "crucible_equal" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal llvm_equal)
     Current
     [ "Legacy alternative name for `llvm_equal`." ]
@@ -5079,7 +5079,7 @@ primitives = Map.fromList $
     Current
     [ "Legacy alternative name for `llvm_postcond`." ]
 
-  , prim "llvm_execute_func" "[SetupValue] -> LLVMSetup ()"
+  , prim "llvm_execute_func" "[LLVMValue] -> LLVMSetup ()"
     (pureVal llvm_execute_func)
     Current
     [ "Specify the given list of values as the arguments of the function."
@@ -5090,7 +5090,7 @@ primitives = Map.fromList $
     , "statements depend on whether they occur in the pre-state or post-state"
     , "section."
     ]
-  , prim "crucible_execute_func" "[SetupValue] -> LLVMSetup ()"
+  , prim "crucible_execute_func" "[LLVMValue] -> LLVMSetup ()"
     (pureVal llvm_execute_func)
     Current
     [ "Legacy alternative name for `llvm_execute_func`." ]
@@ -5114,18 +5114,18 @@ primitives = Map.fromList $
     (pureVal mir_unint) Current unint_help
   ]
   ++
-  [ prim "llvm_return" "SetupValue -> LLVMSetup ()"
+  [ prim "llvm_return" "LLVMValue -> LLVMSetup ()"
     (pureVal llvm_return)
     Current
     [ "Specify the given value as the return value of the function. A"
     , "crucible_return statement is required if and only if the function"
     , "has a non-void return type." ]
-  , prim "crucible_return" "SetupValue -> LLVMSetup ()"
+  , prim "crucible_return" "LLVMValue -> LLVMSetup ()"
     (pureVal llvm_return)
     Current
     [ "Legacy alternative name for `llvm_return`." ]
 
-  , prim "llvm_cast_pointer" "SetupValue -> LLVMType -> SetupValue"
+  , prim "llvm_cast_pointer" "LLVMValue -> LLVMType -> LLVMValue"
     (pureVal llvm_cast_pointer)
     Current
     [ "Cast the type of the given setup value (which must be a pointer value)."
@@ -5363,13 +5363,13 @@ primitives = Map.fromList $
     ]
 
   , prim "llvm_array_value"
-    "[SetupValue] -> SetupValue"
+    "[LLVMValue] -> LLVMValue"
     (pureVal CIR.anySetupArray)
     Current
-    [ "Create a SetupValue representing an array, with the given list of"
+    [ "Create an LLVMValue representing an array, with the given list of"
     , "values as elements. The list must be non-empty." ]
   , prim "crucible_array"
-    "[SetupValue] -> SetupValue"
+    "[LLVMValue] -> LLVMValue"
     (pureVal CIR.anySetupArray)
     Current
     [ "Legacy alternative name for `llvm_array_value`." ]
@@ -5381,13 +5381,13 @@ primitives = Map.fromList $
     [ "The type of an LLVM struct with elements of the given types." ]
 
   , prim "llvm_struct_value"
-    "[SetupValue] -> SetupValue"
+    "[LLVMValue] -> LLVMValue"
     (pureVal (CIR.anySetupStruct False))
     Current
-    [ "Create a SetupValue representing a struct, with the given list of"
+    [ "Create an LLVMValue representing a struct, with the given list of"
     , "values as elements." ]
   , prim "crucible_struct"
-    "[SetupValue] -> SetupValue"
+    "[LLVMValue] -> LLVMValue"
     (pureVal (CIR.anySetupStruct False))
     Current
     [ "Legacy alternative name for `llvm_struct_value`." ]
@@ -5399,101 +5399,101 @@ primitives = Map.fromList $
     [ "The type of a packed LLVM struct with elements of the given types." ]
 
   , prim "llvm_packed_struct_value"
-    "[SetupValue] -> SetupValue"
+    "[LLVMValue] -> LLVMValue"
     (pureVal (CIR.anySetupStruct True))
     Current
-    [ "Create a SetupValue representing a packed struct, with the given"
+    [ "Create an LLVMValue representing a packed struct, with the given"
     , "list of values as elements." ]
   , prim "crucible_packed_struct"
-    "[SetupValue] -> SetupValue"
+    "[LLVMValue] -> LLVMValue"
     (pureVal (CIR.anySetupStruct True))
     Current
     [ "Legacy alternative name for `llvm_packed_struct_value`." ]
 
   , prim "llvm_elem"
-    "SetupValue -> Int -> SetupValue"
+    "LLVMValue -> Int -> LLVMValue"
     (pureVal CIR.anySetupElem)
     Current
-    [ "Turn a SetupValue representing a struct or array pointer into"
+    [ "Turn an LLVMValue representing a struct or array pointer into"
     , "a pointer to an element of the struct or array by field index." ]
   , prim "crucible_elem"
-    "SetupValue -> Int -> SetupValue"
+    "LLVMValue -> Int -> LLVMValue"
     (pureVal CIR.anySetupElem)
     Current
     [ "Legacy alternative name for `llvm_elem`." ]
 
   , prim "llvm_union"
-    "SetupValue -> String -> SetupValue"
+    "LLVMValue -> String -> LLVMValue"
     (pureVal CIR.anySetupUnion)
     Current
-    [ "Turn a SetupValue representing a union pointer into"
+    [ "Turn an LLVMValue representing a union pointer into"
     , "a pointer to one of the branches of the union by field name."
     , "Requires debug symbols to resolve union field names."
     ]
 
   , prim "llvm_field"
-    "SetupValue -> String -> SetupValue"
+    "LLVMValue -> String -> LLVMValue"
     (pureVal CIR.anySetupField)
     Current
-    [ "Turn a SetupValue representing a struct pointer into"
+    [ "Turn an LLVMValue representing a struct pointer into"
     , "a pointer to an element of the struct by field name."
     , "Requires debug symbols to resolve struct field names."
     ]
   , prim "crucible_field"
-    "SetupValue -> String -> SetupValue"
+    "LLVMValue -> String -> LLVMValue"
     (pureVal CIR.anySetupField)
     Current
     [ "Legacy alternative name for `llvm_field`." ]
 
   , prim "llvm_null"
-    "SetupValue"
+    "LLVMValue"
     (pureVal CIR.anySetupNull)
     Current
-    [ "A SetupValue representing a null pointer value." ]
+    [ "An LLVMValue representing a null pointer value." ]
   , prim "crucible_null"
-    "SetupValue"
+    "LLVMValue"
     (pureVal CIR.anySetupNull)
     Current
     [ "Legacy alternative name for `llvm_null`." ]
 
   , prim "llvm_global"
-    "String -> SetupValue"
+    "String -> LLVMValue"
     (pureVal CIR.anySetupGlobal)
     Current
-    [ "Return a SetupValue representing a pointer to the named global."
+    [ "Return an LLVMValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
   , prim "crucible_global"
-    "String -> SetupValue"
+    "String -> LLVMValue"
     (pureVal CIR.anySetupGlobal)
     Current
     [ "Legacy alternative name for `llvm_global`." ]
 
   , prim "llvm_global_initializer"
-    "String -> SetupValue"
+    "String -> LLVMValue"
     (pureVal CIR.anySetupGlobalInitializer)
     Current
-    [ "Return a SetupValue representing the value of the initializer of a named"
+    [ "Return an LLVMValue representing the value of the initializer of a named"
     , "global. The String should be the name of a global value."
     ]
   , prim "crucible_global_initializer"
-    "String -> SetupValue"
+    "String -> LLVMValue"
     (pureVal CIR.anySetupGlobalInitializer)
     Current
     [ "Legacy alternative name for `llvm_global_initializer`." ]
 
   , prim "llvm_term"
-    "Term -> SetupValue"
+    "Term -> LLVMValue"
     (pureVal CIR.anySetupTerm)
     Current
-    [ "Construct a `SetupValue` from a `Term`." ]
+    [ "Construct a `LLVMValue` from a `Term`." ]
   , prim "crucible_term"
-    "Term -> SetupValue"
+    "Term -> LLVMValue"
     (pureVal CIR.anySetupTerm)
     Current
     [ "Legacy alternative name for `llvm_term`." ]
 
   , prim "crucible_setup_val_to_term"
-    " SetupValue -> TopLevel Term"
+    " LLVMValue -> TopLevel Term"
     (pureVal crucible_setup_val_to_typed_term)
     HideDeprecated
     [ "Convert from a setup value to a typed term. This can only be done for a"
@@ -5875,7 +5875,7 @@ primitives = Map.fromList $
   , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
     (pureVal (CMS.SetupArray :: MIR.Ty -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
     Experimental
-    [ "Create a SetupValue representing an array of the given type, with the"
+    [ "Create a MIRValue representing an array of the given type, with the"
     , "given list of values as elements."
     ]
 
@@ -6128,7 +6128,7 @@ primitives = Map.fromList $
   , prim "mir_struct_value" "MIRAdt -> [MIRValue] -> MIRValue"
     (pureVal (CMS.SetupStruct :: MIR.Adt -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
     Experimental
-    [ "Create a SetupValue representing a MIR struct with the given list of"
+    [ "Create a MIRValue representing a MIR struct with the given list of"
     , "values as elements. The MIRAdt argument determines what struct type to"
     , "create; use `mir_find_adt` to retrieve a MIRAdt value."
     ]
@@ -6158,7 +6158,7 @@ primitives = Map.fromList $
   , prim "mir_tuple_value" "[MIRValue] -> MIRValue"
     (pureVal (CMS.SetupTuple () :: [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
     Experimental
-    [ "Create a SetupValue representing a MIR tuple with the given list of"
+    [ "Create a MIRValue representing a MIR tuple with the given list of"
     , "values as elements."
     ]
 
