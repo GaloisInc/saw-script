@@ -6,6 +6,13 @@ This release supports [version
 
 ## Changes
 
+* The `LLVMSetup` and `MIRSetup` monad types are now just ordinary builtin
+  types; their names are no longer reserved words.
+  (The `JVMSetup` type was already this way.
+  A bogus unused `JavaSetup` reserved word has been removed.
+  See #2768.)
+  The legacy name `CrucibleSetup` remains a reserved word for the time being.
+
 * The REPL's `:search` command can now handle unapplied type constructors. For
   example, one can now write `:search ProofScript` to find objects mentioning
   `ProofScript` applied to any type.
