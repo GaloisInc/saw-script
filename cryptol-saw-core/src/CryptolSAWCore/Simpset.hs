@@ -13,6 +13,7 @@ module CryptolSAWCore.Simpset
   ( mkCryptolSimpset
   ) where
 
+import SAWCore.Conversion (natConversions)
 import SAWCore.Module (moduleDefs, Def(..))
 import SAWCore.Name
 import SAWCore.Rewriter
@@ -30,7 +31,7 @@ import SAWCore.SharedTerm
 mkCryptolSimpset :: SharedContext -> IO (Simpset a)
 mkCryptolSimpset sc =
   do m <- scFindModule sc cryptolModuleName
-     scSimpset sc (cryptolDefs m) idents []
+     scSimpset sc (cryptolDefs m) idents natConversions
   where
     cryptolDefs m = filter (not . excluded) $ moduleDefs m
     excluded d =
