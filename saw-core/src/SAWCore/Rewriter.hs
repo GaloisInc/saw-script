@@ -833,10 +833,19 @@ rewriteSharedTermTypeSafe sc ss t0 =
                          App <$> rewriteAll convertibleFlag e1 <*> rewriteAll convertibleFlag e2
                    _ -> App <$> rewriteAll convertibleFlag e1 <*> rewriteAll ConvertibleRulesOnly e2
                    -- could compute WHNF of t1 to see if it's a thing that doesn't match Pi but behaves like Pi
-          Lambda pat t e -> Lambda pat t <$> rewriteAll convertibleFlag e -- pat is x or varnames etc, t types (so don't rewrite), e is body
+          Lambda x t1 t2 ->
+            do var <- scVariable sc x t1 -- we don't rewrite t1 which represents types
+               t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
+               t2'' <- rewriteAll convertibleFlag t2'
+               pure (Lambda x t1 t2'')
           Constant{}     -> return tf
           Variable{}     -> return tf
-          Pi x t1 t2 -> Pi x <$> rewriteAll convertibleFlag t1 <*> rewriteAll convertibleFlag t2
+          Pi x t1 t2 ->
+            do t1' <- rewriteAll convertibleFlag t1
+               var <- scVariable sc x t1'
+               t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
+               t2'' <- rewriteAll convertibleFlag t2'
+               pure (Pi x t1' t2'')
 
     rewriteFTermF :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
                      Convertibility -> FlatTermF Term -> IO (FlatTermF Term)
