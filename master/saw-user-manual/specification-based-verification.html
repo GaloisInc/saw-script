@@ -264,6 +264,14 @@ For instance, if a function is defined in an <code class="docutils literal notra
 </div>
 <p>If you are in doubt about what the full identifier for a given function is,
 consult the MIR JSON file for your program.</p>
+<p>The Rust compiler generates a separate instance for each use of a polymorphic
+function at a different type.   These instances have a compiler-generated
+name, so the easiest way to refer to them is by using the command
+<code class="docutils literal notranslate"><span class="pre">mir_find_name</span> <span class="pre">:</span> <span class="pre">MIRModule</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">[MIRType]</span> <span class="pre">-&gt;</span> <span class="pre">String</span></code>.
+Given a Rust module, the name of a polymorphic function, and a list of types,
+<code class="docutils literal notranslate"><span class="pre">mir_find_name</span></code> will return the name of the corresponding instantiation.
+It throws an exception if the polymorphic function or the given
+instantiation are not found.</p>
 </li>
 </ul>
 <hr class="docutils" />

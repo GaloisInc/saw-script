@@ -112,6 +112,15 @@ Where:
   If you are in doubt about what the full identifier for a given function is,
   consult the MIR JSON file for your program.
 
+  The Rust compiler generates a separate instance for each use of a polymorphic
+  function at a different type.   These instances have a compiler-generated
+  name, so the easiest way to refer to them is by using the command
+  `mir_find_name : MIRModule -> String -> [MIRType] -> String`.
+  Given a Rust module, the name of a polymorphic function, and a list of types,
+  `mir_find_name` will return the name of the corresponding instantiation.
+  It throws an exception if the polymorphic function or the given
+  instantiation are not found.
+
 -----
 
 Now we describe how to construct a value of type `LLVMSetup ()`, `JVMSetup ()`,
