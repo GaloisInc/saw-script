@@ -70,6 +70,12 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Cache
 import SAWCore.Conversion
+  (Conversion(..)
+  , termPat
+  , conversionPat
+  , runConversion
+  , runTermBuilder
+  )
 import SAWCore.Module
   ( ctorName
   , ctorNumParams
@@ -851,12 +857,17 @@ rewriteSharedTermTypeSafe sc ss t0 =
           ArrayValue t es  -> ArrayValue t <$> traverse (rewriteAll convertibleFlag) es -- specifically NOT rewriting type, only elts
           StringLit{}      -> return ftf
 
+    filterRulesFlag :: Convertibility -> Bool -> Bool
+    filterRulesFlag convertibleFlag isConvertible =
+      case convertibleFlag of
+        ConvertibleRulesOnly -> isConvertible
+        AllRules -> True
+
     filterRules :: Convertibility -> Either (RewriteRule a) Conversion -> Bool
     filterRules convertibleFlag (Left RewriteRule{convertible = ruleConvFlag}) =
-      case convertibleFlag of
-        ConvertibleRulesOnly -> ruleConvFlag
-        AllRules -> True
-    filterRules _ (Right _) = True
+      filterRulesFlag convertibleFlag ruleConvFlag
+    filterRules convertibleFlag (Right (Conversion convConvFlag _)) =
+      filterRulesFlag convertibleFlag convConvFlag
 
     rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) => Convertibility -> Term -> IO Term
     rewriteTop convertibleFlag t =
