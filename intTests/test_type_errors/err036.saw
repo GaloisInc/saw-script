@@ -1,8 +1,6 @@
 //
 // Too many arguments for type: named type variables
 //
-// This is _not_ a parser message, unlike all the other cases of this
-// form, because the parser allows both the forms "t" and "t1 t2".
 
 typedef t = Int;
 

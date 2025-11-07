@@ -1,7 +1,5 @@
 //
 // Too many arguments for type constructor: monads
 //
-// This should produce a kind mismatch error, but currently does not produce any
-// error at all.
 
 let x : TopLevel Int Int = return 0;

@@ -29,7 +29,7 @@ module SAWCentral.AST
        , SchemaPattern(..)
        , NamedType(..)
        , Kind(..)
-       , kindStar
+       , kindStar, kindStarToStar
        , tMono, tForall, tUnit, tTuple, tRecord, tArray, tFun
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
        , tJVMSpec, tLLVMSpec, tMIRSpec
@@ -327,11 +327,10 @@ newtype Kind = Kind { kindNumArgs :: Word }
 kindStar :: Kind
 kindStar = Kind 0
 
--- this isn't currently used but will be needed for #2764
---kindStarToStar :: Kind
---kindStarToStar = Kind 1
+kindStarToStar :: Kind
+kindStarToStar = Kind 1
 
--- these isn't currently used
+-- this isn't currently used
 --kindStarToStarToStar :: Kind
 --kindStarToStarToStar = Kind 2
 

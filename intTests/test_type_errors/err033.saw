@@ -1,7 +1,5 @@
 //
 // Not enough arguments for type constructor: monads
 //
-// Currently this produces a type constructor mismatch error, rather than the
-// desired kind mismatch error.
 
 let x : TopLevel = false;

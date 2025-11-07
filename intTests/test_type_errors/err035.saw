@@ -1,7 +1,5 @@
 //
 // Too many arguments for type: records
 //
-// Currently this produces a generic type mismatch error, rather than the
-// desired kind mismatch error.
 
 let x : { a: Int } Int = { a = 3 };

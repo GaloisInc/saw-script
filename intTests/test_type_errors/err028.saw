@@ -1,8 +1,6 @@
 //
 // Too many arguments for type constructor: String
 //
-// Currently this trips on `Block`; the desired kind mismatch message in
-// the typechecker is unreachable.
 
 let x : String Int = "abc";
 

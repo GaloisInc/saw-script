@@ -1,0 +1,3 @@
+// typedefs must (for now at least) have kind *
+
+typedef Foo = ProofScript;

@@ -1,8 +1,6 @@
 //
 // Too many arguments for type constructor: Int
 //
-// Currently this trips on `Block`; the desired kind mismatch message in
-// the typechecker is unreachable.
 
 let x : Int Bool = false;
 
