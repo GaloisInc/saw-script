@@ -91,6 +91,7 @@ import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck               as SC
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName, Name(..))
+import SAWCore.Term.Certified (scSubtype)
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import SAWCore.Term.Pretty (showTerm)
 
@@ -1663,8 +1664,12 @@ coerceTerm sc env t1 t2 e
   | otherwise =
     do t1' <- importType sc env t1
        t2' <- importType sc env t2
-       q <- proveEq sc env t1 t2
-       scGlobalApply sc "Prelude.coerce" [t1', t2', q, e]
+       same <- scSubtype sc t1' t2'
+       case same of
+         True -> pure e -- ascribe type t2' to e
+         False ->
+           do q <- proveEq sc env t1 t2
+              scGlobalApply sc "Prelude.coerce" [t1', t2', q, e]
 
 proveEq :: SharedContext -> Env -> C.Type -> C.Type -> IO Term
 proveEq sc env t1 t2
