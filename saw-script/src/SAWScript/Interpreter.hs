@@ -5970,6 +5970,15 @@ primitives = Map.fromList $
     , "be found in the MIRModule, this will raise an error."
     ]
 
+  , prim "mir_find_name" "MIRModule -> String -> [MIRType] -> String"
+    (funVal3 mir_find_name)
+    Experimental
+    [ "Consult the given MIRModule to find an instantiation of a function"
+    , "with the given String as an identifier and the given MIRTypes as the"
+    , "types used to instantiate the type parameters. If such an instantiation cannot"
+    , "be found in the MIRModule, this will raise an error."
+    ]
+
   , prim "mir_find_mangled_adt" "MIRModule -> String -> MIRAdt"
     (funVal2 mir_find_mangled_adt)
     Experimental

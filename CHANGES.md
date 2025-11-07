@@ -169,6 +169,9 @@ This release supports [version
 
 ## New Features
 
+* SAW has a new command `mir_find_name : MIRModule -> String -> [MIRType] -> String`
+  which can be used to find the name of the instantiation of a polymorphic function.
+
 * SAW has new commands `llvm_unint: [String] -> LLVMSetup ()` and
   and analogous commands for JVM and MIR, which can be used to declare that some
   Cryptol names should be kept opaque during symbolic simulation.

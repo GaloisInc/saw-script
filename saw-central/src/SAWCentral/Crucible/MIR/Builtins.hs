@@ -23,6 +23,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_equal
   , mir_extract
   , mir_find_adt
+  , mir_find_name
   , mir_find_mangled_adt
   , mir_fresh_cryptol_var
   , mir_fresh_expanded_value
@@ -383,6 +384,15 @@ mir_find_adt rm origName substs = do
   origDid <- findDefId cs origName
   findAdt col origDid (Mir.Substs substs)
 
+-- | Find an instantiation of a polymorphic function.
+mir_find_name :: MonadFail m => Mir.RustModule -> Text -> [Mir.Ty] -> m Text
+mir_find_name rm origName tys =
+  do
+    let cs  = rm ^. Mir.rmCS
+        col = cs ^. Mir.collection
+    origId <- findDefId cs origName
+    findFnInstance col origId (Mir.Substs tys)
+    
 -- | Generate a fresh term of the given Cryptol type. The name will be used when
 -- pretty-printing the variable in debug output.
 mir_fresh_cryptol_var ::
@@ -1801,6 +1811,28 @@ findAdt col origName substs =
         Nothing -> fail $ "Unknown ADT: " ++ show (origName, substs)
   where
     insts = col ^. Mir.adtsOrig . at origName . to (fromMaybe [])
+
+findFnInstance :: MonadFail m => Mir.Collection -> Mir.DefId -> Mir.Substs -> m Text
+findFnInstance col origName substs =
+  case found of
+    Just i -> pure (Mir.idText i)
+    Nothing
+      | hasInstances -> fail ("Could not find function instance: " ++ show (Mir.cleanVariantName origName))
+      | origName `Map.member` (col ^. Mir.functions) -> pure (Mir.idText origName)
+      | otherwise -> fail ("Could not find function " ++ show (Mir.cleanVariantName origName))
+  where
+  (hasInstances, found) = foldr check (False, Nothing) (col ^. Mir.intrinsics)
+  check i (hasIs, rest) =
+    let inst = i ^. Mir.intrInst
+    in case inst ^. Mir.inKind of
+          Mir.IkItem
+            | inst ^. Mir.inDefId == origName ->
+              (True, if inst ^. Mir.inSubsts == substs
+                       then Just (i ^. Mir.intrName)
+                       else rest)
+          _ -> (hasIs, rest)
+
+
 
 -- | Find the ADT definition corresponding to a mangled identifier (i.e., an
 -- identifier for an ADT that is already instantiated with type arguments). See
