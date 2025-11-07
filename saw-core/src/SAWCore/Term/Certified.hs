@@ -13,6 +13,8 @@ module SAWCore.Term.Certified
   , rawType
   , scTypeCheckWHNF
   , scTypeOf
+  , scTypeConvertible
+  , scSubtype
   , scWHNF
     -- * Building certified terms
   , scApply
