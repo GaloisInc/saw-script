@@ -34,41 +34,41 @@ codegen : String -> [String] -> String -> Term -> TopLevel ()
 concat : {a} [a] -> [a] -> [a]
 core_axiom : String -> Theorem
 core_thm : String -> Theorem
-crucible_alloc : LLVMType -> LLVMSetup SetupValue
-crucible_alloc_aligned : Int -> LLVMType -> LLVMSetup SetupValue
+crucible_alloc : LLVMType -> LLVMSetup LLVMValue
+crucible_alloc_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
 crucible_alloc_global : String -> LLVMSetup ()
-crucible_alloc_readonly : LLVMType -> LLVMSetup SetupValue
-crucible_alloc_readonly_aligned : Int -> LLVMType -> LLVMSetup SetupValue
-crucible_array : [SetupValue] -> SetupValue
-crucible_conditional_points_to : Term -> SetupValue -> SetupValue -> LLVMSetup ()
-crucible_conditional_points_to_untyped : Term -> SetupValue -> SetupValue -> LLVMSetup ()
+crucible_alloc_readonly : LLVMType -> LLVMSetup LLVMValue
+crucible_alloc_readonly_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
+crucible_array : [LLVMValue] -> LLVMValue
+crucible_conditional_points_to : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
+crucible_conditional_points_to_untyped : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
 crucible_declare_ghost_state : String -> TopLevel Ghost
-crucible_elem : SetupValue -> Int -> SetupValue
-crucible_equal : SetupValue -> SetupValue -> LLVMSetup ()
-crucible_execute_func : [SetupValue] -> LLVMSetup ()
-crucible_field : SetupValue -> String -> SetupValue
-crucible_fresh_expanded_val : LLVMType -> LLVMSetup SetupValue
-crucible_fresh_pointer : LLVMType -> LLVMSetup SetupValue
+crucible_elem : LLVMValue -> Int -> LLVMValue
+crucible_equal : LLVMValue -> LLVMValue -> LLVMSetup ()
+crucible_execute_func : [LLVMValue] -> LLVMSetup ()
+crucible_field : LLVMValue -> String -> LLVMValue
+crucible_fresh_expanded_val : LLVMType -> LLVMSetup LLVMValue
+crucible_fresh_pointer : LLVMType -> LLVMSetup LLVMValue
 crucible_fresh_var : String -> LLVMType -> LLVMSetup Term
 crucible_ghost_value : Ghost -> Term -> LLVMSetup ()
-crucible_global : String -> SetupValue
-crucible_global_initializer : String -> SetupValue
+crucible_global : String -> LLVMValue
+crucible_global_initializer : String -> LLVMValue
 crucible_java_extract : JavaClass -> String -> TopLevel Term
 crucible_llvm_extract : LLVMModule -> String -> TopLevel Term
 crucible_llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
 crucible_llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
-crucible_null : SetupValue
-crucible_packed_struct : [SetupValue] -> SetupValue
-crucible_points_to : SetupValue -> SetupValue -> LLVMSetup ()
-crucible_points_to_untyped : SetupValue -> SetupValue -> LLVMSetup ()
+crucible_null : LLVMValue
+crucible_packed_struct : [LLVMValue] -> LLVMValue
+crucible_points_to : LLVMValue -> LLVMValue -> LLVMSetup ()
+crucible_points_to_untyped : LLVMValue -> LLVMValue -> LLVMSetup ()
 crucible_postcond : Term -> LLVMSetup ()
 crucible_precond : Term -> LLVMSetup ()
-crucible_return : SetupValue -> LLVMSetup ()
+crucible_return : LLVMValue -> LLVMSetup ()
 crucible_spec_size : LLVMSpec -> Int
 crucible_spec_solvers : LLVMSpec -> [String]
-crucible_struct : [SetupValue] -> SetupValue
-crucible_symbolic_alloc : Bool -> Int -> Term -> LLVMSetup SetupValue
-crucible_term : Term -> SetupValue
+crucible_struct : [LLVMValue] -> LLVMValue
+crucible_symbolic_alloc : Bool -> Int -> Term -> LLVMSetup LLVMValue
+crucible_term : Term -> LLVMValue
 cryptol_add_path : String -> TopLevel ()
 cryptol_extract : CryptolModule -> String -> TopLevel Term
 cryptol_load : String -> TopLevel CryptolModule
@@ -168,56 +168,56 @@ lambdas : [Term] -> Term -> Term
 length : {a} [a] -> Int
 list_term : [Term] -> Term
 llvm_alias : String -> LLVMType
-llvm_alloc : LLVMType -> LLVMSetup SetupValue
-llvm_alloc_aligned : Int -> LLVMType -> LLVMSetup SetupValue
+llvm_alloc : LLVMType -> LLVMSetup LLVMValue
+llvm_alloc_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
 llvm_alloc_global : String -> LLVMSetup ()
-llvm_alloc_readonly : LLVMType -> LLVMSetup SetupValue
-llvm_alloc_readonly_aligned : Int -> LLVMType -> LLVMSetup SetupValue
+llvm_alloc_readonly : LLVMType -> LLVMSetup LLVMValue
+llvm_alloc_readonly_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
 llvm_array : Int -> LLVMType -> LLVMType
-llvm_array_value : [SetupValue] -> SetupValue
+llvm_array_value : [LLVMValue] -> LLVMValue
 llvm_assert : Term -> LLVMSetup ()
-llvm_cast_pointer : SetupValue -> LLVMType -> SetupValue
+llvm_cast_pointer : LLVMValue -> LLVMType -> LLVMValue
 llvm_cfg : LLVMModule -> String -> TopLevel CFG
-llvm_conditional_points_to : Term -> SetupValue -> SetupValue -> LLVMSetup ()
-llvm_conditional_points_to_at_type : Term -> SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()
-llvm_conditional_points_to_untyped : Term -> SetupValue -> SetupValue -> LLVMSetup ()
+llvm_conditional_points_to : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
+llvm_conditional_points_to_at_type : Term -> LLVMValue -> LLVMType -> LLVMValue -> LLVMSetup ()
+llvm_conditional_points_to_untyped : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
 llvm_declare_ghost_state : String -> TopLevel Ghost
 llvm_double : LLVMType
-llvm_elem : SetupValue -> Int -> SetupValue
-llvm_equal : SetupValue -> SetupValue -> LLVMSetup ()
-llvm_execute_func : [SetupValue] -> LLVMSetup ()
+llvm_elem : LLVMValue -> Int -> LLVMValue
+llvm_equal : LLVMValue -> LLVMValue -> LLVMSetup ()
+llvm_execute_func : [LLVMValue] -> LLVMSetup ()
 llvm_extract : LLVMModule -> String -> TopLevel Term
-llvm_field : SetupValue -> String -> SetupValue
+llvm_field : LLVMValue -> String -> LLVMValue
 llvm_float : LLVMType
-llvm_fresh_expanded_val : LLVMType -> LLVMSetup SetupValue
-llvm_fresh_pointer : LLVMType -> LLVMSetup SetupValue
+llvm_fresh_expanded_val : LLVMType -> LLVMSetup LLVMValue
+llvm_fresh_pointer : LLVMType -> LLVMSetup LLVMValue
 llvm_fresh_var : String -> LLVMType -> LLVMSetup Term
 llvm_ghost_value : Ghost -> Term -> LLVMSetup ()
-llvm_global : String -> SetupValue
-llvm_global_initializer : String -> SetupValue
+llvm_global : String -> LLVMValue
+llvm_global_initializer : String -> LLVMValue
 llvm_int : Int -> LLVMType
 llvm_load_module : String -> TopLevel LLVMModule
-llvm_null : SetupValue
+llvm_null : LLVMValue
 llvm_packed_struct_type : [LLVMType] -> LLVMType
-llvm_packed_struct_value : [SetupValue] -> SetupValue
+llvm_packed_struct_value : [LLVMValue] -> LLVMValue
 llvm_pointer : LLVMType -> LLVMType
-llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()
-llvm_points_to_at_type : SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()
-llvm_points_to_untyped : SetupValue -> SetupValue -> LLVMSetup ()
+llvm_points_to : LLVMValue -> LLVMValue -> LLVMSetup ()
+llvm_points_to_at_type : LLVMValue -> LLVMType -> LLVMValue -> LLVMSetup ()
+llvm_points_to_untyped : LLVMValue -> LLVMValue -> LLVMSetup ()
 llvm_postcond : Term -> LLVMSetup ()
 llvm_precond : Term -> LLVMSetup ()
-llvm_return : SetupValue -> LLVMSetup ()
+llvm_return : LLVMValue -> LLVMSetup ()
 llvm_sizeof : LLVMModule -> LLVMType -> Int
 llvm_spec_size : LLVMSpec -> Int
 llvm_spec_solvers : LLVMSpec -> [String]
 llvm_struct : String -> LLVMType
 llvm_struct_type : [LLVMType] -> LLVMType
-llvm_struct_value : [SetupValue] -> SetupValue
-llvm_symbolic_alloc : Bool -> Int -> Term -> LLVMSetup SetupValue
-llvm_term : Term -> SetupValue
+llvm_struct_value : [LLVMValue] -> LLVMValue
+llvm_symbolic_alloc : Bool -> Int -> Term -> LLVMSetup LLVMValue
+llvm_term : Term -> LLVMValue
 llvm_type : String -> LLVMType
 llvm_unint : [String] -> LLVMSetup ()
-llvm_union : SetupValue -> String -> SetupValue
+llvm_union : LLVMValue -> String -> LLVMValue
 llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 load_aig : String -> TopLevel AIG
