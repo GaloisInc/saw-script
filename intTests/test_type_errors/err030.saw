@@ -1,8 +1,6 @@
 //
 // Too many arguments for type constructor: Type
 //
-// Currently this trips on `Block`; the desired kind mismatch message in
-// the typechecker is unreachable.
 
 let x : Type Int = {| [8] |};
 

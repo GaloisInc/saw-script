@@ -10,6 +10,8 @@ import Control.Lens (view)
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.Text (Text)
 
+import CryptolServer.Data.Expression (Expression, getCryptolExpr)
+
 import SAWCentral.Crucible.MIR.Builtins (mir_find_adt)
 
 import qualified Argo
@@ -17,20 +19,23 @@ import qualified Argo.Doc as Doc
 import SAWServer.SAWServer
     ( SAWState,
       ServerName,
+      sawBIC,
       sawEnv,
       sawTask,
+      sawTopLevelRW,
       setServerVal,
       getMIRModule )
 import SAWServer.Data.MIRType ( JSONMIRType, mirType )
 import SAWServer.Exceptions ( notAtTopLevel )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
+import SAWCentral.Value ( rwGetCryptolEnv )
 
 -- | The parameters for the @SAW/MIR/find ADT@ command.
 data MIRFindADTParams = MIRFindADTParams
   { mfaModule :: ServerName
   , mfaADTOrigName :: Text
-  , mfaTypeSubstitutions :: [JSONMIRType]
+  , mfaTypeSubstitutions :: [JSONMIRType Expression]
   , mfaADTServerName :: ServerName
   }
 
@@ -60,15 +65,19 @@ mirFindADT :: MIRFindADTParams -> Argo.Command SAWState OK
 mirFindADT params = do
   state <- Argo.getState
   let tasks = view sawTask state
+      bic = view sawBIC state
+      cenv = rwGetCryptolEnv (view sawTopLevelRW state)
       sawenv = view sawEnv state
+  fileReader <- Argo.getFileReader
   case tasks of
     (_:_) -> Argo.raise $ notAtTopLevel $ fst <$> tasks
     [] -> do
       mod' <- getMIRModule $ mfaModule params
-      adt <- tl $ mir_find_adt
-                    mod'
-                    (mfaADTOrigName params)
-                    (map (mirType sawenv) $ mfaTypeSubstitutions params)
+      let substs0 = mfaTypeSubstitutions params
+      substs1 <- traverse (traverse getCryptolExpr) substs0
+      substs2 <-
+        tl $ traverse (mirType fileReader bic cenv sawenv) substs1
+      adt <- tl $ mir_find_adt mod' (mfaADTOrigName params) substs2
       let sn = mfaADTServerName params
       setServerVal sn adt
       ok

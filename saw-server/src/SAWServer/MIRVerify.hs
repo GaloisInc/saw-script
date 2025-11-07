@@ -9,7 +9,10 @@ module SAWServer.MIRVerify
 
 import Prelude hiding (mod)
 import Control.Lens
+import Data.Bitraversable (Bitraversable(bitraverse))
 import qualified Data.Map as Map
+
+import CryptolServer.Data.Expression (Expression)
 
 import SAWCentral.Crucible.MIR.Builtins
     ( mir_unsafe_assume_spec, mir_verify )
@@ -42,7 +45,7 @@ import SAWServer.TopLevel ( tl )
 import SAWServer.VerifyCommon
     ( AssumeParams(AssumeParams), VerifyParams(VerifyParams) )
 
-mirVerifyAssume :: ContractMode -> VerifyParams JSONMIRType -> Argo.Command SAWState OK
+mirVerifyAssume :: ContractMode -> VerifyParams (JSONMIRType Expression) -> Argo.Command SAWState OK
 mirVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract script lemmaName) =
   do tasks <- view sawTask <$> Argo.getState
      case tasks of
@@ -57,7 +60,7 @@ mirVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scri
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts
             setup <- compileMIRContract fileReader bic ghostEnv cenv sawenv <$>
-                     traverse getCryptolExpr contract
+                     bitraverse (traverse getCryptolExpr) getCryptolExpr contract
             res <- case mode of
               VerifyContract -> do
                 lemmas <- mapM getMIRMethodSpecIR lemmaNames
@@ -69,14 +72,14 @@ mirVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scri
             setServerVal lemmaName res
             ok
 
-mirVerify :: VerifyParams JSONMIRType -> Argo.Command SAWState OK
+mirVerify :: VerifyParams (JSONMIRType Expression) -> Argo.Command SAWState OK
 mirVerify = mirVerifyAssume VerifyContract
 
 mirVerifyDescr :: Doc.Block
 mirVerifyDescr =
   Doc.Paragraph [Doc.Text "Verify the named MIR method meets its specification."]
 
-mirAssume :: AssumeParams JSONMIRType -> Argo.Command SAWState OK
+mirAssume :: AssumeParams (JSONMIRType Expression) -> Argo.Command SAWState OK
 mirAssume (AssumeParams modName fun contract lemmaName) =
   mirVerifyAssume AssumeContract (VerifyParams modName fun [] False contract (ProofScript []) lemmaName)
 

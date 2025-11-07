@@ -1,10 +1,16 @@
 # next -- TBA
 
 This release supports [version
-4](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#4) of
+5](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#5) of
 `mir-json`'s schema.
 
 ## Changes
+
+* The `SetupValue` associated with LLVM verification has been renamed to
+  `LLVMValue` to match the corresponding `JVMValue` and `MIRValue` types.
+  The name `SetupValue` remains as an alias.
+  Eventually it will be marked deprecated, but probably not until at least
+  after the next release.
 
 * The `LLVMSetup` and `MIRSetup` monad types are now just ordinary builtin
   types; their names are no longer reserved words.
@@ -191,12 +197,16 @@ This release supports [version
 * As a result of the previous change, `submodule` is now a reserved
   word in the SAWScript parser.
 
+* Add a `mir_const : MIRType -> Term -> MIRType` function, which can be used to
+  specify a constant used to instantiate a const generic parameter. `mir_const`
+  is intended to be used in conjunction with `mir_find_adt` to look up
+  instantiations of const generic ADTs.
+
 * Add a `mir_find_mangled_adt : MIRModule -> String -> MIRAdt` command, which
   allows looking up MIR ADTs by their full, mangled names.
   `mir_find_mangled_adt`'s use is discouraged in favor of using `mir_find_adt`
   instead, but `mir_find_mangled_adt` can be useful in scenarios where
-  `mir_find_adt` isn't expressive enough to look up particular ADTs (e.g., ADTs
-  that use const generics).
+  `mir_find_adt` isn't expressive enough to look up particular ADTs.
 
 * Add a `set_solver_cache_timeout : Int -> TopLevel ()` command that allows
   configuring the solver result cache's timeout for database lookups and

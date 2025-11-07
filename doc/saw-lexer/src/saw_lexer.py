@@ -62,12 +62,12 @@ class SAWScriptLexer(RegexLexer):
                 r"SimpSet|Theorem|"
                 r"Ghost|"
                 r"LLVMSetup|JVMSetup|MIRSetup|ProofScript|TopLevel|"
-                r"LLVMModule|LLVMType|SetupValue|LLVMSpec|"
+                r"LLVMModule|LLVMType|LLVMValue|LLVMSpec|"
                 r"FunctionProfile|FunctionSkeleton|ModuleSkeleton|SkeletonState|"
                 r"JavaClass|JavaType|JVMValue|JVMMethodSpec|JVMSpec|"
                 r"MIRModule|MIRAdt|MIRType|MIRValue|MIRSpec|"
                 r"YosysSequential|YosysTheorem|"
-                r"CrucibleSetup|CrucibleMethodSpec|"
+                r"SetupValue|CrucibleSetup|CrucibleMethodSpec|"
                 r"BisimTheorem)(\s+)",
                 bygroups(Keyword.Type, Whitespace),
             ),

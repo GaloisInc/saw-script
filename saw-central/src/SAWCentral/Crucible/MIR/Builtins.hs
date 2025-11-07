@@ -56,6 +56,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_array
   , mir_bool
   , mir_char
+  , mir_const
   , mir_i8
   , mir_i16
   , mir_i32
@@ -89,6 +90,7 @@ import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BSL
+import Data.Char (chr)
 import Data.Foldable (for_, toList)
 import qualified Data.Foldable.WithIndex as FWI
 import qualified Data.IntMap as IntMap
@@ -101,7 +103,7 @@ import Data.Map (Map)
 import Data.Maybe (fromMaybe)
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
-import Data.Parameterized.NatRepr (knownNat, maxSigned, natValue)
+import Data.Parameterized.NatRepr (intValue, knownNat, maxSigned, natValue)
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
@@ -157,7 +159,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 import qualified CryptolSAWCore.CryptolEnv as CryEnv
 import CryptolSAWCore.TypedTerm
 
-import SAWCentral.Builtins (ghost_value)
+import SAWCentral.Builtins (eval_bool_inner, eval_int_inner, ghost_value)
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.Override
@@ -1151,6 +1153,74 @@ mir_bool = Mir.TyBool
 mir_char :: Mir.Ty
 mir_char = Mir.TyChar
 
+-- | A constant value used to instantiate a const generic parameter. This is
+-- intended to be used in conjunction with @mir_find_adt@ to look up
+-- instantiations of const generic ADTs.
+mir_const :: Mir.Ty -> TypedTerm -> TopLevel Mir.Ty
+mir_const ty term = do
+  constVal <-
+    case ty of
+      Mir.TyBool -> extractConstBool term
+      Mir.TyChar -> extractConstChar term
+      Mir.TyInt bs -> extractConstInt bs term
+      Mir.TyUint bs -> extractConstUint bs term
+      _ -> unsupportedType
+  pure $ Mir.TyConst constVal
+  where
+    extractConstBool :: TypedTerm -> TopLevel Mir.ConstVal
+    extractConstBool t = do
+      b <- eval_bool_inner "mir_const" t
+      pure $ Mir.ConstBool b
+
+    extractConstChar :: TypedTerm -> TopLevel Mir.ConstVal
+    extractConstChar t = do
+      (actualWidth, val) <- eval_int_inner "mir_const" t
+      checkBitvectorWidth 32 actualWidth
+      pure $ Mir.ConstChar $ chr $ fromInteger @Int val
+
+    extractConstInt :: Mir.BaseSize -> TypedTerm -> TopLevel Mir.ConstVal
+    extractConstInt bs t = do
+      (actualWidth, val) <- eval_int_inner "mir_const" t
+      (expectedWidth, intLit) <-
+        case bs of
+          Mir.USize -> pure (intValue (knownNat @Mir.SizeBits), Mir.Isize val)
+          Mir.B8 -> pure (8, Mir.I8 val)
+          Mir.B16 -> pure (16, Mir.I16 val)
+          Mir.B32 -> pure (32, Mir.I32 val)
+          Mir.B64 -> pure (64, Mir.I64 val)
+          Mir.B128 -> pure (128, Mir.I128 val)
+      checkBitvectorWidth expectedWidth actualWidth
+      pure $ Mir.ConstInt intLit
+
+    extractConstUint :: Mir.BaseSize -> TypedTerm -> TopLevel Mir.ConstVal
+    extractConstUint bs t = do
+      (actualWidth, val) <- eval_int_inner "mir_const" t
+      (expectedWidth, uintLit) <-
+        case bs of
+          Mir.USize -> pure (intValue (knownNat @Mir.SizeBits), Mir.Usize val)
+          Mir.B8 -> pure (8, Mir.U8 val)
+          Mir.B16 -> pure (16, Mir.U16 val)
+          Mir.B32 -> pure (32, Mir.U32 val)
+          Mir.B64 -> pure (64, Mir.U64 val)
+          Mir.B128 -> pure (128, Mir.U128 val)
+      checkBitvectorWidth expectedWidth actualWidth
+      pure $ Mir.ConstInt uintLit
+
+    checkBitvectorWidth :: Integer -> Integer -> TopLevel ()
+    checkBitvectorWidth expectedWidth actualWidth =
+      unless (expectedWidth == actualWidth) $
+        malformed $
+          "Expected " ++ show expectedWidth ++
+          "-bit bitvector, but bitvector is actually " ++
+          show actualWidth ++ " bits"
+
+    unsupportedType :: TopLevel a
+    unsupportedType =
+      malformed $ "Unsupported constant type " ++ show (PP.pretty ty)
+
+    malformed :: String -> TopLevel a
+    malformed msg = fail $ "mir_const: " ++ msg
+
 mir_i8 :: Mir.Ty
 mir_i8 = Mir.TyInt Mir.B8
 
@@ -1663,7 +1733,7 @@ cryptolTypeOfActual mty =
     Mir.TyNever        -> Nothing
     Mir.TyForeign      -> Nothing
     Mir.TyLifetime     -> Nothing
-    Mir.TyConst        -> Nothing
+    Mir.TyConst _      -> Nothing
     Mir.TyErased       -> Nothing
     Mir.TyInterned _   -> Nothing
     Mir.TyDynamic _    -> Nothing

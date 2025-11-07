@@ -1,12 +1,15 @@
  Loading file "err028.saw"
- err028.saw:7:22-7:27: Type mismatch.
+ Type errors:
+  err028.saw:5:9-5:15: Kind mismatch: expected "* -> *" but found "*"
+  err028.saw:5:22-5:27: Type mismatch.
     Mismatch of type constructors. Expected: <Block> but got String
-    err028.saw:7:9-7:19: The type String Int arises from this type annotation
-    err028.saw:7:22-7:27: The type String arises from the type of this term
+    err028.saw:5:9-5:19: The type t.0 Int arises from this type annotation
+    err028.saw:5:22-5:27: The type String arises from the type of this term
 
-    Expected: String Int
+    Expected: t.0 Int
     Found:    String
 
-    within "x" (err028.saw:7:5-7:6)
+    within "x" (err028.saw:5:5-5:6)
+
 
 FAILED

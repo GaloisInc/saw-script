@@ -1,0 +1,3 @@
+ Loading file "err063.saw"
+ err063.saw:4:1-4:29: Redefinition of type __DEPRECATED__ (which is not currently visible)
+FAILED
