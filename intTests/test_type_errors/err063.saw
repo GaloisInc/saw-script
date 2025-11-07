@@ -1,0 +1,4 @@
+// typedefing over a builtin abstract type is illegal
+// (even if the type isn't visible)
+
+typedef __DEPRECATED__ = Int;

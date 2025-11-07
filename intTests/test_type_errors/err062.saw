@@ -1,0 +1,3 @@
+// typedefing over a builtin abstract type is illegal
+
+typedef JVMValue = Int;

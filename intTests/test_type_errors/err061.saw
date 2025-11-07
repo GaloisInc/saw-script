@@ -1,0 +1,4 @@
+// multiple typedefs of the same name are illegal
+
+typedef Foo = Int;
+typedef Foo = Bool;
