@@ -81,7 +81,7 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#structure-of-a-specification">Structure of a Specification</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#creating-fresh-variables">Creating Fresh Variables</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#the-setupvalue-jvmvalue-and-mirvalue-types">The SetupValue, JVMValue, and MIRValue Types</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#the-llvmvalue-jvmvalue-and-mirvalue-types">The LLVMValue, JVMValue, and MIRValue Types</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#cryptol-type-correspondence">Cryptol type correspondence</a></li>
 </ul>
 </li>
@@ -391,17 +391,19 @@ later) an arbitrary value, without specifying what that value should be.
 To express such a pattern, you can also run <code class="docutils literal notranslate"><span class="pre">llvm_fresh_var</span></code> from
 the post state (i.e., after <code class="docutils literal notranslate"><span class="pre">llvm_execute_func</span></code>).</p>
 </section>
-<section id="the-setupvalue-jvmvalue-and-mirvalue-types">
-<h2>The SetupValue, JVMValue, and MIRValue Types<a class="headerlink" href="#the-setupvalue-jvmvalue-and-mirvalue-types" title="Link to this heading"></a></h2>
+<section id="the-llvmvalue-jvmvalue-and-mirvalue-types">
+<h2>The LLVMValue, JVMValue, and MIRValue Types<a class="headerlink" href="#the-llvmvalue-jvmvalue-and-mirvalue-types" title="Link to this heading"></a></h2>
 <p>Many specifications require reasoning about both pure values and about
-the configuration of the heap. The <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code> type corresponds to
+the configuration of the heap.
+The “setup value” types (<code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code>, <code class="docutils literal notranslate"><span class="pre">JVMValue</span></code>, and <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>)
+correspond to
 values that can occur during symbolic execution, which includes both
 <code class="docutils literal notranslate"><span class="pre">Term</span></code> values, pointers, and composite types consisting of either of
 these (both structures and arrays).</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">llvm_term</span></code>, <code class="docutils literal notranslate"><span class="pre">jvm_term</span></code>, and <code class="docutils literal notranslate"><span class="pre">mir_term</span></code> functions create a <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code>,
+<p>The <code class="docutils literal notranslate"><span class="pre">llvm_term</span></code>, <code class="docutils literal notranslate"><span class="pre">jvm_term</span></code>, and <code class="docutils literal notranslate"><span class="pre">mir_term</span></code> functions create a <code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code>,
 <code class="docutils literal notranslate"><span class="pre">JVMValue</span></code>, or <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>, respectively, from a <code class="docutils literal notranslate"><span class="pre">Term</span></code>:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_term</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_term</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_term</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">JVMValue</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_term</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span></code></p></li>
 </ul>
@@ -495,7 +497,7 @@ to <code class="docutils literal notranslate"><span class="pre">&lt;ty_i&gt;</sp
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_execute_func</span> <span class="pre">:</span> <span class="pre">[SetupValue]</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_execute_func</span> <span class="pre">:</span> <span class="pre">[LLVMValue]</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_execute_func</span> <span class="pre">:</span> <span class="pre">[JVMValue]</span> <span class="pre">-&gt;</span> <span class="pre">JVMSetup</span> <span class="pre">()</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_execute_func</span> <span class="pre">:</span> <span class="pre">[MIRValue]</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">()</span></code></p></li>
 </ul>
@@ -505,7 +507,7 @@ of the state elements already configured.</p>
 <p>To specify the value that should be returned by the function being
 verified use the <code class="docutils literal notranslate"><span class="pre">{llvm,jvm,mir}_return</span></code> command.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_return</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_return</span> <span class="pre">:</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_return</span> <span class="pre">:</span> <span class="pre">JVMValue</span> <span class="pre">-&gt;</span> <span class="pre">JVMSetup</span> <span class="pre">()</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_return</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">()</span></code></p></li>
 </ul>
@@ -827,11 +829,11 @@ point to allocated memory before they are called. The <code class="docutils lite
 command allows you to specify that a function expects a particular
 pointer to refer to an allocated region appropriate for a specific type.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_alloc</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_alloc</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">LLVMValue</span></code></p></li>
 </ul>
-<p>This command returns a <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code> consisting of a pointer to the
+<p>This command returns a <code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code> consisting of a pointer to the
 allocated space, which can be used wherever a pointer-valued
-<code class="docutils literal notranslate"><span class="pre">SetupValue</span></code> can be used.</p>
+<code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code> can be used.</p>
 <p>In the initial state, <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code> specifies that the function
 expects a pointer to allocated space to exist. In the final state, it
 specifies that the function itself performs an allocation.</p>
@@ -839,17 +841,17 @@ specifies that the function itself performs an allocation.</p>
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_fresh_pointer</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_fresh_pointer</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">LLVMValue</span></code></p></li>
 </ul>
 <p>The NULL pointer is called <code class="docutils literal notranslate"><span class="pre">llvm_null</span></code> in LLVM and <code class="docutils literal notranslate"><span class="pre">jvm_null</span></code> in
 JVM:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_null</span> <span class="pre">:</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_null</span> <span class="pre">:</span> <span class="pre">LLVMValue</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_null</span> <span class="pre">:</span> <span class="pre">JVMValue</span></code></p></li>
 </ul>
 <p>One final, slightly more obscure command is the following:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_alloc_readonly</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_alloc_readonly</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">LLVMValue</span></code></p></li>
 </ul>
 <p>This works like <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code> except that writes to the space
 allocated are forbidden. This can be useful for specifying that a
@@ -919,11 +921,11 @@ can do with the <em>points-to</em> family of commands.</p>
 <h3>LLVM heap values<a class="headerlink" href="#llvm-heap-values" title="Link to this heading"></a></h3>
 <p>LLVM verification primarily uses the <code class="docutils literal notranslate"><span class="pre">llvm_points_to</span></code> command:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_points_to</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code>
-takes two <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code> arguments, the first of which must be a pointer,
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_points_to</span> <span class="pre">:</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code>
+takes two <code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code> arguments, the first of which must be a pointer,
 and states that the memory specified by that pointer should contain the
 value given in the second argument (which may be any type of
-<code class="docutils literal notranslate"><span class="pre">SetupValue</span></code>).</p></li>
+<code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code>).</p></li>
 </ul>
 <p>When used in the final state, <code class="docutils literal notranslate"><span class="pre">llvm_points_to</span></code> specifies that the
 given pointer <em>should</em> point to the given value when the function
@@ -932,7 +934,7 @@ finishes.</p>
 type as another through casts, it can be useful to specify that a
 pointer points to a value that does not agree with its static type.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_points_to_untyped</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code> works like <code class="docutils literal notranslate"><span class="pre">llvm_points_to</span></code> but omits type
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_points_to_untyped</span> <span class="pre">:</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code> works like <code class="docutils literal notranslate"><span class="pre">llvm_points_to</span></code> but omits type
 checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
 reinterpretation is intentional. As an alternative, one
@@ -1032,10 +1034,10 @@ in SAWScript specs, for ease of conversion from Cryptol sequences.</p>
 compound types (arrays or <code class="docutils literal notranslate"><span class="pre">struct</span></code>s). Compound values can be dealt with
 either piecewise or in their entirety.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_elem</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code> yields a pointer to
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_elem</span> <span class="pre">:</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code> yields a pointer to
 an internal element of a compound value. For arrays, the <code class="docutils literal notranslate"><span class="pre">Int</span></code> parameter
 is the array index. For <code class="docutils literal notranslate"><span class="pre">struct</span></code> values, it is the field index.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_field</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code> yields a pointer
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_field</span> <span class="pre">:</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code> yields a pointer
 to a particular named <code class="docutils literal notranslate"><span class="pre">struct</span></code> field, if debugging information is
 available in the bitcode.</p></li>
 </ul>
@@ -1045,8 +1047,8 @@ Sometimes, however, it is more convenient to specify all array elements
 or field values at once. The <code class="docutils literal notranslate"><span class="pre">llvm_array_value</span></code> and <code class="docutils literal notranslate"><span class="pre">llvm_struct_value</span></code>
 functions construct compound values from lists of element values.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_array_value</span> <span class="pre">:</span> <span class="pre">[SetupValue]</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_struct_value</span> <span class="pre">:</span> <span class="pre">[SetupValue]</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_array_value</span> <span class="pre">:</span> <span class="pre">[LLVMValue]</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_struct_value</span> <span class="pre">:</span> <span class="pre">[LLVMValue]</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code></p></li>
 </ul>
 <p>To specify an array or struct in which each element or field is
 symbolic, it would be possible, but tedious, to use a large combination
@@ -1054,7 +1056,7 @@ of <code class="docutils literal notranslate"><span class="pre">llvm_fresh_var</
 However, the following function can simplify the common case
 where you want every element or field to have a fresh value.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_fresh_expanded_val</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_fresh_expanded_val</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">LLVMValue</span></code></p></li>
 </ul>
 <p>The <code class="docutils literal notranslate"><span class="pre">llvm_struct_value</span></code> function normally creates a <code class="docutils literal notranslate"><span class="pre">struct</span></code> whose layout
 obeys the alignment rules of the platform specified in the LLVM file
@@ -1062,14 +1064,14 @@ being analyzed. Structs in LLVM can explicitly be “packed”, however, so
 that every field immediately follows the previous in memory. The
 following command will create values of such types:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_packed_struct_value</span> <span class="pre">:</span> <span class="pre">[SetupValue]</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_packed_struct_value</span> <span class="pre">:</span> <span class="pre">[LLVMValue]</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code></p></li>
 </ul>
 <p>C programs will sometimes make use of pointer casting to implement
 various kinds of polymorphic behaviors, either via direct pointer
 casts, or by using <code class="docutils literal notranslate"><span class="pre">union</span></code> types to codify the pattern. To reason
 about such cases, the following operation is useful.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_cast_pointer</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_cast_pointer</span> <span class="pre">:</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code></p></li>
 </ul>
 <p>This function function casts the type of the input value (which must be a
 pointer) so that it points to values of the given type.  This mainly
@@ -1081,7 +1083,7 @@ cases.</p>
 <p>We can automate the process of applying pointer casts if we have debug
 information avaliable:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_union</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_union</span> <span class="pre">:</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code></p></li>
 </ul>
 <p>Given a pointer setup value, this attempts to select the named union
 branch and cast the type of the pointer. For this to work, debug
@@ -1574,7 +1576,7 @@ special care is required to write SAW specifications involving bitfields. For
 this reason, there is a dedicated <code class="docutils literal notranslate"><span class="pre">llvm_points_to_bitfield</span></code> function for this
 purpose:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_points_to_bitfield</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_points_to_bitfield</span> <span class="pre">:</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code></p></li>
 </ul>
 <p>The type of <code class="docutils literal notranslate"><span class="pre">llvm_points_to_bitfield</span></code> is similar that of <code class="docutils literal notranslate"><span class="pre">llvm_points_to</span></code>,
 except that it takes the name of a field within a bitfield as an additional
@@ -1641,7 +1643,7 @@ require a call to <code class="docutils literal notranslate"><span class="pre">l
 <p>Pointers to global variables or functions can be accessed with
 <code class="docutils literal notranslate"><span class="pre">llvm_global</span></code>:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_global</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_global</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code></p></li>
 </ul>
 <p>Like the pointers returned by <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code>, however, these aren’t
 initialized at the beginning of symbolic – setting global variables may
@@ -1686,7 +1688,7 @@ truly be compositional. For instance, it’s not the case that <code class="docu
 <code class="docutils literal notranslate"><span class="pre">x</span></code> in a way that crosses function boundaries.</p>
 <p>To deal with this, we can use the following function:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_global_initializer</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span></code> returns the value
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_global_initializer</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span></code> returns the value
 of the constant global initializer for the named global variable.</p></li>
 </ul>
 <p>Given this function, the specifications for <code class="docutils literal notranslate"><span class="pre">f</span></code> and <code class="docutils literal notranslate"><span class="pre">g</span></code> can make this
@@ -1808,7 +1810,7 @@ invariants that make sense in both phases.  The <code class="docutils literal no
 state that two values should be equal, and can be used in either the initial or
 the final state.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_equal</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_equal</span> <span class="pre">:</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMValue</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">()</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_equal</span> <span class="pre">:</span> <span class="pre">JVMValue</span> <span class="pre">-&gt;</span> <span class="pre">JVMValue</span> <span class="pre">-&gt;</span> <span class="pre">JVMSetup</span> <span class="pre">()</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_equal</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">()</span></code></p></li>
 </ul>
@@ -1989,8 +1991,8 @@ above.</p>
 <section id="utility-functions">
 <h4>Utility Functions<a class="headerlink" href="#utility-functions" title="Link to this heading"></a></h4>
 <p>We first define the function
-<code class="docutils literal notranslate"><span class="pre">alloc_init</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">SetupValue</span></code>.</p>
-<p><code class="docutils literal notranslate"><span class="pre">alloc_init</span> <span class="pre">ty</span> <span class="pre">v</span></code> returns a <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code> consisting of a pointer to memory
+<code class="docutils literal notranslate"><span class="pre">alloc_init</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">LLVMValue</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">alloc_init</span> <span class="pre">ty</span> <span class="pre">v</span></code> returns a <code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code> consisting of a pointer to memory
 allocated and initialized to a value <code class="docutils literal notranslate"><span class="pre">v</span></code> of type <code class="docutils literal notranslate"><span class="pre">ty</span></code>. <code class="docutils literal notranslate"><span class="pre">alloc_init_readonly</span></code>
 does the same, except the memory allocated cannot be written to.</p>
 <div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">&quot;Salsa20.cry&quot;</span><span class="p">;</span>
@@ -2009,7 +2011,7 @@ does the same, except the memory allocated cannot be written to.</p>
 </pre></div>
 </div>
 <p>We now define
-<code class="docutils literal notranslate"><span class="pre">ptr_to_fresh</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">(Term,</span> <span class="pre">SetupValue)</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">ptr_to_fresh</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">(Term,</span> <span class="pre">LLVMValue)</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">ptr_to_fresh</span> <span class="pre">n</span> <span class="pre">ty</span></code> returns a pair <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">p)</span></code> consisting of a fresh symbolic
 variable <code class="docutils literal notranslate"><span class="pre">x</span></code> of type <code class="docutils literal notranslate"><span class="pre">ty</span></code> and a pointer <code class="docutils literal notranslate"><span class="pre">p</span></code> to it. <code class="docutils literal notranslate"><span class="pre">n</span></code> specifies the
 name that SAW should use when printing <code class="docutils literal notranslate"><span class="pre">x</span></code>. <code class="docutils literal notranslate"><span class="pre">ptr_to_fresh_readonly</span></code> does the
