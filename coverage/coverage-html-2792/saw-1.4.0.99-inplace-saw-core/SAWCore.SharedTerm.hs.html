@@ -1226,7 +1226,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1207 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (convertsToNat    -&gt; Just k) = scFlatTermF sc (NatLit k) &gt;&gt;= go xs</span>
 <span class="lineno"> 1208 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asApp            -&gt; Just (t, x)) = go (ElimApp x : xs) t</span>
 <span class="lineno"> 1209 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asRecordSelector -&gt; Just (t, n)) = go (ElimProj n : xs) t</span>
-<span class="lineno"> 1210 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asPairSelector -&gt; Just (t, i))   = <span class="nottickedoff">go (ElimPair i : xs) t</span></span>
+<span class="lineno"> 1210 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asPairSelector -&gt; Just (t, i))   = go (ElimPair i : xs) t</span>
 <span class="lineno"> 1211 </span><span class="spaces">    </span><span class="istickedoff">go (ElimApp x : xs)       (asLambda -&gt; Just (vn, _, body))  = betaReduce xs [(vn, x)] body</span>
 <span class="lineno"> 1212 </span><span class="spaces">    </span><span class="istickedoff">go (ElimPair i : xs)      (asPairValue -&gt; Just (a, b))      = <span class="nottickedoff">go xs (if i then b else a)</span></span>
 <span class="lineno"> 1213 </span><span class="spaces">    </span><span class="istickedoff">go (ElimProj fld : xs)    (asRecordValue -&gt; Just elems)     = case Map.lookup fld elems of</span>
@@ -1283,7 +1283,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1264 </span><span class="spaces">    </span><span class="istickedoff">reapply :: Term -&gt; WHNFElim -&gt; IO Term</span>
 <span class="lineno"> 1265 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimApp x) = scApply sc t x</span>
 <span class="lineno"> 1266 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimProj i) = <span class="nottickedoff">scRecordSelect sc t i</span></span>
-<span class="lineno"> 1267 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimPair i) = <span class="nottickedoff">scPairSelector sc t i</span></span>
+<span class="lineno"> 1267 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimPair i) = scPairSelector sc t i</span>
 <span class="lineno"> 1268 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimRecursor r _crec params motive elims ixs) =</span>
 <span class="lineno"> 1269 </span><span class="spaces">      </span><span class="istickedoff">do f &lt;- scApplyAll sc r (params ++ motive : elims ++ ixs)</span>
 <span class="lineno"> 1270 </span><span class="spaces">         </span><span class="istickedoff">scApply sc f t</span>
@@ -1341,22 +1341,22 @@ span.spaces    { background: white }
 <span class="lineno"> 1322 </span><span class="spaces">                  </span><span class="istickedoff">Just x -&gt; <span class="nottickedoff">join (goF c vm &lt;$&gt; whnf c x &lt;*&gt; return y)</span></span>
 <span class="lineno"> 1323 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt; pure False</span>
 <span class="lineno"> 1324 </span><span class="spaces">       </span><span class="istickedoff">goF c vm x (Constant ny)</span>
-<span class="lineno"> 1325 </span><span class="spaces">           </span><span class="istickedoff">| <span class="nottickedoff">unfoldConst</span> =</span>
-<span class="lineno"> 1326 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">do my &lt;- scFindDefBody sc (nameIndex ny)</span></span>
-<span class="lineno"> 1327 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">case my of</span></span>
-<span class="lineno"> 1328 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">Just y -&gt; join (goF c vm &lt;$&gt; return x &lt;*&gt; whnf c y)</span></span>
-<span class="lineno"> 1329 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; pure False</span></span>
+<span class="lineno"> 1325 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">unfoldConst</span> =</span>
+<span class="lineno"> 1326 </span><span class="spaces">             </span><span class="istickedoff">do my &lt;- scFindDefBody sc (nameIndex ny)</span>
+<span class="lineno"> 1327 </span><span class="spaces">                </span><span class="istickedoff">case my of</span>
+<span class="lineno"> 1328 </span><span class="spaces">                  </span><span class="istickedoff">Just y -&gt; <span class="nottickedoff">join (goF c vm &lt;$&gt; return x &lt;*&gt; whnf c y)</span></span>
+<span class="lineno"> 1329 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt; pure False</span>
 <span class="lineno"> 1330 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1331 </span><span class="spaces">       </span><span class="istickedoff">goF c vm (FTermF ftf1) (FTermF ftf2) =</span>
 <span class="lineno"> 1332 </span><span class="spaces">               </span><span class="istickedoff">case zipWithFlatTermF (go c vm) ftf1 ftf2 of</span>
-<span class="lineno"> 1333 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">return False</span></span>
+<span class="lineno"> 1333 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">False</span></span>
 <span class="lineno"> 1334 </span><span class="spaces">                 </span><span class="istickedoff">Just zipped -&gt; Fold.and &lt;$&gt; traverse id zipped</span>
 <span class="lineno"> 1335 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1336 </span><span class="spaces">       </span><span class="istickedoff">goF c vm (App f1 x1) (App f2 x2) =</span>
 <span class="lineno"> 1337 </span><span class="spaces">              </span><span class="istickedoff">pure (&amp;&amp;) &lt;*&gt; go c vm f1 f2 &lt;*&gt; go c vm x1 x2</span>
 <span class="lineno"> 1338 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1339 </span><span class="spaces">       </span><span class="istickedoff">goF c vm (Lambda (vnIndex -&gt; i1) ty1 body1) (Lambda (vnIndex -&gt; i2) ty2 body2) =</span>
-<span class="lineno"> 1340 </span><span class="spaces">         </span><span class="istickedoff">pure (&amp;&amp;) &lt;*&gt; go <span class="nottickedoff">c</span> <span class="nottickedoff">vm</span> ty1 ty2 &lt;*&gt; go c vm' body1 body2</span>
+<span class="lineno"> 1340 </span><span class="spaces">         </span><span class="istickedoff">pure (&amp;&amp;) &lt;*&gt; go c <span class="nottickedoff">vm</span> ty1 ty2 &lt;*&gt; go c vm' body1 body2</span>
 <span class="lineno"> 1341 </span><span class="spaces">           </span><span class="istickedoff">where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm</span>
 <span class="lineno"> 1342 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1343 </span><span class="spaces">       </span><span class="istickedoff">goF c vm (Pi (vnIndex -&gt; i1) ty1 body1) (Pi (vnIndex -&gt; i2) ty2 body2) =</span>
@@ -1364,13 +1364,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1345 </span><span class="spaces">           </span><span class="istickedoff">where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm</span>
 <span class="lineno"> 1346 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1347 </span><span class="spaces">       </span><span class="istickedoff">goF c vm (Variable x1 t1) (Variable x2 t2)</span>
-<span class="lineno"> 1348 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">i' == vnIndex x2</span> = go <span class="nottickedoff">c</span> vm t1 t2</span>
+<span class="lineno"> 1348 </span><span class="spaces">         </span><span class="istickedoff">| i' == vnIndex x2 = go <span class="nottickedoff">c</span> vm t1 t2</span>
 <span class="lineno"> 1349 </span><span class="spaces">           </span><span class="istickedoff">where i' = case IntMap.lookup (vnIndex x1) vm of</span>
 <span class="lineno"> 1350 </span><span class="spaces">                        </span><span class="istickedoff">Nothing -&gt; vnIndex x1</span>
 <span class="lineno"> 1351 </span><span class="spaces">                        </span><span class="istickedoff">Just i -&gt; i</span>
 <span class="lineno"> 1352 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1353 </span><span class="spaces">       </span><span class="istickedoff">-- final catch-all case</span>
-<span class="lineno"> 1354 </span><span class="spaces">       </span><span class="istickedoff">goF _c _vm _x _y = <span class="nottickedoff">pure False</span></span></span>
+<span class="lineno"> 1354 </span><span class="spaces">       </span><span class="istickedoff">goF _c _vm _x _y = pure False</span></span>
 <span class="lineno"> 1355 </span>
 <span class="lineno"> 1356 </span>-- | Test if two terms are convertible using 'scWhnf' for evaluation
 <span class="lineno"> 1357 </span>scConvertible :: SharedContext
@@ -1675,8 +1675,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1656 </span>-- | Create a term representing either the left or right projection of the
 <span class="lineno"> 1657 </span>-- given 'Term', depending on the given 'Bool': left if @False@, right if @True@.
 <span class="lineno"> 1658 </span>scPairSelector :: SharedContext -&gt; Term -&gt; Bool -&gt; IO Term
-<span class="lineno"> 1659 </span><span class="decl"><span class="nottickedoff">scPairSelector sc t False = scPairLeft sc t</span>
-<span class="lineno"> 1660 </span><span class="spaces"></span><span class="nottickedoff">scPairSelector sc t True = scPairRight sc t</span></span>
+<span class="lineno"> 1659 </span><span class="decl"><span class="istickedoff">scPairSelector sc t False = scPairLeft sc t</span>
+<span class="lineno"> 1660 </span><span class="spaces"></span><span class="istickedoff">scPairSelector sc t True = <span class="nottickedoff">scPairRight sc t</span></span></span>
 <span class="lineno"> 1661 </span>
 <span class="lineno"> 1662 </span>-- | @scTupleSelector sc t i n@ returns a term selecting the @i@th component of
 <span class="lineno"> 1663 </span>-- an @n@-place tuple 'Term', @t@.

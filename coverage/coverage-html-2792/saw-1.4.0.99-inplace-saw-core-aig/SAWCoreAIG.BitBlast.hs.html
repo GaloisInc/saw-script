@@ -572,7 +572,7 @@ span.spaces    { background: white }
 <span class="lineno">  553 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList [ (vnIndex x, v) | (x, v) &lt;- vars ]</span>
 <span class="lineno">  554 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- bitBlastBasic be modmap addlPrims varMap t</span>
 <span class="lineno">  555 </span><span class="spaces">          </span><span class="istickedoff">case x of</span>
-<span class="lineno">  556 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l <span class="nottickedoff">varShapes</span></span>
+<span class="lineno">  556 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l varShapes</span>
 <span class="lineno">  557 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;SAWCoreAIG.BitBlast.withBitBlastedSATQuery: non-boolean result type.&quot;</span></span></span>
 
 </pre>

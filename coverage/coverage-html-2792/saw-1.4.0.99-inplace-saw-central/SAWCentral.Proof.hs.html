@@ -1877,7 +1877,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1858 </span><span class="spaces">                      </span><span class="istickedoff">do let (es1, es2) = splitAt (length gs') es</span>
 <span class="lineno"> 1859 </span><span class="spaces">                         </span><span class="istickedoff">e &lt;- buildTacticEvidence es1</span>
 <span class="lineno"> 1860 </span><span class="spaces">                         </span><span class="istickedoff">evidenceCont (e:es2)</span>
-<span class="lineno"> 1861 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') <span class="nottickedoff">timeout</span> evidenceCont' <span class="nottickedoff">start</span></span>
+<span class="lineno"> 1861 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') timeout evidenceCont' <span class="nottickedoff">start</span></span>
 <span class="lineno"> 1862 </span><span class="spaces">              </span><span class="istickedoff">seq ps' (return (Right (<span class="nottickedoff">x</span>, ps')))</span></span>
 <span class="lineno"> 1863 </span>
 <span class="lineno"> 1864 </span>predicateToSATQuery :: SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO SATQuery
@@ -1950,7 +1950,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1931 </span><span class="spaces">    </span><span class="istickedoff">filterFirstOrderVars mmap fovars absvars ((x, t) : es) =</span>
 <span class="lineno"> 1932 </span><span class="spaces">      </span><span class="istickedoff">case evalFOT mmap t of</span>
 <span class="lineno"> 1933 </span><span class="spaces">         </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">filterFirstOrderVars mmap fovars (Set.insert (vnIndex x) absvars) es</span></span>
-<span class="lineno"> 1934 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert x <span class="nottickedoff">fot</span> fovars) absvars es</span>
+<span class="lineno"> 1934 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert x fot fovars) absvars es</span>
 <span class="lineno"> 1935 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1936 </span><span class="spaces">    </span><span class="istickedoff">processAssert mmap tp =</span>
 <span class="lineno"> 1937 </span><span class="spaces">      </span><span class="istickedoff">case asEqTrue tp of</span>

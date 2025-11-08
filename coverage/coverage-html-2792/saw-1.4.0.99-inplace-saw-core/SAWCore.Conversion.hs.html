@@ -593,8 +593,8 @@ span.spaces    { background: white }
 <span class="lineno">  574 </span>divNat_NatLit :: Conversion
 <span class="lineno">  575 </span><span class="decl"><span class="istickedoff">divNat_NatLit = Conversion $</span>
 <span class="lineno">  576 </span><span class="spaces">  </span><span class="istickedoff">thenMatcher (asGlobalDef &quot;Prelude.divNat&quot; &lt;:&gt; asAnyNatLit &lt;:&gt; asAnyNatLit)</span>
-<span class="lineno">  577 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(\(_ :*: x :*: y) -&gt;</span></span>
-<span class="lineno">  578 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">if y /= 0 then Just (mkNatLit (x `div` y)) else Nothing)</span></span></span>
+<span class="lineno">  577 </span><span class="spaces">    </span><span class="istickedoff">(\(_ :*: x :*: y) -&gt;</span>
+<span class="lineno">  578 </span><span class="spaces">         </span><span class="istickedoff">if <span class="tickonlytrue">y /= 0</span> then Just (mkNatLit (x `div` y)) else <span class="nottickedoff">Nothing</span>)</span></span>
 <span class="lineno">  579 </span>
 <span class="lineno">  580 </span>remNat_NatLit :: Conversion
 <span class="lineno">  581 </span><span class="decl"><span class="istickedoff">remNat_NatLit = Conversion $</span>
