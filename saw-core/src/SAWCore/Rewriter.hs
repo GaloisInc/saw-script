@@ -824,7 +824,8 @@ rewriteSharedTermTypeSafe sc ss t0 =
           FTermF ftf -> FTermF <$> rewriteFTermF convertibleFlag ftf
           App e1 e2 ->
               do t1 <- scTypeOf sc e1
-                 case unwrapTermF t1 of
+                 t1' <- scWhnf sc t1
+                 case unwrapTermF t1' of
                    -- If type of e1 is not a dependent type, we can use any rule to rewrite e2
                    -- otherwise, we only rewrite using convertible rules
                    -- This prevents rewriting e2 from changing type of @App e1 e2@.
@@ -832,7 +833,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
                      | IntSet.notMember (vnIndex x) (freeVars t) ->
                          App <$> rewriteAll convertibleFlag e1 <*> rewriteAll convertibleFlag e2
                    _ -> App <$> rewriteAll convertibleFlag e1 <*> rewriteAll ConvertibleRulesOnly e2
-                   -- could compute WHNF of t1 to see if it's a thing that doesn't match Pi but behaves like Pi
           Lambda x t1 t2 ->
             do var <- scVariable sc x t1 -- we don't rewrite t1 which represents types
                t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
