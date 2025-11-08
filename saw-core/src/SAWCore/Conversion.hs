@@ -452,6 +452,11 @@ runConversion (Conversion _ m) = runMatcher m
 conversionPat :: Conversion -> Net.Pat
 conversionPat (Conversion _ m) = matcherPat m
 
+-- | Constructs a Conversion from a Matcher (TermBuilder Term)
+-- This assumes the default case that the Conversion is
+-- non-convertible; if the Conversion is convertible with regard
+-- to the SAW type system, it should be constructed using
+-- the data constructor.
 newConversion :: Matcher (TermBuilder Term) -> Conversion
 newConversion = Conversion False
 
