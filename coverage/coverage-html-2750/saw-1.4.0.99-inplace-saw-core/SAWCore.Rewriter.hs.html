@@ -843,15 +843,15 @@ span.spaces    { background: white }
 <span class="lineno">  824 </span><span class="spaces">          </span><span class="istickedoff">FTermF ftf -&gt; FTermF &lt;$&gt; rewriteFTermF convertibleFlag ftf</span>
 <span class="lineno">  825 </span><span class="spaces">          </span><span class="istickedoff">App e1 e2 -&gt;</span>
 <span class="lineno">  826 </span><span class="spaces">              </span><span class="istickedoff">do t1 &lt;- scTypeOf sc e1</span>
-<span class="lineno">  827 </span><span class="spaces">                 </span><span class="istickedoff">case unwrapTermF t1 of</span>
-<span class="lineno">  828 </span><span class="spaces">                   </span><span class="istickedoff">-- If type of e1 is not a dependent type, we can use any rule to rewrite e2</span>
-<span class="lineno">  829 </span><span class="spaces">                   </span><span class="istickedoff">-- otherwise, we only rewrite using convertible rules</span>
-<span class="lineno">  830 </span><span class="spaces">                   </span><span class="istickedoff">-- This prevents rewriting e2 from changing type of @App e1 e2@.</span>
-<span class="lineno">  831 </span><span class="spaces">                   </span><span class="istickedoff">Pi x _ t</span>
-<span class="lineno">  832 </span><span class="spaces">                     </span><span class="istickedoff">| IntSet.notMember (vnIndex x) (freeVars t) -&gt;</span>
-<span class="lineno">  833 </span><span class="spaces">                         </span><span class="istickedoff">App &lt;$&gt; rewriteAll convertibleFlag e1 &lt;*&gt; rewriteAll convertibleFlag e2</span>
-<span class="lineno">  834 </span><span class="spaces">                   </span><span class="istickedoff">_ -&gt; App &lt;$&gt; rewriteAll convertibleFlag e1 &lt;*&gt; rewriteAll ConvertibleRulesOnly e2</span>
-<span class="lineno">  835 </span><span class="spaces">                   </span><span class="istickedoff">-- could compute WHNF of t1 to see if it's a thing that doesn't match Pi but behaves like Pi</span>
+<span class="lineno">  827 </span><span class="spaces">                 </span><span class="istickedoff">t1' &lt;- scWhnf sc t1</span>
+<span class="lineno">  828 </span><span class="spaces">                 </span><span class="istickedoff">case unwrapTermF t1' of</span>
+<span class="lineno">  829 </span><span class="spaces">                   </span><span class="istickedoff">-- If type of e1 is not a dependent type, we can use any rule to rewrite e2</span>
+<span class="lineno">  830 </span><span class="spaces">                   </span><span class="istickedoff">-- otherwise, we only rewrite using convertible rules</span>
+<span class="lineno">  831 </span><span class="spaces">                   </span><span class="istickedoff">-- This prevents rewriting e2 from changing type of @App e1 e2@.</span>
+<span class="lineno">  832 </span><span class="spaces">                   </span><span class="istickedoff">Pi x _ t</span>
+<span class="lineno">  833 </span><span class="spaces">                     </span><span class="istickedoff">| IntSet.notMember (vnIndex x) (freeVars t) -&gt;</span>
+<span class="lineno">  834 </span><span class="spaces">                         </span><span class="istickedoff">App &lt;$&gt; rewriteAll convertibleFlag e1 &lt;*&gt; rewriteAll convertibleFlag e2</span>
+<span class="lineno">  835 </span><span class="spaces">                   </span><span class="istickedoff">_ -&gt; App &lt;$&gt; rewriteAll convertibleFlag e1 &lt;*&gt; rewriteAll ConvertibleRulesOnly e2</span>
 <span class="lineno">  836 </span><span class="spaces">          </span><span class="istickedoff">Lambda x t1 t2 -&gt;</span>
 <span class="lineno">  837 </span><span class="spaces">            </span><span class="istickedoff">do var &lt;- scVariable sc x t1 -- we don't rewrite t1 which represents types</span>
 <span class="lineno">  838 </span><span class="spaces">               </span><span class="istickedoff">t2' &lt;- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2</span>
