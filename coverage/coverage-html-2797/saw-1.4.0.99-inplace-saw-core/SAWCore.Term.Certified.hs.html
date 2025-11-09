@@ -169,7 +169,7 @@ span.spaces    { background: white }
 <span class="lineno">  150 </span><span class="spaces">     </span><span class="istickedoff">ok &lt;- scSubtype sc (rawType arg) t1</span>
 <span class="lineno">  151 </span><span class="spaces">     </span><span class="istickedoff">unless ok $ <span class="nottickedoff">fail $ unlines $</span></span>
 <span class="lineno">  152 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">[&quot;Not a subtype&quot;, &quot;expected: &quot; ++ showTerm t1, &quot;got: &quot; ++ showTerm (rawType arg)]</span></span>
-<span class="lineno">  153 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- Raw.scInstantiate sc (IntMap.singleton i (rawTerm arg)) t2</span>
+<span class="lineno">  153 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- Raw.scInstantiateBeta sc (IntMap.singleton i (rawTerm arg)) t2</span>
 <span class="lineno">  154 </span><span class="spaces">     </span><span class="istickedoff">pure (Term tm tp)</span></span>
 <span class="lineno">  155 </span>
 <span class="lineno">  156 </span>-- possible errors: not a type, context mismatch, variable free in context
@@ -226,7 +226,7 @@ span.spaces    { background: white }
 <span class="lineno">  207 </span>-- possible errors: not a type
 <span class="lineno">  208 </span>scVariable :: SharedContext -&gt; VarName -&gt; Term -&gt; IO Term
 <span class="lineno">  209 </span><span class="decl"><span class="istickedoff">scVariable sc vn t =</span>
-<span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">do _s &lt;- ensureSort sc (rawType t)</span>
+<span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">do _s &lt;- ensureSort <span class="nottickedoff">sc</span> (rawType t)</span>
 <span class="lineno">  211 </span><span class="spaces">     </span><span class="istickedoff">let tp = rawTerm t</span>
 <span class="lineno">  212 </span><span class="spaces">     </span><span class="istickedoff">tm &lt;- Raw.scVariable sc vn tp</span>
 <span class="lineno">  213 </span><span class="spaces">     </span><span class="istickedoff">pure (Term tm tp)</span></span>
@@ -367,7 +367,7 @@ span.spaces    { background: white }
 <span class="lineno">  348 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;ensureRecognizer: Expected &quot; ++ s ++ &quot;, found: &quot; ++ showTerm trm'</span></span></span>
 <span class="lineno">  349 </span>
 <span class="lineno">  350 </span>ensureSort :: SharedContext -&gt; Raw.Term -&gt; IO Sort
-<span class="lineno">  351 </span><span class="decl"><span class="istickedoff">ensureSort sc tp = ensureRecognizer <span class="nottickedoff">&quot;Sort&quot;</span> sc asSort tp</span></span>
+<span class="lineno">  351 </span><span class="decl"><span class="istickedoff">ensureSort sc tp = ensureRecognizer <span class="nottickedoff">&quot;Sort&quot;</span> <span class="nottickedoff">sc</span> asSort tp</span></span>
 <span class="lineno">  352 </span>
 <span class="lineno">  353 </span>ensurePi :: SharedContext -&gt; Raw.Term -&gt; IO (VarName, Raw.Term, Raw.Term)
 <span class="lineno">  354 </span><span class="decl"><span class="istickedoff">ensurePi sc tp = ensureRecognizer <span class="nottickedoff">&quot;Pi&quot;</span> sc asPi tp</span></span>

@@ -147,7 +147,7 @@ span.spaces    { background: white }
 <span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">termf vm (FTermF ftf1) (FTermF ftf2) = ftermf vm ftf1 ftf2</span>
 <span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">termf vm (App t1 u1) (App t2 u2) = term vm t1 t2 &amp;&amp; term vm u1 u2</span>
 <span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Lambda (vnIndex -&gt; i1) t1 u1) (Lambda (vnIndex -&gt; i2) t2 u2) =</span>
-<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm</span>
+<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if i1 == i2 then vm else IntMap.insert i1 <span class="nottickedoff">i2</span> vm</span>
 <span class="lineno">  132 </span><span class="spaces">      </span><span class="istickedoff">in term <span class="nottickedoff">vm</span> t1 t2 &amp;&amp; term vm' u1 u2</span>
 <span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Pi (vnIndex -&gt; i1) t1 u1) (Pi (vnIndex -&gt; i2) t2 u2) =</span>
 <span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm</span>
@@ -159,7 +159,7 @@ span.spaces    { background: white }
 <span class="lineno">  140 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; x1 == x2</span>
 <span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">termf _ FTermF{}   _ = False</span>
 <span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">termf _ App{}      _ = False</span>
-<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">termf _ Lambda{}   _ = False</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">termf _ Lambda{}   _ = <span class="nottickedoff">False</span></span>
 <span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">termf _ Pi{}       _ = False</span>
 <span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff">termf _ Constant{} _ = False</span>
 <span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">termf _ Variable{} _ = False</span>
