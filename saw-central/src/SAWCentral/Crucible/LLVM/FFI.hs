@@ -212,7 +212,7 @@ mkSizeArg tyArgTerm = do
       [ mkOpenTerm tyArgTerm
       , vectorTypeOpenTerm sizeBitSize boolTypeOpenTerm
       , applyGlobalOpenTerm "Cryptol.PLiteralSeqBool"
-          [ctorOpenTerm "Cryptol.TCNum" [sizeBitSize]]
+          [applyGlobalOpenTerm "Cryptol.TCNum" [sizeBitSize]]
       ]
   where
   sizeBitSize = natOpenTerm $

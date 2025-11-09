@@ -56,7 +56,7 @@ module SAWCore.OpenTerm (
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   tupleOpenTerm', tupleTypeOpenTerm', projTupleOpenTerm',
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
-  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, variableOpenTerm,
+  globalOpenTerm, identOpenTerm, variableOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
   applyPiOpenTerm, piArgOpenTerm, lambdaOpenTerm, lambdaOpenTermMulti,
   piOpenTerm, piOpenTermMulti, arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
@@ -77,10 +77,6 @@ import SAWCore.Term.Raw
 import SAWCore.SharedTerm
 import qualified SAWCore.Term.Certified as SC
 import SAWCore.SCTypeCheck
-import SAWCore.Module
-  ( ctorName
-  , dtName
-  )
 
 
 -- | An open term is represented as a type-checking computation that computes a
@@ -248,30 +244,6 @@ projRecordOpenTerm (OpenTerm m) f =
   OpenTerm $ do t <- m
                 typeInferComplete $ RecordProj t f
 
--- | Build an 'OpenTerm' for a constructor applied to its arguments
-ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
-ctorOpenTerm c all_args = applyOpenTermMulti ctor_open_term all_args
-  where
-    ctor_open_term =
-      OpenTerm $
-      do maybe_ctor <- liftTCM scFindCtor c
-         ctor <- case maybe_ctor of
-                   Just ctor -> pure ctor
-                   Nothing -> throwTCError $ NoSuchCtor (ModuleIdentifier c)
-         typeInferComplete (Constant (ctorName ctor) :: TermF Term)
-
--- | Build an 'OpenTerm' for a datatype applied to its arguments
-dataTypeOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
-dataTypeOpenTerm d all_args = applyOpenTermMulti dt_open_term all_args
-  where
-    dt_open_term =
-      OpenTerm $
-      do maybe_dt <- liftTCM scFindDataType d
-         dt <- case maybe_dt of
-                 Just dt -> pure dt
-                 Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier d)
-         typeInferComplete (Constant (dtName dt) :: TermF Term)
-
 -- | Build an 'OpenTerm' for a global name with a definition
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
@@ -383,9 +355,9 @@ bitvectorTypeOpenTerm w =
 -- | Build a SAW core term for a list with the given element type
 listOpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
 listOpenTerm tp elems =
-  foldr (\x l -> ctorOpenTerm "Prelude.Cons" [tp, x, l])
-  (ctorOpenTerm "Prelude.Nil" [tp]) elems
+  foldr (\x l -> applyGlobalOpenTerm "Prelude.Cons" [tp, x, l])
+  (applyGlobalOpenTerm "Prelude.Nil" [tp]) elems
 
 -- | Build the type @Either a b@ from types @a@ and @b@
 eitherTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-eitherTypeOpenTerm a b = dataTypeOpenTerm "Prelude.Either" [a,b]
+eitherTypeOpenTerm a b = applyGlobalOpenTerm "Prelude.Either" [a, b]
