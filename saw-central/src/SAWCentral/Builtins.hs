@@ -565,7 +565,7 @@ normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      idxs <- mconcat <$> mapM (resolveName sc) opaque
      let opaqueSet = Set.fromList idxs
-     tm' <- io (scTypeCheckWHNF sc =<< scUnfoldConstantSet sc False opaqueSet (ttTerm tt))
+     tm' <- io (betaNormalize sc =<< scUnfoldConstantSet sc False opaqueSet (ttTerm tt))
      pure tt{ ttTerm = tm' }
 
 goal_normalize :: [Text] -> ProofScript ()
