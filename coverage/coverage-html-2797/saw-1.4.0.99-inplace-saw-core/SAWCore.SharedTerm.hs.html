@@ -1643,7 +1643,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1624 </span><span class="spaces">             </span><span class="istickedoff">FTermF ftf -&gt;</span>
 <span class="lineno"> 1625 </span><span class="spaces">               </span><span class="istickedoff">do ftf' &lt;- traverse memo ftf</span>
 <span class="lineno"> 1626 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- scFlatTermF sc ftf'</span>
-<span class="lineno"> 1627 </span><span class="spaces">                  </span><span class="istickedoff">scApplyAll <span class="nottickedoff">sc</span> t' args</span>
+<span class="lineno"> 1627 </span><span class="spaces">                  </span><span class="istickedoff">scApplyAll sc t' args</span>
 <span class="lineno"> 1628 </span><span class="spaces">             </span><span class="istickedoff">App t1 t2 -&gt;</span>
 <span class="lineno"> 1629 </span><span class="spaces">               </span><span class="istickedoff">do t2' &lt;- memo t2</span>
 <span class="lineno"> 1630 </span><span class="spaces">                  </span><span class="istickedoff">go t1 (t2' : args)</span>
@@ -1668,16 +1668,16 @@ span.spaces    { background: white }
 <span class="lineno"> 1649 </span><span class="spaces">                      </span><span class="istickedoff">scLambda sc x' t1' t2'</span>
 <span class="lineno"> 1650 </span><span class="spaces">             </span><span class="istickedoff">Pi x t1 t2 -&gt;</span>
 <span class="lineno"> 1651 </span><span class="spaces">               </span><span class="istickedoff">-- Pi expressions may never be applied to arguments</span>
-<span class="lineno"> 1652 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do t1' &lt;- memo t1</span></span>
-<span class="lineno"> 1653 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">-- Freshen bound variable if it can capture.</span></span>
-<span class="lineno"> 1654 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">x' &lt;-</span></span>
-<span class="lineno"> 1655 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">if IntSet.member (vnIndex x) rangeVars</span></span>
-<span class="lineno"> 1656 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">then scFreshVarName sc (vnName x)</span></span>
-<span class="lineno"> 1657 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">else pure x</span></span>
-<span class="lineno"> 1658 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">var &lt;- scVariable sc x' t1'</span></span>
-<span class="lineno"> 1659 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">let sub' = IntMap.insert (vnIndex x) var sub</span></span>
-<span class="lineno"> 1660 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">t2' &lt;- scBetaNormalizeAux sc sub' t2 []</span></span>
-<span class="lineno"> 1661 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">scPi sc x' t1' t2'</span></span>
+<span class="lineno"> 1652 </span><span class="spaces">               </span><span class="istickedoff">do t1' &lt;- memo t1</span>
+<span class="lineno"> 1653 </span><span class="spaces">                  </span><span class="istickedoff">-- Freshen bound variable if it can capture.</span>
+<span class="lineno"> 1654 </span><span class="spaces">                  </span><span class="istickedoff">x' &lt;-</span>
+<span class="lineno"> 1655 </span><span class="spaces">                    </span><span class="istickedoff">if <span class="tickonlyfalse">IntSet.member (vnIndex x) rangeVars</span></span>
+<span class="lineno"> 1656 </span><span class="spaces">                    </span><span class="istickedoff">then <span class="nottickedoff">scFreshVarName sc (vnName x)</span></span>
+<span class="lineno"> 1657 </span><span class="spaces">                    </span><span class="istickedoff">else pure x</span>
+<span class="lineno"> 1658 </span><span class="spaces">                  </span><span class="istickedoff">var &lt;- scVariable sc x' t1'</span>
+<span class="lineno"> 1659 </span><span class="spaces">                  </span><span class="istickedoff">let sub' = IntMap.insert (vnIndex x) var sub</span>
+<span class="lineno"> 1660 </span><span class="spaces">                  </span><span class="istickedoff">t2' &lt;- scBetaNormalizeAux sc sub' t2 []</span>
+<span class="lineno"> 1661 </span><span class="spaces">                  </span><span class="istickedoff">scPi sc x' t1' t2'</span>
 <span class="lineno"> 1662 </span><span class="spaces">             </span><span class="istickedoff">Constant{} -&gt;</span>
 <span class="lineno"> 1663 </span><span class="spaces">               </span><span class="istickedoff">scApplyAll sc t args</span>
 <span class="lineno"> 1664 </span><span class="spaces">             </span><span class="istickedoff">Variable x _ -&gt;</span>
