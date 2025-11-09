@@ -1372,7 +1372,7 @@ reducePi sc t arg = do
   t' <- scWhnf sc t
   case asPi t' of
     Just (vn, _, body) ->
-      scInstantiate sc (IntMap.singleton (vnIndex vn) arg) body
+      scInstantiateBeta sc (IntMap.singleton (vnIndex vn) arg) body
     _ ->
       fail $ unlines ["reducePi: not a Pi term", showTerm t']
 
