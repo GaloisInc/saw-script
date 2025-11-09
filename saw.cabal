@@ -1039,14 +1039,13 @@ test-suite saw-core-coq-tests
   build-depends:
     -- upstream packages from hackage
     base,
-    containers,
+    directory,
+    filepath,
     mtl,
     prettyprinter,
-    text,
-
-    -- internal sublibraries in the saw tree
-    saw:saw-core,
-    saw:saw-core-coq,
+    process,
+    tasty-hunit,
+    tasty
 
   type: exitcode-stdio-1.0
   hs-source-dirs: otherTests/saw-core-coq
