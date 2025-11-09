@@ -56,7 +56,7 @@ module SAWCore.OpenTerm (
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   tupleOpenTerm', tupleTypeOpenTerm', projTupleOpenTerm',
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
-  globalOpenTerm, identOpenTerm, variableOpenTerm,
+  globalOpenTerm, variableOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
   applyPiOpenTerm, piArgOpenTerm, lambdaOpenTerm, lambdaOpenTermMulti,
   piOpenTerm, piOpenTermMulti, arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
@@ -247,12 +247,6 @@ projRecordOpenTerm (OpenTerm m) f =
 -- | Build an 'OpenTerm' for a global name with a definition
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
-  OpenTerm (liftTCM SC.scGlobal ident)
-
--- | Build an 'OpenTerm' for an 'Ident', which can either refer to a definition,
--- a constructor, or a datatype
-identOpenTerm :: Ident -> OpenTerm
-identOpenTerm ident =
   OpenTerm (liftTCM SC.scGlobal ident)
 
 -- | Build an 'OpenTerm' for a named variable.
