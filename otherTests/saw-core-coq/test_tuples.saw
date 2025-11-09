@@ -1,0 +1,23 @@
+// Test: Tuples.
+enable_experimental;
+
+let t1 = {{ (0, 0) : ([8], [16]) }};
+write_coq_term "TestTuple_Pair" [] [] "" t1;
+
+let t2 = {{ (255, 255, 255) : ([8], [8], [8]) }};
+write_coq_term "TestTuple_Triple" [] [] "" t2;
+
+let t3 = {{ (1, 2, 3, 4) : ([8], [9], [10], [11]) }};
+write_coq_term "TestTuple_Fourple" [] [] "" t3;
+
+let t4 = {{ ((1, 2), 3) : (([8], [8]), [8]) }};
+write_coq_term "TestTuple_Nested" [] [] "" t4;
+
+let t5 = {{ ((1, 2).0 : [8]) == 1 }};
+write_coq_term "TestTuple_Fst" [] [] "" t5;
+
+let t6 = {{ ((1, 2).1 : [8]) == 2 }};
+write_coq_term "TestTuple_Snd" [] [] "" t6;
+
+let t7 = {{ (((1, 2), 3).0.1 : [8]) == 2 }};
+write_coq_term "TestTuple_NestedProj" [] [] "" t7;

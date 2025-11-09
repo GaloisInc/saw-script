@@ -1,0 +1,18 @@
+// Simple test module for Coq extraction
+module TestModule where
+
+// Basic arithmetic function
+addOne : [8] -> [8]
+addOne x = x + 1
+
+// Function with multiple arguments
+addTwo : [8] -> [8] -> [8]
+addTwo x y = x + y
+
+// Boolean function
+isZero : [8] -> Bit
+isZero x = x == 0
+
+// Conditional function
+maxVal : [8] -> [8] -> [8]
+maxVal x y = if x > y then x else y
