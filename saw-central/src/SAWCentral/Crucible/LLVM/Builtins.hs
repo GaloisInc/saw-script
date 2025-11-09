@@ -1036,12 +1036,7 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
           gimap = view Crucible.globalInitMap mtrans
       case Map.lookup symbol gimap of
         Just (g, Right (mt, _)) -> ccWithBackend cc $ \bak ->
-          do when (L.gaConstant $ L.globalAttrs g) . throwMethodSpec mspec $ mconcat
-               [ "Global variable \""
-               , name
-               , "\" is not mutable"
-               ]
-             let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
+          do let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
              sz' <- W4.bvLit sym ?ptrWidth $ Crucible.bytesToBV ?ptrWidth sz
              alignment <-
                case L.globalAlign g of
@@ -1055,7 +1050,10 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
                        ]
                      Just al -> return al
                  _ -> pure $ Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) mt
-             (ptr, mem') <- Crucible.doMalloc bak Crucible.GlobalAlloc Crucible.Mutable name mem sz' alignment
+             let mutability
+                   | L.gaConstant (L.globalAttrs g) = Crucible.Immutable
+                   | otherwise = Crucible.Mutable
+             (ptr, mem') <- Crucible.doMalloc bak Crucible.GlobalAlloc mutability name mem sz' alignment
              pure $ Crucible.registerGlobal mem' [symbol] ptr
         _ -> throwMethodSpec mspec $ mconcat
           [ "Global variable \""
@@ -1695,6 +1693,7 @@ setupLLVMCrucibleContext pathSat lm action =
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      laxPointerOrdering <- gets rwLaxPointerOrdering
      laxLoadsAndStores <- gets rwLaxLoadsAndStores
+     globalAllocMode <- gets rwLLVMGlobalAllocMode
      noSatisfyingWriteFreshConstant <- gets rwNoSatisfyingWriteFreshConstant
      pathSatSolver <- gets rwPathSatSolver
      what4Eval <- gets rwWhat4Eval
@@ -1753,8 +1752,17 @@ setupLLVMCrucibleContext pathSat lm action =
                                  intrinsics halloc stdout
                                  bindings (Crucible.llvmExtensionImpl ?memOpts)
                                  Common.SAWCruciblePersonality
-               mem <- Crucible.populateConstGlobals bak (view Crucible.globalInitMap mtrans)
-                        =<< Crucible.initializeMemoryConstGlobals bak ctx llvm_mod
+               
+               mem <-
+                case globalAllocMode of
+                  LLVMAllocConstantGlobals ->
+                    Crucible.populateConstGlobals bak (view Crucible.globalInitMap mtrans)
+                    =<< Crucible.initializeMemoryConstGlobals bak ctx llvm_mod
+                  LLVMAllocAllGlobals ->
+                    Crucible.populateConstGlobals bak (view Crucible.globalInitMap mtrans)
+                    =<< Crucible.initializeAllMemory bak ctx llvm_mod
+                  LLVMAllocNoGlobals ->
+                    Crucible.initializeMemory (const False) bak ctx llvm_mod
 
                let globals  = Crucible.llvmGlobals (Crucible.llvmMemVar ctx) mem
 
