@@ -45,8 +45,8 @@ module SAWCore.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  mkOpenTerm, failOpenTerm,
-  bindTCMOpenTerm, bindPPOpenTerm, openTermType,
+  mkOpenTerm,
+  openTermType,
   flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
@@ -67,7 +67,7 @@ import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts, render)
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Name
 import SAWCore.Panic
@@ -100,34 +100,11 @@ completeOpenTermType sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM (SC.rawType <$> termM) sc
 
--- | Embed a closed 'Term' into an 'OpenTerm'
+-- | Embed a 'Term' into an 'OpenTerm'.
 mkOpenTerm :: Term -> OpenTerm
 mkOpenTerm t = OpenTerm $ typeInferComplete t
 
--- | Build an 'OpenTerm' that 'fail's in the underlying monad when completed
-failOpenTerm :: String -> OpenTerm
-failOpenTerm str = OpenTerm $ fail str
-
--- | Bind the result of a type-checking computation in building an 'OpenTerm'.
--- NOTE: this operation should be considered \"unsafe\" because it can create
--- malformed 'OpenTerm's if the result of the 'TCM' computation is used as part
--- of the resulting 'OpenTerm'. For instance, @a@ should not be 'OpenTerm'.
-bindTCMOpenTerm :: TCM a -> (a -> OpenTerm) -> OpenTerm
-bindTCMOpenTerm m f = OpenTerm (m >>= unOpenTerm . f)
-
--- | Bind the result of pretty-printing an 'OpenTerm' while building another
-bindPPOpenTerm :: OpenTerm -> (String -> OpenTerm) -> OpenTerm
-bindPPOpenTerm (OpenTerm m) f =
-  OpenTerm $
-  do t <- SC.rawTerm <$> m
-     -- XXX: this could use scPrettyTermInCtx (which builds in the call to
-     -- PPS.render) except that it's slightly different under the covers
-     -- (in its use of the "global" flag, and it isn't entirely clear what
-     -- that actually does)
-     unOpenTerm $ f $ PPS.render PPS.defaultOpts $
-       ppTermInCtx PPS.defaultOpts [] t
-
--- | Return type type of an 'OpenTerm' as an 'OpenTerm
+-- | Return type of an 'OpenTerm' as an 'OpenTerm'.
 openTermType :: OpenTerm -> OpenTerm
 openTermType (OpenTerm m) =
   OpenTerm $ do t <- m
