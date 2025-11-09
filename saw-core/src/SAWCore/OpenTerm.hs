@@ -65,8 +65,8 @@ module SAWCore.OpenTerm (
   tuple', tupleType', projTuple',
   record, recordType, projRecord,
   global, variable,
-  apply, applyMulti, applyGlobal,
-  applyPi, piArg, lambda, lambdaMulti,
+  app, apply, applyGlobal,
+  applyPi, piArg, lambda, lambdas,
   piType, piMulti, arrow, mkLet, sawLet,
   bitvectorType, list, eitherType,
   ) where
@@ -177,7 +177,7 @@ vectorType n a = applyGlobal "Prelude.Vec" [n,a]
 -- | Create a SAW core term for the type of a bitvector
 bvType :: Integral a => a -> OpenTerm
 bvType n =
-  applyMulti (global "Prelude.Vec")
+  apply (global "Prelude.Vec")
   [nat (fromIntegral n), boolType]
 
 -- | Build an 'OpenTerm' for a pair
@@ -261,18 +261,18 @@ global ident =
 variable :: VarName -> Term -> OpenTerm
 variable x t = OpenTerm (liftTCM scVariable x t >>= typeInferComplete)
 
--- | Apply an 'OpenTerm' to another
-apply :: OpenTerm -> OpenTerm -> OpenTerm
-apply (OpenTerm f) (OpenTerm arg) =
+-- | Apply an 'OpenTerm' to another.
+app :: OpenTerm -> OpenTerm -> OpenTerm
+app (OpenTerm f) (OpenTerm arg) =
   OpenTerm ((App <$> f <*> arg) >>= typeInferComplete)
 
--- | Apply an 'OpenTerm' to 0 or more arguments
-applyMulti :: OpenTerm -> [OpenTerm] -> OpenTerm
-applyMulti = foldl apply
+-- | Apply an 'OpenTerm' to a list of zero or more arguments.
+apply :: OpenTerm -> [OpenTerm] -> OpenTerm
+apply = foldl app
 
--- | Apply a named global to 0 or more arguments
+-- | Apply a named global to a list of zero or more arguments.
 applyGlobal :: Ident -> [OpenTerm] -> OpenTerm
-applyGlobal ident = applyMulti (global ident)
+applyGlobal ident = apply (global ident)
 
 -- | Compute the output type of applying a function of a given type to an
 -- argument. That is, given @tp@ and @arg@, compute the type of applying any @f@
@@ -305,9 +305,9 @@ lambda x (OpenTerm tpM) body_f = OpenTerm $
      typeInferComplete $ Lambda vn tp body
 
 -- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
-lambdaMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
+lambdas :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
                        OpenTerm
-lambdaMulti xs_tps body_f =
+lambdas xs_tps body_f =
   foldr (\(x,tp) rest_f xs ->
           lambda x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
 
@@ -339,7 +339,7 @@ piMulti xs_tps body_f =
 -- > 'apply' ('lambda' x tp body) rhs
 mkLet ::
   LocalName -> OpenTerm -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
-mkLet x tp rhs body_f = apply (lambda x tp body_f) rhs
+mkLet x tp rhs body_f = app (lambda x tp body_f) rhs
 
 -- | Build a let expression as an 'OpenTerm'. This is equivalent to
 -- > 'apply' ('lambda' x tp body) rhs
@@ -347,7 +347,7 @@ sawLet ::
   LocalName -> OpenTerm -> OpenTerm -> OpenTerm ->
   (OpenTerm -> OpenTerm) -> OpenTerm
 sawLet x tp tp_ret rhs body_f =
-  applyMulti (global "Prelude.sawLet")
+  apply (global "Prelude.sawLet")
   [tp, tp_ret, rhs, lambda x tp body_f]
 
 -- | Build a bitvector type with the given length

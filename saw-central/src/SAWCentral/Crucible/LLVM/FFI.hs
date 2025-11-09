@@ -166,7 +166,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
           ffiArgTypes
         (llvmOutArgs, post) <- setupRet tenv ffiRetType
         llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)
-        post $ OT.applyMulti (OT.term appTerm) cryArgs
+        post $ OT.apply (OT.term appTerm) cryArgs
       Just (CallAbstract (FFIFunType{})) ->
         -- CallAbstract uses ordinary Cryptol types instead of FFIType,
         -- and while the logic above might be generalized to support that
