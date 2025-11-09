@@ -347,8 +347,12 @@ piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
      typeInferComplete $ Pi nm tp body
 
 -- | Build a non-dependent function type.
-arrowOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm
-arrowOpenTerm x tp body = piOpenTerm x tp (const body)
+arrowOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+arrowOpenTerm t1 t2 =
+  OpenTerm $
+  do t1' <- unOpenTerm t1
+     t2' <- unOpenTerm t2
+     typeInferComplete $ Pi wildcardVarName t1' t2'
 
 -- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
 piOpenTermMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
