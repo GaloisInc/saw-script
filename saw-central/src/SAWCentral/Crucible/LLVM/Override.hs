@@ -1494,7 +1494,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
                 do sub <- OM (use termSub)
                    instantiated_expected_sz_tm <- liftIO $ scInstantiate sc sub $ ttTerm expected_sz_tm
                    normalized_expected_sz_tm <- liftIO $
-                     scTypeCheckWHNF sc =<< scUnfoldConstantSet sc False mempty instantiated_expected_sz_tm
+                     scTypeCheckWHNF sc =<< scUnfoldConstants sc (const True) instantiated_expected_sz_tm
                    case asUnsignedConcreteBv normalized_expected_sz_tm of
                      Just sz_nat ->
                        do sz_bv <- liftIO $
