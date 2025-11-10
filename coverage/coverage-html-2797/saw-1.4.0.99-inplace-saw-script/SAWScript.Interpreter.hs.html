@@ -1589,7 +1589,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1570 </span>    <span class="decl"><span class="istickedoff">fromValue _ (VString n) = n</span>
 <span class="lineno"> 1571 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ _ = <span class="nottickedoff">error &quot;fromValue Text&quot;</span></span></span>
 <span class="lineno"> 1572 </span>
-<span class="lineno"> 1573 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue Integer</span></span></span></span> where
+<span class="lineno"> 1573 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">IsValue Integer</span></span></span></span> where
 <span class="lineno"> 1574 </span>    <span class="decl"><span class="istickedoff">toValue _name n = VInteger n</span></span>
 <span class="lineno"> 1575 </span>
 <span class="lineno"> 1576 </span>instance FromValue Integer where
@@ -3041,7 +3041,7 @@ span.spaces    { background: white }
 <span class="lineno"> 3022 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Type-check the current proof goal, printing an error message if ill-typed.&quot; ]</span></span>
 <span class="lineno"> 3023 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3024 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;term_size&quot;           &quot;Term -&gt; Int&quot;</span>
-<span class="lineno"> 3025 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal scSharedSize)</span></span>
+<span class="lineno"> 3025 </span><span class="spaces">    </span><span class="istickedoff">(pureVal scSharedSize)</span>
 <span class="lineno"> 3026 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 3027 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return the size of the given term in the number of DAG nodes.&quot; ]</span></span>
 <span class="lineno"> 3028 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -4236,7 +4236,7 @@ span.spaces    { background: white }
 <span class="lineno"> 4217 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unfold the definitions of the specified constants in the given term.&quot; ]</span></span>
 <span class="lineno"> 4218 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 4219 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;beta_reduce_term&quot;    &quot;Term -&gt; Term&quot;</span>
-<span class="lineno"> 4220 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal1 beta_reduce_term)</span></span>
+<span class="lineno"> 4220 </span><span class="spaces">    </span><span class="istickedoff">(funVal1 beta_reduce_term)</span>
 <span class="lineno"> 4221 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 4222 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Reduce the given term to beta-normal form.&quot; ]</span></span>
 <span class="lineno"> 4223 </span><span class="spaces"></span><span class="istickedoff"></span>

@@ -805,7 +805,7 @@ span.spaces    { background: white }
 <span class="lineno">  786 </span>
 <span class="lineno">  787 </span>-- | Look up a constructor by its identifier
 <span class="lineno">  788 </span>scFindCtor :: SharedContext -&gt; Ident -&gt; IO (Maybe Ctor)
-<span class="lineno">  789 </span><span class="decl"><span class="istickedoff">scFindCtor sc i = findCtorInMap i &lt;$&gt; scGetModuleMap sc</span></span>
+<span class="lineno">  789 </span><span class="decl"><span class="nottickedoff">scFindCtor sc i = findCtorInMap i &lt;$&gt; scGetModuleMap sc</span></span>
 <span class="lineno">  790 </span>
 <span class="lineno">  791 </span>-- | Look up a constructor by its identifier, throwing an error if not found
 <span class="lineno">  792 </span>scRequireCtor :: SharedContext -&gt; Ident -&gt; IO Ctor
@@ -1560,7 +1560,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1541 </span><span class="spaces">                  </span><span class="istickedoff">goArgs t1 (t2' : args)</span>
 <span class="lineno"> 1542 </span><span class="spaces">             </span><span class="istickedoff">Lambda x t1 t2 -&gt;</span>
 <span class="lineno"> 1543 </span><span class="spaces">               </span><span class="istickedoff">do t1' &lt;- memo t1</span>
-<span class="lineno"> 1544 </span><span class="spaces">                  </span><span class="istickedoff">(x', t2') &lt;- goBinder x <span class="nottickedoff">t1'</span> t2</span>
+<span class="lineno"> 1544 </span><span class="spaces">                  </span><span class="istickedoff">(x', t2') &lt;- goBinder x t1' t2</span>
 <span class="lineno"> 1545 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- scLambda sc x' t1' t2'</span>
 <span class="lineno"> 1546 </span><span class="spaces">                  </span><span class="istickedoff">scApplyAll sc t' args</span>
 <span class="lineno"> 1547 </span><span class="spaces">             </span><span class="istickedoff">Pi x t1 t2 -&gt;</span>
@@ -1579,13 +1579,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1560 </span><span class="spaces">                      </span><span class="istickedoff">scApplyAll sc t' args</span>
 <span class="lineno"> 1561 </span><span class="spaces">         </span><span class="istickedoff">goBinder :: VarName -&gt; Term -&gt; Term -&gt; IO (VarName, Term)</span>
 <span class="lineno"> 1562 </span><span class="spaces">         </span><span class="istickedoff">goBinder x@(vnIndex -&gt; i) t body</span>
-<span class="lineno"> 1563 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlyfalse">IntSet.member i rangeVars</span> =</span>
+<span class="lineno"> 1563 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.member i rangeVars =</span>
 <span class="lineno"> 1564 </span><span class="spaces">               </span><span class="istickedoff">-- Possibility of capture; rename bound variable.</span>
-<span class="lineno"> 1565 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do x' &lt;- scFreshVarName sc (vnName x)</span></span>
-<span class="lineno"> 1566 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">var &lt;- scVariable sc x' t</span></span>
-<span class="lineno"> 1567 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">let sub' = IntMap.insert i var sub</span></span>
-<span class="lineno"> 1568 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">body' &lt;- scInstantiateBeta sc sub' body</span></span>
-<span class="lineno"> 1569 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure (x', body')</span></span>
+<span class="lineno"> 1565 </span><span class="spaces">               </span><span class="istickedoff">do x' &lt;- scFreshVarName sc (vnName x)</span>
+<span class="lineno"> 1566 </span><span class="spaces">                  </span><span class="istickedoff">var &lt;- scVariable sc x' t</span>
+<span class="lineno"> 1567 </span><span class="spaces">                  </span><span class="istickedoff">let sub' = IntMap.insert i var sub</span>
+<span class="lineno"> 1568 </span><span class="spaces">                  </span><span class="istickedoff">body' &lt;- scInstantiateBeta sc sub' body</span>
+<span class="lineno"> 1569 </span><span class="spaces">                  </span><span class="istickedoff">pure (x', body')</span>
 <span class="lineno"> 1570 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlyfalse">IntMap.member i sub</span> =</span>
 <span class="lineno"> 1571 </span><span class="spaces">               </span><span class="istickedoff">-- Shadowing; remove entry from substitution.</span>
 <span class="lineno"> 1572 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do let sub' = IntMap.delete i sub</span></span>
@@ -1671,8 +1671,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1652 </span><span class="spaces">               </span><span class="istickedoff">do t1' &lt;- memo t1</span>
 <span class="lineno"> 1653 </span><span class="spaces">                  </span><span class="istickedoff">-- Freshen bound variable if it can capture.</span>
 <span class="lineno"> 1654 </span><span class="spaces">                  </span><span class="istickedoff">x' &lt;-</span>
-<span class="lineno"> 1655 </span><span class="spaces">                    </span><span class="istickedoff">if <span class="tickonlyfalse">IntSet.member (vnIndex x) rangeVars</span></span>
-<span class="lineno"> 1656 </span><span class="spaces">                    </span><span class="istickedoff">then <span class="nottickedoff">scFreshVarName sc (vnName x)</span></span>
+<span class="lineno"> 1655 </span><span class="spaces">                    </span><span class="istickedoff">if IntSet.member (vnIndex x) rangeVars</span>
+<span class="lineno"> 1656 </span><span class="spaces">                    </span><span class="istickedoff">then scFreshVarName sc (vnName x)</span>
 <span class="lineno"> 1657 </span><span class="spaces">                    </span><span class="istickedoff">else pure x</span>
 <span class="lineno"> 1658 </span><span class="spaces">                  </span><span class="istickedoff">var &lt;- scVariable sc x' t1'</span>
 <span class="lineno"> 1659 </span><span class="spaces">                  </span><span class="istickedoff">let sub' = IntMap.insert (vnIndex x) var sub</span>
@@ -2996,7 +2996,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2977 </span>
 <span class="lineno"> 2978 </span>-- | Return the number of DAG nodes used by the given @Term@.
 <span class="lineno"> 2979 </span>scSharedSize :: Term -&gt; Integer
-<span class="lineno"> 2980 </span><span class="decl"><span class="nottickedoff">scSharedSize = fst . scSharedSizeAux (0, Set.empty)</span></span>
+<span class="lineno"> 2980 </span><span class="decl"><span class="istickedoff">scSharedSize = fst . scSharedSizeAux (0, Set.empty)</span></span>
 <span class="lineno"> 2981 </span>
 <span class="lineno"> 2982 </span>scSharedSizeMany :: [Term] -&gt; Integer
 <span class="lineno"> 2983 </span><span class="decl"><span class="istickedoff">scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)</span></span>

@@ -1548,10 +1548,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1529 </span><span class="spaces">  </span><span class="istickedoff">return (TypedTerm schema t')</span></span>
 <span class="lineno"> 1530 </span>
 <span class="lineno"> 1531 </span>beta_reduce_term :: TypedTerm -&gt; TopLevel TypedTerm
-<span class="lineno"> 1532 </span><span class="decl"><span class="nottickedoff">beta_reduce_term (TypedTerm schema t) = do</span>
-<span class="lineno"> 1533 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 1534 </span><span class="spaces">  </span><span class="nottickedoff">t' &lt;- io $ betaNormalize sc t</span>
-<span class="lineno"> 1535 </span><span class="spaces">  </span><span class="nottickedoff">return (TypedTerm schema t')</span></span>
+<span class="lineno"> 1532 </span><span class="decl"><span class="istickedoff">beta_reduce_term (TypedTerm schema t) = do</span>
+<span class="lineno"> 1533 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno"> 1534 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- io $ betaNormalize sc t</span>
+<span class="lineno"> 1535 </span><span class="spaces">  </span><span class="istickedoff">return (TypedTerm <span class="nottickedoff">schema</span> t')</span></span>
 <span class="lineno"> 1536 </span>
 <span class="lineno"> 1537 </span>term_eval :: [Text] -&gt; TypedTerm -&gt; TopLevel TypedTerm
 <span class="lineno"> 1538 </span><span class="decl"><span class="nottickedoff">term_eval unints (TypedTerm schema t0) =</span>
