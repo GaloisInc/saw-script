@@ -228,6 +228,7 @@ module SAWCore.SharedTerm
   , scLambdaListEtaCollapse
   , scGeneralizeTerms
   , scUnfoldConstants
+  , scUnfoldConstantsBeta
   , scUnfoldOnceFixConstantSet
   , scSharedSize
   , scSharedSizeAux
@@ -2889,6 +2890,37 @@ scUnfoldConstants sc unfold t0 =
                useChangeCache tcache idx $
                whenModified t (scTermF sc) (traverse go tf)
      commitChangeT (go t0)
+
+-- | Unfold some of the defined constants within a 'Term'.
+-- The supplied predicate specifies whether or not to unfold each
+-- constant, based on its 'Name'.
+-- Reduce any beta redexes created by unfolding a constant definition
+-- that is a lambda term.
+scUnfoldConstantsBeta ::
+  SharedContext ->
+  (Name -> Bool) {- ^ whether to unfold a constant with this name -} ->
+  Term -> IO Term
+scUnfoldConstantsBeta sc unfold t0 =
+  do tcache <- newCacheMap' Map.empty
+     mm <- scGetModuleMap sc
+     let getRhs nm =
+           case lookupVarIndexInMap (nameIndex nm) mm of
+             Just (ResolvedDef d) -> defBody d
+             _ -> Nothing
+     let memo :: Term -> ChangeT IO Term
+         memo t@STApp{stAppIndex = i} = useChangeCache tcache i (go t)
+         go :: Term -> ChangeT IO Term
+         go (asApplyAll -> (asConstant -> Just nm, args))
+           | unfold nm, Just rhs <- getRhs nm =
+               do args' <- traverse memo args
+                  taint $ lift $ scApplyAllBeta sc rhs args'
+         go t@(asVariable -> Just (x, _))
+           | IntMap.member (vnIndex x) (varTypes t0) =
+               -- Avoid modifying types of free variables to preserve Term invariant
+               pure t
+         go t = whenModified t (scTermF sc) (traverse memo (unwrapTermF t))
+
+     commitChangeT (memo t0)
 
 -- | Unfold one time fixpoint constants.
 --
