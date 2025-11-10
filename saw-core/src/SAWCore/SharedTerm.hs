@@ -223,6 +223,7 @@ module SAWCore.SharedTerm
   , getAllVarsMap
   , getConstantSet
   , scInstantiate
+  , scInstantiateBeta
   , scAbstractTerms
   , scLambdaListEtaCollapse
   , scGeneralizeTerms
@@ -1371,7 +1372,7 @@ reducePi sc t arg = do
   t' <- scWhnf sc t
   case asPi t' of
     Just (vn, _, body) ->
-      scInstantiate sc (IntMap.singleton (vnIndex vn) arg) body
+      scInstantiateBeta sc (IntMap.singleton (vnIndex vn) arg) body
     _ ->
       fail $ unlines ["reducePi: not a Pi term", showTerm t']
 
@@ -1507,36 +1508,173 @@ scImport sc t0 =
 --------------------------------------------------------------------------------
 -- Beta Normalization
 
+-- | Instantiate some of the named variables in the term, reducing any
+-- new beta redexes created in the process.
+-- The substitution 'IntMap' is keyed by 'VarIndex'.
+-- If the input term and all terms in the substitution are in
+-- beta-normal form, then the result will also be beta-normal.
+-- If a substituted term is a lambda, and it is substituted into the
+-- left side of an application, creating a new beta redex, then it
+-- will trigger further beta reduction.
+-- Existing beta redexes in the input term or substitution are
+-- not reduced.
+scInstantiateBeta :: SharedContext -> IntMap Term -> Term -> IO Term
+scInstantiateBeta sc sub t0 =
+  do let domainVars = IntMap.keysSet sub
+     let rangeVars = foldMap freeVars sub
+     cache <- newCacheIntMap
+     let memo :: Term -> IO Term
+         memo t@STApp{stAppIndex = i} = useCache cache i (go t)
+         go :: Term -> IO Term
+         go t
+           | IntSet.disjoint domainVars (freeVars t) = pure t
+           | otherwise = goArgs t []
+         goArgs :: Term -> [Term] -> IO Term
+         goArgs t args =
+           case unwrapTermF t of
+             FTermF ftf ->
+               do ftf' <- traverse memo ftf
+                  t' <- scFlatTermF sc ftf'
+                  scApplyAll sc t' args
+             App t1 t2 ->
+               do t2' <- memo t2
+                  goArgs t1 (t2' : args)
+             Lambda x t1 t2 ->
+               do t1' <- memo t1
+                  (x', t2') <- goBinder x t1' t2
+                  t' <- scLambda sc x' t1' t2'
+                  scApplyAll sc t' args
+             Pi x t1 t2 ->
+               do t1' <- memo t1
+                  (x', t2') <- goBinder x t1' t2
+                  t' <- scPi sc x' t1' t2'
+                  scApplyAll sc t' args
+             Constant {} ->
+               scApplyAll sc t args
+             Variable x t1 ->
+               case IntMap.lookup (vnIndex x) sub of
+                 Just t' -> scApplyAllBeta sc t' args
+                 Nothing ->
+                   do t1' <- memo t1
+                      t' <- scVariable sc x t1'
+                      scApplyAll sc t' args
+         goBinder :: VarName -> Term -> Term -> IO (VarName, Term)
+         goBinder x@(vnIndex -> i) t body
+           | IntSet.member i rangeVars =
+               -- Possibility of capture; rename bound variable.
+               do x' <- scFreshVarName sc (vnName x)
+                  var <- scVariable sc x' t
+                  let sub' = IntMap.insert i var sub
+                  body' <- scInstantiateBeta sc sub' body
+                  pure (x', body')
+           | IntMap.member i sub =
+               -- Shadowing; remove entry from substitution.
+               do let sub' = IntMap.delete i sub
+                  body' <- scInstantiateBeta sc sub' body
+                  pure (x, body')
+           | otherwise =
+               -- No possibility of shadowing or capture.
+               do body' <- memo body
+                  pure (x, body')
+     go t0
+
+-- | Apply a function 'Term' to a list of zero or more arguments.
+-- If the function is a lambda term, then beta reduce the arguments
+-- into the function body.
+-- If all input terms are in beta-normal form, then the result will
+-- also be beta-normal.
+scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
+scApplyAllBeta _ t0 [] = pure t0
+scApplyAllBeta sc t0 (arg0 : args0) =
+  case asLambda t0 of
+    Nothing -> scApplyAll sc t0 (arg0 : args0)
+    Just (x, _, body) -> go (IntMap.singleton (vnIndex x) arg0) body args0
+  where
+    go :: IntMap Term -> Term -> [Term] -> IO Term
+    go sub (asLambda -> Just (x, _, body)) (arg : args) =
+      go (IntMap.insert (vnIndex x) arg sub) body args
+    go sub t args =
+      do t' <- scInstantiateBeta sc sub t
+         scApplyAllBeta sc t' args
+
+-- | Apply a function to an argument, beta-reducing if the function is
+-- a lambda.
+-- If both input terms are in beta-normal form, then the result will
+-- also be beta-normal.
+scApplyBeta :: SharedContext -> Term -> Term -> IO Term
+scApplyBeta sc f arg = scApplyAllBeta sc f [arg]
+
+-- | Internal function: Instantiate free variables within a term,
+-- apply it to a list of arguments, and beta-normalize the result.
+-- Precondition: All terms in the substitution map and the list of
+-- arguments are already in beta-normal form.
+scBetaNormalizeAux ::
+  SharedContext -> IntMap Term -> Term -> [Term] -> IO Term
+scBetaNormalizeAux sc sub t0 args0 =
+  do let rangeVars = foldMap freeVars sub
+     -- The cache memoizes the result of normalizing a given
+     -- expression under the current substitution; recursive calls
+     -- that change the substitution must start a new memo table.
+     cache <- newCacheIntMap
+     let memo :: Term -> IO Term
+         memo t@STApp{ stAppIndex = i } = useCache cache i (go t [])
+         go :: Term -> [Term] -> IO Term
+         go t args =
+           case unwrapTermF t of
+             FTermF ftf ->
+               do ftf' <- traverse memo ftf
+                  t' <- scFlatTermF sc ftf'
+                  scApplyAll sc t' args
+             App t1 t2 ->
+               do t2' <- memo t2
+                  go t1 (t2' : args)
+             Lambda x t1 t2 ->
+               case args of
+                 arg : args' ->
+                   -- No possibility of capture here, as the binder is
+                   -- going away. If x is already in the map,
+                   -- overwriting that entry is what we want.
+                   do let sub' = IntMap.insert (vnIndex x) arg sub
+                      scBetaNormalizeAux sc sub' t2 args'
+                 [] ->
+                   do t1' <- memo t1
+                      -- Freshen bound variable if it can capture.
+                      x' <-
+                        if IntSet.member (vnIndex x) rangeVars
+                        then scFreshVarName sc (vnName x)
+                        else pure x
+                      var <- scVariable sc x' t1'
+                      let sub' = IntMap.insert (vnIndex x) var sub
+                      t2' <- scBetaNormalizeAux sc sub' t2 []
+                      scLambda sc x' t1' t2'
+             Pi x t1 t2 ->
+               -- Pi expressions may never be applied to arguments
+               do t1' <- memo t1
+                  -- Freshen bound variable if it can capture.
+                  x' <-
+                    if IntSet.member (vnIndex x) rangeVars
+                    then scFreshVarName sc (vnName x)
+                    else pure x
+                  var <- scVariable sc x' t1'
+                  let sub' = IntMap.insert (vnIndex x) var sub
+                  t2' <- scBetaNormalizeAux sc sub' t2 []
+                  scPi sc x' t1' t2'
+             Constant{} ->
+               scApplyAll sc t args
+             Variable x _ ->
+               -- All bound variables will be present in the map.
+               -- To preserve term invariants, free variables must
+               -- have their type annotations left unmodified.
+               case IntMap.lookup (vnIndex x) sub of
+                 Nothing ->
+                   scApplyAll sc t args
+                 Just t' ->
+                   scApplyAllBeta sc t' args
+     go t0 args0
+
 -- | Beta-reduce a term to normal form.
 betaNormalize :: SharedContext -> Term -> IO Term
-betaNormalize sc t0 =
-  do cache <- newCache
-     let ?cache = cache in go t0
-  where
-    go :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
-    go t = case t of
-      STApp{ stAppIndex = i } -> useCache ?cache i (go' t)
-
-    go' :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
-    go' t = do
-      let (f, args) = asApplyAll t
-      let (params, body) = asLambdaList f
-      let n = length (zip args params)
-      if n == 0 then go3 t else do
-        body' <- go body
-        let vars = drop n params
-        f' <- scLambdaList sc vars body'
-        args' <- mapM go args
-        let sub = IntMap.fromList [(vnIndex nm, arg) | (arg, (nm, _)) <- zip args params]
-        f'' <- scInstantiate sc sub f'
-        scApplyAll sc f'' (drop n args')
-
-    go3 :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
-    go3 (STApp{ stAppTermF = tf }) = scTermF sc =<< traverseTF go tf
-
-    traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
-    traverseTF _ tf@(Constant {}) = pure tf
-    traverseTF f tf = traverse f tf
+betaNormalize sc t = scBetaNormalizeAux sc IntMap.empty t []
 
 
 --------------------------------------------------------------------------------
@@ -1545,23 +1683,6 @@ betaNormalize sc t0 =
 -- | Apply a function 'Term' to zero or more argument 'Term's.
 scApplyAll :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAll sc = foldlM (scApply sc)
-
--- | Apply a function to an argument, beta-reducing if the function is a lambda
-scApplyBeta :: SharedContext -> Term -> Term -> IO Term
-scApplyBeta sc f arg =
-  case asLambda f of
-    Just (name, _, body) ->
-      scInstantiate sc (IntMap.singleton (vnIndex name) arg) body
-    Nothing ->
-      scApply sc f arg
-
--- | Apply a function 'Term' to zero or more arguments, beta reducing any time
--- the function is a lambda
-scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
-scApplyAllBeta sc = foldlM (scApplyBeta sc)
-
--- TODO: implement version of scCtorApp that looks up the arity of the
--- constructor identifier in the module.
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term

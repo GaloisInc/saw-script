@@ -150,7 +150,7 @@ scApply sc f arg =
      ok <- scSubtype sc (rawType arg) t1
      unless ok $ fail $ unlines $
        ["Not a subtype", "expected: " ++ showTerm t1, "got: " ++ showTerm (rawType arg)]
-     tp <- Raw.scInstantiate sc (IntMap.singleton i (rawTerm arg)) t2
+     tp <- Raw.scInstantiateBeta sc (IntMap.singleton i (rawTerm arg)) t2
      pure (Term tm tp)
 
 -- possible errors: not a type, context mismatch, variable free in context

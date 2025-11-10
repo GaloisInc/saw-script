@@ -502,7 +502,7 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
 
 normalizeProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
 normalizeProp sc opaqueSet (Prop tm) =
-  do tm' <- TC.scTypeCheckWHNF sc =<< scUnfoldConstantSet sc False opaqueSet tm
+  do tm' <- betaNormalize sc =<< scUnfoldConstantSet sc False opaqueSet tm
      termToProp sc tm'
 
 -- | Pretty print the given proposition as a string.
