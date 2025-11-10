@@ -459,7 +459,7 @@ buildOutputRelationTheorem bthms bc = do
   -- Unfold LHS/RHS constants to reveal opportunities for simplification
   let unfold nm = nm `elem` mapMaybe asConstant [lhs, rhs]
   implication_unfolded <-
-    io $ scUnfoldConstants sc unfold implication >>= betaNormalize sc
+    io $ scUnfoldConstantsBeta sc unfold implication
 
   -- Simplify Term with any theorems that apply
   (implication', sideConditions) <- applyAllTheorems bthms bc implication_unfolded

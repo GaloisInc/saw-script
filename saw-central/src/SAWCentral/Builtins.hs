@@ -566,7 +566,7 @@ normalize_term_opaque opaque tt =
      idxs <- mconcat <$> mapM (resolveName sc) opaque
      let opaqueSet = Set.fromList idxs
      let unfold nm = Set.notMember (nameIndex nm) opaqueSet
-     tm' <- io (betaNormalize sc =<< scUnfoldConstants sc unfold (ttTerm tt))
+     tm' <- io $ scUnfoldConstantsBeta sc unfold (ttTerm tt)
      pure tt{ ttTerm = tm' }
 
 goal_normalize :: [Text] -> ProofScript ()
