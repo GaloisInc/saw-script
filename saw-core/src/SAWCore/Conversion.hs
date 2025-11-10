@@ -70,6 +70,7 @@ module SAWCore.Conversion
   , mkBvNat
     -- * Conversion
   , Conversion(..)
+  , newConversion
   , runConversion
   , conversionPat
     -- ** Prelude conversions
@@ -439,14 +440,25 @@ instance Buildable Prim.BitVector where
 -- conversion is a function that takes a term and returns (possibly) a
 -- rewritten term. We use conversions to model the behavior of
 -- primitive operations in SAWCore.
+-- The Bool field is true if the terms before and after the conversion
+-- is executed are convertible in the SAWCore type system and false
+-- otherwise.
 
-newtype Conversion = Conversion (Matcher (TermBuilder Term))
+data Conversion = Conversion Bool (Matcher (TermBuilder Term))
 
 runConversion :: Conversion -> Term -> Maybe (TermBuilder Term)
-runConversion (Conversion m) = runMatcher m
+runConversion (Conversion _ m) = runMatcher m
 
 conversionPat :: Conversion -> Net.Pat
-conversionPat (Conversion m) = matcherPat m
+conversionPat (Conversion _ m) = matcherPat m
+
+-- | Constructs a Conversion from a Matcher (TermBuilder Term)
+-- This assumes the default case that the Conversion is
+-- non-convertible; if the Conversion is convertible with regard
+-- to the SAW type system, it should be constructed using
+-- the data constructor.
+newConversion :: Matcher (TermBuilder Term) -> Conversion
+newConversion = Conversion False
 
 -- | This class is meant to include n-ary function types whose
 -- arguments are all in class @Matchable@ and whose result type is
@@ -462,10 +474,10 @@ instance (Matchable a, Conversionable b) => Conversionable (a -> b) where
         (thenMatcher (m <:> defaultMatcher) (\(f :*: x) -> Just (f x)))
 
 instance Buildable a => Conversionable (Maybe a) where
-    convOfMatcher m = Conversion (thenMatcher m (fmap defaultBuilder))
+    convOfMatcher m = newConversion (thenMatcher m (fmap defaultBuilder))
 
 defaultConvOfMatcher :: Buildable a => Matcher a -> Conversion
-defaultConvOfMatcher m = Conversion (thenMatcher m (Just . defaultBuilder))
+defaultConvOfMatcher m = newConversion (thenMatcher m (Just . defaultBuilder))
 
 instance Conversionable Term where
     convOfMatcher = defaultConvOfMatcher
@@ -496,7 +508,7 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 
 -- | Conversion for selector on a tuple
 tupleConversion :: Conversion
-tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) action
+tupleConversion = Conversion False $ thenMatcher (asTupleSelector asAnyTupleValue) action
   where
     action (ts, i)
       | i > length ts =
@@ -509,12 +521,12 @@ tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) act
 
 -- | Conversion for selector on a record
 recordConversion :: Conversion
-recordConversion = Conversion $ thenMatcher (asRecordSelector asAnyRecordValue) action
+recordConversion = Conversion False $ thenMatcher (asRecordSelector asAnyRecordValue) action
   where action (m, i) = fmap return (Map.lookup i m)
 
 -- | Conversion for equality on tuple types
 eq_Tuple :: Conversion
-eq_Tuple = Conversion $ thenMatcher matcher action
+eq_Tuple = Conversion False $ thenMatcher matcher action
   where
     matcher = asGlobalDef "Prelude.eq" <:> asAnyTupleType <:> asAny <:> asAny
     action (_ :*: ts :*: x :*: y) =
@@ -528,7 +540,7 @@ eq_Tuple = Conversion $ thenMatcher matcher action
 
 -- | Conversion for equality on record types
 eq_Record :: Conversion
-eq_Record = Conversion $ thenMatcher matcher action
+eq_Record = Conversion False $ thenMatcher matcher action
   where
     matcher = asGlobalDef "Prelude.eq" <:> asAnyRecordType <:> asAny <:> asAny
     action (_ :*: tm :*: x :*: y) =
@@ -550,18 +562,18 @@ natConversions = [ zero_NatLit, succ_NatLit, addNat_NatLit, subNat_NatLit
 
 zero_NatLit :: Conversion
 zero_NatLit =
-    Conversion $
+    Conversion True $
     thenMatcher (asCtor "Prelude.Zero" asEmpty) (\_ -> return $ mkNatLit 0)
 
 succ_NatLit :: Conversion
 succ_NatLit =
-    Conversion $ thenMatcher asSuccLit (\n -> return $ mkNatLit (n + 1))
+    Conversion True $ thenMatcher asSuccLit (\n -> return $ mkNatLit (n + 1))
 
 addNat_NatLit :: Conversion
 addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Natural -> Natural -> Natural)
 
 subNat_NatLit :: Conversion
-subNat_NatLit = Conversion $
+subNat_NatLit = Conversion True $
   thenMatcher (asGlobalDef "Prelude.subNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) -> if x >= y then Just (mkNatLit (x - y)) else Nothing)
 
@@ -572,13 +584,13 @@ expNat_NatLit :: Conversion
 expNat_NatLit = globalConv "Prelude.expNat" ((^) :: Natural -> Natural -> Natural)
 
 divNat_NatLit :: Conversion
-divNat_NatLit = Conversion $
+divNat_NatLit = Conversion True $
   thenMatcher (asGlobalDef "Prelude.divNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) ->
          if y /= 0 then Just (mkNatLit (x `div` y)) else Nothing)
 
 remNat_NatLit :: Conversion
-remNat_NatLit = Conversion $
+remNat_NatLit = Conversion True $
   thenMatcher (asGlobalDef "Prelude.remNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) ->
          if y /= 0 then Just (mkNatLit (x `rem` y)) else Nothing)
@@ -663,7 +675,7 @@ at_bvNat = globalConv "Prelude.at" Prim.at_bv
 
 atWithDefault_bvNat :: Conversion
 atWithDefault_bvNat =
-  Conversion $
+  Conversion False $
   (\(_ :*: n :*: a :*: d :*: x :*: i) ->
     if fromIntegral i < width x then mkBool (Prim.at_bv n a x i) else return d) <$>
   (asGlobalDef "Prelude.atWithDefault" <:>

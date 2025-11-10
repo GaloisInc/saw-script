@@ -86,7 +86,7 @@ rawType (Term _ typ) = typ
 -- the SAWCore type system.
 scTypeCheckWHNF :: SharedContext -> Raw.Term -> IO Raw.Term
 scTypeCheckWHNF sc t =
-  do (_, t') <- rewriteSharedTerm sc (addConvs natConversions emptySimpset :: Simpset ()) t
+  do (_, t') <- rewriteSharedTermTypeSafe sc (addConvs natConversions emptySimpset :: Simpset ()) t
      Raw.scWhnf sc t'
 
 -- | Check if two terms are "convertible for type-checking", meaning that they
