@@ -3181,8 +3181,7 @@ primitives = Map.fromList $
   , prim "set_crucible_timeout" "Int -> TopLevel ()"
     (pureVal set_crucible_timeout)
     Experimental
-    -- XXX does this really not apply to JVM/MIR verification, or is
-    -- the help text just Olde?
+    -- XXX this is ignored by JVM/MIR verification; see #2803
     [ "Set the timeout for the SMT solver during the LLVM and x86"
     , "Crucible symbolic execution, in milliseconds. The default is"
     , "10000 (10 seconds). Set it to 0 to disable the timeout."
@@ -4147,9 +4146,8 @@ primitives = Map.fromList $
   , prim "focus_hyp"       "Int -> ProofScript ()"
     (pureVal focus_hyp)
     Experimental
-    -- XXX this description doesn't make sense
-    [ "Focus on the numbered conclusion with a sequent.  This will fail"
-    , "if there are enough hypotheses."
+    [ "Focus on the numbered hypothesis with a sequent.  This will fail"
+    , "if there are not enough hypotheses."
     ]
 
   , prim "print_focus" "ProofScript ()"
@@ -4802,7 +4800,6 @@ primitives = Map.fromList $
                                      "TopLevel YosysSequential")
     (pureVal do_yosys_import_sequential)
     Experimental
-    -- XXX isn't the remark about $dff not true any more?
     [ "Imports a sequential HDL module."
     , ""
     , "The first parameter is the module name; the second is the path"
