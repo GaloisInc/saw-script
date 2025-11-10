@@ -1,0 +1,22 @@
+let {{ ident x = x }};
+let {{ twice f x = f (f x) }};
+
+let reduce t = beta_reduce_term (unfold_term ["ident","twice"] t);
+
+print_term (reduce {{ twice ident }});
+print_term (reduce {{ twice ident True }});
+prove_print trivial (reduce {{ twice ident True }});
+
+print (term_size (reduce {{ twice twice }}));
+print_term (reduce {{ twice twice }});
+print_term (reduce {{ twice twice ident True }});
+prove_print trivial (reduce {{ twice twice ident True }});
+
+print (term_size (reduce {{ twice twice twice }}));
+print_term (reduce {{ twice twice twice }});
+print_term (reduce {{ twice twice twice ident True }});
+prove_print trivial (reduce {{ twice twice twice ident True }});
+
+print (term_size (reduce {{ twice twice twice twice }}));
+print_term (reduce {{ twice twice twice twice ident True }});
+prove_print trivial (reduce {{ twice twice twice twice ident True }});
