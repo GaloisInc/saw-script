@@ -75,7 +75,8 @@ import           SAWCentral.Value
 import           CryptolSAWCore.CryptolEnv
 import           SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import           SAWCore.Name (Name(..))
-import           SAWCore.OpenTerm
+import           SAWCore.OpenTerm (OpenTerm)
+import qualified SAWCore.OpenTerm as OT
 import           SAWCore.Prelude
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm as Term
@@ -165,7 +166,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
           ffiArgTypes
         (llvmOutArgs, post) <- setupRet tenv ffiRetType
         llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)
-        post $ applyOpenTermMulti (mkOpenTerm appTerm) cryArgs
+        post $ OT.apply (OT.term appTerm) cryArgs
       Just (CallAbstract (FFIFunType{})) ->
         -- CallAbstract uses ordinary Cryptol types instead of FFIType,
         -- and while the logic above might be generalized to support that
@@ -208,14 +209,14 @@ mkSizeArg tyArgTerm = do
                       (Cryptol.PLiteralSeqBool (Cryptol.TCNum sizeBitSize))
   -}
   openToSetupTerm $
-    applyGlobalOpenTerm "Cryptol.ecNumber"
-      [ mkOpenTerm tyArgTerm
-      , vectorTypeOpenTerm sizeBitSize boolTypeOpenTerm
-      , applyGlobalOpenTerm "Cryptol.PLiteralSeqBool"
-          [ctorOpenTerm "Cryptol.TCNum" [sizeBitSize]]
+    OT.applyGlobal "Cryptol.ecNumber"
+      [ OT.term tyArgTerm
+      , OT.vectorType sizeBitSize OT.boolType
+      , OT.applyGlobal "Cryptol.PLiteralSeqBool"
+          [OT.applyGlobal "Cryptol.TCNum" [sizeBitSize]]
       ]
   where
-  sizeBitSize = natOpenTerm $
+  sizeBitSize = OT.nat $
     fromIntegral $ finiteBitSize (undefined :: CSize)
 
 -- | Do setup for an input argument, returning the term to pass to the Cryptol
@@ -255,7 +256,7 @@ setupInArg tenv = go
           Nothing -> pure ox
       pure (x, cryTerm)
     tupleInArgs (unzip -> (terms, inArgss)) =
-      (tupleOpenTerm' terms, concat inArgss)
+      (OT.tuple' terms, concat inArgss)
 
 -- | Do setup for the return value, returning a list of output arguments to pass
 -- to the LLVM function and a function that asserts functional correctness given
@@ -299,7 +300,7 @@ setupOutArg tenv = go "out"
         (outArgss, posts) <- unzip <$> setupTupleArgs go name ffiTypes
         let len = fromIntegral $ length ffiTypes
             post ret = zipWithM_
-              (\i p -> p (projTupleOpenTerm' len i ret))
+              (\i p -> p (OT.projTuple' len i ret))
               [0..]
               posts
         pure (concat outArgss, post)
@@ -316,7 +317,7 @@ setupOutArg tenv = go "out"
                         Just i -> i
                         Nothing -> panic "setupOutArg"
                           ["Bad record field access"]
-                p (projTupleOpenTerm' len ix ret))
+                p (OT.projTuple' len ix ret))
               (displayOrder ffiTypeMap)
               posts
         pure (concat outArgss, post)
@@ -345,9 +346,9 @@ getFFIPostcond conv =
         Nothing ->
           FFIPostcondConvToCryEq \llvmTerm cryTerm -> do
             -- ffiToCry llvmTerm == cryTerm
-            lhs <- lio $ completeOpenTerm sc $
+            lhs <- lio $ OT.complete sc $
               ffiToCry $ typedToOpenTerm llvmTerm
-            rhs <- lio $ completeOpenTerm sc cryTerm
+            rhs <- lio $ OT.complete sc cryTerm
             eqTerm <- lio $ mkTypedTerm sc =<< scEq sc lhs rhs
             llvm_postcond eqTerm
     Nothing -> toLLVMWith id
@@ -376,15 +377,15 @@ boolTypeInfo :: Ctx => FFITypeInfo
 boolTypeInfo =
   FFITypeInfo
     { ffiLLVMType = llvm_int 8
-    , ffiLLVMCoreType = bvTypeOpenTerm (8 :: Natural)
+    , ffiLLVMCoreType = OT.bvType (8 :: Natural)
     , ffiConv =
         Just FFIConv
-          { ffiCryType = boolTypeOpenTerm
+          { ffiCryType = OT.boolType
           , ffiPrecond = precondBVZeroPrefix 8 7
           , ffiToCry = \x {- : Vec 8 Bool -} -> -- : Bool
               {- x != zero
               => bvNonzero 8 x -}
-              applyGlobalOpenTerm "Prelude.bvNonzero" [natOpenTerm 8, x]
+              OT.applyGlobal "Prelude.bvNonzero" [OT.nat 8, x]
           , ffiToLLVM = Nothing
           }
     }
@@ -396,20 +397,20 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
     FFIWord (fromInteger -> n) ffiWordSize ->
       FFITypeInfo
         { ffiLLVMType = llvm_int llvmSize
-        , ffiLLVMCoreType = bvTypeOpenTerm (llvmSize :: Natural)
+        , ffiLLVMCoreType = OT.bvType (llvmSize :: Natural)
         , ffiConv = do
             -- No need for conversion if the word size exactly matches a
             -- machine word size.
             guard (n < llvmSize)
             Just FFIConv
-              { ffiCryType = bvTypeOpenTerm n
+              { ffiCryType = OT.bvType n
               , ffiPrecond =
                   precondBVZeroPrefix llvmSize (llvmSize - n)
               , ffiToCry = \x {- : Vec llvmSize Bool -} -> -- : Vec n Bool
                   {- drop (llvmSize - n) x
                   => Prelude.bvTrunc (llvmSize - n) n x -}
-                  applyGlobalOpenTerm "Prelude.bvTrunc"
-                    [natOpenTerm (llvmSize - n), natOpenTerm n, x]
+                  OT.applyGlobal "Prelude.bvTrunc"
+                    [OT.nat (llvmSize - n), OT.nat n, x]
               , ffiToLLVM = Nothing
               }
         }
@@ -424,8 +425,8 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
     FFIFloat _ _ ffiFloatSize ->
       let (ffiLLVMType, ffiLLVMCoreType) =
             case ffiFloatSize of
-              FFIFloat32 -> (llvm_float, globalOpenTerm "Prelude.Float")
-              FFIFloat64 -> (llvm_double, globalOpenTerm "Prelude.Double")
+              FFIFloat32 -> (llvm_float, OT.global "Prelude.Float")
+              FFIFloat64 -> (llvm_double, OT.global "Prelude.Double")
       in  FFITypeInfo
             { ffiConv = Nothing
             , .. }
@@ -437,22 +438,22 @@ precondBVZeroPrefix :: Ctx =>
   Natural {- totalLen -} -> Natural ->
   OpenTerm {- Vec totalLen Bool -} -> LLVMCrucibleSetupM ()
 precondBVZeroPrefix totalLen zeroLen x = do
-  let zeroLenTerm = natOpenTerm zeroLen
+  let zeroLenTerm = OT.nat zeroLen
       precond =
         {- take zeroLen x == zero
         => Prelude.bvEq zeroLen
                         (take Bool zeroLen (totalLen - zeroLen) x)
                         (bvNat zeroLen 0) -}
-        applyGlobalOpenTerm "Prelude.bvEq"
+        OT.applyGlobal "Prelude.bvEq"
           [ zeroLenTerm
-          , applyGlobalOpenTerm "Prelude.take"
-              [ boolTypeOpenTerm
+          , OT.applyGlobal "Prelude.take"
+              [ OT.boolType
               , zeroLenTerm
-              , natOpenTerm (totalLen - zeroLen)
+              , OT.nat (totalLen - zeroLen)
               , x
               ]
-          , applyGlobalOpenTerm "Prelude.bvNat"
-              [zeroLenTerm, natOpenTerm 0]
+          , OT.applyGlobal "Prelude.bvNat"
+              [zeroLenTerm, OT.nat 0]
           ]
   llvm_precond =<< lio (openToTypedTerm precond)
 
@@ -462,14 +463,14 @@ arrayTypeInfo :: Ctx => TypeEnv -> [Cry.Type] -> FFIBasicType ->
 arrayTypeInfo tenv lenTypes ffiBasicType = do
   let lens :: Integral a => [a]
       lens = map (fromInteger . finNat' . evalNumType tenv) lenTypes
-      lenTerms = map natOpenTerm lens
+      lenTerms = map OT.nat lens
       totalLen :: Integral a => a
       totalLen = product lens
-      totalLenTerm = natOpenTerm $ fromInteger totalLen
+      totalLenTerm = OT.nat $ fromInteger totalLen
   FFITypeInfo {..} <- basicTypeInfo ffiBasicType
   pure FFITypeInfo
     { ffiLLVMType = llvm_array totalLen ffiLLVMType
-    , ffiLLVMCoreType = vectorTypeOpenTerm totalLenTerm ffiLLVMCoreType
+    , ffiLLVMCoreType = OT.vectorType totalLenTerm ffiLLVMCoreType
     , ffiConv =
         case (lenTerms, ffiConv) of
           -- If the array is flat and there is no need to convert individual
@@ -478,9 +479,9 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
           _ -> do
             let basicCryType = maybe ffiLLVMCoreType ffiCryType ffiConv
                 basicToLLVM = maybe (Just id) ffiToLLVM ffiConv
-                cumulLenTerms = map natOpenTerm $ scanl1 (*) lens
+                cumulLenTerms = map OT.nat $ scanl1 (*) lens
                 arrCryType :| cumulElemTypes =
-                  NE.scanr vectorTypeOpenTerm basicCryType lenTerms
+                  NE.scanr OT.vectorType basicCryType lenTerms
 
                 noArrayLengths :: a
                 noArrayLengths =
@@ -511,8 +512,8 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                       {- arr @ i
                       => Prelude.at len ffiLLVMCoreType arr i -}
                       ffiPrecond $
-                        applyGlobalOpenTerm "Prelude.at"
-                          [totalLenTerm, ffiLLVMCoreType, arr, natOpenTerm i]
+                        OT.applyGlobal "Prelude.at"
+                          [totalLenTerm, ffiLLVMCoreType, arr, OT.nat i]
               , ffiToCry = \llvmArr {- : Vec totalLen ffiLLVMCoreType -} ->
                   let flatCryArr =
                         case ffiConv of
@@ -523,10 +524,10 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                            (\x -> ffiToCry x)
                                            totalLen
                                            llvmArr -}
-                            applyGlobalOpenTerm "Prelude.map"
+                            OT.applyGlobal "Prelude.map"
                               [ ffiLLVMCoreType
                               , ffiCryType
-                              , lambdaOpenTerm "x" ffiLLVMCoreType ffiToCry
+                              , OT.lambda "x" ffiLLVMCoreType ffiToCry
                               , totalLenTerm
                               , llvmArr
                               ]
@@ -537,7 +538,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                 (split (x * y) z ffiCryType flatCryArr) -}
                       foldr
                         (\(cumulLen, dimLen, arrElemType) arr ->
-                          applyGlobalOpenTerm "Prelude.split"
+                          OT.applyGlobal "Prelude.split"
                             [cumulLen, dimLen, arrElemType, arr])
                         flatCryArr
                         cumul
@@ -550,7 +551,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                  (join x y (Vec z ffiCryType) cryArr) -}
                         foldr
                           (\(cumulLen, dimLen, arrElemType) arr ->
-                            applyGlobalOpenTerm "Prelude.join"
+                            OT.applyGlobal "Prelude.join"
                               [cumulLen, dimLen, arrElemType, arr])
                           cryArr
                           (reverse cumul)
@@ -560,10 +561,10 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                      (\x -> toLLVM x)
                                      totalLen
                                      flatCryArr -}
-                      applyGlobalOpenTerm "Prelude.map"
+                      OT.applyGlobal "Prelude.map"
                         [ basicCryType
                         , ffiLLVMCoreType
-                        , lambdaOpenTerm "x" basicCryType toLLVM
+                        , OT.lambda "x" basicCryType toLLVM
                         , totalLenTerm
                         , flatCryArr
                         ]
@@ -573,14 +574,14 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
 -- Utility functions
 
 openToTypedTerm :: Ctx => OpenTerm -> IO TypedTerm
-openToTypedTerm openTerm = mkTypedTerm sc =<< completeOpenTerm sc openTerm
+openToTypedTerm openTerm = mkTypedTerm sc =<< OT.complete sc openTerm
   where FFISetupCtx {..} = ?ctx
 
 openToSetupTerm :: Ctx => OpenTerm -> IO (AllLLVM SetupValue)
 openToSetupTerm openTerm = anySetupTerm <$> openToTypedTerm openTerm
 
 typedToOpenTerm :: TypedTerm -> OpenTerm
-typedToOpenTerm = mkOpenTerm . ttTerm
+typedToOpenTerm = OT.term . ttTerm
 
 lll :: TopLevel a -> LLVMCrucibleSetupM a
 lll x = LLVMCrucibleSetupM $ lift $ lift x

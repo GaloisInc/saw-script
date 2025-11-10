@@ -10,78 +10,72 @@ License     : BSD3
 Stability   : experimental
 Portability : non-portable (language extensions)
 
-This module defines an interface to building SAW core terms in an incrementally
-type-checked way, meaning that type-checking is performed as the terms are
-built. The interface provides a convenient DSL for building terms in a pure way,
-where sub-terms can be freely composed and combined into super-terms without
-monadic sequencing or 'IO' computations; the 'IO' computation is only run at the
-top level when all the term-building is complete. Users of this interface can
-also build binding constructs like lambda- and pi-abstractions without worrying
-about deBruijn indices, lifting, and free variables. Instead, a key feature of
-this interface is that it uses higher-order abstract syntax for lambda- and
-pi-abstractions, meaning that the bodies of these term constructs are specified
-as Haskell functions that take in terms for the bound variables. The library
-takes care of all the deBruijn indices under the hood.
+This module defines a convenient DSL for building terms in a pure way,
+where sub-terms can be freely composed and combined into super-terms
+without monadic sequencing or 'IO' computations; the 'IO' computation
+is only run at the top level when all the term-building is complete.
 
-To use the 'OpenTerm' API, the caller builds up 'OpenTerm's using a variety of
-combinators that mirror the SAW core 'Term' structure. As some useful examples
-of 'OpenTerm' operations, 'applyOpenTerm' applies one 'OpenTerm' to another,
-'globalOpenTerm' builds an 'OpenTerm' for a global identifier, and
-'lambdaOpenTerm' builds a lambda-abstraction. For instance, the SAW core term
+Users of this interface can also build binding constructs like lambda-
+and pi-abstractions using higher-order abstract syntax, meaning that
+the bodies of these term constructs are specified as Haskell functions
+that take in terms for the bound variables.
+
+Since many function names are short and may clash with names from
+other modules, this module is intended to be imported @qualified@,
+e.g.
+
+>  import SAWCore.OpenTerm (OpenTerm)
+>  import qualified SAWCore.OpenTerm as OpenTerm
+
+To use the 'OpenTerm' API, the caller builds up 'OpenTerm's using a
+variety of combinators that mirror the SAW core 'Term' structure.
+As some useful examples of 'OpenTerm' operations, 'apply' applies one
+'OpenTerm' to another, 'global' builds an 'OpenTerm' for a global
+identifier, and 'lambda' builds a lambda-abstraction. For instance,
+the SAW core term
 
 > \ (f : Bool -> Bool) (x : Bool) -> f x
 
 can be built with the 'OpenTerm' expression
 
-> let bool = globalOpenTerm "Prelude.Bool" in
-> lambdaOpenTerm "f" (arrowOpenTerm bool bool) $ \f ->
-> lambdaOpenTerm "x" (globalOpenTerm "Prelude.Bool") $ \x ->
-> applyOpenTerm f x
+> let boolTy = global "Prelude.Bool" in
+> lambda "f" (arrow boolTy boolTy) $ \f ->
+> lambda "x" boolTy $ \x ->
+> apply f x
 
-Existing SAW core 'Term's can be used in 'OpenTerm' by applying 'mkOpenTerm'.
-At the top level, 'completeOpenTerm' then "completes" an 'OpenTerm'
-by running its underlying 'IO' computation to build and type-check the resulting
+Existing SAW core 'Term's can be used in 'OpenTerm' by applying 'term'.
+At the top level, 'complete' then "completes" an 'OpenTerm' by running
+its underlying 'IO' computation to build and type-check the resulting
 SAW core 'Term'.
 -}
 
 module SAWCore.OpenTerm (
   -- * Open terms and converting to closed terms
-  OpenTerm(..), completeOpenTerm, completeOpenTermType,
+  OpenTerm(..), complete, completeType,
   -- * Basic operations for building open terms
-  mkOpenTerm, failOpenTerm,
-  bindTCMOpenTerm, bindPPOpenTerm, openTermType,
-  flatOpenTerm, sortOpenTerm, natOpenTerm,
-  unitOpenTerm, unitTypeOpenTerm,
-  stringLitOpenTerm, stringTypeOpenTerm,
-  trueOpenTerm, falseOpenTerm, boolOpenTerm, boolTypeOpenTerm,
-  arrayValueOpenTerm, vectorTypeOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
-  pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
-  tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
-  tupleOpenTerm', tupleTypeOpenTerm', projTupleOpenTerm',
-  recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
-  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, variableOpenTerm,
-  applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
-  applyPiOpenTerm, piArgOpenTerm, lambdaOpenTerm, lambdaOpenTermMulti,
-  piOpenTerm, piOpenTermMulti, arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
-  bitvectorTypeOpenTerm, listOpenTerm, eitherTypeOpenTerm,
-  -- * Types that provide similar operations to 'OpenTerm'
-  OpenTermLike(..), lambdaTermLikeMulti, applyTermLikeMulti, failTermLike,
-  globalTermLike, applyGlobalTermLike,
-  natTermLike, unitTermLike, unitTypeTermLike,
-  stringLitTermLike, stringTypeTermLike, trueTermLike, falseTermLike,
-  boolTermLike, boolTypeTermLike,
-  arrayValueTermLike, bvLitTermLike, vectorTypeTermLike, bvTypeTermLike,
-  pairTermLike, pairTypeTermLike, pairLeftTermLike, pairRightTermLike,
-  tupleTermLike, tupleTypeTermLike, projTupleTermLike,
-  letTermLike, sawLetTermLike,
+  term,
+  typeOf,
+  flat, sort, nat,
+  unit, unitType,
+  stringLit, stringType,
+  true, false, bool, boolType,
+  arrayValue, vectorType, bvLit, bvType,
+  pair, pairType, pairLeft, pairRight,
+  tuple, tupleType, projTuple,
+  tuple', tupleType', projTuple',
+  record, recordType, projRecord,
+  global, variable,
+  app, apply, applyGlobal,
+  applyPi, piArg, lambda, lambdas,
+  piType, piMulti, arrow, mkLet, sawLet,
+  bitvectorType, list, eitherType,
   ) where
 
 import qualified Data.Vector as V
-import Control.Monad.Reader
 import Data.Text (Text)
 import Numeric.Natural
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts, render)
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Name
 import SAWCore.Panic
@@ -91,10 +85,6 @@ import SAWCore.Term.Raw
 import SAWCore.SharedTerm
 import qualified SAWCore.Term.Certified as SC
 import SAWCore.SCTypeCheck
-import SAWCore.Module
-  ( ctorName
-  , dtName
-  )
 
 
 -- | An open term is represented as a type-checking computation that computes a
@@ -103,245 +93,192 @@ newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SC.Term }
 
 -- | \"Complete\" an 'OpenTerm' to a closed term or 'fail' on type-checking
 -- error
-completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
-completeOpenTerm sc (OpenTerm termM) =
+complete :: SharedContext -> OpenTerm -> IO Term
+complete sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM (SC.rawTerm <$> termM) sc
 
 -- | \"Complete\" an 'OpenTerm' to a closed term for its type
-completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
-completeOpenTermType sc (OpenTerm termM) =
+completeType :: SharedContext -> OpenTerm -> IO Term
+completeType sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM (SC.rawType <$> termM) sc
 
--- | Embed a closed 'Term' into an 'OpenTerm'
-mkOpenTerm :: Term -> OpenTerm
-mkOpenTerm t = OpenTerm $ typeInferComplete t
+-- | Embed a 'Term' into an 'OpenTerm'.
+term :: Term -> OpenTerm
+term t = OpenTerm $ typeInferComplete t
 
--- | Build an 'OpenTerm' that 'fail's in the underlying monad when completed
-failOpenTerm :: String -> OpenTerm
-failOpenTerm str = OpenTerm $ fail str
-
--- | Bind the result of a type-checking computation in building an 'OpenTerm'.
--- NOTE: this operation should be considered \"unsafe\" because it can create
--- malformed 'OpenTerm's if the result of the 'TCM' computation is used as part
--- of the resulting 'OpenTerm'. For instance, @a@ should not be 'OpenTerm'.
-bindTCMOpenTerm :: TCM a -> (a -> OpenTerm) -> OpenTerm
-bindTCMOpenTerm m f = OpenTerm (m >>= unOpenTerm . f)
-
--- | Bind the result of pretty-printing an 'OpenTerm' while building another
-bindPPOpenTerm :: OpenTerm -> (String -> OpenTerm) -> OpenTerm
-bindPPOpenTerm (OpenTerm m) f =
-  OpenTerm $
-  do t <- SC.rawTerm <$> m
-     -- XXX: this could use scPrettyTermInCtx (which builds in the call to
-     -- PPS.render) except that it's slightly different under the covers
-     -- (in its use of the "global" flag, and it isn't entirely clear what
-     -- that actually does)
-     unOpenTerm $ f $ PPS.render PPS.defaultOpts $
-       ppTermInCtx PPS.defaultOpts [] t
-
--- | Return type type of an 'OpenTerm' as an 'OpenTerm
-openTermType :: OpenTerm -> OpenTerm
-openTermType (OpenTerm m) =
+-- | Return type of an 'OpenTerm' as an 'OpenTerm'.
+typeOf :: OpenTerm -> OpenTerm
+typeOf (OpenTerm m) =
   OpenTerm $ do t <- m
                 liftTCM SC.scTypeOf t
 
 -- | Build an 'OpenTerm' from a 'FlatTermF'
-flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
-flatOpenTerm ftf = OpenTerm $
+flat :: FlatTermF OpenTerm -> OpenTerm
+flat ftf = OpenTerm $
   (sequence (fmap unOpenTerm ftf) >>= typeInferComplete)
 
 -- | Build an 'OpenTerm' for a sort
-sortOpenTerm :: Sort -> OpenTerm
-sortOpenTerm s = flatOpenTerm (Sort s noFlags)
+sort :: Sort -> OpenTerm
+sort s = flat (Sort s noFlags)
 
 -- | Build an 'OpenTerm' for a natural number literal
-natOpenTerm :: Natural -> OpenTerm
-natOpenTerm = flatOpenTerm . NatLit
+nat :: Natural -> OpenTerm
+nat = flat . NatLit
 
 -- | The 'OpenTerm' for the unit value
-unitOpenTerm :: OpenTerm
-unitOpenTerm = flatOpenTerm UnitValue
+unit :: OpenTerm
+unit = flat UnitValue
 
 -- | The 'OpenTerm' for the unit type
-unitTypeOpenTerm :: OpenTerm
-unitTypeOpenTerm = flatOpenTerm UnitType
+unitType :: OpenTerm
+unitType = flat UnitType
 
 -- | Build a SAW core string literal.
-stringLitOpenTerm :: Text -> OpenTerm
-stringLitOpenTerm = flatOpenTerm . StringLit
+stringLit :: Text -> OpenTerm
+stringLit = flat . StringLit
 
 -- | Return the SAW core type @String@ of strings.
-stringTypeOpenTerm :: OpenTerm
-stringTypeOpenTerm = globalOpenTerm "Prelude.String"
+stringType :: OpenTerm
+stringType = global "Prelude.String"
 
 -- | The 'True' value as a SAW core term
-trueOpenTerm :: OpenTerm
-trueOpenTerm = globalOpenTerm "Prelude.True"
+true :: OpenTerm
+true = global "Prelude.True"
 
 -- | The 'False' value as a SAW core term
-falseOpenTerm :: OpenTerm
-falseOpenTerm = globalOpenTerm "Prelude.False"
+false :: OpenTerm
+false = global "Prelude.False"
 
 -- | Convert a 'Bool' to a SAW core term
-boolOpenTerm :: Bool -> OpenTerm
-boolOpenTerm True = globalOpenTerm "Prelude.True"
-boolOpenTerm False = globalOpenTerm "Prelude.False"
+bool :: Bool -> OpenTerm
+bool True = global "Prelude.True"
+bool False = global "Prelude.False"
 
 -- | The 'Bool' type as a SAW core term
-boolTypeOpenTerm :: OpenTerm
-boolTypeOpenTerm = globalOpenTerm "Prelude.Bool"
+boolType :: OpenTerm
+boolType = global "Prelude.Bool"
 
 -- | Build an 'OpenTerm' for an array literal
-arrayValueOpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
-arrayValueOpenTerm tp elems =
-  flatOpenTerm $ ArrayValue tp $ V.fromList elems
+arrayValue :: OpenTerm -> [OpenTerm] -> OpenTerm
+arrayValue tp elems =
+  flat $ ArrayValue tp $ V.fromList elems
 
 -- | Create a SAW core term for a bitvector literal
-bvLitOpenTerm :: [Bool] -> OpenTerm
-bvLitOpenTerm bits =
-  arrayValueOpenTerm boolTypeOpenTerm $ map boolOpenTerm bits
+bvLit :: [Bool] -> OpenTerm
+bvLit bits =
+  arrayValue boolType $ map bool bits
 
 -- | Create a SAW core term for a vector type
-vectorTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-vectorTypeOpenTerm n a = applyGlobalOpenTerm "Prelude.Vec" [n,a]
+vectorType :: OpenTerm -> OpenTerm -> OpenTerm
+vectorType n a = applyGlobal "Prelude.Vec" [n,a]
 
 -- | Create a SAW core term for the type of a bitvector
-bvTypeOpenTerm :: Integral a => a -> OpenTerm
-bvTypeOpenTerm n =
-  applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
-  [natOpenTerm (fromIntegral n), boolTypeOpenTerm]
+bvType :: Integral a => a -> OpenTerm
+bvType n =
+  apply (global "Prelude.Vec")
+  [nat (fromIntegral n), boolType]
 
 -- | Build an 'OpenTerm' for a pair
-pairOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-pairOpenTerm t1 t2 = flatOpenTerm $ PairValue t1 t2
+pair :: OpenTerm -> OpenTerm -> OpenTerm
+pair t1 t2 = flat $ PairValue t1 t2
 
 -- | Build an 'OpenTerm' for a pair type
-pairTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-pairTypeOpenTerm t1 t2 = flatOpenTerm $ PairType t1 t2
+pairType :: OpenTerm -> OpenTerm -> OpenTerm
+pairType t1 t2 = flat $ PairType t1 t2
 
 -- | Build an 'OpenTerm' for the left projection of a pair
-pairLeftOpenTerm :: OpenTerm -> OpenTerm
-pairLeftOpenTerm t = flatOpenTerm $ PairLeft t
+pairLeft :: OpenTerm -> OpenTerm
+pairLeft t = flat $ PairLeft t
 
 -- | Build an 'OpenTerm' for the right projection of a pair
-pairRightOpenTerm :: OpenTerm -> OpenTerm
-pairRightOpenTerm t = flatOpenTerm $ PairRight t
+pairRight :: OpenTerm -> OpenTerm
+pairRight t = flat $ PairRight t
 
 -- | Build a right-nested tuple as an 'OpenTerm'
-tupleOpenTerm :: [OpenTerm] -> OpenTerm
-tupleOpenTerm = foldr pairOpenTerm unitOpenTerm
+tuple :: [OpenTerm] -> OpenTerm
+tuple = foldr pair unit
 
 -- | Build a right-nested tuple type as an 'OpenTerm'
-tupleTypeOpenTerm :: [OpenTerm] -> OpenTerm
-tupleTypeOpenTerm = foldr pairTypeOpenTerm unitTypeOpenTerm
+tupleType :: [OpenTerm] -> OpenTerm
+tupleType = foldr pairType unitType
 
 -- | Project the @n@th element of a right-nested tuple type
-projTupleOpenTerm :: Integer -> OpenTerm -> OpenTerm
-projTupleOpenTerm 0 t = pairLeftOpenTerm t
-projTupleOpenTerm i t = projTupleOpenTerm (i-1) (pairRightOpenTerm t)
+projTuple :: Integer -> OpenTerm -> OpenTerm
+projTuple 0 t = pairLeft t
+projTuple i t = projTuple (i-1) (pairRight t)
 
 -- | Build a right-nested tuple as an 'OpenTerm' but without adding a final unit
 -- as the right-most element
-tupleOpenTerm' :: [OpenTerm] -> OpenTerm
-tupleOpenTerm' [] = unitOpenTerm
-tupleOpenTerm' ts = foldr1 pairOpenTerm ts
+tuple' :: [OpenTerm] -> OpenTerm
+tuple' [] = unit
+tuple' ts = foldr1 pair ts
 
 -- | Build a right-nested tuple type as an 'OpenTerm' but without adding a final
 -- unit type as the right-most element
-tupleTypeOpenTerm' :: [OpenTerm] -> OpenTerm
-tupleTypeOpenTerm' [] = unitTypeOpenTerm
-tupleTypeOpenTerm' ts = foldr1 pairTypeOpenTerm ts
+tupleType' :: [OpenTerm] -> OpenTerm
+tupleType' [] = unitType
+tupleType' ts = foldr1 pairType ts
 
 -- | Project the @i@th element from a term of a right-nested tuple term that
 -- does not have a final unit type as the right-most type. The first argument is
 -- the number of types used to make the tuple type and the second is the index.
-projTupleOpenTerm' :: Natural -> Natural -> OpenTerm -> OpenTerm
-projTupleOpenTerm' 0 _ _ =
+projTuple' :: Natural -> Natural -> OpenTerm -> OpenTerm
+projTuple' 0 _ _ =
   panic "projTupleOpenTerm'" ["Projection of empty tuple!"]
-projTupleOpenTerm' 1 0 tup = tup
-projTupleOpenTerm' _ 0 tup = pairLeftOpenTerm tup
-projTupleOpenTerm' len i tup =
-  projTupleOpenTerm' (len-1) (i-1) $ pairRightOpenTerm tup
+projTuple' 1 0 tup = tup
+projTuple' _ 0 tup = pairLeft tup
+projTuple' len i tup =
+  projTuple' (len-1) (i-1) $ pairRight tup
 
 -- | Build a record value as an 'OpenTerm'
-recordOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm
-recordOpenTerm flds_ts =
+record :: [(FieldName, OpenTerm)] -> OpenTerm
+record flds_ts =
   OpenTerm $ do let (flds,ots) = unzip flds_ts
                 ts <- mapM unOpenTerm ots
                 typeInferComplete $ RecordValue $ zip flds ts
 
 -- | Build a record type as an 'OpenTerm'
-recordTypeOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm
-recordTypeOpenTerm flds_ts =
+recordType :: [(FieldName, OpenTerm)] -> OpenTerm
+recordType flds_ts =
   OpenTerm $ do let (flds,ots) = unzip flds_ts
                 ts <- mapM unOpenTerm ots
                 typeInferComplete $ RecordType $ zip flds ts
 
 -- | Project a field from a record
-projRecordOpenTerm :: OpenTerm -> FieldName -> OpenTerm
-projRecordOpenTerm (OpenTerm m) f =
+projRecord :: OpenTerm -> FieldName -> OpenTerm
+projRecord (OpenTerm m) f =
   OpenTerm $ do t <- m
                 typeInferComplete $ RecordProj t f
 
--- | Build an 'OpenTerm' for a constructor applied to its arguments
-ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
-ctorOpenTerm c all_args = applyOpenTermMulti ctor_open_term all_args
-  where
-    ctor_open_term =
-      OpenTerm $
-      do maybe_ctor <- liftTCM scFindCtor c
-         ctor <- case maybe_ctor of
-                   Just ctor -> pure ctor
-                   Nothing -> throwTCError $ NoSuchCtor (ModuleIdentifier c)
-         typeInferComplete (Constant (ctorName ctor) :: TermF Term)
-
--- | Build an 'OpenTerm' for a datatype applied to its arguments
-dataTypeOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
-dataTypeOpenTerm d all_args = applyOpenTermMulti dt_open_term all_args
-  where
-    dt_open_term =
-      OpenTerm $
-      do maybe_dt <- liftTCM scFindDataType d
-         dt <- case maybe_dt of
-                 Just dt -> pure dt
-                 Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier d)
-         typeInferComplete (Constant (dtName dt) :: TermF Term)
-
 -- | Build an 'OpenTerm' for a global name with a definition
-globalOpenTerm :: Ident -> OpenTerm
-globalOpenTerm ident =
-  OpenTerm (liftTCM SC.scGlobal ident)
-
--- | Build an 'OpenTerm' for an 'Ident', which can either refer to a definition,
--- a constructor, or a datatype
-identOpenTerm :: Ident -> OpenTerm
-identOpenTerm ident =
+global :: Ident -> OpenTerm
+global ident =
   OpenTerm (liftTCM SC.scGlobal ident)
 
 -- | Build an 'OpenTerm' for a named variable.
-variableOpenTerm :: VarName -> Term -> OpenTerm
-variableOpenTerm x t = OpenTerm (liftTCM scVariable x t >>= typeInferComplete)
+variable :: VarName -> Term -> OpenTerm
+variable x t = OpenTerm (liftTCM scVariable x t >>= typeInferComplete)
 
--- | Apply an 'OpenTerm' to another
-applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-applyOpenTerm (OpenTerm f) (OpenTerm arg) =
+-- | Apply an 'OpenTerm' to another.
+app :: OpenTerm -> OpenTerm -> OpenTerm
+app (OpenTerm f) (OpenTerm arg) =
   OpenTerm ((App <$> f <*> arg) >>= typeInferComplete)
 
--- | Apply an 'OpenTerm' to 0 or more arguments
-applyOpenTermMulti :: OpenTerm -> [OpenTerm] -> OpenTerm
-applyOpenTermMulti = foldl applyOpenTerm
+-- | Apply an 'OpenTerm' to a list of zero or more arguments.
+apply :: OpenTerm -> [OpenTerm] -> OpenTerm
+apply = foldl app
 
--- | Apply a named global to 0 or more arguments
-applyGlobalOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
-applyGlobalOpenTerm ident = applyOpenTermMulti (globalOpenTerm ident)
+-- | Apply a named global to a list of zero or more arguments.
+applyGlobal :: Ident -> [OpenTerm] -> OpenTerm
+applyGlobal ident = apply (global ident)
 
 -- | Compute the output type of applying a function of a given type to an
 -- argument. That is, given @tp@ and @arg@, compute the type of applying any @f@
 -- of type @tp@ to @arg@.
-applyPiOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
+applyPi :: OpenTerm -> OpenTerm -> OpenTerm
+applyPi (OpenTerm m_f) (OpenTerm m_arg) =
   OpenTerm $
   do f <- m_f
      arg <- m_arg
@@ -350,17 +287,17 @@ applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
 
 -- | Get the argument type of a function type, 'fail'ing if the input term is
 -- not a function type
-piArgOpenTerm :: OpenTerm -> OpenTerm
-piArgOpenTerm (OpenTerm m) =
+piArg :: OpenTerm -> OpenTerm
+piArg (OpenTerm m) =
   OpenTerm $ m >>= \case
   (unwrapTermF . SC.rawTerm -> Pi _ tp _) -> typeInferComplete tp
   t ->
-    fail ("piArgOpenTerm: not a pi type: " ++
+    fail ("piArg: not a pi type: " ++
           scPrettyTermInCtx PPS.defaultOpts [] (SC.rawTerm t))
 
 -- | Build a lambda abstraction as an 'OpenTerm'
-lambdaOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
-lambdaOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
+lambda :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
+lambda x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
      vn <- liftTCM scFreshVarName x
      var <- typeInferComplete $ Variable vn tp
@@ -368,15 +305,15 @@ lambdaOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
      typeInferComplete $ Lambda vn tp body
 
 -- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
-lambdaOpenTermMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
+lambdas :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
                        OpenTerm
-lambdaOpenTermMulti xs_tps body_f =
+lambdas xs_tps body_f =
   foldr (\(x,tp) rest_f xs ->
-          lambdaOpenTerm x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
+          lambda x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
 
 -- | Build a Pi abstraction as an 'OpenTerm'
-piOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
-piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
+piType :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
+piType x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
      nm <- liftTCM scFreshVarName x
      var <- typeInferComplete $ Variable nm tp
@@ -384,219 +321,46 @@ piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
      typeInferComplete $ Pi nm tp body
 
 -- | Build a non-dependent function type.
-arrowOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm
-arrowOpenTerm x tp body = piOpenTerm x tp (const body)
+arrow :: OpenTerm -> OpenTerm -> OpenTerm
+arrow t1 t2 =
+  OpenTerm $
+  do t1' <- unOpenTerm t1
+     t2' <- unOpenTerm t2
+     typeInferComplete $ Pi wildcardVarName t1' t2'
 
 -- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
-piOpenTermMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
+piMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
                    OpenTerm
-piOpenTermMulti xs_tps body_f =
+piMulti xs_tps body_f =
   foldr (\(x,tp) rest_f xs ->
-          piOpenTerm x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
+          piType x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
 
 -- | Build a let expression as an 'OpenTerm'. This is equivalent to
--- > 'applyOpenTerm' ('lambdaOpenTerm' x tp body) rhs
-letOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> (OpenTerm -> OpenTerm) ->
-               OpenTerm
-letOpenTerm x tp rhs body_f = applyOpenTerm (lambdaOpenTerm x tp body_f) rhs
+-- > 'apply' ('lambda' x tp body) rhs
+mkLet ::
+  LocalName -> OpenTerm -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
+mkLet x tp rhs body_f = app (lambda x tp body_f) rhs
 
 -- | Build a let expression as an 'OpenTerm'. This is equivalent to
--- > 'applyOpenTerm' ('lambdaOpenTerm' x tp body) rhs
-sawLetOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm ->
-                  (OpenTerm -> OpenTerm) -> OpenTerm
-sawLetOpenTerm x tp tp_ret rhs body_f =
-  applyOpenTermMulti (globalOpenTerm "Prelude.sawLet")
-  [tp, tp_ret, rhs, lambdaOpenTerm x tp body_f]
+-- > 'apply' ('lambda' x tp body) rhs
+sawLet ::
+  LocalName -> OpenTerm -> OpenTerm -> OpenTerm ->
+  (OpenTerm -> OpenTerm) -> OpenTerm
+sawLet x tp tp_ret rhs body_f =
+  apply (global "Prelude.sawLet")
+  [tp, tp_ret, rhs, lambda x tp body_f]
 
 -- | Build a bitvector type with the given length
-bitvectorTypeOpenTerm :: OpenTerm -> OpenTerm
-bitvectorTypeOpenTerm w =
-  applyGlobalOpenTerm "Prelude.Vec" [w, globalOpenTerm "Prelude.Bool"]
+bitvectorType :: OpenTerm -> OpenTerm
+bitvectorType w =
+  applyGlobal "Prelude.Vec" [w, global "Prelude.Bool"]
 
 -- | Build a SAW core term for a list with the given element type
-listOpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
-listOpenTerm tp elems =
-  foldr (\x l -> ctorOpenTerm "Prelude.Cons" [tp, x, l])
-  (ctorOpenTerm "Prelude.Nil" [tp]) elems
+list :: OpenTerm -> [OpenTerm] -> OpenTerm
+list tp elems =
+  foldr (\x l -> applyGlobal "Prelude.Cons" [tp, x, l])
+  (applyGlobal "Prelude.Nil" [tp]) elems
 
 -- | Build the type @Either a b@ from types @a@ and @b@
-eitherTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-eitherTypeOpenTerm a b = dataTypeOpenTerm "Prelude.Either" [a,b]
-
---------------------------------------------------------------------------------
--- Types that provide similar operations to 'OpenTerm'
-
-class OpenTermLike t where
-  -- | Convert an 'OpenTerm' to a @t@
-  openTermLike :: OpenTerm -> t
-  -- | Get the type of a @t@
-  typeOfTermLike :: t -> t
-  -- | Build a @t@ from a 'FlatTermF'
-  flatTermLike :: FlatTermF t -> t
-  -- | Apply a @t@ to another @t@
-  applyTermLike :: t -> t -> t
-  -- | Build a lambda abstraction as a @t@
-  lambdaTermLike :: LocalName -> t -> (t -> t) -> t
-  -- | Build a pi abstraction as a @t@
-  piTermLike :: LocalName -> t -> (t -> t) -> t
-  -- | Build a @t@ for a constructor applied to its arguments
-  ctorTermLike :: Ident -> [t] -> t
-  -- | Build a @t@ for a datatype applied to its arguments
-  dataTypeTermLike :: Ident -> [t] -> t
-
-instance OpenTermLike OpenTerm where
-  openTermLike = id
-  typeOfTermLike = openTermType
-  flatTermLike = flatOpenTerm
-  applyTermLike = applyOpenTerm
-  lambdaTermLike = lambdaOpenTerm
-  piTermLike = piOpenTerm
-  ctorTermLike = ctorOpenTerm
-  dataTypeTermLike = dataTypeOpenTerm
-
--- Lift an OpenTermLike instance from t to functions from some type a to t,
--- where the OpenTermLike methods pass the same input a argument to all subterms
-instance OpenTermLike t => OpenTermLike (a -> t) where
-  openTermLike t = const $ openTermLike t
-  typeOfTermLike t = \x -> typeOfTermLike (t x)
-  flatTermLike ftf = \x -> flatTermLike (fmap ($ x) ftf)
-  applyTermLike f arg = \x -> applyTermLike (f x) (arg x)
-  lambdaTermLike nm tp bodyF =
-    \x -> lambdaTermLike nm (tp x) (\y -> bodyF (const y) x)
-  piTermLike nm tp bodyF =
-    \x -> piTermLike nm (tp x) (\y -> bodyF (const y) x)
-  ctorTermLike c args = \x -> ctorTermLike c (map ($ x) args)
-  dataTypeTermLike d args = \x -> dataTypeTermLike d (map ($ x) args)
-
--- This is the same as the function instance above
-instance OpenTermLike t => OpenTermLike (Reader r t) where
-  openTermLike t = reader $ openTermLike t
-  typeOfTermLike t = reader $ typeOfTermLike $ runReader t
-  flatTermLike ftf = reader $ flatTermLike $ fmap runReader ftf
-  applyTermLike f arg = reader $ applyTermLike (runReader f) (runReader arg)
-  lambdaTermLike x tp body =
-    reader $ lambdaTermLike x (runReader tp) (runReader . body . reader)
-  piTermLike x tp body =
-    reader $ piTermLike x (runReader tp) (runReader . body . reader)
-  ctorTermLike c args = reader $ ctorTermLike c $ map runReader args
-  dataTypeTermLike d args = reader $ dataTypeTermLike d $ map runReader args
-
--- | Build a nested sequence of lambda abstractions
-lambdaTermLikeMulti :: OpenTermLike t => [(LocalName, t)] -> ([t] -> t) -> t
-lambdaTermLikeMulti xs_tps body_f =
-  foldr (\(x,tp) rest_f xs ->
-          lambdaTermLike x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
-
--- | Apply a term to 0 or more arguments
-applyTermLikeMulti :: OpenTermLike t => t -> [t] -> t
-applyTermLikeMulti = foldl applyTermLike
-
--- | Build a term that 'fail's in the underlying monad when completed
-failTermLike :: OpenTermLike t => String -> t
-failTermLike str = openTermLike $ failOpenTerm str
-
--- | Build a term for a global name with a definition
-globalTermLike :: OpenTermLike t => Ident -> t
-globalTermLike ident = openTermLike $ globalOpenTerm ident
-
--- | Apply a named global to 0 or more arguments
-applyGlobalTermLike :: OpenTermLike t => Ident -> [t] -> t
-applyGlobalTermLike ident = applyTermLikeMulti (globalTermLike ident)
-
--- | Build a term for a natural number literal
-natTermLike :: OpenTermLike t => Natural -> t
-natTermLike = flatTermLike . NatLit
-
--- | The term for the unit value
-unitTermLike :: OpenTermLike t => t
-unitTermLike = flatTermLike UnitValue
-
--- | The term for the unit type
-unitTypeTermLike :: OpenTermLike t => t
-unitTypeTermLike = flatTermLike UnitType
-
--- | Build a SAW core string literal.
-stringLitTermLike :: OpenTermLike t => Text -> t
-stringLitTermLike = flatTermLike . StringLit
-
--- | Return the SAW core type @String@ of strings.
-stringTypeTermLike :: OpenTermLike t => t
-stringTypeTermLike = globalTermLike "Prelude.String"
-
--- | The 'True' value as a SAW core term
-trueTermLike :: OpenTermLike t => t
-trueTermLike = globalTermLike "Prelude.True"
-
--- | The 'False' value as a SAW core term
-falseTermLike :: OpenTermLike t => t
-falseTermLike = globalTermLike "Prelude.False"
-
--- | Convert a 'Bool' to a SAW core term
-boolTermLike :: OpenTermLike t => Bool -> t
-boolTermLike True = globalTermLike "Prelude.True"
-boolTermLike False = globalTermLike "Prelude.False"
-
--- | The 'Bool' type as a SAW core term
-boolTypeTermLike :: OpenTermLike t => t
-boolTypeTermLike = globalTermLike "Prelude.Bool"
-
--- | Build an term for an array literal
-arrayValueTermLike :: OpenTermLike t => t -> [t] -> t
-arrayValueTermLike tp elems =
-  flatTermLike $ ArrayValue tp $ V.fromList elems
-
--- | Create a SAW core term for a bitvector literal
-bvLitTermLike :: OpenTermLike t => [Bool] -> t
-bvLitTermLike bits =
-  arrayValueTermLike boolTypeTermLike $ map boolTermLike bits
-
--- | Create a SAW core term for a vector type
-vectorTypeTermLike :: OpenTermLike t => t -> t -> t
-vectorTypeTermLike n a = applyGlobalTermLike "Prelude.Vec" [n,a]
-
--- | Create a SAW core term for the type of a bitvector
-bvTypeTermLike :: OpenTermLike t => Integral n => n -> t
-bvTypeTermLike n =
-  applyTermLikeMulti (globalTermLike "Prelude.Vec")
-  [natTermLike (fromIntegral n), boolTypeTermLike]
-
--- | Build a term for a pair
-pairTermLike :: OpenTermLike t => t -> t -> t
-pairTermLike t1 t2 = flatTermLike $ PairValue t1 t2
-
--- | Build a term for a pair type
-pairTypeTermLike :: OpenTermLike t => t -> t -> t
-pairTypeTermLike t1 t2 = flatTermLike $ PairType t1 t2
-
--- | Build a term for the left projection of a pair
-pairLeftTermLike :: OpenTermLike t => t -> t
-pairLeftTermLike t = flatTermLike $ PairLeft t
-
--- | Build a term for the right projection of a pair
-pairRightTermLike :: OpenTermLike t => t -> t
-pairRightTermLike t = flatTermLike $ PairRight t
-
--- | Build a right-nested tuple as a term
-tupleTermLike :: OpenTermLike t => [t] -> t
-tupleTermLike = foldr pairTermLike unitTermLike
-
--- | Build a right-nested tuple type as a term
-tupleTypeTermLike :: OpenTermLike t => [t] -> t
-tupleTypeTermLike = foldr pairTypeTermLike unitTypeTermLike
-
--- | Project the @n@th element of a right-nested tuple type
-projTupleTermLike :: OpenTermLike t => Integer -> t -> t
-projTupleTermLike 0 t = pairLeftTermLike t
-projTupleTermLike i t = projTupleTermLike (i-1) (pairRightTermLike t)
-
--- | Build a let expression as a term. This is equivalent to
--- > 'applyTermLike' ('lambdaTermLike' x tp body) rhs
-letTermLike :: OpenTermLike t => LocalName -> t -> t -> (t -> t) -> t
-letTermLike x tp rhs body_f = applyTermLike (lambdaTermLike x tp body_f) rhs
-
--- | Build a let expression as a term using the @sawLet@ combinator. This
--- is equivalent to the term @sawLet tp tp_ret rhs (\ (x : tp) -> body_f)@
-sawLetTermLike :: OpenTermLike t => LocalName -> t -> t -> t -> (t -> t) -> t
-sawLetTermLike x tp tp_ret rhs body_f =
-  applyTermLikeMulti (globalTermLike "Prelude.sawLet")
-  [tp, tp_ret, rhs, lambdaTermLike x tp body_f]
+eitherType :: OpenTerm -> OpenTerm -> OpenTerm
+eitherType a b = applyGlobal "Prelude.Either" [a, b]
