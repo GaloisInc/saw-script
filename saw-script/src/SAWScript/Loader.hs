@@ -168,16 +168,10 @@ readSchemaPure fakeFileName lc tyenv str = do
 --   Also runs the typechecker to check the pattern.
 --
 readSchemaPattern ::
+    Options ->
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
     IO (Either [Text] SchemaPattern)
-readSchemaPattern fileName environ rbenv avail str = do
-  -- XXX: this preserves the original behavior of ignoring the
-  -- verbosity setting. We could expect the caller to pass in the
-  -- options value to get the verbosity setting, and that's really
-  -- the right thing to do; except that current plans are to get
-  -- rid of that verbosity setting in the near future anyway.
-  let opts = Options.defaultOptions
-
+readSchemaPattern opts fileName environ rbenv avail str = do
   let result = readAny fileName str parseSchemaPattern
   let result' = case result of
         Left errs -> Left errs
@@ -202,11 +196,11 @@ readSchemaPattern fileName environ rbenv avail str = do
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
-readExpression :: FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text -> IO (Either [Text] (Schema, Expr))
-readExpression fileName environ rbenv avail str = do
-  -- XXX as above
-  let opts = Options.defaultOptions
-
+readExpression ::
+    Options ->
+    FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
+    IO (Either [Text] (Schema, Expr))
+readExpression opts fileName environ rbenv avail str = do
   let result = readAny fileName str parseExpression
   let result' = case result of
         Left errs -> Left errs
@@ -251,11 +245,8 @@ readExpression fileName environ rbenv avail str = do
 --
 --   May produce more than one statement if the statement given is an
 --   @include@.
-readREPLTextUnchecked :: FilePath -> Text -> IO (Either [Text] [Stmt])
-readREPLTextUnchecked fileName str = do
-  -- XXX as above
-  let opts = Options.defaultOptions
-
+readREPLTextUnchecked :: Options -> FilePath -> Text -> IO (Either [Text] [Stmt])
+readREPLTextUnchecked opts fileName str = do
   let result = readAny fileName str parseREPLText
   dispatchMsgs opts result
 
