@@ -193,7 +193,7 @@ span.spaces    { background: white }
 <span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">ftf &lt;- asFTermF t</span>
 <span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">case ftf of</span>
 <span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">PairType x y -&gt; return (x, y)</span>
-<span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">_            -&gt; Nothing</span></span>
+<span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">_            -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  178 </span>
 <span class="lineno">  179 </span>asPairValue :: Recognizer Term (Term, Term)
 <span class="lineno">  180 </span><span class="decl"><span class="istickedoff">asPairValue t = do</span>
@@ -251,7 +251,7 @@ span.spaces    { background: white }
 <span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">ftf &lt;- asFTermF t</span>
 <span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">case ftf of</span>
 <span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">RecordType elems -&gt; return $ Map.fromList elems</span>
-<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">_                -&gt; Nothing</span></span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">_                -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  236 </span>
 <span class="lineno">  237 </span>asRecordValue :: Recognizer Term (Map FieldName Term)
 <span class="lineno">  238 </span><span class="decl"><span class="istickedoff">asRecordValue t = do</span>
