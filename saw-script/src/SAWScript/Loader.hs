@@ -156,9 +156,9 @@ dispatchMsgs opts result =
 --   returning the failure.
 --
 resolveIncludes ::
-    IncludePath -> Options -> Inc.Processor a -> WithMsgs a ->
+    Int -> IncludePath -> Options -> Inc.Processor a -> WithMsgs a ->
     IO (WithMsgs a)
-resolveIncludes incpath opts process result =
+resolveIncludes depth incpath opts process result =
     let printMsg vrb msg =
           Options.printOutLn opts vrb (Text.unpack msg)
     in
@@ -166,7 +166,7 @@ resolveIncludes incpath opts process result =
         Left errs ->
             pure $ Left errs
         Right (msgs, tree) -> do
-            result' <- process (includeFile incpath opts) tree
+            result' <- process (includeFile depth incpath opts) tree
             case result' of
                 Left errs -> do
                     mapM_ (printMsg Options.Warn) msgs
@@ -265,7 +265,7 @@ readExpression opts fileName environ rbenv avail str = do
   let incpath = (".", Options.importPath opts)
 
   let result = readAny fileName str parseExpression
-  result' <- resolveIncludes incpath opts Inc.processExpr result
+  result' <- resolveIncludes 0{-depth-} incpath opts Inc.processExpr result
   let result'' = case result' of
         Left errs -> Left errs
         Right (msgs, expr) ->
@@ -314,7 +314,7 @@ readREPLTextUnchecked opts fileName str = do
   let incpath = (".", Options.importPath opts)
 
   let result = readAny fileName str parseREPLText
-  result' <- resolveIncludes incpath opts Inc.processStmts result
+  result' <- resolveIncludes 0{-depth-} incpath opts Inc.processStmts result
   dispatchMsgs opts result'
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
@@ -348,22 +348,26 @@ locateFile (current, rawdirs) file = do
 
 -- | Load the 'Stmt's in a @.saw@ file.
 --   Doesn't run the typechecker (yet).
-includeFile :: IncludePath -> Options -> FilePath -> IO (Either [Text] [Stmt])
-includeFile incpath opts fname = do
+includeFile :: Int -> IncludePath -> Options -> FilePath ->
+    IO (Either [Text] [Stmt])
+includeFile depth incpath opts fname = do
   result <- locateFile incpath fname
   case result of
     Left errs -> return $ Left errs
-    Right fname' -> do
-      let (_current, dirs) = incpath
-          current' = takeDirectory fname'
-          incpath' = (current', dirs)
+    Right fname' ->
+      if depth > 128 then
+          pure $ Left ["Maximum include depth exceeded"]
+      else do
+          let (_current, dirs) = incpath
+              current' = takeDirectory fname'
+              incpath' = (current', dirs)
 
-      Options.printOutLn opts Options.Info $ "Loading file " ++ show fname'
-      ftext <- TextIO.readFile fname'
+          Options.printOutLn opts Options.Info $ "Loading file " ++ show fname'
+          ftext <- TextIO.readFile fname'
 
-      let result' = wrapDir current' $ readAny fname ftext parseModule
-      result'' <- resolveIncludes incpath' opts Inc.processStmts result'
-      dispatchMsgs opts result''
+          let result' = wrapDir current' $ readAny fname ftext parseModule
+          result'' <- resolveIncludes (depth + 1) incpath' opts Inc.processStmts result'
+          dispatchMsgs opts result''
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
@@ -374,4 +378,4 @@ includeFile incpath opts fname = do
 findAndLoadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
 findAndLoadFileUnchecked opts fp =
   let incpath = (".", Options.importPath opts) in
-  includeFile incpath opts fp
+  includeFile 0{-depth-} incpath opts fp
