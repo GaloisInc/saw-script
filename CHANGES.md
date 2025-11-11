@@ -6,6 +6,28 @@ This release supports [version
 
 ## Changes
 
+* The REPL no longer gratuitously rejects multiple statements
+  separated by semicolons on a single line.
+  It also no longer chokes on lines that contain only comments.
+
+* The `include` functionality in SAWScript is now syntax rather than
+  a builtin function.
+  This means that `include` is now a reserved word, and assorted wild
+  things that used to be theoretically possible (like producing a
+  monad action that might be an include and might be something else)
+  are not allowed.
+  Computing the filename to include is also no longer permitted.
+  (Since SAW has negligible ability to compute strings, it is highly
+  unlikely anyone was doing this.)
+  More importantly `include` is no longer a back door to the type
+  system.
+  Also on the plus side, you can now successfully `include` in the
+  ProofScript context.
+  There is a small functional difference, which is that includes are
+  now resolved up front before execution begins, instead of when the
+  include statements are reached.
+  If anyone has a use case that this affects, please get in touch.
+
 * The `SetupValue` associated with LLVM verification has been renamed to
   `LLVMValue` to match the corresponding `JVMValue` and `MIRValue` types.
   The name `SetupValue` remains as an alias.
