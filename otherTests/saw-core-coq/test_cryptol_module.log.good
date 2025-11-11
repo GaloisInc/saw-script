@@ -27,29 +27,17 @@ Malformed term: let { x@1 = Cryptol.TCNum 0
       x@17 = Cryptol.tcMin x@8 x@15
       x@18 = Cryptol.tcMin x@8 x@17
       x@19 = Cryptol.PRingSeqBool x@4
-      x@20 = Cryptol.tcAdd x@2 x@8
-      x@21 = Cryptol.seq x@20 x@5
-      x@22 = Cryptol.tcAdd x@8 x@2
-      x@23 = Cryptol.seq x@22 x@5
-      x@24 = Cryptol.seq_cong1 x@20 x@22 x@5
-               (Prelude.unsafeAssert Cryptol.Num x@20 x@22)
-      x@25 = Cryptol.tcAdd x@2 x@6
-      x@26 = Cryptol.seq x@25 x@5
-      x@27 = Cryptol.tcAdd x@8 x@1
-      x@28 = Cryptol.seq x@27 x@5
-      x@29 = Cryptol.seq_cong1 x@25 x@27 x@5
-               (Prelude.unsafeAssert Cryptol.Num x@25 x@27)
-      x@30 = Cryptol.tcMin x@6 x@8
+      x@20 = Cryptol.tcMin x@6 x@8
     }
  in Prelude.fix x@10
       (\(fixRecord : x@10) ->
-         let { x@31 = fixRecord.T1
-               x@32 = fixRecord.gs
-               x@33 = fixRecord.fs
-               x@34 = fixRecord.es
-               x@35 = fixRecord.cs
-               x@36 = fixRecord.bs
-               x@37 = fixRecord.as
+         let { x@21 = fixRecord.T1
+               x@22 = fixRecord.gs
+               x@23 = fixRecord.fs
+               x@24 = fixRecord.es
+               x@25 = fixRecord.cs
+               x@26 = fixRecord.bs
+               x@27 = fixRecord.as
              }
           in {T1 =
            Prelude.coerce (Cryptol.seq x@18 x@5) x@7
@@ -75,9 +63,9 @@ Malformed term: let { x@1 = Cryptol.TCNum 0
                                                  k_t)
                                               w_t))))))
                 (Cryptol.seqZip x@5 x@16 x@8 x@17 fixRecord.hs
-                   (Cryptol.seqZip x@5 x@14 x@8 x@15 x@34
-                      (Cryptol.seqZip x@5 x@12 x@8 x@13 x@33
-                         (Cryptol.seqZip x@5 x@11 x@8 x@6 x@32
+                   (Cryptol.seqZip x@5 x@14 x@8 x@15 x@24
+                      (Cryptol.seqZip x@5 x@12 x@8 x@13 x@23
+                         (Cryptol.seqZip x@5 x@11 x@8 x@6 x@22
                             (Cryptol.seqZipSame x@5 x@5 x@6 cryptol:/SHA512/SHA__parameter/K
                                W))))))
          ,T2 =
@@ -89,87 +77,79 @@ Malformed term: let { x@1 = Cryptol.TCNum 0
                         \(c : x@5) ->
                           Cryptol.ecPlus x@5 x@19 (cryptol:/SHA512/S0 a)
                             (cryptol:/SHA512/Maj a b c))))
-             (Cryptol.seqZipSame x@5 x@11 x@8 x@37
-                (Cryptol.seqZipSame x@5 x@5 x@8 x@36 x@35))
+             (Cryptol.seqZipSame x@5 x@11 x@8 x@27
+                (Cryptol.seqZipSame x@5 x@5 x@8 x@26 x@25))
          ,as =
            Cryptol.ecTake x@8 x@1 x@5
-             (Prelude.coerce x@26 x@28 x@29
-                (Cryptol.ecCat x@2 x@6 x@5
-                   [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
-                       H
-                       (Cryptol.ecNumber x@1 Prelude.Integer Cryptol.PLiteralInteger) ]
-                   (Prelude.coerce (Cryptol.seq x@30 x@5) x@7
-                      (Cryptol.seq_cong1 x@30 x@6 x@5
-                         (Prelude.unsafeAssert Cryptol.Num x@30 x@6))
-                      (Cryptol.seqMap x@11 x@5 x@30
-                         (Prelude.uncurry x@5 x@5 x@5
-                            (\(t1 : x@5) -> \(t2 : x@5) -> Cryptol.ecPlus x@5 x@19 t1 t2))
-                         (Cryptol.seqZip x@5 x@5 x@6 x@8 x@31 fixRecord.T2)))))
+             (Cryptol.ecCat x@2 x@6 x@5
+                [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
+                    H
+                    (Cryptol.ecNumber x@1 Prelude.Integer Cryptol.PLiteralInteger) ]
+                (Prelude.coerce (Cryptol.seq x@20 x@5) x@7
+                   (Cryptol.seq_cong1 x@20 x@6 x@5
+                      (Prelude.unsafeAssert Cryptol.Num x@20 x@6))
+                   (Cryptol.seqMap x@11 x@5 x@20
+                      (Prelude.uncurry x@5 x@5 x@5
+                         (\(t1 : x@5) -> \(t2 : x@5) -> Cryptol.ecPlus x@5 x@19 t1 t2))
+                      (Cryptol.seqZip x@5 x@5 x@6 x@8 x@21 fixRecord.T2))))
          ,bs =
            Cryptol.ecTake x@8 x@2 x@5
-             (Prelude.coerce x@21 x@23 x@24
-                (Cryptol.ecCat x@2 x@8 x@5
-                   [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
-                       H
-                       (Cryptol.ecNumber x@2 Prelude.Integer Cryptol.PLiteralInteger) ]
-                   x@37))
+             (Cryptol.ecCat x@2 x@8 x@5
+                [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
+                    H
+                    (Cryptol.ecNumber x@2 Prelude.Integer Cryptol.PLiteralInteger) ]
+                x@27)
          ,cs =
            Cryptol.ecTake x@8 x@2 x@5
-             (Prelude.coerce x@21 x@23 x@24
-                (Cryptol.ecCat x@2 x@8 x@5
-                   [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
-                       H
-                       (Cryptol.ecNumber (Cryptol.TCNum 2) Prelude.Integer
-                          Cryptol.PLiteralInteger) ]
-                   x@36))
+             (Cryptol.ecCat x@2 x@8 x@5
+                [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
+                    H
+                    (Cryptol.ecNumber (Cryptol.TCNum 2) Prelude.Integer
+                       Cryptol.PLiteralInteger) ]
+                x@26)
          ,ds =
            Cryptol.ecTake x@8 x@2 x@5
-             (Prelude.coerce x@21 x@23 x@24
-                (Cryptol.ecCat x@2 x@8 x@5
-                   [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
-                       H
-                       (Cryptol.ecNumber (Cryptol.TCNum 3) Prelude.Integer
-                          Cryptol.PLiteralInteger) ]
-                   x@35))
+             (Cryptol.ecCat x@2 x@8 x@5
+                [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
+                    H
+                    (Cryptol.ecNumber (Cryptol.TCNum 3) Prelude.Integer
+                       Cryptol.PLiteralInteger) ]
+                x@25)
          ,es =
            Cryptol.ecTake x@8 x@1 x@5
-             (Prelude.coerce x@26 x@28 x@29
-                (Cryptol.ecCat x@2 x@6 x@5
-                   [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
-                       H
-                       (Cryptol.ecNumber (Cryptol.TCNum 4) Prelude.Integer
-                          Cryptol.PLiteralInteger) ]
-                   (Prelude.coerce (Cryptol.seq x@13 x@5) x@7
-                      (Cryptol.seq_cong1 x@13 x@6 x@5
-                         (Prelude.unsafeAssert Cryptol.Num x@13 x@6))
-                      (Cryptol.seqMap x@11 x@5 x@13
-                         (Prelude.uncurry x@5 x@5 x@5
-                            (\(d : x@5) -> \(t1 : x@5) -> Cryptol.ecPlus x@5 x@19 d t1))
-                         (Cryptol.seqZip x@5 x@5 x@8 x@6 fixRecord.ds x@31)))))
+             (Cryptol.ecCat x@2 x@6 x@5
+                [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
+                    H
+                    (Cryptol.ecNumber (Cryptol.TCNum 4) Prelude.Integer
+                       Cryptol.PLiteralInteger) ]
+                (Prelude.coerce (Cryptol.seq x@13 x@5) x@7
+                   (Cryptol.seq_cong1 x@13 x@6 x@5
+                      (Prelude.unsafeAssert Cryptol.Num x@13 x@6))
+                   (Cryptol.seqMap x@11 x@5 x@13
+                      (Prelude.uncurry x@5 x@5 x@5
+                         (\(d : x@5) -> \(t1 : x@5) -> Cryptol.ecPlus x@5 x@19 d t1))
+                      (Cryptol.seqZip x@5 x@5 x@8 x@6 fixRecord.ds x@21))))
          ,fs =
            Cryptol.ecTake x@8 x@2 x@5
-             (Prelude.coerce x@21 x@23 x@24
-                (Cryptol.ecCat x@2 x@8 x@5
-                   [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
-                       H
-                       (Cryptol.ecNumber (Cryptol.TCNum 5) Prelude.Integer
-                          Cryptol.PLiteralInteger) ]
-                   x@34))
+             (Cryptol.ecCat x@2 x@8 x@5
+                [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
+                    H
+                    (Cryptol.ecNumber (Cryptol.TCNum 5) Prelude.Integer
+                       Cryptol.PLiteralInteger) ]
+                x@24)
          ,gs =
            Cryptol.ecTake x@8 x@2 x@5
-             (Prelude.coerce x@21 x@23 x@24
-                (Cryptol.ecCat x@2 x@8 x@5
-                   [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
-                       H
-                       (Cryptol.ecNumber (Cryptol.TCNum 6) Prelude.Integer
-                          Cryptol.PLiteralInteger) ]
-                   x@33))
+             (Cryptol.ecCat x@2 x@8 x@5
+                [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
+                    H
+                    (Cryptol.ecNumber (Cryptol.TCNum 6) Prelude.Integer
+                       Cryptol.PLiteralInteger) ]
+                x@23)
          ,hs =
            Cryptol.ecTake x@8 x@2 x@5
-             (Prelude.coerce x@21 x@23 x@24
-                (Cryptol.ecCat x@2 x@8 x@5
-                   [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
-                       H
-                       (Cryptol.ecNumber (Cryptol.TCNum 7) Prelude.Integer
-                          Cryptol.PLiteralInteger) ]
-                   x@32))})
+             (Cryptol.ecCat x@2 x@8 x@5
+                [ Cryptol.ecAt x@3 x@5 Prelude.Integer Cryptol.PIntegralInteger
+                    H
+                    (Cryptol.ecNumber (Cryptol.TCNum 7) Prelude.Integer
+                       Cryptol.PLiteralInteger) ]
+                x@22)})

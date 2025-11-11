@@ -130,9 +130,7 @@ Definition TestSeq_Take3 : SAWCoreVectorsAsCoqVectors.Vec 3 (CryptolPrimitivesFo
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
   let var__3   := CryptolPrimitivesForSAWCore.TCNum 2 in
   let var__4   := CryptolPrimitivesForSAWCore.TCNum 3 in
-  let var__5   := CryptolPrimitivesForSAWCore.TCNum 5 in
-  let var__6   := CryptolPrimitivesForSAWCore.tcAdd var__4 var__3 in
-  CryptolPrimitivesForSAWCore.ecTake var__4 var__3 var__1 (SAWCoreScaffolding.coerce (CryptolPrimitivesForSAWCore.seq var__5 var__1) (CryptolPrimitivesForSAWCore.seq var__6 var__1) (CryptolPrimitivesForSAWCore.seq_cong1 var__5 var__6 var__1 ltac:(solveUnsafeAssert)) [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__4 var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 4) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__5 var__1 var__2]).
+  CryptolPrimitivesForSAWCore.ecTake var__4 var__3 var__1 [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__4 var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 4) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 5) var__1 var__2].
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -156,13 +154,11 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestSeq_TakeAll : SAWCoreVectorsAsCoqVectors.Vec 5 (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum 8) Coq.Init.Datatypes.bool) :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 0 in
-  let var__1   := CryptolPrimitivesForSAWCore.TCNum 8 in
-  let var__2   := CryptolPrimitivesForSAWCore.seq var__1 Coq.Init.Datatypes.bool in
-  let var__3   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1 in
-  let var__4   := CryptolPrimitivesForSAWCore.TCNum 5 in
-  let var__5   := CryptolPrimitivesForSAWCore.tcAdd var__4 var__0 in
-  CryptolPrimitivesForSAWCore.ecTake var__4 var__0 var__2 (SAWCoreScaffolding.coerce (CryptolPrimitivesForSAWCore.seq var__4 var__2) (CryptolPrimitivesForSAWCore.seq var__5 var__2) (CryptolPrimitivesForSAWCore.seq_cong1 var__4 var__5 var__2 ltac:(solveUnsafeAssert)) [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 3) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 4) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber var__4 var__2 var__3]).
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
+  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
+  let var__3   := CryptolPrimitivesForSAWCore.TCNum 5 in
+  CryptolPrimitivesForSAWCore.ecTake var__3 (CryptolPrimitivesForSAWCore.TCNum 0) var__1 [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 3) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 4) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 var__2].
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -186,13 +182,11 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestSeq_TakeZero : SAWCoreVectorsAsCoqVectors.Vec 0 (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum 8) Coq.Init.Datatypes.bool) :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 0 in
-  let var__1   := CryptolPrimitivesForSAWCore.TCNum 8 in
-  let var__2   := CryptolPrimitivesForSAWCore.seq var__1 Coq.Init.Datatypes.bool in
-  let var__3   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1 in
-  let var__4   := CryptolPrimitivesForSAWCore.TCNum 3 in
-  let var__5   := CryptolPrimitivesForSAWCore.tcAdd var__0 var__4 in
-  CryptolPrimitivesForSAWCore.ecTake var__0 var__4 var__2 (SAWCoreScaffolding.coerce (CryptolPrimitivesForSAWCore.seq var__4 var__2) (CryptolPrimitivesForSAWCore.seq var__5 var__2) (CryptolPrimitivesForSAWCore.seq_cong1 var__4 var__5 var__2 ltac:(solveUnsafeAssert)) [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber var__4 var__2 var__3]).
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
+  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
+  let var__3   := CryptolPrimitivesForSAWCore.TCNum 3 in
+  CryptolPrimitivesForSAWCore.ecTake (CryptolPrimitivesForSAWCore.TCNum 0) var__3 var__1 [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 var__2].
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -221,9 +215,7 @@ Definition TestSeq_Drop : SAWCoreVectorsAsCoqVectors.Vec 3 (CryptolPrimitivesFor
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
   let var__3   := CryptolPrimitivesForSAWCore.TCNum 2 in
   let var__4   := CryptolPrimitivesForSAWCore.TCNum 3 in
-  let var__5   := CryptolPrimitivesForSAWCore.TCNum 5 in
-  let var__6   := CryptolPrimitivesForSAWCore.tcAdd var__3 var__4 in
-  CryptolPrimitivesForSAWCore.ecDrop var__3 var__4 var__1 (SAWCoreScaffolding.coerce (CryptolPrimitivesForSAWCore.seq var__5 var__1) (CryptolPrimitivesForSAWCore.seq var__6 var__1) (CryptolPrimitivesForSAWCore.seq_cong1 var__5 var__6 var__1 ltac:(solveUnsafeAssert)) [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__4 var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 4) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__5 var__1 var__2]).
+  CryptolPrimitivesForSAWCore.ecDrop var__3 var__4 var__1 [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__4 var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 4) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 5) var__1 var__2].
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -247,13 +239,11 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestSeq_DropAll : SAWCoreVectorsAsCoqVectors.Vec 0 (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum 8) Coq.Init.Datatypes.bool) :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 0 in
-  let var__1   := CryptolPrimitivesForSAWCore.TCNum 8 in
-  let var__2   := CryptolPrimitivesForSAWCore.seq var__1 Coq.Init.Datatypes.bool in
-  let var__3   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1 in
-  let var__4   := CryptolPrimitivesForSAWCore.TCNum 3 in
-  let var__5   := CryptolPrimitivesForSAWCore.tcAdd var__4 var__0 in
-  CryptolPrimitivesForSAWCore.ecDrop var__4 var__0 var__2 (SAWCoreScaffolding.coerce (CryptolPrimitivesForSAWCore.seq var__4 var__2) (CryptolPrimitivesForSAWCore.seq var__5 var__2) (CryptolPrimitivesForSAWCore.seq_cong1 var__4 var__5 var__2 ltac:(solveUnsafeAssert)) [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber var__4 var__2 var__3]).
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
+  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
+  let var__3   := CryptolPrimitivesForSAWCore.TCNum 3 in
+  CryptolPrimitivesForSAWCore.ecDrop var__3 (CryptolPrimitivesForSAWCore.TCNum 0) var__1 [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 var__2].
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -277,13 +267,11 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestSeq_DropZero : SAWCoreVectorsAsCoqVectors.Vec 3 (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum 8) Coq.Init.Datatypes.bool) :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 0 in
-  let var__1   := CryptolPrimitivesForSAWCore.TCNum 8 in
-  let var__2   := CryptolPrimitivesForSAWCore.seq var__1 Coq.Init.Datatypes.bool in
-  let var__3   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1 in
-  let var__4   := CryptolPrimitivesForSAWCore.TCNum 3 in
-  let var__5   := CryptolPrimitivesForSAWCore.tcAdd var__0 var__4 in
-  CryptolPrimitivesForSAWCore.ecDrop var__0 var__4 var__2 (SAWCoreScaffolding.coerce (CryptolPrimitivesForSAWCore.seq var__4 var__2) (CryptolPrimitivesForSAWCore.seq var__5 var__2) (CryptolPrimitivesForSAWCore.seq_cong1 var__4 var__5 var__2 ltac:(solveUnsafeAssert)) [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber var__4 var__2 var__3]).
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
+  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
+  let var__3   := CryptolPrimitivesForSAWCore.TCNum 3 in
+  CryptolPrimitivesForSAWCore.ecDrop (CryptolPrimitivesForSAWCore.TCNum 0) var__3 var__1 [CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2; CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 var__2].
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -308,15 +296,12 @@ Import CryptolPrimitivesForSAWCore.
 
 Definition TestSeq_TakeDrop : SAWCoreVectorsAsCoqVectors.Vec 2 (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum 8) Coq.Init.Datatypes.bool) :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum 1 in
-  let var__1   := CryptolPrimitivesForSAWCore.TCNum 4 in
-  let var__2   := CryptolPrimitivesForSAWCore.TCNum 8 in
-  let var__3   := CryptolPrimitivesForSAWCore.seq var__2 Coq.Init.Datatypes.bool in
-  let var__4   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__2 in
-  let var__5   := CryptolPrimitivesForSAWCore.TCNum 2 in
-  let var__6   := CryptolPrimitivesForSAWCore.TCNum 3 in
-  let var__7   := CryptolPrimitivesForSAWCore.tcAdd var__0 var__6 in
-  let var__8   := CryptolPrimitivesForSAWCore.tcAdd var__5 var__0 in
-  CryptolPrimitivesForSAWCore.ecTake var__5 var__0 var__3 (SAWCoreScaffolding.coerce (CryptolPrimitivesForSAWCore.seq var__6 var__3) (CryptolPrimitivesForSAWCore.seq var__8 var__3) (CryptolPrimitivesForSAWCore.seq_cong1 var__6 var__8 var__3 ltac:(solveUnsafeAssert)) (CryptolPrimitivesForSAWCore.ecDrop var__0 var__6 var__3 (SAWCoreScaffolding.coerce (CryptolPrimitivesForSAWCore.seq var__1 var__3) (CryptolPrimitivesForSAWCore.seq var__7 var__3) (CryptolPrimitivesForSAWCore.seq_cong1 var__1 var__7 var__3 ltac:(solveUnsafeAssert)) [CryptolPrimitivesForSAWCore.ecNumber var__0 var__3 var__4; CryptolPrimitivesForSAWCore.ecNumber var__5 var__3 var__4; CryptolPrimitivesForSAWCore.ecNumber var__6 var__3 var__4; CryptolPrimitivesForSAWCore.ecNumber var__1 var__3 var__4]))).
+  let var__1   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__2   := CryptolPrimitivesForSAWCore.seq var__1 Coq.Init.Datatypes.bool in
+  let var__3   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1 in
+  let var__4   := CryptolPrimitivesForSAWCore.TCNum 2 in
+  let var__5   := CryptolPrimitivesForSAWCore.TCNum 3 in
+  CryptolPrimitivesForSAWCore.ecTake var__4 var__0 var__2 (CryptolPrimitivesForSAWCore.ecDrop var__0 var__5 var__2 [CryptolPrimitivesForSAWCore.ecNumber var__0 var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber var__4 var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber var__5 var__2 var__3; CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 4) var__2 var__3]).
 
 
 (** Mandatory imports from saw-core-coq *)
