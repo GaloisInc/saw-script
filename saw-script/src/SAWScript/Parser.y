@@ -108,8 +108,8 @@ StmtsEOF :: { [Stmt] }
 StmtEOF :: { Stmt }
  : Stmt EOF                             { $1 }
 
-StmtSemiEOF :: { Stmt }
- : StmtSemi EOF                         { $1 }
+StmtSemiEOF :: { [Stmt] }
+ : StmtSemi EOF                         { [$1] }
 
 ExpressionEOF :: { Expr }
  : Expression EOF                       { $1 }

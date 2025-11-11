@@ -18,7 +18,7 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
-  ( interpretTopStmt
+  ( interpretTopStmts
   , processFile
   , buildTopLevelEnv
   )
@@ -986,6 +986,19 @@ interpretTopStmt printBinds stmt = do
 
     SS.StmtTypedef _ _ name ty ->
       liftTopLevel $ addTypedef name ty
+
+-- | Interpret multiple top-level statements in an interpreter monad
+--   (any of the SAWScript monads)
+--
+--    This is the entry point used by the REPL for executing stuff the
+--    user types in.
+--
+interpretTopStmts :: InterpreterMonad m =>
+  Bool {-^ whether to print non-unit result values -} ->
+  [SS.Stmt] ->
+  m ()
+interpretTopStmts printBinds stmts =
+  mapM_ (interpretTopStmt printBinds) stmts
 
 -- Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter

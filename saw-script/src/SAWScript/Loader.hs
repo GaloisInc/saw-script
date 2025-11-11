@@ -248,7 +248,10 @@ readExpression fileName environ rbenv avail str = do
 
 -- | Read a statement from a string. This is used by the REPL evaluator.
 --   Doesn't run the typechecker (yet).
-readStmtSemiUnchecked :: FilePath -> Text -> IO (Either [Text] Stmt)
+--
+--   May produce more than one statement if the statement given is an
+--   @include@.
+readStmtSemiUnchecked :: FilePath -> Text -> IO (Either [Text] [Stmt])
 readStmtSemiUnchecked fileName str = do
   -- XXX as above
   let opts = Options.defaultOptions
