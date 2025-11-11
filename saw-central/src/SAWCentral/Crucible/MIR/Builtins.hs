@@ -392,7 +392,7 @@ mir_find_name rm origName tys =
         col = cs ^. Mir.collection
     origId <- findDefId cs origName
     findFnInstance col origId (Mir.Substs tys)
-    
+
 -- | Generate a fresh term of the given Cryptol type. The name will be used when
 -- pretty-printing the variable in debug output.
 mir_fresh_cryptol_var ::
