@@ -41,7 +41,7 @@ import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
-import System.FilePath (takeDirectory, (</>) )
+import System.FilePath ( (</>) )
 import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
@@ -1119,7 +1119,6 @@ interpretFile file runMain =
             -- output.
             throwTopLevel $ Text.unpack $ Text.intercalate "\n" errs
           Right stmts -> pure stmts
-      io $ setCurrentDirectory (takeDirectory file)
       mapM_ stmtWithPrint stmts
       when runMain interpretMain
       writeVerificationSummary
