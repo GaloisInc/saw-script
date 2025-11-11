@@ -148,8 +148,8 @@ span.spaces    { background: white }
 <span class="lineno">  129 </span><span class="spaces">                 </span><span class="istickedoff">let show_s = if <span class="tickonlyfalse">s == propSort</span> then <span class="nottickedoff">&quot;Prop&quot;</span> else drop 5 (show s)</span>
 <span class="lineno">  130 </span><span class="spaces">                 </span><span class="istickedoff">pure $ unwords [&quot;Recursor&quot;, show (nameIndex d), show_s]</span>
 <span class="lineno">  131 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  132 </span><span class="spaces">            </span><span class="istickedoff">RecordType elem_tps -&gt; <span class="nottickedoff">pure $ unwords [&quot;RecordType&quot;, show elem_tps]</span></span>
-<span class="lineno">  133 </span><span class="spaces">            </span><span class="istickedoff">RecordValue elems   -&gt; <span class="nottickedoff">pure $ unwords [&quot;Record&quot;, show elems]</span></span>
+<span class="lineno">  132 </span><span class="spaces">            </span><span class="istickedoff">RecordType elem_tps -&gt; pure $ unwords [&quot;RecordType&quot;, show elem_tps]</span>
+<span class="lineno">  133 </span><span class="spaces">            </span><span class="istickedoff">RecordValue elems   -&gt; pure $ unwords [&quot;Record&quot;, show elems]</span>
 <span class="lineno">  134 </span><span class="spaces">            </span><span class="istickedoff">RecordProj e prj    -&gt; pure $ unwords [&quot;RecordProj&quot;, show e, Text.unpack prj]</span>
 <span class="lineno">  135 </span><span class="spaces">            </span><span class="istickedoff">Sort s h</span>
 <span class="lineno">  136 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlyfalse">s == propSort</span> -&gt; <span class="nottickedoff">pure $ unwords (&quot;Prop&quot; : map show (sortFlagsToList h))</span></span>

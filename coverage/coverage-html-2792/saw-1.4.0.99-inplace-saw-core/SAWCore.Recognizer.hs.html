@@ -331,9 +331,9 @@ span.spaces    { background: white }
 <span class="lineno">  312 </span><span class="spaces"></span><span class="istickedoff">asLambda _ = Nothing</span></span>
 <span class="lineno">  313 </span>
 <span class="lineno">  314 </span>asLambdaList :: Term -&gt; ([(VarName, Term)], Term)
-<span class="lineno">  315 </span><span class="decl"><span class="istickedoff">asLambdaList = go []</span>
-<span class="lineno">  316 </span><span class="spaces">  </span><span class="istickedoff">where go r (asLambda -&gt; Just (nm,tp,rhs)) = go ((nm,tp):r) rhs</span>
-<span class="lineno">  317 </span><span class="spaces">        </span><span class="istickedoff">go r rhs = (reverse r, rhs)</span></span>
+<span class="lineno">  315 </span><span class="decl"><span class="nottickedoff">asLambdaList = go []</span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="nottickedoff">where go r (asLambda -&gt; Just (nm,tp,rhs)) = go ((nm,tp):r) rhs</span>
+<span class="lineno">  317 </span><span class="spaces">        </span><span class="nottickedoff">go r rhs = (reverse r, rhs)</span></span>
 <span class="lineno">  318 </span>
 <span class="lineno">  319 </span>asPi :: Recognizer Term (VarName, Term, Term)
 <span class="lineno">  320 </span><span class="decl"><span class="istickedoff">asPi (unwrapTermF -&gt; Pi nm tp body) = return (nm, tp, body)</span>

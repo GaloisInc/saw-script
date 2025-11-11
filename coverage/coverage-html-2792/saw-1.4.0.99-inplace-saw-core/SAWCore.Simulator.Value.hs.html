@@ -252,7 +252,7 @@ span.spaces    { background: white }
 <span class="lineno">  233 </span><span class="decl"><span class="istickedoff">vTuple [] = <span class="nottickedoff">VUnit</span></span>
 <span class="lineno">  234 </span><span class="spaces"></span><span class="istickedoff">vTuple [_] = <span class="nottickedoff">error &quot;vTuple: unsupported 1-tuple&quot;</span></span>
 <span class="lineno">  235 </span><span class="spaces"></span><span class="istickedoff">vTuple [x, y] = VPair x y</span>
-<span class="lineno">  236 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = VPair x (ready (vTuple xs))</span></span>
+<span class="lineno">  236 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = <span class="nottickedoff">VPair x (ready (vTuple xs))</span></span></span>
 <span class="lineno">  237 </span>
 <span class="lineno">  238 </span>vTupleType :: VMonad l =&gt; [TValue l] -&gt; TValue l
 <span class="lineno">  239 </span><span class="decl"><span class="nottickedoff">vTupleType [] = VUnitType</span>
