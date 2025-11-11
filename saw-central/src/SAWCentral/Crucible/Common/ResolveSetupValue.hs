@@ -29,7 +29,7 @@ import SAWCoreWhat4.ReturnTrip
 import SAWCentral.Crucible.Common
 
 import SAWCentral.Proof (TheoremNonce)
-import SAWCore.Rewriter (Simpset, rewriteSharedTerm)
+import SAWCore.Rewriter (Simpset, rewriteSharedTermTypeSafe)
 import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
 
 import Cryptol.TypeCheck.Type (tIsBit, tIsSeq, tIsNum)
@@ -94,7 +94,7 @@ resolveTerm sym unint bt rr tm =
   basicRewrite sc =
     case rrBasicSS rr of
       Nothing -> pure
-      Just ss -> \t -> snd <$> rewriteSharedTerm sc ss t
+      Just ss -> \t -> snd <$> rewriteSharedTermTypeSafe sc ss t
 
   checkType sc =
     do
