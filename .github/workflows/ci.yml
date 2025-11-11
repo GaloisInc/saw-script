@@ -104,14 +104,9 @@ jobs:
             hpc: true
           # Windows and macOS CI runners are more expensive than Linux runners,
           # so we only build one particular GHC version to test them on. We
-          # include both an x86-64 macOS runner (macos-13) as well as an AArch64
-          # macOS runner (macos-14).
+          # include only an AArch64 macOS runner (macos-14). As macos-13
+          # has been deprecated.
           - os: windows-2022
-            ghc: 9.4.8
-            haddock: false
-            run-tests: true
-            hpc: false
-          - os: macos-13
             ghc: 9.4.8
             haddock: false
             run-tests: true
