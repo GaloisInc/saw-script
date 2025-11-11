@@ -860,9 +860,11 @@ interpretDoStmt stmt =
             setCryptolEnv ce'
       SS.StmtImport _ _ ->
           fail "block-level import unimplemented"
-      SS.StmtInclude _ file -> do
-          let file' :: FilePath = Text.unpack file
-          liftTopLevel $ interpretFile file' False
+      SS.StmtInclude pos _file ->
+          panic "interpretDoStmt" [
+              "Leftover unresolved include statement",
+              "Position: " <> Text.pack (show pos)
+          ]
       SS.StmtTypedef _ _ name ty -> do
           liftTopLevel $ addTypedef name ty
       SS.StmtPushdir _ dir -> liftTopLevel $ pushdir dir
@@ -1050,9 +1052,11 @@ interpretTopStmt printBinds stmt = do
          setCryptolEnv cenv'
          --showCryptolEnv
 
-    SS.StmtInclude _ file -> do
-      let file' :: FilePath = Text.unpack file
-      liftTopLevel $ interpretFile file' False
+    SS.StmtInclude pos _file ->
+      panic "interpretTopStmt" [
+          "Leftover unresolved include statement",
+          "Position: " <> Text.pack (show pos)
+      ]
 
     SS.StmtTypedef _ _ name ty ->
       liftTopLevel $ addTypedef name ty
