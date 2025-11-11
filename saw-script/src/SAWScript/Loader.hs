@@ -11,7 +11,7 @@ module SAWScript.Loader (
     readSchemaPure,
     readSchemaPattern,
     readExpression,
-    readStmtSemiUnchecked,
+    readREPLTextUnchecked,
     findAndLoadFileUnchecked
   ) where
 
@@ -251,12 +251,12 @@ readExpression fileName environ rbenv avail str = do
 --
 --   May produce more than one statement if the statement given is an
 --   @include@.
-readStmtSemiUnchecked :: FilePath -> Text -> IO (Either [Text] [Stmt])
-readStmtSemiUnchecked fileName str = do
+readREPLTextUnchecked :: FilePath -> Text -> IO (Either [Text] [Stmt])
+readREPLTextUnchecked fileName str = do
   -- XXX as above
   let opts = Options.defaultOptions
 
-  let result = readAny fileName str parseStmtSemi
+  let result = readAny fileName str parseREPLText
   dispatchMsgs opts result
 
 -- | Load the 'Stmt's in a @.saw@ file.

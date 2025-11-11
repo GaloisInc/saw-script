@@ -1,4 +1,4 @@
-return ()    // wildcard searches
+// wildcard searches
 
 print "--------------------------------"
 print "-- (LLVMSpec -> _)"

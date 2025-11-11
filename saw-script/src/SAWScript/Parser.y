@@ -2,8 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module SAWScript.Parser
   ( parseModule
-  , parseStmt
-  , parseStmtSemi
+  , parseREPLText
   , parseExpression
   , parseSchema
   , parseSchemaPattern
@@ -31,9 +30,8 @@ import Control.Exception
 
 }
 
-%name parseModule StmtsEOF
-%name parseStmt StmtEOF
-%name parseStmtSemi StmtSemiEOF
+%name parseModule StmtsSemiEOF
+%name parseREPLText StmtsOptSemiEOF
 %name parseExpression ExpressionEOF
 %name parseSchema PolyTypeEOF
 %name parseSchemaPattern SchemaPatternEOF
@@ -102,14 +100,14 @@ import Control.Exception
 
 %%
 
-StmtsEOF :: { [Stmt] }
- : Stmts EOF                            { $1 }
+StmtsSemiEOF :: { [Stmt] }
+ : EOF                                  { [] }
+ | Stmts ';' EOF                        { reverse $1 }
 
-StmtEOF :: { Stmt }
- : Stmt EOF                             { $1 }
-
-StmtSemiEOF :: { [Stmt] }
- : StmtSemi EOF                         { [$1] }
+StmtsOptSemiEOF :: { [Stmt] }
+ : EOF                                  { [] }
+ | Stmts EOF                            { reverse $1 }
+ | Stmts ';' EOF                        { reverse $1 }
 
 ExpressionEOF :: { Expr }
  : Expression EOF                       { $1 }
@@ -120,11 +118,10 @@ PolyTypeEOF :: { Schema }
 SchemaPatternEOF :: { SchemaPattern }
  : SchemaPattern EOF                    { $1 }
 
+-- accumulates in reverse order
 Stmts :: { [Stmt] }
- : termBy(Stmt, ';')                    { $1 }
-
-StmtSemi :: { Stmt }
- : fst(Stmt, opt(';'))                  { $1 }
+ : Stmt                                 { [$1] }
+ | Stmts ';' Stmt                       { $3 : $1 }
 
 Import :: { Import }
  : MName mbAs mbImportSpec              { buildImport False $1 $2 $3 }

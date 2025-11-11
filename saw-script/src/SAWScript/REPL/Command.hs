@@ -388,7 +388,7 @@ genericHelp = map cmdHelp commandList
 -- | Execute some SAWScript text.
 executeSAWScriptText :: Text -> REPL ()
 executeSAWScriptText str = exceptionProtect $ do
-  errs_or_stmts <- liftIO $ Loader.readStmtSemiUnchecked replFileName str
+  errs_or_stmts <- liftIO $ Loader.readREPLTextUnchecked replFileName str
   case errs_or_stmts of
     Left errs -> failOn errs
     Right stmts -> do
