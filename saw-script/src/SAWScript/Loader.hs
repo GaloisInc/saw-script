@@ -250,30 +250,19 @@ readREPLTextUnchecked opts fileName str = do
   let result = readAny fileName str parseREPLText
   dispatchMsgs opts result
 
--- | Load the 'Stmt's in a @.saw@ file.
---   Doesn't run the typechecker (yet).
-loadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
-loadFileUnchecked opts fname = do
-  Options.printOutLn opts Options.Info $ "Loading file " ++ show fname
-  ftext <- TextIO.readFile fname
-
-  let result = readAny fname ftext parseModule
-  dispatchMsgs opts result
-
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
 -- @-i@/@--import-path@ command-line options). If the file was successfully
--- found, load it. If not, fail by returning `Left`.
+-- found, return the full path. If not, fail by returning `Left`.
 --
--- Doesn't run the typechecker (yet).
-findAndLoadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
-findAndLoadFileUnchecked opts fp = do
+locateFile :: Options -> FilePath -> IO (Either [Text] FilePath)
+locateFile opts file = do
   let paths = Options.importPath opts
-  mfname <- findFile paths fp
+  mfname <- findFile paths file
   case mfname of
     Nothing -> do
         let msgs = [
-                "Couldn't find file: " <> Text.pack fp,
+                "Couldn't find file: " <> Text.pack file,
                 "  Searched in directories:"
              ] ++ map (\p -> "    " <> Text.pack p) paths
         return $ Left msgs
@@ -283,4 +272,29 @@ findAndLoadFileUnchecked opts fp = do
       -- search path to the front of the file path that is found, which can
       -- cause paths like "./foo.saw" to be returned. This looks ugly in error
       -- messages, where we would rather display "foo.saw" instead.
-      loadFileUnchecked opts (normalise fname)
+      return $ Right (normalise fname)
+
+-- | Load the 'Stmt's in a @.saw@ file.
+--   Doesn't run the typechecker (yet).
+includeFile :: Options -> FilePath -> IO (WithMsgs [Stmt])
+includeFile opts fname = do
+  result <- locateFile opts fname
+  case result of
+    Left errs -> return $ Left errs
+    Right fname' -> do
+      Options.printOutLn opts Options.Info $ "Loading file " ++ show fname'
+      ftext <- TextIO.readFile fname'
+
+      let result' = readAny fname' ftext parseModule
+      pure result'
+
+-- | Find a file, potentially looking in a list of multiple search paths (as
+-- specified via the @SAW_IMPORT_PATH@ environment variable or
+-- @-i@/@--import-path@ command-line options). If the file was successfully
+-- found, load it. If not, fail by returning `Left`.
+--
+-- Doesn't run the typechecker (yet).
+findAndLoadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
+findAndLoadFileUnchecked opts fp = do
+  result <- includeFile opts fp
+  dispatchMsgs opts result
