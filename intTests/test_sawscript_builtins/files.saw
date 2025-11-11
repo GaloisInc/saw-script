@@ -1,4 +1,7 @@
 
+// It now works to include in ProofScript.
+prove_print (do { include "include/proof.saw"; return (); }) {{ True }};
+
 // Put the include file in a subdir so it doesn't also get run
 // directly.
 include "include/test.saw";
