@@ -222,6 +222,9 @@ This release supports [version
   allows extracting a MIR function to a term. See the SAW manual for details on
   what types of MIR functions are supported for extraction.
 
+* Add a `mir_vec : MIRModule -> MIRType -> MIRType` function, which provides a
+  convenient shorthand for constructing the `Vec<T>` type (for some type `T`).
+
 ## Bug Fixes
 
 * Under some combinations of circumstances you would sometimes get

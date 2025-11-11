@@ -2,9 +2,8 @@ enable_experimental;
 
 m <- mir_load_module "test.linked-mir.json";
 
-let global_adt = mir_find_adt m "alloc::alloc::Global" [];
-let vec_u32_adt = mir_find_adt m "alloc::vec::Vec" [mir_u32, mir_adt global_adt];
-let option_vec_u32_adt = mir_find_adt m "core::option::Option" [mir_adt vec_u32_adt];
+let vec_u32_ty = mir_vec m mir_u32;
+let option_vec_u32_adt = mir_find_adt m "core::option::Option" [vec_u32_ty];
 
 let f_spec = do {
     mir_execute_func [];
