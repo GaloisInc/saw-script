@@ -457,9 +457,9 @@ buildOutputRelationTheorem bthms bc = do
   implication <- io $ scImplies sc initRelation relationRes
 
   -- Unfold LHS/RHS constants to reveal opportunities for simplification
-  let vs = map nameIndex $ mapMaybe asConstant [lhs, rhs]
+  let unfold nm = nm `elem` mapMaybe asConstant [lhs, rhs]
   implication_unfolded <-
-    io $ scUnfoldConstants sc vs implication >>= betaNormalize sc
+    io $ scUnfoldConstantsBeta sc unfold implication
 
   -- Simplify Term with any theorems that apply
   (implication', sideConditions) <- applyAllTheorems bthms bc implication_unfolded

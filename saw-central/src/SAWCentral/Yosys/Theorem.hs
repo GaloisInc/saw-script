@@ -14,7 +14,7 @@ Stability   : experimental
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 module SAWCentral.Yosys.Theorem where
- 
+
 import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
@@ -23,7 +23,6 @@ import Control.Exception (throw)
 import Control.Monad.Catch (MonadThrow)
 
 import Data.Text (Text)
-import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -52,7 +51,7 @@ data YosysTheorem = YosysTheorem
   , _theoremModule :: SC.Term -- ^ {{ \r -> module r }}
   , _theoremPrecond :: Maybe SC.Term -- ^ {{ \r -> precond r }}
   , _theoremBody :: SC.Term -- ^ {{ \r -> other r }}
-  } 
+  }
 makeLenses ''YosysTheorem
 
 -- | Construct a SAWCore proposition for the given theorem.
@@ -171,7 +170,8 @@ applyOverride sc thm t = do
   tidx <- liftIO (SC.scResolveNameByURI sc $ thm ^. theoremURI) >>= \case
     Nothing -> throw . YosysErrorOverrideNameNotFound . URI.render $ thm ^. theoremURI
     Just i -> pure i
-  unfolded <- liftIO $ SC.scUnfoldConstantSet sc False (Set.singleton tidx) t
+  let unfold nm = SC.nameIndex nm /= tidx
+  unfolded <- liftIO $ SC.scUnfoldConstants sc unfold t
   cache <- liftIO SC.newCache
   let
     go :: SC.Term -> IO SC.Term

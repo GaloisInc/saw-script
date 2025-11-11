@@ -64,7 +64,7 @@ import SAWCore.ExternalFormat
 import SAWCore.FiniteValue
   ( FiniteType(..), readFiniteValue
   )
-import SAWCore.Name (ModuleName, VarName(..), mkModuleName, moduleIdentToURI)
+import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToURI)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Simulator.Concrete (constMap)
@@ -565,7 +565,8 @@ normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      idxs <- mconcat <$> mapM (resolveName sc) opaque
      let opaqueSet = Set.fromList idxs
-     tm' <- io (betaNormalize sc =<< scUnfoldConstantSet sc False opaqueSet (ttTerm tt))
+     let unfold nm = Set.notMember (nameIndex nm) opaqueSet
+     tm' <- io $ scUnfoldConstantsBeta sc unfold (ttTerm tt)
      pure tt{ ttTerm = tm' }
 
 goal_normalize :: [Text] -> ProofScript ()
@@ -1524,8 +1525,9 @@ rewritePrim ss (TypedTerm schema t) = do
 unfold_term :: [Text] -> TypedTerm -> TopLevel TypedTerm
 unfold_term unints (TypedTerm schema t) = do
   sc <- getSharedContext
-  unints' <- mconcat <$> mapM (resolveName sc) unints
-  t' <- io $ scUnfoldConstants sc unints' t
+  unints' <- Set.fromList <$> mconcat <$> mapM (resolveName sc) unints
+  let unfold nm = Set.member (nameIndex nm) unints'
+  t' <- io $ scUnfoldConstants sc unfold t
   return (TypedTerm schema t')
 
 beta_reduce_term :: TypedTerm -> TopLevel TypedTerm

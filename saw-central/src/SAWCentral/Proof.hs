@@ -155,7 +155,7 @@ import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
-import SAWCore.Name (DisplayNameEnv, VarName(..))
+import SAWCore.Name (DisplayNameEnv, Name(..), VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
@@ -377,7 +377,8 @@ splitSequent sc sqt =
 --   whose VarIndex is found in the given set.
 unfoldProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
 unfoldProp sc unints (Prop tm) =
-  do tm' <- scUnfoldConstantSet sc True unints tm
+  do let unfold nm = Set.member (nameIndex nm) unints
+     tm' <- scUnfoldConstants sc unfold tm
      return (Prop tm')
 
 -- | Unfold one time all the fixpoint constants appearing in the proposition
@@ -502,7 +503,8 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
 
 normalizeProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
 normalizeProp sc opaqueSet (Prop tm) =
-  do tm' <- betaNormalize sc =<< scUnfoldConstantSet sc False opaqueSet tm
+  do let unfold nm = Set.notMember (nameIndex nm) opaqueSet
+     tm' <- scUnfoldConstantsBeta sc unfold tm
      termToProp sc tm'
 
 -- | Pretty print the given proposition as a string.

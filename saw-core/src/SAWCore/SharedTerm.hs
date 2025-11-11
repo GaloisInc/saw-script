@@ -228,9 +228,7 @@ module SAWCore.SharedTerm
   , scLambdaListEtaCollapse
   , scGeneralizeTerms
   , scUnfoldConstants
-  , scUnfoldConstants'
-  , scUnfoldConstantSet
-  , scUnfoldConstantSet'
+  , scUnfoldConstantsBeta
   , scUnfoldOnceFixConstantSet
   , scSharedSize
   , scSharedSizeAux
@@ -2863,38 +2861,66 @@ scGeneralizeTerms sc args body =
         Just var -> pure var
         Nothing -> fail "scGeneralizeTerms: expected Variable"
 
-scUnfoldConstants :: SharedContext -> [VarIndex] -> Term -> IO Term
-scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0
+-- | Unfold some of the defined constants within a 'Term'.
+-- The supplied predicate specifies whether or not to unfold each
+-- constant, based on its 'Name'.
+scUnfoldConstants ::
+  SharedContext ->
+  (Name -> Bool) {- ^ whether to unfold a constant with this name -} ->
+  Term -> IO Term
+scUnfoldConstants sc unfold t0 =
+  do tcache <- newCacheMap' Map.empty
+     mm <- scGetModuleMap sc
+     let getRhs nm =
+           case lookupVarIndexInMap (nameIndex nm) mm of
+             Just (ResolvedDef d) -> defBody d
+             _ -> Nothing
+     let go :: Term -> ChangeT IO Term
+         go t@STApp{stAppIndex = idx, stAppTermF = tf} =
+           case tf of
+             Constant nm
+               | unfold nm
+               , Just rhs <- getRhs nm -> taint (go rhs)
+               | otherwise             -> pure t
+             Variable x _
+               | IntMap.member (vnIndex x) (varTypes t0) ->
+                 -- Avoid modifying types of free variables to preserve Term invariant
+                 pure t
+             _ ->
+               useChangeCache tcache idx $
+               whenModified t (scTermF sc) (traverse go tf)
+     commitChangeT (go t0)
 
--- | TODO: test whether this version is slower or faster.
-scUnfoldConstants' :: SharedContext -> [VarIndex] -> Term -> IO Term
-scUnfoldConstants' sc names t0 = scUnfoldConstantSet' sc True (Set.fromList names) t0
+-- | Unfold some of the defined constants within a 'Term'.
+-- The supplied predicate specifies whether or not to unfold each
+-- constant, based on its 'Name'.
+-- Reduce any beta redexes created by unfolding a constant definition
+-- that is a lambda term.
+scUnfoldConstantsBeta ::
+  SharedContext ->
+  (Name -> Bool) {- ^ whether to unfold a constant with this name -} ->
+  Term -> IO Term
+scUnfoldConstantsBeta sc unfold t0 =
+  do tcache <- newCacheMap' Map.empty
+     mm <- scGetModuleMap sc
+     let getRhs nm =
+           case lookupVarIndexInMap (nameIndex nm) mm of
+             Just (ResolvedDef d) -> defBody d
+             _ -> Nothing
+     let memo :: Term -> ChangeT IO Term
+         memo t@STApp{stAppIndex = i} = useChangeCache tcache i (go t)
+         go :: Term -> ChangeT IO Term
+         go (asApplyAll -> (asConstant -> Just nm, args))
+           | unfold nm, Just rhs <- getRhs nm =
+               do args' <- traverse memo args
+                  taint $ lift $ scApplyAllBeta sc rhs args'
+         go t@(asVariable -> Just (x, _))
+           | IntMap.member (vnIndex x) (varTypes t0) =
+               -- Avoid modifying types of free variables to preserve Term invariant
+               pure t
+         go t = whenModified t (scTermF sc) (traverse memo (unwrapTermF t))
 
-scUnfoldConstantSet :: SharedContext
-                    -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
-                    -> Set VarIndex -- ^ Set of constant names
-                    -> Term
-                    -> IO Term
-scUnfoldConstantSet sc b names t0 = do
-  cache <- newCache
-  mm <- scGetModuleMap sc
-  let getRhs v =
-        case lookupVarIndexInMap v mm of
-          Just (ResolvedDef d) -> defBody d
-          _ -> Nothing
-  let go :: Term -> IO Term
-      go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
-        case tf of
-          Constant (Name nmidx _)
-            | Set.member nmidx names == b
-            , Just rhs <- getRhs nmidx    -> go rhs
-            | otherwise                   -> return t
-          Variable x _
-            | IntMap.member (vnIndex x) (varTypes t0) ->
-              -- Avoid modifying types of free variables to preserve Term invariant
-              pure t
-          _ -> scTermF sc =<< traverse go tf
-  go t0
+     commitChangeT (memo t0)
 
 -- | Unfold one time fixpoint constants.
 --
@@ -2925,34 +2951,6 @@ scUnfoldOnceFixConstantSet sc b names t0 = do
           Constant (Name nmidx _) | Just rhs <- getRhs nmidx -> unfold t nmidx rhs
           _ -> scTermF sc =<< traverse go tf
   go t0
-
--- | TODO: test whether this version is slower or faster.
-scUnfoldConstantSet' :: SharedContext
-                    -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
-                    -> Set VarIndex -- ^ Set of constant names
-                    -> Term
-                    -> IO Term
-scUnfoldConstantSet' sc b names t0 = do
-  tcache <- newCacheMap' Map.empty
-  mm <- scGetModuleMap sc
-  let getRhs v =
-        case lookupVarIndexInMap v mm of
-          Just (ResolvedDef d) -> defBody d
-          _ -> Nothing
-  let go :: Term -> ChangeT IO Term
-      go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =
-        case tf of
-          Constant (Name nmidx _)
-            | Set.member nmidx names == b
-            , Just rhs <- getRhs nmidx    -> taint (go rhs)
-            | otherwise                   -> pure t
-          Variable x _
-            | IntMap.member (vnIndex x) (varTypes t0) ->
-              -- Avoid modifying types of free variables to preserve Term invariant
-              pure t
-          _ -> useChangeCache tcache idx $
-                 whenModified t (scTermF sc) (traverse go tf)
-  commitChangeT (go t0)
 
 -- | Return the number of DAG nodes used by the given @Term@.
 scSharedSize :: Term -> Integer
