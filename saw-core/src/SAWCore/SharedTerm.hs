@@ -1187,13 +1187,7 @@ convertsToNat (asFTermF -> Just (NatLit _)) = Nothing
 convertsToNat t = asNat t
 
 -- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
--- definitions at the top level of a term, and evaluates all arguments to type
--- constructors (including function, record, and tuple types).
---
--- NOTE: this notion of weak head normal form differs from the standard type
--- theory definition, in that it normalizes the arguments of type-forming
--- constructs like pi types, pair types, etc. The idea is that these constructs
--- are being treated as strict constructors in the Haskell sense.
+-- definitions at the top level of a term.
 scWhnf :: SharedContext -> Term -> IO Term
 scWhnf sc t0 =
   do cache <- newCacheIntMap
@@ -1221,21 +1215,6 @@ scWhnf sc t0 =
                                                                 , Just (elims, xs2) <- splitApps (length (recursorCtorOrder crec)) xs1
                                                                 , Just (ixs, ElimApp x : xs') <- splitApps (recursorNumIxs crec) xs2
                                                                 = go (ElimRecursor r crec params motive elims ixs : xs') x
-    go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
-                                                                     t' <- scPairValue sc a b'
-                                                                     foldM reapply t' xs
-    go xs                     (asPairType -> Just (a, b))       = do a' <- memo a
-                                                                     b' <- memo b
-                                                                     t' <- scPairType sc a' b'
-                                                                     foldM reapply t' xs
-    go xs                     (asRecordType -> Just elems)      = do elems' <- mapM (\(i,t) -> (i,) <$> memo t)
-                                                                                    (Map.assocs elems)
-                                                                     t' <- scRecordType sc elems'
-                                                                     foldM reapply t' xs
-    go xs                     (asPi -> Just (x,aty,rty))        = do aty' <- memo aty
-                                                                     rty' <- memo rty
-                                                                     t' <- scPi sc x aty' rty'
-                                                                     foldM reapply t' xs
     go xs                     t@(asConstant -> Just nm)         = do r <- resolveConstant nm
                                                                      case r of
                                                                        ResolvedDef d ->
