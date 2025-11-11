@@ -1307,7 +1307,8 @@ matchArg opts sc cc cs prepost md = go False []
                   W4.bvLit sym discrW $ BV.mkBV discrW discr
                 discrEq <- liftIO $
                   W4.bvEq sym expectedDiscr actualDiscr
-                addAssert discrEq md =<< notEq
+                addAssert discrEq md =<<
+                  discriminantMismatchErrMsg expectedDiscr actualDiscr
 
                 case expectedVariant of
                   W4.PE xsPred xs -> do
@@ -1316,7 +1317,7 @@ matchArg opts sc cc cs prepost md = go False []
                     -- way that we construct specific enum values, this should
                     -- always hold if the discriminant values match, but we
                     -- check it anyway to be on the safe side.
-                    addAssert xsPred md =<< notEq
+                    addAssert xsPred md =<< variantNotDefinedErrMsg xsPred
                     -- Finally, ensure that the fields match point-wise.
                     matchFields sym xsFldShps xs zs
                   W4.Unassigned ->
@@ -1517,6 +1518,31 @@ matchArg opts sc cc cs prepost md = go False []
       notEq = notEqual prepost opts loc cc sc cs
         (reapplyProjToSetupValue projStack expected)
         actual
+
+      discriminantMismatchErrMsg ::
+        W4.SymBV Sym width ->
+        W4.SymBV Sym width ->
+        OverrideMatcher MIR w Crucible.SimError
+      discriminantMismatchErrMsg expectedDiscriminant actualDiscriminant =
+        let msg = unlines
+              [ "Equality " ++ MS.stateCond prepost
+              , "Expected enum discriminant: "
+              , show $ W4.printSymExpr expectedDiscriminant
+              , "Actual enum discriminant: "
+              , show $ W4.printSymExpr actualDiscriminant
+              ] in
+        pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
+
+      variantNotDefinedErrMsg ::
+        W4.Pred Sym ->
+        OverrideMatcher MIR w Crucible.SimError
+      variantNotDefinedErrMsg p =
+        let msg = unlines
+              [ "Equality " ++ MS.stateCond prepost
+              , "Variant defined if the following predicate holds: "
+              , show $ W4.printSymExpr p
+              ] in
+        pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
 {-
 Note [Matching slices in overrides]

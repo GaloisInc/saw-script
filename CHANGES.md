@@ -250,6 +250,9 @@ This release supports [version
 * Fix a bug that would cause SAW to completely ignore the paths specified in
   the `SAW_IMPORT_PATH`/`--import-path` options.
 
+* Fix a bug that would cause SAW to crash when verifying a `mir_return`
+  statement returning a `Vec` that was allocated in a postcondition.
+
 # Version 1.4 -- date still TBD
 
 This release supports [version

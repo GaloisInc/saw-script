@@ -1,0 +1,25 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let global_adt = mir_find_adt m "alloc::alloc::Global" [];
+let vec_u32_adt = mir_find_adt m "alloc::vec::Vec" [mir_u32, mir_adt global_adt];
+let option_vec_u32_adt = mir_find_adt m "core::option::Option" [mir_adt vec_u32_adt];
+
+let f_spec = do {
+    mir_execute_func [];
+
+    vec <- mir_vec_of "vec_var" mir_u32 (mir_term {{ [42] : [1][32] }});
+    mir_return vec;
+};
+
+let g_spec = do {
+    mir_execute_func [];
+
+    vec <- mir_vec_of "vec_var" mir_u32 (mir_term {{ [42] : [1][32] }});
+    let some = mir_enum_value option_vec_u32_adt "Some" [vec];
+    mir_return some;
+};
+
+mir_verify m "test::f" [] false f_spec z3;
+mir_verify m "test::g" [] false g_spec z3;
