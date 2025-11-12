@@ -38,7 +38,7 @@ env:
   # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20250606"
+  SOLVER_PKG_VERSION: "snapshot-20251112"
 
 jobs:
   config:
@@ -104,19 +104,19 @@ jobs:
             hpc: true
           # Windows and macOS CI runners are more expensive than Linux runners,
           # so we only build one particular GHC version to test them on. We
-          # include both an x86-64 macOS runner (macos-13) as well as an AArch64
-          # macOS runner (macos-14).
+          # include both an x86-64 macOS runner (macos-15-intel) as well as an
+          # AArch64 (arm64) macOS runner (macos-15).
           - os: windows-2022
             ghc: 9.4.8
             haddock: false
             run-tests: true
             hpc: false
-          - os: macos-13
+          - os: macos-15-intel
             ghc: 9.4.8
             haddock: false
             run-tests: true
             hpc: false
-          - os: macos-14
+          - os: macos-15
             ghc: 9.4.8
             haddock: false
             run-tests: true
@@ -474,7 +474,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -519,7 +519,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repo and submodules
@@ -591,7 +591,7 @@ jobs:
               poetry install
               poetry run mypy --install-types --non-interactive saw_client/ || true
               poetry run mypy --install-types --non-interactive saw_client/
-            os: macos-14
+            os: macos-15
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-24.04
@@ -645,7 +645,7 @@ jobs:
         continue-on-error: [false]
         include:
           - suite: integration-tests
-            os: macos-14
+            os: macos-15
             continue-on-error: false
           - suite: integration-tests
             os: windows-2022
