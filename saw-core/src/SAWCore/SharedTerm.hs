@@ -17,7 +17,6 @@ module SAWCore.SharedTerm
   , Ident, mkIdent
   , VarIndex
   , NameInfo(..)
-  , ppName
     -- * Shared terms
   , Term -- exported as abstract
   , unwrapTermF
