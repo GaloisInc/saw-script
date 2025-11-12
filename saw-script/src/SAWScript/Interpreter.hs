@@ -1066,8 +1066,8 @@ interpretTopStmt printBinds stmt = do
 -- | Interpret multiple top-level statements in an interpreter monad
 --   (any of the SAWScript monads)
 --
---    This is the entry point used by the REPL for executing stuff the
---    user types in.
+--   This is the entry point used by the REPL for executing stuff the
+--   user types in.
 --
 interpretTopStmts :: InterpreterMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
