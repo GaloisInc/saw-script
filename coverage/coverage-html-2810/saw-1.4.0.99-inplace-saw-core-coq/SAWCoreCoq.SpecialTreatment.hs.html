@@ -560,50 +560,57 @@ span.spaces    { background: white }
 <span class="lineno">  541 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun4&quot;,            skip)</span>
 <span class="lineno">  542 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun5&quot;,            skip)</span>
 <span class="lineno">  543 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun6&quot;,            skip)</span>
-<span class="lineno">  544 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  545 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  546 </span><span class="spaces">  </span><span class="nottickedoff">-- Either</span>
-<span class="lineno">  547 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  548 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Either&quot;,     mapsTo datatypesModule &quot;sum&quot;)</span>
-<span class="lineno">  549 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Left&quot;,       mapsToExpl datatypesModule &quot;inl&quot;)</span>
-<span class="lineno">  550 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Right&quot;,       mapsToExpl datatypesModule &quot;inr&quot;)</span>
+<span class="lineno">  544 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatPrec&quot;,            skip)</span>
+<span class="lineno">  545 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatAdd0&quot;,            skip)</span>
+<span class="lineno">  546 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatAddS&quot;,            skip)</span>
+<span class="lineno">  547 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatAddComm&quot;,         skip)</span>
+<span class="lineno">  548 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;addNat_assoc&quot;,         skip)</span>
+<span class="lineno">  549 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLtNat_Zero_absurd&quot;,  skip)</span>
+<span class="lineno">  550 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLeNat_SuccSucc&quot;,     skip)</span>
 <span class="lineno">  551 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
 <span class="lineno">  552 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  553 </span><span class="spaces">  </span><span class="nottickedoff">-- Lists</span>
+<span class="lineno">  553 </span><span class="spaces">  </span><span class="nottickedoff">-- Either</span>
 <span class="lineno">  554 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  555 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;List&quot;, mapsToExpl datatypesModule &quot;list&quot;)</span>
-<span class="lineno">  556 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Nil&quot;, mapsToExpl datatypesModule &quot;nil&quot;)</span>
-<span class="lineno">  557 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Cons&quot;, mapsToExpl datatypesModule &quot;cons&quot;)</span>
-<span class="lineno">  558 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;List__rec&quot;, mapsToExpl datatypesModule &quot;list_rect&quot;)</span>
-<span class="lineno">  559 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
-<span class="lineno">  560 </span>
-<span class="lineno">  561 </span>escapeIdent :: Coq.Ident -&gt; Coq.Ident
-<span class="lineno">  562 </span><span class="decl"><span class="nottickedoff">escapeIdent (Coq.Ident str)</span>
-<span class="lineno">  563 </span><span class="spaces">  </span><span class="nottickedoff">| all okChar str = Coq.Ident str</span>
-<span class="lineno">  564 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise      = Coq.Ident (&quot;Op_&quot; ++ zEncodeString str)</span>
-<span class="lineno">  565 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
-<span class="lineno">  566 </span><span class="spaces">   </span><span class="nottickedoff">okChar x = isAlphaNum x || x `elem` (&quot;_'&quot; :: String)</span></span>
+<span class="lineno">  555 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Either&quot;,     mapsTo datatypesModule &quot;sum&quot;)</span>
+<span class="lineno">  556 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Left&quot;,       mapsToExpl datatypesModule &quot;inl&quot;)</span>
+<span class="lineno">  557 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Right&quot;,       mapsToExpl datatypesModule &quot;inr&quot;)</span>
+<span class="lineno">  558 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  559 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  560 </span><span class="spaces">  </span><span class="nottickedoff">-- Lists</span>
+<span class="lineno">  561 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  562 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;List&quot;, mapsToExpl datatypesModule &quot;list&quot;)</span>
+<span class="lineno">  563 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Nil&quot;, mapsToExpl datatypesModule &quot;nil&quot;)</span>
+<span class="lineno">  564 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Cons&quot;, mapsToExpl datatypesModule &quot;cons&quot;)</span>
+<span class="lineno">  565 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;List__rec&quot;, mapsToExpl datatypesModule &quot;list_rect&quot;)</span>
+<span class="lineno">  566 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
 <span class="lineno">  567 </span>
-<span class="lineno">  568 </span>zipSnippet :: String
-<span class="lineno">  569 </span><span class="decl"><span class="nottickedoff">zipSnippet = [i|</span>
-<span class="lineno">  570 </span><span class="spaces"></span><span class="nottickedoff">Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)</span>
-<span class="lineno">  571 </span><span class="spaces">  </span><span class="nottickedoff">: Vec (minNat m n) (a * b) :=</span>
-<span class="lineno">  572 </span><span class="spaces">  </span><span class="nottickedoff">match</span>
-<span class="lineno">  573 </span><span class="spaces">    </span><span class="nottickedoff">xs in Vector.t _ m'</span>
-<span class="lineno">  574 </span><span class="spaces">    </span><span class="nottickedoff">return Vector.t _ (minNat m' n)</span>
-<span class="lineno">  575 </span><span class="spaces">  </span><span class="nottickedoff">with</span>
-<span class="lineno">  576 </span><span class="spaces">  </span><span class="nottickedoff">| Vector.nil =&gt; Vector.nil _</span>
-<span class="lineno">  577 </span><span class="spaces">  </span><span class="nottickedoff">| Vector.cons x pm xs =&gt;</span>
-<span class="lineno">  578 </span><span class="spaces">    </span><span class="nottickedoff">match</span>
-<span class="lineno">  579 </span><span class="spaces">      </span><span class="nottickedoff">ys in Vector.t _ n'</span>
-<span class="lineno">  580 </span><span class="spaces">      </span><span class="nottickedoff">return Vector.t _ (minNat (S pm) n')</span>
-<span class="lineno">  581 </span><span class="spaces">    </span><span class="nottickedoff">with</span>
-<span class="lineno">  582 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.nil =&gt; Vector.nil _</span>
-<span class="lineno">  583 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.cons y pm' ys =&gt; Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)</span>
-<span class="lineno">  584 </span><span class="spaces">    </span><span class="nottickedoff">end</span>
-<span class="lineno">  585 </span><span class="spaces">  </span><span class="nottickedoff">end</span>
-<span class="lineno">  586 </span><span class="spaces"></span><span class="nottickedoff">.</span>
-<span class="lineno">  587 </span><span class="spaces"></span><span class="nottickedoff">|]</span></span>
+<span class="lineno">  568 </span>escapeIdent :: Coq.Ident -&gt; Coq.Ident
+<span class="lineno">  569 </span><span class="decl"><span class="nottickedoff">escapeIdent (Coq.Ident str)</span>
+<span class="lineno">  570 </span><span class="spaces">  </span><span class="nottickedoff">| all okChar str = Coq.Ident str</span>
+<span class="lineno">  571 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise      = Coq.Ident (&quot;Op_&quot; ++ zEncodeString str)</span>
+<span class="lineno">  572 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
+<span class="lineno">  573 </span><span class="spaces">   </span><span class="nottickedoff">okChar x = isAlphaNum x || x `elem` (&quot;_'&quot; :: String)</span></span>
+<span class="lineno">  574 </span>
+<span class="lineno">  575 </span>zipSnippet :: String
+<span class="lineno">  576 </span><span class="decl"><span class="nottickedoff">zipSnippet = [i|</span>
+<span class="lineno">  577 </span><span class="spaces"></span><span class="nottickedoff">Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)</span>
+<span class="lineno">  578 </span><span class="spaces">  </span><span class="nottickedoff">: Vec (minNat m n) (a * b) :=</span>
+<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">match</span>
+<span class="lineno">  580 </span><span class="spaces">    </span><span class="nottickedoff">xs in Vector.t _ m'</span>
+<span class="lineno">  581 </span><span class="spaces">    </span><span class="nottickedoff">return Vector.t _ (minNat m' n)</span>
+<span class="lineno">  582 </span><span class="spaces">  </span><span class="nottickedoff">with</span>
+<span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">| Vector.nil =&gt; Vector.nil _</span>
+<span class="lineno">  584 </span><span class="spaces">  </span><span class="nottickedoff">| Vector.cons x pm xs =&gt;</span>
+<span class="lineno">  585 </span><span class="spaces">    </span><span class="nottickedoff">match</span>
+<span class="lineno">  586 </span><span class="spaces">      </span><span class="nottickedoff">ys in Vector.t _ n'</span>
+<span class="lineno">  587 </span><span class="spaces">      </span><span class="nottickedoff">return Vector.t _ (minNat (S pm) n')</span>
+<span class="lineno">  588 </span><span class="spaces">    </span><span class="nottickedoff">with</span>
+<span class="lineno">  589 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.nil =&gt; Vector.nil _</span>
+<span class="lineno">  590 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.cons y pm' ys =&gt; Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)</span>
+<span class="lineno">  591 </span><span class="spaces">    </span><span class="nottickedoff">end</span>
+<span class="lineno">  592 </span><span class="spaces">  </span><span class="nottickedoff">end</span>
+<span class="lineno">  593 </span><span class="spaces"></span><span class="nottickedoff">.</span>
+<span class="lineno">  594 </span><span class="spaces"></span><span class="nottickedoff">|]</span></span>
 
 </pre>
 </body>
