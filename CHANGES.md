@@ -222,6 +222,9 @@ This release supports [version
   allows extracting a MIR function to a term. See the SAW manual for details on
   what types of MIR functions are supported for extraction.
 
+* Add a `mir_vec : MIRModule -> MIRType -> MIRType` function, which provides a
+  convenient shorthand for constructing the `Vec<T>` type (for some type `T`).
+
 ## Bug Fixes
 
 * Under some combinations of circumstances you would sometimes get
@@ -249,6 +252,9 @@ This release supports [version
 
 * Fix a bug that would cause SAW to completely ignore the paths specified in
   the `SAW_IMPORT_PATH`/`--import-path` options.
+
+* Fix a bug that would cause SAW to crash when verifying a `mir_return`
+  statement returning a `Vec` that was allocated in a postcondition.
 
 # Version 1.4 -- date still TBD
 

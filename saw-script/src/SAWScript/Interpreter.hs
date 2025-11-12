@@ -6559,6 +6559,14 @@ primitives = Map.fromList $
     , "favor of using 'mir_find_adt' whenever possible."
     ]
 
+  , prim "mir_vec" "MIRModule -> MIRType -> MIRType"
+    (funVal2 mir_vec)
+    Experimental
+    [ "The type of MIR vectors, i.e., Vec<T> (for some type T)."
+    , "This requires looking up Vec-related relevant identifiers"
+    , "in the supplied MIRModule."
+    ]
+
     ------------------------------------------------------------
     -- MIR values / terms
 

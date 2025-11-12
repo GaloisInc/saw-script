@@ -80,6 +80,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_u64
   , mir_u128
   , mir_usize
+  , mir_vec
   ) where
 
 import Control.Lens
@@ -392,7 +393,7 @@ mir_find_name rm origName tys =
         col = cs ^. Mir.collection
     origId <- findDefId cs origName
     findFnInstance col origId (Mir.Substs tys)
-    
+
 -- | Generate a fresh term of the given Cryptol type. The name will be used when
 -- pretty-printing the variable in debug output.
 mir_fresh_cryptol_var ::
@@ -1052,9 +1053,9 @@ mir_vec_of prefix elemTy contents = do
           col = rm ^. Mir.rmCS . Mir.collection
           find name tyArgs = mirTopLevel $ mir_find_adt rm name tyArgs
       globalAllocAdt <-
-        find "alloc::alloc::Global" []
+        find globalAllocId []
       vecTAdt <-
-        find "alloc::vec::Vec" [elemTy, mir_adt globalAllocAdt]
+        find vecId [elemTy, mir_adt globalAllocAdt]
       rawVecTAdt <-
         find "alloc::raw_vec::RawVec" [elemTy, mir_adt globalAllocAdt]
       typedAllocatorTAdt <-
@@ -1296,6 +1297,12 @@ mir_u128 = Mir.TyUint Mir.B128
 
 mir_usize :: Mir.Ty
 mir_usize = Mir.TyUint Mir.USize
+
+mir_vec :: Mir.RustModule -> Mir.Ty -> TopLevel Mir.Ty
+mir_vec rm elemTy = do
+  globalAllocAdt <- mir_find_adt rm globalAllocId []
+  vecTAdt <- mir_find_adt rm vecId [elemTy, mir_adt globalAllocAdt]
+  pure $ mir_adt vecTAdt
 
 --------------------------------------------------------------------------------
 -- mir_verify
@@ -1712,6 +1719,16 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat md
         do v <- prepareArg tr (xs !! Ctx.indexVal idx)
            return (Crucible.RegEntry tr v))
       ctx
+
+--------------------------------------------------------------------------------
+-- Internal MIR identifiers
+--------------------------------------------------------------------------------
+
+globalAllocId :: Text
+globalAllocId = "alloc::alloc::Global"
+
+vecId :: Text
+vecId = "alloc::vec::Vec"
 
 --------------------------------------------------------------------------------
 -- Utilities
