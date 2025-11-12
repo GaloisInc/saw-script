@@ -541,6 +541,13 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("test_fun4",            skip)
   , ("test_fun5",            skip)
   , ("test_fun6",            skip)
+  , ("eqNatPrec",            mapsTo sawDefinitionsModule "eqNatPrec")
+  , ("eqNatAdd0",            mapsTo sawDefinitionsModule "eqNatAdd0")
+  , ("eqNatAddS",            mapsTo sawDefinitionsModule "eqNatAddS")
+  , ("eqNatAddComm",         mapsTo sawDefinitionsModule "eqNatAddComm")
+  , ("addNat_assoc",         mapsTo sawDefinitionsModule "addNat_assoc")
+  , ("IsLtNat_Zero_absurd",  mapsTo sawDefinitionsModule "IsLtNat_Zero_absurd")
+  , ("IsLeNat_SuccSucc",     mapsTo sawDefinitionsModule "IsLeNat_SuccSucc")
   ]
 
   -- Either

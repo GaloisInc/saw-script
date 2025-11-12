@@ -290,6 +290,27 @@ Definition if0Nat (a : Type) (n : Nat) (x y : a) : a :=
   | S _ => y
   end.
 
+Definition eqNatPrec : forall (x y : nat), Succ x = Succ y -> x = y :=
+  eq_add_S.
+
+Definition eqNatAdd0 (x : nat) : addNat x 0 = x :=
+  eq_sym (plus_n_O x).
+
+Definition eqNatAddS (x y : nat) : addNat x (Succ y) = Succ (addNat x y) :=
+  eq_sym (plus_n_Sm x y).
+
+Definition eqNatAddComm : forall (x y : nat), addNat x y = addNat y x :=
+  Nat.add_comm.
+
+Definition addNat_assoc : forall (x y z : nat), addNat x (addNat y z) = addNat (addNat x y) z :=
+  Nat.add_assoc.
+
+Definition IsLtNat_Zero_absurd (p : Prop) (m : Nat) : IsLtNat m Zero -> p :=
+  fun H => False_ind _ (Nat.nlt_0_r m H).
+
+Definition IsLeNat_SuccSucc : forall (n m : Nat), IsLeNat (Succ n) (Succ m) -> IsLeNat n m :=
+  le_S_n.
+
 Definition Pos_cases
   (a : Type)
   (one : a)
