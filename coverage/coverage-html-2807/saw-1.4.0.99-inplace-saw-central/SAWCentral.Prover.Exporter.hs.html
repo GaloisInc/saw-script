@@ -432,21 +432,21 @@ span.spaces    { background: white }
 <span class="lineno">  413 </span>  [(Text, Text)] -&gt;
 <span class="lineno">  414 </span>  [Text] -&gt;
 <span class="lineno">  415 </span>  Coq.TranslationConfiguration
-<span class="lineno">  416 </span><span class="decl"><span class="nottickedoff">coqTranslationConfiguration renamings skips = Coq.TranslationConfiguration</span>
-<span class="lineno">  417 </span><span class="spaces">  </span><span class="nottickedoff">{ Coq.constantRenaming = map (\(a, b) -&gt; (Text.unpack a, Text.unpack b)) renamings</span>
-<span class="lineno">  418 </span><span class="spaces">  </span><span class="nottickedoff">, Coq.constantSkips = map Text.unpack skips</span>
-<span class="lineno">  419 </span><span class="spaces">  </span><span class="nottickedoff">, Coq.monadicTranslation = False</span>
-<span class="lineno">  420 </span><span class="spaces">  </span><span class="nottickedoff">, Coq.postPreamble = []</span>
-<span class="lineno">  421 </span><span class="spaces">  </span><span class="nottickedoff">, Coq.vectorModule = &quot;SAWCoreVectorsAsCoqVectors&quot;</span>
-<span class="lineno">  422 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  416 </span><span class="decl"><span class="istickedoff">coqTranslationConfiguration renamings skips = Coq.TranslationConfiguration</span>
+<span class="lineno">  417 </span><span class="spaces">  </span><span class="istickedoff">{ Coq.constantRenaming = <span class="nottickedoff">map (\(a, b) -&gt; (Text.unpack a, Text.unpack b)) renamings</span></span>
+<span class="lineno">  418 </span><span class="spaces">  </span><span class="istickedoff">, Coq.constantSkips = <span class="nottickedoff">map Text.unpack skips</span></span>
+<span class="lineno">  419 </span><span class="spaces">  </span><span class="istickedoff">, Coq.monadicTranslation = <span class="nottickedoff">False</span></span>
+<span class="lineno">  420 </span><span class="spaces">  </span><span class="istickedoff">, Coq.postPreamble = []</span>
+<span class="lineno">  421 </span><span class="spaces">  </span><span class="istickedoff">, Coq.vectorModule = &quot;SAWCoreVectorsAsCoqVectors&quot;</span>
+<span class="lineno">  422 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
 <span class="lineno">  423 </span>
 <span class="lineno">  424 </span>withImportSAWCorePrelude :: Coq.TranslationConfiguration  -&gt; Coq.TranslationConfiguration
-<span class="lineno">  425 </span><span class="decl"><span class="nottickedoff">withImportSAWCorePrelude config@(Coq.TranslationConfiguration { Coq.postPreamble }) =</span>
-<span class="lineno">  426 </span><span class="spaces">  </span><span class="nottickedoff">config { Coq.postPreamble = postPreamble ++ unlines</span>
-<span class="lineno">  427 </span><span class="spaces">   </span><span class="nottickedoff">[ &quot;From CryptolToCoq Require Import SAWCorePrelude.&quot;</span>
-<span class="lineno">  428 </span><span class="spaces">   </span><span class="nottickedoff">, &quot;Import SAWCorePrelude.&quot;</span>
-<span class="lineno">  429 </span><span class="spaces">   </span><span class="nottickedoff">]</span>
-<span class="lineno">  430 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  425 </span><span class="decl"><span class="istickedoff">withImportSAWCorePrelude config@(Coq.TranslationConfiguration { Coq.postPreamble }) =</span>
+<span class="lineno">  426 </span><span class="spaces">  </span><span class="istickedoff">config { Coq.postPreamble = postPreamble ++ unlines</span>
+<span class="lineno">  427 </span><span class="spaces">   </span><span class="istickedoff">[ &quot;From CryptolToCoq Require Import SAWCorePrelude.&quot;</span>
+<span class="lineno">  428 </span><span class="spaces">   </span><span class="istickedoff">, &quot;Import SAWCorePrelude.&quot;</span>
+<span class="lineno">  429 </span><span class="spaces">   </span><span class="istickedoff">]</span>
+<span class="lineno">  430 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
 <span class="lineno">  431 </span>
 <span class="lineno">  432 </span>withImportSAWCorePreludeExtra :: Coq.TranslationConfiguration  -&gt; Coq.TranslationConfiguration
 <span class="lineno">  433 </span><span class="decl"><span class="nottickedoff">withImportSAWCorePreludeExtra config@(Coq.TranslationConfiguration { Coq.postPreamble }) =</span>
@@ -458,12 +458,12 @@ span.spaces    { background: white }
 <span class="lineno">  439 </span>
 <span class="lineno">  440 </span>withImportCryptolPrimitivesForSAWCore ::
 <span class="lineno">  441 </span>  Coq.TranslationConfiguration  -&gt; Coq.TranslationConfiguration
-<span class="lineno">  442 </span><span class="decl"><span class="nottickedoff">withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =</span>
-<span class="lineno">  443 </span><span class="spaces">  </span><span class="nottickedoff">config { Coq.postPreamble = postPreamble ++ unlines</span>
-<span class="lineno">  444 </span><span class="spaces">   </span><span class="nottickedoff">[ &quot;From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.&quot;</span>
-<span class="lineno">  445 </span><span class="spaces">   </span><span class="nottickedoff">, &quot;Import CryptolPrimitivesForSAWCore.&quot;</span>
-<span class="lineno">  446 </span><span class="spaces">   </span><span class="nottickedoff">]</span>
-<span class="lineno">  447 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  442 </span><span class="decl"><span class="istickedoff">withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =</span>
+<span class="lineno">  443 </span><span class="spaces">  </span><span class="istickedoff">config { Coq.postPreamble = postPreamble ++ unlines</span>
+<span class="lineno">  444 </span><span class="spaces">   </span><span class="istickedoff">[ &quot;From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.&quot;</span>
+<span class="lineno">  445 </span><span class="spaces">   </span><span class="istickedoff">, &quot;Import CryptolPrimitivesForSAWCore.&quot;</span>
+<span class="lineno">  446 </span><span class="spaces">   </span><span class="istickedoff">]</span>
+<span class="lineno">  447 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
 <span class="lineno">  448 </span>
 <span class="lineno">  449 </span>withImportCryptolPrimitivesForSAWCoreExtra ::
 <span class="lineno">  450 </span>  Coq.TranslationConfiguration  -&gt; Coq.TranslationConfiguration
@@ -481,19 +481,19 @@ span.spaces    { background: white }
 <span class="lineno">  462 </span>  FilePath -&gt;
 <span class="lineno">  463 </span>  Term -&gt;
 <span class="lineno">  464 </span>  TopLevel ()
-<span class="lineno">  465 </span><span class="decl"><span class="nottickedoff">writeCoqTerm name notations skips path t = do</span>
-<span class="lineno">  466 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
-<span class="lineno">  467 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCore $</span>
-<span class="lineno">  468 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
-<span class="lineno">  469 </span><span class="spaces">        </span><span class="nottickedoff">coqTranslationConfiguration notations skips</span>
-<span class="lineno">  470 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  471 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- io $ scGetModuleMap sc</span>
-<span class="lineno">  472 </span><span class="spaces">  </span><span class="nottickedoff">tp &lt;- io $ scTypeOf sc t</span>
-<span class="lineno">  473 </span><span class="spaces">  </span><span class="nottickedoff">case Coq.translateTermAsDeclImports configuration mm (Coq.Ident (Text.unpack name)) t tp of</span>
-<span class="lineno">  474 </span><span class="spaces">    </span><span class="nottickedoff">Left err -&gt; throwTopLevel $ &quot;Error translating: &quot; ++ show err</span>
-<span class="lineno">  475 </span><span class="spaces">    </span><span class="nottickedoff">Right doc -&gt; io $ case path of</span>
-<span class="lineno">  476 </span><span class="spaces">      </span><span class="nottickedoff">&quot;&quot; -&gt; print doc</span>
-<span class="lineno">  477 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; writeFile path (show doc)</span></span>
+<span class="lineno">  465 </span><span class="decl"><span class="istickedoff">writeCoqTerm name notations skips path t = do</span>
+<span class="lineno">  466 </span><span class="spaces">  </span><span class="istickedoff">let configuration =</span>
+<span class="lineno">  467 </span><span class="spaces">        </span><span class="istickedoff">withImportCryptolPrimitivesForSAWCore $</span>
+<span class="lineno">  468 </span><span class="spaces">        </span><span class="istickedoff">withImportSAWCorePrelude $</span>
+<span class="lineno">  469 </span><span class="spaces">        </span><span class="istickedoff">coqTranslationConfiguration <span class="nottickedoff">notations</span> <span class="nottickedoff">skips</span></span>
+<span class="lineno">  470 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  471 </span><span class="spaces">  </span><span class="istickedoff">mm &lt;- io $ scGetModuleMap sc</span>
+<span class="lineno">  472 </span><span class="spaces">  </span><span class="istickedoff">tp &lt;- io $ scTypeOf sc t</span>
+<span class="lineno">  473 </span><span class="spaces">  </span><span class="istickedoff">case Coq.translateTermAsDeclImports configuration <span class="nottickedoff">mm</span> (Coq.Ident (Text.unpack name)) t tp of</span>
+<span class="lineno">  474 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwTopLevel $ &quot;Error translating: &quot; ++ show err</span></span>
+<span class="lineno">  475 </span><span class="spaces">    </span><span class="istickedoff">Right doc -&gt; io $ case path of</span>
+<span class="lineno">  476 </span><span class="spaces">      </span><span class="istickedoff">&quot;&quot; -&gt; <span class="nottickedoff">print doc</span></span>
+<span class="lineno">  477 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; writeFile path (show doc)</span></span>
 <span class="lineno">  478 </span>
 <span class="lineno">  479 </span>writeCoqProp ::
 <span class="lineno">  480 </span>  Text -&gt;

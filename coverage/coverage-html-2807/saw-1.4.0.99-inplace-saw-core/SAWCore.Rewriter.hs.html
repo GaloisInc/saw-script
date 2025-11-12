@@ -781,7 +781,7 @@ span.spaces    { background: white }
 <span class="lineno">  762 </span><span class="spaces">             </span><span class="istickedoff">[Either (RewriteRule a) Conversion] -&gt; Term -&gt; IO Term</span>
 <span class="lineno">  763 </span><span class="spaces">    </span><span class="istickedoff">apply [] t = return t</span>
 <span class="lineno">  764 </span><span class="spaces">    </span><span class="istickedoff">apply (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do</span>
-<span class="lineno">  765 </span><span class="spaces">      </span><span class="istickedoff">result &lt;- scMatch sc ctxt lhs t</span>
+<span class="lineno">  765 </span><span class="spaces">      </span><span class="istickedoff">result &lt;- scMatch <span class="nottickedoff">sc</span> ctxt lhs t</span>
 <span class="lineno">  766 </span><span class="spaces">      </span><span class="istickedoff">case result of</span>
 <span class="lineno">  767 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; apply rules t</span>
 <span class="lineno">  768 </span><span class="spaces">        </span><span class="istickedoff">Just inst</span>
@@ -809,13 +809,13 @@ span.spaces    { background: white }
 <span class="lineno">  790 </span><span class="spaces">            </span><span class="istickedoff">do -- putStrLn &quot;REWRITING:&quot;</span>
 <span class="lineno">  791 </span><span class="spaces">               </span><span class="istickedoff">-- print lhs</span>
 <span class="lineno">  792 </span><span class="spaces">               </span><span class="istickedoff">recordAnn annotation</span>
-<span class="lineno">  793 </span><span class="spaces">               </span><span class="istickedoff">rewriteAll =&lt;&lt; scInstantiate sc inst rhs</span>
+<span class="lineno">  793 </span><span class="spaces">               </span><span class="istickedoff">rewriteAll =&lt;&lt; scInstantiate <span class="nottickedoff">sc</span> inst rhs</span>
 <span class="lineno">  794 </span><span class="spaces">    </span><span class="istickedoff">apply (Right conv : rules) t =</span>
-<span class="lineno">  795 </span><span class="spaces">        </span><span class="istickedoff">do -- putStrLn &quot;REWRITING:&quot;</span>
-<span class="lineno">  796 </span><span class="spaces">           </span><span class="istickedoff">-- print (Net.toPat conv)</span>
-<span class="lineno">  797 </span><span class="spaces">           </span><span class="istickedoff">case runConversion conv t of</span>
-<span class="lineno">  798 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt; apply rules t</span>
-<span class="lineno">  799 </span><span class="spaces">             </span><span class="istickedoff">Just tb -&gt; rewriteAll =&lt;&lt; runTermBuilder tb (scGlobalDef sc) (scTermF sc)</span></span>
+<span class="lineno">  795 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do -- putStrLn &quot;REWRITING:&quot;</span></span>
+<span class="lineno">  796 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">-- print (Net.toPat conv)</span></span>
+<span class="lineno">  797 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">case runConversion conv t of</span></span>
+<span class="lineno">  798 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; apply rules t</span></span>
+<span class="lineno">  799 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Just tb -&gt; rewriteAll =&lt;&lt; runTermBuilder tb (scGlobalDef sc) (scTermF sc)</span></span></span>
 <span class="lineno">  800 </span>
 <span class="lineno">  801 </span>data Convertibility = AllRules | ConvertibleRulesOnly
 <span class="lineno">  802 </span>
@@ -870,7 +870,7 @@ span.spaces    { background: white }
 <span class="lineno">  851 </span><span class="spaces">                     </span><span class="istickedoff">Convertibility -&gt; FlatTermF Term -&gt; IO (FlatTermF Term)</span>
 <span class="lineno">  852 </span><span class="spaces">    </span><span class="istickedoff">rewriteFTermF convertibleFlag ftf =</span>
 <span class="lineno">  853 </span><span class="spaces">        </span><span class="istickedoff">case ftf of</span>
-<span class="lineno">  854 </span><span class="spaces">          </span><span class="istickedoff">UnitValue        -&gt; <span class="nottickedoff">return ftf</span></span>
+<span class="lineno">  854 </span><span class="spaces">          </span><span class="istickedoff">UnitValue        -&gt; return ftf</span>
 <span class="lineno">  855 </span><span class="spaces">          </span><span class="istickedoff">UnitType         -&gt; return ftf</span>
 <span class="lineno">  856 </span><span class="spaces">          </span><span class="istickedoff">PairValue{}      -&gt; traverse (rewriteAll convertibleFlag) ftf</span>
 <span class="lineno">  857 </span><span class="spaces">          </span><span class="istickedoff">PairType{}       -&gt; traverse (rewriteAll convertibleFlag) ftf</span>
@@ -946,7 +946,7 @@ span.spaces    { background: white }
 <span class="lineno">  927 </span><span class="spaces">        </span><span class="istickedoff">do </span>
 <span class="lineno">  928 </span><span class="spaces">          </span><span class="istickedoff">case runConversion conv t of</span>
 <span class="lineno">  929 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt; apply convertibleFlag rules t</span>
-<span class="lineno">  930 </span><span class="spaces">             </span><span class="istickedoff">Just tb -&gt; rewriteAll convertibleFlag =&lt;&lt; runTermBuilder tb <span class="nottickedoff">(scGlobalDef sc)</span> (scTermF sc)</span></span>
+<span class="lineno">  930 </span><span class="spaces">             </span><span class="istickedoff">Just tb -&gt; rewriteAll convertibleFlag =&lt;&lt; runTermBuilder tb (scGlobalDef sc) (scTermF sc)</span></span>
 <span class="lineno">  931 </span>
 <span class="lineno">  932 </span>
 <span class="lineno">  933 </span>-- FIXME: is there some way to have sensable term replacement in the presence of loose variables

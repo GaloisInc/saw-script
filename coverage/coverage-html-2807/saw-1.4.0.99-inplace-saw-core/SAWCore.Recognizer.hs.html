@@ -193,7 +193,7 @@ span.spaces    { background: white }
 <span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">ftf &lt;- asFTermF t</span>
 <span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">case ftf of</span>
 <span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">PairType x y -&gt; return (x, y)</span>
-<span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">_            -&gt; Nothing</span></span>
+<span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">_            -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  178 </span>
 <span class="lineno">  179 </span>asPairValue :: Recognizer Term (Term, Term)
 <span class="lineno">  180 </span><span class="decl"><span class="istickedoff">asPairValue t = do</span>
@@ -251,7 +251,7 @@ span.spaces    { background: white }
 <span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">ftf &lt;- asFTermF t</span>
 <span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">case ftf of</span>
 <span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">RecordType elems -&gt; return $ Map.fromList elems</span>
-<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">_                -&gt; Nothing</span></span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">_                -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  236 </span>
 <span class="lineno">  237 </span>asRecordValue :: Recognizer Term (Map FieldName Term)
 <span class="lineno">  238 </span><span class="decl"><span class="istickedoff">asRecordValue t = do</span>
@@ -331,9 +331,9 @@ span.spaces    { background: white }
 <span class="lineno">  312 </span><span class="spaces"></span><span class="istickedoff">asLambda _ = Nothing</span></span>
 <span class="lineno">  313 </span>
 <span class="lineno">  314 </span>asLambdaList :: Term -&gt; ([(VarName, Term)], Term)
-<span class="lineno">  315 </span><span class="decl"><span class="nottickedoff">asLambdaList = go []</span>
-<span class="lineno">  316 </span><span class="spaces">  </span><span class="nottickedoff">where go r (asLambda -&gt; Just (nm,tp,rhs)) = go ((nm,tp):r) rhs</span>
-<span class="lineno">  317 </span><span class="spaces">        </span><span class="nottickedoff">go r rhs = (reverse r, rhs)</span></span>
+<span class="lineno">  315 </span><span class="decl"><span class="istickedoff">asLambdaList = go []</span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="istickedoff">where go r (asLambda -&gt; Just (nm,tp,rhs)) = go ((nm,tp):r) rhs</span>
+<span class="lineno">  317 </span><span class="spaces">        </span><span class="istickedoff">go r rhs = (reverse r, rhs)</span></span>
 <span class="lineno">  318 </span>
 <span class="lineno">  319 </span>asPi :: Recognizer Term (VarName, Term, Term)
 <span class="lineno">  320 </span><span class="decl"><span class="istickedoff">asPi (unwrapTermF -&gt; Pi nm tp body) = return (nm, tp, body)</span>
@@ -364,11 +364,11 @@ span.spaces    { background: white }
 <span class="lineno">  345 </span><span class="spaces">    </span><span class="istickedoff">_      -&gt; Nothing</span></span>
 <span class="lineno">  346 </span>
 <span class="lineno">  347 </span>asSortWithFlags :: Recognizer Term (Sort, SortFlags)
-<span class="lineno">  348 </span><span class="decl"><span class="nottickedoff">asSortWithFlags t = do</span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="nottickedoff">ftf &lt;- asFTermF t</span>
-<span class="lineno">  350 </span><span class="spaces">  </span><span class="nottickedoff">case ftf of</span>
-<span class="lineno">  351 </span><span class="spaces">    </span><span class="nottickedoff">Sort s h -&gt; return (s, h)</span>
-<span class="lineno">  352 </span><span class="spaces">    </span><span class="nottickedoff">_      -&gt; Nothing</span></span>
+<span class="lineno">  348 </span><span class="decl"><span class="istickedoff">asSortWithFlags t = do</span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">ftf &lt;- asFTermF t</span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">case ftf of</span></span>
+<span class="lineno">  351 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Sort s h -&gt; return (s, h)</span></span>
+<span class="lineno">  352 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">_      -&gt; Nothing</span></span></span>
 <span class="lineno">  353 </span>
 <span class="lineno">  354 </span>
 <span class="lineno">  355 </span>

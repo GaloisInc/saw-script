@@ -95,7 +95,7 @@ span.spaces    { background: white }
 <span class="lineno">   76 </span>-- Module Names ----------------------------------------------------------------
 <span class="lineno">   77 </span>
 <span class="lineno">   78 </span>newtype ModuleName = ModuleName Text
-<span class="lineno">   79 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
+<span class="lineno">   79 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
 <span class="lineno">   80 </span>
 <span class="lineno">   81 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable ModuleName</span></span></span></span> -- automatically derived
 <span class="lineno">   82 </span>
@@ -112,7 +112,7 @@ span.spaces    { background: white }
 <span class="lineno">   93 </span>-- | Create a module name given a list of strings with the top-most
 <span class="lineno">   94 </span>-- module name given first.
 <span class="lineno">   95 </span>mkModuleName :: [Text] -&gt; ModuleName
-<span class="lineno">   96 </span><span class="decl"><span class="istickedoff">mkModuleName nms = ModuleName $ Text.intercalate <span class="nottickedoff">&quot;.&quot;</span> nms</span></span>
+<span class="lineno">   96 </span><span class="decl"><span class="istickedoff">mkModuleName nms = ModuleName $ Text.intercalate &quot;.&quot; nms</span></span>
 <span class="lineno">   97 </span>
 <span class="lineno">   98 </span>preludeName :: ModuleName
 <span class="lineno">   99 </span><span class="decl"><span class="istickedoff">preludeName = mkModuleName [&quot;Prelude&quot;]</span></span>
@@ -142,7 +142,7 @@ span.spaces    { background: white }
 <span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">(x:xs) -&gt; x :| (xs ++ [identBaseName i])</span></span>
 <span class="lineno">  124 </span>
 <span class="lineno">  125 </span>identName :: Ident -&gt; String
-<span class="lineno">  126 </span><span class="decl"><span class="nottickedoff">identName = Text.unpack . identBaseName</span></span>
+<span class="lineno">  126 </span><span class="decl"><span class="istickedoff">identName = Text.unpack . identBaseName</span></span>
 <span class="lineno">  127 </span>
 <span class="lineno">  128 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Read Ident</span></span></span></span></span></span> where
 <span class="lineno">  129 </span>  <span class="decl"><span class="nottickedoff">readsPrec _ str =</span>

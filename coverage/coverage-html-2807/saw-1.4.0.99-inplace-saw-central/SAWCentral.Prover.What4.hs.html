@@ -128,19 +128,19 @@ span.spaces    { background: white }
 <span class="lineno">  109 </span>  FilePath -&gt;
 <span class="lineno">  110 </span>  SATQuery -&gt;
 <span class="lineno">  111 </span>  TopLevel (Maybe CEX, Text)
-<span class="lineno">  112 </span><span class="decl"><span class="nottickedoff">proveExportWhat4_sym solver hashConsing outFilePath satq = do</span>
-<span class="lineno">  113 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  114 </span><span class="spaces">  </span><span class="nottickedoff">what4PushMuxOps &lt;- gets rwWhat4PushMuxOps</span>
-<span class="lineno">  115 </span><span class="spaces">  </span><span class="nottickedoff">io $ do</span>
-<span class="lineno">  116 </span><span class="spaces">     </span><span class="nottickedoff">sym &lt;- setupWhat4_sym hashConsing what4PushMuxOps</span>
-<span class="lineno">  117 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  118 </span><span class="spaces">     </span><span class="nottickedoff">-- Write smt out</span>
-<span class="lineno">  119 </span><span class="spaces">     </span><span class="nottickedoff">(_, _, lits, solver_name) &lt;- setupWhat4_solver solver sym sc satq</span>
-<span class="lineno">  120 </span><span class="spaces">     </span><span class="nottickedoff">withFile outFilePath WriteMode $ \handle -&gt;</span>
-<span class="lineno">  121 </span><span class="spaces">       </span><span class="nottickedoff">solver_adapter_write_smt2 solver sym handle lits</span>
-<span class="lineno">  122 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  123 </span><span class="spaces">     </span><span class="nottickedoff">-- Assume unsat</span>
-<span class="lineno">  124 </span><span class="spaces">     </span><span class="nottickedoff">return (Nothing, solver_name)</span></span>
+<span class="lineno">  112 </span><span class="decl"><span class="istickedoff">proveExportWhat4_sym solver hashConsing outFilePath satq = do</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">what4PushMuxOps &lt;- gets <span class="nottickedoff">rwWhat4PushMuxOps</span></span>
+<span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">io $ do</span>
+<span class="lineno">  116 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- setupWhat4_sym hashConsing <span class="nottickedoff">what4PushMuxOps</span></span>
+<span class="lineno">  117 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  118 </span><span class="spaces">     </span><span class="istickedoff">-- Write smt out</span>
+<span class="lineno">  119 </span><span class="spaces">     </span><span class="istickedoff">(_, _, lits, solver_name) &lt;- setupWhat4_solver solver sym sc satq</span>
+<span class="lineno">  120 </span><span class="spaces">     </span><span class="istickedoff">withFile outFilePath WriteMode $ \handle -&gt;</span>
+<span class="lineno">  121 </span><span class="spaces">       </span><span class="istickedoff">solver_adapter_write_smt2 solver sym handle lits</span>
+<span class="lineno">  122 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  123 </span><span class="spaces">     </span><span class="istickedoff">-- Assume unsat</span>
+<span class="lineno">  124 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">Nothing</span>, <span class="nottickedoff">solver_name</span>)</span></span>
 <span class="lineno">  125 </span>
 <span class="lineno">  126 </span>proveWhat4_z3,
 <span class="lineno">  127 </span>  proveWhat4_bitwuzla, proveWhat4_boolector,
@@ -186,7 +186,7 @@ span.spaces    { background: white }
 <span class="lineno">  167 </span>  SATQuery      {- ^ The query to be proved -} -&gt;
 <span class="lineno">  168 </span>  TopLevel (Maybe CEX, Text)
 <span class="lineno">  169 </span>
-<span class="lineno">  170 </span><span class="decl"><span class="nottickedoff">proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter</span></span>
+<span class="lineno">  170 </span><span class="decl"><span class="istickedoff">proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter</span></span>
 <span class="lineno">  171 </span><span class="decl"><span class="nottickedoff">proveExportWhat4_bitwuzla  = proveExportWhat4_sym bitwuzlaAdapter</span></span>
 <span class="lineno">  172 </span><span class="decl"><span class="nottickedoff">proveExportWhat4_boolector = proveExportWhat4_sym boolectorAdapter</span></span>
 <span class="lineno">  173 </span><span class="decl"><span class="nottickedoff">proveExportWhat4_cvc4      = proveExportWhat4_sym cvc4Adapter</span></span>

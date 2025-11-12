@@ -476,9 +476,9 @@ span.spaces    { background: white }
 <span class="lineno">  457 </span><span class="spaces">  </span><span class="istickedoff">implication &lt;- io $ scImplies sc initRelation relationRes</span>
 <span class="lineno">  458 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  459 </span><span class="spaces">  </span><span class="istickedoff">-- Unfold LHS/RHS constants to reveal opportunities for simplification</span>
-<span class="lineno">  460 </span><span class="spaces">  </span><span class="istickedoff">let vs = map nameIndex $ mapMaybe asConstant [lhs, rhs]</span>
+<span class="lineno">  460 </span><span class="spaces">  </span><span class="istickedoff">let unfold nm = nm `elem` mapMaybe asConstant [lhs, rhs]</span>
 <span class="lineno">  461 </span><span class="spaces">  </span><span class="istickedoff">implication_unfolded &lt;-</span>
-<span class="lineno">  462 </span><span class="spaces">    </span><span class="istickedoff">io $ scUnfoldConstants sc vs implication &gt;&gt;= betaNormalize sc</span>
+<span class="lineno">  462 </span><span class="spaces">    </span><span class="istickedoff">io $ scUnfoldConstantsBeta sc unfold implication</span>
 <span class="lineno">  463 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  464 </span><span class="spaces">  </span><span class="istickedoff">-- Simplify Term with any theorems that apply</span>
 <span class="lineno">  465 </span><span class="spaces">  </span><span class="istickedoff">(implication', sideConditions) &lt;- applyAllTheorems bthms bc implication_unfolded</span>

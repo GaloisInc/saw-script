@@ -1513,7 +1513,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1494 </span><span class="spaces">                </span><span class="istickedoff">do sub &lt;- OM (use termSub)</span>
 <span class="lineno"> 1495 </span><span class="spaces">                   </span><span class="istickedoff">instantiated_expected_sz_tm &lt;- liftIO $ scInstantiate <span class="nottickedoff">sc</span> sub $ ttTerm expected_sz_tm</span>
 <span class="lineno"> 1496 </span><span class="spaces">                   </span><span class="istickedoff">normalized_expected_sz_tm &lt;- liftIO $</span>
-<span class="lineno"> 1497 </span><span class="spaces">                     </span><span class="istickedoff">scTypeCheckWHNF sc =&lt;&lt; scUnfoldConstantSet sc False mempty instantiated_expected_sz_tm</span>
+<span class="lineno"> 1497 </span><span class="spaces">                     </span><span class="istickedoff">scTypeCheckWHNF sc =&lt;&lt; scUnfoldConstants sc (const True) instantiated_expected_sz_tm</span>
 <span class="lineno"> 1498 </span><span class="spaces">                   </span><span class="istickedoff">case asUnsignedConcreteBv normalized_expected_sz_tm of</span>
 <span class="lineno"> 1499 </span><span class="spaces">                     </span><span class="istickedoff">Just sz_nat -&gt;</span>
 <span class="lineno"> 1500 </span><span class="spaces">                       </span><span class="istickedoff">do sz_bv &lt;- liftIO $</span>

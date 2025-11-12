@@ -42,12 +42,12 @@ span.spaces    { background: white }
 <span class="lineno">   23 </span>import qualified Data.Map as Map
 <span class="lineno">   24 </span>import Data.Map (Map)
 <span class="lineno">   25 </span>import System.Directory
-<span class="lineno">   26 </span>import System.FilePath (normalise)
+<span class="lineno">   26 </span>import System.FilePath (normalise, takeDirectory)
 <span class="lineno">   27 </span>
 <span class="lineno">   28 </span>import qualified SAWSupport.ScopedMap as ScopedMap
 <span class="lineno">   29 </span>--import SAWSupport.ScopedMap (ScopedMap)
 <span class="lineno">   30 </span>
-<span class="lineno">   31 </span>import SAWCentral.Position (Pos, getPos)
+<span class="lineno">   31 </span>import SAWCentral.Position (Pos(..), getPos)
 <span class="lineno">   32 </span>import qualified SAWCentral.Options as Options
 <span class="lineno">   33 </span>import SAWCentral.Options (Options)
 <span class="lineno">   34 </span>import SAWCentral.AST
@@ -78,286 +78,326 @@ span.spaces    { background: white }
 <span class="lineno">   59 </span><span class="spaces">    </span><span class="nottickedoff">in</span>
 <span class="lineno">   60 </span><span class="spaces">    </span><span class="nottickedoff">pos' &lt;&gt; &quot;: &quot; &lt;&gt; msg'</span></span>
 <span class="lineno">   61 </span>
-<span class="lineno">   62 </span>-- | Read some SAWScript text, using the selected parser entry point.
+<span class="lineno">   62 </span>-- | Type shorthand for an include path.
 <span class="lineno">   63 </span>--
-<span class="lineno">   64 </span>--   Returns only in Either; caller is responsible for handling the
-<span class="lineno">   65 </span>--   resulting warnings and errors.
-<span class="lineno">   66 </span>--
-<span class="lineno">   67 </span>--   The FilePath argument is the name of the file the text comes
-<span class="lineno">   68 </span>--   from. If the text didn't come from a file, it should have a
-<span class="lineno">   69 </span>--   suitable placeholder string; that's what ends up in the source
-<span class="lineno">   70 </span>--   positions in the results.
+<span class="lineno">   64 </span>--   The LHS is the directory the current file was included from
+<span class="lineno">   65 </span>--   (starts as &quot;.&quot;) and the RHS is the user's search path.
+<span class="lineno">   66 </span>type IncludePath = (FilePath, [FilePath])
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>-- | Wrap statements in a pushd/popd pair.
+<span class="lineno">   69 </span>--
+<span class="lineno">   70 </span>--   See the notes in the interpreter for why we do this.
 <span class="lineno">   71 </span>--
-<span class="lineno">   72 </span>readAny :: FilePath -&gt; Text.Text -&gt; ([Token Pos] -&gt; Either ParseError a) -&gt; WithMsgs a
-<span class="lineno">   73 </span><span class="decl"><span class="istickedoff">readAny fileName str parser =</span>
-<span class="lineno">   74 </span><span class="spaces">    </span><span class="istickedoff">-- XXX printing of positions properly belongs to the</span>
-<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">-- message-printing infrastructure.</span>
-<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">let positionMsg pos msg =</span>
-<span class="lineno">   77 </span><span class="spaces">          </span><span class="istickedoff">Text.pack (show pos) &lt;&gt; &quot;: &quot; &lt;&gt; msg</span>
-<span class="lineno">   78 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">   79 </span><span class="spaces">    </span><span class="istickedoff">case lexSAW fileName str of</span>
-<span class="lineno">   80 </span><span class="spaces">        </span><span class="istickedoff">Left (_verbosity, pos, msg) -&gt;</span>
-<span class="lineno">   81 </span><span class="spaces">            </span><span class="istickedoff">Left [positionMsg pos msg]</span>
-<span class="lineno">   82 </span><span class="spaces">        </span><span class="istickedoff">Right (tokens, optmsg) -&gt;</span>
-<span class="lineno">   83 </span><span class="spaces">            </span><span class="istickedoff">let msgs = case optmsg of</span>
-<span class="lineno">   84 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt; []</span>
-<span class="lineno">   85 </span><span class="spaces">                  </span><span class="istickedoff">Just (Options.Error, _, _) -&gt;</span>
-<span class="lineno">   86 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;readAny&quot; [&quot;Lexer returned an error in the warning slot&quot;]</span></span>
-<span class="lineno">   87 </span><span class="spaces">                  </span><span class="istickedoff">Just (_verbosity, pos, msg) -&gt;</span>
-<span class="lineno">   88 </span><span class="spaces">                      </span><span class="istickedoff">[positionMsg pos msg]</span>
-<span class="lineno">   89 </span><span class="spaces">            </span><span class="istickedoff">in</span>
-<span class="lineno">   90 </span><span class="spaces">            </span><span class="istickedoff">case parser tokens of</span>
-<span class="lineno">   91 </span><span class="spaces">                </span><span class="istickedoff">Left err -&gt;</span>
-<span class="lineno">   92 </span><span class="spaces">                    </span><span class="istickedoff">let err' = Text.pack (show err) in</span>
-<span class="lineno">   93 </span><span class="spaces">                    </span><span class="istickedoff">Left (msgs ++ [err'])</span>
-<span class="lineno">   94 </span><span class="spaces">                </span><span class="istickedoff">Right tree -&gt;</span>
-<span class="lineno">   95 </span><span class="spaces">                    </span><span class="istickedoff">-- Note: there's no such things as warnings in a</span>
-<span class="lineno">   96 </span><span class="spaces">                    </span><span class="istickedoff">-- Happy parser, so there are no more messages to</span>
-<span class="lineno">   97 </span><span class="spaces">                    </span><span class="istickedoff">-- add in this branch.</span>
-<span class="lineno">   98 </span><span class="spaces">                    </span><span class="istickedoff">Right (msgs, tree)</span></span>
-<span class="lineno">   99 </span>
-<span class="lineno">  100 </span>-- | Use the readAny result to panic if any messages were generated.
-<span class="lineno">  101 </span>panicOnMsgs :: Text -&gt; WithMsgs a -&gt; a
-<span class="lineno">  102 </span><span class="decl"><span class="istickedoff">panicOnMsgs whoAmI result = case result of</span>
-<span class="lineno">  103 </span><span class="spaces">   </span><span class="istickedoff">Left errs -&gt;</span>
-<span class="lineno">  104 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">panic whoAmI (&quot;Unexpected errors:&quot; : errs)</span></span>
-<span class="lineno">  105 </span><span class="spaces">   </span><span class="istickedoff">Right ([], tree) -&gt;</span>
-<span class="lineno">  106 </span><span class="spaces">       </span><span class="istickedoff">tree</span>
-<span class="lineno">  107 </span><span class="spaces">   </span><span class="istickedoff">Right (warns, _) -&gt;</span>
-<span class="lineno">  108 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">panic whoAmI (&quot;Unexpected warnings:&quot; : warns)</span></span></span>
-<span class="lineno">  109 </span>
-<span class="lineno">  110 </span>-- | Handle the readAny result in IO.
-<span class="lineno">  111 </span>--
-<span class="lineno">  112 </span>--   Also return in Either, to be consistent with the current interface
-<span class="lineno">  113 </span>--   into this file. Prints any warnings, and return just errors or a
-<span class="lineno">  114 </span>--   result.
-<span class="lineno">  115 </span>--
-<span class="lineno">  116 </span>dispatchMsgs :: Options -&gt; WithMsgs a -&gt; IO (Either [Text] a)
-<span class="lineno">  117 </span><span class="decl"><span class="istickedoff">dispatchMsgs opts result =</span>
-<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">let printMsg vrb msg =</span>
-<span class="lineno">  119 </span><span class="spaces">          </span><span class="istickedoff">Options.printOutLn opts vrb (Text.unpack msg)</span>
-<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff">case result of</span>
-<span class="lineno">  122 </span><span class="spaces">        </span><span class="istickedoff">Left errs -&gt;</span>
-<span class="lineno">  123 </span><span class="spaces">            </span><span class="istickedoff">pure $ Left errs</span>
-<span class="lineno">  124 </span><span class="spaces">        </span><span class="istickedoff">Right (msgs, tree) -&gt; do</span>
-<span class="lineno">  125 </span><span class="spaces">            </span><span class="istickedoff">mapM_ (printMsg Options.Warn) msgs</span>
-<span class="lineno">  126 </span><span class="spaces">            </span><span class="istickedoff">pure $ Right tree</span></span>
-<span class="lineno">  127 </span>
-<span class="lineno">  128 </span>-- | Run the readAny result through the `Include` module to resolve
-<span class="lineno">  129 </span>--   @include@ statements.
-<span class="lineno">  130 </span>--
-<span class="lineno">  131 </span>--   If we fail after collecting warnings, print the warnings before
-<span class="lineno">  132 </span>--   returning the failure.
-<span class="lineno">  133 </span>--
-<span class="lineno">  134 </span>resolveIncludes ::
-<span class="lineno">  135 </span>    Int -&gt; Options -&gt; Inc.Processor a -&gt; WithMsgs a -&gt; IO (WithMsgs a)
-<span class="lineno">  136 </span><span class="decl"><span class="istickedoff">resolveIncludes depth opts process result =</span>
-<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">printMsg vrb msg =</span></span>
-<span class="lineno">  138 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Options.printOutLn opts vrb (Text.unpack msg)</span></span>
-<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff">case result of</span>
-<span class="lineno">  141 </span><span class="spaces">        </span><span class="istickedoff">Left errs -&gt;</span>
-<span class="lineno">  142 </span><span class="spaces">            </span><span class="istickedoff">pure $ Left errs</span>
-<span class="lineno">  143 </span><span class="spaces">        </span><span class="istickedoff">Right (msgs, tree) -&gt; do</span>
-<span class="lineno">  144 </span><span class="spaces">            </span><span class="istickedoff">result' &lt;- process (includeFile depth opts) tree</span>
-<span class="lineno">  145 </span><span class="spaces">            </span><span class="istickedoff">case result' of</span>
-<span class="lineno">  146 </span><span class="spaces">                </span><span class="istickedoff">Left errs -&gt; do</span>
-<span class="lineno">  147 </span><span class="spaces">                    </span><span class="istickedoff">mapM_ <span class="nottickedoff">(printMsg Options.Warn)</span> msgs</span>
-<span class="lineno">  148 </span><span class="spaces">                    </span><span class="istickedoff">pure $ Left errs</span>
-<span class="lineno">  149 </span><span class="spaces">                </span><span class="istickedoff">Right tree' -&gt;</span>
-<span class="lineno">  150 </span><span class="spaces">                    </span><span class="istickedoff">pure $ Right (msgs, tree')</span></span>
+<span class="lineno">   72 </span>--   FUTURE: if we keep this thing, it would be nice to attach the
+<span class="lineno">   73 </span>--   source position of the include to the push and pop statements.
+<span class="lineno">   74 </span>--
+<span class="lineno">   75 </span>wrapDir :: FilePath -&gt; WithMsgs [Stmt] -&gt; WithMsgs [Stmt]
+<span class="lineno">   76 </span><span class="decl"><span class="istickedoff">wrapDir dir result =</span>
+<span class="lineno">   77 </span><span class="spaces">    </span><span class="istickedoff">case result of</span>
+<span class="lineno">   78 </span><span class="spaces">        </span><span class="istickedoff">Left errs -&gt; Left errs</span>
+<span class="lineno">   79 </span><span class="spaces">        </span><span class="istickedoff">Right (msgs, stmts) -&gt;</span>
+<span class="lineno">   80 </span><span class="spaces">            </span><span class="istickedoff">let stmts' = </span>
+<span class="lineno">   81 </span><span class="spaces">                  </span><span class="istickedoff">let pos = PosInternal &quot;pushd/popd derived from include&quot; in</span>
+<span class="lineno">   82 </span><span class="spaces">                  </span><span class="istickedoff">[StmtPushdir pos dir] ++ stmts ++ [StmtPopdir pos]</span>
+<span class="lineno">   83 </span><span class="spaces">            </span><span class="istickedoff">in</span>
+<span class="lineno">   84 </span><span class="spaces">            </span><span class="istickedoff">Right (msgs, stmts')</span></span>
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>-- | Read some SAWScript text, using the selected parser entry point.
+<span class="lineno">   87 </span>--
+<span class="lineno">   88 </span>--   Returns only in Either; caller is responsible for handling the
+<span class="lineno">   89 </span>--   resulting warnings and errors.
+<span class="lineno">   90 </span>--
+<span class="lineno">   91 </span>--   The FilePath argument is the name of the file the text comes
+<span class="lineno">   92 </span>--   from. If the text didn't come from a file, it should have a
+<span class="lineno">   93 </span>--   suitable placeholder string; that's what ends up in the source
+<span class="lineno">   94 </span>--   positions in the results.
+<span class="lineno">   95 </span>--
+<span class="lineno">   96 </span>readAny :: FilePath -&gt; Text.Text -&gt; ([Token Pos] -&gt; Either ParseError a) -&gt; WithMsgs a
+<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">readAny fileName str parser =</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="istickedoff">-- XXX printing of positions properly belongs to the</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="istickedoff">-- message-printing infrastructure.</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">let positionMsg pos msg =</span>
+<span class="lineno">  101 </span><span class="spaces">          </span><span class="istickedoff">Text.pack (show pos) &lt;&gt; &quot;: &quot; &lt;&gt; msg</span>
+<span class="lineno">  102 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  103 </span><span class="spaces">    </span><span class="istickedoff">case lexSAW fileName str of</span>
+<span class="lineno">  104 </span><span class="spaces">        </span><span class="istickedoff">Left (_verbosity, pos, msg) -&gt;</span>
+<span class="lineno">  105 </span><span class="spaces">            </span><span class="istickedoff">Left [positionMsg pos msg]</span>
+<span class="lineno">  106 </span><span class="spaces">        </span><span class="istickedoff">Right (tokens, optmsg) -&gt;</span>
+<span class="lineno">  107 </span><span class="spaces">            </span><span class="istickedoff">let msgs = case optmsg of</span>
+<span class="lineno">  108 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt; []</span>
+<span class="lineno">  109 </span><span class="spaces">                  </span><span class="istickedoff">Just (Options.Error, _, _) -&gt;</span>
+<span class="lineno">  110 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;readAny&quot; [&quot;Lexer returned an error in the warning slot&quot;]</span></span>
+<span class="lineno">  111 </span><span class="spaces">                  </span><span class="istickedoff">Just (_verbosity, pos, msg) -&gt;</span>
+<span class="lineno">  112 </span><span class="spaces">                      </span><span class="istickedoff">[positionMsg pos msg]</span>
+<span class="lineno">  113 </span><span class="spaces">            </span><span class="istickedoff">in</span>
+<span class="lineno">  114 </span><span class="spaces">            </span><span class="istickedoff">case parser tokens of</span>
+<span class="lineno">  115 </span><span class="spaces">                </span><span class="istickedoff">Left err -&gt;</span>
+<span class="lineno">  116 </span><span class="spaces">                    </span><span class="istickedoff">let err' = Text.pack (show err) in</span>
+<span class="lineno">  117 </span><span class="spaces">                    </span><span class="istickedoff">Left (msgs ++ [err'])</span>
+<span class="lineno">  118 </span><span class="spaces">                </span><span class="istickedoff">Right tree -&gt;</span>
+<span class="lineno">  119 </span><span class="spaces">                    </span><span class="istickedoff">-- Note: there's no such things as warnings in a</span>
+<span class="lineno">  120 </span><span class="spaces">                    </span><span class="istickedoff">-- Happy parser, so there are no more messages to</span>
+<span class="lineno">  121 </span><span class="spaces">                    </span><span class="istickedoff">-- add in this branch.</span>
+<span class="lineno">  122 </span><span class="spaces">                    </span><span class="istickedoff">Right (msgs, tree)</span></span>
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>-- | Use the readAny result to panic if any messages were generated.
+<span class="lineno">  125 </span>panicOnMsgs :: Text -&gt; WithMsgs a -&gt; a
+<span class="lineno">  126 </span><span class="decl"><span class="istickedoff">panicOnMsgs whoAmI result = case result of</span>
+<span class="lineno">  127 </span><span class="spaces">   </span><span class="istickedoff">Left errs -&gt;</span>
+<span class="lineno">  128 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">panic whoAmI (&quot;Unexpected errors:&quot; : errs)</span></span>
+<span class="lineno">  129 </span><span class="spaces">   </span><span class="istickedoff">Right ([], tree) -&gt;</span>
+<span class="lineno">  130 </span><span class="spaces">       </span><span class="istickedoff">tree</span>
+<span class="lineno">  131 </span><span class="spaces">   </span><span class="istickedoff">Right (warns, _) -&gt;</span>
+<span class="lineno">  132 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">panic whoAmI (&quot;Unexpected warnings:&quot; : warns)</span></span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>-- | Handle the readAny result in IO.
+<span class="lineno">  135 </span>--
+<span class="lineno">  136 </span>--   Also return in Either, to be consistent with the current interface
+<span class="lineno">  137 </span>--   into this file. Prints any warnings, and return just errors or a
+<span class="lineno">  138 </span>--   result.
+<span class="lineno">  139 </span>--
+<span class="lineno">  140 </span>dispatchMsgs :: Options -&gt; WithMsgs a -&gt; IO (Either [Text] a)
+<span class="lineno">  141 </span><span class="decl"><span class="istickedoff">dispatchMsgs opts result =</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">let printMsg vrb msg =</span>
+<span class="lineno">  143 </span><span class="spaces">          </span><span class="istickedoff">Options.printOutLn opts vrb (Text.unpack msg)</span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff">case result of</span>
+<span class="lineno">  146 </span><span class="spaces">        </span><span class="istickedoff">Left errs -&gt;</span>
+<span class="lineno">  147 </span><span class="spaces">            </span><span class="istickedoff">pure $ Left errs</span>
+<span class="lineno">  148 </span><span class="spaces">        </span><span class="istickedoff">Right (msgs, tree) -&gt; do</span>
+<span class="lineno">  149 </span><span class="spaces">            </span><span class="istickedoff">mapM_ (printMsg Options.Warn) msgs</span>
+<span class="lineno">  150 </span><span class="spaces">            </span><span class="istickedoff">pure $ Right tree</span></span>
 <span class="lineno">  151 </span>
-<span class="lineno">  152 </span>-- | Read a type schema from a string. This is used to digest the type
-<span class="lineno">  153 </span>--   signatures for builtins, and the expansions for builtin typedefs.
+<span class="lineno">  152 </span>-- | Run the readAny result through the `Include` module to resolve
+<span class="lineno">  153 </span>--   @include@ statements.
 <span class="lineno">  154 </span>--
-<span class="lineno">  155 </span>-- Pure function that panics on any error or warning. This is
-<span class="lineno">  156 </span>-- appropriate since we use it only to handle the builtins; any
-<span class="lineno">  157 </span>-- glitches there are properly panics.
-<span class="lineno">  158 </span>--
-<span class="lineno">  159 </span>-- The first argument (fileName) is a string to pass as the
-<span class="lineno">  160 </span>-- filename for the lexer, which (complete with line and column
-<span class="lineno">  161 </span>-- numbering of dubious value) will go into the positions of the
-<span class="lineno">  162 </span>-- elements of the resulting type.
-<span class="lineno">  163 </span>--
-<span class="lineno">  164 </span>-- The fake file name names the builtin object involved, so we'll also
-<span class="lineno">  165 </span>-- use it as the panic location string if we need to panic.
-<span class="lineno">  166 </span>--
-<span class="lineno">  167 </span>-- FUTURE: we should figure out how to generate more meaningful
-<span class="lineno">  168 </span>-- positions (like &quot;third argument of concat&quot;) but this at least
-<span class="lineno">  169 </span>-- allows telling the user which builtin the type came from.
-<span class="lineno">  170 </span>--
-<span class="lineno">  171 </span>-- Note: there is no way to reach @include@ statements from type
-<span class="lineno">  172 </span>-- schemas, so no need to process includes in what we read.
-<span class="lineno">  173 </span>--
-<span class="lineno">  174 </span>readSchemaPure ::
-<span class="lineno">  175 </span>    FilePath -&gt;
-<span class="lineno">  176 </span>    PrimitiveLifecycle -&gt;
-<span class="lineno">  177 </span>    Map Name (PrimitiveLifecycle, NamedType) -&gt;
-<span class="lineno">  178 </span>    Text -&gt;
-<span class="lineno">  179 </span>    Schema
-<span class="lineno">  180 </span><span class="decl"><span class="istickedoff">readSchemaPure fakeFileName lc tyenv str = do</span>
-<span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">let result = readAny fakeFileName str parseSchema</span>
-<span class="lineno">  182 </span><span class="spaces">    </span><span class="istickedoff">let result' = case result of</span>
-<span class="lineno">  183 </span><span class="spaces">          </span><span class="istickedoff">Left errs -&gt; <span class="nottickedoff">Left errs</span></span>
-<span class="lineno">  184 </span><span class="spaces">          </span><span class="istickedoff">Right (msgs, schema) -&gt;</span>
-<span class="lineno">  185 </span><span class="spaces">              </span><span class="istickedoff">let (errs_or_results, warns) = checkSchema lc tyenv schema</span>
-<span class="lineno">  186 </span><span class="spaces">                  </span><span class="istickedoff">warns' = map <span class="nottickedoff">convertTypeMsg</span> warns</span>
-<span class="lineno">  187 </span><span class="spaces">              </span><span class="istickedoff">in</span>
-<span class="lineno">  188 </span><span class="spaces">              </span><span class="istickedoff">case errs_or_results of</span>
-<span class="lineno">  189 </span><span class="spaces">                  </span><span class="istickedoff">Left errs -&gt; <span class="nottickedoff">Left (msgs ++ warns' ++ map convertTypeMsg errs)</span></span>
-<span class="lineno">  190 </span><span class="spaces">                  </span><span class="istickedoff">Right () -&gt; Right (msgs ++ warns', schema)</span>
-<span class="lineno">  191 </span><span class="spaces">    </span><span class="istickedoff">panicOnMsgs <span class="nottickedoff">(Text.pack fakeFileName)</span> result'</span></span>
-<span class="lineno">  192 </span>
-<span class="lineno">  193 </span>-- | Read a schema pattern from a string. This is used by the
-<span class="lineno">  194 </span>--   :search REPL command.
+<span class="lineno">  155 </span>--   If we fail after collecting warnings, print the warnings before
+<span class="lineno">  156 </span>--   returning the failure.
+<span class="lineno">  157 </span>--
+<span class="lineno">  158 </span>resolveIncludes ::
+<span class="lineno">  159 </span>    Int -&gt; IncludePath -&gt; Options -&gt; Inc.Processor a -&gt; WithMsgs a -&gt;
+<span class="lineno">  160 </span>    IO (WithMsgs a)
+<span class="lineno">  161 </span><span class="decl"><span class="istickedoff">resolveIncludes depth incpath opts process result =</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">printMsg vrb msg =</span></span>
+<span class="lineno">  163 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Options.printOutLn opts vrb (Text.unpack msg)</span></span>
+<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">case result of</span>
+<span class="lineno">  166 </span><span class="spaces">        </span><span class="istickedoff">Left errs -&gt;</span>
+<span class="lineno">  167 </span><span class="spaces">            </span><span class="istickedoff">pure $ Left errs</span>
+<span class="lineno">  168 </span><span class="spaces">        </span><span class="istickedoff">Right (msgs, tree) -&gt; do</span>
+<span class="lineno">  169 </span><span class="spaces">            </span><span class="istickedoff">result' &lt;- process (includeFile depth incpath opts) tree</span>
+<span class="lineno">  170 </span><span class="spaces">            </span><span class="istickedoff">case result' of</span>
+<span class="lineno">  171 </span><span class="spaces">                </span><span class="istickedoff">Left errs -&gt; do</span>
+<span class="lineno">  172 </span><span class="spaces">                    </span><span class="istickedoff">mapM_ <span class="nottickedoff">(printMsg Options.Warn)</span> msgs</span>
+<span class="lineno">  173 </span><span class="spaces">                    </span><span class="istickedoff">pure $ Left errs</span>
+<span class="lineno">  174 </span><span class="spaces">                </span><span class="istickedoff">Right tree' -&gt;</span>
+<span class="lineno">  175 </span><span class="spaces">                    </span><span class="istickedoff">pure $ Right (msgs, tree')</span></span>
+<span class="lineno">  176 </span>
+<span class="lineno">  177 </span>-- | Read a type schema from a string. This is used to digest the type
+<span class="lineno">  178 </span>--   signatures for builtins, and the expansions for builtin typedefs.
+<span class="lineno">  179 </span>--
+<span class="lineno">  180 </span>-- Pure function that panics on any error or warning. This is
+<span class="lineno">  181 </span>-- appropriate since we use it only to handle the builtins; any
+<span class="lineno">  182 </span>-- glitches there are properly panics.
+<span class="lineno">  183 </span>--
+<span class="lineno">  184 </span>-- The first argument (fileName) is a string to pass as the
+<span class="lineno">  185 </span>-- filename for the lexer, which (complete with line and column
+<span class="lineno">  186 </span>-- numbering of dubious value) will go into the positions of the
+<span class="lineno">  187 </span>-- elements of the resulting type.
+<span class="lineno">  188 </span>--
+<span class="lineno">  189 </span>-- The fake file name names the builtin object involved, so we'll also
+<span class="lineno">  190 </span>-- use it as the panic location string if we need to panic.
+<span class="lineno">  191 </span>--
+<span class="lineno">  192 </span>-- FUTURE: we should figure out how to generate more meaningful
+<span class="lineno">  193 </span>-- positions (like &quot;third argument of concat&quot;) but this at least
+<span class="lineno">  194 </span>-- allows telling the user which builtin the type came from.
 <span class="lineno">  195 </span>--
-<span class="lineno">  196 </span>--   Also runs the typechecker to check the pattern.
-<span class="lineno">  197 </span>--
-<span class="lineno">  198 </span>-- Note: there is no way to reach @include@ statements from schema
-<span class="lineno">  199 </span>-- patterns, so no need to process includes in what we read.
-<span class="lineno">  200 </span>--
-<span class="lineno">  201 </span>readSchemaPattern ::
-<span class="lineno">  202 </span>    Options -&gt;
-<span class="lineno">  203 </span>    FilePath -&gt; Environ -&gt; RebindableEnv -&gt; Set PrimitiveLifecycle -&gt; Text -&gt;
-<span class="lineno">  204 </span>    IO (Either [Text] SchemaPattern)
-<span class="lineno">  205 </span><span class="decl"><span class="istickedoff">readSchemaPattern opts fileName environ rbenv avail str = do</span>
-<span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">let result = readAny <span class="nottickedoff">fileName</span> str parseSchemaPattern</span>
-<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">let result' = case result of</span>
-<span class="lineno">  208 </span><span class="spaces">        </span><span class="istickedoff">Left errs -&gt; <span class="nottickedoff">Left errs</span></span>
-<span class="lineno">  209 </span><span class="spaces">        </span><span class="istickedoff">Right (msgs, pat) -&gt;</span>
-<span class="lineno">  210 </span><span class="spaces">          </span><span class="istickedoff">let Environ varenv tyenv _cryenv = <span class="nottickedoff">environ</span> in</span>
-<span class="lineno">  211 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  212 </span><span class="spaces">          </span><span class="istickedoff">-- XXX it should not be necessary to do this munging</span>
-<span class="lineno">  213 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)</span></span>
-<span class="lineno">  214 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span></span>
-<span class="lineno">  215 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">tyenv' = ScopedMap.flatten tyenv</span></span>
-<span class="lineno">  216 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)</span></span>
-<span class="lineno">  217 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">rbenv' = Map.map rbsquash rbenv</span></span>
-<span class="lineno">  218 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">varenv'' = Map.union varenv' rbenv'</span></span>
-<span class="lineno">  219 </span><span class="spaces">          </span><span class="istickedoff">in</span>
-<span class="lineno">  220 </span><span class="spaces">          </span><span class="istickedoff">let (errs_or_results, warns) = checkSchemaPattern <span class="nottickedoff">avail</span> <span class="nottickedoff">varenv''</span> <span class="nottickedoff">tyenv'</span> pat</span>
-<span class="lineno">  221 </span><span class="spaces">              </span><span class="istickedoff">warns' = map <span class="nottickedoff">convertTypeMsg</span> warns</span>
-<span class="lineno">  222 </span><span class="spaces">          </span><span class="istickedoff">in</span>
-<span class="lineno">  223 </span><span class="spaces">          </span><span class="istickedoff">case errs_or_results of</span>
-<span class="lineno">  224 </span><span class="spaces">              </span><span class="istickedoff">Left errs -&gt; <span class="nottickedoff">Left (msgs ++ warns' ++ map convertTypeMsg errs)</span></span>
-<span class="lineno">  225 </span><span class="spaces">              </span><span class="istickedoff">Right results -&gt; Right (msgs ++ warns', results)</span>
-<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">dispatchMsgs <span class="nottickedoff">opts</span> result'</span></span>
-<span class="lineno">  227 </span>
-<span class="lineno">  228 </span>-- | Read an expression from a string. This is used by the
-<span class="lineno">  229 </span>--   :type REPL command.
-<span class="lineno">  230 </span>--
-<span class="lineno">  231 </span>-- It is possible for someone to provide an expression that includes
-<span class="lineno">  232 </span>-- an @include@ in a do-block, so just in case call into `Include`
-<span class="lineno">  233 </span>-- to resolve any that appear.
-<span class="lineno">  234 </span>--
-<span class="lineno">  235 </span>readExpression ::
-<span class="lineno">  236 </span>    Options -&gt;
-<span class="lineno">  237 </span>    FilePath -&gt; Environ -&gt; RebindableEnv -&gt; Set PrimitiveLifecycle -&gt; Text -&gt;
-<span class="lineno">  238 </span>    IO (Either [Text] (Schema, Expr))
-<span class="lineno">  239 </span><span class="decl"><span class="nottickedoff">readExpression opts fileName environ rbenv avail str = do</span>
-<span class="lineno">  240 </span><span class="spaces">  </span><span class="nottickedoff">let result = readAny fileName str parseExpression</span>
-<span class="lineno">  241 </span><span class="spaces">  </span><span class="nottickedoff">result' &lt;- resolveIncludes 0{-depth-} opts Inc.processExpr result</span>
-<span class="lineno">  242 </span><span class="spaces">  </span><span class="nottickedoff">let result'' = case result' of</span>
-<span class="lineno">  243 </span><span class="spaces">        </span><span class="nottickedoff">Left errs -&gt; Left errs</span>
-<span class="lineno">  244 </span><span class="spaces">        </span><span class="nottickedoff">Right (msgs, expr) -&gt;</span>
-<span class="lineno">  245 </span><span class="spaces">           </span><span class="nottickedoff">let Environ varenv tyenv _cryenvs = environ in</span>
-<span class="lineno">  246 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  247 </span><span class="spaces">           </span><span class="nottickedoff">-- XXX it should not be necessary to do this munging</span>
-<span class="lineno">  248 </span><span class="spaces">           </span><span class="nottickedoff">let squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)</span>
-<span class="lineno">  249 </span><span class="spaces">               </span><span class="nottickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span>
-<span class="lineno">  250 </span><span class="spaces">               </span><span class="nottickedoff">tyenv' = ScopedMap.flatten tyenv</span>
-<span class="lineno">  251 </span><span class="spaces">               </span><span class="nottickedoff">rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)</span>
-<span class="lineno">  252 </span><span class="spaces">               </span><span class="nottickedoff">rbenv' = Map.map rbsquash rbenv</span>
-<span class="lineno">  253 </span><span class="spaces">               </span><span class="nottickedoff">varenv'' = Map.union varenv' rbenv'</span>
-<span class="lineno">  254 </span><span class="spaces">           </span><span class="nottickedoff">in</span>
-<span class="lineno">  255 </span><span class="spaces">           </span><span class="nottickedoff">-- XXX: also it shouldn't be necessary to do this wrappery</span>
-<span class="lineno">  256 </span><span class="spaces">           </span><span class="nottickedoff">let pos = getPos expr</span>
-<span class="lineno">  257 </span><span class="spaces">               </span><span class="nottickedoff">decl = Decl pos (PWild pos Nothing) Nothing expr</span>
-<span class="lineno">  258 </span><span class="spaces">           </span><span class="nottickedoff">in</span>
-<span class="lineno">  259 </span><span class="spaces">           </span><span class="nottickedoff">let (errs_or_results, warns) = checkDecl avail varenv'' tyenv' decl</span>
-<span class="lineno">  260 </span><span class="spaces">               </span><span class="nottickedoff">warns' = map convertTypeMsg warns</span>
-<span class="lineno">  261 </span><span class="spaces">           </span><span class="nottickedoff">in</span>
-<span class="lineno">  262 </span><span class="spaces">           </span><span class="nottickedoff">case errs_or_results of</span>
-<span class="lineno">  263 </span><span class="spaces">               </span><span class="nottickedoff">Left errs -&gt; Left (msgs ++ warns' ++ map convertTypeMsg errs)</span>
-<span class="lineno">  264 </span><span class="spaces">               </span><span class="nottickedoff">Right decl' -&gt;</span>
-<span class="lineno">  265 </span><span class="spaces">                   </span><span class="nottickedoff">let expr' = dDef decl'</span>
-<span class="lineno">  266 </span><span class="spaces">                       </span><span class="nottickedoff">schema = case dType decl' of</span>
-<span class="lineno">  267 </span><span class="spaces">                         </span><span class="nottickedoff">Just sch -&gt; sch</span>
-<span class="lineno">  268 </span><span class="spaces">                         </span><span class="nottickedoff">Nothing -&gt;</span>
-<span class="lineno">  269 </span><span class="spaces">                             </span><span class="nottickedoff">-- If the typechecker didn't insert a type, it's bust,</span>
-<span class="lineno">  270 </span><span class="spaces">                             </span><span class="nottickedoff">-- so panic. Not much point in printing the expression</span>
-<span class="lineno">  271 </span><span class="spaces">                             </span><span class="nottickedoff">-- or position in panic, since it's what the user just</span>
-<span class="lineno">  272 </span><span class="spaces">                             </span><span class="nottickedoff">-- typed.</span>
-<span class="lineno">  273 </span><span class="spaces">                             </span><span class="nottickedoff">panic &quot;readExpressionChecked&quot; [</span>
-<span class="lineno">  274 </span><span class="spaces">                                 </span><span class="nottickedoff">&quot;Typechecker failed to produce a type&quot;</span>
-<span class="lineno">  275 </span><span class="spaces">                             </span><span class="nottickedoff">]</span>
-<span class="lineno">  276 </span><span class="spaces">                   </span><span class="nottickedoff">in</span>
-<span class="lineno">  277 </span><span class="spaces">                   </span><span class="nottickedoff">Right (msgs ++ warns', (schema, expr'))</span>
-<span class="lineno">  278 </span><span class="spaces">  </span><span class="nottickedoff">dispatchMsgs opts result''</span></span>
-<span class="lineno">  279 </span>
-<span class="lineno">  280 </span>-- | Read a statement from a string. This is used by the REPL evaluator.
-<span class="lineno">  281 </span>--   Doesn't run the typechecker (yet).
-<span class="lineno">  282 </span>--
-<span class="lineno">  283 </span>--   May produce more than one statement if the statement given is an
-<span class="lineno">  284 </span>--   @include@.
-<span class="lineno">  285 </span>readREPLTextUnchecked :: Options -&gt; FilePath -&gt; Text -&gt; IO (Either [Text] [Stmt])
-<span class="lineno">  286 </span><span class="decl"><span class="istickedoff">readREPLTextUnchecked opts fileName str = do</span>
-<span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">let result = readAny fileName str parseREPLText</span>
-<span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">result' &lt;- resolveIncludes 0{-depth-} opts Inc.processStmts result</span>
-<span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">dispatchMsgs <span class="nottickedoff">opts</span> result'</span></span>
-<span class="lineno">  290 </span>
-<span class="lineno">  291 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
-<span class="lineno">  292 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
-<span class="lineno">  293 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
-<span class="lineno">  294 </span>-- found, return the full path. If not, fail by returning `Left`.
-<span class="lineno">  295 </span>--
-<span class="lineno">  296 </span>locateFile :: Options -&gt; FilePath -&gt; IO (Either [Text] FilePath)
-<span class="lineno">  297 </span><span class="decl"><span class="istickedoff">locateFile opts file = do</span>
-<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">let paths = Options.importPath opts</span>
-<span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">mfname &lt;- findFile paths file</span>
-<span class="lineno">  300 </span><span class="spaces">  </span><span class="istickedoff">case mfname of</span>
-<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno">  302 </span><span class="spaces">        </span><span class="istickedoff">let msgs = [</span>
-<span class="lineno">  303 </span><span class="spaces">                </span><span class="istickedoff">&quot;Couldn't find file: &quot; &lt;&gt; Text.pack file,</span>
-<span class="lineno">  304 </span><span class="spaces">                </span><span class="istickedoff">&quot;  Searched in directories:&quot;</span>
-<span class="lineno">  305 </span><span class="spaces">             </span><span class="istickedoff">] ++ map (\p -&gt; &quot;    &quot; &lt;&gt; Text.pack p) paths</span>
-<span class="lineno">  306 </span><span class="spaces">        </span><span class="istickedoff">return $ Left msgs</span>
-<span class="lineno">  307 </span><span class="spaces">    </span><span class="istickedoff">Just fname -&gt;</span>
-<span class="lineno">  308 </span><span class="spaces">      </span><span class="istickedoff">-- NB: Normalise the path name. The default SAW_IMPORT_PATH contains &quot;.&quot;,</span>
-<span class="lineno">  309 </span><span class="spaces">      </span><span class="istickedoff">-- and the behavior of filepath's 'normalise' function is to prepend a</span>
-<span class="lineno">  310 </span><span class="spaces">      </span><span class="istickedoff">-- search path to the front of the file path that is found, which can</span>
-<span class="lineno">  311 </span><span class="spaces">      </span><span class="istickedoff">-- cause paths like &quot;./foo.saw&quot; to be returned. This looks ugly in error</span>
-<span class="lineno">  312 </span><span class="spaces">      </span><span class="istickedoff">-- messages, where we would rather display &quot;foo.saw&quot; instead.</span>
-<span class="lineno">  313 </span><span class="spaces">      </span><span class="istickedoff">return $ Right (normalise fname)</span></span>
-<span class="lineno">  314 </span>
-<span class="lineno">  315 </span>-- | Load the 'Stmt's in a @.saw@ file.
-<span class="lineno">  316 </span>--   Doesn't run the typechecker (yet).
-<span class="lineno">  317 </span>includeFile :: Int -&gt; Options -&gt; FilePath -&gt; IO (Either [Text] [Stmt])
-<span class="lineno">  318 </span><span class="decl"><span class="istickedoff">includeFile depth opts fname = do</span>
-<span class="lineno">  319 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- locateFile opts fname</span>
-<span class="lineno">  320 </span><span class="spaces">  </span><span class="istickedoff">case result of</span>
-<span class="lineno">  321 </span><span class="spaces">    </span><span class="istickedoff">Left errs -&gt; return $ Left errs</span>
-<span class="lineno">  322 </span><span class="spaces">    </span><span class="istickedoff">Right fname' -&gt;</span>
-<span class="lineno">  323 </span><span class="spaces">      </span><span class="istickedoff">if depth &gt; 128 then</span>
-<span class="lineno">  324 </span><span class="spaces">          </span><span class="istickedoff">pure $ Left [&quot;Maximum include depth exceeded&quot;]</span>
-<span class="lineno">  325 </span><span class="spaces">      </span><span class="istickedoff">else do</span>
-<span class="lineno">  326 </span><span class="spaces">          </span><span class="istickedoff">Options.printOutLn opts Options.Info $ &quot;Loading file &quot; ++ show fname'</span>
-<span class="lineno">  327 </span><span class="spaces">          </span><span class="istickedoff">ftext &lt;- TextIO.readFile fname'</span>
-<span class="lineno">  328 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  329 </span><span class="spaces">          </span><span class="istickedoff">let result' = readAny fname ftext parseModule</span>
-<span class="lineno">  330 </span><span class="spaces">          </span><span class="istickedoff">result'' &lt;- resolveIncludes (depth + 1) opts Inc.processStmts result'</span>
-<span class="lineno">  331 </span><span class="spaces">          </span><span class="istickedoff">dispatchMsgs opts result''</span></span>
-<span class="lineno">  332 </span>
-<span class="lineno">  333 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
-<span class="lineno">  334 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
-<span class="lineno">  335 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
-<span class="lineno">  336 </span>-- found, load it. If not, fail by returning `Left`.
-<span class="lineno">  337 </span>--
-<span class="lineno">  338 </span>-- Doesn't run the typechecker (yet).
-<span class="lineno">  339 </span>findAndLoadFileUnchecked :: Options -&gt; FilePath -&gt; IO (Either [Text] [Stmt])
-<span class="lineno">  340 </span><span class="decl"><span class="istickedoff">findAndLoadFileUnchecked opts fp =</span>
-<span class="lineno">  341 </span><span class="spaces">  </span><span class="istickedoff">includeFile 0{-depth-} opts fp</span></span>
+<span class="lineno">  196 </span>-- Note: there is no way to reach @include@ statements from type
+<span class="lineno">  197 </span>-- schemas, so no need to process includes in what we read.
+<span class="lineno">  198 </span>--
+<span class="lineno">  199 </span>readSchemaPure ::
+<span class="lineno">  200 </span>    FilePath -&gt;
+<span class="lineno">  201 </span>    PrimitiveLifecycle -&gt;
+<span class="lineno">  202 </span>    Map Name (PrimitiveLifecycle, NamedType) -&gt;
+<span class="lineno">  203 </span>    Text -&gt;
+<span class="lineno">  204 </span>    Schema
+<span class="lineno">  205 </span><span class="decl"><span class="istickedoff">readSchemaPure fakeFileName lc tyenv str = do</span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff">let result = readAny fakeFileName str parseSchema</span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">let result' = case result of</span>
+<span class="lineno">  208 </span><span class="spaces">          </span><span class="istickedoff">Left errs -&gt; <span class="nottickedoff">Left errs</span></span>
+<span class="lineno">  209 </span><span class="spaces">          </span><span class="istickedoff">Right (msgs, schema) -&gt;</span>
+<span class="lineno">  210 </span><span class="spaces">              </span><span class="istickedoff">let (errs_or_results, warns) = checkSchema lc tyenv schema</span>
+<span class="lineno">  211 </span><span class="spaces">                  </span><span class="istickedoff">warns' = map <span class="nottickedoff">convertTypeMsg</span> warns</span>
+<span class="lineno">  212 </span><span class="spaces">              </span><span class="istickedoff">in</span>
+<span class="lineno">  213 </span><span class="spaces">              </span><span class="istickedoff">case errs_or_results of</span>
+<span class="lineno">  214 </span><span class="spaces">                  </span><span class="istickedoff">Left errs -&gt; <span class="nottickedoff">Left (msgs ++ warns' ++ map convertTypeMsg errs)</span></span>
+<span class="lineno">  215 </span><span class="spaces">                  </span><span class="istickedoff">Right () -&gt; Right (msgs ++ warns', schema)</span>
+<span class="lineno">  216 </span><span class="spaces">    </span><span class="istickedoff">panicOnMsgs <span class="nottickedoff">(Text.pack fakeFileName)</span> result'</span></span>
+<span class="lineno">  217 </span>
+<span class="lineno">  218 </span>-- | Read a schema pattern from a string. This is used by the
+<span class="lineno">  219 </span>--   :search REPL command.
+<span class="lineno">  220 </span>--
+<span class="lineno">  221 </span>--   Also runs the typechecker to check the pattern.
+<span class="lineno">  222 </span>--
+<span class="lineno">  223 </span>-- Note: there is no way to reach @include@ statements from schema
+<span class="lineno">  224 </span>-- patterns, so no need to process includes in what we read.
+<span class="lineno">  225 </span>--
+<span class="lineno">  226 </span>readSchemaPattern ::
+<span class="lineno">  227 </span>    Options -&gt;
+<span class="lineno">  228 </span>    FilePath -&gt; Environ -&gt; RebindableEnv -&gt; Set PrimitiveLifecycle -&gt; Text -&gt;
+<span class="lineno">  229 </span>    IO (Either [Text] SchemaPattern)
+<span class="lineno">  230 </span><span class="decl"><span class="istickedoff">readSchemaPattern opts fileName environ rbenv avail str = do</span>
+<span class="lineno">  231 </span><span class="spaces">  </span><span class="istickedoff">let result = readAny <span class="nottickedoff">fileName</span> str parseSchemaPattern</span>
+<span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">let result' = case result of</span>
+<span class="lineno">  233 </span><span class="spaces">        </span><span class="istickedoff">Left errs -&gt; <span class="nottickedoff">Left errs</span></span>
+<span class="lineno">  234 </span><span class="spaces">        </span><span class="istickedoff">Right (msgs, pat) -&gt;</span>
+<span class="lineno">  235 </span><span class="spaces">          </span><span class="istickedoff">let Environ varenv tyenv _cryenv = <span class="nottickedoff">environ</span> in</span>
+<span class="lineno">  236 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  237 </span><span class="spaces">          </span><span class="istickedoff">-- XXX it should not be necessary to do this munging</span>
+<span class="lineno">  238 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)</span></span>
+<span class="lineno">  239 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span></span>
+<span class="lineno">  240 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">tyenv' = ScopedMap.flatten tyenv</span></span>
+<span class="lineno">  241 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)</span></span>
+<span class="lineno">  242 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">rbenv' = Map.map rbsquash rbenv</span></span>
+<span class="lineno">  243 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">varenv'' = Map.union varenv' rbenv'</span></span>
+<span class="lineno">  244 </span><span class="spaces">          </span><span class="istickedoff">in</span>
+<span class="lineno">  245 </span><span class="spaces">          </span><span class="istickedoff">let (errs_or_results, warns) = checkSchemaPattern <span class="nottickedoff">avail</span> <span class="nottickedoff">varenv''</span> <span class="nottickedoff">tyenv'</span> pat</span>
+<span class="lineno">  246 </span><span class="spaces">              </span><span class="istickedoff">warns' = map <span class="nottickedoff">convertTypeMsg</span> warns</span>
+<span class="lineno">  247 </span><span class="spaces">          </span><span class="istickedoff">in</span>
+<span class="lineno">  248 </span><span class="spaces">          </span><span class="istickedoff">case errs_or_results of</span>
+<span class="lineno">  249 </span><span class="spaces">              </span><span class="istickedoff">Left errs -&gt; <span class="nottickedoff">Left (msgs ++ warns' ++ map convertTypeMsg errs)</span></span>
+<span class="lineno">  250 </span><span class="spaces">              </span><span class="istickedoff">Right results -&gt; Right (msgs ++ warns', results)</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="istickedoff">dispatchMsgs <span class="nottickedoff">opts</span> result'</span></span>
+<span class="lineno">  252 </span>
+<span class="lineno">  253 </span>-- | Read an expression from a string. This is used by the
+<span class="lineno">  254 </span>--   :type REPL command.
+<span class="lineno">  255 </span>--
+<span class="lineno">  256 </span>-- It is possible for someone to provide an expression that includes
+<span class="lineno">  257 </span>-- an @include@ in a do-block, so just in case call into `Include`
+<span class="lineno">  258 </span>-- to resolve any that appear.
+<span class="lineno">  259 </span>--
+<span class="lineno">  260 </span>readExpression ::
+<span class="lineno">  261 </span>    Options -&gt;
+<span class="lineno">  262 </span>    FilePath -&gt; Environ -&gt; RebindableEnv -&gt; Set PrimitiveLifecycle -&gt; Text -&gt;
+<span class="lineno">  263 </span>    IO (Either [Text] (Schema, Expr))
+<span class="lineno">  264 </span><span class="decl"><span class="nottickedoff">readExpression opts fileName environ rbenv avail str = do</span>
+<span class="lineno">  265 </span><span class="spaces">  </span><span class="nottickedoff">let incpath = (&quot;.&quot;, Options.importPath opts)</span>
+<span class="lineno">  266 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  267 </span><span class="spaces">  </span><span class="nottickedoff">let result = readAny fileName str parseExpression</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="nottickedoff">result' &lt;- resolveIncludes 0{-depth-} incpath opts Inc.processExpr result</span>
+<span class="lineno">  269 </span><span class="spaces">  </span><span class="nottickedoff">let result'' = case result' of</span>
+<span class="lineno">  270 </span><span class="spaces">        </span><span class="nottickedoff">Left errs -&gt; Left errs</span>
+<span class="lineno">  271 </span><span class="spaces">        </span><span class="nottickedoff">Right (msgs, expr) -&gt;</span>
+<span class="lineno">  272 </span><span class="spaces">           </span><span class="nottickedoff">let Environ varenv tyenv _cryenvs = environ in</span>
+<span class="lineno">  273 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  274 </span><span class="spaces">           </span><span class="nottickedoff">-- XXX it should not be necessary to do this munging</span>
+<span class="lineno">  275 </span><span class="spaces">           </span><span class="nottickedoff">let squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)</span>
+<span class="lineno">  276 </span><span class="spaces">               </span><span class="nottickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span>
+<span class="lineno">  277 </span><span class="spaces">               </span><span class="nottickedoff">tyenv' = ScopedMap.flatten tyenv</span>
+<span class="lineno">  278 </span><span class="spaces">               </span><span class="nottickedoff">rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)</span>
+<span class="lineno">  279 </span><span class="spaces">               </span><span class="nottickedoff">rbenv' = Map.map rbsquash rbenv</span>
+<span class="lineno">  280 </span><span class="spaces">               </span><span class="nottickedoff">varenv'' = Map.union varenv' rbenv'</span>
+<span class="lineno">  281 </span><span class="spaces">           </span><span class="nottickedoff">in</span>
+<span class="lineno">  282 </span><span class="spaces">           </span><span class="nottickedoff">-- XXX: also it shouldn't be necessary to do this wrappery</span>
+<span class="lineno">  283 </span><span class="spaces">           </span><span class="nottickedoff">let pos = getPos expr</span>
+<span class="lineno">  284 </span><span class="spaces">               </span><span class="nottickedoff">decl = Decl pos (PWild pos Nothing) Nothing expr</span>
+<span class="lineno">  285 </span><span class="spaces">           </span><span class="nottickedoff">in</span>
+<span class="lineno">  286 </span><span class="spaces">           </span><span class="nottickedoff">let (errs_or_results, warns) = checkDecl avail varenv'' tyenv' decl</span>
+<span class="lineno">  287 </span><span class="spaces">               </span><span class="nottickedoff">warns' = map convertTypeMsg warns</span>
+<span class="lineno">  288 </span><span class="spaces">           </span><span class="nottickedoff">in</span>
+<span class="lineno">  289 </span><span class="spaces">           </span><span class="nottickedoff">case errs_or_results of</span>
+<span class="lineno">  290 </span><span class="spaces">               </span><span class="nottickedoff">Left errs -&gt; Left (msgs ++ warns' ++ map convertTypeMsg errs)</span>
+<span class="lineno">  291 </span><span class="spaces">               </span><span class="nottickedoff">Right decl' -&gt;</span>
+<span class="lineno">  292 </span><span class="spaces">                   </span><span class="nottickedoff">let expr' = dDef decl'</span>
+<span class="lineno">  293 </span><span class="spaces">                       </span><span class="nottickedoff">schema = case dType decl' of</span>
+<span class="lineno">  294 </span><span class="spaces">                         </span><span class="nottickedoff">Just sch -&gt; sch</span>
+<span class="lineno">  295 </span><span class="spaces">                         </span><span class="nottickedoff">Nothing -&gt;</span>
+<span class="lineno">  296 </span><span class="spaces">                             </span><span class="nottickedoff">-- If the typechecker didn't insert a type, it's bust,</span>
+<span class="lineno">  297 </span><span class="spaces">                             </span><span class="nottickedoff">-- so panic. Not much point in printing the expression</span>
+<span class="lineno">  298 </span><span class="spaces">                             </span><span class="nottickedoff">-- or position in panic, since it's what the user just</span>
+<span class="lineno">  299 </span><span class="spaces">                             </span><span class="nottickedoff">-- typed.</span>
+<span class="lineno">  300 </span><span class="spaces">                             </span><span class="nottickedoff">panic &quot;readExpressionChecked&quot; [</span>
+<span class="lineno">  301 </span><span class="spaces">                                 </span><span class="nottickedoff">&quot;Typechecker failed to produce a type&quot;</span>
+<span class="lineno">  302 </span><span class="spaces">                             </span><span class="nottickedoff">]</span>
+<span class="lineno">  303 </span><span class="spaces">                   </span><span class="nottickedoff">in</span>
+<span class="lineno">  304 </span><span class="spaces">                   </span><span class="nottickedoff">Right (msgs ++ warns', (schema, expr'))</span>
+<span class="lineno">  305 </span><span class="spaces">  </span><span class="nottickedoff">dispatchMsgs opts result''</span></span>
+<span class="lineno">  306 </span>
+<span class="lineno">  307 </span>-- | Read a statement from a string. This is used by the REPL evaluator.
+<span class="lineno">  308 </span>--   Doesn't run the typechecker (yet).
+<span class="lineno">  309 </span>--
+<span class="lineno">  310 </span>--   May produce more than one statement if the statement given is an
+<span class="lineno">  311 </span>--   @include@.
+<span class="lineno">  312 </span>readREPLTextUnchecked :: Options -&gt; FilePath -&gt; Text -&gt; IO (Either [Text] [Stmt])
+<span class="lineno">  313 </span><span class="decl"><span class="istickedoff">readREPLTextUnchecked opts fileName str = do</span>
+<span class="lineno">  314 </span><span class="spaces">  </span><span class="istickedoff">let incpath = (&quot;.&quot;, Options.importPath opts)</span>
+<span class="lineno">  315 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="istickedoff">let result = readAny fileName str parseREPLText</span>
+<span class="lineno">  317 </span><span class="spaces">  </span><span class="istickedoff">result' &lt;- resolveIncludes 0{-depth-} incpath opts Inc.processStmts result</span>
+<span class="lineno">  318 </span><span class="spaces">  </span><span class="istickedoff">dispatchMsgs <span class="nottickedoff">opts</span> result'</span></span>
+<span class="lineno">  319 </span>
+<span class="lineno">  320 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
+<span class="lineno">  321 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
+<span class="lineno">  322 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
+<span class="lineno">  323 </span>-- found, return the full path. If not, fail by returning `Left`.
+<span class="lineno">  324 </span>--
+<span class="lineno">  325 </span>locateFile :: IncludePath -&gt; FilePath -&gt; IO (Either [Text] FilePath)
+<span class="lineno">  326 </span><span class="decl"><span class="istickedoff">locateFile (current, rawdirs) file = do</span>
+<span class="lineno">  327 </span><span class="spaces">  </span><span class="istickedoff">-- Replace &quot;.&quot; in the search path with the directory the current</span>
+<span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">-- file came from, which might or might not be &quot;.&quot;.</span>
+<span class="lineno">  329 </span><span class="spaces">  </span><span class="istickedoff">let dirs = map adjust rawdirs</span>
+<span class="lineno">  330 </span><span class="spaces">      </span><span class="istickedoff">adjust &quot;.&quot; = current</span>
+<span class="lineno">  331 </span><span class="spaces">      </span><span class="istickedoff">adjust dir = dir</span>
+<span class="lineno">  332 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">mfname &lt;- findFile dirs file</span>
+<span class="lineno">  334 </span><span class="spaces">  </span><span class="istickedoff">case mfname of</span>
+<span class="lineno">  335 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">  336 </span><span class="spaces">        </span><span class="istickedoff">let msgs = [</span>
+<span class="lineno">  337 </span><span class="spaces">                </span><span class="istickedoff">&quot;Couldn't find file: &quot; &lt;&gt; Text.pack file,</span>
+<span class="lineno">  338 </span><span class="spaces">                </span><span class="istickedoff">&quot;  Searched in directories:&quot;</span>
+<span class="lineno">  339 </span><span class="spaces">             </span><span class="istickedoff">] ++ map (\p -&gt; &quot;    &quot; &lt;&gt; Text.pack p) dirs</span>
+<span class="lineno">  340 </span><span class="spaces">        </span><span class="istickedoff">return $ Left msgs</span>
+<span class="lineno">  341 </span><span class="spaces">    </span><span class="istickedoff">Just fname -&gt;</span>
+<span class="lineno">  342 </span><span class="spaces">      </span><span class="istickedoff">-- NB: Normalise the path name. The default SAW_IMPORT_PATH contains &quot;.&quot;,</span>
+<span class="lineno">  343 </span><span class="spaces">      </span><span class="istickedoff">-- and the behavior of filepath's 'normalise' function is to prepend a</span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">-- search path to the front of the file path that is found, which can</span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">-- cause paths like &quot;./foo.saw&quot; to be returned. This looks ugly in error</span>
+<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff">-- messages, where we would rather display &quot;foo.saw&quot; instead.</span>
+<span class="lineno">  347 </span><span class="spaces">      </span><span class="istickedoff">return $ Right (normalise fname)</span></span>
+<span class="lineno">  348 </span>
+<span class="lineno">  349 </span>-- | Load the 'Stmt's in a @.saw@ file.
+<span class="lineno">  350 </span>--   Doesn't run the typechecker (yet).
+<span class="lineno">  351 </span>includeFile :: Int -&gt; IncludePath -&gt; Options -&gt; FilePath -&gt;
+<span class="lineno">  352 </span>    IO (Either [Text] [Stmt])
+<span class="lineno">  353 </span><span class="decl"><span class="istickedoff">includeFile depth incpath opts fname = do</span>
+<span class="lineno">  354 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- locateFile incpath fname</span>
+<span class="lineno">  355 </span><span class="spaces">  </span><span class="istickedoff">case result of</span>
+<span class="lineno">  356 </span><span class="spaces">    </span><span class="istickedoff">Left errs -&gt; return $ Left errs</span>
+<span class="lineno">  357 </span><span class="spaces">    </span><span class="istickedoff">Right fname' -&gt;</span>
+<span class="lineno">  358 </span><span class="spaces">      </span><span class="istickedoff">if depth &gt; 128 then</span>
+<span class="lineno">  359 </span><span class="spaces">          </span><span class="istickedoff">pure $ Left [&quot;Maximum include depth exceeded&quot;]</span>
+<span class="lineno">  360 </span><span class="spaces">      </span><span class="istickedoff">else do</span>
+<span class="lineno">  361 </span><span class="spaces">          </span><span class="istickedoff">let (_current, dirs) = incpath</span>
+<span class="lineno">  362 </span><span class="spaces">              </span><span class="istickedoff">current' = takeDirectory fname'</span>
+<span class="lineno">  363 </span><span class="spaces">              </span><span class="istickedoff">incpath' = (current', dirs)</span>
+<span class="lineno">  364 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  365 </span><span class="spaces">          </span><span class="istickedoff">Options.printOutLn opts Options.Info $ &quot;Loading file &quot; ++ show fname'</span>
+<span class="lineno">  366 </span><span class="spaces">          </span><span class="istickedoff">ftext &lt;- TextIO.readFile fname'</span>
+<span class="lineno">  367 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  368 </span><span class="spaces">          </span><span class="istickedoff">let result' = wrapDir current' $ readAny fname ftext parseModule</span>
+<span class="lineno">  369 </span><span class="spaces">          </span><span class="istickedoff">result'' &lt;- resolveIncludes (depth + 1) incpath' opts Inc.processStmts result'</span>
+<span class="lineno">  370 </span><span class="spaces">          </span><span class="istickedoff">dispatchMsgs opts result''</span></span>
+<span class="lineno">  371 </span>
+<span class="lineno">  372 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
+<span class="lineno">  373 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
+<span class="lineno">  374 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
+<span class="lineno">  375 </span>-- found, load it. If not, fail by returning `Left`.
+<span class="lineno">  376 </span>--
+<span class="lineno">  377 </span>-- Doesn't run the typechecker (yet).
+<span class="lineno">  378 </span>findAndLoadFileUnchecked :: Options -&gt; FilePath -&gt; IO (Either [Text] [Stmt])
+<span class="lineno">  379 </span><span class="decl"><span class="istickedoff">findAndLoadFileUnchecked opts fp =</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="istickedoff">let incpath = (&quot;.&quot;, Options.importPath opts) in</span>
+<span class="lineno">  381 </span><span class="spaces">  </span><span class="istickedoff">includeFile 0{-depth-} incpath opts fp</span></span>
 
 </pre>
 </body>

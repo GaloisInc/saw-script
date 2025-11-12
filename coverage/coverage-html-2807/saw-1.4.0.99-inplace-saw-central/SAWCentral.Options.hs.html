@@ -53,7 +53,7 @@ span.spaces    { background: white }
 <span class="lineno">   34 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">cleanMisVsCache</span></span></span>  :: Maybe FilePath
 <span class="lineno">   35 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">printOutFn</span></span></span>       :: Verbosity -&gt; String -&gt; IO ()
 <span class="lineno">   36 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">summaryFile</span></span></span>      :: Maybe FilePath
-<span class="lineno">   37 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">summaryFormat</span></span></span>    :: SummaryFormat
+<span class="lineno">   37 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">summaryFormat</span></span></span>    :: SummaryFormat
 <span class="lineno">   38 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">   39 </span>
 <span class="lineno">   40 </span>-- | Verbosity is currently a linear setting (vs a mask or tree).  Any given
@@ -91,7 +91,7 @@ span.spaces    { background: white }
 <span class="lineno">   72 </span><span class="spaces">    </span><span class="istickedoff">, useColor = <span class="nottickedoff">True</span></span>
 <span class="lineno">   73 </span><span class="spaces">    </span><span class="istickedoff">, cleanMisVsCache = Nothing</span>
 <span class="lineno">   74 </span><span class="spaces">    </span><span class="istickedoff">, summaryFile = Nothing</span>
-<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">, summaryFormat = <span class="nottickedoff">Pretty</span></span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">, summaryFormat = Pretty</span>
 <span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
 <span class="lineno">   77 </span>
 <span class="lineno">   78 </span>printOutWith :: Verbosity -&gt; Verbosity -&gt; String -&gt; IO ()

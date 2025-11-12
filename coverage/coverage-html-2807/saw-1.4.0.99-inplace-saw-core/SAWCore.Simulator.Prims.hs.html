@@ -211,7 +211,7 @@ span.spaces    { background: white }
 <span class="lineno">  192 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpAnd</span></span></span>    :: VBool l -&gt; VBool l -&gt; MBool l
 <span class="lineno">  193 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpOr</span></span></span>     :: VBool l -&gt; VBool l -&gt; MBool l
 <span class="lineno">  194 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpXor</span></span></span>    :: VBool l -&gt; VBool l -&gt; MBool l
-<span class="lineno">  195 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBoolEq</span></span></span> :: VBool l -&gt; VBool l -&gt; MBool l
+<span class="lineno">  195 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBoolEq</span></span></span> :: VBool l -&gt; VBool l -&gt; MBool l
 <span class="lineno">  196 </span>    -- Bitvector logical
 <span class="lineno">  197 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvNot</span></span></span>  :: VWord l -&gt; MWord l
 <span class="lineno">  198 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvAnd</span></span></span>  :: VWord l -&gt; VWord l -&gt; MWord l
@@ -294,7 +294,7 @@ span.spaces    { background: white }
 <span class="lineno">  275 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.and&quot;   , boolBinOp (bpAnd bp))</span>
 <span class="lineno">  276 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.or&quot;    , boolBinOp (bpOr bp))</span>
 <span class="lineno">  277 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.xor&quot;   , <span class="nottickedoff">boolBinOp (bpXor bp)</span>)</span>
-<span class="lineno">  278 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.boolEq&quot;, boolBinOp (bpBoolEq bp))</span>
+<span class="lineno">  278 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.boolEq&quot;, <span class="nottickedoff">boolBinOp (bpBoolEq bp)</span>)</span>
 <span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">-- Bitwise</span>
 <span class="lineno">  280 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvAnd&quot; , wordBinOp (bpPack bp) (bpBvAnd bp))</span>
 <span class="lineno">  281 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvOr&quot;  , wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvOr  bp))</span>
