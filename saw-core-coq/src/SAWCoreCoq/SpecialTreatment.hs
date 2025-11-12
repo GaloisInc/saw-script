@@ -187,6 +187,21 @@ stringModule :: ModuleName
 stringModule =
   mkModuleName ["Coq", "Strings", "String"]
 
+-- | The Coq built-in @BinNums@ module.
+binNumsModule :: ModuleName
+binNumsModule =
+  mkModuleName ["Coq", "Numbers", "BinNums"]
+
+-- | The Coq built-in @BinPos@ module.
+binPosModule :: ModuleName
+binPosModule =
+  mkModuleName ["Coq", "PArith", "BinPos"]
+
+-- | The Coq built-in @BinInt@ module.
+binIntModule :: ModuleName
+binIntModule =
+  mkModuleName ["Coq", "ZArith", "BinInt"]
+
 -- | The @SAWCoreScaffolding@ module
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
@@ -360,7 +375,44 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Zero",      mapsTo sawDefinitionsModule "Zero")
   , ("Succ",      mapsTo sawDefinitionsModule "Succ")
   , ("addNat",    mapsTo sawDefinitionsModule "addNat")
+  , ("subNat",    mapsTo sawDefinitionsModule "subNat")
   , ("mulNat",    mapsTo sawDefinitionsModule "mulNat")
+  , ("expNat",    mapsTo sawDefinitionsModule "expNat")
+  , ("equalNat",  mapsTo sawDefinitionsModule "equalNat")
+  , ("ltNat",     mapsTo sawDefinitionsModule "ltNat")
+  , ("leNat",     mapsTo sawDefinitionsModule "leNat")
+  , ("minNat",    mapsTo sawDefinitionsModule "minNat")
+  , ("maxNat",    mapsTo sawDefinitionsModule "maxNat")
+  , ("Nat__rec",  mapsTo sawDefinitionsModule "Nat__rec")
+  , ("if0Nat",    mapsTo sawDefinitionsModule "if0Nat")
+  ]
+
+  -- Binary numerals
+  ++
+  [ ("Pos",       mapsTo binPosModule "positive")
+  , ("One",       mapsTo binPosModule "xH")
+  , ("Bit0",      mapsTo binPosModule "xO")
+  , ("Bit1",      mapsTo binPosModule "xI")
+  , ("posInc",    mapsTo binPosModule "Pos.succ")
+  , ("posAdd",    mapsTo binPosModule "add")
+  , ("posMul",    mapsTo binPosModule "mul")
+  , ("posExp",    mapsTo binPosModule "pow")
+  , ("eqPos",     mapsTo binPosModule "eqb")
+  , ("NatPos",    mapsTo binPosModule "Pos.to_nat")
+  , ("BitM",      mapsTo binPosModule "Pos.pred_double")
+  , ("Pos_cases", mapsTo sawDefinitionsModule "Pos_cases")
+  , ("AccessiblePos",        skip)
+  , ("AccessiblePos_Bit0",   skip)
+  , ("AccessiblePos_Bit1",   skip)
+  , ("AccessiblePos_all",    skip)
+  , ("AccessibleNat",        skip)
+  , ("AccessibleNat_NatPos", skip)
+  , ("AccessibleNat_all",    skip)
+  , ("Z",         mapsTo binIntModule "Z")
+  , ("ZZero",     mapsTo binIntModule "Z0")
+  , ("ZPos",      mapsTo binIntModule "Zpos")
+  , ("ZNeg",      mapsTo binIntModule "Zneg")
+  , ("subNZ",     skip)
   ]
 
   -- Vectors
