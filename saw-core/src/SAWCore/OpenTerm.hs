@@ -288,8 +288,7 @@ piArg (OpenTerm m) =
   OpenTerm $ m >>= \case
   (unwrapTermF -> Pi _ tp _) -> pure tp
   t ->
-    fail ("piArg: not a pi type: " ++
-          scPrettyTermInCtx PPS.defaultOpts [] t)
+    fail ("piArg: not a pi type: " ++ scPrettyTerm PPS.defaultOpts t)
 
 -- | Build a lambda abstraction as an 'OpenTerm'
 lambda :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm

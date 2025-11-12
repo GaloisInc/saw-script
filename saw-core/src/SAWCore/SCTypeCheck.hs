@@ -64,7 +64,7 @@ import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Term.Certified (scRecordValue)
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty (scPrettyTermInCtx)
+import SAWCore.Term.Pretty (scPrettyTerm)
 
 -- | The 'ReaderT' environment for a type-checking computation.
 type TCEnv = SharedContext
@@ -207,7 +207,7 @@ prettyTCError e = helper Nothing e where
   indent prefix s = init (unlines (map (prefix ++) (lines s)))
 
   ishow :: Term -> String
-  ishow tm = indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm
+  ishow tm = indent "  " $ scPrettyTerm PPS.defaultOpts tm
 
   tyshow :: Term -> String
   tyshow t =
@@ -215,7 +215,7 @@ prettyTCError e = helper Nothing e where
       Left s ->
         indent "  " $ show s
       Right tm ->
-        indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm
+        indent "  " $ scPrettyTerm PPS.defaultOpts tm
 
   sortSuffix :: Sort -> String
   sortSuffix s =
