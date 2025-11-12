@@ -23,7 +23,6 @@ module SAWCore.Term.Pretty
   , showTermWithNames
   , scTermCount
   , shouldMemoizeTerm
-  , ppName
   , ppTermContainerWithNames
   ) where
 
