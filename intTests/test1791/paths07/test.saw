@@ -1,0 +1,1 @@
+prove_print (offline_w4_unint_z3 [] "paths07") {{ \(x : [8]) -> x == x }};
