@@ -304,7 +304,7 @@ readExpression opts fileName environ rbenv avail str = do
                    Right (msgs ++ warns', (schema, expr'))
   dispatchMsgs opts result''
 
--- | Read a statement from a string. This is used by the REPL evaluator.
+-- | Read statements from a string. This is used by the REPL evaluator.
 --   Doesn't run the typechecker (yet).
 --
 --   May produce more than one statement if the statement given is an

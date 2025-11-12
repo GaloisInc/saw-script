@@ -315,7 +315,7 @@ popdir = do
     dirstack <- gets rwDirStack
     let dirstack' = case dirstack of
           [] ->
-              panic "interpretDoStmt / StmtPopdir" [
+              panic "popdir" [
                   "Directory stack ran out"
               ]
           _ : ds -> ds
