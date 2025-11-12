@@ -298,6 +298,7 @@ initialState readFileFn =
                 , rwRebindables = Map.empty
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty
+                , rwDirStack = []
                 , rwPPOpts = PPS.defaultOpts
                 , rwSolverCache = mb_cache
                 , rwTheoremDB = emptyTheoremDB

@@ -183,6 +183,8 @@ data Stmt
   | StmtImport   Pos Import
   | StmtInclude  Pos Text
   | StmtTypedef  Pos Pos Text Type
+  | StmtPushdir  Pos FilePath
+  | StmtPopdir   Pos
   deriving Show
 
 -- | Tracking/state type for the @let rebindable@ behavior.
@@ -198,6 +200,8 @@ instance Positioned Stmt where
   getPos (StmtImport pos _)    = pos
   getPos (StmtInclude pos _)    = pos
   getPos (StmtTypedef allpos _apos _a _ty) = allpos
+  getPos (StmtPushdir pos _) = pos
+  getPos (StmtPopdir pos) = pos
 
 -- | Systems of mutually recursive declarations.
 --
@@ -453,6 +457,10 @@ instance Pretty Stmt where
           "include" PP.<+> PP.dquotes (PP.pretty name)
       StmtTypedef _ _ name ty ->
          "typedef" PP.<+> PP.pretty name PP.<+> PPS.prettyPrec 0 ty
+      StmtPushdir _ dir ->
+         ".pushdir" PP.<+> PP.pretty dir
+      StmtPopdir _ ->
+         ".popdir"
       --expr -> PP.cyan . PP.viaShow expr
 
       where

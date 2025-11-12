@@ -225,6 +225,8 @@ instance AppSubst Stmt where
     StmtImport pos imp       -> StmtImport pos imp
     StmtInclude pos file     -> StmtInclude pos file
     StmtTypedef allpos apos a ty -> StmtTypedef allpos apos a (appSubst s ty)
+    StmtPushdir pos dir      -> StmtPushdir pos dir
+    StmtPopdir pos           -> StmtPopdir pos
 
 instance AppSubst DeclGroup where
   appSubst s (Recursive ds) = Recursive (appSubst s ds)
@@ -1510,6 +1512,10 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
                     -- FUTURE: print the position of the previous definition
                     -- (currently we don't keep it around)
                     return s
+        StmtPushdir _spos _ ->
+            return s
+        StmtPopdir _spos ->
+            return s
 
 -- Inference for a do-block.
 --
