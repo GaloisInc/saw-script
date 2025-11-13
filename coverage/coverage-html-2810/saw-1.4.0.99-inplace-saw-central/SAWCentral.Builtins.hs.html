@@ -1100,7 +1100,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1081 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1082 </span>
 <span class="lineno"> 1083 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1084 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
+<span class="lineno"> 1084 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
 <span class="lineno"> 1085 </span>
 <span class="lineno"> 1086 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1087 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
@@ -1193,7 +1193,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1174 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1175 </span>
 <span class="lineno"> 1176 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1177 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
+<span class="lineno"> 1177 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
 <span class="lineno"> 1178 </span>
 <span class="lineno"> 1179 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1180 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
