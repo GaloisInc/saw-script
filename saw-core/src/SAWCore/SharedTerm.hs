@@ -1176,14 +1176,6 @@ data WHNFElim
   | ElimRecursor Term CompiledRecursor [Term] Term [Term] [Term]
     -- ^ recursor, compiled recursor, params, motive, eliminators, indices
 
--- | Test if a term is a constructor application that should be converted to a
--- natural number literal. Specifically, test if a term is not already a natural
--- number literal, but is 0 or more applications of the @Succ@ constructor to
--- either the @Zero@ constructor or a natural number literal
-convertsToNat :: Term -> Maybe Natural
-convertsToNat (asFTermF -> Just (NatLit _)) = Nothing
-convertsToNat t = asNat t
-
 -- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
 -- definitions at the top level of a term.
 scWhnf :: SharedContext -> Term -> IO Term
@@ -1197,7 +1189,6 @@ scWhnf sc t0 =
         STApp { stAppIndex = i } -> useCache ?cache i (go [] t)
 
     go :: (?cache :: Cache IO TermIndex Term) => [WHNFElim] -> Term -> IO Term
-    go xs                     (convertsToNat    -> Just k) = scFlatTermF sc (NatLit k) >>= go xs
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
     go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
@@ -1462,7 +1453,6 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
                Just _ -> fail "Record field not in record type"
                Nothing -> fail "Record project of non-record type"
         Sort s _ -> lift $ scSort sc (sortOf s)
-        NatLit _ -> lift $ scNatType sc
         ArrayValue tp vs -> lift $ do
           n <- scNat sc (fromIntegral (V.length vs))
           scVecType sc n tp
@@ -1675,7 +1665,18 @@ scISort sc s = scSortWithFlags sc s $ noFlags { flagInhabited = True }
 
 -- | Create a literal term from a 'Natural'.
 scNat :: SharedContext -> Natural -> IO Term
-scNat sc n = scFlatTermF sc (NatLit n)
+scNat sc 0 = scGlobalDef sc "Prelude.Zero"
+scNat sc n =
+  do p <- scPos sc n
+     scGlobalApply sc "Prelude.NatPos" [p]
+
+scPos :: SharedContext -> Natural -> IO Term
+scPos sc n
+  | n <= 1    = scGlobalDef sc "Prelude.One"
+  | otherwise =
+    do arg <- scPos sc (div n 2)
+       let ident = if even n then "Prelude.Bit0" else "Prelude.Bit1"
+       scGlobalApply sc ident [arg]
 
 -- | Create a literal term (of saw-core type @String@) from a 'Text'.
 scString :: SharedContext -> Text -> IO Term

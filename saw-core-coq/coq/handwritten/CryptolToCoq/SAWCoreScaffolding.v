@@ -1,6 +1,7 @@
 From Coq Require Import Numbers.Cyclic.ZModulo.ZModulo.
 From Coq Require Import ZArith.BinInt.
 From Coq Require Import ZArith.Zdiv.
+From Coq Require Import NArith.NArith.
 From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
@@ -259,6 +260,65 @@ Definition Succ := S.
 
 Definition addNat := Nat.add.
 Definition mulNat := Nat.mul.
+Definition equalNat := Nat.eqb.
+Definition ltNat := Nat.ltb.
+Definition leNat := Nat.leb.
+Definition minNat := Nat.min.
+Definition maxNat := Nat.max.
+Definition Nat__rec := nat_rect.
+
+Fixpoint expNat b n : nat :=
+  match n with
+  | 0 => S 0
+  | S n' => Nat.mul b (expNat b n')
+  end.
+
+(* Designed so that 'subNat i 0' reduces to 'i'. *)
+Fixpoint subNat m n {struct n} : nat :=
+  match n with
+  | 0 => m
+  | S n' =>
+      match m with
+      | 0 => 0
+      | S m' => subNat m' n'
+      end
+  end.
+
+Definition if0Nat (a : Type) (n : Nat) (x y : a) : a :=
+  match n with
+  | 0 => x
+  | S _ => y
+  end.
+
+Definition eqNatPrec : forall (x y : nat), Succ x = Succ y -> x = y :=
+  eq_add_S.
+
+Definition eqNatAdd0 (x : nat) : addNat x 0 = x :=
+  eq_sym (plus_n_O x).
+
+Definition eqNatAddS (x y : nat) : addNat x (Succ y) = Succ (addNat x y) :=
+  eq_sym (plus_n_Sm x y).
+
+Definition eqNatAddComm : forall (x y : nat), addNat x y = addNat y x :=
+  Nat.add_comm.
+
+Definition addNat_assoc : forall (x y z : nat), addNat x (addNat y z) = addNat (addNat x y) z :=
+  Nat.add_assoc.
+
+Definition IsLtNat_Zero_absurd (p : Prop) (m : Nat) : IsLtNat m Zero -> p :=
+  fun H => False_ind _ (Nat.nlt_0_r m H).
+
+Definition IsLeNat_SuccSucc : forall (n m : Nat), IsLeNat (Succ n) (Succ m) -> IsLeNat n m :=
+  le_S_n.
+
+Definition Pos_cases
+  (a : Type)
+  (one : a)
+  (b0 : positive -> a -> a)
+  (b1 : positive -> a -> a)
+  : positive -> a :=
+  positive_rect _ b1 b0 one.
+
 
 Global Instance Inhabited_Pair (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (PairType a b) :=
     MkInhabited (PairType a b) (PairValue a b inhabitant inhabitant).

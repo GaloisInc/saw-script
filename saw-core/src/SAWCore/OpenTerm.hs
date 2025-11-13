@@ -125,7 +125,7 @@ sort s = flat (Sort s noFlags)
 
 -- | Build an 'OpenTerm' for a natural number literal
 nat :: Natural -> OpenTerm
-nat = flat . NatLit
+nat n = OpenTerm $ liftTCM SC.scNat n
 
 -- | The 'OpenTerm' for the unit value
 unit :: OpenTerm

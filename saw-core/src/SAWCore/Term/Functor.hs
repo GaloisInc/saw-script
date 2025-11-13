@@ -172,8 +172,6 @@ data FlatTermF e
   | Sort !Sort !SortFlags
 
     -- Primitive builtin values
-    -- | Natural number with given value.
-  | NatLit !Natural
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
     -- | String literal
@@ -258,7 +256,6 @@ zipWithFlatTermF f = go
 
     go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (sortFlagsLift2 (&&) hx hy))
          -- /\ NB, it's not entirely clear how the flags should be propagated
-    go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
     go (ArrayValue tx vx) (ArrayValue ty vy)
       | V.length vx == V.length vy
@@ -275,7 +272,6 @@ zipWithFlatTermF f = go
     go RecordValue{}  _ = Nothing
     go RecordProj{}   _ = Nothing
     go Sort{}         _ = Nothing
-    go NatLit{}       _ = Nothing
     go ArrayValue{}   _ = Nothing
     go StringLit{}    _ = Nothing
 

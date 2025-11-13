@@ -263,7 +263,7 @@ typeInferCompleteTerm (Un.TypeConstraint t _ tp) =
 
 -- Literals
 typeInferCompleteTerm (Un.NatLit _ i) =
-  typeInferComplete (NatLit i :: FlatTermF SC.Term)
+  lift $ TC.liftTCM SC.scNat i
 typeInferCompleteTerm (Un.StringLit _ str) =
   typeInferComplete (StringLit str :: FlatTermF SC.Term)
 typeInferCompleteTerm (Un.VecLit _ []) = throwTCError EmptyVectorLit
@@ -313,7 +313,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      typed_tp <- typeInferCompleteUTerm tp
      void $ lift $ TC.ensureSort $ SC.rawType typed_tp
      let def_tp = SC.rawTerm typed_tp
-     def_tp_whnf <- lift $ TC.liftTCM TC.scTypeCheckWHNF def_tp
+     def_tp_whnf <- lift $ TC.liftTCM scWhnf def_tp
 
      -- Step 2: assign types to the bound variables of the definition, by
      -- peeling off the pi-abstraction variables in the type annotation. Any

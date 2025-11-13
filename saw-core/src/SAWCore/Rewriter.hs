@@ -290,11 +290,6 @@ scMatch sc ctxt pat term =
                Just y3 -> if y2 == y3 then return (MatchState m' cs) else mzero
         Nothing ->
           case (unwrapTermF x, unwrapTermF y) of
-            (_, FTermF (NatLit n))
-              | Just [x'] <- R.asGlobalApply preludeSuccIdent x
-              , n > 0 ->
-                do y' <- lift $ scNat sc (n-1)
-                   match locals x' y' s
             -- check that neither x nor y contains bound variables less than `depth`
             (FTermF xf, FTermF yf) ->
               case zipWithFlatTermF (match locals) xf yf of
@@ -306,9 +301,6 @@ scMatch sc ctxt pat term =
               match locals t1 t2 s >>= match (IntSet.insert (vnIndex nm) locals) x1 x2
             (Pi nm t1 x1, Pi _ t2 x2) ->
               match locals t1 t2 s >>= match (IntSet.insert (vnIndex nm) locals) x1 x2
-            (App _ _, FTermF (NatLit n)) ->
-              -- add deferred constraint
-              return (MatchState m ((x, n) : cs))
             (_, _) ->
               -- other possible matches are local vars and constants
               if x == y then return s else mzero
@@ -862,7 +854,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
           RecordValue{}    -> traverse (rewriteAll convertibleFlag) ftf
           RecordProj{}     -> traverse (rewriteAll convertibleFlag) ftf
           Sort{}           -> return ftf
-          NatLit{}         -> return ftf
           ArrayValue t es  -> ArrayValue t <$> traverse (rewriteAll convertibleFlag) es -- specifically NOT rewriting type, only elts
           StringLit{}      -> return ftf
 

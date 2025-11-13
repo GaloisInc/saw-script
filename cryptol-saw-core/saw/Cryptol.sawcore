@@ -1051,7 +1051,7 @@ PLiteralSeqBool n =
            (error (PLiteral (Stream Bool)) "PLiteralSeqBool: no instance for streams") n;
 
 PLiteralBit : PLiteral Bool;
-PLiteralBit = Nat_cases Bool False (\ (n:Nat) -> \ (b:Bool) -> True);
+PLiteralBit = ltNat Zero;
 
 PLiteralInteger : PLiteral Integer;
 PLiteralInteger = natToInt;

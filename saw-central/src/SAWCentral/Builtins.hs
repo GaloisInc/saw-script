@@ -564,7 +564,10 @@ normalize_term_opaque :: [Text] -> TypedTerm -> TopLevel TypedTerm
 normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      idxs <- mconcat <$> mapM (resolveName sc) opaque
-     let opaqueSet = Set.fromList idxs
+     -- Also exclude defined SAWCore constants that are implemented as primitives
+     let primURIs = map moduleIdentToURI (Map.keys constMap)
+     primIdxs <- io $ traverse (scResolveNameByURI sc) primURIs
+     let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)
      let unfold nm = Set.notMember (nameIndex nm) opaqueSet
      tm' <- io $ scUnfoldConstantsBeta sc unfold (ttTerm tt)
      pure tt{ ttTerm = tm' }

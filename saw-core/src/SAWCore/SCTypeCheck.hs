@@ -17,7 +17,6 @@ module SAWCore.SCTypeCheck
   , scTypeCheckError
   , scTypeCheckComplete
   , scTypeCheckCompleteError
-  , SC.scTypeCheckWHNF
   , scConvertible
   , scCheckSubtype
   , TCError(..)
@@ -311,7 +310,7 @@ class TypeInfer a where
 typeInferCompleteWHNF :: TypeInfer a => a -> TCM SC.Term
 typeInferCompleteWHNF a =
   do t <- typeInferComplete a
-     liftTCM SC.scWHNF t
+     liftTCM SC.scWhnf t
 
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work
@@ -446,8 +445,6 @@ inferFlatTermF ftf =
          liftTCM SC.scRecordProj t fld
     Sort s flags ->
       liftTCM SC.scSortWithFlags s flags
-    NatLit n ->
-      liftTCM SC.scNat n
     ArrayValue tp vs ->
       do void $ ensureSort (SC.rawType tp)
          tp' <- typeCheckWHNF (SC.rawTerm tp)
@@ -495,10 +492,9 @@ ensureRecordType err tp = ensureRecognizer asRecordType err tp
 ensurePiType :: TCError -> Term -> TCM (VarName, Term, Term)
 ensurePiType err tp = ensureRecognizer asPi err tp
 
--- | Reduce a type to WHNF (using 'scWhnf'), also adding in some conversions for
--- operations on Nat literals that are useful in type-checking
+-- | Reduce a type to weak head-normal form (using 'scWhnf').
 typeCheckWHNF :: Term -> TCM Term
-typeCheckWHNF = liftTCM SC.scTypeCheckWHNF
+typeCheckWHNF = liftTCM scWhnf
 
 -- | Check that one type is a subtype of another, assuming both arguments are
 -- types, i.e., that both have type Sort s for some s.
@@ -527,9 +523,9 @@ isSubtype (asSort -> Just s1) (asSort -> Just s2) | s1 <= s2 = return True
 isSubtype t1' t2' = areConvertible t1' t2'
 
 -- | Check if two terms are "convertible for type-checking", meaning that they
--- are convertible up to 'natConversions'
+-- are convertible up to the reductions performed by 'scWhnf'.
 areConvertible :: Term -> Term -> TCM Bool
-areConvertible t1 t2 = liftTCM scConvertibleEval SC.scTypeCheckWHNF True t1 t2
+areConvertible t1 t2 = liftTCM scConvertibleEval scWhnf True t1 t2
 
 
 compileRecursor ::

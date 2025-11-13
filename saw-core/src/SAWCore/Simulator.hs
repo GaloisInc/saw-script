@@ -55,7 +55,6 @@ import SAWCore.Module
   , defName
   , dtNumIndices
   , dtNumParams
-  , findCtorInMap
   , lookupVarIndexInMap
   , resolvedNameType
   , requireNameInMap
@@ -68,7 +67,6 @@ import SAWCore.Module
   )
 import SAWCore.Name
 import SAWCore.SharedTerm
-import SAWCore.Prelude.Constants
 
 import SAWCore.Simulator.Value
 import SAWCore.Term.Functor
@@ -221,8 +219,6 @@ evalTermF cfg lam recEval tf env =
 
         Sort s _h           -> return $ TValue (VSort s)
 
-        NatLit n            -> return $ VNat n
-
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
 
         StringLit s         -> return $ VString s
@@ -283,12 +279,6 @@ evalTermF cfg lam recEval tf env =
       case lookupVarIndexInMap (nameIndex c) (simModMap cfg) of
         Just (ResolvedCtor ctor) -> Just (ctor, args)
         _ -> Nothing
-    evalConstructor (VNat 0) =
-       do ctor <- findCtorInMap preludeZeroIdent (simModMap cfg)
-          Just (ctor, [])
-    evalConstructor (VNat n) =
-       do ctor <- findCtorInMap preludeSuccIdent (simModMap cfg)
-          Just (ctor, [ ready (VNat (pred n)) ])
     evalConstructor _ =
        Nothing
 

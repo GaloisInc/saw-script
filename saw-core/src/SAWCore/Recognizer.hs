@@ -36,6 +36,7 @@ module SAWCore.Recognizer
   , asRecordValue
   , asRecordSelector
   , asRecursorApp
+  , asPos
   , asNat
   , asBvNat
   , asUnsignedConcreteBv
@@ -251,10 +252,15 @@ asRecursorApp t =
   do Recursor crec <- asFTermF t
      pure (t, crec)
 
+asPos :: Recognizer Term Natural
+asPos (asGlobalApply "Prelude.One" -> Just []) = pure 1
+asPos (asGlobalApply "Prelude.Bit0" -> Just [asPos -> Just n]) = pure (2*n)
+asPos (asGlobalApply "Prelude.Bit1" -> Just [asPos -> Just n]) = pure (2*n+1)
+asPos _ = Nothing
+
 asNat :: Recognizer Term Natural
-asNat (unwrapTermF -> FTermF (NatLit i)) = pure i
 asNat (asGlobalApply preludeZeroIdent -> Just []) = pure 0
-asNat (asGlobalApply preludeSuccIdent -> Just [asNat -> Just i]) = pure (i+1)
+asNat (asGlobalApply "Prelude.NatPos" -> Just [asPos -> Just n]) = pure n
 asNat _ = Nothing
 
 -- | Recognize an application of @bvNat@

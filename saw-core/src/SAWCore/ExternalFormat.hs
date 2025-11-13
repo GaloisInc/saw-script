@@ -136,7 +136,6 @@ scWriteExternal t0 =
               | s == propSort -> pure $ unwords ("Prop" : map show (sortFlagsToList h))
               | otherwise     -> pure $ unwords ("Sort" : drop 5 (show s) : map show (sortFlagsToList h))
                                                         -- /\ Ugly hack to drop "sort "
-            NatLit n            -> pure $ unwords ["Nat", show n]
             ArrayValue e v      -> pure $ unwords ("Array" : show e :
                                             map show (V.toList v))
             StringLit s         -> pure $ unwords ["String", show s]
@@ -288,8 +287,6 @@ scReadExternalTyped sc input =
         ("Sort" : s : h)    -> do s' <- mkSort <$> readM s
                                   flags <- sortFlagsFromList <$> mapM readM h
                                   lift $ scSortWithFlags sc s' flags
-        ["Nat", n]          -> do n' <- readM n
-                                  lift $ scNat sc n'
         ("Array" : e : es)  -> do t <- readIdx e
                                   ts <- traverse readIdx es
                                   lift $ scVector sc t ts
