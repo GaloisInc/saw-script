@@ -144,29 +144,29 @@ span.spaces    { background: white }
 <span class="lineno">  125 </span><span class="spaces">      </span><span class="istickedoff">(IntMap.disjoint vt1 vm &amp;&amp; i1 == i2) || termf vm tf1 tf2</span>
 <span class="lineno">  126 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff">termf :: IntMap VarIndex -&gt; TermF Term -&gt; TermF Term -&gt; Bool</span>
-<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">termf vm (FTermF ftf1) (FTermF ftf2) = ftermf vm ftf1 ftf2</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">termf vm (FTermF ftf1) (FTermF ftf2) = ftermf <span class="nottickedoff">vm</span> ftf1 ftf2</span>
 <span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">termf vm (App t1 u1) (App t2 u2) = term vm t1 t2 &amp;&amp; term vm u1 u2</span>
 <span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Lambda (vnIndex -&gt; i1) t1 u1) (Lambda (vnIndex -&gt; i2) t2 u2) =</span>
-<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm</span>
+<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if <span class="tickonlyfalse">i1 == i2</span> then <span class="nottickedoff">vm</span> else IntMap.insert i1 <span class="nottickedoff">i2</span> vm</span>
 <span class="lineno">  132 </span><span class="spaces">      </span><span class="istickedoff">in term <span class="nottickedoff">vm</span> t1 t2 &amp;&amp; term vm' u1 u2</span>
 <span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Pi (vnIndex -&gt; i1) t1 u1) (Pi (vnIndex -&gt; i2) t2 u2) =</span>
-<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm</span>
+<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff">let vm' = if <span class="tickonlyfalse">i1 == i2</span> then <span class="nottickedoff">vm</span> else IntMap.insert i1 i2 vm</span>
 <span class="lineno">  135 </span><span class="spaces">      </span><span class="istickedoff">in term vm t1 t2 &amp;&amp; term vm' u1 u2</span>
 <span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff">termf _vm (Constant x1) (Constant x2) = x1 == x2</span>
 <span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">termf vm (Variable x1 _t1) (Variable x2 _t2) =</span>
 <span class="lineno">  138 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (vnIndex x1) vm of</span>
 <span class="lineno">  139 </span><span class="spaces">        </span><span class="istickedoff">Just i -&gt; vnIndex x2 == i</span>
-<span class="lineno">  140 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">x1 == x2</span></span>
+<span class="lineno">  140 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; x1 == x2</span>
 <span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">termf _ FTermF{}   _ = False</span>
 <span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">termf _ App{}      _ = False</span>
-<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">termf _ Lambda{}   _ = False</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">termf _ Lambda{}   _ = <span class="nottickedoff">False</span></span>
 <span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">termf _ Pi{}       _ = False</span>
 <span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff">termf _ Constant{} _ = False</span>
 <span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">termf _ Variable{} _ = False</span>
 <span class="lineno">  147 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">ftermf :: IntMap Int -&gt; FlatTermF Term -&gt; FlatTermF Term -&gt; Bool</span>
 <span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">ftermf vm ftf1 ftf2 =</span>
-<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">case zipWithFlatTermF (term vm) ftf1 ftf2 of</span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">case zipWithFlatTermF (term <span class="nottickedoff">vm</span>) ftf1 ftf2 of</span>
 <span class="lineno">  151 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; False</span>
 <span class="lineno">  152 </span><span class="spaces">        </span><span class="istickedoff">Just ftf3 -&gt; Foldable.and ftf3</span></span>
 <span class="lineno">  153 </span>

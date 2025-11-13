@@ -1477,7 +1477,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1458 </span>  | TyViewNever
 <span class="lineno"> 1459 </span>  | TyViewForeign
 <span class="lineno"> 1460 </span>  | TyViewLifetime
-<span class="lineno"> 1461 </span>  | TyViewConst
+<span class="lineno"> 1461 </span>  | TyViewConst !Mir.ConstVal
 <span class="lineno"> 1462 </span>  | TyViewErased
 <span class="lineno"> 1463 </span>  | TyViewInterned Mir.TyName
 <span class="lineno"> 1464 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
@@ -1540,7 +1540,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1521 </span><span class="spaces"></span><span class="istickedoff">tyView Mir.TyNever = <span class="nottickedoff">TyViewNever</span></span>
 <span class="lineno"> 1522 </span><span class="spaces"></span><span class="istickedoff">tyView Mir.TyForeign = <span class="nottickedoff">TyViewForeign</span></span>
 <span class="lineno"> 1523 </span><span class="spaces"></span><span class="istickedoff">tyView Mir.TyLifetime = TyViewLifetime</span>
-<span class="lineno"> 1524 </span><span class="spaces"></span><span class="istickedoff">tyView Mir.TyConst = TyViewConst</span>
+<span class="lineno"> 1524 </span><span class="spaces"></span><span class="istickedoff">tyView (Mir.TyConst c) = TyViewConst c</span>
 <span class="lineno"> 1525 </span><span class="spaces"></span><span class="istickedoff">tyView Mir.TyErased = <span class="nottickedoff">TyViewErased</span></span>
 <span class="lineno"> 1526 </span><span class="spaces"></span><span class="istickedoff">tyView (Mir.TyInterned nm) = <span class="nottickedoff">TyViewInterned nm</span></span></span>
 <span class="lineno"> 1527 </span>

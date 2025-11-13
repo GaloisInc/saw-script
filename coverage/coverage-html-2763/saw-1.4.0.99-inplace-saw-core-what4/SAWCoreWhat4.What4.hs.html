@@ -177,7 +177,7 @@ span.spaces    { background: white }
 <span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvectors</span>
 <span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = SW.bvUnpackBE sym</span>
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpPack    = <span class="nottickedoff">SW.bvPackBE sym</span></span>
-<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = \w i -&gt; SW.bvAtBE sym w (toInteger i)</span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = <span class="nottickedoff">\w i -&gt; SW.bvAtBE sym w (toInteger i)</span></span>
 <span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLit   = \l x -&gt; SW.bvLit sym (toInteger l) x</span>
 <span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSize  = swBvWidth</span>
 <span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = SW.bvJoin   sym</span>
@@ -195,7 +195,7 @@ span.spaces    { background: white }
 <span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = W.andPred   sym</span>
 <span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = <span class="nottickedoff">W.orPred    sym</span></span>
 <span class="lineno">  178 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">W.xorPred   sym</span></span>
-<span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = W.isEq      <span class="nottickedoff">sym</span></span>
+<span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = <span class="nottickedoff">W.isEq      sym</span></span>
 <span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
 <span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNot  = SW.bvNot  sym</span>
 <span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAnd  = SW.bvAnd  sym</span>
@@ -293,7 +293,7 @@ span.spaces    { background: white }
 <span class="lineno">  274 </span>recursor :: Sym sym =&gt; sym -&gt; Name -&gt; sort -&gt; Maybe (IO (SValue sym))
 <span class="lineno">  275 </span><span class="decl"><span class="istickedoff">recursor sym nm _sort =</span>
 <span class="lineno">  276 </span><span class="spaces">  </span><span class="istickedoff">case nameInfo nm of</span>
-<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; Just (pure (streamRecOp <span class="nottickedoff">sym</span>))</span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; <span class="nottickedoff">Just (pure (streamRecOp sym))</span></span>
 <span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; Nothing</span></span>
 <span class="lineno">  279 </span>
 <span class="lineno">  280 </span>-----------------------------------------------------------------------
@@ -628,13 +628,13 @@ span.spaces    { background: white }
 <span class="lineno">  609 </span>--   (a : sort 0) -&gt; (p : Stream a -&gt; sort 0) -&gt;
 <span class="lineno">  610 </span>--   ((f : Nat -&gt; a) -&gt; p (MkStream a f)) -&gt; (str : Stream a) -&gt; p str
 <span class="lineno">  611 </span>streamRecOp :: Sym sym =&gt; sym -&gt; SValue sym
-<span class="lineno">  612 </span><span class="decl"><span class="istickedoff">streamRecOp sym =</span>
-<span class="lineno">  613 </span><span class="spaces">  </span><span class="istickedoff">VFun $ \_a -&gt; pure $</span>
-<span class="lineno">  614 </span><span class="spaces">  </span><span class="istickedoff">VFun $ \_p -&gt; pure $</span>
-<span class="lineno">  615 </span><span class="spaces">  </span><span class="istickedoff">vStrictFun $ \f1 -&gt; pure $</span>
-<span class="lineno">  616 </span><span class="spaces">  </span><span class="istickedoff">vStrictFun $ \xs -&gt;</span>
-<span class="lineno">  617 </span><span class="spaces">  </span><span class="istickedoff">do let f = vStrictFun $ \ix -&gt; streamGet <span class="nottickedoff">sym</span> xs ix</span>
-<span class="lineno">  618 </span><span class="spaces">     </span><span class="istickedoff">apply f1 (ready f)</span></span>
+<span class="lineno">  612 </span><span class="decl"><span class="nottickedoff">streamRecOp sym =</span>
+<span class="lineno">  613 </span><span class="spaces">  </span><span class="nottickedoff">VFun $ \_a -&gt; pure $</span>
+<span class="lineno">  614 </span><span class="spaces">  </span><span class="nottickedoff">VFun $ \_p -&gt; pure $</span>
+<span class="lineno">  615 </span><span class="spaces">  </span><span class="nottickedoff">vStrictFun $ \f1 -&gt; pure $</span>
+<span class="lineno">  616 </span><span class="spaces">  </span><span class="nottickedoff">vStrictFun $ \xs -&gt;</span>
+<span class="lineno">  617 </span><span class="spaces">  </span><span class="nottickedoff">do let f = vStrictFun $ \ix -&gt; streamGet sym xs ix</span>
+<span class="lineno">  618 </span><span class="spaces">     </span><span class="nottickedoff">apply f1 (ready f)</span></span>
 <span class="lineno">  619 </span>
 <span class="lineno">  620 </span>muxBVal :: forall sym. Sym sym =&gt;
 <span class="lineno">  621 </span>  sym -&gt; SBool sym -&gt; SValue sym -&gt; SValue sym -&gt; IO (SValue sym)

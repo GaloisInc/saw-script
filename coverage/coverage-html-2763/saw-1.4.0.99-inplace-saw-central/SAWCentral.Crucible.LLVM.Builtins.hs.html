@@ -1328,7 +1328,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1309 </span><span class="spaces">  </span><span class="istickedoff">do let function_id = L.Symbol name</span>
 <span class="lineno"> 1310 </span><span class="spaces">     </span><span class="istickedoff">Crucible.getTranslatedCFG (ccLLVMModuleTrans context) function_id &gt;&gt;= \case</span>
 <span class="lineno"> 1311 </span><span class="spaces">       </span><span class="istickedoff">Just (_, Crucible.AnyCFG cfg, warns) -&gt;</span>
-<span class="lineno"> 1312 </span><span class="spaces">         </span><span class="istickedoff">do mapM_ (handleTranslationWarning opts) warns</span>
+<span class="lineno"> 1312 </span><span class="spaces">         </span><span class="istickedoff">do mapM_ <span class="nottickedoff">(handleTranslationWarning opts)</span> warns</span>
 <span class="lineno"> 1313 </span><span class="spaces">            </span><span class="istickedoff">k cfg</span>
 <span class="lineno"> 1314 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;Unexpected function name: &quot; ++ name</span></span></span>
 <span class="lineno"> 1315 </span>
@@ -1341,7 +1341,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1322 </span>  IO a
 <span class="lineno"> 1323 </span><span class="decl"><span class="istickedoff">withCfgAndBlockId opts context method_spec k =</span>
 <span class="lineno"> 1324 </span><span class="spaces">  </span><span class="istickedoff">case method_spec ^. csParentName of</span>
-<span class="lineno"> 1325 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; withCfg opts context (Text.unpack (method_spec ^. csName)) $ \cfg -&gt;</span>
+<span class="lineno"> 1325 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; withCfg <span class="nottickedoff">opts</span> context (Text.unpack (method_spec ^. csName)) $ \cfg -&gt;</span>
 <span class="lineno"> 1326 </span><span class="spaces">      </span><span class="istickedoff">k cfg (Crucible.cfgEntryBlockID cfg)</span>
 <span class="lineno"> 1327 </span><span class="spaces">    </span><span class="istickedoff">Just parent -&gt; withBreakpointCfgAndBlockId <span class="nottickedoff">opts</span></span>
 <span class="lineno"> 1328 </span><span class="spaces">      </span><span class="istickedoff">context</span>
@@ -1390,7 +1390,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1371 </span>  IORef MetadataMap -&gt;
 <span class="lineno"> 1372 </span>  TopLevel (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym, MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym))
 <span class="lineno"> 1373 </span><span class="decl"><span class="istickedoff">verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap =</span>
-<span class="lineno"> 1374 </span><span class="spaces">  </span><span class="istickedoff">io $ withCfgAndBlockId opts cc mspec $ \cfg entryId -&gt; ccWithBackend cc $ \bak -&gt; do</span>
+<span class="lineno"> 1374 </span><span class="spaces">  </span><span class="istickedoff">io $ withCfgAndBlockId <span class="nottickedoff">opts</span> cc mspec $ \cfg entryId -&gt; ccWithBackend cc $ \bak -&gt; do</span>
 <span class="lineno"> 1375 </span><span class="spaces">     </span><span class="istickedoff">let sym = cc^.ccSym</span>
 <span class="lineno"> 1376 </span><span class="spaces">     </span><span class="istickedoff">let argTys = Crucible.blockInputs $</span>
 <span class="lineno"> 1377 </span><span class="spaces">           </span><span class="istickedoff">Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg</span>
@@ -1779,7 +1779,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1760 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1761 </span><span class="spaces">               </span><span class="istickedoff">let setupMem =</span>
 <span class="lineno"> 1762 </span><span class="spaces">                     </span><span class="istickedoff">do -- register all the functions defined in the LLVM module</span>
-<span class="lineno"> 1763 </span><span class="spaces">                        </span><span class="istickedoff">Crucible.registerLazyModule (handleTranslationWarning opts) mtrans</span>
+<span class="lineno"> 1763 </span><span class="spaces">                        </span><span class="istickedoff">Crucible.registerLazyModule <span class="nottickedoff">(handleTranslationWarning opts)</span> mtrans</span>
 <span class="lineno"> 1764 </span><span class="spaces">                        </span><span class="istickedoff">-- register the callable override functions</span>
 <span class="lineno"> 1765 </span><span class="spaces">                        </span><span class="istickedoff">_ &lt;- Crucible.register_llvm_overrides llvm_mod saw_llvm_overrides saw_llvm_overrides ctx</span>
 <span class="lineno"> 1766 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1808,13 +1808,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1789 </span>
 <span class="lineno"> 1790 </span>
 <span class="lineno"> 1791 </span>handleTranslationWarning :: Options -&gt; Crucible.LLVMTranslationWarning -&gt; IO ()
-<span class="lineno"> 1792 </span><span class="decl"><span class="istickedoff">handleTranslationWarning opts (Crucible.LLVMTranslationWarning s p msg) =</span>
-<span class="lineno"> 1793 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Warn $ unwords</span>
-<span class="lineno"> 1794 </span><span class="spaces">    </span><span class="istickedoff">[ &quot;LLVM bitcode translation warning&quot;</span>
-<span class="lineno"> 1795 </span><span class="spaces">    </span><span class="istickedoff">, show (Crucible.ppSymbol s)</span>
-<span class="lineno"> 1796 </span><span class="spaces">    </span><span class="istickedoff">, show p</span>
-<span class="lineno"> 1797 </span><span class="spaces">    </span><span class="istickedoff">, Text.unpack msg</span>
-<span class="lineno"> 1798 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno"> 1792 </span><span class="decl"><span class="nottickedoff">handleTranslationWarning opts (Crucible.LLVMTranslationWarning s p msg) =</span>
+<span class="lineno"> 1793 </span><span class="spaces">  </span><span class="nottickedoff">printOutLn opts Warn $ unwords</span>
+<span class="lineno"> 1794 </span><span class="spaces">    </span><span class="nottickedoff">[ &quot;LLVM bitcode translation warning&quot;</span>
+<span class="lineno"> 1795 </span><span class="spaces">    </span><span class="nottickedoff">, show (Crucible.ppSymbol s)</span>
+<span class="lineno"> 1796 </span><span class="spaces">    </span><span class="nottickedoff">, show p</span>
+<span class="lineno"> 1797 </span><span class="spaces">    </span><span class="nottickedoff">, Text.unpack msg</span>
+<span class="lineno"> 1798 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
 <span class="lineno"> 1799 </span>
 <span class="lineno"> 1800 </span>--------------------------------------------------------------------------------
 <span class="lineno"> 1801 </span>

@@ -199,7 +199,7 @@ span.spaces    { background: white }
 <span class="lineno">  180 </span>-- | @append@ specialized to BitVector (big-endian)
 <span class="lineno">  181 </span>-- append :: (m n :: Nat) -&gt; (a :: sort 0) -&gt; Vec m a -&gt; Vec n a -&gt; Vec (addNat m n) a;
 <span class="lineno">  182 </span>append_bv :: Int -&gt; Int -&gt; () -&gt; BitVector -&gt; BitVector -&gt; BitVector
-<span class="lineno">  183 </span><span class="decl"><span class="nottickedoff">append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (shiftL x n .|. y)</span></span>
+<span class="lineno">  183 </span><span class="decl"><span class="istickedoff">append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (shiftL x n .|. y)</span></span>
 <span class="lineno">  184 </span>-- little-endian version:
 <span class="lineno">  185 </span>-- append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (x .|. shiftL y m)
 <span class="lineno">  186 </span>

@@ -90,7 +90,7 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span>
 <span class="lineno">   72 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show Sort</span></span></span></span> where
 <span class="lineno">   73 </span>  <span class="decl"><span class="istickedoff">showsPrec p (TypeSort i) = showParen (p &gt;= 10) (showString &quot;sort &quot; . shows i)</span>
-<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff">showsPrec _ PropSort = showString &quot;Prop&quot;</span></span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff">showsPrec _ PropSort = <span class="nottickedoff">showString &quot;Prop&quot;</span></span></span>
 <span class="lineno">   75 </span>
 <span class="lineno">   76 </span>-- | Create sort @Type i@ for the given natural number @i@.
 <span class="lineno">   77 </span>mkSort :: Natural -&gt; Sort
@@ -191,152 +191,148 @@ span.spaces    { background: white }
 <span class="lineno">  172 </span>  | Sort !Sort !SortFlags
 <span class="lineno">  173 </span>
 <span class="lineno">  174 </span>    -- Primitive builtin values
-<span class="lineno">  175 </span>    -- | Natural number with given value.
-<span class="lineno">  176 </span>  | NatLit !Natural
-<span class="lineno">  177 </span>    -- | Array value includes type of elements followed by elements.
-<span class="lineno">  178 </span>  | ArrayValue e (Vector e)
-<span class="lineno">  179 </span>    -- | String literal
-<span class="lineno">  180 </span>  | StringLit !Text
-<span class="lineno">  181 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  175 </span>    -- | Array value includes type of elements followed by elements.
+<span class="lineno">  176 </span>  | ArrayValue e (Vector e)
+<span class="lineno">  177 </span>    -- | String literal
+<span class="lineno">  178 </span>  | StringLit !Text
+<span class="lineno">  179 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable e =&gt; Hashable (FlatTermF e)</span></span></span></span> -- automatically derived
 <span class="lineno">  182 </span>
-<span class="lineno">  183 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable e =&gt; Hashable (FlatTermF e)</span></span></span></span> -- automatically derived
-<span class="lineno">  184 </span>
-<span class="lineno">  185 </span>-- | A 'CompiledRecursor' comprises the datatype name and elimination
-<span class="lineno">  186 </span>-- sort of a recursor, along with some other data derived from details
-<span class="lineno">  187 </span>-- of the datatype definition.
-<span class="lineno">  188 </span>data CompiledRecursor =
-<span class="lineno">  189 </span>  CompiledRecursor
-<span class="lineno">  190 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorDataType</span></span></span>  :: Name
-<span class="lineno">  191 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorSort</span></span></span>      :: Sort
-<span class="lineno">  192 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorNumParams</span></span></span> :: Int
-<span class="lineno">  193 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorNumIxs</span></span></span>    :: Int
-<span class="lineno">  194 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorCtorOrder</span></span></span> :: [Name]
-<span class="lineno">  195 </span>  }
-<span class="lineno">  196 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  183 </span>-- | A 'CompiledRecursor' comprises the datatype name and elimination
+<span class="lineno">  184 </span>-- sort of a recursor, along with some other data derived from details
+<span class="lineno">  185 </span>-- of the datatype definition.
+<span class="lineno">  186 </span>data CompiledRecursor =
+<span class="lineno">  187 </span>  CompiledRecursor
+<span class="lineno">  188 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorDataType</span></span></span>  :: Name
+<span class="lineno">  189 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorSort</span></span></span>      :: Sort
+<span class="lineno">  190 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorNumParams</span></span></span> :: Int
+<span class="lineno">  191 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorNumIxs</span></span></span>    :: Int
+<span class="lineno">  192 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorCtorOrder</span></span></span> :: [Name]
+<span class="lineno">  193 </span>  }
+<span class="lineno">  194 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  195 </span>
+<span class="lineno">  196 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable CompiledRecursor</span></span></span></span> -- automatically derived
 <span class="lineno">  197 </span>
-<span class="lineno">  198 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable CompiledRecursor</span></span></span></span> -- automatically derived
-<span class="lineno">  199 </span>
-<span class="lineno">  200 </span>-- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
-<span class="lineno">  201 </span>-- precisely the given field names and no more. If so, return the values
-<span class="lineno">  202 </span>-- associated with those field names, in the order given in the input, and
-<span class="lineno">  203 </span>-- otherwise return 'Nothing'
-<span class="lineno">  204 </span>alistAllFields :: Eq k =&gt; [k] -&gt; [(k, a)] -&gt; Maybe [a]
-<span class="lineno">  205 </span><span class="decl"><span class="istickedoff">alistAllFields [] [] = Just <span class="nottickedoff">[]</span></span>
-<span class="lineno">  206 </span><span class="spaces"></span><span class="istickedoff">alistAllFields (fld:flds) alist</span>
-<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">| Just val &lt;- lookup fld alist =</span>
-<span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">(val :) &lt;$&gt; alistAllFields flds (deleteField fld alist)</span>
-<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">deleteField _ [] = <span class="nottickedoff">error &quot;deleteField&quot;</span></span>
-<span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff">deleteField f ((f',_):rest) | <span class="tickonlytrue">f == f'</span> = rest</span>
-<span class="lineno">  212 </span><span class="spaces">    </span><span class="istickedoff">deleteField f (x:rest) = <span class="nottickedoff">x : deleteField f rest</span></span>
-<span class="lineno">  213 </span><span class="spaces"></span><span class="istickedoff">alistAllFields _ _ = <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">  214 </span>
-<span class="lineno">  215 </span>zipName :: Name -&gt; Name -&gt; Maybe Name
-<span class="lineno">  216 </span><span class="decl"><span class="nottickedoff">zipName x y</span>
-<span class="lineno">  217 </span><span class="spaces">  </span><span class="nottickedoff">| x == y = Just x</span>
-<span class="lineno">  218 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Nothing</span></span>
-<span class="lineno">  219 </span>
-<span class="lineno">  220 </span>zipRec :: CompiledRecursor -&gt; CompiledRecursor -&gt; Maybe CompiledRecursor
-<span class="lineno">  221 </span><span class="decl"><span class="istickedoff">zipRec (CompiledRecursor d1 s1 ps1 n1 ord1) (CompiledRecursor d2 s2 _ n2 ord2)</span>
-<span class="lineno">  222 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">n1 == n2 &amp;&amp; s1 == s2</span></span>
-<span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do d &lt;- zipName d1 d2</span></span>
-<span class="lineno">  224 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">ord &lt;- sequence (zipWith zipName ord1 ord2)</span></span>
-<span class="lineno">  225 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">pure $ CompiledRecursor</span></span>
-<span class="lineno">  226 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">d</span></span>
-<span class="lineno">  227 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">s1</span></span>
-<span class="lineno">  228 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ps1</span></span>
-<span class="lineno">  229 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">n1</span></span>
-<span class="lineno">  230 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ord</span></span>
-<span class="lineno">  231 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
-<span class="lineno">  232 </span>
-<span class="lineno">  233 </span>-- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
-<span class="lineno">  234 </span>-- pointwise to immediate subterms, if the two 'FlatTermF's are the same
-<span class="lineno">  235 </span>-- constructor; otherwise, return 'Nothing' if they use different constructors
-<span class="lineno">  236 </span>zipWithFlatTermF :: (x -&gt; y -&gt; z) -&gt; FlatTermF x -&gt; FlatTermF y -&gt;
-<span class="lineno">  237 </span>                    Maybe (FlatTermF z)
-<span class="lineno">  238 </span><span class="decl"><span class="istickedoff">zipWithFlatTermF f = go</span>
-<span class="lineno">  239 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">go UnitValue UnitValue = <span class="nottickedoff">Just UnitValue</span></span>
-<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">go UnitType UnitType = Just UnitType</span>
-<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))</span>
-<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))</span>
-<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">go (PairLeft x) (PairLeft y) = <span class="nottickedoff">Just (PairLeft (f x y))</span></span>
-<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">go (PairRight x) (PairRight y) = <span class="nottickedoff">Just (PairLeft (f x y))</span></span>
-<span class="lineno">  246 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  247 </span><span class="spaces">    </span><span class="istickedoff">go (Recursor rec1) (Recursor rec2) =</span>
-<span class="lineno">  248 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Recursor</span> &lt;$&gt; zipRec rec1 rec2</span>
-<span class="lineno">  249 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  250 </span><span class="spaces">    </span><span class="istickedoff">go (RecordType elems1) (RecordType elems2)</span>
-<span class="lineno">  251 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- alistAllFields (map fst elems1) elems2 =</span>
-<span class="lineno">  252 </span><span class="spaces">        </span><span class="istickedoff">Just $ RecordType $ zipWith (\(fld,x) y -&gt; (<span class="nottickedoff">fld</span>, f x y)) elems1 vals2</span>
-<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">go (RecordValue elems1) (RecordValue elems2)</span>
-<span class="lineno">  254 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- <span class="nottickedoff">alistAllFields (map fst elems1) elems2</span> =</span>
-<span class="lineno">  255 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just $ RecordValue $ zipWith (\(fld,x) y -&gt; (fld, f x y)) elems1 vals2</span></span>
-<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">go (RecordProj e1 fld1) (RecordProj e2 fld2)</span>
-<span class="lineno">  257 </span><span class="spaces">      </span><span class="istickedoff">| fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1</span>
-<span class="lineno">  258 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  259 </span><span class="spaces">    </span><span class="istickedoff">go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (sortFlagsLift2 <span class="nottickedoff">(&amp;&amp;)</span> hx hy))</span>
-<span class="lineno">  260 </span><span class="spaces">         </span><span class="istickedoff">-- /\ NB, it's not entirely clear how the flags should be propagated</span>
-<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">go (NatLit i) (NatLit j) | i == j = Just (NatLit i)</span>
-<span class="lineno">  262 </span><span class="spaces">    </span><span class="istickedoff">go (StringLit s) (StringLit t) | <span class="nottickedoff">s == t</span> = <span class="nottickedoff">Just (StringLit s)</span></span>
-<span class="lineno">  263 </span><span class="spaces">    </span><span class="istickedoff">go (ArrayValue tx vx) (ArrayValue ty vy)</span>
-<span class="lineno">  264 </span><span class="spaces">      </span><span class="istickedoff">| V.length vx == V.length vy</span>
-<span class="lineno">  265 </span><span class="spaces">      </span><span class="istickedoff">= Just $ ArrayValue (f tx ty) (V.zipWith <span class="nottickedoff">f</span> vx vy)</span>
-<span class="lineno">  266 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">go UnitValue      _ = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">go UnitType       _ = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">go PairValue{}    _ = Nothing</span>
-<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">go PairType{}     _ = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">go PairLeft{}     _ = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">go PairRight{}    _ = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">go Recursor{}     _ = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">go RecordType{}   _ = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">go RecordValue{}  _ = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff">go RecordProj{}   _ = Nothing</span>
-<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">go Sort{}         _ = Nothing</span>
-<span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff">go NatLit{}       _ = Nothing</span>
-<span class="lineno">  279 </span><span class="spaces">    </span><span class="istickedoff">go ArrayValue{}   _ = Nothing</span>
-<span class="lineno">  280 </span><span class="spaces">    </span><span class="istickedoff">go StringLit{}    _ = <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">  281 </span>
-<span class="lineno">  282 </span>
-<span class="lineno">  283 </span>-- Term Functor ----------------------------------------------------------------
-<span class="lineno">  284 </span>
-<span class="lineno">  285 </span>-- | A \&quot;knot-tying\&quot; structure for representing terms and term-like things.
-<span class="lineno">  286 </span>-- Often, this appears in context as the type \&quot;'TermF' 'Term'\&quot;, in which case
-<span class="lineno">  287 </span>-- it represents a full 'Term' AST. The \&quot;F\&quot; stands for 'Functor', or
-<span class="lineno">  288 </span>-- occasionally for \&quot;Former\&quot;.
-<span class="lineno">  289 </span>data TermF e
-<span class="lineno">  290 </span>    = FTermF !(FlatTermF e)
-<span class="lineno">  291 </span>      -- ^ The atomic, or builtin, term constructs
-<span class="lineno">  292 </span>    | App !e !e
-<span class="lineno">  293 </span>      -- ^ Applications of functions
-<span class="lineno">  294 </span>    | Lambda !VarName !e !e
-<span class="lineno">  295 </span>      -- ^ Function abstractions
-<span class="lineno">  296 </span>    | Pi !VarName !e !e
-<span class="lineno">  297 </span>      -- ^ The type of a (possibly) dependent function
-<span class="lineno">  298 </span>    | Constant !Name
-<span class="lineno">  299 </span>      -- ^ A global constant identified by its name.
-<span class="lineno">  300 </span>    | Variable !VarName !e
-<span class="lineno">  301 </span>      -- ^ A named variable with a type.
-<span class="lineno">  302 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
-<span class="lineno">  303 </span>
-<span class="lineno">  304 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Hashable e =&gt; Hashable (TermF e)</span></span></span></span> -- automatically derived
-<span class="lineno">  305 </span>
-<span class="lineno">  306 </span>
-<span class="lineno">  307 </span>-- Free Named Variables --------------------------------------------------------
-<span class="lineno">  308 </span>
-<span class="lineno">  309 </span>-- | Compute an 'IntSet' containing the 'VarIndex' of the free
-<span class="lineno">  310 </span>-- variables of a term, given the free variables for its immediate
-<span class="lineno">  311 </span>-- subterms.
-<span class="lineno">  312 </span>freesTermF :: TermF IntSet -&gt; IntSet
-<span class="lineno">  313 </span><span class="decl"><span class="istickedoff">freesTermF tf =</span>
-<span class="lineno">  314 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
-<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' IntSet.union IntSet.empty ftf</span>
-<span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">App l r -&gt; IntSet.union l r</span>
-<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm tp rhs -&gt; IntSet.union tp (IntSet.delete (vnIndex nm) rhs)</span>
-<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">Pi nm lhs rhs -&gt; IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)</span>
-<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; IntSet.empty</span>
-<span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp -&gt; IntSet.insert (vnIndex nm) tp</span></span>
+<span class="lineno">  198 </span>-- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
+<span class="lineno">  199 </span>-- precisely the given field names and no more. If so, return the values
+<span class="lineno">  200 </span>-- associated with those field names, in the order given in the input, and
+<span class="lineno">  201 </span>-- otherwise return 'Nothing'
+<span class="lineno">  202 </span>alistAllFields :: Eq k =&gt; [k] -&gt; [(k, a)] -&gt; Maybe [a]
+<span class="lineno">  203 </span><span class="decl"><span class="istickedoff">alistAllFields [] [] = Just <span class="nottickedoff">[]</span></span>
+<span class="lineno">  204 </span><span class="spaces"></span><span class="istickedoff">alistAllFields (fld:flds) alist</span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">| Just val &lt;- lookup fld alist =</span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff">(val :) &lt;$&gt; alistAllFields flds (deleteField fld alist)</span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">deleteField _ [] = <span class="nottickedoff">error &quot;deleteField&quot;</span></span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">deleteField f ((f',_):rest) | <span class="tickonlytrue">f == f'</span> = rest</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">deleteField f (x:rest) = <span class="nottickedoff">x : deleteField f rest</span></span>
+<span class="lineno">  211 </span><span class="spaces"></span><span class="istickedoff">alistAllFields _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  212 </span>
+<span class="lineno">  213 </span>zipName :: Name -&gt; Name -&gt; Maybe Name
+<span class="lineno">  214 </span><span class="decl"><span class="istickedoff">zipName x y</span>
+<span class="lineno">  215 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">x == y</span> = <span class="nottickedoff">Just x</span></span>
+<span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
+<span class="lineno">  217 </span>
+<span class="lineno">  218 </span>zipRec :: CompiledRecursor -&gt; CompiledRecursor -&gt; Maybe CompiledRecursor
+<span class="lineno">  219 </span><span class="decl"><span class="istickedoff">zipRec (CompiledRecursor d1 s1 ps1 n1 ord1) (CompiledRecursor d2 s2 _ n2 ord2)</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">| n1 == n2 &amp;&amp; s1 == s2</span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">= do d &lt;- zipName d1 d2</span>
+<span class="lineno">  222 </span><span class="spaces">       </span><span class="istickedoff">ord &lt;- <span class="nottickedoff">sequence (zipWith zipName ord1 ord2)</span></span>
+<span class="lineno">  223 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">pure $ CompiledRecursor</span></span>
+<span class="lineno">  224 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">d</span></span>
+<span class="lineno">  225 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">s1</span></span>
+<span class="lineno">  226 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ps1</span></span>
+<span class="lineno">  227 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">n1</span></span>
+<span class="lineno">  228 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ord</span></span>
+<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>-- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
+<span class="lineno">  232 </span>-- pointwise to immediate subterms, if the two 'FlatTermF's are the same
+<span class="lineno">  233 </span>-- constructor; otherwise, return 'Nothing' if they use different constructors
+<span class="lineno">  234 </span>zipWithFlatTermF :: (x -&gt; y -&gt; z) -&gt; FlatTermF x -&gt; FlatTermF y -&gt;
+<span class="lineno">  235 </span>                    Maybe (FlatTermF z)
+<span class="lineno">  236 </span><span class="decl"><span class="istickedoff">zipWithFlatTermF f = go</span>
+<span class="lineno">  237 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">go UnitValue UnitValue = <span class="nottickedoff">Just UnitValue</span></span>
+<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">go UnitType UnitType = Just UnitType</span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))</span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))</span>
+<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">go (PairLeft x) (PairLeft y) = <span class="nottickedoff">Just (PairLeft (f x y))</span></span>
+<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">go (PairRight x) (PairRight y) = <span class="nottickedoff">Just (PairLeft (f x y))</span></span>
+<span class="lineno">  244 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">go (Recursor rec1) (Recursor rec2) =</span>
+<span class="lineno">  246 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Recursor</span> &lt;$&gt; zipRec rec1 rec2</span>
+<span class="lineno">  247 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  248 </span><span class="spaces">    </span><span class="istickedoff">go (RecordType elems1) (RecordType elems2)</span>
+<span class="lineno">  249 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- alistAllFields (map fst elems1) elems2 =</span>
+<span class="lineno">  250 </span><span class="spaces">        </span><span class="istickedoff">Just $ RecordType $ zipWith (\(fld,x) y -&gt; (<span class="nottickedoff">fld</span>, f x y)) elems1 vals2</span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="istickedoff">go (RecordValue elems1) (RecordValue elems2)</span>
+<span class="lineno">  252 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- <span class="nottickedoff">alistAllFields (map fst elems1) elems2</span> =</span>
+<span class="lineno">  253 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just $ RecordValue $ zipWith (\(fld,x) y -&gt; (fld, f x y)) elems1 vals2</span></span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">go (RecordProj e1 fld1) (RecordProj e2 fld2)</span>
+<span class="lineno">  255 </span><span class="spaces">      </span><span class="istickedoff">| fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1</span>
+<span class="lineno">  256 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (sortFlagsLift2 <span class="nottickedoff">(&amp;&amp;)</span> hx hy))</span>
+<span class="lineno">  258 </span><span class="spaces">         </span><span class="istickedoff">-- /\ NB, it's not entirely clear how the flags should be propagated</span>
+<span class="lineno">  259 </span><span class="spaces">    </span><span class="istickedoff">go (StringLit s) (StringLit t) | <span class="nottickedoff">s == t</span> = <span class="nottickedoff">Just (StringLit s)</span></span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">go (ArrayValue tx vx) (ArrayValue ty vy)</span>
+<span class="lineno">  261 </span><span class="spaces">      </span><span class="istickedoff">| V.length vx == V.length vy</span>
+<span class="lineno">  262 </span><span class="spaces">      </span><span class="istickedoff">= Just $ ArrayValue (f tx ty) (V.zipWith <span class="nottickedoff">f</span> vx vy)</span>
+<span class="lineno">  263 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff">go UnitValue      _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  265 </span><span class="spaces">    </span><span class="istickedoff">go UnitType       _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  266 </span><span class="spaces">    </span><span class="istickedoff">go PairValue{}    _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">go PairType{}     _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">go PairLeft{}     _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">go PairRight{}    _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">go Recursor{}     _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">go RecordType{}   _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">go RecordValue{}  _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">go RecordProj{}   _ = Nothing</span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">go Sort{}         _ = Nothing</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">go ArrayValue{}   _ = Nothing</span>
+<span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff">go StringLit{}    _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  277 </span>
+<span class="lineno">  278 </span>
+<span class="lineno">  279 </span>-- Term Functor ----------------------------------------------------------------
+<span class="lineno">  280 </span>
+<span class="lineno">  281 </span>-- | A \&quot;knot-tying\&quot; structure for representing terms and term-like things.
+<span class="lineno">  282 </span>-- Often, this appears in context as the type \&quot;'TermF' 'Term'\&quot;, in which case
+<span class="lineno">  283 </span>-- it represents a full 'Term' AST. The \&quot;F\&quot; stands for 'Functor', or
+<span class="lineno">  284 </span>-- occasionally for \&quot;Former\&quot;.
+<span class="lineno">  285 </span>data TermF e
+<span class="lineno">  286 </span>    = FTermF !(FlatTermF e)
+<span class="lineno">  287 </span>      -- ^ The atomic, or builtin, term constructs
+<span class="lineno">  288 </span>    | App !e !e
+<span class="lineno">  289 </span>      -- ^ Applications of functions
+<span class="lineno">  290 </span>    | Lambda !VarName !e !e
+<span class="lineno">  291 </span>      -- ^ Function abstractions
+<span class="lineno">  292 </span>    | Pi !VarName !e !e
+<span class="lineno">  293 </span>      -- ^ The type of a (possibly) dependent function
+<span class="lineno">  294 </span>    | Constant !Name
+<span class="lineno">  295 </span>      -- ^ A global constant identified by its name.
+<span class="lineno">  296 </span>    | Variable !VarName !e
+<span class="lineno">  297 </span>      -- ^ A named variable with a type.
+<span class="lineno">  298 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Hashable e =&gt; Hashable (TermF e)</span></span></span></span> -- automatically derived
+<span class="lineno">  301 </span>
+<span class="lineno">  302 </span>
+<span class="lineno">  303 </span>-- Free Named Variables --------------------------------------------------------
+<span class="lineno">  304 </span>
+<span class="lineno">  305 </span>-- | Compute an 'IntSet' containing the 'VarIndex' of the free
+<span class="lineno">  306 </span>-- variables of a term, given the free variables for its immediate
+<span class="lineno">  307 </span>-- subterms.
+<span class="lineno">  308 </span>freesTermF :: TermF IntSet -&gt; IntSet
+<span class="lineno">  309 </span><span class="decl"><span class="istickedoff">freesTermF tf =</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' IntSet.union IntSet.empty ftf</span>
+<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">App l r -&gt; IntSet.union l r</span>
+<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm tp rhs -&gt; IntSet.union tp (IntSet.delete (vnIndex nm) rhs)</span>
+<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">Pi nm lhs rhs -&gt; IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)</span>
+<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; IntSet.empty</span>
+<span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp -&gt; IntSet.insert (vnIndex nm) tp</span></span>
 
 </pre>
 </body>
