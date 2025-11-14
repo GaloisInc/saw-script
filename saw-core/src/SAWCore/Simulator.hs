@@ -590,7 +590,7 @@ mkMemoLocal cfg memoClosed t env = go mempty t
         FTermF ftf      -> foldlM go memo ftf
         App t1 t2       -> do memo' <- goTermF memo (unwrapTermF t1)
                               go memo' t2
-        Lambda _ t1 _   -> go memo t1
+        Lambda{}        -> pure memo
         Pi _ t1 _       -> go memo t1
         Constant{}      -> pure memo
         Variable _nm tp -> go memo tp
