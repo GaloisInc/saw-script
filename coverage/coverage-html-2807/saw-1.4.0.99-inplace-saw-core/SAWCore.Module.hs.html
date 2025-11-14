@@ -321,7 +321,7 @@ span.spaces    { background: white }
 <span class="lineno">  302 </span><span class="decl"><span class="nottickedoff">resolveName m str = Map.lookup str (moduleResolveMap m)</span></span>
 <span class="lineno">  303 </span>
 <span class="lineno">  304 </span>asResolvedCtor :: ResolvedName -&gt; Maybe Ctor
-<span class="lineno">  305 </span><span class="decl"><span class="istickedoff">asResolvedCtor = \case { ResolvedCtor ctor -&gt; Just ctor; _ -&gt; <span class="nottickedoff">Nothing</span> }</span></span>
+<span class="lineno">  305 </span><span class="decl"><span class="nottickedoff">asResolvedCtor = \case { ResolvedCtor ctor -&gt; Just ctor; _ -&gt; Nothing }</span></span>
 <span class="lineno">  306 </span>
 <span class="lineno">  307 </span>asResolvedDataType :: ResolvedName -&gt; Maybe DataType
 <span class="lineno">  308 </span><span class="decl"><span class="istickedoff">asResolvedDataType = \case { ResolvedDataType d -&gt; Just d; _ -&gt; Nothing }</span></span>
@@ -480,7 +480,7 @@ span.spaces    { background: white }
 <span class="lineno">  461 </span>
 <span class="lineno">  462 </span>-- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
 <span class="lineno">  463 </span>findCtorInMap :: Ident -&gt; ModuleMap -&gt; Maybe Ctor
-<span class="lineno">  464 </span><span class="decl"><span class="istickedoff">findCtorInMap i mm = resolveNameInMap mm i &gt;&gt;= asResolvedCtor</span></span>
+<span class="lineno">  464 </span><span class="decl"><span class="nottickedoff">findCtorInMap i mm = resolveNameInMap mm i &gt;&gt;= asResolvedCtor</span></span>
 <span class="lineno">  465 </span>
 <span class="lineno">  466 </span>-- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
 <span class="lineno">  467 </span>findDataTypeInMap :: Ident -&gt; ModuleMap -&gt; Maybe DataType

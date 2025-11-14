@@ -282,7 +282,7 @@ span.spaces    { background: white }
 <span class="lineno">  263 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  264 </span><span class="spaces"></span><span class="istickedoff">-- Literals</span>
 <span class="lineno">  265 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.NatLit _ i) =</span>
-<span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (NatLit i :: FlatTermF SC.Term)</span>
+<span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">lift $ TC.liftTCM SC.scNat i</span>
 <span class="lineno">  267 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.StringLit _ str) =</span>
 <span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (StringLit str :: FlatTermF SC.Term)</span>
 <span class="lineno">  269 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.VecLit _ []) = throwTCError EmptyVectorLit</span>
@@ -332,7 +332,7 @@ span.spaces    { background: white }
 <span class="lineno">  313 </span><span class="spaces">     </span><span class="istickedoff">typed_tp &lt;- typeInferCompleteUTerm tp</span>
 <span class="lineno">  314 </span><span class="spaces">     </span><span class="istickedoff">void $ lift $ TC.ensureSort $ SC.rawType typed_tp</span>
 <span class="lineno">  315 </span><span class="spaces">     </span><span class="istickedoff">let def_tp = SC.rawTerm typed_tp</span>
-<span class="lineno">  316 </span><span class="spaces">     </span><span class="istickedoff">def_tp_whnf &lt;- lift $ TC.liftTCM TC.scTypeCheckWHNF def_tp</span>
+<span class="lineno">  316 </span><span class="spaces">     </span><span class="istickedoff">def_tp_whnf &lt;- lift $ TC.liftTCM scWhnf def_tp</span>
 <span class="lineno">  317 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  318 </span><span class="spaces">     </span><span class="istickedoff">-- Step 2: assign types to the bound variables of the definition, by</span>
 <span class="lineno">  319 </span><span class="spaces">     </span><span class="istickedoff">-- peeling off the pi-abstraction variables in the type annotation. Any</span>

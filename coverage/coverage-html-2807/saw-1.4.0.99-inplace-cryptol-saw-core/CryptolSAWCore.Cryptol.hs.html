@@ -1704,13 +1704,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1685 </span><span class="spaces">           </span><span class="istickedoff">a1' &lt;- importType sc env a1</span>
 <span class="lineno"> 1686 </span><span class="spaces">           </span><span class="istickedoff">a2' &lt;- importType sc env a2</span>
 <span class="lineno"> 1687 </span><span class="spaces">           </span><span class="istickedoff">num &lt;- scGlobalApply sc &quot;Cryptol.Num&quot; []</span>
-<span class="lineno"> 1688 </span><span class="spaces">           </span><span class="istickedoff">nEq &lt;- if n1 == n2</span>
-<span class="lineno"> 1689 </span><span class="spaces">                  </span><span class="istickedoff">then scGlobalApply sc &quot;Prelude.Refl&quot; [num, n1']</span>
+<span class="lineno"> 1688 </span><span class="spaces">           </span><span class="istickedoff">nEq &lt;- if <span class="tickonlyfalse">n1 == n2</span></span>
+<span class="lineno"> 1689 </span><span class="spaces">                  </span><span class="istickedoff">then <span class="nottickedoff">scGlobalApply sc &quot;Prelude.Refl&quot; [num, n1']</span></span>
 <span class="lineno"> 1690 </span><span class="spaces">                  </span><span class="istickedoff">else scGlobalApply sc &quot;Prelude.unsafeAssert&quot; [num, n1', n2']</span>
 <span class="lineno"> 1691 </span><span class="spaces">           </span><span class="istickedoff">aEq &lt;- proveEq sc env a1 a2</span>
-<span class="lineno"> 1692 </span><span class="spaces">           </span><span class="istickedoff">if a1 == a2</span>
+<span class="lineno"> 1692 </span><span class="spaces">           </span><span class="istickedoff">if <span class="tickonlytrue">a1 == a2</span></span>
 <span class="lineno"> 1693 </span><span class="spaces">             </span><span class="istickedoff">then scGlobalApply sc &quot;Cryptol.seq_cong1&quot; [n1', n2', a1', nEq]</span>
-<span class="lineno"> 1694 </span><span class="spaces">             </span><span class="istickedoff">else scGlobalApply sc &quot;Cryptol.seq_cong&quot; [n1', n2', a1', a2', nEq, aEq]</span>
+<span class="lineno"> 1694 </span><span class="spaces">             </span><span class="istickedoff">else <span class="nottickedoff">scGlobalApply sc &quot;Cryptol.seq_cong&quot; [n1', n2', a1', a2', nEq, aEq]</span></span>
 <span class="lineno"> 1695 </span><span class="spaces">      </span><span class="istickedoff">(C.tIsIntMod -&gt; Just n1, C.tIsIntMod -&gt; Just n2) -&gt;</span>
 <span class="lineno"> 1696 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do n1' &lt;- importType sc env n1</span></span>
 <span class="lineno"> 1697 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">n2' &lt;- importType sc env n2</span></span>

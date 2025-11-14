@@ -50,7 +50,7 @@ span.spaces    { background: white }
 <span class="lineno">   31 </span><span class="decl"><span class="nottickedoff">string = pretty</span></span>
 <span class="lineno">   32 </span>
 <span class="lineno">   33 </span>integer :: Integer -&gt; Doc ann
-<span class="lineno">   34 </span><span class="decl"><span class="istickedoff">integer = pretty</span></span>
+<span class="lineno">   34 </span><span class="decl"><span class="nottickedoff">integer = pretty</span></span>
 <span class="lineno">   35 </span>
 <span class="lineno">   36 </span>-- TODO: import SAWCore pretty-printer?
 <span class="lineno">   37 </span>tightSepList :: Doc ann -&gt; [Doc ann] -&gt; Doc ann
@@ -152,11 +152,11 @@ span.spaces    { background: white }
 <span class="lineno">  133 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda)</span></span>
 <span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(ppTerm PrecApp tm &lt;+&gt; text &quot;:&quot; &lt;+&gt; ppTerm PrecApp tp)</span></span>
 <span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">NatLit i -&gt;</span>
-<span class="lineno">  136 </span><span class="spaces">      </span><span class="istickedoff">if <span class="tickonlyfalse">i &gt; 1000</span> then</span>
-<span class="lineno">  137 </span><span class="spaces">        </span><span class="istickedoff">-- Explicitly convert from Z if an integer is too big</span>
+<span class="lineno">  136 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if i &gt; 1000 then</span></span>
+<span class="lineno">  137 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- Explicitly convert from Z if an integer is too big</span></span>
 <span class="lineno">  138 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) (text &quot;Z.to_nat&quot; &lt;+&gt; integer i &lt;&gt; text &quot;%Z&quot;)</span></span>
-<span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff">else</span>
-<span class="lineno">  140 </span><span class="spaces">        </span><span class="istickedoff">integer i</span>
+<span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">else</span></span>
+<span class="lineno">  140 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">integer i</span></span>
 <span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">ZLit i -&gt;</span>
 <span class="lineno">  142 </span><span class="spaces">      </span><span class="istickedoff">-- we use hex unless our integer is a positive or negitive digit</span>
 <span class="lineno">  143 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if abs i &gt; 9  then let ui = toInteger (fromInteger i :: Word64)</span></span>

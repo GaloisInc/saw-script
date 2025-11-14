@@ -144,7 +144,7 @@ span.spaces    { background: white }
 <span class="lineno">  125 </span>
 <span class="lineno">  126 </span>-- | Build an 'OpenTerm' for a natural number literal
 <span class="lineno">  127 </span>nat :: Natural -&gt; OpenTerm
-<span class="lineno">  128 </span><span class="decl"><span class="istickedoff">nat = flat . NatLit</span></span>
+<span class="lineno">  128 </span><span class="decl"><span class="istickedoff">nat n = OpenTerm $ liftTCM SC.scNat n</span></span>
 <span class="lineno">  129 </span>
 <span class="lineno">  130 </span>-- | The 'OpenTerm' for the unit value
 <span class="lineno">  131 </span>unit :: OpenTerm
