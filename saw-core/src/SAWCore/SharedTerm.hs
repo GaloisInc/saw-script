@@ -876,24 +876,12 @@ scBuildCtor sc d c arg_struct =
     -- of its eliminator functions
     tp <- ctxCtorType sc d arg_struct
 
-    -- Step 2: build the API function that shuffles the terms around in the
-    -- correct way.
-    let iota_fun r cs_fs args =
-          do let elim = case Map.lookup (nameIndex cname) cs_fs of
-                   Just e -> e
-                   Nothing ->
-                     panic "ctorIotaReduction" [
-                         "no eliminator for constructor " <> Text.pack (show c)
-                     ]
-             ctxReduceRecursor sc r elim args arg_struct
-
     -- Finally, return the required Ctor record
     return $ Ctor
       { ctorName = cname
       , ctorArgStruct = arg_struct
       , ctorDataType = d
       , ctorType = tp
-      , ctorIotaReduction = iota_fun
       }
 
 -- | Compute the type of an eliminator function for a constructor from the name
@@ -1140,9 +1128,34 @@ scReduceRecursor sc r crec params motive elims c args =
        Just (ResolvedCtor ctor) ->
          -- The ctorIotaReduction field caches the result of iota reduction, which
          -- we just substitute into to perform the reduction
-         ctorIotaReduction ctor r_applied cs_fs args
+         ctorIotaReduction sc ctor r_applied cs_fs args
        _ ->
          panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
+
+-- | Function for computing the result of one step of iota reduction
+-- of the term
+--
+-- > dt#rec params elims ixs (c params args)
+--
+-- The arguments to this function are the recursor value (applied to
+-- params and elims), a mapping from constructor name indices to
+-- eliminator functions, and the arguments to the constructor.
+ctorIotaReduction ::
+  SharedContext ->
+  Ctor ->
+  Term {- ^ recursor term -} ->
+  Map VarIndex Term {- ^ constructor eliminators -} ->
+  [Term] {- ^ constructor arguments -} ->
+  IO Term
+ctorIotaReduction sc ctor r cs_fs args =
+  ctxReduceRecursor sc r elim args (ctorArgStruct ctor)
+  where
+    elim =
+      case Map.lookup (nameIndex (ctorName ctor)) cs_fs of
+        Just e -> e
+        Nothing ->
+          panic "ctorIotaReduction"
+          ["no eliminator for constructor " <> toAbsoluteName (nameInfo (ctorName ctor))]
 
 -- | Reduce an application of a recursor to a concrete nat value.
 --   The given recursor value is assumed to be correctly-typed

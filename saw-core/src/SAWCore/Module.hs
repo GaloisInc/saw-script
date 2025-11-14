@@ -152,19 +152,6 @@ data Ctor =
     -- where the @pi@ are the 'ctorParams', the @argi@ are the types specified
     -- by the 'ctorArgs', and the @ixi@ are the 'ctorDataTypeIndices'. Note that
     -- this type should always be top-level, i.e., have no free variables.
-  , ctorIotaReduction ::
-       Term {- ^ recursor term -} ->
-       Map VarIndex Term {- ^ constructor eliminators -} ->
-       [Term] {- ^ constructor arguments -} ->
-       IO Term
-    -- ^ Cached function for computing the result of one step of iota
-    --   reduction of the term
-    --
-    -- > RecursorApp rec ixs (c params args)
-    --
-    --   The arguments to this function are the recusor value, the
-    --   the map from the recursor that maps constructors to eliminator
-    --   functions, and the arguments to the constructor.
   }
 
 -- | Return the number of parameters of a constructor
