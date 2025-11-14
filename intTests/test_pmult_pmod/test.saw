@@ -1,0 +1,18 @@
+let {{
+  pmult_correct : {u, v} (fin u, fin v) => [1 + u] -> [1 + v] -> Bool
+  pmult_correct x y = pmult x y == Cryptol::Reference::pmult x y
+}};
+
+let {{
+  pmod_correct : {u, v} (fin u, fin v) => [u] -> [1 + v] -> Bool
+  pmod_correct x y = y != 0 ==> pmod x y == Cryptol::Reference::pmod x y
+}};
+
+// Verify size used by AES and larger sizes.
+prove_print rme {{ pmult_correct`{7,7} }};
+prove_print rme {{ pmult_correct`{15,15} }};
+prove_print rme {{ pmult_correct`{31,31} }};
+prove_print rme {{ pmult_correct`{63,63} }};
+
+// Verify size used by AES.
+prove_print rme {{ pmod_correct`{15,8} }};

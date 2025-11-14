@@ -1739,6 +1739,47 @@ bvSExt m n x = append m (Succ n) Bool (replicateBool m (msb n x)) x;
 -- bvSExt : (m n : Nat) -> Vec (Succ n) Bool -> Vec (addNat (Succ n) m) Bool;
 -- bvSExt m n x = append (Succ n) m Bool x (replicateBool m (msb n x));
 
+bvMin : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
+bvMin n x y = ite (Vec n Bool) (bvule n x y) x y;
+
+--------------------------------------------------------------------------------
+-- GF2 Polynomials
+
+polyMul :
+  (m n : Nat) -> Vec (Succ m) Bool -> Vec (Succ n) Bool ->
+  Vec (Succ (addNat m n)) Bool;
+polyMul m n x y =
+  foldl Bool (Vec (Succ (addNat m n)) Bool) (Succ n)
+  (\ (z : Vec (Succ (addNat m n)) Bool) (yi : Bool) ->
+   bvXor (Succ (addNat m n))
+   (bvShl (Succ (addNat m n)) z 1)
+   (coerce (Vec (addNat n (Succ m)) Bool) (Vec (Succ (addNat m n)) Bool)
+    (vecCong Bool (addNat n (Succ m)) (Succ (addNat m n))
+     (trans Nat (addNat n (Succ m)) (Succ (addNat n m)) (Succ (addNat m n))
+      (eqNatAddS n m) (eqNatSucc (addNat n m) (addNat m n) (eqNatAddComm n m)))
+    )
+    (bvUExt n (Succ m) ((ite (Vec (Succ m) Bool) yi x (bvNat (Succ m) 0))))
+   )
+  )
+  (bvNat (Succ (addNat m n)) 0)
+  y;
+
+polyMod : (m n : Nat) -> Vec m Bool -> Vec (Succ n) Bool -> Vec n Bool;
+polyMod m n x y =
+  (\ (reduce : Vec (Succ n) Bool -> Vec (Succ n) Bool) ->
+   (foldr Bool #(Vec n Bool, Vec (Succ n) Bool) m
+    (\ (xi : Bool) (acc : #(Vec n Bool, Vec (Succ n) Bool)) ->
+     (bvXor n (acc.(1))
+      (ite (Vec n Bool) xi (tail n Bool (acc.(2))) (bvNat n 0))
+     ,
+      reduce (bvShl (Succ n) (acc.(2)) 1)
+     )
+    )
+    (bvNat n 0, reduce (bvNat (Succ n) 1)) x
+   ).(1)
+  )
+  (\ (u : Vec (Succ n) Bool) -> bvMin (Succ n) u (bvXor (Succ n) u y));
+
 --------------------------------------------------------------------------------
 -- Infinite streams
 
