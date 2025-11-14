@@ -292,21 +292,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ++
   [ ("Void", mapsTo datatypesModule "Empty_set")]
 
-  -- Decidable equality, does not make sense in Coq unless turned into a type
-  -- class
-  -- Apparently, this is not used much for Cryptol, so we can skip it.
-  ++
-  [ ("eq",            skip) -- MapsTo $ mkCoqIdent sawDefinitionsModule "eq")
-  , ("eq_bitvector",  skip)
-  , ("eq_Bool",       skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq_Bool")
-  , ("eq_Nat",        skip)
-  , ("eq_refl",       skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq_refl")
-  , ("eq_VecBool",    skip)
-  , ("eq_VecVec",     skip)
-  , ("ite_eq_cong_1", skip)
-  , ("ite_eq_cong_2", skip)
-  ]
-
   -- Boolean
   ++
   [ ("Bool",          mapsTo datatypesModule "bool")
