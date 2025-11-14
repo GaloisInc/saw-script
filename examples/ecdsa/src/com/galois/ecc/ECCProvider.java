@@ -9,14 +9,14 @@ Copyright 2012 Galois, Inc.  All rights reserved.
 
 package com.galois.ecc;
 
-// Class definition {{{1
+// Class definition
 
 /**
  * Abstract class that provides Elliptic Curve cryptography services
  * for a particular curve.
  */
 public abstract class ECCProvider {
-  // Constants {{{2
+  // Constants
 
   /**
    * Number of elements required in array for storing field and group values.
@@ -53,7 +53,7 @@ public abstract class ECCProvider {
    */
   protected final int[] group_order;
 
-  // Intermediate values {{{2
+  // Intermediate values
   private int[] h;
   private int[] t1;
   private int[] t2;
@@ -72,7 +72,7 @@ public abstract class ECCProvider {
    */
   private final AffinePoint qPoint;
 
-  // Constructor and cleanup operations {{{2
+  // Constructor and cleanup operations
 
   /**
    * Construct a new ECCProvider given the constants for configuration.
@@ -151,7 +151,7 @@ public abstract class ECCProvider {
     qPoint.clear();
   }
 
-  // Static large word operations {{{2
+  // Static large word operations
 
   /** Let w = z -p, and return carry bit. */
   static private boolean is_zero(int[] x) {
@@ -227,8 +227,8 @@ public abstract class ECCProvider {
   public abstract void field_red(int[] z, int[] a);
   public abstract int field_red_aux(int[] z, int[] a);
 
-  // Abstract operations {{{2
-  // Large word operations {{{3
+  // Abstract operations
+  // Large word operations
   /**
    * Assigns z = x + y, and returns carry bit.
    */
@@ -249,7 +249,7 @@ public abstract class ECCProvider {
    */
   protected abstract int sub(int[] z, int[] x, int[] y);
 
-  // Field operations {{{3
+  // Field operations
 
   /**
    * Assigns x = x - field_prime, and returns carry value (0 or -1).
@@ -279,7 +279,7 @@ public abstract class ECCProvider {
    */
   protected abstract void group_mul(int[] r, int[] x, int[] y);
 
-  // Predefined field operations {{{2
+  // Predefined field operations
   /**
    * Assigns z = x + y (mod field_prime).
    */
@@ -380,7 +380,7 @@ public abstract class ECCProvider {
     if (c != 0 || leq(group_order, z)) sub(z, z, group_order);
   }
 
-  // Generic field operations {{{2
+  // Generic field operations
 
   /**
    * Assigns z = x - y (mod p).
@@ -442,7 +442,7 @@ public abstract class ECCProvider {
     if (swapped) assign(rb, ra);
   }
 
-  // Point operations {{{2
+  // Point operations
 
   /**
    * Assigns r the point represented by s.
@@ -971,7 +971,7 @@ public abstract class ECCProvider {
       }
     }
 
-  // ECDSA operations {{{2
+  // ECDSA operations
   /**
    * Attempt to sign a given hash using a randomly generated ephermeral key.
    * The signing attempt may fail with probability <code>2/group_order</code>.
@@ -1167,5 +1167,4 @@ public abstract class ECCProvider {
     cleanup();
     return false;
   }
-  // }}}2
 }

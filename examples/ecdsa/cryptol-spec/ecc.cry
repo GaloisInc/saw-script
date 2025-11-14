@@ -11,7 +11,7 @@ import p384_field
 import p384_ec_point_ops
 import p384_ec_mul
 
-/* Scalar multiply operations {{{1 */
+/* Scalar multiply operations */
 
 
 test_params : ([384], AffinePoint [384], [384], AffinePoint [384])
@@ -27,7 +27,7 @@ test_params =
     , y=0x4d6b2b937c85b3c0c3cd2df85e9307cc89e0093f336af3b4531aa126bbdbec466562d8aa0dc1cf360fc1f1d0951e3ad1
     })
 
-/* ECDSA Operations {{{1 */
+/* ECDSA Operations */
 
 /** Operations for ECDSA abstraction layer */
 type Curve fv gv = {
@@ -120,9 +120,9 @@ ecdsa_public_verify_imp(c, e, (r, s), q)
     carrybits = (sum < r) && (sum < p384_group_size)
     k = f.mul(sum, r2zsq)
 
-/* P384 reference definitions {{{1 */
+/* P384 reference definitions */
 
-/* Utility functions {{{2 */
+/* Utility functions */
 
 type RsltWithCarry a b = { carrybits : a , rslt : b }
 
@@ -138,17 +138,17 @@ p384_decFieldPrime x = { carrybits = if (bs @ 0) then -1 else 0
                        }
   where bs = safe_sub(x, p384_prime)
 
-/* P384 modular arithmetic definitions. {{{2 */
+/* P384 modular arithmetic definitions. */
 
 
-/* P384 field definitions. {{{2 */
+/* P384 field definitions. */
 
 
 p384_field_cube(x)       = p384_field_mul(x, p384_field_sq(x))
 
-/* P384 group field operations {{{2 */
+/* P384 group field operations */
 
-/** P384 curve operations {{{2 */
+/** P384 curve operations */
 
 p384_base : AffinePoint [384]
 p384_base = nzAffinePoint(
@@ -179,7 +179,7 @@ p384_ecdsa_public_verify : ([384], [384], [384], AffinePoint [384]) -> Bit
 p384_ecdsa_public_verify(e,pr,ps,q) =
   ecdsa_public_verify_imp(p384_curve,e,(pr,ps),q)
 
-/* P384 test code {{{2 */
+/* P384 test code */
 
 /* Curve "a" parameter, defined in [FIPS-186-3, page 87] to be -3 */
 p384_a : [384]
@@ -215,6 +215,6 @@ p384_is_affine_point p =
   p384_field_add(p384_field_cube(p.x),
                  p384_field_add(p384_field_mul(p384_a, p.x), p384_b))
 
-/* P384 implementation curve definition {{{1 */
+/* P384 implementation curve definition */
 
-/* Chunked arithmetic routines {{{2 */
+/* Chunked arithmetic routines */

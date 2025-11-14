@@ -49,7 +49,7 @@ module SAWCentral.JavaExpr
   , JavaType(..)
   ) where
 
--- Imports {{{2
+-- Imports
 
 import Control.Monad.Trans
 import Control.Monad.Trans.Except
@@ -82,7 +82,7 @@ data MethodLocation
    | LineExact Integer
   deriving (Show)
 
--- JavaExpr {{{1
+-- JavaExpr
 
 data JavaExprF v
   = ReturnVal JSS.Type
@@ -188,7 +188,7 @@ exprDepth _ = 1
 isScalarExpr :: JavaExpr -> Bool
 isScalarExpr = JSS.isPrimitiveType . exprType
 
--- LogicExpr {{{1
+-- LogicExpr
 
 data LogicExpr =
   LogicExpr { -- | A term, possibly function type, which does _not_
@@ -215,7 +215,7 @@ useLogicExpr sc (LogicExpr t _) args = scApplyAll sc t args
 typeOfLogicExpr :: SharedContext -> LogicExpr -> IO Term
 typeOfLogicExpr sc (LogicExpr t _) = scTypeOf sc t
 
--- MixedExpr {{{1
+-- MixedExpr
 
 -- | A logic or Java expression.
 data MixedExpr

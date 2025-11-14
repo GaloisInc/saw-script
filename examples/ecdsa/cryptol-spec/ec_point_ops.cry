@@ -62,7 +62,7 @@ ec_jacobian_eq(f, a, b)
 	bz2 = f.sq(b.z)
 	bz3 = f.mul(b.z, bz2)
 
-/* Point operations {{{1 */
+/* Point operations */
 
 type PointOps fv gv = {
        field : FieldRep fv

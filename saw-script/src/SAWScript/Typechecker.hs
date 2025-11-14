@@ -47,7 +47,7 @@ type TyEnv = Map Name (PrimitiveLifecycle, NamedType)
 
 
 ------------------------------------------------------------
--- UnifyVars {{{
+-- UnifyVars
 
 --
 -- unifyVars is a type-class-polymorphic function for extracting
@@ -86,11 +86,9 @@ instance UnifyVars NamedType where
     ConcreteType ty -> unifyVars ty
     AbstractType _kind -> Map.empty
 
--- }}}
-
 
 ------------------------------------------------------------
--- Substitutions {{{
+-- Substitutions
 
 -- Subst is the type of a substitution map for unification vars.
 newtype Subst = Subst { unSubst :: Map TypeIndex Type } deriving (Show)
@@ -249,11 +247,9 @@ instance AppSubst NamedType where
     ConcreteType ty -> ConcreteType $ appSubst s ty
     AbstractType kind -> AbstractType kind
 
--- }}}
-
 
 ------------------------------------------------------------
--- Context names {{{
+-- Context names
 
 -- Type errors include a "context name" that's typically the name (and
 -- position) of the enclosing function. This should probably be removed
@@ -266,11 +262,9 @@ instance Show ContextName where
   show (ContextName pos name) = show name ++ " (" ++ show pos ++ ")"
 
 
--- }}}
-
 
 ------------------------------------------------------------
--- Pass context {{{
+-- Pass context
 
 --
 -- The monad for this pass is "TI", which is composed of a "readonly"
@@ -477,11 +471,9 @@ patternBindingsWithSchema pat sch =
             concat $ zipWith once ps ts'
           _ -> []
 
--- }}}
-
 
 ------------------------------------------------------------
--- Unification {{{
+-- Unification
 
 --
 -- Error reporting.
@@ -804,11 +796,9 @@ matches t1 t2 = do
     Right _ -> return True
     Left _ -> return False
 
--- }}}
-
 
 ------------------------------------------------------------
--- Inspect for free type variables {{{
+-- Inspect for free type variables
 
 -- We want to allow declaring polymorphic functions by introducing
 -- type variables in the function header (rather than requiring an
@@ -899,11 +889,9 @@ inspectDeclFTVs (Decl _dpos pat _mty e0) = do
     return $ Map.unions [nameFTVs, argFTVs, retFTVs]
 
 
--- }}}
-
 
 ------------------------------------------------------------
--- Main recursive pass {{{
+-- Main recursive pass
 
 type OutExpr = Expr
 type OutStmt = Stmt
@@ -1920,11 +1908,9 @@ checkType kind ty = case ty of
       -- need to do anything.
       return ty
 
--- }}}
-
 
 ------------------------------------------------------------
--- External interface {{{
+-- External interface
 
 -- Some short names for use in the signatures below
 type MsgList = [(Pos, String)]
@@ -2104,8 +2090,6 @@ checkSchemaPattern _avail _env _tenv pat =
     -- to keep this hook and keep knowledge of its internals private
     -- here even though for now it's a nop.
     (Right pat, [])
-
--- }}}
 
 
 {-

@@ -107,7 +107,7 @@ unifyVarPanic who what =
     panic ("search / " <> who) [what <> " contained a unification var"]
 
 ------------------------------------------------------------
--- Exact matching {{{
+-- Exact matching
 
 -- | Match two types exactly (no alpha equivalence, no substitutions, etc.)
 --
@@ -135,11 +135,9 @@ matchExact ty1 ty2 = case (ty1, ty2) of
     (TyUnifyVar _ _, _) ->
         False
 
--- }}}
-
 
 ------------------------------------------------------------
--- Substitutions {{{
+-- Substitutions
 
 -- | A single match candidate
 --
@@ -230,11 +228,9 @@ data Match = Match {
     mTgtForalls :: Set Name   -- ^ forall-bound tyvars in the match target
  }
 
--- }}}
-
 
 ------------------------------------------------------------
--- Selectivity {{{
+-- Selectivity
 
 -- | Compare two type pattern fragments by how selective they are.
 -- Approximately.
@@ -278,11 +274,9 @@ compareBySelectivity ctx ty1 ty2 =
           TyUnifyVar _pos _x ->
               unifyVarPanic "compareBySelectivity" "pattern"
 
--- }}}
-
 
 ------------------------------------------------------------
--- Full matching {{{
+-- Full matching
 
 -- Match types according to a current substitution, on the assumption
 -- that the target type and pattern must correspond fully.
@@ -401,11 +395,9 @@ matchFullAllPairs ctx cand0 pairs =
           Just cand -> matchFullOnce ctx cand tgtType patType
     in foldr once (Just cand0) pairs
 
--- }}}
-
 
 ------------------------------------------------------------
--- Fragment matching {{{
+-- Fragment matching
 
 -- Match a target type against a pattern, trying to find a subsection
 -- of the target type that the pattern successfully matches. Since in
@@ -468,11 +460,9 @@ matchFragList ctx cand0 tgtType patTypes =
     in
     foldr oneType (Set.singleton cand0) patTypes'
 
--- }}}
-
 
 ------------------------------------------------------------
--- External interface {{{
+-- External interface
 
 -- | Check and compile a type schema pattern.
 --
@@ -516,5 +506,3 @@ matchSearchPattern pattern (Forall tgtForallList tgtType) =
       cands = matchFragList ctx emptyCandidate tgtType (spTypes pattern)
   in
   not $ Set.null cands
-
--- }}}
