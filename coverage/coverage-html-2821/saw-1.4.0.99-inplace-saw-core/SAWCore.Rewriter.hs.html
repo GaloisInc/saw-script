@@ -718,7 +718,7 @@ span.spaces    { background: white }
 <span class="lineno">  699 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex c) mm of</span>
 <span class="lineno">  700 </span><span class="spaces">           </span><span class="istickedoff">Just (ResolvedCtor ctor) -&gt;</span>
 <span class="lineno">  701 </span><span class="spaces">             </span><span class="istickedoff">Just &lt;$&gt; scReduceRecursor sc r crec params motive elims c (drop (ctorNumParams ctor) args)</span>
-<span class="lineno">  702 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; pure Nothing</span>
+<span class="lineno">  702 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure Nothing</span></span>
 <span class="lineno">  703 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm _ _ = pure Nothing</span></span>
 <span class="lineno">  704 </span>
 <span class="lineno">  705 </span>-- | Rewriter for shared terms.  The annotations of any used rules are collected
