@@ -52,7 +52,6 @@ module SAWCore.SharedTerm
     -- ** Recursors and datatypes
   , scRecursorType
   , scReduceRecursor
-  , scReduceNatRecursor
   , allowedElimSort
   , scBuildCtor
     -- ** Modules
@@ -1157,27 +1156,6 @@ ctorIotaReduction sc ctor r cs_fs args =
           panic "ctorIotaReduction"
           ["no eliminator for constructor " <> toAbsoluteName (nameInfo (ctorName ctor))]
 
--- | Reduce an application of a recursor to a concrete nat value.
---   The given recursor value is assumed to be correctly-typed
---   for the @Nat@ datatype.  It will reduce using either the
---   elimiation function for @Zero@ or @Succ@, depending on
---   the concrete value of the @Nat@.
-scReduceNatRecursor ::
-  SharedContext ->
-  Term {- ^ eliminator function for @Zero@ -} ->
-  Term {- ^ eliminator function for @Succ@ -} ->
-  Natural {- ^ Concrete natural value to eliminate -} ->
-  IO Term
-scReduceNatRecursor sc f1 f2 = go
-  where
-    go :: Natural -> IO Term
-    go n
-      | n == 0 = pure f1
-      | otherwise =
-          do x <- go (pred n)
-             n' <- scNat sc (pred n)
-             scApplyAll sc f2 [n', x]
-
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
 
@@ -1211,8 +1189,6 @@ scWhnf sc t0 =
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
-    go (ElimRecursor _r _params _crec _motive [f1, f2] [] : xs)
-                              (asNat -> Just n)                 = scReduceNatRecursor sc f1 f2 n >>= go xs
     go xs                     (asRecursorApp -> Just (r, crec)) | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
                                                                 , Just (elims, xs2) <- splitApps (length (recursorCtorOrder crec)) xs1
                                                                 , Just (ixs, ElimApp x : xs') <- splitApps (recursorNumIxs crec) xs2
