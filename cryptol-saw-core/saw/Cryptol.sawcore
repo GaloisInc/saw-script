@@ -1866,6 +1866,57 @@ ecArrayRangeEq : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool
 ecArrayRangeEq = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool) arrayRangeEq;
 
 --------------------------------------------------------------------------------
+-- GF2 Polynomial Primitives
+
+addNat_1 : (n : Nat) -> Eq Nat (addNat 1 n) (Succ n);
+addNat_1 =
+  Nat#rec
+  (\ (n : Nat) -> Eq Nat (addNat 1 n) (Succ n))
+  (Refl Nat 1)
+  (\ (x : Pos) -> Refl Nat (NatPos (posInc x)));
+
+ecPmult :
+  (u v : Num) ->
+  seq (tcAdd (TCNum 1) u) Bool ->
+  seq (tcAdd (TCNum 1) v) Bool ->
+  seq (tcAdd (TCNum 1) (tcAdd u v)) Bool;
+ecPmult =
+  finNumRec2
+  (\ (u v : Num) ->
+   seq (tcAdd (TCNum 1) u) Bool ->
+   seq (tcAdd (TCNum 1) v) Bool ->
+   seq (tcAdd (TCNum 1) (tcAdd u v)) Bool
+  )
+  (\ (u v : Nat) ->
+   \ (x : Vec (addNat 1 u) Bool) ->
+   \ (y : Vec (addNat 1 v) Bool) ->
+   coerceVec Bool (Succ (addNat u v)) (addNat 1 (addNat u v))
+   (sym Nat (addNat 1 (addNat u v)) (Succ (addNat u v)) (addNat_1 (addNat u v)))
+   (polyMul u v
+    (coerceVec Bool (addNat 1 u) (Succ u) (addNat_1 u) x)
+    (coerceVec Bool (addNat 1 v) (Succ v) (addNat_1 v) y)
+   )
+  );
+
+ecPmod :
+  (u v : Num) ->
+  seq u Bool ->
+  seq (tcAdd (TCNum 1) v) Bool ->
+  seq v Bool;
+ecPmod =
+  finNumRec2
+  (\ (u v : Num) ->
+   seq u Bool ->
+   seq (tcAdd (TCNum 1) v) Bool ->
+   seq v Bool
+  )
+  (\ (u v : Nat) ->
+   \ (x : Vec u Bool) ->
+   \ (y : Vec (addNat 1 v) Bool) ->
+   polyMod u v x (coerceVec Bool (addNat 1 v) (Succ v) (addNat_1 v) y)
+  );
+
+--------------------------------------------------------------------------------
 -- Suite-B Primitives
 
 AESEncRound : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
