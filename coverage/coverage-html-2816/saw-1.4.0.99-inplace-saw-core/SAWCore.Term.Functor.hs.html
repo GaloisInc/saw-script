@@ -329,9 +329,9 @@ span.spaces    { background: white }
 <span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
 <span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' IntSet.union IntSet.empty ftf</span>
 <span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">App l r -&gt; IntSet.union l r</span>
-<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm tp rhs -&gt; IntSet.union tp (IntSet.delete (vnIndex nm) rhs)</span>
+<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm tp rhs -&gt; <span class="nottickedoff">IntSet.union tp (IntSet.delete (vnIndex nm) rhs)</span></span>
 <span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">Pi nm lhs rhs -&gt; IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)</span>
-<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; IntSet.empty</span>
+<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; <span class="nottickedoff">IntSet.empty</span></span>
 <span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp -&gt; IntSet.insert (vnIndex nm) tp</span></span>
 
 </pre>
