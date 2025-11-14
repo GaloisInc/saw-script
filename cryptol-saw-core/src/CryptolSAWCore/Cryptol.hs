@@ -950,6 +950,10 @@ prelPrims =
                                   --   (fin first, fin stride, stride >= 1, first >= bound, Literal first a) =>
                                   --   [(first - bound)/^stride]a
 
+    -- GF2 Polynomial primitives
+  , ("pmult",        flip scGlobalDef "Cryptol.ecPmult")     -- {u, v} (fin u, fin v) => [1 + u] -> [1 + v] -> [1 + (u + v)]
+  , ("pmod",         flip scGlobalDef "Cryptol.ecPmod")      -- {u, v} (fin u, fin v) => [u] -> [1 + v] -> [v]
+
     -- Evaluation primitives: deepseq, parmap
   , ("deepseq",      flip scGlobalDef "Cryptol.ecDeepseq")     -- {a, b} (Eq b) => a -> b -> b
   , ("parmap",       flip scGlobalDef "Cryptol.ecParmap")      -- {a, b, n} (Eq b, fin n) => (a -> b) -> [n]a -> [n]b
