@@ -165,7 +165,7 @@ span.spaces    { background: white }
 <span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">Set.insert (Text.pack s) $ stmtCalls stmts</span>
 <span class="lineno">  147 </span><span class="spaces"></span><span class="nottickedoff">stmtCalls (_:stmts) = stmtCalls stmts</span></span>
 <span class="lineno">  148 </span>
-<span class="lineno">  149 </span>-- Infer locations of declarations by looking at either debug records (for
+<span class="lineno">  149 </span>-- | Infer locations of declarations by looking at either debug records (for
 <span class="lineno">  150 </span>-- recent versions of LLVM) or debug-related intrinsic functions (for older
 <span class="lineno">  151 </span>-- versions of LLVM.
 <span class="lineno">  152 </span>stmtDebugDeclares :: [LLVM.Stmt] -&gt; Map Int Location
@@ -201,7 +201,7 @@ span.spaces    { background: white }
 <span class="lineno">  182 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise</span>
 <span class="lineno">  183 </span><span class="spaces">  </span><span class="nottickedoff">= Map.union (debugRecordDeclares drs) (stmtDebugDeclares stmts)</span></span>
 <span class="lineno">  184 </span>
-<span class="lineno">  185 </span>-- Infer locations of declarations by looking at @#dbg_declare@ and
+<span class="lineno">  185 </span>-- | Infer locations of declarations by looking at @#dbg_declare@ and
 <span class="lineno">  186 </span>-- @#dbg_value@ debug records.
 <span class="lineno">  187 </span>debugRecordDeclares :: [LLVM.DebugRecord] -&gt; Map Int Location
 <span class="lineno">  188 </span><span class="decl"><span class="nottickedoff">debugRecordDeclares [] = Map.empty</span>
