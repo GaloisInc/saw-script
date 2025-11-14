@@ -311,306 +311,291 @@ span.spaces    { background: white }
 <span class="lineno">  292 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
 <span class="lineno">  293 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Void&quot;, mapsTo datatypesModule &quot;Empty_set&quot;)]</span>
 <span class="lineno">  294 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  295 </span><span class="spaces">  </span><span class="nottickedoff">-- Decidable equality, does not make sense in Coq unless turned into a type</span>
-<span class="lineno">  296 </span><span class="spaces">  </span><span class="nottickedoff">-- class</span>
-<span class="lineno">  297 </span><span class="spaces">  </span><span class="nottickedoff">-- Apparently, this is not used much for Cryptol, so we can skip it.</span>
-<span class="lineno">  298 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  299 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;eq&quot;,            skip) -- MapsTo $ mkCoqIdent sawDefinitionsModule &quot;eq&quot;)</span>
-<span class="lineno">  300 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eq_bitvector&quot;,  skip)</span>
-<span class="lineno">  301 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eq_Bool&quot;,       skip) -- MapsTo $ mkCoqIdent &quot;CryptolToCoq.SAW&quot; &quot;eq_Bool&quot;)</span>
-<span class="lineno">  302 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eq_Nat&quot;,        skip)</span>
-<span class="lineno">  303 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eq_refl&quot;,       skip) -- MapsTo $ mkCoqIdent &quot;CryptolToCoq.SAW&quot; &quot;eq_refl&quot;)</span>
-<span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eq_VecBool&quot;,    skip)</span>
-<span class="lineno">  305 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eq_VecVec&quot;,     skip)</span>
-<span class="lineno">  306 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_eq_cong_1&quot;, skip)</span>
-<span class="lineno">  307 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_eq_cong_2&quot;, skip)</span>
-<span class="lineno">  308 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  309 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  310 </span><span class="spaces">  </span><span class="nottickedoff">-- Boolean</span>
-<span class="lineno">  311 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  312 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Bool&quot;,          mapsTo datatypesModule &quot;bool&quot;)</span>
-<span class="lineno">  313 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;True&quot;,          mapsTo datatypesModule &quot;true&quot;)</span>
-<span class="lineno">  314 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;False&quot;,         mapsTo datatypesModule &quot;false&quot;)</span>
-<span class="lineno">  315 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;and&quot;,           mapsTo datatypesModule &quot;andb&quot;)</span>
-<span class="lineno">  316 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;and__eq&quot;,       mapsTo sawDefinitionsModule &quot;and__eq&quot;)</span>
-<span class="lineno">  317 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;or&quot;,            mapsTo datatypesModule &quot;orb&quot;)</span>
-<span class="lineno">  318 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;or__eq&quot;,        mapsTo sawDefinitionsModule &quot;or__eq&quot;)</span>
-<span class="lineno">  319 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;xor&quot;,           mapsTo datatypesModule &quot;xorb&quot;)</span>
-<span class="lineno">  320 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;xor__eq&quot;,       mapsTo sawDefinitionsModule &quot;xor__eq&quot;)</span>
-<span class="lineno">  321 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;not&quot;,           mapsTo datatypesModule &quot;negb&quot;)</span>
-<span class="lineno">  322 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;not__eq&quot;,       mapsTo sawDefinitionsModule &quot;not__eq&quot;)</span>
-<span class="lineno">  323 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;boolEq&quot;,        mapsTo sawDefinitionsModule &quot;boolEq&quot;)</span>
-<span class="lineno">  324 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;boolEq__eq&quot;,    mapsTo sawDefinitionsModule &quot;boolEq__eq&quot;)</span>
-<span class="lineno">  325 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite&quot;,           mapsTo sawDefinitionsModule &quot;ite&quot;)</span>
-<span class="lineno">  326 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;iteDep&quot;,        mapsTo sawDefinitionsModule &quot;iteDep&quot;)</span>
-<span class="lineno">  327 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;iteDep_True&quot;,   mapsTo sawDefinitionsModule &quot;iteDep_True&quot;)</span>
-<span class="lineno">  328 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;iteDep_False&quot;,  mapsTo sawDefinitionsModule &quot;iteDep_False&quot;)</span>
-<span class="lineno">  329 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_bit&quot;,       skip) -- FIXME: change this</span>
-<span class="lineno">  330 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_eq_iteDep&quot;, mapsTo sawDefinitionsModule &quot;ite_eq_iteDep&quot;)</span>
-<span class="lineno">  331 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  332 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  333 </span><span class="spaces">  </span><span class="nottickedoff">-- Pairs</span>
-<span class="lineno">  334 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  335 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;PairType&quot;,  mapsTo sawDefinitionsModule &quot;PairType&quot;)</span>
-<span class="lineno">  336 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;PairValue&quot;, mapsTo sawDefinitionsModule &quot;PairValue&quot;)</span>
-<span class="lineno">  337 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Pair__rec&quot;, mapsTo sawDefinitionsModule &quot;Pair__rec&quot;)</span>
-<span class="lineno">  338 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;fst&quot;,       replaceDropArgs 2 $ Coq.Var &quot;fst&quot;)</span>
-<span class="lineno">  339 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;snd&quot;,       replaceDropArgs 2 $ Coq.Var &quot;snd&quot;)</span>
-<span class="lineno">  340 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  341 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  342 </span><span class="spaces">  </span><span class="nottickedoff">-- Equality</span>
-<span class="lineno">  343 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  344 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Eq&quot;,      mapsToExpl logicModule &quot;eq&quot;)</span>
-<span class="lineno">  345 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Eq__rec&quot;, mapsTo sawDefinitionsModule &quot;Eq__rec&quot;)</span>
-<span class="lineno">  346 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Refl&quot;,    mapsToExpl logicModule &quot;eq_refl&quot;)</span>
-<span class="lineno">  347 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  348 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="nottickedoff">-- Nat le/lt</span>
-<span class="lineno">  350 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  351 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;IsLeNat&quot;     , mapsTo sawDefinitionsModule &quot;IsLeNat&quot;)</span>
-<span class="lineno">  352 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLeNat__rec&quot;, mapsTo sawDefinitionsModule &quot;IsLeNat__rec&quot;)</span>
-<span class="lineno">  353 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLeNat_base&quot;, mapsTo sawDefinitionsModule &quot;IsLeNat_base&quot;)</span>
-<span class="lineno">  354 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLeNat_succ&quot;, mapsTo sawDefinitionsModule &quot;IsLeNat_succ&quot;)</span>
-<span class="lineno">  355 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLtNat&quot;     , mapsTo sawDefinitionsModule &quot;IsLtNat&quot;)</span>
-<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  357 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  358 </span><span class="spaces">  </span><span class="nottickedoff">-- Strings</span>
-<span class="lineno">  359 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  360 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;String&quot;, mapsTo stringModule &quot;string&quot;)</span>
-<span class="lineno">  361 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;equalString&quot;, mapsTo sawDefinitionsModule &quot;equalString&quot;)</span>
-<span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;appendString&quot;, mapsTo sawDefinitionsModule &quot;appendString&quot;)</span>
-<span class="lineno">  363 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  364 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  365 </span><span class="spaces">  </span><span class="nottickedoff">-- Utility functions</span>
-<span class="lineno">  366 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  367 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;id&quot;, mapsTo datatypesModule &quot;id&quot;)</span>
-<span class="lineno">  368 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  369 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  370 </span><span class="spaces">  </span><span class="nottickedoff">-- Natural numbers</span>
-<span class="lineno">  371 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  372 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;divModNat&quot;, mapsTo sawDefinitionsModule &quot;divModNat&quot;)</span>
-<span class="lineno">  373 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Nat&quot;,       mapsTo datatypesModule &quot;nat&quot;)</span>
-<span class="lineno">  374 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;widthNat&quot;,  mapsTo sawDefinitionsModule &quot;widthNat&quot;)</span>
-<span class="lineno">  375 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Zero&quot;,      mapsTo sawDefinitionsModule &quot;Zero&quot;)</span>
-<span class="lineno">  376 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Succ&quot;,      mapsTo sawDefinitionsModule &quot;Succ&quot;)</span>
-<span class="lineno">  377 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;addNat&quot;,    mapsTo sawDefinitionsModule &quot;addNat&quot;)</span>
-<span class="lineno">  378 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;subNat&quot;,    mapsTo sawDefinitionsModule &quot;subNat&quot;)</span>
-<span class="lineno">  379 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;mulNat&quot;,    mapsTo sawDefinitionsModule &quot;mulNat&quot;)</span>
-<span class="lineno">  380 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;expNat&quot;,    mapsTo sawDefinitionsModule &quot;expNat&quot;)</span>
-<span class="lineno">  381 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;equalNat&quot;,  mapsTo sawDefinitionsModule &quot;equalNat&quot;)</span>
-<span class="lineno">  382 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ltNat&quot;,     mapsTo sawDefinitionsModule &quot;ltNat&quot;)</span>
-<span class="lineno">  383 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;leNat&quot;,     mapsTo sawDefinitionsModule &quot;leNat&quot;)</span>
-<span class="lineno">  384 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;minNat&quot;,    mapsTo sawDefinitionsModule &quot;minNat&quot;)</span>
-<span class="lineno">  385 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;maxNat&quot;,    mapsTo sawDefinitionsModule &quot;maxNat&quot;)</span>
-<span class="lineno">  386 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Nat__rec&quot;,  mapsTo sawDefinitionsModule &quot;Nat__rec&quot;)</span>
-<span class="lineno">  387 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;if0Nat&quot;,    mapsTo sawDefinitionsModule &quot;if0Nat&quot;)</span>
-<span class="lineno">  388 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  389 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  390 </span><span class="spaces">  </span><span class="nottickedoff">-- Binary numerals</span>
-<span class="lineno">  391 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  392 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Pos&quot;,       mapsTo binPosModule &quot;positive&quot;)</span>
-<span class="lineno">  393 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;One&quot;,       mapsTo binPosModule &quot;xH&quot;)</span>
-<span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Bit0&quot;,      mapsTo binPosModule &quot;xO&quot;)</span>
-<span class="lineno">  395 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Bit1&quot;,      mapsTo binPosModule &quot;xI&quot;)</span>
-<span class="lineno">  396 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;posInc&quot;,    mapsTo binPosModule &quot;Pos.succ&quot;)</span>
-<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;posAdd&quot;,    mapsTo binPosModule &quot;add&quot;)</span>
-<span class="lineno">  398 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;posMul&quot;,    mapsTo binPosModule &quot;mul&quot;)</span>
-<span class="lineno">  399 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;posExp&quot;,    mapsTo binPosModule &quot;pow&quot;)</span>
-<span class="lineno">  400 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqPos&quot;,     mapsTo binPosModule &quot;eqb&quot;)</span>
-<span class="lineno">  401 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;NatPos&quot;,    mapsTo binPosModule &quot;Pos.to_nat&quot;)</span>
-<span class="lineno">  402 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;BitM&quot;,      mapsTo binPosModule &quot;Pos.pred_double&quot;)</span>
-<span class="lineno">  403 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Pos_cases&quot;, mapsTo sawDefinitionsModule &quot;Pos_cases&quot;)</span>
-<span class="lineno">  404 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessiblePos&quot;,        skip)</span>
-<span class="lineno">  405 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessiblePos_Bit0&quot;,   skip)</span>
-<span class="lineno">  406 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessiblePos_Bit1&quot;,   skip)</span>
-<span class="lineno">  407 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessiblePos_all&quot;,    skip)</span>
-<span class="lineno">  408 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessibleNat&quot;,        skip)</span>
-<span class="lineno">  409 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessibleNat_NatPos&quot;, skip)</span>
-<span class="lineno">  410 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessibleNat_all&quot;,    skip)</span>
-<span class="lineno">  411 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Z&quot;,         mapsTo binIntModule &quot;Z&quot;)</span>
-<span class="lineno">  412 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ZZero&quot;,     mapsTo binIntModule &quot;Z0&quot;)</span>
-<span class="lineno">  413 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ZPos&quot;,      mapsTo binIntModule &quot;Zpos&quot;)</span>
-<span class="lineno">  414 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ZNeg&quot;,      mapsTo binIntModule &quot;Zneg&quot;)</span>
-<span class="lineno">  415 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;subNZ&quot;,     skip)</span>
-<span class="lineno">  416 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  417 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  418 </span><span class="spaces">  </span><span class="nottickedoff">-- Vectors</span>
-<span class="lineno">  419 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  420 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;EmptyVec&quot;,      mapsTo vectorsModule &quot;EmptyVec&quot;)</span>
-<span class="lineno">  421 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;at&quot;,            rename &quot;sawAt&quot;) -- `at` is a reserved keyword in Coq</span>
-<span class="lineno">  422 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;atWithDefault&quot;, mapsTo vectorsModule &quot;atWithDefault&quot;)</span>
-<span class="lineno">  423 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;atWithProof&quot;,   mapsTo vectorsModule &quot;atWithProof&quot;)</span>
-<span class="lineno">  424 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;at_single&quot;,     skip) -- is boring, could be proved on the Coq side</span>
-<span class="lineno">  425 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvAdd&quot;,         mapsTo vectorsModule &quot;bvAdd&quot;)</span>
-<span class="lineno">  426 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvLg2&quot;,         mapsTo vectorsModule &quot;bvLg2&quot;)</span>
-<span class="lineno">  427 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvMul&quot;,         mapsTo vectorsModule &quot;bvMul&quot;)</span>
-<span class="lineno">  428 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvNat&quot;,         mapsTo vectorsModule &quot;bvNat&quot;)</span>
-<span class="lineno">  429 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvNeg&quot;,         mapsTo vectorsModule &quot;bvNeg&quot;)</span>
-<span class="lineno">  430 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvSDiv&quot;,        mapsTo vectorsModule &quot;bvSDiv&quot;)</span>
-<span class="lineno">  431 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvSRem&quot;,        mapsTo vectorsModule &quot;bvSRem&quot;)</span>
-<span class="lineno">  432 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvSShr&quot;,        mapsTo vectorsModule &quot;bvSShr&quot;)</span>
-<span class="lineno">  433 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvSub&quot;,         mapsTo vectorsModule &quot;bvSub&quot;)</span>
-<span class="lineno">  434 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvToNat&quot;,       mapsTo vectorsModule &quot;bvToNat&quot;)</span>
-<span class="lineno">  435 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvUDiv&quot;,        mapsTo vectorsModule &quot;bvUDiv&quot;)</span>
-<span class="lineno">  436 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvURem&quot;,        mapsTo vectorsModule &quot;bvURem&quot;)</span>
-<span class="lineno">  437 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvsge&quot;,         mapsTo vectorsModule &quot;bvsge&quot;)</span>
-<span class="lineno">  438 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvsgt&quot;,         mapsTo vectorsModule &quot;bvsgt&quot;)</span>
-<span class="lineno">  439 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvsle&quot;,         mapsTo vectorsModule &quot;bvsle&quot;)</span>
-<span class="lineno">  440 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvslt&quot;,         mapsTo vectorsModule &quot;bvslt&quot;)</span>
-<span class="lineno">  441 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvult&quot;,         mapsTo vectorsModule &quot;bvult&quot;)</span>
-<span class="lineno">  442 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvule&quot;,         mapsTo vectorsModule &quot;bvule&quot;)</span>
-<span class="lineno">  443 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;coerceVec&quot;,     mapsTo vectorsModule &quot;coerceVec&quot;)</span>
-<span class="lineno">  444 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eq_Vec&quot;,        skip)</span>
-<span class="lineno">  445 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldr&quot;,         mapsTo vectorsModule &quot;foldr&quot;)</span>
-<span class="lineno">  446 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldr_nil&quot;,     mapsTo vectorsModule &quot;foldr_nil&quot;)</span>
-<span class="lineno">  447 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldr_cons&quot;,    mapsTo vectorsModule &quot;foldr_cons&quot;)</span>
-<span class="lineno">  448 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldl&quot;,         mapsTo vectorsModule &quot;foldl&quot;)</span>
-<span class="lineno">  449 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldl_nil&quot;,     mapsTo vectorsModule &quot;foldl_nil&quot;)</span>
-<span class="lineno">  450 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldl_cons&quot;,    mapsTo vectorsModule &quot;foldl_cons&quot;)</span>
-<span class="lineno">  451 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;genWithProof&quot;,  mapsTo vectorsModule &quot;genWithProof&quot;)</span>
-<span class="lineno">  452 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;scanl&quot;,         mapsTo vectorsModule &quot;scanl&quot;)</span>
-<span class="lineno">  453 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;gen&quot;,           mapsTo vectorsModule &quot;gen&quot;)</span>
-<span class="lineno">  454 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;rotateL&quot;,       mapsTo vectorsModule &quot;rotateL&quot;)</span>
-<span class="lineno">  455 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;rotateR&quot;,       mapsTo vectorsModule &quot;rotateR&quot;)</span>
-<span class="lineno">  456 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;shiftL&quot;,        mapsTo vectorsModule &quot;shiftL&quot;)</span>
-<span class="lineno">  457 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;shiftR&quot;,        mapsTo vectorsModule &quot;shiftR&quot;)</span>
-<span class="lineno">  458 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;take0&quot;,         skip)</span>
-<span class="lineno">  459 </span><span class="spaces">  </span><span class="nottickedoff">-- zip must be realized in-place because it both depends on definitions and is</span>
-<span class="lineno">  460 </span><span class="spaces">  </span><span class="nottickedoff">-- used by other definitions in the same file, so it can neither be pre- nor</span>
-<span class="lineno">  461 </span><span class="spaces">  </span><span class="nottickedoff">-- post-defined.</span>
-<span class="lineno">  462 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;zip&quot;,           realize zipSnippet)</span>
-<span class="lineno">  463 </span><span class="spaces">  </span><span class="nottickedoff">-- cannot map directly to Vector.t because arguments are in a different order</span>
-<span class="lineno">  464 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Vec&quot;,           mapsTo vectorsModule &quot;Vec&quot;)</span>
-<span class="lineno">  465 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;head&quot;,          mapsTo vectorsModule &quot;head&quot;)</span>
-<span class="lineno">  466 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;tail&quot;,          mapsTo vectorsModule &quot;tail&quot;)</span>
-<span class="lineno">  467 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;head_gen&quot;,      mapsTo vectorsModule &quot;head_gen&quot;)</span>
-<span class="lineno">  468 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;tail_gen&quot;,      mapsTo vectorsModule &quot;tail_gen&quot;)</span>
-<span class="lineno">  469 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  470 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  471 </span><span class="spaces">  </span><span class="nottickedoff">-- Streams</span>
-<span class="lineno">  472 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  473 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;streamScanl&quot;,   mapsTo preludeExtraModule &quot;streamScanl&quot;)</span>
-<span class="lineno">  474 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  475 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  476 </span><span class="spaces">  </span><span class="nottickedoff">-- Integers</span>
-<span class="lineno">  477 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  478 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Integer&quot;,  mapsTo sawDefinitionsModule &quot;Integer&quot;)</span>
-<span class="lineno">  479 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intAdd&quot;,   mapsTo sawDefinitionsModule &quot;intAdd&quot;)</span>
-<span class="lineno">  480 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intSub&quot;,   mapsTo sawDefinitionsModule &quot;intSub&quot;)</span>
-<span class="lineno">  481 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intMul&quot;,   mapsTo sawDefinitionsModule &quot;intMul&quot;)</span>
-<span class="lineno">  482 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intDiv&quot;,   mapsTo sawDefinitionsModule &quot;intDiv&quot;)</span>
-<span class="lineno">  483 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intMod&quot;,   mapsTo sawDefinitionsModule &quot;intMod&quot;)</span>
-<span class="lineno">  484 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intMin&quot;,   mapsTo sawDefinitionsModule &quot;intMin&quot;)</span>
-<span class="lineno">  485 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intMax&quot;,   mapsTo sawDefinitionsModule &quot;intMax&quot;)</span>
-<span class="lineno">  486 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intNeg&quot;,   mapsTo sawDefinitionsModule &quot;intNeg&quot;)</span>
-<span class="lineno">  487 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intAbs&quot;,   mapsTo sawDefinitionsModule &quot;intAbs&quot;)</span>
-<span class="lineno">  488 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intEq&quot;,    mapsTo sawDefinitionsModule &quot;intEq&quot;)</span>
-<span class="lineno">  489 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intLe&quot;,    mapsTo sawDefinitionsModule &quot;intLe&quot;)</span>
-<span class="lineno">  490 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intLt&quot;,    mapsTo sawDefinitionsModule &quot;intLt&quot;)</span>
-<span class="lineno">  491 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intToNat&quot;, mapsTo sawDefinitionsModule &quot;intToNat&quot;)</span>
-<span class="lineno">  492 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;natToInt&quot;, mapsTo sawDefinitionsModule &quot;natToInt&quot;)</span>
-<span class="lineno">  493 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intToBv&quot;,  mapsTo vectorsModule &quot;intToBv&quot;)</span>
-<span class="lineno">  494 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvToInt&quot;,  mapsTo vectorsModule &quot;bvToInt&quot;)</span>
-<span class="lineno">  495 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;sbvToInt&quot;, mapsTo vectorsModule &quot;sbvToInt&quot;)</span>
-<span class="lineno">  496 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  497 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  498 </span><span class="spaces">  </span><span class="nottickedoff">-- Modular integers</span>
-<span class="lineno">  499 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  500 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;IntMod&quot;,     mapsTo sawDefinitionsModule &quot;IntMod&quot;)</span>
-<span class="lineno">  501 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;toIntMod&quot;,   mapsTo sawDefinitionsModule &quot;toIntMod&quot;)</span>
-<span class="lineno">  502 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;fromIntMod&quot;, mapsTo sawDefinitionsModule &quot;fromIntMod&quot;)</span>
-<span class="lineno">  503 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModEq&quot;,   mapsTo sawDefinitionsModule &quot;intModEq&quot;)</span>
-<span class="lineno">  504 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModAdd&quot;,  mapsTo sawDefinitionsModule &quot;intModAdd&quot;)</span>
-<span class="lineno">  505 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModSub&quot;,  mapsTo sawDefinitionsModule &quot;intModSub&quot;)</span>
-<span class="lineno">  506 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModMul&quot;,  mapsTo sawDefinitionsModule &quot;intModMul&quot;)</span>
-<span class="lineno">  507 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModNeg&quot;,  mapsTo sawDefinitionsModule &quot;intModNeg&quot;)</span>
-<span class="lineno">  508 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  509 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  510 </span><span class="spaces">  </span><span class="nottickedoff">-- Axioms currently skipped</span>
-<span class="lineno">  511 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  512 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;drop0&quot;,                skip)</span>
-<span class="lineno">  513 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvugt&quot;,                skip)</span>
-<span class="lineno">  514 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvuge&quot;,                skip)</span>
-<span class="lineno">  515 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvPopcount&quot;,           skip)</span>
-<span class="lineno">  516 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvCountLeadingZeros&quot;,  skip)</span>
-<span class="lineno">  517 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvCountTrailingZeros&quot;, skip)</span>
-<span class="lineno">  518 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvForall&quot;,             skip)</span>
-<span class="lineno">  519 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvAddZeroL&quot;,           skip)</span>
-<span class="lineno">  520 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvAddZeroR&quot;,           skip)</span>
-<span class="lineno">  521 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvShl&quot;,                mapsTo vectorsModule &quot;bvShl&quot;)</span>
-<span class="lineno">  522 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvShr&quot;,                mapsTo vectorsModule &quot;bvShr&quot;)</span>
-<span class="lineno">  523 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvShiftL_bvShl&quot;,       skip)</span>
-<span class="lineno">  524 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvShiftR_bvShr&quot;,       skip)</span>
-<span class="lineno">  525 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvEq_refl&quot;,            skip)</span>
-<span class="lineno">  526 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;equalNat_bv&quot;,          skip)</span>
-<span class="lineno">  527 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Float&quot;,                skip)</span>
-<span class="lineno">  528 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;mkFloat&quot;,              skip)</span>
-<span class="lineno">  529 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Double&quot;,               skip)</span>
-<span class="lineno">  530 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;mkDouble&quot;,             skip)</span>
-<span class="lineno">  531 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bveq_sameL&quot;,           skip)</span>
-<span class="lineno">  532 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bveq_sameR&quot;,           skip)</span>
-<span class="lineno">  533 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bveq_same2&quot;,           skip)</span>
-<span class="lineno">  534 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_split_cong&quot;,       skip)</span>
-<span class="lineno">  535 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_join_cong&quot;,        skip)</span>
-<span class="lineno">  536 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;map_map&quot;,              skip)</span>
-<span class="lineno">  537 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun0&quot;,            skip)</span>
-<span class="lineno">  538 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun1&quot;,            skip)</span>
-<span class="lineno">  539 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun2&quot;,            skip)</span>
-<span class="lineno">  540 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun3&quot;,            skip)</span>
-<span class="lineno">  541 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun4&quot;,            skip)</span>
-<span class="lineno">  542 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun5&quot;,            skip)</span>
-<span class="lineno">  543 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun6&quot;,            skip)</span>
-<span class="lineno">  544 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatPrec&quot;,            mapsTo sawDefinitionsModule &quot;eqNatPrec&quot;)</span>
-<span class="lineno">  545 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatAdd0&quot;,            mapsTo sawDefinitionsModule &quot;eqNatAdd0&quot;)</span>
-<span class="lineno">  546 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatAddS&quot;,            mapsTo sawDefinitionsModule &quot;eqNatAddS&quot;)</span>
-<span class="lineno">  547 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatAddComm&quot;,         mapsTo sawDefinitionsModule &quot;eqNatAddComm&quot;)</span>
-<span class="lineno">  548 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;addNat_assoc&quot;,         mapsTo sawDefinitionsModule &quot;addNat_assoc&quot;)</span>
-<span class="lineno">  549 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLtNat_Zero_absurd&quot;,  mapsTo sawDefinitionsModule &quot;IsLtNat_Zero_absurd&quot;)</span>
-<span class="lineno">  550 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLeNat_SuccSucc&quot;,     mapsTo sawDefinitionsModule &quot;IsLeNat_SuccSucc&quot;)</span>
-<span class="lineno">  551 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  552 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  553 </span><span class="spaces">  </span><span class="nottickedoff">-- Either</span>
-<span class="lineno">  554 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  555 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Either&quot;,     mapsTo datatypesModule &quot;sum&quot;)</span>
-<span class="lineno">  556 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Left&quot;,       mapsToExpl datatypesModule &quot;inl&quot;)</span>
-<span class="lineno">  557 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Right&quot;,       mapsToExpl datatypesModule &quot;inr&quot;)</span>
-<span class="lineno">  558 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  559 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  560 </span><span class="spaces">  </span><span class="nottickedoff">-- Lists</span>
-<span class="lineno">  561 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
-<span class="lineno">  562 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;List&quot;, mapsToExpl datatypesModule &quot;list&quot;)</span>
-<span class="lineno">  563 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Nil&quot;, mapsToExpl datatypesModule &quot;nil&quot;)</span>
-<span class="lineno">  564 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Cons&quot;, mapsToExpl datatypesModule &quot;cons&quot;)</span>
-<span class="lineno">  565 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;List__rec&quot;, mapsToExpl datatypesModule &quot;list_rect&quot;)</span>
-<span class="lineno">  566 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
-<span class="lineno">  567 </span>
-<span class="lineno">  568 </span>escapeIdent :: Coq.Ident -&gt; Coq.Ident
-<span class="lineno">  569 </span><span class="decl"><span class="nottickedoff">escapeIdent (Coq.Ident str)</span>
-<span class="lineno">  570 </span><span class="spaces">  </span><span class="nottickedoff">| all okChar str = Coq.Ident str</span>
-<span class="lineno">  571 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise      = Coq.Ident (&quot;Op_&quot; ++ zEncodeString str)</span>
-<span class="lineno">  572 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
-<span class="lineno">  573 </span><span class="spaces">   </span><span class="nottickedoff">okChar x = isAlphaNum x || x `elem` (&quot;_'&quot; :: String)</span></span>
-<span class="lineno">  574 </span>
-<span class="lineno">  575 </span>zipSnippet :: String
-<span class="lineno">  576 </span><span class="decl"><span class="nottickedoff">zipSnippet = [i|</span>
-<span class="lineno">  577 </span><span class="spaces"></span><span class="nottickedoff">Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)</span>
-<span class="lineno">  578 </span><span class="spaces">  </span><span class="nottickedoff">: Vec (minNat m n) (a * b) :=</span>
-<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">match</span>
-<span class="lineno">  580 </span><span class="spaces">    </span><span class="nottickedoff">xs in Vector.t _ m'</span>
-<span class="lineno">  581 </span><span class="spaces">    </span><span class="nottickedoff">return Vector.t _ (minNat m' n)</span>
-<span class="lineno">  582 </span><span class="spaces">  </span><span class="nottickedoff">with</span>
-<span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">| Vector.nil =&gt; Vector.nil _</span>
-<span class="lineno">  584 </span><span class="spaces">  </span><span class="nottickedoff">| Vector.cons x pm xs =&gt;</span>
-<span class="lineno">  585 </span><span class="spaces">    </span><span class="nottickedoff">match</span>
-<span class="lineno">  586 </span><span class="spaces">      </span><span class="nottickedoff">ys in Vector.t _ n'</span>
-<span class="lineno">  587 </span><span class="spaces">      </span><span class="nottickedoff">return Vector.t _ (minNat (S pm) n')</span>
-<span class="lineno">  588 </span><span class="spaces">    </span><span class="nottickedoff">with</span>
-<span class="lineno">  589 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.nil =&gt; Vector.nil _</span>
-<span class="lineno">  590 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.cons y pm' ys =&gt; Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)</span>
-<span class="lineno">  591 </span><span class="spaces">    </span><span class="nottickedoff">end</span>
-<span class="lineno">  592 </span><span class="spaces">  </span><span class="nottickedoff">end</span>
-<span class="lineno">  593 </span><span class="spaces"></span><span class="nottickedoff">.</span>
-<span class="lineno">  594 </span><span class="spaces"></span><span class="nottickedoff">|]</span></span>
+<span class="lineno">  295 </span><span class="spaces">  </span><span class="nottickedoff">-- Boolean</span>
+<span class="lineno">  296 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  297 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Bool&quot;,          mapsTo datatypesModule &quot;bool&quot;)</span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;True&quot;,          mapsTo datatypesModule &quot;true&quot;)</span>
+<span class="lineno">  299 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;False&quot;,         mapsTo datatypesModule &quot;false&quot;)</span>
+<span class="lineno">  300 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;and&quot;,           mapsTo datatypesModule &quot;andb&quot;)</span>
+<span class="lineno">  301 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;and__eq&quot;,       mapsTo sawDefinitionsModule &quot;and__eq&quot;)</span>
+<span class="lineno">  302 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;or&quot;,            mapsTo datatypesModule &quot;orb&quot;)</span>
+<span class="lineno">  303 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;or__eq&quot;,        mapsTo sawDefinitionsModule &quot;or__eq&quot;)</span>
+<span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;xor&quot;,           mapsTo datatypesModule &quot;xorb&quot;)</span>
+<span class="lineno">  305 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;xor__eq&quot;,       mapsTo sawDefinitionsModule &quot;xor__eq&quot;)</span>
+<span class="lineno">  306 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;not&quot;,           mapsTo datatypesModule &quot;negb&quot;)</span>
+<span class="lineno">  307 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;not__eq&quot;,       mapsTo sawDefinitionsModule &quot;not__eq&quot;)</span>
+<span class="lineno">  308 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;boolEq&quot;,        mapsTo sawDefinitionsModule &quot;boolEq&quot;)</span>
+<span class="lineno">  309 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;boolEq__eq&quot;,    mapsTo sawDefinitionsModule &quot;boolEq__eq&quot;)</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite&quot;,           mapsTo sawDefinitionsModule &quot;ite&quot;)</span>
+<span class="lineno">  311 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;iteDep&quot;,        mapsTo sawDefinitionsModule &quot;iteDep&quot;)</span>
+<span class="lineno">  312 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;iteDep_True&quot;,   mapsTo sawDefinitionsModule &quot;iteDep_True&quot;)</span>
+<span class="lineno">  313 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;iteDep_False&quot;,  mapsTo sawDefinitionsModule &quot;iteDep_False&quot;)</span>
+<span class="lineno">  314 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_bit&quot;,       skip) -- FIXME: change this</span>
+<span class="lineno">  315 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_eq_iteDep&quot;, mapsTo sawDefinitionsModule &quot;ite_eq_iteDep&quot;)</span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  317 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  318 </span><span class="spaces">  </span><span class="nottickedoff">-- Pairs</span>
+<span class="lineno">  319 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  320 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;PairType&quot;,  mapsTo sawDefinitionsModule &quot;PairType&quot;)</span>
+<span class="lineno">  321 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;PairValue&quot;, mapsTo sawDefinitionsModule &quot;PairValue&quot;)</span>
+<span class="lineno">  322 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Pair__rec&quot;, mapsTo sawDefinitionsModule &quot;Pair__rec&quot;)</span>
+<span class="lineno">  323 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;fst&quot;,       replaceDropArgs 2 $ Coq.Var &quot;fst&quot;)</span>
+<span class="lineno">  324 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;snd&quot;,       replaceDropArgs 2 $ Coq.Var &quot;snd&quot;)</span>
+<span class="lineno">  325 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  326 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  327 </span><span class="spaces">  </span><span class="nottickedoff">-- Equality</span>
+<span class="lineno">  328 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  329 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Eq&quot;,      mapsToExpl logicModule &quot;eq&quot;)</span>
+<span class="lineno">  330 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Eq__rec&quot;, mapsTo sawDefinitionsModule &quot;Eq__rec&quot;)</span>
+<span class="lineno">  331 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Refl&quot;,    mapsToExpl logicModule &quot;eq_refl&quot;)</span>
+<span class="lineno">  332 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  333 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  334 </span><span class="spaces">  </span><span class="nottickedoff">-- Nat le/lt</span>
+<span class="lineno">  335 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  336 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;IsLeNat&quot;     , mapsTo sawDefinitionsModule &quot;IsLeNat&quot;)</span>
+<span class="lineno">  337 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLeNat__rec&quot;, mapsTo sawDefinitionsModule &quot;IsLeNat__rec&quot;)</span>
+<span class="lineno">  338 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLeNat_base&quot;, mapsTo sawDefinitionsModule &quot;IsLeNat_base&quot;)</span>
+<span class="lineno">  339 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLeNat_succ&quot;, mapsTo sawDefinitionsModule &quot;IsLeNat_succ&quot;)</span>
+<span class="lineno">  340 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLtNat&quot;     , mapsTo sawDefinitionsModule &quot;IsLtNat&quot;)</span>
+<span class="lineno">  341 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  342 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  343 </span><span class="spaces">  </span><span class="nottickedoff">-- Strings</span>
+<span class="lineno">  344 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  345 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;String&quot;, mapsTo stringModule &quot;string&quot;)</span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;equalString&quot;, mapsTo sawDefinitionsModule &quot;equalString&quot;)</span>
+<span class="lineno">  347 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;appendString&quot;, mapsTo sawDefinitionsModule &quot;appendString&quot;)</span>
+<span class="lineno">  348 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  349 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="nottickedoff">-- Utility functions</span>
+<span class="lineno">  351 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  352 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;id&quot;, mapsTo datatypesModule &quot;id&quot;)</span>
+<span class="lineno">  353 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  354 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  355 </span><span class="spaces">  </span><span class="nottickedoff">-- Natural numbers</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  357 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;divModNat&quot;, mapsTo sawDefinitionsModule &quot;divModNat&quot;)</span>
+<span class="lineno">  358 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Nat&quot;,       mapsTo datatypesModule &quot;nat&quot;)</span>
+<span class="lineno">  359 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;widthNat&quot;,  mapsTo sawDefinitionsModule &quot;widthNat&quot;)</span>
+<span class="lineno">  360 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Zero&quot;,      mapsTo sawDefinitionsModule &quot;Zero&quot;)</span>
+<span class="lineno">  361 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Succ&quot;,      mapsTo sawDefinitionsModule &quot;Succ&quot;)</span>
+<span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;addNat&quot;,    mapsTo sawDefinitionsModule &quot;addNat&quot;)</span>
+<span class="lineno">  363 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;subNat&quot;,    mapsTo sawDefinitionsModule &quot;subNat&quot;)</span>
+<span class="lineno">  364 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;mulNat&quot;,    mapsTo sawDefinitionsModule &quot;mulNat&quot;)</span>
+<span class="lineno">  365 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;expNat&quot;,    mapsTo sawDefinitionsModule &quot;expNat&quot;)</span>
+<span class="lineno">  366 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;equalNat&quot;,  mapsTo sawDefinitionsModule &quot;equalNat&quot;)</span>
+<span class="lineno">  367 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ltNat&quot;,     mapsTo sawDefinitionsModule &quot;ltNat&quot;)</span>
+<span class="lineno">  368 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;leNat&quot;,     mapsTo sawDefinitionsModule &quot;leNat&quot;)</span>
+<span class="lineno">  369 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;minNat&quot;,    mapsTo sawDefinitionsModule &quot;minNat&quot;)</span>
+<span class="lineno">  370 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;maxNat&quot;,    mapsTo sawDefinitionsModule &quot;maxNat&quot;)</span>
+<span class="lineno">  371 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Nat__rec&quot;,  mapsTo sawDefinitionsModule &quot;Nat__rec&quot;)</span>
+<span class="lineno">  372 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;if0Nat&quot;,    mapsTo sawDefinitionsModule &quot;if0Nat&quot;)</span>
+<span class="lineno">  373 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  374 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  375 </span><span class="spaces">  </span><span class="nottickedoff">-- Binary numerals</span>
+<span class="lineno">  376 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Pos&quot;,       mapsTo binPosModule &quot;positive&quot;)</span>
+<span class="lineno">  378 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;One&quot;,       mapsTo binPosModule &quot;xH&quot;)</span>
+<span class="lineno">  379 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Bit0&quot;,      mapsTo binPosModule &quot;xO&quot;)</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Bit1&quot;,      mapsTo binPosModule &quot;xI&quot;)</span>
+<span class="lineno">  381 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;posInc&quot;,    mapsTo binPosModule &quot;Pos.succ&quot;)</span>
+<span class="lineno">  382 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;posAdd&quot;,    mapsTo binPosModule &quot;add&quot;)</span>
+<span class="lineno">  383 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;posMul&quot;,    mapsTo binPosModule &quot;mul&quot;)</span>
+<span class="lineno">  384 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;posExp&quot;,    mapsTo binPosModule &quot;pow&quot;)</span>
+<span class="lineno">  385 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqPos&quot;,     mapsTo binPosModule &quot;eqb&quot;)</span>
+<span class="lineno">  386 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;NatPos&quot;,    mapsTo binPosModule &quot;Pos.to_nat&quot;)</span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;BitM&quot;,      mapsTo binPosModule &quot;Pos.pred_double&quot;)</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Pos_cases&quot;, mapsTo sawDefinitionsModule &quot;Pos_cases&quot;)</span>
+<span class="lineno">  389 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessiblePos&quot;,        skip)</span>
+<span class="lineno">  390 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessiblePos_Bit0&quot;,   skip)</span>
+<span class="lineno">  391 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessiblePos_Bit1&quot;,   skip)</span>
+<span class="lineno">  392 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessiblePos_all&quot;,    skip)</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessibleNat&quot;,        skip)</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessibleNat_NatPos&quot;, skip)</span>
+<span class="lineno">  395 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;AccessibleNat_all&quot;,    skip)</span>
+<span class="lineno">  396 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Z&quot;,         mapsTo binIntModule &quot;Z&quot;)</span>
+<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ZZero&quot;,     mapsTo binIntModule &quot;Z0&quot;)</span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ZPos&quot;,      mapsTo binIntModule &quot;Zpos&quot;)</span>
+<span class="lineno">  399 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ZNeg&quot;,      mapsTo binIntModule &quot;Zneg&quot;)</span>
+<span class="lineno">  400 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;subNZ&quot;,     skip)</span>
+<span class="lineno">  401 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  402 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  403 </span><span class="spaces">  </span><span class="nottickedoff">-- Vectors</span>
+<span class="lineno">  404 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  405 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;EmptyVec&quot;,      mapsTo vectorsModule &quot;EmptyVec&quot;)</span>
+<span class="lineno">  406 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;at&quot;,            rename &quot;sawAt&quot;) -- `at` is a reserved keyword in Coq</span>
+<span class="lineno">  407 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;atWithDefault&quot;, mapsTo vectorsModule &quot;atWithDefault&quot;)</span>
+<span class="lineno">  408 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;atWithProof&quot;,   mapsTo vectorsModule &quot;atWithProof&quot;)</span>
+<span class="lineno">  409 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;at_single&quot;,     skip) -- is boring, could be proved on the Coq side</span>
+<span class="lineno">  410 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvAdd&quot;,         mapsTo vectorsModule &quot;bvAdd&quot;)</span>
+<span class="lineno">  411 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvLg2&quot;,         mapsTo vectorsModule &quot;bvLg2&quot;)</span>
+<span class="lineno">  412 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvMul&quot;,         mapsTo vectorsModule &quot;bvMul&quot;)</span>
+<span class="lineno">  413 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvNat&quot;,         mapsTo vectorsModule &quot;bvNat&quot;)</span>
+<span class="lineno">  414 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvNeg&quot;,         mapsTo vectorsModule &quot;bvNeg&quot;)</span>
+<span class="lineno">  415 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvSDiv&quot;,        mapsTo vectorsModule &quot;bvSDiv&quot;)</span>
+<span class="lineno">  416 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvSRem&quot;,        mapsTo vectorsModule &quot;bvSRem&quot;)</span>
+<span class="lineno">  417 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvSShr&quot;,        mapsTo vectorsModule &quot;bvSShr&quot;)</span>
+<span class="lineno">  418 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvSub&quot;,         mapsTo vectorsModule &quot;bvSub&quot;)</span>
+<span class="lineno">  419 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvToNat&quot;,       mapsTo vectorsModule &quot;bvToNat&quot;)</span>
+<span class="lineno">  420 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvUDiv&quot;,        mapsTo vectorsModule &quot;bvUDiv&quot;)</span>
+<span class="lineno">  421 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvURem&quot;,        mapsTo vectorsModule &quot;bvURem&quot;)</span>
+<span class="lineno">  422 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvsge&quot;,         mapsTo vectorsModule &quot;bvsge&quot;)</span>
+<span class="lineno">  423 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvsgt&quot;,         mapsTo vectorsModule &quot;bvsgt&quot;)</span>
+<span class="lineno">  424 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvsle&quot;,         mapsTo vectorsModule &quot;bvsle&quot;)</span>
+<span class="lineno">  425 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvslt&quot;,         mapsTo vectorsModule &quot;bvslt&quot;)</span>
+<span class="lineno">  426 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvult&quot;,         mapsTo vectorsModule &quot;bvult&quot;)</span>
+<span class="lineno">  427 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvule&quot;,         mapsTo vectorsModule &quot;bvule&quot;)</span>
+<span class="lineno">  428 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;coerceVec&quot;,     mapsTo vectorsModule &quot;coerceVec&quot;)</span>
+<span class="lineno">  429 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eq_Vec&quot;,        skip)</span>
+<span class="lineno">  430 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldr&quot;,         mapsTo vectorsModule &quot;foldr&quot;)</span>
+<span class="lineno">  431 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldr_nil&quot;,     mapsTo vectorsModule &quot;foldr_nil&quot;)</span>
+<span class="lineno">  432 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldr_cons&quot;,    mapsTo vectorsModule &quot;foldr_cons&quot;)</span>
+<span class="lineno">  433 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldl&quot;,         mapsTo vectorsModule &quot;foldl&quot;)</span>
+<span class="lineno">  434 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldl_nil&quot;,     mapsTo vectorsModule &quot;foldl_nil&quot;)</span>
+<span class="lineno">  435 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;foldl_cons&quot;,    mapsTo vectorsModule &quot;foldl_cons&quot;)</span>
+<span class="lineno">  436 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;genWithProof&quot;,  mapsTo vectorsModule &quot;genWithProof&quot;)</span>
+<span class="lineno">  437 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;scanl&quot;,         mapsTo vectorsModule &quot;scanl&quot;)</span>
+<span class="lineno">  438 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;gen&quot;,           mapsTo vectorsModule &quot;gen&quot;)</span>
+<span class="lineno">  439 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;rotateL&quot;,       mapsTo vectorsModule &quot;rotateL&quot;)</span>
+<span class="lineno">  440 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;rotateR&quot;,       mapsTo vectorsModule &quot;rotateR&quot;)</span>
+<span class="lineno">  441 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;shiftL&quot;,        mapsTo vectorsModule &quot;shiftL&quot;)</span>
+<span class="lineno">  442 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;shiftR&quot;,        mapsTo vectorsModule &quot;shiftR&quot;)</span>
+<span class="lineno">  443 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;take0&quot;,         skip)</span>
+<span class="lineno">  444 </span><span class="spaces">  </span><span class="nottickedoff">-- zip must be realized in-place because it both depends on definitions and is</span>
+<span class="lineno">  445 </span><span class="spaces">  </span><span class="nottickedoff">-- used by other definitions in the same file, so it can neither be pre- nor</span>
+<span class="lineno">  446 </span><span class="spaces">  </span><span class="nottickedoff">-- post-defined.</span>
+<span class="lineno">  447 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;zip&quot;,           realize zipSnippet)</span>
+<span class="lineno">  448 </span><span class="spaces">  </span><span class="nottickedoff">-- cannot map directly to Vector.t because arguments are in a different order</span>
+<span class="lineno">  449 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Vec&quot;,           mapsTo vectorsModule &quot;Vec&quot;)</span>
+<span class="lineno">  450 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;head&quot;,          mapsTo vectorsModule &quot;head&quot;)</span>
+<span class="lineno">  451 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;tail&quot;,          mapsTo vectorsModule &quot;tail&quot;)</span>
+<span class="lineno">  452 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;head_gen&quot;,      mapsTo vectorsModule &quot;head_gen&quot;)</span>
+<span class="lineno">  453 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;tail_gen&quot;,      mapsTo vectorsModule &quot;tail_gen&quot;)</span>
+<span class="lineno">  454 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  455 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  456 </span><span class="spaces">  </span><span class="nottickedoff">-- Streams</span>
+<span class="lineno">  457 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  458 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;streamScanl&quot;,   mapsTo preludeExtraModule &quot;streamScanl&quot;)</span>
+<span class="lineno">  459 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  460 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  461 </span><span class="spaces">  </span><span class="nottickedoff">-- Integers</span>
+<span class="lineno">  462 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  463 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Integer&quot;,  mapsTo sawDefinitionsModule &quot;Integer&quot;)</span>
+<span class="lineno">  464 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intAdd&quot;,   mapsTo sawDefinitionsModule &quot;intAdd&quot;)</span>
+<span class="lineno">  465 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intSub&quot;,   mapsTo sawDefinitionsModule &quot;intSub&quot;)</span>
+<span class="lineno">  466 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intMul&quot;,   mapsTo sawDefinitionsModule &quot;intMul&quot;)</span>
+<span class="lineno">  467 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intDiv&quot;,   mapsTo sawDefinitionsModule &quot;intDiv&quot;)</span>
+<span class="lineno">  468 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intMod&quot;,   mapsTo sawDefinitionsModule &quot;intMod&quot;)</span>
+<span class="lineno">  469 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intMin&quot;,   mapsTo sawDefinitionsModule &quot;intMin&quot;)</span>
+<span class="lineno">  470 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intMax&quot;,   mapsTo sawDefinitionsModule &quot;intMax&quot;)</span>
+<span class="lineno">  471 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intNeg&quot;,   mapsTo sawDefinitionsModule &quot;intNeg&quot;)</span>
+<span class="lineno">  472 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intAbs&quot;,   mapsTo sawDefinitionsModule &quot;intAbs&quot;)</span>
+<span class="lineno">  473 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intEq&quot;,    mapsTo sawDefinitionsModule &quot;intEq&quot;)</span>
+<span class="lineno">  474 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intLe&quot;,    mapsTo sawDefinitionsModule &quot;intLe&quot;)</span>
+<span class="lineno">  475 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intLt&quot;,    mapsTo sawDefinitionsModule &quot;intLt&quot;)</span>
+<span class="lineno">  476 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intToNat&quot;, mapsTo sawDefinitionsModule &quot;intToNat&quot;)</span>
+<span class="lineno">  477 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;natToInt&quot;, mapsTo sawDefinitionsModule &quot;natToInt&quot;)</span>
+<span class="lineno">  478 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intToBv&quot;,  mapsTo vectorsModule &quot;intToBv&quot;)</span>
+<span class="lineno">  479 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvToInt&quot;,  mapsTo vectorsModule &quot;bvToInt&quot;)</span>
+<span class="lineno">  480 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;sbvToInt&quot;, mapsTo vectorsModule &quot;sbvToInt&quot;)</span>
+<span class="lineno">  481 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  482 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  483 </span><span class="spaces">  </span><span class="nottickedoff">-- Modular integers</span>
+<span class="lineno">  484 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  485 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;IntMod&quot;,     mapsTo sawDefinitionsModule &quot;IntMod&quot;)</span>
+<span class="lineno">  486 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;toIntMod&quot;,   mapsTo sawDefinitionsModule &quot;toIntMod&quot;)</span>
+<span class="lineno">  487 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;fromIntMod&quot;, mapsTo sawDefinitionsModule &quot;fromIntMod&quot;)</span>
+<span class="lineno">  488 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModEq&quot;,   mapsTo sawDefinitionsModule &quot;intModEq&quot;)</span>
+<span class="lineno">  489 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModAdd&quot;,  mapsTo sawDefinitionsModule &quot;intModAdd&quot;)</span>
+<span class="lineno">  490 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModSub&quot;,  mapsTo sawDefinitionsModule &quot;intModSub&quot;)</span>
+<span class="lineno">  491 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModMul&quot;,  mapsTo sawDefinitionsModule &quot;intModMul&quot;)</span>
+<span class="lineno">  492 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;intModNeg&quot;,  mapsTo sawDefinitionsModule &quot;intModNeg&quot;)</span>
+<span class="lineno">  493 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  494 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  495 </span><span class="spaces">  </span><span class="nottickedoff">-- Axioms currently skipped</span>
+<span class="lineno">  496 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  497 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;drop0&quot;,                skip)</span>
+<span class="lineno">  498 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvugt&quot;,                skip)</span>
+<span class="lineno">  499 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvuge&quot;,                skip)</span>
+<span class="lineno">  500 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvPopcount&quot;,           skip)</span>
+<span class="lineno">  501 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvCountLeadingZeros&quot;,  skip)</span>
+<span class="lineno">  502 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvCountTrailingZeros&quot;, skip)</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvForall&quot;,             skip)</span>
+<span class="lineno">  504 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvAddZeroL&quot;,           skip)</span>
+<span class="lineno">  505 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvAddZeroR&quot;,           skip)</span>
+<span class="lineno">  506 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvShl&quot;,                mapsTo vectorsModule &quot;bvShl&quot;)</span>
+<span class="lineno">  507 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvShr&quot;,                mapsTo vectorsModule &quot;bvShr&quot;)</span>
+<span class="lineno">  508 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvShiftL_bvShl&quot;,       skip)</span>
+<span class="lineno">  509 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvShiftR_bvShr&quot;,       skip)</span>
+<span class="lineno">  510 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bvEq_refl&quot;,            skip)</span>
+<span class="lineno">  511 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;equalNat_bv&quot;,          skip)</span>
+<span class="lineno">  512 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Float&quot;,                skip)</span>
+<span class="lineno">  513 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;mkFloat&quot;,              skip)</span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Double&quot;,               skip)</span>
+<span class="lineno">  515 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;mkDouble&quot;,             skip)</span>
+<span class="lineno">  516 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bveq_sameL&quot;,           skip)</span>
+<span class="lineno">  517 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bveq_sameR&quot;,           skip)</span>
+<span class="lineno">  518 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;bveq_same2&quot;,           skip)</span>
+<span class="lineno">  519 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_split_cong&quot;,       skip)</span>
+<span class="lineno">  520 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;ite_join_cong&quot;,        skip)</span>
+<span class="lineno">  521 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;map_map&quot;,              skip)</span>
+<span class="lineno">  522 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun0&quot;,            skip)</span>
+<span class="lineno">  523 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun1&quot;,            skip)</span>
+<span class="lineno">  524 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun2&quot;,            skip)</span>
+<span class="lineno">  525 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun3&quot;,            skip)</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun4&quot;,            skip)</span>
+<span class="lineno">  527 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun5&quot;,            skip)</span>
+<span class="lineno">  528 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;test_fun6&quot;,            skip)</span>
+<span class="lineno">  529 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatPrec&quot;,            mapsTo sawDefinitionsModule &quot;eqNatPrec&quot;)</span>
+<span class="lineno">  530 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatAdd0&quot;,            mapsTo sawDefinitionsModule &quot;eqNatAdd0&quot;)</span>
+<span class="lineno">  531 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatAddS&quot;,            mapsTo sawDefinitionsModule &quot;eqNatAddS&quot;)</span>
+<span class="lineno">  532 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;eqNatAddComm&quot;,         mapsTo sawDefinitionsModule &quot;eqNatAddComm&quot;)</span>
+<span class="lineno">  533 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;addNat_assoc&quot;,         mapsTo sawDefinitionsModule &quot;addNat_assoc&quot;)</span>
+<span class="lineno">  534 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLtNat_Zero_absurd&quot;,  mapsTo sawDefinitionsModule &quot;IsLtNat_Zero_absurd&quot;)</span>
+<span class="lineno">  535 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;IsLeNat_SuccSucc&quot;,     mapsTo sawDefinitionsModule &quot;IsLeNat_SuccSucc&quot;)</span>
+<span class="lineno">  536 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  537 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  538 </span><span class="spaces">  </span><span class="nottickedoff">-- Either</span>
+<span class="lineno">  539 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  540 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Either&quot;,     mapsTo datatypesModule &quot;sum&quot;)</span>
+<span class="lineno">  541 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Left&quot;,       mapsToExpl datatypesModule &quot;inl&quot;)</span>
+<span class="lineno">  542 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Right&quot;,       mapsToExpl datatypesModule &quot;inr&quot;)</span>
+<span class="lineno">  543 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  544 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  545 </span><span class="spaces">  </span><span class="nottickedoff">-- Lists</span>
+<span class="lineno">  546 </span><span class="spaces">  </span><span class="nottickedoff">++</span>
+<span class="lineno">  547 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;List&quot;, mapsToExpl datatypesModule &quot;list&quot;)</span>
+<span class="lineno">  548 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Nil&quot;, mapsToExpl datatypesModule &quot;nil&quot;)</span>
+<span class="lineno">  549 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Cons&quot;, mapsToExpl datatypesModule &quot;cons&quot;)</span>
+<span class="lineno">  550 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;List__rec&quot;, mapsToExpl datatypesModule &quot;list_rect&quot;)</span>
+<span class="lineno">  551 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  552 </span>
+<span class="lineno">  553 </span>escapeIdent :: Coq.Ident -&gt; Coq.Ident
+<span class="lineno">  554 </span><span class="decl"><span class="nottickedoff">escapeIdent (Coq.Ident str)</span>
+<span class="lineno">  555 </span><span class="spaces">  </span><span class="nottickedoff">| all okChar str = Coq.Ident str</span>
+<span class="lineno">  556 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise      = Coq.Ident (&quot;Op_&quot; ++ zEncodeString str)</span>
+<span class="lineno">  557 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
+<span class="lineno">  558 </span><span class="spaces">   </span><span class="nottickedoff">okChar x = isAlphaNum x || x `elem` (&quot;_'&quot; :: String)</span></span>
+<span class="lineno">  559 </span>
+<span class="lineno">  560 </span>zipSnippet :: String
+<span class="lineno">  561 </span><span class="decl"><span class="nottickedoff">zipSnippet = [i|</span>
+<span class="lineno">  562 </span><span class="spaces"></span><span class="nottickedoff">Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)</span>
+<span class="lineno">  563 </span><span class="spaces">  </span><span class="nottickedoff">: Vec (minNat m n) (a * b) :=</span>
+<span class="lineno">  564 </span><span class="spaces">  </span><span class="nottickedoff">match</span>
+<span class="lineno">  565 </span><span class="spaces">    </span><span class="nottickedoff">xs in Vector.t _ m'</span>
+<span class="lineno">  566 </span><span class="spaces">    </span><span class="nottickedoff">return Vector.t _ (minNat m' n)</span>
+<span class="lineno">  567 </span><span class="spaces">  </span><span class="nottickedoff">with</span>
+<span class="lineno">  568 </span><span class="spaces">  </span><span class="nottickedoff">| Vector.nil =&gt; Vector.nil _</span>
+<span class="lineno">  569 </span><span class="spaces">  </span><span class="nottickedoff">| Vector.cons x pm xs =&gt;</span>
+<span class="lineno">  570 </span><span class="spaces">    </span><span class="nottickedoff">match</span>
+<span class="lineno">  571 </span><span class="spaces">      </span><span class="nottickedoff">ys in Vector.t _ n'</span>
+<span class="lineno">  572 </span><span class="spaces">      </span><span class="nottickedoff">return Vector.t _ (minNat (S pm) n')</span>
+<span class="lineno">  573 </span><span class="spaces">    </span><span class="nottickedoff">with</span>
+<span class="lineno">  574 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.nil =&gt; Vector.nil _</span>
+<span class="lineno">  575 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.cons y pm' ys =&gt; Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)</span>
+<span class="lineno">  576 </span><span class="spaces">    </span><span class="nottickedoff">end</span>
+<span class="lineno">  577 </span><span class="spaces">  </span><span class="nottickedoff">end</span>
+<span class="lineno">  578 </span><span class="spaces"></span><span class="nottickedoff">.</span>
+<span class="lineno">  579 </span><span class="spaces"></span><span class="nottickedoff">|]</span></span>
 
 </pre>
 </body>
