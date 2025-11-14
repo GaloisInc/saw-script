@@ -166,10 +166,11 @@ evalTermF cfg lam recEval tf env =
                                             Just t -> recEval t
                                             Nothing -> simPrimitive cfg nm
 
-    Variable nm tp          -> do tp' <- evalType tp
-                                  case IntMap.lookup (vnIndex nm) env of
-                                    Nothing -> simVariable cfg tp nm tp'
-                                    Just x -> force x
+    Variable nm tp          -> case IntMap.lookup (vnIndex nm) env of
+                                 Just x -> force x
+                                 Nothing ->
+                                   do tp' <- evalType tp
+                                      simVariable cfg tp nm tp'
     FTermF ftf              ->
       case ftf of
         UnitValue           -> return VUnit
