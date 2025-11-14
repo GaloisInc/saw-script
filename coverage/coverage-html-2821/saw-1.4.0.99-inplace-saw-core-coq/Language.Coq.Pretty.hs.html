@@ -44,7 +44,7 @@ span.spaces    { background: white }
 <span class="lineno">   25 </span><span class="decl"><span class="nottickedoff">escapeStringLit = concatMap (\c -&gt; if c == '&quot;' then &quot;\&quot;\&quot;&quot; else [c])</span></span>
 <span class="lineno">   26 </span>
 <span class="lineno">   27 </span>text :: String -&gt; Doc ann
-<span class="lineno">   28 </span><span class="decl"><span class="nottickedoff">text = pretty</span></span>
+<span class="lineno">   28 </span><span class="decl"><span class="istickedoff">text = pretty</span></span>
 <span class="lineno">   29 </span>
 <span class="lineno">   30 </span>string :: String -&gt; Doc ann
 <span class="lineno">   31 </span><span class="decl"><span class="nottickedoff">string = pretty</span></span>
@@ -69,16 +69,16 @@ span.spaces    { background: white }
 <span class="lineno">   50 </span><span class="decl"><span class="nottickedoff">semiSepList = tightSepList semi</span></span>
 <span class="lineno">   51 </span>
 <span class="lineno">   52 </span>period :: Doc ann
-<span class="lineno">   53 </span><span class="decl"><span class="nottickedoff">period = text &quot;.&quot;</span></span>
+<span class="lineno">   53 </span><span class="decl"><span class="istickedoff">period = text &quot;.&quot;</span></span>
 <span class="lineno">   54 </span>
 <span class="lineno">   55 </span>ppIdent :: Ident -&gt; Doc ann
-<span class="lineno">   56 </span><span class="decl"><span class="nottickedoff">ppIdent (Ident s) = text s</span></span>
+<span class="lineno">   56 </span><span class="decl"><span class="istickedoff">ppIdent (Ident s) = text s</span></span>
 <span class="lineno">   57 </span>
 <span class="lineno">   58 </span>ppBinder :: Binder -&gt; Doc ann
-<span class="lineno">   59 </span><span class="decl"><span class="nottickedoff">ppBinder (Binder x Nothing)  = ppIdent x</span>
-<span class="lineno">   60 </span><span class="spaces"></span><span class="nottickedoff">ppBinder (Binder x (Just t)) = parens (ppIdent x &lt;+&gt; colon &lt;+&gt; ppTerm PrecNone t)</span>
-<span class="lineno">   61 </span><span class="spaces"></span><span class="nottickedoff">ppBinder (ImplicitBinder x Nothing)  = braces (ppIdent x)</span>
-<span class="lineno">   62 </span><span class="spaces"></span><span class="nottickedoff">ppBinder (ImplicitBinder x (Just t)) = braces (ppIdent x &lt;+&gt; colon &lt;+&gt; ppTerm PrecNone t)</span></span>
+<span class="lineno">   59 </span><span class="decl"><span class="istickedoff">ppBinder (Binder x Nothing)  = <span class="nottickedoff">ppIdent x</span></span>
+<span class="lineno">   60 </span><span class="spaces"></span><span class="istickedoff">ppBinder (Binder x (Just t)) = parens (ppIdent x &lt;+&gt; colon &lt;+&gt; ppTerm PrecNone t)</span>
+<span class="lineno">   61 </span><span class="spaces"></span><span class="istickedoff">ppBinder (ImplicitBinder x Nothing)  = <span class="nottickedoff">braces (ppIdent x)</span></span>
+<span class="lineno">   62 </span><span class="spaces"></span><span class="istickedoff">ppBinder (ImplicitBinder x (Just t)) = <span class="nottickedoff">braces (ppIdent x &lt;+&gt; colon &lt;+&gt; ppTerm PrecNone t)</span></span></span>
 <span class="lineno">   63 </span>
 <span class="lineno">   64 </span>ppPiBinder :: PiBinder -&gt; Doc ann
 <span class="lineno">   65 </span><span class="decl"><span class="nottickedoff">ppPiBinder (PiBinder Nothing t)  = ppTerm PrecApp t &lt;+&gt; text &quot;-&gt;&quot;</span>
@@ -89,11 +89,11 @@ span.spaces    { background: white }
 <span class="lineno">   70 </span><span class="spaces">  </span><span class="nottickedoff">text &quot;forall&quot; &lt;+&gt; braces (ppIdent x &lt;+&gt; colon &lt;+&gt; ppTerm PrecNone t) &lt;&gt; comma</span></span>
 <span class="lineno">   71 </span>
 <span class="lineno">   72 </span>ppBinders :: [Binder] -&gt; Doc ann
-<span class="lineno">   73 </span><span class="decl"><span class="nottickedoff">ppBinders = hsep . map ppBinder</span></span>
+<span class="lineno">   73 </span><span class="decl"><span class="istickedoff">ppBinders = hsep . map <span class="nottickedoff">ppBinder</span></span></span>
 <span class="lineno">   74 </span>
 <span class="lineno">   75 </span>ppMaybeTy :: Maybe Type -&gt; Doc ann
-<span class="lineno">   76 </span><span class="decl"><span class="nottickedoff">ppMaybeTy Nothing = mempty</span>
-<span class="lineno">   77 </span><span class="spaces"></span><span class="nottickedoff">ppMaybeTy (Just ty) = colon &lt;+&gt; ppTerm PrecNone ty</span></span>
+<span class="lineno">   76 </span><span class="decl"><span class="istickedoff">ppMaybeTy Nothing = mempty</span>
+<span class="lineno">   77 </span><span class="spaces"></span><span class="istickedoff">ppMaybeTy (Just ty) = colon &lt;+&gt; ppTerm <span class="nottickedoff">PrecNone</span> ty</span></span>
 <span class="lineno">   78 </span>
 <span class="lineno">   79 </span>ppSort :: Sort -&gt; Doc ann
 <span class="lineno">   80 </span><span class="decl"><span class="nottickedoff">ppSort Prop = text &quot;Prop&quot;</span>
@@ -108,103 +108,103 @@ span.spaces    { background: white }
 <span class="lineno">   89 </span>  | PrecLambda
 <span class="lineno">   90 </span>  | PrecApp
 <span class="lineno">   91 </span>  | PrecAtom
-<span class="lineno">   92 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   92 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
 <span class="lineno">   93 </span>
 <span class="lineno">   94 </span>parensIf :: Bool -&gt; Doc ann -&gt; Doc ann
-<span class="lineno">   95 </span><span class="decl"><span class="nottickedoff">parensIf p d = if p then parens d else d</span></span>
+<span class="lineno">   95 </span><span class="decl"><span class="istickedoff">parensIf p d = if p then parens d else d</span></span>
 <span class="lineno">   96 </span>
 <span class="lineno">   97 </span>ppTerm :: Prec -&gt; Term -&gt; Doc ann
-<span class="lineno">   98 </span><span class="decl"><span class="nottickedoff">ppTerm p e =</span>
-<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">case e of</span>
-<span class="lineno">  100 </span><span class="spaces">    </span><span class="nottickedoff">Lambda bs t -&gt;</span>
-<span class="lineno">  101 </span><span class="spaces">      </span><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span>
-<span class="lineno">  102 </span><span class="spaces">      </span><span class="nottickedoff">text &quot;fun&quot; &lt;+&gt; ppBinders bs &lt;+&gt; text &quot;=&gt;&quot; &lt;+&gt; ppTerm PrecLambda t</span>
-<span class="lineno">  103 </span><span class="spaces">    </span><span class="nottickedoff">Fix ident binders returnType body -&gt;</span>
-<span class="lineno">  104 </span><span class="spaces">      </span><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span>
-<span class="lineno">  105 </span><span class="spaces">      </span><span class="nottickedoff">text &quot;fix&quot; &lt;+&gt; ppIdent ident &lt;+&gt; ppBinders binders &lt;+&gt; text &quot;:&quot;</span>
-<span class="lineno">  106 </span><span class="spaces">        </span><span class="nottickedoff">&lt;+&gt; ppTerm PrecNone returnType &lt;+&gt; text &quot;:=&quot; &lt;+&gt; ppTerm PrecLambda body</span>
-<span class="lineno">  107 </span><span class="spaces">    </span><span class="nottickedoff">Pi bs t -&gt;</span>
-<span class="lineno">  108 </span><span class="spaces">      </span><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span>
-<span class="lineno">  109 </span><span class="spaces">      </span><span class="nottickedoff">ppPi bs &lt;+&gt; ppTerm PrecLambda t</span>
-<span class="lineno">  110 </span><span class="spaces">    </span><span class="nottickedoff">Let x bs mty t body -&gt;</span>
-<span class="lineno">  111 </span><span class="spaces">      </span><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span>
-<span class="lineno">  112 </span><span class="spaces">      </span><span class="nottickedoff">fillSep</span>
-<span class="lineno">  113 </span><span class="spaces">      </span><span class="nottickedoff">[ text &quot;let&quot; &lt;+&gt; ppIdent x &lt;+&gt; ppBinders bs &lt;+&gt; ppMaybeTy mty &lt;+&gt;</span>
-<span class="lineno">  114 </span><span class="spaces">        </span><span class="nottickedoff">text &quot;:=&quot; &lt;+&gt; ppTerm PrecNone t &lt;+&gt; text &quot;in&quot;</span>
-<span class="lineno">  115 </span><span class="spaces">      </span><span class="nottickedoff">, ppTerm PrecLambda body ]</span>
-<span class="lineno">  116 </span><span class="spaces">    </span><span class="nottickedoff">If c t f -&gt;</span>
-<span class="lineno">  117 </span><span class="spaces">      </span><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span>
-<span class="lineno">  118 </span><span class="spaces">      </span><span class="nottickedoff">text &quot;if&quot; &lt;+&gt; ppTerm PrecNone c &lt;+&gt;</span>
-<span class="lineno">  119 </span><span class="spaces">      </span><span class="nottickedoff">text &quot;then&quot; &lt;+&gt; ppTerm PrecNone t &lt;+&gt;</span>
-<span class="lineno">  120 </span><span class="spaces">      </span><span class="nottickedoff">text &quot;else&quot; &lt;+&gt; ppTerm PrecLambda f</span>
-<span class="lineno">  121 </span><span class="spaces">    </span><span class="nottickedoff">App f [] -&gt;</span>
-<span class="lineno">  122 </span><span class="spaces">      </span><span class="nottickedoff">ppTerm p f</span>
-<span class="lineno">  123 </span><span class="spaces">    </span><span class="nottickedoff">App f args -&gt;</span>
-<span class="lineno">  124 </span><span class="spaces">      </span><span class="nottickedoff">parensIf (p &gt; PrecApp) $</span>
-<span class="lineno">  125 </span><span class="spaces">      </span><span class="nottickedoff">hsep (ppTerm PrecApp f : map (ppTerm PrecAtom) args)</span>
-<span class="lineno">  126 </span><span class="spaces">    </span><span class="nottickedoff">Sort s -&gt;</span>
-<span class="lineno">  127 </span><span class="spaces">      </span><span class="nottickedoff">ppSort s</span>
-<span class="lineno">  128 </span><span class="spaces">    </span><span class="nottickedoff">Var x -&gt; ppIdent x</span>
-<span class="lineno">  129 </span><span class="spaces">    </span><span class="nottickedoff">ExplVar x -&gt;</span>
-<span class="lineno">  130 </span><span class="spaces">      </span><span class="nottickedoff">parensIf (p &gt; PrecApp) $</span>
-<span class="lineno">  131 </span><span class="spaces">      </span><span class="nottickedoff">string &quot;@&quot; &lt;&gt; ppIdent x</span>
-<span class="lineno">  132 </span><span class="spaces">    </span><span class="nottickedoff">Ascription tm tp -&gt;</span>
-<span class="lineno">  133 </span><span class="spaces">      </span><span class="nottickedoff">parensIf (p &gt; PrecLambda)</span>
-<span class="lineno">  134 </span><span class="spaces">      </span><span class="nottickedoff">(ppTerm PrecApp tm &lt;+&gt; text &quot;:&quot; &lt;+&gt; ppTerm PrecApp tp)</span>
-<span class="lineno">  135 </span><span class="spaces">    </span><span class="nottickedoff">NatLit i -&gt;</span>
-<span class="lineno">  136 </span><span class="spaces">      </span><span class="nottickedoff">if i &gt; 1000 then</span>
-<span class="lineno">  137 </span><span class="spaces">        </span><span class="nottickedoff">-- Explicitly convert from Z if an integer is too big</span>
-<span class="lineno">  138 </span><span class="spaces">        </span><span class="nottickedoff">parensIf (p &gt; PrecLambda) (text &quot;Z.to_nat&quot; &lt;+&gt; integer i &lt;&gt; text &quot;%Z&quot;)</span>
-<span class="lineno">  139 </span><span class="spaces">      </span><span class="nottickedoff">else</span>
-<span class="lineno">  140 </span><span class="spaces">        </span><span class="nottickedoff">integer i</span>
-<span class="lineno">  141 </span><span class="spaces">    </span><span class="nottickedoff">ZLit i -&gt;</span>
-<span class="lineno">  142 </span><span class="spaces">      </span><span class="nottickedoff">-- we use hex unless our integer is a positive or negitive digit</span>
-<span class="lineno">  143 </span><span class="spaces">      </span><span class="nottickedoff">if abs i &gt; 9  then let ui = toInteger (fromInteger i :: Word64)</span>
-<span class="lineno">  144 </span><span class="spaces">                          </span><span class="nottickedoff">in text (&quot;0x&quot; ++ showHex ui [] ++ &quot;%Z&quot;)</span>
-<span class="lineno">  145 </span><span class="spaces">      </span><span class="nottickedoff">else if i &lt; 0 then text (&quot;(&quot; ++ show i ++ &quot;)%Z&quot;)</span>
-<span class="lineno">  146 </span><span class="spaces">                    </span><span class="nottickedoff">else text (show i ++ &quot;%Z&quot;)</span>
-<span class="lineno">  147 </span><span class="spaces">    </span><span class="nottickedoff">List ts -&gt;</span>
-<span class="lineno">  148 </span><span class="spaces">      </span><span class="nottickedoff">brackets (semiSepList (map (ppTerm PrecNone) ts))</span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="nottickedoff">StringLit s -&gt;</span>
-<span class="lineno">  150 </span><span class="spaces">      </span><span class="nottickedoff">dquotes (string $ escapeStringLit s)</span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="nottickedoff">Scope term scope -&gt;</span>
-<span class="lineno">  152 </span><span class="spaces">      </span><span class="nottickedoff">ppTerm PrecAtom term &lt;&gt; text &quot;%&quot; &lt;&gt; text scope</span>
-<span class="lineno">  153 </span><span class="spaces">    </span><span class="nottickedoff">Ltac s -&gt;</span>
-<span class="lineno">  154 </span><span class="spaces">      </span><span class="nottickedoff">text &quot;ltac:&quot; &lt;&gt; parens (string s)</span></span>
+<span class="lineno">   98 </span><span class="decl"><span class="istickedoff">ppTerm p e =</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="istickedoff">case e of</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">Lambda bs t -&gt;</span>
+<span class="lineno">  101 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span></span>
+<span class="lineno">  102 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">text &quot;fun&quot; &lt;+&gt; ppBinders bs &lt;+&gt; text &quot;=&gt;&quot; &lt;+&gt; ppTerm PrecLambda t</span></span>
+<span class="lineno">  103 </span><span class="spaces">    </span><span class="istickedoff">Fix ident binders returnType body -&gt;</span>
+<span class="lineno">  104 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span></span>
+<span class="lineno">  105 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">text &quot;fix&quot; &lt;+&gt; ppIdent ident &lt;+&gt; ppBinders binders &lt;+&gt; text &quot;:&quot;</span></span>
+<span class="lineno">  106 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&lt;+&gt; ppTerm PrecNone returnType &lt;+&gt; text &quot;:=&quot; &lt;+&gt; ppTerm PrecLambda body</span></span>
+<span class="lineno">  107 </span><span class="spaces">    </span><span class="istickedoff">Pi bs t -&gt;</span>
+<span class="lineno">  108 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span></span>
+<span class="lineno">  109 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppPi bs &lt;+&gt; ppTerm PrecLambda t</span></span>
+<span class="lineno">  110 </span><span class="spaces">    </span><span class="istickedoff">Let x bs mty t body -&gt;</span>
+<span class="lineno">  111 </span><span class="spaces">      </span><span class="istickedoff">parensIf (p &gt; PrecLambda) $</span>
+<span class="lineno">  112 </span><span class="spaces">      </span><span class="istickedoff">fillSep</span>
+<span class="lineno">  113 </span><span class="spaces">      </span><span class="istickedoff">[ text &quot;let&quot; &lt;+&gt; ppIdent x &lt;+&gt; ppBinders bs &lt;+&gt; ppMaybeTy mty &lt;+&gt;</span>
+<span class="lineno">  114 </span><span class="spaces">        </span><span class="istickedoff">text &quot;:=&quot; &lt;+&gt; ppTerm PrecNone t &lt;+&gt; text &quot;in&quot;</span>
+<span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">, ppTerm PrecLambda body ]</span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="istickedoff">If c t f -&gt;</span>
+<span class="lineno">  117 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span></span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">text &quot;if&quot; &lt;+&gt; ppTerm PrecNone c &lt;+&gt;</span></span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">text &quot;then&quot; &lt;+&gt; ppTerm PrecNone t &lt;+&gt;</span></span>
+<span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">text &quot;else&quot; &lt;+&gt; ppTerm PrecLambda f</span></span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff">App f [] -&gt;</span>
+<span class="lineno">  122 </span><span class="spaces">      </span><span class="istickedoff">ppTerm <span class="nottickedoff">p</span> f</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">App f args -&gt;</span>
+<span class="lineno">  124 </span><span class="spaces">      </span><span class="istickedoff">parensIf (p &gt; PrecApp) $</span>
+<span class="lineno">  125 </span><span class="spaces">      </span><span class="istickedoff">hsep (ppTerm <span class="nottickedoff">PrecApp</span> f : map (ppTerm PrecAtom) args)</span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff">Sort s -&gt;</span>
+<span class="lineno">  127 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppSort s</span></span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">Var x -&gt; ppIdent x</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">ExplVar x -&gt;</span>
+<span class="lineno">  130 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecApp) $</span></span>
+<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">string &quot;@&quot; &lt;&gt; ppIdent x</span></span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">Ascription tm tp -&gt;</span>
+<span class="lineno">  133 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda)</span></span>
+<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(ppTerm PrecApp tm &lt;+&gt; text &quot;:&quot; &lt;+&gt; ppTerm PrecApp tp)</span></span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">NatLit i -&gt;</span>
+<span class="lineno">  136 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if i &gt; 1000 then</span></span>
+<span class="lineno">  137 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- Explicitly convert from Z if an integer is too big</span></span>
+<span class="lineno">  138 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) (text &quot;Z.to_nat&quot; &lt;+&gt; integer i &lt;&gt; text &quot;%Z&quot;)</span></span>
+<span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">else</span></span>
+<span class="lineno">  140 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">integer i</span></span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">ZLit i -&gt;</span>
+<span class="lineno">  142 </span><span class="spaces">      </span><span class="istickedoff">-- we use hex unless our integer is a positive or negitive digit</span>
+<span class="lineno">  143 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if abs i &gt; 9  then let ui = toInteger (fromInteger i :: Word64)</span></span>
+<span class="lineno">  144 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">in text (&quot;0x&quot; ++ showHex ui [] ++ &quot;%Z&quot;)</span></span>
+<span class="lineno">  145 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">else if i &lt; 0 then text (&quot;(&quot; ++ show i ++ &quot;)%Z&quot;)</span></span>
+<span class="lineno">  146 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">else text (show i ++ &quot;%Z&quot;)</span></span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">List ts -&gt;</span>
+<span class="lineno">  148 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">brackets (semiSepList (map (ppTerm PrecNone) ts))</span></span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">StringLit s -&gt;</span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">dquotes (string $ escapeStringLit s)</span></span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">Scope term scope -&gt;</span>
+<span class="lineno">  152 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppTerm PrecAtom term &lt;&gt; text &quot;%&quot; &lt;&gt; text scope</span></span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">Ltac s -&gt;</span>
+<span class="lineno">  154 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">text &quot;ltac:&quot; &lt;&gt; parens (string s)</span></span></span>
 <span class="lineno">  155 </span>
 <span class="lineno">  156 </span>ppDecl :: Decl -&gt; Doc ann
-<span class="lineno">  157 </span><span class="decl"><span class="nottickedoff">ppDecl decl = case decl of</span>
-<span class="lineno">  158 </span><span class="spaces">  </span><span class="nottickedoff">Axiom nm ty -&gt;</span>
-<span class="lineno">  159 </span><span class="spaces">    </span><span class="nottickedoff">nest 2 (</span>
-<span class="lineno">  160 </span><span class="spaces">      </span><span class="nottickedoff">hsep [text &quot;Axiom&quot;, ppIdent nm, text &quot;:&quot;, ppTerm PrecNone ty, period]</span>
-<span class="lineno">  161 </span><span class="spaces">    </span><span class="nottickedoff">) &lt;&gt; hardline</span>
-<span class="lineno">  162 </span><span class="spaces">  </span><span class="nottickedoff">Parameter nm ty -&gt;</span>
-<span class="lineno">  163 </span><span class="spaces">    </span><span class="nottickedoff">nest 2 (</span>
-<span class="lineno">  164 </span><span class="spaces">     </span><span class="nottickedoff">hsep [text &quot;Parameter&quot;, ppIdent nm, text &quot;:&quot;, ppTerm PrecNone ty, period]</span>
-<span class="lineno">  165 </span><span class="spaces">    </span><span class="nottickedoff">) &lt;&gt; hardline</span>
-<span class="lineno">  166 </span><span class="spaces">  </span><span class="nottickedoff">Variable nm ty -&gt;</span>
-<span class="lineno">  167 </span><span class="spaces">    </span><span class="nottickedoff">nest 2 (</span>
-<span class="lineno">  168 </span><span class="spaces">      </span><span class="nottickedoff">hsep [text &quot;Variable&quot;, ppIdent nm, text &quot;:&quot;, ppTerm PrecNone ty, period]</span>
-<span class="lineno">  169 </span><span class="spaces">    </span><span class="nottickedoff">) &lt;&gt; hardline</span>
-<span class="lineno">  170 </span><span class="spaces">  </span><span class="nottickedoff">Comment s -&gt;</span>
-<span class="lineno">  171 </span><span class="spaces">    </span><span class="nottickedoff">text &quot;(*&quot; &lt;+&gt; text s &lt;+&gt; text &quot;*)&quot; &lt;&gt; hardline</span>
-<span class="lineno">  172 </span><span class="spaces">  </span><span class="nottickedoff">Definition nm bs mty body -&gt;</span>
-<span class="lineno">  173 </span><span class="spaces">    </span><span class="nottickedoff">nest 2 (</span>
-<span class="lineno">  174 </span><span class="spaces">      </span><span class="nottickedoff">vsep</span>
-<span class="lineno">  175 </span><span class="spaces">      </span><span class="nottickedoff">[ hsep ([text &quot;Definition&quot;, ppIdent nm] ++</span>
-<span class="lineno">  176 </span><span class="spaces">             </span><span class="nottickedoff">map ppBinder bs ++</span>
-<span class="lineno">  177 </span><span class="spaces">             </span><span class="nottickedoff">[ppMaybeTy mty, text &quot;:=&quot;])</span>
-<span class="lineno">  178 </span><span class="spaces">      </span><span class="nottickedoff">, ppTerm PrecNone body &lt;&gt; period</span>
-<span class="lineno">  179 </span><span class="spaces">      </span><span class="nottickedoff">]</span>
-<span class="lineno">  180 </span><span class="spaces">    </span><span class="nottickedoff">) &lt;&gt; hardline</span>
-<span class="lineno">  181 </span><span class="spaces">  </span><span class="nottickedoff">InductiveDecl ind -&gt; ppInductive ind</span>
-<span class="lineno">  182 </span><span class="spaces">  </span><span class="nottickedoff">Section nm ds -&gt;</span>
-<span class="lineno">  183 </span><span class="spaces">    </span><span class="nottickedoff">vsep $ concat</span>
-<span class="lineno">  184 </span><span class="spaces">     </span><span class="nottickedoff">[ [ hsep [text &quot;Section&quot;, ppIdent nm, period] ]</span>
-<span class="lineno">  185 </span><span class="spaces">     </span><span class="nottickedoff">, map (indent 2 . ppDecl) ds</span>
-<span class="lineno">  186 </span><span class="spaces">     </span><span class="nottickedoff">, [ hsep [text &quot;End&quot;, ppIdent nm, period] ]</span>
-<span class="lineno">  187 </span><span class="spaces">     </span><span class="nottickedoff">]</span>
-<span class="lineno">  188 </span><span class="spaces">  </span><span class="nottickedoff">Snippet s -&gt; text s</span></span>
+<span class="lineno">  157 </span><span class="decl"><span class="istickedoff">ppDecl decl = case decl of</span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">Axiom nm ty -&gt;</span>
+<span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nest 2 (</span></span>
+<span class="lineno">  160 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">hsep [text &quot;Axiom&quot;, ppIdent nm, text &quot;:&quot;, ppTerm PrecNone ty, period]</span></span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">) &lt;&gt; hardline</span></span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">Parameter nm ty -&gt;</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nest 2 (</span></span>
+<span class="lineno">  164 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">hsep [text &quot;Parameter&quot;, ppIdent nm, text &quot;:&quot;, ppTerm PrecNone ty, period]</span></span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">) &lt;&gt; hardline</span></span>
+<span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">Variable nm ty -&gt;</span>
+<span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nest 2 (</span></span>
+<span class="lineno">  168 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">hsep [text &quot;Variable&quot;, ppIdent nm, text &quot;:&quot;, ppTerm PrecNone ty, period]</span></span>
+<span class="lineno">  169 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">) &lt;&gt; hardline</span></span>
+<span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">Comment s -&gt;</span>
+<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">text &quot;(*&quot; &lt;+&gt; text s &lt;+&gt; text &quot;*)&quot; &lt;&gt; hardline</span></span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">Definition nm bs mty body -&gt;</span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">nest 2 (</span>
+<span class="lineno">  174 </span><span class="spaces">      </span><span class="istickedoff">vsep</span>
+<span class="lineno">  175 </span><span class="spaces">      </span><span class="istickedoff">[ hsep ([text &quot;Definition&quot;, ppIdent nm] ++</span>
+<span class="lineno">  176 </span><span class="spaces">             </span><span class="istickedoff">map ppBinder bs ++</span>
+<span class="lineno">  177 </span><span class="spaces">             </span><span class="istickedoff">[ppMaybeTy mty, text &quot;:=&quot;])</span>
+<span class="lineno">  178 </span><span class="spaces">      </span><span class="istickedoff">, ppTerm PrecNone body &lt;&gt; period</span>
+<span class="lineno">  179 </span><span class="spaces">      </span><span class="istickedoff">]</span>
+<span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff">) &lt;&gt; hardline</span>
+<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">InductiveDecl ind -&gt; <span class="nottickedoff">ppInductive ind</span></span>
+<span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">Section nm ds -&gt;</span>
+<span class="lineno">  183 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">vsep $ concat</span></span>
+<span class="lineno">  184 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">[ [ hsep [text &quot;Section&quot;, ppIdent nm, period] ]</span></span>
+<span class="lineno">  185 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">, map (indent 2 . ppDecl) ds</span></span>
+<span class="lineno">  186 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">, [ hsep [text &quot;End&quot;, ppIdent nm, period] ]</span></span>
+<span class="lineno">  187 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  188 </span><span class="spaces">  </span><span class="istickedoff">Snippet s -&gt; <span class="nottickedoff">text s</span></span></span>
 <span class="lineno">  189 </span>
 <span class="lineno">  190 </span>ppConstructor :: Constructor -&gt; Doc ann
 <span class="lineno">  191 </span><span class="decl"><span class="nottickedoff">ppConstructor (Constructor {..}) =</span>

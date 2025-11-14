@@ -999,16 +999,16 @@ span.spaces    { background: white }
 <span class="lineno">  980 </span>  FilePath -&gt;
 <span class="lineno">  981 </span>  FilePath -&gt;
 <span class="lineno">  982 </span>  ProofScript ()
-<span class="lineno">  983 </span><span class="decl"><span class="nottickedoff">wrapW4ProveExporter f unints path ext = do</span>
-<span class="lineno">  984 </span><span class="spaces">  </span><span class="nottickedoff">hashConsing &lt;- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing</span>
-<span class="lineno">  985 </span><span class="spaces">  </span><span class="nottickedoff">unintSet &lt;- SV.scriptTopLevel $ resolveNames unints</span>
-<span class="lineno">  986 </span><span class="spaces">  </span><span class="nottickedoff">execTactic $ tacticSolve $ \g -&gt; do</span>
-<span class="lineno">  987 </span><span class="spaces">    </span><span class="nottickedoff">let file = path ++ &quot;.&quot; ++ goalType g ++ show (goalNum g) ++ ext</span>
-<span class="lineno">  988 </span><span class="spaces">    </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  989 </span><span class="spaces">    </span><span class="nottickedoff">satq &lt;- io $ sequentToSATQuery sc unintSet (goalSequent g)</span>
-<span class="lineno">  990 </span><span class="spaces">    </span><span class="nottickedoff">(_, solver_name) &lt;- f hashConsing file satq</span>
-<span class="lineno">  991 </span><span class="spaces">    </span><span class="nottickedoff">let stats = solverStats solver_name (sequentSharedSize (goalSequent g))</span>
-<span class="lineno">  992 </span><span class="spaces">    </span><span class="nottickedoff">return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))</span></span>
+<span class="lineno">  983 </span><span class="decl"><span class="istickedoff">wrapW4ProveExporter f unints path ext = do</span>
+<span class="lineno">  984 </span><span class="spaces">  </span><span class="istickedoff">hashConsing &lt;- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing</span>
+<span class="lineno">  985 </span><span class="spaces">  </span><span class="istickedoff">unintSet &lt;- SV.scriptTopLevel $ resolveNames unints</span>
+<span class="lineno">  986 </span><span class="spaces">  </span><span class="istickedoff">execTactic $ tacticSolve $ \g -&gt; do</span>
+<span class="lineno">  987 </span><span class="spaces">    </span><span class="istickedoff">let file = path ++ &quot;.&quot; ++ goalType g ++ show (goalNum g) ++ ext</span>
+<span class="lineno">  988 </span><span class="spaces">    </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  989 </span><span class="spaces">    </span><span class="istickedoff">satq &lt;- io $ sequentToSATQuery sc unintSet (goalSequent g)</span>
+<span class="lineno">  990 </span><span class="spaces">    </span><span class="istickedoff">(_, solver_name) &lt;- f hashConsing file satq</span>
+<span class="lineno">  991 </span><span class="spaces">    </span><span class="istickedoff">let stats = solverStats <span class="nottickedoff">solver_name</span> <span class="nottickedoff">(sequentSharedSize (goalSequent g))</span></span>
+<span class="lineno">  992 </span><span class="spaces">    </span><span class="istickedoff">return (<span class="nottickedoff">stats</span>, SolveSuccess (SolverEvidence stats (goalSequent g)))</span></span>
 <span class="lineno">  993 </span>
 <span class="lineno">  994 </span>--------------------------------------------------
 <span class="lineno">  995 </span>proveABC_SBV :: ProofScript ()
@@ -1080,7 +1080,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1061 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1062 </span>
 <span class="lineno"> 1063 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1064 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
+<span class="lineno"> 1064 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
 <span class="lineno"> 1065 </span>
 <span class="lineno"> 1066 </span>w4_unint_rme :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1067 </span><span class="decl"><span class="istickedoff">w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme</span></span>
@@ -1100,18 +1100,18 @@ span.spaces    { background: white }
 <span class="lineno"> 1081 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1082 </span>
 <span class="lineno"> 1083 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1084 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
+<span class="lineno"> 1084 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
 <span class="lineno"> 1085 </span>
 <span class="lineno"> 1086 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1087 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
+<span class="lineno"> 1087 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
 <span class="lineno"> 1088 </span>
 <span class="lineno"> 1089 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1090 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
 <span class="lineno"> 1091 </span><span class="spaces">  </span><span class="nottickedoff">wrapW4ProveExporter Prover.proveExportWhat4_bitwuzla unints path &quot;.smt2&quot;</span></span>
 <span class="lineno"> 1092 </span>
 <span class="lineno"> 1093 </span>offline_w4_unint_z3 :: [Text] -&gt; FilePath -&gt; ProofScript ()
-<span class="lineno"> 1094 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_z3 unints path =</span>
-<span class="lineno"> 1095 </span><span class="spaces">  </span><span class="nottickedoff">wrapW4ProveExporter Prover.proveExportWhat4_z3 unints path &quot;.smt2&quot;</span></span>
+<span class="lineno"> 1094 </span><span class="decl"><span class="istickedoff">offline_w4_unint_z3 unints path =</span>
+<span class="lineno"> 1095 </span><span class="spaces">  </span><span class="istickedoff">wrapW4ProveExporter Prover.proveExportWhat4_z3 unints path &quot;.smt2&quot;</span></span>
 <span class="lineno"> 1096 </span>
 <span class="lineno"> 1097 </span>offline_w4_unint_cvc4 :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1098 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_cvc4 unints path =</span>
@@ -1193,7 +1193,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1174 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1175 </span>
 <span class="lineno"> 1176 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1177 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
+<span class="lineno"> 1177 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
 <span class="lineno"> 1178 </span>
 <span class="lineno"> 1179 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1180 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
@@ -2239,24 +2239,24 @@ span.spaces    { background: white }
 <span class="lineno"> 2220 </span><span class="decl"><span class="istickedoff">writeVerificationSummary = do</span>
 <span class="lineno"> 2221 </span><span class="spaces">  </span><span class="istickedoff">do</span>
 <span class="lineno"> 2222 </span><span class="spaces">    </span><span class="istickedoff">db &lt;- SV.getTheoremDB</span>
-<span class="lineno"> 2223 </span><span class="spaces">    </span><span class="istickedoff">values &lt;- <span class="nottickedoff">rwProofs</span> &lt;$&gt; getTopLevelRW</span>
-<span class="lineno"> 2224 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">jspecs  = [ s | SV.VJVMMethodSpec s &lt;- values ]</span></span>
-<span class="lineno"> 2225 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span></span>
-<span class="lineno"> 2226 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span></span>
-<span class="lineno"> 2227 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">summary = computeVerificationSummary db jspecs lspecs thms</span></span>
+<span class="lineno"> 2223 </span><span class="spaces">    </span><span class="istickedoff">values &lt;- rwProofs &lt;$&gt; getTopLevelRW</span>
+<span class="lineno"> 2224 </span><span class="spaces">    </span><span class="istickedoff">let jspecs  = [ <span class="nottickedoff">s</span> | SV.VJVMMethodSpec s &lt;- values ]</span>
+<span class="lineno"> 2225 </span><span class="spaces">        </span><span class="istickedoff">lspecs  = [ <span class="nottickedoff">s</span> | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span>
+<span class="lineno"> 2226 </span><span class="spaces">        </span><span class="istickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span>
+<span class="lineno"> 2227 </span><span class="spaces">        </span><span class="istickedoff">summary = computeVerificationSummary db jspecs lspecs thms</span>
 <span class="lineno"> 2228 </span><span class="spaces">    </span><span class="istickedoff">opts &lt;- asks roOptions</span>
-<span class="lineno"> 2229 </span><span class="spaces">    </span><span class="istickedoff">dir &lt;- asks <span class="nottickedoff">roInitWorkDir</span></span>
+<span class="lineno"> 2229 </span><span class="spaces">    </span><span class="istickedoff">dir &lt;- asks roInitWorkDir</span>
 <span class="lineno"> 2230 </span><span class="spaces">    </span><span class="istickedoff">nenv &lt;- io . scGetNamingEnv =&lt;&lt; getSharedContext</span>
 <span class="lineno"> 2231 </span><span class="spaces">    </span><span class="istickedoff">ppOpts &lt;- getTopLevelPPOpts</span>
 <span class="lineno"> 2232 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2233 </span><span class="spaces">    </span><span class="istickedoff">case summaryFile opts of</span>
 <span class="lineno"> 2234 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2235 </span><span class="spaces">      </span><span class="istickedoff">Just f -&gt; <span class="nottickedoff">let</span></span>
-<span class="lineno"> 2236 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">f' = if hasDrive f then f else dir &lt;/&gt; f</span></span>
-<span class="lineno"> 2237 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">formatSummary = case summaryFormat opts of</span></span>
-<span class="lineno"> 2238 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">JSON -&gt; jsonVerificationSummary</span></span>
-<span class="lineno"> 2239 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">Pretty -&gt; prettyVerificationSummary ppOpts nenv</span></span>
-<span class="lineno"> 2240 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in io $ writeFile f' $ formatSummary summary</span></span></span>
+<span class="lineno"> 2235 </span><span class="spaces">      </span><span class="istickedoff">Just f -&gt; let</span>
+<span class="lineno"> 2236 </span><span class="spaces">        </span><span class="istickedoff">f' = if <span class="tickonlyfalse">hasDrive f</span> then <span class="nottickedoff">f</span> else dir &lt;/&gt; f</span>
+<span class="lineno"> 2237 </span><span class="spaces">        </span><span class="istickedoff">formatSummary = case summaryFormat opts of</span>
+<span class="lineno"> 2238 </span><span class="spaces">                       </span><span class="istickedoff">JSON -&gt; <span class="nottickedoff">jsonVerificationSummary</span></span>
+<span class="lineno"> 2239 </span><span class="spaces">                       </span><span class="istickedoff">Pretty -&gt; prettyVerificationSummary ppOpts nenv</span>
+<span class="lineno"> 2240 </span><span class="spaces">        </span><span class="istickedoff">in io $ writeFile f' $ formatSummary summary</span></span>
 <span class="lineno"> 2241 </span>
 <span class="lineno"> 2242 </span>declare_ghost_state ::
 <span class="lineno"> 2243 </span>  Text -&gt;

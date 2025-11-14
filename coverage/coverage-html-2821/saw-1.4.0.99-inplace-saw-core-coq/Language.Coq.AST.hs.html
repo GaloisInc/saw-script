@@ -37,13 +37,13 @@ span.spaces    { background: white }
 <span class="lineno">   18 </span>-- A /qualified/ identifier is a sequence of one or more identifiers
 <span class="lineno">   19 </span>-- separated by periods.
 <span class="lineno">   20 </span>newtype Ident = Ident String
-<span class="lineno">   21 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   21 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
 <span class="lineno">   22 </span>
 <span class="lineno">   23 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Ident</span></span></span></span> where
 <span class="lineno">   24 </span>  <span class="decl"><span class="nottickedoff">show (Ident s) = show s</span></span>
 <span class="lineno">   25 </span>
 <span class="lineno">   26 </span>instance IsString Ident where
-<span class="lineno">   27 </span>  <span class="decl"><span class="nottickedoff">fromString s = Ident s</span></span>
+<span class="lineno">   27 </span>  <span class="decl"><span class="istickedoff">fromString s = Ident s</span></span>
 <span class="lineno">   28 </span>
 <span class="lineno">   29 </span>data Sort
 <span class="lineno">   30 </span>  = Prop

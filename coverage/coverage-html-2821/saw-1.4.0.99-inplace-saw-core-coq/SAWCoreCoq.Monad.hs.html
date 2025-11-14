@@ -104,7 +104,7 @@ span.spaces    { background: white }
 <span class="lineno">   85 </span>-- of the translation configuration.
 <span class="lineno">   86 </span>data WithTranslationConfiguration r = WithTranslationConfiguration
 <span class="lineno">   87 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">translationConfiguration</span></span></span> :: TranslationConfiguration
-<span class="lineno">   88 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">otherConfiguration</span></span></span> :: r
+<span class="lineno">   88 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">otherConfiguration</span></span></span> :: r
 <span class="lineno">   89 </span>  }
 <span class="lineno">   90 </span>
 <span class="lineno">   91 </span>-- | Some computations will rely solely on access to the configuration, so we
@@ -125,8 +125,8 @@ span.spaces    { background: white }
 <span class="lineno">  106 </span>  s -&gt;
 <span class="lineno">  107 </span>  (forall m. TranslationMonad r s m =&gt; m a) -&gt;
 <span class="lineno">  108 </span>  Either (TranslationError Term) (a, s)
-<span class="lineno">  109 </span><span class="decl"><span class="nottickedoff">runTranslationMonad configuration r s m =</span>
-<span class="lineno">  110 </span><span class="spaces">  </span><span class="nottickedoff">runStateT (runReaderT m (WithTranslationConfiguration configuration r)) s</span></span>
+<span class="lineno">  109 </span><span class="decl"><span class="istickedoff">runTranslationMonad configuration r s m =</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">runStateT (runReaderT m (WithTranslationConfiguration <span class="nottickedoff">configuration</span> r)) s</span></span>
 
 </pre>
 </body>
