@@ -117,7 +117,7 @@ SAW can analyze LLVM programs (usually derived from C, but potentially
 for other languages). The only tool strictly required for this is a
 compiler that can generate LLVM bitcode, such as `clang`. However,
 having the full LLVM tool suite available can be useful. We have tested
-SAW with LLVM and `clang` versions from 3.5 to 16.0, as well as the
+SAW with LLVM and `clang` versions from 3.5 to 20.0, as well as the
 version of `clang` bundled with Apple Xcode. We welcome bug reports on
 any failure to parse bitcode from LLVM versions in that range.
 

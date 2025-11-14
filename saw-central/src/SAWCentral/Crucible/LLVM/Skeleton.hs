@@ -140,17 +140,19 @@ parseArg LLVM.Typed { LLVM.typedType = t } (nm, loc) = do
 
 stmtCalls :: [LLVM.Stmt] -> Set Text
 stmtCalls [] = Set.empty
-stmtCalls (LLVM.Result _ (LLVM.Call _ _ (LLVM.ValSymbol (LLVM.Symbol s)) _) _:stmts) =
+stmtCalls (LLVM.Result _ (LLVM.Call _ _ (LLVM.ValSymbol (LLVM.Symbol s)) _) _ _:stmts) =
   Set.insert (Text.pack s) $ stmtCalls stmts
-stmtCalls (LLVM.Effect (LLVM.Call _ _ (LLVM.ValSymbol (LLVM.Symbol s)) _) _:stmts) =
+stmtCalls (LLVM.Effect (LLVM.Call _ _ (LLVM.ValSymbol (LLVM.Symbol s)) _) _ _:stmts) =
   Set.insert (Text.pack s) $ stmtCalls stmts
 stmtCalls (_:stmts) = stmtCalls stmts
 
+-- | Infer locations of declarations by looking at either debug records (for
+-- recent versions of LLVM) or debug-related intrinsic functions (for older
+-- versions of LLVM.
 stmtDebugDeclares :: [LLVM.Stmt] -> Map Int Location
 stmtDebugDeclares [] = Map.empty
-stmtDebugDeclares
-  (LLVM.Result _
-    (LLVM.Call _ _
+stmtDebugDeclares (LLVM.Result _ instr drs md:stmts)
+  | LLVM.Call _ _
       (LLVM.ValSymbol (LLVM.Symbol s))
       [ _
       , LLVM.Typed
@@ -158,13 +160,14 @@ stmtDebugDeclares
           LLVM.ValMd (LLVM.ValMdDebugInfo (LLVM.DebugInfoLocalVariable LLVM.DILocalVariable { LLVM.dilvArg = a }))
         }
       , _
-      ]) md:stmts)
-  | s == "llvm.dbg.declare" || s == "llvm.dbg.value"
+      ] <- instr
+  , s == "llvm.dbg.declare" || s == "llvm.dbg.value"
   , Just (LLVM.ValMdLoc LLVM.DebugLoc { LLVM.dlLine = line, LLVM.dlCol = col }) <- lookup "dbg" md
   = Map.insert (fromIntegral a) (Location (fromIntegral line) . Just $ fromIntegral col) $ stmtDebugDeclares stmts
-stmtDebugDeclares
-  (LLVM.Effect
-    (LLVM.Call _ _
+  | otherwise
+  = Map.union (debugRecordDeclares drs) (stmtDebugDeclares stmts)
+stmtDebugDeclares (LLVM.Effect instr drs md:stmts)
+  | LLVM.Call _ _
       (LLVM.ValSymbol (LLVM.Symbol s))
       [ _
       , LLVM.Typed
@@ -172,11 +175,48 @@ stmtDebugDeclares
           LLVM.ValMd (LLVM.ValMdDebugInfo (LLVM.DebugInfoLocalVariable LLVM.DILocalVariable { LLVM.dilvArg = a }))
         }
       , _
-      ]) md:stmts)
-  | s == "llvm.dbg.declare" || s == "llvm.dbg.value"
+      ] <- instr
+  , s == "llvm.dbg.declare" || s == "llvm.dbg.value"
   , Just (LLVM.ValMdLoc LLVM.DebugLoc { LLVM.dlLine = line, LLVM.dlCol = col }) <- lookup "dbg" md
   = Map.insert (fromIntegral a) (Location (fromIntegral line) . Just $ fromIntegral col) $ stmtDebugDeclares stmts
-stmtDebugDeclares (_:stmts) = stmtDebugDeclares stmts
+  | otherwise
+  = Map.union (debugRecordDeclares drs) (stmtDebugDeclares stmts)
+
+-- | Infer locations of declarations by looking at @#dbg_declare@ and
+-- @#dbg_value@ debug records.
+debugRecordDeclares :: [LLVM.DebugRecord] -> Map Int Location
+debugRecordDeclares [] = Map.empty
+debugRecordDeclares
+  (LLVM.DebugRecordDeclare
+    (LLVM.DbgRecDeclare
+      { LLVM.drdLocation =
+          LLVM.ValMdLoc
+            LLVM.DebugLoc { LLVM.dlLine = line, LLVM.dlCol = col }
+      , LLVM.drdLocalVariable =
+          LLVM.ValMdDebugInfo
+            (LLVM.DebugInfoLocalVariable
+              LLVM.DILocalVariable { LLVM.dilvArg = a })
+      }):drs) =
+  Map.insert
+    (fromIntegral a)
+    (Location (fromIntegral line) (Just (fromIntegral col)))
+    (debugRecordDeclares drs)
+debugRecordDeclares
+  (LLVM.DebugRecordValue
+    (LLVM.DbgRecValue
+      { LLVM.drvLocation =
+          LLVM.ValMdLoc
+            LLVM.DebugLoc { LLVM.dlLine = line, LLVM.dlCol = col }
+      , LLVM.drvLocalVariable =
+          LLVM.ValMdDebugInfo
+            (LLVM.DebugInfoLocalVariable
+              LLVM.DILocalVariable { LLVM.dilvArg = a })
+      }):drs) =
+  Map.insert
+    (fromIntegral a)
+    (Location (fromIntegral line) (Just (fromIntegral col)))
+    (debugRecordDeclares drs)
+debugRecordDeclares (_:drs) = debugRecordDeclares drs
 
 defineName :: LLVM.Define -> Text
 defineName LLVM.Define { LLVM.defName = LLVM.Symbol s } = Text.pack s

@@ -167,6 +167,8 @@ This release supports [version
        - importing ambiguous symbols is allowed
        - referring to ambiguous (qualified) symbols is an error.
 
+* Support LLVM versions up to 20.
+
 ## New Features
 
 * SAW has a new command `mir_find_name : MIRModule -> String -> [MIRType] -> String`
