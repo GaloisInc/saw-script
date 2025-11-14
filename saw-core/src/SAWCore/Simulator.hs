@@ -516,16 +516,19 @@ mkMemoClosed cfg t =
 
     termf :: TermF Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
     termf tf =
-      do -- if tf is a defined constant, traverse the definition body and type
-         case tf of
-           Constant nm ->
-             do let r = requireNameInMap nm (simModMap cfg)
-                void $ go (resolvedNameType r)
-                case r of
-                  ResolvedDef (defBody -> Just body) -> void $ go body
-                  _ -> pure ()
-           _ -> pure ()
-         freesTermF <$> traverse go tf
+      case tf of
+        Constant nm ->
+          -- if tf is a defined constant, traverse the definition body and type
+          do let r = requireNameInMap nm (simModMap cfg)
+             void $ go (resolvedNameType r)
+             case r of
+               ResolvedDef (defBody -> Just body) -> go body
+               _ -> pure IntSet.empty
+        Lambda x _ty body ->
+          -- skip type, which is not used for simulation
+          IntSet.delete (vnIndex x) <$> go body
+        _ ->
+          freesTermF <$> traverse go tf
 
 {-# SPECIALIZE evalClosedTermF ::
   Show (Extra l) =>
