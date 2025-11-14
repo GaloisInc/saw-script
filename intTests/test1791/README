@@ -1,0 +1,40 @@
+A relative path in a SAWScript file should be relative to the
+directory the file lives in, not the directory SAW was in when it was
+loaded. This is, though not necessarily automatically correct (there
+is a lot to be said for always creating all _output_ in the current
+directory) the current behavior and we don't want it to regress
+without being noticed.
+
+In here we test the following things:
+
+paths01:
+   - An include statement with a relative path should get the right
+     file.
+   - Within the included file, another include statement with a
+     relative path should get the right file.
+   - Then do a second include statement with a relative path in the
+     original file, to make sure the interpretation doesn't change.
+
+paths02:
+   - Cryptol imports (in the absence of other considerations, like
+     CRYPTOLPATH) should be relative to the script file as well.
+
+paths03:
+   - load_sawcore_from_file gets the right file.
+
+paths04:
+   - The file written as a result of the -s (summarize) option should
+     appear in the startup directory, not the script directory.
+
+paths05:
+   - write_smtlib2 outputs to the script directory.
+
+paths06:
+   - write_coq_term outputs to the script directory.
+
+paths07:
+   - offline_w4_unint_z3 outputs to the script directory.
+
+Note that we don't test either every file reader or every file writer,
+although perhaps we should eventually (note: there are a lot); instead
+we take a representative sample from different parts of the system.

@@ -221,7 +221,10 @@ instance AppSubst Stmt where
     StmtLet pos rb dg        -> StmtLet pos rb (appSubst s dg)
     StmtCode allpos spos str -> StmtCode allpos spos str
     StmtImport pos imp       -> StmtImport pos imp
+    StmtInclude pos file     -> StmtInclude pos file
     StmtTypedef allpos apos a ty -> StmtTypedef allpos apos a (appSubst s ty)
+    StmtPushdir pos dir      -> StmtPushdir pos dir
+    StmtPopdir pos           -> StmtPopdir pos
 
 instance AppSubst DeclGroup where
   appSubst s (Recursive ds) = Recursive (appSubst s ds)
@@ -1460,6 +1463,15 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
             return s
         StmtImport _spos _ ->
             return s
+        StmtInclude spos _ -> do
+            -- Restrict include to TopLevel. This matches the prior
+            -- behavior when it was a builtin function rather than
+            -- syntax. FUTURE: consider relaxing the requirement.
+            let spos' = PosInferred InfTerm spos
+            let tm = TyCon spos' (ContextCon TopLevel) []
+            tx <- getFreshTyVar spos
+            unify cname (tBlock blockpos ctx tx) spos (tBlock spos tm tx)
+            return s
         StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
             tyenv <- gets tyEnv
@@ -1488,6 +1500,10 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
                     -- FUTURE: print the position of the previous definition
                     -- (currently we don't keep it around)
                     return s
+        StmtPushdir _spos _ ->
+            return s
+        StmtPopdir _spos ->
+            return s
 
 -- Inference for a do-block.
 --

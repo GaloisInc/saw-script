@@ -11,7 +11,7 @@ module SAWScript.Loader (
     readSchemaPure,
     readSchemaPattern,
     readExpression,
-    readStmtSemiUnchecked,
+    readREPLTextUnchecked,
     findAndLoadFileUnchecked
   ) where
 
@@ -23,12 +23,12 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import System.Directory
-import System.FilePath (normalise)
+import System.FilePath (normalise, takeDirectory)
 
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
 
-import SAWCentral.Position (Pos, getPos)
+import SAWCentral.Position (Pos(..), getPos)
 import qualified SAWCentral.Options as Options
 import SAWCentral.Options (Options)
 import SAWCentral.AST
@@ -38,6 +38,7 @@ import SAWScript.Panic (panic)
 import SAWScript.Token (Token)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
+import SAWScript.Include as Inc
 import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
 
 
@@ -57,6 +58,30 @@ convertTypeMsg (pos, msg) =
         msg' = Text.pack msg
     in
     pos' <> ": " <> msg'
+
+-- | Type shorthand for an include path.
+--
+--   The LHS is the directory the current file was included from
+--   (starts as ".") and the RHS is the user's search path.
+type IncludePath = (FilePath, [FilePath])
+
+-- | Wrap statements in a pushd/popd pair.
+--
+--   See the notes in the interpreter for why we do this.
+--
+--   FUTURE: if we keep this thing, it would be nice to attach the
+--   source position of the include to the push and pop statements.
+--
+wrapDir :: FilePath -> WithMsgs [Stmt] -> WithMsgs [Stmt]
+wrapDir dir result =
+    case result of
+        Left errs -> Left errs
+        Right (msgs, stmts) ->
+            let stmts' = 
+                  let pos = PosInternal "pushd/popd derived from include" in
+                  [StmtPushdir pos dir] ++ stmts ++ [StmtPopdir pos]
+            in
+            Right (msgs, stmts')
 
 -- | Read some SAWScript text, using the selected parser entry point.
 --
@@ -124,6 +149,31 @@ dispatchMsgs opts result =
             mapM_ (printMsg Options.Warn) msgs
             pure $ Right tree
 
+-- | Run the readAny result through the `Include` module to resolve
+--   @include@ statements.
+--
+--   If we fail after collecting warnings, print the warnings before
+--   returning the failure.
+--
+resolveIncludes ::
+    Int -> IncludePath -> Options -> Inc.Processor a -> WithMsgs a ->
+    IO (WithMsgs a)
+resolveIncludes depth incpath opts process result =
+    let printMsg vrb msg =
+          Options.printOutLn opts vrb (Text.unpack msg)
+    in
+    case result of
+        Left errs ->
+            pure $ Left errs
+        Right (msgs, tree) -> do
+            result' <- process (includeFile depth incpath opts) tree
+            case result' of
+                Left errs -> do
+                    mapM_ (printMsg Options.Warn) msgs
+                    pure $ Left errs
+                Right tree' ->
+                    pure $ Right (msgs, tree')
+
 -- | Read a type schema from a string. This is used to digest the type
 --   signatures for builtins, and the expansions for builtin typedefs.
 --
@@ -142,6 +192,9 @@ dispatchMsgs opts result =
 -- FUTURE: we should figure out how to generate more meaningful
 -- positions (like "third argument of concat") but this at least
 -- allows telling the user which builtin the type came from.
+--
+-- Note: there is no way to reach @include@ statements from type
+-- schemas, so no need to process includes in what we read.
 --
 readSchemaPure ::
     FilePath ->
@@ -167,17 +220,14 @@ readSchemaPure fakeFileName lc tyenv str = do
 --
 --   Also runs the typechecker to check the pattern.
 --
+-- Note: there is no way to reach @include@ statements from schema
+-- patterns, so no need to process includes in what we read.
+--
 readSchemaPattern ::
+    Options ->
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
     IO (Either [Text] SchemaPattern)
-readSchemaPattern fileName environ rbenv avail str = do
-  -- XXX: this preserves the original behavior of ignoring the
-  -- verbosity setting. We could expect the caller to pass in the
-  -- options value to get the verbosity setting, and that's really
-  -- the right thing to do; except that current plans are to get
-  -- rid of that verbosity setting in the near future anyway.
-  let opts = Options.defaultOptions
-
+readSchemaPattern opts fileName environ rbenv avail str = do
   let result = readAny fileName str parseSchemaPattern
   let result' = case result of
         Left errs -> Left errs
@@ -202,13 +252,21 @@ readSchemaPattern fileName environ rbenv avail str = do
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
-readExpression :: FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text -> IO (Either [Text] (Schema, Expr))
-readExpression fileName environ rbenv avail str = do
-  -- XXX as above
-  let opts = Options.defaultOptions
+--
+-- It is possible for someone to provide an expression that includes
+-- an @include@ in a do-block, so just in case call into `Include`
+-- to resolve any that appear.
+--
+readExpression ::
+    Options ->
+    FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
+    IO (Either [Text] (Schema, Expr))
+readExpression opts fileName environ rbenv avail str = do
+  let incpath = (".", Options.importPath opts)
 
   let result = readAny fileName str parseExpression
-  let result' = case result of
+  result' <- resolveIncludes 0{-depth-} incpath opts Inc.processExpr result
+  let result'' = case result' of
         Left errs -> Left errs
         Right (msgs, expr) ->
            let Environ varenv tyenv _cryenvs = environ in
@@ -244,27 +302,72 @@ readExpression fileName environ rbenv avail str = do
                              ]
                    in
                    Right (msgs ++ warns', (schema, expr'))
+  dispatchMsgs opts result''
+
+-- | Read statements from a string. This is used by the REPL evaluator.
+--   Doesn't run the typechecker (yet).
+--
+--   May produce more than one statement if the statement given is an
+--   @include@.
+readREPLTextUnchecked :: Options -> FilePath -> Text -> IO (Either [Text] [Stmt])
+readREPLTextUnchecked opts fileName str = do
+  let incpath = (".", Options.importPath opts)
+
+  let result = readAny fileName str parseREPLText
+  result' <- resolveIncludes 0{-depth-} incpath opts Inc.processStmts result
   dispatchMsgs opts result'
 
--- | Read a statement from a string. This is used by the REPL evaluator.
---   Doesn't run the typechecker (yet).
-readStmtSemiUnchecked :: FilePath -> Text -> IO (Either [Text] Stmt)
-readStmtSemiUnchecked fileName str = do
-  -- XXX as above
-  let opts = Options.defaultOptions
+-- | Find a file, potentially looking in a list of multiple search paths (as
+-- specified via the @SAW_IMPORT_PATH@ environment variable or
+-- @-i@/@--import-path@ command-line options). If the file was successfully
+-- found, return the full path. If not, fail by returning `Left`.
+--
+locateFile :: IncludePath -> FilePath -> IO (Either [Text] FilePath)
+locateFile (current, rawdirs) file = do
+  -- Replace "." in the search path with the directory the current
+  -- file came from, which might or might not be ".".
+  let dirs = map adjust rawdirs
+      adjust "." = current
+      adjust dir = dir
 
-  let result = readAny fileName str parseStmtSemi
-  dispatchMsgs opts result
+  mfname <- findFile dirs file
+  case mfname of
+    Nothing -> do
+        let msgs = [
+                "Couldn't find file: " <> Text.pack file,
+                "  Searched in directories:"
+             ] ++ map (\p -> "    " <> Text.pack p) dirs
+        return $ Left msgs
+    Just fname ->
+      -- NB: Normalise the path name. The default SAW_IMPORT_PATH contains ".",
+      -- and the behavior of filepath's 'normalise' function is to prepend a
+      -- search path to the front of the file path that is found, which can
+      -- cause paths like "./foo.saw" to be returned. This looks ugly in error
+      -- messages, where we would rather display "foo.saw" instead.
+      return $ Right (normalise fname)
 
 -- | Load the 'Stmt's in a @.saw@ file.
 --   Doesn't run the typechecker (yet).
-loadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
-loadFileUnchecked opts fname = do
-  Options.printOutLn opts Options.Info $ "Loading file " ++ show fname
-  ftext <- TextIO.readFile fname
+includeFile :: Int -> IncludePath -> Options -> FilePath ->
+    IO (Either [Text] [Stmt])
+includeFile depth incpath opts fname = do
+  result <- locateFile incpath fname
+  case result of
+    Left errs -> return $ Left errs
+    Right fname' ->
+      if depth > 128 then
+          pure $ Left ["Maximum include depth exceeded"]
+      else do
+          let (_current, dirs) = incpath
+              current' = takeDirectory fname'
+              incpath' = (current', dirs)
 
-  let result = readAny fname ftext parseModule
-  dispatchMsgs opts result
+          Options.printOutLn opts Options.Info $ "Loading file " ++ show fname'
+          ftext <- TextIO.readFile fname'
+
+          let result' = wrapDir current' $ readAny fname ftext parseModule
+          result'' <- resolveIncludes (depth + 1) incpath' opts Inc.processStmts result'
+          dispatchMsgs opts result''
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
@@ -273,20 +376,6 @@ loadFileUnchecked opts fname = do
 --
 -- Doesn't run the typechecker (yet).
 findAndLoadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
-findAndLoadFileUnchecked opts fp = do
-  let paths = Options.importPath opts
-  mfname <- findFile paths fp
-  case mfname of
-    Nothing -> do
-        let msgs = [
-                "Couldn't find file: " <> Text.pack fp,
-                "  Searched in directories:"
-             ] ++ map (\p -> "    " <> Text.pack p) paths
-        return $ Left msgs
-    Just fname ->
-      -- NB: Normalise the path name. The default SAW_IMPORT_PATH contains ".",
-      -- and the behavior of filepath's 'normalise' function is to prepend a
-      -- search path to the front of the file path that is found, which can
-      -- cause paths like "./foo.saw" to be returned. This looks ugly in error
-      -- messages, where we would rather display "foo.saw" instead.
-      loadFileUnchecked opts (normalise fname)
+findAndLoadFileUnchecked opts fp =
+  let incpath = (".", Options.importPath opts) in
+  includeFile 0{-depth-} incpath opts fp

@@ -685,6 +685,7 @@ library saw-script
     SAWScript.REPL.Monad
   other-modules:
     SAWScript.Panic
+    SAWScript.Include
 
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints

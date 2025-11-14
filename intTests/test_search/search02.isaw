@@ -1,4 +1,4 @@
-return ()    // polymorphic searches
+// polymorphic searches
 
 print "--------------------------------"
 print "-- (a -> a)"

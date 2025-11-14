@@ -1,0 +1,3 @@
+print "here";
+include "subdir/there.saw";
+include "here.saw";

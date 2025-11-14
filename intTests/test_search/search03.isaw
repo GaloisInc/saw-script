@@ -1,4 +1,4 @@
-return ()    // applied and partially-applied contexts
+// applied and partially-applied contexts
 
 print "--------------------------------"
 print "-- ProofScript"

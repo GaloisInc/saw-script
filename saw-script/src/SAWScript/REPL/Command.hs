@@ -51,12 +51,12 @@ import SAWSupport.Trie (Trie)
 
 import qualified SAWCentral.AST as SS (Name, Schema)
 import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable)
-import SAWCentral.Value (Environ(..), TopLevelRW(..))
+import SAWCentral.Value (Environ(..), TopLevelRO(..), TopLevelRW(..))
 
 import SAWScript.Panic (panic)
 import qualified SAWScript.Loader as Loader
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
-import SAWScript.Interpreter (interpretTopStmt)
+import SAWScript.Interpreter (interpretTopStmts)
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Data
@@ -163,11 +163,13 @@ searchCmd str
      -- hide them from the search.
      let avail = everythingAvailable
 
+     ro <- getTopLevelRO
      rw <- getTopLevelRW
-     let environ = rwEnviron rw
+     let opts = roOptions ro
+         environ = rwEnviron rw
          rebindables = rwRebindables rw
      errs_or_pat <- liftIO $
-         Loader.readSchemaPattern replFileName environ rebindables avail str
+         Loader.readSchemaPattern opts replFileName environ rebindables avail str
      pat <- case errs_or_pat of
            Left errs -> failOn errs
            Right p -> return p
@@ -289,12 +291,14 @@ typeOfCmd str
   | Text.null str =
         liftIO $ putStrLn "Error: The :type command requires an argument"
   | otherwise = do
+     ro <- getTopLevelRO
      rw <- getTopLevelRW
-     let environ = rwEnviron rw
+     let opts = roOptions ro
+         environ = rwEnviron rw
          rebindables = rwRebindables rw
          avail = rwPrimsAvail rw
      errs_or_expr <- liftIO $
-         Loader.readExpression replFileName environ rebindables avail str
+         Loader.readExpression opts replFileName environ rebindables avail str
      (schema, _expr) <- case errs_or_expr of
          Left errs -> failOn errs
          Right info -> return info
@@ -388,14 +392,16 @@ genericHelp = map cmdHelp commandList
 -- | Execute some SAWScript text.
 executeSAWScriptText :: Text -> REPL ()
 executeSAWScriptText str = exceptionProtect $ do
-  errs_or_stmt <- liftIO $ Loader.readStmtSemiUnchecked replFileName str
-  case errs_or_stmt of
+  ro <- getTopLevelRO
+  let opts = roOptions ro
+  errs_or_stmts <- liftIO $ Loader.readREPLTextUnchecked opts replFileName str
+  case errs_or_stmts of
     Left errs -> failOn errs
-    Right stmt -> do
+    Right stmts -> do
          mbPst <- getProofState
          case mbPst of
-           Nothing -> void $ liftTopLevel (interpretTopStmt True stmt)
-           Just _  -> void $ liftProofScript (interpretTopStmt True stmt)
+           Nothing -> void $ liftTopLevel (interpretTopStmts True stmts)
+           Just _  -> void $ liftProofScript (interpretTopStmts True stmts)
 
 
 ------------------------------------------------------------

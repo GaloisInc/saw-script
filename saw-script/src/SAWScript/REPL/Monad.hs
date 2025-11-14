@@ -25,6 +25,7 @@ module SAWScript.REPL.Monad (
   , liftProofScript
   , REPLState(..)
   , getCryptolEnv
+  , getTopLevelRO
   , getTopLevelRW
   , getProofState
   ) where

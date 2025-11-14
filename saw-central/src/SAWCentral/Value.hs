@@ -1004,6 +1004,11 @@ data TopLevelRW =
     -- | The current stack trace. The most recent frame is at the front.
   , rwStackTrace :: Trace
 
+    -- | The current directory stack used by the pushdir/popdir statements.
+    --   See the notes attached to the pushdir/popdir implementation
+    --   in the interpreter for an explanation of why we have this.
+  , rwDirStack :: [FilePath]
+
   , rwJavaCodebase  :: JavaCodebase -- ^ Current state of Java sub-system.
 
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}

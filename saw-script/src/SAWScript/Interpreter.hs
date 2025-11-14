@@ -18,7 +18,7 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
-  ( interpretTopStmt
+  ( interpretTopStmts
   , processFile
   , buildTopLevelEnv
   )
@@ -27,8 +27,8 @@ module SAWScript.Interpreter
 import qualified Control.Exception as X
 import Control.Monad (unless, when)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (ask)
-import Control.Monad.State (gets, get, put)
+import Control.Monad.Reader (asks, ask)
+import Control.Monad.State (gets, get, put, modify)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.List (genericLength)
@@ -41,7 +41,7 @@ import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
-import System.FilePath (takeDirectory)
+import System.FilePath ( (</>) )
 import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
@@ -261,6 +261,74 @@ propagateRefChain chain1 v =
     VJVMSetup pos chain2 f -> VJVMSetup pos (insert chain2) f
     VMIRSetup pos chain2 f -> VMIRSetup pos (insert chain2) f
     _ -> v
+
+
+------------------------------------------------------------
+-- Current directory frobbing
+
+-- When we include a file, the interpreter needs to chdir to its
+-- directory. This is, for the time being, necessary so that other
+-- file accesses are relative to the directory the script file is in;
+-- that's the current behavior, and for the same reasons it makes
+-- sense for includes, it makes sense for other file reads (e.g.
+-- loading SAWCore files) and also makes some sense for writes. For
+-- the time being we have no infrastructure to support contextualizing
+-- those file accesses, so we need to keep the chdir behavior until we
+-- have some. (Note that we want such infrastructure anyway; for
+-- example, in an ideal world when using the remote API all file
+-- accesses would be done over the remote interface and actually
+-- happen on the client's machine.) It'll take a good deal of work to
+-- get there; as of this writing there's no useful structure to
+-- provide state to most of the places that do the actual file I/O.
+--
+-- Thus, in the meantime, we'll have the include handling insert a
+-- pushd on entry to an included file and popd on exit. We'll also
+-- keep the exception barrier code that was added in #1770 so we don't
+-- run off the rails if we don't reach the popd operation, and extend
+-- it so it also restores the directory stack.
+--
+-- I've chosen to make pushd and popd statements in the AST rather
+-- than builtins, and not expose any concrete syntax for them either.
+-- This is partly because consing them on the fly is easier that way,
+-- but also because, even though a pushd/popd facility might be useful
+-- to users if we made it available, I'm reluctant to do so because of
+-- the interactions with include statements and exceptions.
+--
+-- Note that when we get ourselves enough file access infrastructure
+-- that we no longer need to chdir, which is definitely the long-term
+-- goal as chdir'ing around on the fly is messy and confuses things,
+-- we should remove the pushdir/popdir implementation. Therefore we
+-- should also try to avoid creating new things that depend on it.
+
+pushdir :: FilePath -> TopLevel ()
+pushdir dir = do
+    dirstack <- gets rwDirStack
+    let dirstack' = dir : dirstack
+    modify (\rw -> rw { rwDirStack = dirstack' })
+    -- The directories we pushdir with are relative to the original
+    -- startup dir, not the current dir.
+    origdir <- asks roInitWorkDir    
+    liftIO $ setCurrentDirectory (origdir </> dir)
+
+popdir :: TopLevel ()
+popdir = do
+    dirstack <- gets rwDirStack
+    let dirstack' = case dirstack of
+          [] ->
+              panic "popdir" [
+                  "Directory stack ran out"
+              ]
+          _ : ds -> ds
+    -- The directories we pushdir with are relative to the original
+    -- startup dir, not the current dir.
+    origdir <- asks roInitWorkDir
+    dir <- case dirstack' of
+        [] ->
+            pure origdir
+        d : _ ->
+            pure (origdir </> d)
+    modify (\rw -> rw { rwDirStack = dirstack' })
+    liftIO $ setCurrentDirectory dir
 
 
 ------------------------------------------------------------
@@ -792,8 +860,15 @@ interpretDoStmt stmt =
             setCryptolEnv ce'
       SS.StmtImport _ _ ->
           fail "block-level import unimplemented"
+      SS.StmtInclude pos _file ->
+          panic "interpretDoStmt" [
+              "Leftover unresolved include statement",
+              "Position: " <> Text.pack (show pos)
+          ]
       SS.StmtTypedef _ _ name ty -> do
           liftTopLevel $ addTypedef name ty
+      SS.StmtPushdir _ dir -> liftTopLevel $ pushdir dir
+      SS.StmtPopdir _ -> liftTopLevel popdir
 
 -- Eval some statements from a do-block.
 --
@@ -977,8 +1052,29 @@ interpretTopStmt printBinds stmt = do
          setCryptolEnv cenv'
          --showCryptolEnv
 
+    SS.StmtInclude pos _file ->
+      panic "interpretTopStmt" [
+          "Leftover unresolved include statement",
+          "Position: " <> Text.pack (show pos)
+      ]
+
     SS.StmtTypedef _ _ name ty ->
       liftTopLevel $ addTypedef name ty
+    SS.StmtPushdir _ dir -> liftTopLevel $ pushdir dir
+    SS.StmtPopdir _ -> liftTopLevel popdir
+
+-- | Interpret multiple top-level statements in an interpreter monad
+--   (any of the SAWScript monads)
+--
+--   This is the entry point used by the REPL for executing stuff the
+--   user types in.
+--
+interpretTopStmts :: InterpreterMonad m =>
+  Bool {-^ whether to print non-unit result values -} ->
+  [SS.Stmt] ->
+  m ()
+interpretTopStmts printBinds stmts =
+  mapM_ (interpretTopStmt printBinds) stmts
 
 -- Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter
@@ -999,9 +1095,22 @@ stmtInterpreter ro rw stmts =
   -- environment because that doesn't require any fiddling.
   fst <$> runTopLevel (mapM_ (interpretTopStmt False) stmts) ro rw
 
+-- Save the system current directory and directory stack
+saveDirState :: TopLevel (FilePath, [FilePath])
+saveDirState = do
+  cwd <- liftIO getCurrentDirectory
+  dirstack <- gets rwDirStack
+  return (cwd, dirstack)
+
+-- Restore the system current directory and directory stack
+restoreDirState :: (FilePath, [FilePath]) -> TopLevel ()
+restoreDirState (cwd, dirstack) = do
+  liftIO $ setCurrentDirectory cwd
+  modify (\rw -> rw { rwDirStack = dirstack })
+
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain =
-  bracketTopLevel (io getCurrentDirectory) (io . setCurrentDirectory) (const interp)
+  bracketTopLevel saveDirState restoreDirState (const interp)
   where
     interp = do
       opts <- getOptions
@@ -1014,7 +1123,6 @@ interpretFile file runMain =
             -- output.
             throwTopLevel $ Text.unpack $ Text.intercalate "\n" errs
           Right stmts -> pure stmts
-      io $ setCurrentDirectory (takeDirectory file)
       mapM_ stmtWithPrint stmts
       when runMain interpretMain
       writeVerificationSummary
@@ -1130,6 +1238,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwRebindables = Map.empty
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
+                   , rwDirStack   = []
                    , rwProofs     = []
                    , rwPPOpts     = PPS.defaultOpts
                    , rwSharedContext = sc
@@ -2104,11 +2213,6 @@ set_crucible_timeout t = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwCrucibleTimeout = t }
 
-include_value :: Text -> TopLevel ()
-include_value file = do
-  let file' :: FilePath = Text.unpack file
-  interpretFile file' False
-
 set_ascii :: Bool -> TopLevel ()
 set_ascii b = do
   rw <- getTopLevelRW
@@ -2552,11 +2656,6 @@ primitives = Map.fromList $
     , "would. Works in any of the SAWScript monads."
     , "Note: not a control-flow operator."
     ]
-
-  , prim "include"             "String -> TopLevel ()"
-    (pureVal include_value)
-    Current
-    [ "Load and execute the given SAWScript file." ]
 
   , prim "undefined"           "{a} a"
     -- In order to work as expected this has to be "error" in place of

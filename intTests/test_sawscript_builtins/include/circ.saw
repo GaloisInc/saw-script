@@ -1,0 +1,2 @@
+// circular include
+include "circ.saw";

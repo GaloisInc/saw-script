@@ -1,5 +1,4 @@
-return ()    // the return works around a parsing bug with comment lines
-return ()    // various basic searches
+// various basic searches
 
 print "--------------------------------"
 print "-- LLVMSpec"
