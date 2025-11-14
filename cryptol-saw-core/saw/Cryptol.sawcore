@@ -1870,10 +1870,13 @@ ecArrayRangeEq = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -
 
 addNat_1 : (n : Nat) -> Eq Nat (addNat 1 n) (Succ n);
 addNat_1 =
-  Nat#rec
+  Nat__rec
   (\ (n : Nat) -> Eq Nat (addNat 1 n) (Succ n))
   (Refl Nat 1)
-  (\ (x : Pos) -> Refl Nat (NatPos (posInc x)));
+  (\ (n : Nat) (ih : Eq Nat (addNat 1 n) (Succ n)) ->
+   trans Nat (addNat 1 (Succ n)) (Succ (addNat 1 n)) (Succ (Succ n))
+   (eqNatAddS 1 n) (eqNatSucc (addNat 1 n) (Succ n) ih)
+  );
 
 ecPmult :
   (u v : Num) ->
