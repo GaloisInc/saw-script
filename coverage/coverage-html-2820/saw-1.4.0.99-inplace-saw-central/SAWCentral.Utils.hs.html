@@ -74,7 +74,7 @@ span.spaces    { background: white }
 <span class="lineno">   55 </span>mapLookupAny :: Ord k =&gt; [k] -&gt; Map k a -&gt; Maybe a
 <span class="lineno">   56 </span><span class="decl"><span class="nottickedoff">mapLookupAny keys m = listToMaybe $ catMaybes $ map (\k -&gt; Map.lookup k m) keys</span></span>
 <span class="lineno">   57 </span>
-<span class="lineno">   58 </span>-- ExecException {{{1
+<span class="lineno">   58 </span>-- ExecException
 <span class="lineno">   59 </span>
 <span class="lineno">   60 </span>-- | Class of exceptions thrown by SBV parser.
 <span class="lineno">   61 </span>data ExecException = ExecException Pos          -- Position
@@ -92,7 +92,7 @@ span.spaces    { background: white }
 <span class="lineno">   73 </span>throwExecException :: Pos -&gt; Doc Void -&gt; String -&gt; m a
 <span class="lineno">   74 </span><span class="decl"><span class="nottickedoff">throwExecException site errorMsg resolution = throw (ExecException site errorMsg resolution)</span></span>
 <span class="lineno">   75 </span>
-<span class="lineno">   76 </span>-- Timing {{{1
+<span class="lineno">   76 </span>-- Timing
 <span class="lineno">   77 </span>
 <span class="lineno">   78 </span>-- | Return a string representation of the elapsed time since start
 <span class="lineno">   79 </span>timeIt :: (NFData a, MonadIO m) =&gt; m a -&gt; m (a, String)
@@ -118,7 +118,7 @@ span.spaces    { background: white }
 <span class="lineno">   99 </span><span class="spaces">        </span><span class="nottickedoff">m :: Int</span>
 <span class="lineno">  100 </span><span class="spaces">        </span><span class="nottickedoff">m = floor ((toRational n) * (1 % 60))</span></span>
 <span class="lineno">  101 </span>
-<span class="lineno">  102 </span>-- Java lookup functions {{{1
+<span class="lineno">  102 </span>-- Java lookup functions
 <span class="lineno">  103 </span>
 <span class="lineno">  104 </span>-- | Atempt to find class with given name, or throw ExecException if no class
 <span class="lineno">  105 </span>-- with that name exists. Class name should be in slash-separated form.

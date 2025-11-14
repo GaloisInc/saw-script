@@ -66,7 +66,7 @@ span.spaces    { background: white }
 <span class="lineno">   47 </span>import Prelude hiding (const, mapM)
 <span class="lineno">   48 </span>
 <span class="lineno">   49 </span>
-<span class="lineno">   50 </span>-- Functor typeclass extensions {{{1
+<span class="lineno">   50 </span>-- Functor typeclass extensions
 <span class="lineno">   51 </span>
 <span class="lineno">   52 </span>class EqFoldable f where
 <span class="lineno">   53 </span>  -- | Compares equality of arguments.
@@ -82,7 +82,7 @@ span.spaces    { background: white }
 <span class="lineno">   63 </span>  fshows :: Show x =&gt; f x -&gt; ShowS
 <span class="lineno">   64 </span>  <span class="decl"><span class="nottickedoff">fshows x = (fshow x ++)</span></span>
 <span class="lineno">   65 </span>
-<span class="lineno">   66 </span>-- Term {{{1
+<span class="lineno">   66 </span>-- Term
 <span class="lineno">   67 </span>
 <span class="lineno">   68 </span>-- | A term with the given operator.
 <span class="lineno">   69 </span>newtype Term f = Term { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">unTerm</span></span></span> :: f (Term f) }
@@ -105,12 +105,12 @@ span.spaces    { background: white }
 <span class="lineno">   86 </span><span class="decl"><span class="nottickedoff">foldTerm f = go</span>
 <span class="lineno">   87 </span><span class="spaces">  </span><span class="nottickedoff">where go (Term x) = f (fmap go x)</span></span>
 <span class="lineno">   88 </span>
-<span class="lineno">   89 </span>-- Class {{{1
+<span class="lineno">   89 </span>-- Class
 <span class="lineno">   90 </span>
 <span class="lineno">   91 </span>newtype Class = Class Integer
 <span class="lineno">   92 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
 <span class="lineno">   93 </span>
-<span class="lineno">   94 </span>-- ClassApp {{{1
+<span class="lineno">   94 </span>-- ClassApp
 <span class="lineno">   95 </span>
 <span class="lineno">   96 </span>newtype ClassApp f = ClassApp (f Class)
 <span class="lineno">   97 </span>
@@ -120,7 +120,7 @@ span.spaces    { background: white }
 <span class="lineno">  101 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">OrdFoldable f =&gt; Ord (ClassApp f)</span></span></span></span></span></span></span></span></span></span></span></span> where
 <span class="lineno">  102 </span>  <span class="decl"><span class="nottickedoff">(ClassApp x) `compare` (ClassApp y) = x `fcompare` y</span></span>
 <span class="lineno">  103 </span>
-<span class="lineno">  104 </span>-- CCSet {{{1
+<span class="lineno">  104 </span>-- CCSet
 <span class="lineno">  105 </span>
 <span class="lineno">  106 </span>data CCSet f = CC {
 <span class="lineno">  107 </span>         -- | Number of classes added so far.
@@ -220,7 +220,7 @@ span.spaces    { background: white }
 <span class="lineno">  201 </span>toList :: OrdFoldable f =&gt; CCSet f -&gt; [[Term f]]
 <span class="lineno">  202 </span><span class="decl"><span class="nottickedoff">toList = map Set.toList . Set.toList . toSet</span></span>
 <span class="lineno">  203 </span>
-<span class="lineno">  204 </span>-- CCSet implementation {{{1
+<span class="lineno">  204 </span>-- CCSet implementation
 <span class="lineno">  205 </span>
 <span class="lineno">  206 </span>-- | Returns a class for term if one exists.
 <span class="lineno">  207 </span>getExistingClass :: (OrdFoldable f, Traversable f) =&gt; CCSet f -&gt; Term f -&gt; Maybe Class

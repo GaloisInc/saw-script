@@ -68,7 +68,7 @@ span.spaces    { background: white }
 <span class="lineno">   49 </span>  , JavaType(..)
 <span class="lineno">   50 </span>  ) where
 <span class="lineno">   51 </span>
-<span class="lineno">   52 </span>-- Imports {{{2
+<span class="lineno">   52 </span>-- Imports
 <span class="lineno">   53 </span>
 <span class="lineno">   54 </span>import Control.Monad.Trans
 <span class="lineno">   55 </span>import Control.Monad.Trans.Except
@@ -101,7 +101,7 @@ span.spaces    { background: white }
 <span class="lineno">   82 </span>   | LineExact Integer
 <span class="lineno">   83 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">   84 </span>
-<span class="lineno">   85 </span>-- JavaExpr {{{1
+<span class="lineno">   85 </span>-- JavaExpr
 <span class="lineno">   86 </span>
 <span class="lineno">   87 </span>data JavaExprF v
 <span class="lineno">   88 </span>  = ReturnVal JSS.Type
@@ -207,7 +207,7 @@ span.spaces    { background: white }
 <span class="lineno">  188 </span>isScalarExpr :: JavaExpr -&gt; Bool
 <span class="lineno">  189 </span><span class="decl"><span class="nottickedoff">isScalarExpr = JSS.isPrimitiveType . exprType</span></span>
 <span class="lineno">  190 </span>
-<span class="lineno">  191 </span>-- LogicExpr {{{1
+<span class="lineno">  191 </span>-- LogicExpr
 <span class="lineno">  192 </span>
 <span class="lineno">  193 </span>data LogicExpr =
 <span class="lineno">  194 </span>  LogicExpr { -- | A term, possibly function type, which does _not_
@@ -234,7 +234,7 @@ span.spaces    { background: white }
 <span class="lineno">  215 </span>typeOfLogicExpr :: SharedContext -&gt; LogicExpr -&gt; IO Term
 <span class="lineno">  216 </span><span class="decl"><span class="nottickedoff">typeOfLogicExpr sc (LogicExpr t _) = scTypeOf sc t</span></span>
 <span class="lineno">  217 </span>
-<span class="lineno">  218 </span>-- MixedExpr {{{1
+<span class="lineno">  218 </span>-- MixedExpr
 <span class="lineno">  219 </span>
 <span class="lineno">  220 </span>-- | A logic or Java expression.
 <span class="lineno">  221 </span>data MixedExpr

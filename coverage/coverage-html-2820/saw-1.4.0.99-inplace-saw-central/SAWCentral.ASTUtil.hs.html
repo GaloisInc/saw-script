@@ -40,7 +40,7 @@ span.spaces    { background: white }
 <span class="lineno">   21 </span>import SAWCentral.AST
 <span class="lineno">   22 </span>
 <span class="lineno">   23 </span>------------------------------------------------------------
-<span class="lineno">   24 </span>-- NamedTyVars {{{
+<span class="lineno">   24 </span>-- NamedTyVars
 <span class="lineno">   25 </span>
 <span class="lineno">   26 </span>--
 <span class="lineno">   27 </span>-- namedTyVars is a type-class-polymorphic function for extracting named
@@ -71,7 +71,7 @@ span.spaces    { background: white }
 <span class="lineno">   52 </span>
 <span class="lineno">   53 </span>
 <span class="lineno">   54 </span>------------------------------------------------------------
-<span class="lineno">   55 </span>-- SubstituteTyVars {{{
+<span class="lineno">   55 </span>-- SubstituteTyVars
 <span class="lineno">   56 </span>
 <span class="lineno">   57 </span>--
 <span class="lineno">   58 </span>-- substituteTyVars is a typeclass-polymorphic function for
@@ -157,21 +157,16 @@ span.spaces    { background: white }
 <span class="lineno">  138 </span><span class="spaces">                    </span><span class="istickedoff">AbstractType _kind -&gt; ty</span>
 <span class="lineno">  139 </span><span class="spaces">                    </span><span class="istickedoff">ConcreteType ty' -&gt; ty'</span></span>
 <span class="lineno">  140 </span>
-<span class="lineno">  141 </span>-- }}}
-<span class="lineno">  142 </span>
-<span class="lineno">  143 </span>
-<span class="lineno">  144 </span>------------------------------------------------------------
-<span class="lineno">  145 </span>-- Deprecation {{{
-<span class="lineno">  146 </span>
-<span class="lineno">  147 </span>isDeprecated :: PrimitiveLifecycle -&gt; Bool
-<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">isDeprecated lc = case lc of</span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">Current -&gt; False</span>
-<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">True</span></span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">True</span></span>
-<span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff">Experimental -&gt; False</span></span>
-<span class="lineno">  153 </span>
-<span class="lineno">  154 </span>
-<span class="lineno">  155 </span>-- }}}
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>------------------------------------------------------------
+<span class="lineno">  143 </span>-- Deprecation
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>isDeprecated :: PrimitiveLifecycle -&gt; Bool
+<span class="lineno">  146 </span><span class="decl"><span class="istickedoff">isDeprecated lc = case lc of</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">Current -&gt; False</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">True</span></span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">True</span></span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">Experimental -&gt; False</span></span>
 
 </pre>
 </body>
