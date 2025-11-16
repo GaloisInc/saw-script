@@ -20,12 +20,12 @@ Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec : let var__0   := SAWCoreVectorsAsCoqVectors.Vec 8 Coq.Init.Datatypes.bool in
+Definition TestRec : let var__0   := CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) Coq.Init.Datatypes.bool in
   prod var__0 var__0 :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2).
+  pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) var__1 var__2).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -48,9 +48,9 @@ Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec_Single : SAWCoreVectorsAsCoqVectors.Vec 8 Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 42) (CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
+Definition TestRec_Single : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) Coq.Init.Datatypes.bool :=
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
+  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))))) (CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -73,12 +73,12 @@ Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec_Three : let var__0   := SAWCoreVectorsAsCoqVectors.Vec 8 Coq.Init.Datatypes.bool in
+Definition TestRec_Three : let var__0   := CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) Coq.Init.Datatypes.bool in
   prod var__0 (prod var__0 var__0) :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2) (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 3) var__1 var__2)).
+  pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) var__1 var__2) (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH))) var__1 var__2)).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -101,10 +101,10 @@ Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec_MixedWidth : prod (SAWCoreVectorsAsCoqVectors.Vec 8 Coq.Init.Datatypes.bool) (SAWCoreVectorsAsCoqVectors.Vec 16 Coq.Init.Datatypes.bool) :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
-  let var__1   := CryptolPrimitivesForSAWCore.TCNum 16 in
-  pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) (CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) (CryptolPrimitivesForSAWCore.seq var__1 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1)).
+Definition TestRec_MixedWidth : prod (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))))) Coq.Init.Datatypes.bool) :=
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
+  let var__1   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) in
+  pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) (CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) (CryptolPrimitivesForSAWCore.seq var__1 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1)).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -127,12 +127,12 @@ Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec_Nested : let var__0   := SAWCoreVectorsAsCoqVectors.Vec 8 Coq.Init.Datatypes.bool in
+Definition TestRec_Nested : let var__0   := CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) Coq.Init.Datatypes.bool in
   prod (prod var__0 var__0) var__0 :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 3) var__1 var__2).
+  pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) var__1 var__2)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH))) var__1 var__2).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -155,9 +155,9 @@ Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec_ProjY : SAWCoreVectorsAsCoqVectors.Vec 8 Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
-  snd (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 42) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 100) (CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0))).
+Definition TestRec_ProjY : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) Coq.Init.Datatypes.bool :=
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
+  snd (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH)))))))) (CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0))).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -180,9 +180,9 @@ Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec_NestedProj : SAWCoreVectorsAsCoqVectors.Vec 8 Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
-  fst (fst (pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) (CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 3) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger))).
+Definition TestRec_NestedProj : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) Coq.Init.Datatypes.bool :=
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
+  fst (fst (pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) (CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger))).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -205,12 +205,12 @@ Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec_Update1 : let var__0   := SAWCoreVectorsAsCoqVectors.Vec 8 Coq.Init.Datatypes.bool in
+Definition TestRec_Update1 : let var__0   := CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) Coq.Init.Datatypes.bool in
   prod var__0 var__0 :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  CryptolPrimitivesForSAWCore.updFst var__1 var__1 (CryptolPrimitivesForSAWCore.const var__1 var__1 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 3) var__1 var__2)) (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2)).
+  CryptolPrimitivesForSAWCore.updFst var__1 var__1 (CryptolPrimitivesForSAWCore.const var__1 var__1 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH))) var__1 var__2)) (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) var__1 var__2)).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -257,12 +257,12 @@ Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec_Nested (u1219 : Type) {Inh_u1219 : SAWCoreScaffolding.Inhabited u1219} (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) : let var__0   := SAWCoreVectorsAsCoqVectors.Vec 8 Coq.Init.Datatypes.bool in
+Definition TestRec_Nested (u1219 : Type) {Inh_u1219 : SAWCoreScaffolding.Inhabited u1219} (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) : let var__0   := CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) Coq.Init.Datatypes.bool in
   prod (prod var__0 var__0) u1219 :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 100) u1219 _P).
+  pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) var__1 var__2)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH)))))))) u1219 _P).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -286,12 +286,12 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestRec_Update2 : Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
   let var__3   := CryptolPrimitivesForSAWCore.PEqSeqBool var__0 in
-  let var__4   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 30) var__1 var__2 in
-  CryptolPrimitivesForSAWCore.ecEq (prod var__1 var__1) (CryptolPrimitivesForSAWCore.PEqPair var__1 var__1 var__3 var__3) (CryptolPrimitivesForSAWCore.updFst var__1 var__1 (CryptolPrimitivesForSAWCore.const var__1 var__1 var__4) (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2))) (pair var__4 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 20) var__1 var__2)).
+  let var__4   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH)))))) var__1 var__2 in
+  CryptolPrimitivesForSAWCore.ecEq (prod var__1 var__1) (CryptolPrimitivesForSAWCore.PEqPair var__1 var__1 var__3 var__3) (CryptolPrimitivesForSAWCore.updFst var__1 var__1 (CryptolPrimitivesForSAWCore.const var__1 var__1 var__4) (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) var__1 var__2))) (pair var__4 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))))) var__1 var__2)).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -339,15 +339,15 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestRec_RelativeUpdate : Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  let var__3   := pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__1 var__2) in
+  let var__3   := pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) var__1 var__2) in
   let var__4   := CryptolPrimitivesForSAWCore.PEqSeqBool var__0 in
-  let var__5   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 20) var__1 var__2 in
-  CryptolPrimitivesForSAWCore.ecEq (prod var__1 var__1) (CryptolPrimitivesForSAWCore.PEqPair var__1 var__1 var__4 var__4) (CryptolPrimitivesForSAWCore.updFst var__1 var__1 (CryptolPrimitivesForSAWCore.const var__1 var__1 ((fun (x : var__1) => let var__6   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__5   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))))) var__1 var__2 in
+  CryptolPrimitivesForSAWCore.ecEq (prod var__1 var__1) (CryptolPrimitivesForSAWCore.PEqPair var__1 var__1 var__4 var__4) (CryptolPrimitivesForSAWCore.updFst var__1 var__1 (CryptolPrimitivesForSAWCore.const var__1 var__1 ((fun (x : var__1) => let var__6   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__7   := CryptolPrimitivesForSAWCore.seq var__6 Coq.Init.Datatypes.bool in
-  CryptolPrimitivesForSAWCore.ecPlus var__7 (CryptolPrimitivesForSAWCore.PRingSeqBool var__6) x (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 5) var__7 var__2)) (fst var__3))) var__3) (pair var__5 var__5).
+  CryptolPrimitivesForSAWCore.ecPlus var__7 (CryptolPrimitivesForSAWCore.PRingSeqBool var__6) x (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) var__7 var__2)) (fst var__3))) var__3) (pair var__5 var__5).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -371,18 +371,18 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestRec_NestedField1 : Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
   let var__3   := prod var__1 var__1 in
   let var__4   := CryptolPrimitivesForSAWCore.PEqSeqBool var__0 in
-  let var__5   := (fun (u1219 : Type) {Inh_u1219 : SAWCoreScaffolding.Inhabited u1219} (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) => let var__6   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__5   := (fun (u1219 : Type) {Inh_u1219 : SAWCoreScaffolding.Inhabited u1219} (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) => let var__6   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__7   := CryptolPrimitivesForSAWCore.seq var__6 Coq.Init.Datatypes.bool in
   let var__8   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__6 in
-  pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__7 var__8) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__7 var__8)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 100) u1219 _P)) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
-  CryptolPrimitivesForSAWCore.ecEq (prod var__3 SAWCoreScaffolding.Integer) (CryptolPrimitivesForSAWCore.PEqPair var__3 SAWCoreScaffolding.Integer (CryptolPrimitivesForSAWCore.PEqPair var__1 var__1 var__4 var__4) CryptolPrimitivesForSAWCore.PEqInteger) (CryptolPrimitivesForSAWCore.updFst var__3 SAWCoreScaffolding.Integer (CryptolPrimitivesForSAWCore.const var__3 var__3 ((fun (r : var__3) => let var__6   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) var__7 var__8) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) var__7 var__8)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH)))))))) u1219 _P)) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
+  CryptolPrimitivesForSAWCore.ecEq (prod var__3 SAWCoreScaffolding.Integer) (CryptolPrimitivesForSAWCore.PEqPair var__3 SAWCoreScaffolding.Integer (CryptolPrimitivesForSAWCore.PEqPair var__1 var__1 var__4 var__4) CryptolPrimitivesForSAWCore.PEqInteger) (CryptolPrimitivesForSAWCore.updFst var__3 SAWCoreScaffolding.Integer (CryptolPrimitivesForSAWCore.const var__3 var__3 ((fun (r : var__3) => let var__6   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__7   := CryptolPrimitivesForSAWCore.seq var__6 Coq.Init.Datatypes.bool in
-  CryptolPrimitivesForSAWCore.updFst var__7 var__7 (CryptolPrimitivesForSAWCore.const var__7 var__7 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 10) var__7 var__2)) r) (fst var__5))) var__5) (pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 10) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 20) var__1 var__2)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 100) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger)).
+  CryptolPrimitivesForSAWCore.updFst var__7 var__7 (CryptolPrimitivesForSAWCore.const var__7 var__7 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) var__7 var__2)) r) (fst var__5))) var__5) (pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))))) var__1 var__2)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH)))))))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger)).
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -406,17 +406,17 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestRec_NestedField2 : Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
   let var__3   := prod var__1 var__1 in
   let var__4   := CryptolPrimitivesForSAWCore.PEqSeqBool var__0 in
-  let var__5   := (fun (u1219 : Type) {Inh_u1219 : SAWCoreScaffolding.Inhabited u1219} (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) => let var__6   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  let var__5   := (fun (u1219 : Type) {Inh_u1219 : SAWCoreScaffolding.Inhabited u1219} (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) => let var__6   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__7   := CryptolPrimitivesForSAWCore.seq var__6 Coq.Init.Datatypes.bool in
   let var__8   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__6 in
-  pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 1) var__7 var__8) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 2) var__7 var__8)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 100) u1219 _P)) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
+  pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat Coq.PArith.BinPos.xH)) var__7 var__8) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))) var__7 var__8)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH)))))))) u1219 _P)) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
   CryptolPrimitivesForSAWCore.ecEq (prod var__3 SAWCoreScaffolding.Integer) (CryptolPrimitivesForSAWCore.PEqPair var__3 SAWCoreScaffolding.Integer (CryptolPrimitivesForSAWCore.PEqPair var__1 var__1 var__4 var__4) CryptolPrimitivesForSAWCore.PEqInteger) (CryptolPrimitivesForSAWCore.updFst var__3 SAWCoreScaffolding.Integer (CryptolPrimitivesForSAWCore.const var__3 var__3 ((fun (r : var__3) => let var__6   := CryptolPrimitivesForSAWCore.seq var__0 Coq.Init.Datatypes.bool in
-  CryptolPrimitivesForSAWCore.updFst var__6 var__6 (CryptolPrimitivesForSAWCore.const var__6 var__6 ((fun (x : var__6) => let var__7   := CryptolPrimitivesForSAWCore.TCNum 8 in
+  CryptolPrimitivesForSAWCore.updFst var__6 var__6 (CryptolPrimitivesForSAWCore.const var__6 var__6 ((fun (x : var__6) => let var__7   := CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) in
   let var__8   := CryptolPrimitivesForSAWCore.seq var__7 Coq.Init.Datatypes.bool in
-  CryptolPrimitivesForSAWCore.ecPlus var__8 (CryptolPrimitivesForSAWCore.PRingSeqBool var__7) x (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 10) var__8 var__2)) (fst r))) r) (fst var__5))) var__5) (pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 25) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 20) var__1 var__2)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 100) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger)).
+  CryptolPrimitivesForSAWCore.ecPlus var__8 (CryptolPrimitivesForSAWCore.PRingSeqBool var__7) x (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH))))) var__8 var__2)) (fst r))) r) (fst var__5))) var__5) (pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH)))))) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))))) var__1 var__2)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH)))))))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger)).
 

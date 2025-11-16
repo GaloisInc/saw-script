@@ -21,7 +21,7 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestTypelvl_MaxWidth : Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 4) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
+  let var__0   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
   CryptolPrimitivesForSAWCore.ecEq SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PEqInteger var__0 var__0.
 
 
@@ -46,7 +46,7 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestTypelvl_MinWidth : Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 3) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
+  let var__0   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
   CryptolPrimitivesForSAWCore.ecEq SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PEqInteger var__0 var__0.
 
 
@@ -71,7 +71,7 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestTypelvl_Arith1 (u1218 : Type) {Inh_u1218 : SAWCoreScaffolding.Inhabited u1218} (_P : CryptolPrimitivesForSAWCore.PLiteral u1218) : u1218 :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 0) u1218 _P.
+  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) u1218 _P.
 
 
 (** Mandatory imports from saw-core-coq *)
@@ -95,5 +95,5 @@ Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestTypelvl_Arith2 (u1218 : Type) {Inh_u1218 : SAWCoreScaffolding.Inhabited u1218} (_P : CryptolPrimitivesForSAWCore.PLiteral u1218) : u1218 :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum 0) u1218 _P.
+  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) u1218 _P.
 
