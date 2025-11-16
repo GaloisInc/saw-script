@@ -1,4 +1,4 @@
- Loading file "test_cryptol_module.saw"
+ Loading file "test_cryptol_module_sha512.saw"
 Malformed term: let { x@1 = Cryptol.TCNum 0
       x@2 = Cryptol.TCNum 1
       x@3 = Cryptol.TCNum 8
