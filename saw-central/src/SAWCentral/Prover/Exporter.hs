@@ -473,8 +473,9 @@ writeCoqTerm name notations skips path t = do
   case Coq.translateTermAsDeclImports configuration mm (Coq.Ident (Text.unpack name)) t tp of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
     Right doc -> io $ case path of
-      "" -> print doc
-      _ -> writeFile path (show doc)
+      ""  -> print doc
+      "-" -> print doc
+      _   -> writeFile path (show doc)
 
 writeCoqProp ::
   Text ->
@@ -529,8 +530,9 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
     Right cmDoc -> do
       let doc = vcat [ Coq.preamble configuration, cmDoc ]
       case outputFile of
-        "" -> print doc
-        _  -> writeFile outputFile $ show doc
+        ""  -> print doc
+        "-" -> print doc
+        _   -> writeFile outputFile $ show doc
 
 nameOfSAWCorePrelude :: Un.ModuleName
 nameOfSAWCorePrelude = Un.moduleName preludeModule
@@ -551,8 +553,9 @@ writeCoqSAWCorePrelude outputFile notations skips = do
   let configuration = coqTranslationConfiguration notations skips
   let doc = vcat [ Coq.preamble configuration, Coq.translateSAWModule configuration mm m ]
   case outputFile of
-    "" -> print doc
-    _  -> writeFile outputFile $ show doc
+    ""  -> print doc
+    "-" -> print doc
+    _   -> writeFile outputFile $ show doc
 
 writeCoqCryptolPrimitivesForSAWCore ::
   FilePath ->
@@ -572,8 +575,9 @@ writeCoqCryptolPrimitivesForSAWCore cryFile notations skips = do
         coqTranslationConfiguration notations skips
   let doc = vcat [ Coq.preamble configuration, Coq.translateSAWModule configuration mm m ]
   case cryFile of
-    "" -> print doc
-    _  -> writeFile cryFile $ show doc
+    ""  -> print doc
+    "-" -> print doc
+    _   -> writeFile cryFile $ show doc
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
