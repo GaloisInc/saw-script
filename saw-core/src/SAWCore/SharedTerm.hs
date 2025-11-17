@@ -821,16 +821,6 @@ allowedElimSort dt s =
     length (dtCtors dt) == 1
   else True
 
--- | Internal: Convert a 'CtorArg' into the type that it represents.
-ctxCtorArgType ::
-  SharedContext ->
-  Term {- ^ datatype applied to parameters -} ->
-  CtorArg ->
-  IO Term
-ctxCtorArgType _ _ (ConstArg tp) = return tp
-ctxCtorArgType sc d_params (RecursiveArg zs_ctx ixs) =
-  scPiList sc zs_ctx =<< scApplyAll sc d_params ixs
-
 -- | Internal: Compute the type of a constructor from the name of its
 -- datatype and its 'CtorArgStruct'.
 ctxCtorType :: SharedContext -> Name -> CtorArgStruct -> IO Term
@@ -838,7 +828,11 @@ ctxCtorType sc d (CtorArgStruct{..}) =
   do params <- scVariables sc ctorParams
      d_params <- scConstApply sc d params
      d_params_ixs <- scApplyAll sc d_params ctorIndices
-     bs <- traverse (traverse (ctxCtorArgType sc d_params)) ctorArgs
+     let ctorArgType :: CtorArg -> IO Term
+         ctorArgType (ConstArg tp) = pure tp
+         ctorArgType (RecursiveArg zs_ctx ixs) =
+           scPiList sc zs_ctx =<< scApplyAll sc d_params ixs
+     bs <- traverse (traverse ctorArgType) ctorArgs
      body <- scPiList sc bs d_params_ixs
      scPiList sc ctorParams body
 
