@@ -821,8 +821,7 @@ allowedElimSort dt s =
     length (dtCtors dt) == 1
   else True
 
--- | Internal: Convert a 'CtorArg' into the type that it represents,
--- given a context of the parameters and of the previous arguments.
+-- | Internal: Convert a 'CtorArg' into the type that it represents.
 ctxCtorArgType ::
   SharedContext ->
   Term {- ^ datatype applied to parameters -} ->
@@ -832,27 +831,14 @@ ctxCtorArgType _ _ (ConstArg tp) = return tp
 ctxCtorArgType sc d_params (RecursiveArg zs_ctx ixs) =
   scPiList sc zs_ctx =<< scApplyAll sc d_params ixs
 
--- | Internal: Convert a bindings list of 'CtorArg's to a binding list
--- of types.
-ctxCtorArgBindings ::
-  SharedContext ->
-  Term {- ^ data type applied to params -} ->
-  [(VarName, CtorArg)] ->
-  IO [(VarName, Term)]
-ctxCtorArgBindings _ _ [] = return []
-ctxCtorArgBindings sc d_params ((x, arg) : args) =
-  do tp <- ctxCtorArgType sc d_params arg
-     rest <- ctxCtorArgBindings sc d_params args
-     return ((x, tp) : rest)
-
 -- | Internal: Compute the type of a constructor from the name of its
--- datatype and its 'CtorArgStruct'
+-- datatype and its 'CtorArgStruct'.
 ctxCtorType :: SharedContext -> Name -> CtorArgStruct -> IO Term
 ctxCtorType sc d (CtorArgStruct{..}) =
   do params <- scVariables sc ctorParams
      d_params <- scConstApply sc d params
-     bs <- ctxCtorArgBindings sc d_params ctorArgs
      d_params_ixs <- scApplyAll sc d_params ctorIndices
+     bs <- traverse (traverse (ctxCtorArgType sc d_params)) ctorArgs
      body <- scPiList sc bs d_params_ixs
      scPiList sc ctorParams body
 
