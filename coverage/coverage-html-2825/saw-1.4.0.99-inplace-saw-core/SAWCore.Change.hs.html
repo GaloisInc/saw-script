@@ -1,0 +1,170 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCore.Change
+<span class="lineno">    3 </span>Copyright   : Galois, Inc. 2012-2015
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : jhendrix@galois.com
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>Portability : non-portable (language extensions)
+<span class="lineno">    8 </span>-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>module SAWCore.Change
+<span class="lineno">   11 </span>  ( ChangeMonad(..)
+<span class="lineno">   12 </span>  , Change(..)
+<span class="lineno">   13 </span>  , ChangeT(..)
+<span class="lineno">   14 </span>  , change
+<span class="lineno">   15 </span>  , changeList
+<span class="lineno">   16 </span>  , commitChange
+<span class="lineno">   17 </span>  , commitChangeT
+<span class="lineno">   18 </span>  , preserveChangeT
+<span class="lineno">   19 </span>  , flatten
+<span class="lineno">   20 </span>  ) where
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import qualified Control.Applicative as App (liftA2)
+<span class="lineno">   23 </span>import Control.Monad (liftM)
+<span class="lineno">   24 </span>import Control.Monad.Trans
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>----------------------------------------------------------------------
+<span class="lineno">   27 </span>-- Monads for tracking whether values have changed
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>class (Monad m, Applicative m) =&gt; ChangeMonad m where
+<span class="lineno">   30 </span>  preserve :: a -&gt; m a -&gt; m a
+<span class="lineno">   31 </span>  taint :: m a -&gt; m a
+<span class="lineno">   32 </span>  <span class="decl"><span class="nottickedoff">taint m = m &gt;&gt;= modified</span></span>
+<span class="lineno">   33 </span>  modified :: a -&gt; m a
+<span class="lineno">   34 </span>  <span class="decl"><span class="nottickedoff">modified x = taint (pure x)</span></span>
+<span class="lineno">   35 </span>  -- Laws (not a minimal set):
+<span class="lineno">   36 </span>  -- taint (taint m) = taint m
+<span class="lineno">   37 </span>  -- taint (pure x) = modified x
+<span class="lineno">   38 </span>  -- fmap f (taint m) = taint (fmap f m)
+<span class="lineno">   39 </span>  -- taint m1 &lt;*&gt; m2 = taint (m1 &lt;*&gt; m2)
+<span class="lineno">   40 </span>  -- m1 &lt;*&gt; taint m2 = taint (m1 &lt;*&gt; m2)
+<span class="lineno">   41 </span>  -- fmap f (modified x) = modified (f x)
+<span class="lineno">   42 </span>  -- modified x &gt;&gt;= k = taint (k x)
+<span class="lineno">   43 </span>  -- m &gt;&gt;= modified = taint m
+<span class="lineno">   44 </span>  -- taint (modified x) = modified x
+<span class="lineno">   45 </span>  -- taint (return x) = modified x
+<span class="lineno">   46 </span>  -- taint (m &gt;&gt;= k) = taint m &gt;&gt;= k
+<span class="lineno">   47 </span>  -- taint (m &gt;&gt;= k) = m &gt;&gt;= (taint . k)
+<span class="lineno">   48 </span>  -- preserve x (pure _) = pure x
+<span class="lineno">   49 </span>  -- preserve _ (modified y) = modified y
+<span class="lineno">   50 </span>  -- preserve _ (taint m) = taint m
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>change :: ChangeMonad m =&gt; (a -&gt; Maybe a) -&gt; a -&gt; m a
+<span class="lineno">   53 </span><span class="decl"><span class="nottickedoff">change f a =</span>
+<span class="lineno">   54 </span><span class="spaces">  </span><span class="nottickedoff">case f a of</span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; pure a</span>
+<span class="lineno">   56 </span><span class="spaces">    </span><span class="nottickedoff">Just x  -&gt; modified x</span></span>
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>changeList :: ChangeMonad m =&gt; (a -&gt; m a) -&gt; [a] -&gt; m [a]
+<span class="lineno">   59 </span><span class="decl"><span class="nottickedoff">changeList f xs =</span>
+<span class="lineno">   60 </span><span class="spaces">  </span><span class="nottickedoff">preserve xs $</span>
+<span class="lineno">   61 </span><span class="spaces">    </span><span class="nottickedoff">case xs of</span>
+<span class="lineno">   62 </span><span class="spaces">      </span><span class="nottickedoff">[] -&gt; pure []</span>
+<span class="lineno">   63 </span><span class="spaces">      </span><span class="nottickedoff">y : ys -&gt; (:) &lt;$&gt; f y &lt;*&gt; changeList f ys</span></span>
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>----------------------------------------------------------------------
+<span class="lineno">   66 </span>-- Change monad
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>data Change a = Original a | Modified a
+<span class="lineno">   69 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>)
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative Change</span></span></span></span></span></span> where
+<span class="lineno">   72 </span>  <span class="decl"><span class="nottickedoff">pure x = Original x</span></span>
+<span class="lineno">   73 </span>  <span class="decl"><span class="istickedoff">Original f &lt;*&gt; Original x = Original (f x)</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff">Original f &lt;*&gt; Modified x = Modified (f x)</span>
+<span class="lineno">   75 </span><span class="spaces">  </span><span class="istickedoff">Modified f &lt;*&gt; Original x = Modified (f x)</span>
+<span class="lineno">   76 </span><span class="spaces">  </span><span class="istickedoff">Modified f &lt;*&gt; Modified x = Modified (f x)</span></span>
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>instance <span class="decl"><span class="nottickedoff">Monad Change</span></span> where
+<span class="lineno">   79 </span>  <span class="decl"><span class="nottickedoff">return = pure</span></span>
+<span class="lineno">   80 </span>  <span class="decl"><span class="nottickedoff">Original x &gt;&gt;= k = k x</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="nottickedoff">Modified x &gt;&gt;= k = taint (k x)</span></span>
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>instance ChangeMonad Change where
+<span class="lineno">   84 </span>  <span class="decl"><span class="nottickedoff">preserve x (Original _) = Original x</span>
+<span class="lineno">   85 </span><span class="spaces">  </span><span class="nottickedoff">preserve _ c@(Modified _) = c</span></span>
+<span class="lineno">   86 </span>  <span class="decl"><span class="istickedoff">taint (Original x) = Modified x</span>
+<span class="lineno">   87 </span><span class="spaces">  </span><span class="istickedoff">taint c@(Modified _) = c</span></span>
+<span class="lineno">   88 </span>  <span class="decl"><span class="nottickedoff">modified x = Modified x</span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>commitChange :: Change a -&gt; a
+<span class="lineno">   91 </span><span class="decl"><span class="istickedoff">commitChange (Original x) = x</span>
+<span class="lineno">   92 </span><span class="spaces"></span><span class="istickedoff">commitChange (Modified x) = x</span></span>
+<span class="lineno">   93 </span>-- ^ Satisfies the following laws:
+<span class="lineno">   94 </span>-- @commitChange (fmap f m) = f (commitChange m)@
+<span class="lineno">   95 </span>-- @commitChange (taint m) = commitChange m@
+<span class="lineno">   96 </span>-- @commitChange (m &gt;&gt;= k) = commitChange (k (commitChange m))@
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>----------------------------------------------------------------------
+<span class="lineno">   99 </span>-- Change monad transformer
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>newtype ChangeT m a = ChangeT { <span class="istickedoff"><span class="decl"><span class="istickedoff">runChangeT</span></span></span> :: m (Change a) }
+<span class="lineno">  102 </span>
+<span class="lineno">  103 </span>instance <span class="decl"><span class="nottickedoff">Functor m =&gt; Functor (ChangeT m)</span></span> where
+<span class="lineno">  104 </span>  <span class="decl"><span class="istickedoff">fmap f (ChangeT m) = ChangeT (fmap (fmap f) m)</span></span>
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative m =&gt; Applicative (ChangeT m)</span></span></span></span></span></span> where
+<span class="lineno">  107 </span>  <span class="decl"><span class="istickedoff">pure x = ChangeT (pure (Original x))</span></span>
+<span class="lineno">  108 </span>  <span class="decl"><span class="istickedoff">ChangeT m1 &lt;*&gt; ChangeT m2 = ChangeT (App.liftA2 (&lt;*&gt;) m1 m2)</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>instance <span class="decl"><span class="nottickedoff">Monad m =&gt; Monad (ChangeT m)</span></span> where
+<span class="lineno">  111 </span>  <span class="decl"><span class="nottickedoff">return = pure</span></span>
+<span class="lineno">  112 </span>  <span class="decl"><span class="istickedoff">ChangeT m &gt;&gt;= k = ChangeT (m &gt;&gt;= f)</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">where f (Original x) = runChangeT (k x)</span>
+<span class="lineno">  114 </span><span class="spaces">          </span><span class="istickedoff">f (Modified x) = runChangeT (k x) &gt;&gt;= (return . taint)</span></span>
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>instance MonadTrans ChangeT where
+<span class="lineno">  117 </span>  <span class="decl"><span class="istickedoff">lift m = ChangeT (liftM Original m)</span></span>
+<span class="lineno">  118 </span>
+<span class="lineno">  119 </span>instance MonadIO m =&gt; MonadIO (ChangeT m) where
+<span class="lineno">  120 </span>  <span class="decl"><span class="nottickedoff">liftIO m = lift (liftIO m)</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>instance Monad m =&gt; ChangeMonad (ChangeT m) where
+<span class="lineno">  123 </span>  <span class="decl"><span class="nottickedoff">preserve x (ChangeT m) = ChangeT (liftM (preserve x) m)</span></span>
+<span class="lineno">  124 </span>  <span class="decl"><span class="istickedoff">taint (ChangeT m) = ChangeT (liftM taint m)</span></span>
+<span class="lineno">  125 </span>  <span class="decl"><span class="nottickedoff">modified x = ChangeT (return (modified x))</span></span>
+<span class="lineno">  126 </span>
+<span class="lineno">  127 </span>commitChangeT :: Monad m =&gt; ChangeT m a -&gt; m a
+<span class="lineno">  128 </span><span class="decl"><span class="istickedoff">commitChangeT (ChangeT m) = liftM commitChange m</span></span>
+<span class="lineno">  129 </span>-- ^ Is a natural transformation from @ChangeT m@ to @m@:
+<span class="lineno">  130 </span>-- @commitChangeT (fmap f m) = fmap f (commitChangeT m)@
+<span class="lineno">  131 </span>-- @commitChangeT (lift m) = m@
+<span class="lineno">  132 </span>-- @commitChangeT (m &gt;&gt;= k) = commitChangeT m &gt;&gt;= (commitChangeT . k)@
+<span class="lineno">  133 </span>-- @commitChangeT (return x) = return x@
+<span class="lineno">  134 </span>-- @commitChangeT (taint m) = commitChangeT m@
+<span class="lineno">  135 </span>
+<span class="lineno">  136 </span>preserveChangeT :: Monad m =&gt; a -&gt; ChangeT m (m a) -&gt; ChangeT m a
+<span class="lineno">  137 </span><span class="decl"><span class="nottickedoff">preserveChangeT x (ChangeT c) = ChangeT (c &gt;&gt;= k)</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">where k (Original _) = return (Original x)</span>
+<span class="lineno">  139 </span><span class="spaces">        </span><span class="nottickedoff">k (Modified m) = liftM Modified m</span></span>
+<span class="lineno">  140 </span>-- ^ Satisfies @preserveChangeT x (return _) = return x@ and
+<span class="lineno">  141 </span>-- @preserveChangeT _ (modified m) = taint (lift m)@.
+<span class="lineno">  142 </span>
+<span class="lineno">  143 </span>flatten :: Monad m =&gt; (a -&gt; ChangeT m (m a)) -&gt; a -&gt; ChangeT m a
+<span class="lineno">  144 </span><span class="decl"><span class="nottickedoff">flatten f x = ChangeT (runChangeT (f x) &gt;&gt;= k)</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">where k (Original _) = return (Original x)</span>
+<span class="lineno">  146 </span><span class="spaces">        </span><span class="nottickedoff">k (Modified m) = liftM Modified m</span></span>
+<span class="lineno">  147 </span>-- ^ @flatten f x = preserveChangeT x (f x)@
+
+</pre>
+</body>
+</html>
