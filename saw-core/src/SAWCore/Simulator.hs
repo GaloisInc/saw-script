@@ -242,7 +242,7 @@ evalTermF cfg lam recEval tf env =
 
           | otherwise ->
               panic "evalTermF / evalRecursor"
-              ["Could not find info for constructor: " <> Text.pack (show ctor)]
+              ["Could not find info for constructor: " <> toAbsoluteName (nameInfo (ctorName ctor))]
         Nothing ->
           case argv of
             VCtorMux _ps branches ->
