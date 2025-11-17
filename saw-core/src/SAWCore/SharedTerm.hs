@@ -1123,8 +1123,8 @@ scReduceRecursor sc r crec params motive elims c args =
 -- > dt#rec params elims ixs (c params args)
 --
 -- The arguments to this function are the recursor value (applied to
--- params and elims), a mapping from constructor name indices to
--- eliminator functions, and the arguments to the constructor.
+-- params, motive and elims), a mapping from constructor name indices
+-- to eliminator functions, and the arguments to the constructor.
 ctorIotaReduction ::
   SharedContext ->
   Ctor ->
