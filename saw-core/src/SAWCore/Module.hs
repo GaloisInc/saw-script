@@ -152,19 +152,6 @@ data Ctor =
     -- where the @pi@ are the 'ctorParams', the @argi@ are the types specified
     -- by the 'ctorArgs', and the @ixi@ are the 'ctorDataTypeIndices'. Note that
     -- this type should always be top-level, i.e., have no free variables.
-  , ctorIotaReduction ::
-       Term {- ^ recursor term -} ->
-       Map VarIndex Term {- ^ constructor eliminators -} ->
-       [Term] {- ^ constructor arguments -} ->
-       IO Term
-    -- ^ Cached function for computing the result of one step of iota
-    --   reduction of the term
-    --
-    -- > RecursorApp rec ixs (c params args)
-    --
-    --   The arguments to this function are the recusor value, the
-    --   the map from the recursor that maps constructors to eliminator
-    --   functions, and the arguments to the constructor.
   }
 
 -- | Return the number of parameters of a constructor
@@ -176,18 +163,6 @@ ctorNumParams (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
 ctorNumArgs :: Ctor -> Int
 ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   length ctorArgs
-
-lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
-lift2 f h x y = h (f x) (f y)
-
-instance Eq Ctor where
-  (==) = lift2 ctorName (==)
-
-instance Ord Ctor where
-  compare = lift2 ctorName compare
-
-instance Show Ctor where
-  show = show . toAbsoluteName . nameInfo . ctorName
 
 
 -- Datatypes -------------------------------------------------------------------
@@ -225,15 +200,6 @@ dtNumParams dt = length $ dtParams dt
 -- | Return the number of indices of a datatype
 dtNumIndices :: DataType -> Int
 dtNumIndices dt = length $ dtIndices dt
-
-instance Eq DataType where
-  (==) = lift2 dtName (==)
-
-instance Ord DataType where
-  compare = lift2 dtName compare
-
-instance Show DataType where
-  show = show . nameInfo . dtName
 
 
 -- Modules ---------------------------------------------------------------------

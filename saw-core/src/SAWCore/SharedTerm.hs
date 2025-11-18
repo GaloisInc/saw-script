@@ -52,7 +52,6 @@ module SAWCore.SharedTerm
     -- ** Recursors and datatypes
   , scRecursorType
   , scReduceRecursor
-  , scReduceNatRecursor
   , allowedElimSort
   , scBuildCtor
     -- ** Modules
@@ -822,38 +821,18 @@ allowedElimSort dt s =
     length (dtCtors dt) == 1
   else True
 
--- | Internal: Convert a 'CtorArg' into the type that it represents,
--- given a context of the parameters and of the previous arguments.
-ctxCtorArgType ::
-  SharedContext ->
-  Term {- ^ datatype applied to parameters -} ->
-  CtorArg ->
-  IO Term
-ctxCtorArgType _ _ (ConstArg tp) = return tp
-ctxCtorArgType sc d_params (RecursiveArg zs_ctx ixs) =
-  scPiList sc zs_ctx =<< scApplyAll sc d_params ixs
-
--- | Internal: Convert a bindings list of 'CtorArg's to a binding list
--- of types.
-ctxCtorArgBindings ::
-  SharedContext ->
-  Term {- ^ data type applied to params -} ->
-  [(VarName, CtorArg)] ->
-  IO [(VarName, Term)]
-ctxCtorArgBindings _ _ [] = return []
-ctxCtorArgBindings sc d_params ((x, arg) : args) =
-  do tp <- ctxCtorArgType sc d_params arg
-     rest <- ctxCtorArgBindings sc d_params args
-     return ((x, tp) : rest)
-
 -- | Internal: Compute the type of a constructor from the name of its
--- datatype and its 'CtorArgStruct'
+-- datatype and its 'CtorArgStruct'.
 ctxCtorType :: SharedContext -> Name -> CtorArgStruct -> IO Term
 ctxCtorType sc d (CtorArgStruct{..}) =
   do params <- scVariables sc ctorParams
      d_params <- scConstApply sc d params
-     bs <- ctxCtorArgBindings sc d_params ctorArgs
      d_params_ixs <- scApplyAll sc d_params ctorIndices
+     let ctorArgType :: CtorArg -> IO Term
+         ctorArgType (ConstArg tp) = pure tp
+         ctorArgType (RecursiveArg zs_ctx ixs) =
+           scPiList sc zs_ctx =<< scApplyAll sc d_params ixs
+     bs <- traverse (traverse ctorArgType) ctorArgs
      body <- scPiList sc bs d_params_ixs
      scPiList sc ctorParams body
 
@@ -876,24 +855,12 @@ scBuildCtor sc d c arg_struct =
     -- of its eliminator functions
     tp <- ctxCtorType sc d arg_struct
 
-    -- Step 2: build the API function that shuffles the terms around in the
-    -- correct way.
-    let iota_fun r cs_fs args =
-          do let elim = case Map.lookup (nameIndex cname) cs_fs of
-                   Just e -> e
-                   Nothing ->
-                     panic "ctorIotaReduction" [
-                         "no eliminator for constructor " <> Text.pack (show c)
-                     ]
-             ctxReduceRecursor sc r elim args arg_struct
-
     -- Finally, return the required Ctor record
     return $ Ctor
       { ctorName = cname
       , ctorArgStruct = arg_struct
       , ctorDataType = d
       , ctorType = tp
-      , ctorIotaReduction = iota_fun
       }
 
 -- | Compute the type of an eliminator function for a constructor from the name
@@ -1140,30 +1107,34 @@ scReduceRecursor sc r crec params motive elims c args =
        Just (ResolvedCtor ctor) ->
          -- The ctorIotaReduction field caches the result of iota reduction, which
          -- we just substitute into to perform the reduction
-         ctorIotaReduction ctor r_applied cs_fs args
+         ctorIotaReduction sc ctor r_applied cs_fs args
        _ ->
          panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
 
--- | Reduce an application of a recursor to a concrete nat value.
---   The given recursor value is assumed to be correctly-typed
---   for the @Nat@ datatype.  It will reduce using either the
---   elimiation function for @Zero@ or @Succ@, depending on
---   the concrete value of the @Nat@.
-scReduceNatRecursor ::
+-- | Function for computing the result of one step of iota reduction
+-- of the term
+--
+-- > dt#rec params elims ixs (c params args)
+--
+-- The arguments to this function are the recursor value (applied to
+-- params, motive and elims), a mapping from constructor name indices
+-- to eliminator functions, and the arguments to the constructor.
+ctorIotaReduction ::
   SharedContext ->
-  Term {- ^ eliminator function for @Zero@ -} ->
-  Term {- ^ eliminator function for @Succ@ -} ->
-  Natural {- ^ Concrete natural value to eliminate -} ->
+  Ctor ->
+  Term {- ^ recursor term -} ->
+  Map VarIndex Term {- ^ constructor eliminators -} ->
+  [Term] {- ^ constructor arguments -} ->
   IO Term
-scReduceNatRecursor sc f1 f2 = go
+ctorIotaReduction sc ctor r cs_fs args =
+  ctxReduceRecursor sc r elim args (ctorArgStruct ctor)
   where
-    go :: Natural -> IO Term
-    go n
-      | n == 0 = pure f1
-      | otherwise =
-          do x <- go (pred n)
-             n' <- scNat sc (pred n)
-             scApplyAll sc f2 [n', x]
+    elim =
+      case Map.lookup (nameIndex (ctorName ctor)) cs_fs of
+        Just e -> e
+        Nothing ->
+          panic "ctorIotaReduction"
+          ["no eliminator for constructor " <> toAbsoluteName (nameInfo (ctorName ctor))]
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
@@ -1198,8 +1169,6 @@ scWhnf sc t0 =
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
-    go (ElimRecursor _r _params _crec _motive [f1, f2] [] : xs)
-                              (asNat -> Just n)                 = scReduceNatRecursor sc f1 f2 n >>= go xs
     go xs                     (asRecursorApp -> Just (r, crec)) | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
                                                                 , Just (elims, xs2) <- splitApps (length (recursorCtorOrder crec)) xs1
                                                                 , Just (ixs, ElimApp x : xs') <- splitApps (recursorNumIxs crec) xs2
