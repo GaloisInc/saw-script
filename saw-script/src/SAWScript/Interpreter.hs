@@ -1130,10 +1130,10 @@ interpretFile file runMain =
 
       -- Insert a Nothing in the statement list in the second-to-last
       -- position, asserting that the last statement is a StmtPopdir.
-      let stmts' = reverse $ case (reverse $ map Just stmts) of
+      let stmts' = reverse $ case reverse stmts of
             [] -> []
-            Just (SS.StmtPopdir pos) : ss ->
-                Just (SS.StmtPopdir pos) : Nothing : ss
+            SS.StmtPopdir pos : ss ->
+                Just (SS.StmtPopdir pos) : Nothing : map Just ss
             _ : _ ->
                 panic "interpretFile" ["Last statement of file not a popdir"]
 
