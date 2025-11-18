@@ -1,0 +1,4 @@
+module test8 where
+import Prelude;
+foo : Bool;
+foo = True;

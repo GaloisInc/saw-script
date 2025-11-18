@@ -35,6 +35,14 @@ paths06:
 paths07:
    - offline_w4_unint_z3 outputs to the script directory.
 
+paths08:
+   - Any "main" we run is run in the script directory and not in the
+     startup directory. Which is more correct is debatable, since one
+     can argue that the "main" invocation should be like the "-s"
+     option and not be attached to any particular script file.
+     However, using the script directory is the historical behavior
+     and changing it breaks things. (See #2826.)
+
 Note that we don't test either every file reader or every file writer,
 although perhaps we should eventually (note: there are a lot); instead
 we take a representative sample from different parts of the system.
