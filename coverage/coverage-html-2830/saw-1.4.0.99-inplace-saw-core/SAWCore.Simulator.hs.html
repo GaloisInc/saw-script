@@ -261,7 +261,7 @@ span.spaces    { background: white }
 <span class="lineno">  242 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  243 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
 <span class="lineno">  244 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF / evalRecursor&quot;</span></span>
-<span class="lineno">  245 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[&quot;Could not find info for constructor: &quot; &lt;&gt; Text.pack (show ctor)]</span></span>
+<span class="lineno">  245 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[&quot;Could not find info for constructor: &quot; &lt;&gt; toAbsoluteName (nameInfo (ctorName ctor))]</span></span>
 <span class="lineno">  246 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  247 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case argv of</span></span>
 <span class="lineno">  248 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">VCtorMux _ps branches -&gt;</span></span>
