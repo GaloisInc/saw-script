@@ -1041,7 +1041,10 @@ inferExpr (ln, expr) = case expr of
       ctx <- getFreshTyVar pos
       tyResult <- getFreshTyVar pos
       let ty = tBlock (PosInferred InfTerm pos) ctx tyResult
+      saveVarEnv <- gets varEnv
+      saveTyEnv <- gets tyEnv
       body' <- inferBlock ln pos ctx ty body
+      modify (\rw -> rw { varEnv = saveVarEnv, tyEnv = saveTyEnv })
       return (Block pos body', ty)
 
   Tuple pos es -> do
