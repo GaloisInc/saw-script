@@ -1,4 +1,4 @@
-# Version 1.4 -- date still TBD
+# Version 1.4 -- 2025-11-18
 
 This release supports [version
 4](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#4) of
