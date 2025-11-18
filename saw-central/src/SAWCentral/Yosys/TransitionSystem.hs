@@ -22,7 +22,6 @@ import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.), view, at)
 import Control.Monad (forM, foldM)
-import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
 import Data.Functor.Const (Const(..))
@@ -80,10 +79,8 @@ makeLenses ''SequentialFields
 -- | Convert a mapping from names to widths into a typed mapping from
 -- those names to What4 bitvectors of those widths.
 sequentialReprs ::
-  forall m.
-  MonadIO m =>
   Map Text Natural ->
-  m (Some SequentialFields)
+  IO (Some SequentialFields)
 sequentialReprs fs = do
   let assocs = Map.assocs fs
   Some fields <- go assocs
@@ -94,7 +91,7 @@ sequentialReprs fs = do
     , _sequentialFieldsIndex = Map.fromList index
     }
   where
-    go :: [(Text, Natural)] -> m (Some (Ctx.Assignment SequentialField))
+    go :: [(Text, Natural)] -> IO (Some (Ctx.Assignment SequentialField))
     go [] = pure $ Some Ctx.empty
     go ((nm, n):ns) = case someNat n of
       Just (Some nr) | Just LeqProof <- testLeq (knownNat @1) nr -> do
@@ -113,23 +110,22 @@ sequentialReprs fs = do
 -- struct into a representation that is more convenient to manipulate
 -- in SAWCore.)
 ecBindingsOfFields ::
-  MonadIO m =>
   W4.B.ExprBuilder n st fs ->
   SC.SharedContext ->
   Text {- ^ Prefix to prepend to all field names -} ->
   Map Text SC.Term {- ^ Mapping from field names to SAWCore types -} ->
   SequentialFields ctx {- ^ Mapping from field names to What4 base types -} ->
   W4.SymStruct (W4.B.ExprBuilder n st fs) ctx {- ^ What4 record to deconstruct -} ->
-  m (Map Text (SC.VarName, SC.Term, SimW4.SValue (W4.B.ExprBuilder n st fs)))
+  IO (Map Text (SC.VarName, SC.Term, SimW4.SValue (W4.B.ExprBuilder n st fs)))
 ecBindingsOfFields sym sc pfx fs s inp = fmap Map.fromList . forM (Map.assocs fs) $ \(baseName, ty) -> do
   let nm = pfx <> baseName
-  vn <- liftIO $ SC.scFreshVarName sc nm
+  vn <- SC.scFreshVarName sc nm
   val <- case s ^. sequentialFieldsIndex . at nm of
     Just (Some idx)
       | sf <- s ^. sequentialFields . ixF' idx
       , W4.BaseBVRepr _nr <- sf ^. sequentialFieldTypeRepr
         -> do
-          inpExpr <- liftIO $ W4.structField sym inp idx
+          inpExpr <- W4.structField sym inp idx
           pure . Sim.VWord $ W4.DBV inpExpr
     _ -> throw $ YosysErrorTransitionSystemMissingField nm
   pure (baseName, (vn, ty, val))
@@ -137,14 +133,13 @@ ecBindingsOfFields sym sc pfx fs s inp = fmap Map.fromList . forM (Map.assocs fs
 -- | Given a sequential circuit and a query, construct and write to
 -- disk a Sally transition system encoding that query.
 queryModelChecker ::
-  MonadIO m =>
   W4.B.ExprBuilder n st fs ->
   SC.SharedContext ->
   YosysSequential ->
   FilePath {- ^ Path to write the resulting Sally input -} ->
   SC.TypedTerm {- ^ A boolean function of three parameters: an 8-bit cycle counter, a record of "fixed" inputs, and a record of circuit outputs -} ->
   Set Text {- ^ Names of circuit inputs that are fixed -}->
-  m ()
+  IO ()
 queryModelChecker sym sc sequential path query fixedInputs = do
   -- there are 5 classes of field:
   --  - fixed inputs (inputs from the circuit named in the fixed set, assumed to be constant across cycles
@@ -155,7 +150,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
   let (fixedInputWidths, variableInputWidths) = Map.partitionWithKey (\nm _ -> Set.member nm fixedInputs) $ sequential ^. yosysSequentialInputWidths
   let (fixedInputFields, variableInputFields) = Map.partitionWithKey (\nm _ -> Set.member nm fixedInputs) $ sequential ^. yosysSequentialInputFields
   let internalWidths = Map.singleton "cycle" 8
-  internalFields <- forM internalWidths $ \w -> liftIO $ SC.scBitvector sc w
+  internalFields <- forM internalWidths $ \w -> SC.scBitvector sc w
 
   -- the "inputs" for our transition system are exclusively the circuit's variable inputs
   Some inputFields <- sequentialReprs variableInputWidths
@@ -217,31 +212,31 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             states <- forM curBindings $ \(vn, tp, _) -> SC.scVariable sc vn tp
             inpst <- cryptolRecord sc states
             domainRec <- cryptolRecord sc $ Map.insert "__state__" inpst inps
-            codomainRec <- liftIO $ SC.scApply sc (sequential ^. yosysSequentialTerm . SC.ttTermLens) domainRec
+            codomainRec <- SC.scApply sc (sequential ^. yosysSequentialTerm . SC.ttTermLens) domainRec
             codomainFields <- insertStateField sc (sequential ^. yosysSequentialStateFields) $ sequential ^. yosysSequentialOutputFields
             outst <- cryptolRecordSelect sc codomainFields codomainRec "__state__"
             stPreds <- forM (Map.assocs $ sequential ^. yosysSequentialStateWidths) $ \(nm, w) -> do
               val <- cryptolRecordSelect sc (sequential ^. yosysSequentialStateFields) outst nm
               wnat <- SC.scNat sc w
               new <- lookupBinding nm nextBindings
-              liftIO $ SC.scBvEq sc wnat new val
+              SC.scBvEq sc wnat new val
             outputPreds <- forM (Map.assocs $ sequential ^. yosysSequentialOutputWidths) $ \(nm, w) -> do
               val <- cryptolRecordSelect sc codomainFields codomainRec nm
               wnat <- SC.scNat sc w
               new <- lookupBinding nm nextOutputBindings
-              liftIO $ SC.scBvEq sc wnat new val
+              SC.scBvEq sc wnat new val
             fixedInputPreds <- forM (Map.assocs fixedInputWidths) $ \(nm, w) -> do
               wnat <- SC.scNat sc w
               val <- lookupBinding nm curFixedInputBindings
               new <- lookupBinding nm nextFixedInputBindings
-              liftIO $ SC.scBvEq sc wnat new val
+              SC.scBvEq sc wnat new val
             cycleIncrement <- do
               wnat <- SC.scNat sc 8
               val <- lookupBinding "cycle" curInternalBindings
               one <- SC.scBvConst sc 8 1
               incremented <- SC.scBvAdd sc wnat val one
               new <- lookupBinding "cycle" nextInternalBindings
-              liftIO $ SC.scBvEq sc wnat new incremented
+              SC.scBvEq sc wnat new incremented
             identity <- SC.scBool sc True
             conj <- foldM (SC.scAnd sc) identity $ stPreds <> outputPreds <> fixedInputPreds <> [cycleIncrement]
             ref <- IORef.newIORef Map.empty
@@ -278,7 +273,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             cycleVal <- lookupBinding "cycle" curInternalBindings
             fixedInputRec <- cryptolRecord sc fixedInps
             outputRec <- cryptolRecord sc outputs
-            result <- liftIO $ SC.scApplyAll sc (query ^. SC.ttTermLens) [cycleVal, fixedInputRec, outputRec]
+            result <- SC.scApplyAll sc (query ^. SC.ttTermLens) [cycleVal, fixedInputRec, outputRec]
             ref <- IORef.newIORef Map.empty
             let args = Map.unions $ fmap (Map.fromList . fmap (\(vn, _ty, x) -> (SC.vnIndex vn, x)) . Map.elems)
                   [ curOutputBindings
@@ -291,7 +286,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
               _ -> throw . YosysError $ "Invalid type when converting predicate to What4: " <> Text.pack (show sval)
             pure [w4Pred]
         }
-  sts <- liftIO $ Sally.exportTransitionSystem sym Sally.mySallyNames ts
-  sexp <- liftIO $ Sally.sexpOfSally sym sts
-  liftIO . BS.writeFile path . encodeUtf8 . Text.pack . show $ Sally.sexpToDoc sexp
+  sts <- Sally.exportTransitionSystem sym Sally.mySallyNames ts
+  sexp <- Sally.sexpOfSally sym sts
+  BS.writeFile path . encodeUtf8 . Text.pack . show $ Sally.sexpToDoc sexp
   pure ()

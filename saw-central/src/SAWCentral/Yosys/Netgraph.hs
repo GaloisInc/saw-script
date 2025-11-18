@@ -21,7 +21,6 @@ import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
 import Control.Monad (forM, foldM)
-import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
 import qualified Data.Maybe as Maybe
@@ -93,15 +92,15 @@ data ConvertedModule = ConvertedModule
 makeLenses ''ConvertedModule
 
 lookupPatternTerm ::
-  (MonadIO m, Ord b, Show b) =>
+  (Ord b, Show b) =>
   SC.SharedContext ->
   YosysBitvecConsumer ->
   [b] ->
   Map [b] Preterm ->
-  m SC.Term
+  IO SC.Term
 lookupPatternTerm sc loc pat ts =
   case Map.lookup pat ts of
-    Just t -> liftIO $ scPreterm sc t
+    Just t -> scPreterm sc t
     Nothing -> do
       bits <- forM pat $ \b -> do
         case Map.lookup [b] ts of
@@ -109,17 +108,16 @@ lookupPatternTerm sc loc pat ts =
           Nothing -> throw $ YosysErrorNoSuchOutputBitvec (Text.pack $ show b) loc
       -- Yosys lists bits in little-endian order, while scVector expects big-endian, so reverse
       let ps = fusePreterms (reverse bits)
-      liftIO $ scPreterms sc ps
+      scPreterms sc ps
 
 -- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
 -- generated from the rest of the netgraph.
 netgraphToTerms ::
-  (MonadIO m) =>
   SC.SharedContext ->
   Map Text ConvertedModule ->
   Netgraph ->
   Map [Bitrep] Preterm ->
-  m (Map [Bitrep] Preterm)
+  IO (Map [Bitrep] Preterm)
 netgraphToTerms sc env ng inputs
   | length (Graph.scc $ ng ^. netgraphGraph) /= length (ng ^. netgraphGraph)
   = do
@@ -155,7 +153,7 @@ netgraphToTerms sc env ng inputs
                       case Map.lookup submoduleName env of
                         Just cm -> do
                           r <- cryptolRecord sc args
-                          liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
+                          SC.scApply sc (cm ^. convertedModuleTerm) r
                         Nothing ->
                             throw $ YosysErrorNoSuchSubmodule  submoduleName cnm
 
@@ -169,11 +167,10 @@ netgraphToTerms sc env ng inputs
         sorted
 
 convertModule ::
-  MonadIO m =>
   SC.SharedContext ->
   Map Text ConvertedModule ->
   Module ->
-  m ConvertedModule
+  IO ConvertedModule
 convertModule sc env m = do
   let ng = moduleNetgraph m
 
@@ -182,25 +179,25 @@ convertModule sc env m = do
 
   inputFields <- forM inputPorts
     (\inp -> do
-        liftIO . SC.scBitvector sc . fromIntegral $ length inp
+        SC.scBitvector sc . fromIntegral $ length inp
     )
   outputFields <- forM outputPorts
     (\out -> do
-        liftIO . SC.scBitvector sc . fromIntegral $ length out
+        SC.scBitvector sc . fromIntegral $ length out
     )
   inputRecordType <- cryptolRecordType sc inputFields
   outputRecordType <- cryptolRecordType sc outputFields
-  inputRecord <- liftIO $ SC.scFreshVariable sc "input" inputRecordType
+  inputRecord <- SC.scFreshVariable sc "input" inputRecordType
 
   derivedInputs <- forM (Map.assocs inputPorts) $ \(nm, inp) -> do
-    t <- liftIO $ cryptolRecordSelect sc inputFields inputRecord nm
+    t <- cryptolRecordSelect sc inputFields inputRecord nm
     deriveTermsByIndices sc inp t
 
-  oneBitType <- liftIO $ SC.scBitvector sc 1
-  xMsg <- liftIO $ SC.scString sc "Attempted to read X bit"
-  xTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
-  zMsg <- liftIO $ SC.scString sc "Attempted to read Z bit"
-  zTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
+  oneBitType <- SC.scBitvector sc 1
+  xMsg <- SC.scString sc "Attempted to read X bit"
+  xTerm <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
+  zMsg <- SC.scString sc "Attempted to read Z bit"
+  zTerm <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
   let inputs = Map.unions $ mconcat
         [ [ Map.fromList
             [ ( [BitrepZero], PretermBvNat 1 0 )
@@ -216,8 +213,8 @@ convertModule sc env m = do
   outputRecord <- cryptolRecord sc =<< mapForWithKeyM outputPorts
     (\onm out -> lookupPatternTerm sc (YosysBitvecConsumerOutputPort onm) out terms)
 
-  t <- liftIO $ SC.scAbstractTerms sc [inputRecord] outputRecord
-  ty <- liftIO $ SC.scFun sc inputRecordType outputRecordType
+  t <- SC.scAbstractTerms sc [inputRecord] outputRecord
+  ty <- SC.scFun sc inputRecordType outputRecordType
 
   let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)
   let cty = C.tFun

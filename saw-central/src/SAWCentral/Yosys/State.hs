@@ -20,7 +20,6 @@ import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
 import Control.Monad (forM, foldM)
-import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
 import Data.Map (Map)
@@ -66,11 +65,10 @@ makeLenses ''YosysSequential
 -- | Add a record-typed field named __states__ to the given mapping of
 -- field names to types.
 insertStateField ::
-  MonadIO m =>
   SC.SharedContext ->
   Map Text (SC.Term, C.Type) {- ^ The field types of "__states__" -} ->
   Map Text (SC.Term, C.Type) {- ^ The mapping to update -} ->
-  m (Map Text (SC.Term, C.Type))
+  IO (Map Text (SC.Term, C.Type))
 insertStateField sc stateFields fields = do
   stateRecordType <- fieldsToType sc stateFields
   stateRecordCryptolType <- fieldsToCryptolType stateFields
@@ -78,10 +76,9 @@ insertStateField sc stateFields fields = do
 
 -- | Translate a stateful HDL module into SAWCore
 convertModuleInline ::
-  MonadIO m =>
   SC.SharedContext ->
   Module ->
-  m YosysSequential
+  IO YosysSequential
 convertModuleInline sc m = do
   let ng = moduleNetgraph m
 
@@ -106,18 +103,18 @@ convertModuleInline sc m = do
       Just b -> pure . fromIntegral $ length b
 
   stateFields <- forM stateWidths $ \w -> do
-    t <- liftIO $ SC.scBitvector sc w
+    t <- SC.scBitvector sc w
     let cty = C.tWord $ C.tNum w
     pure (t, cty)
 
   let inputPorts = moduleInputPorts m
   let outputPorts = moduleOutputPorts m
   inputFields <- forM inputPorts $ \inp -> do
-    ty <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
+    ty <- SC.scBitvector sc . fromIntegral $ length inp
     let cty = C.tWord . C.tNum $ length inp
     pure (ty, cty)
   outputFields <- forM outputPorts $ \out -> do
-    ty <- liftIO . SC.scBitvector sc . fromIntegral $ length out
+    ty <- SC.scBitvector sc . fromIntegral $ length out
     let cty = C.tWord . C.tNum $ length out
     pure (ty, cty)
 
@@ -130,25 +127,25 @@ convertModuleInline sc m = do
   codomainCryptolRecordType <- fieldsToCryptolType codomainFields
 
   -- convert module into term
-  domainRecord <- liftIO $ SC.scFreshVariable sc "input" domainRecordType
+  domainRecord <- SC.scFreshVariable sc "input" domainRecordType
 
   derivedInputs <- forM (Map.assocs inputPorts) $ \(nm, inp) -> do
-    t <- liftIO $ cryptolRecordSelect sc domainFields domainRecord nm
+    t <- cryptolRecordSelect sc domainFields domainRecord nm
     deriveTermsByIndices sc inp t
 
-  preStateRecord <- liftIO $ cryptolRecordSelect sc domainFields domainRecord "__state__"
+  preStateRecord <- cryptolRecordSelect sc domainFields domainRecord "__state__"
   derivedPreState <- forM (Map.assocs dffs) $ \(cnm, c) ->
     case Map.lookup "Q" $ c ^. cellConnections of
       Nothing -> panic "convertModuleInline" ["Missing expected output name for $dff cell"]
       Just b -> do
-        t <- liftIO $ cryptolRecordSelect sc stateFields preStateRecord cnm
+        t <- cryptolRecordSelect sc stateFields preStateRecord cnm
         deriveTermsByIndices sc b t
 
-  oneBitType <- liftIO $ SC.scBitvector sc 1
-  xMsg <- liftIO $ SC.scString sc "Attempted to read X bit"
-  xTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
-  zMsg <- liftIO $ SC.scString sc "Attempted to read Z bit"
-  zTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
+  oneBitType <- SC.scBitvector sc 1
+  xMsg <- SC.scString sc "Attempted to read X bit"
+  xTerm <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
+  zMsg <- SC.scString sc "Attempted to read Z bit"
+  zTerm <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
   let inputs = Map.unions $ mconcat
         [ [ Map.fromList
             [ ( [BitrepZero], PretermBvNat 1 0 )
@@ -175,8 +172,8 @@ convertModuleInline sc m = do
     (\onm out -> lookupPatternTerm sc (YosysBitvecConsumerOutputPort onm) out terms)
 
   -- construct result
-  t <- liftIO $ SC.scAbstractTerms sc [domainRecord] outputRecord
-  -- ty <- liftIO $ SC.scFun sc domainRecordType codomainRecordType
+  t <- SC.scAbstractTerms sc [domainRecord] outputRecord
+  -- ty <- SC.scFun sc domainRecordType codomainRecordType
   _ <- validateTerm sc "translating a sequential circuit" t
   let cty = C.tFun domainCryptolRecordType codomainCryptolRecordType
   pure YosysSequential
@@ -193,78 +190,76 @@ convertModuleInline sc m = do
 -- given number of times. The resulting term has a parameter for the
 -- initial state, the resulting Cryptol types does not.
 composeYosysSequentialHelper ::
-  forall m.
-  MonadIO m =>
   SC.SharedContext ->
   YosysSequential ->
   Integer ->
-  m (SC.Term, C.Type)
+  IO (SC.Term, C.Type)
 composeYosysSequentialHelper sc s n = do
   let t = SC.ttTerm $ s ^. yosysSequentialTerm
 
-  width <- liftIO . SC.scNat sc $ fromIntegral n
+  width <- SC.scNat sc $ fromIntegral n
   extendedInputFields <- forM (s ^. yosysSequentialInputFields) $ \(ty, cty) -> do
-    exty <- liftIO $ SC.scVecType sc width ty
+    exty <- SC.scVecType sc width ty
     let excty = C.tSeq (C.tNum n) cty
     pure (exty, excty)
   extendedOutputFields <- forM (s ^. yosysSequentialOutputFields) $ \(ty, cty) -> do
-    exty <- liftIO $ SC.scVecType sc width ty
+    exty <- SC.scVecType sc width ty
     let excty = C.tSeq (C.tNum n) cty
     pure (exty, excty)
   extendedInputType <- fieldsToType sc extendedInputFields
   extendedInputCryptolType <- fieldsToCryptolType extendedInputFields
-  extendedInputRecord <- liftIO $ SC.scFreshVariable sc "input" extendedInputType
+  extendedInputRecord <- SC.scFreshVariable sc "input" extendedInputType
   extendedOutputCryptolType <- fieldsToCryptolType extendedOutputFields
 
   allInputs <- fmap Map.fromList . forM (Map.keys extendedInputFields) $ \nm -> do
-    inp <- liftIO $ cryptolRecordSelect sc extendedInputFields extendedInputRecord nm
+    inp <- cryptolRecordSelect sc extendedInputFields extendedInputRecord nm
     pure (nm, inp)
 
   codomainFields <- insertStateField sc (s ^. yosysSequentialStateFields) $ s ^. yosysSequentialOutputFields
 
   let
-    buildIntermediateInput :: Integer -> SC.Term -> m SC.Term
+    buildIntermediateInput :: Integer -> SC.Term -> IO SC.Term
     buildIntermediateInput i st = do
       inps <- fmap Map.fromList . forM (Map.assocs allInputs) $ \(nm, inp) -> do
         case Map.lookup nm $ s ^. yosysSequentialInputFields of
           Nothing -> throw . YosysError $ "Invalid input: " <> nm
           Just (elemty, _) -> do
-            idx <- liftIO . SC.scNat sc $ fromIntegral i
-            idxed <- liftIO $ SC.scAt sc width elemty inp idx
+            idx <- SC.scNat sc $ fromIntegral i
+            idxed <- SC.scAt sc width elemty inp idx
             pure (nm, idxed)
       let inpsWithSt = Map.insert "__state__" st inps
       cryptolRecord sc inpsWithSt
 
-    summarizeOutput :: SC.Term -> m (SC.Term, Map Text SC.Term)
+    summarizeOutput :: SC.Term -> IO (SC.Term, Map Text SC.Term)
     summarizeOutput outrec = do
-      outstate <- liftIO $ cryptolRecordSelect sc codomainFields outrec "__state__"
+      outstate <- cryptolRecordSelect sc codomainFields outrec "__state__"
       outputs <- fmap Map.fromList . forM (Map.assocs $ s ^. yosysSequentialOutputFields) $ \(nm, (ty, _)) -> do
-        out <- liftIO $ cryptolRecordSelect sc codomainFields outrec nm
-        wrapped <- liftIO $ SC.scSingle sc ty out
+        out <- cryptolRecordSelect sc codomainFields outrec nm
+        wrapped <- SC.scSingle sc ty out
         pure (nm, wrapped)
       pure (outstate, outputs)
 
-    compose1 :: Integer -> (SC.Term, Map Text SC.Term) -> m (SC.Term, Map Text SC.Term)
+    compose1 :: Integer -> (SC.Term, Map Text SC.Term) -> IO (SC.Term, Map Text SC.Term)
     compose1 i (st, outs) = do
       inprec <- buildIntermediateInput i st
-      outrec <- liftIO $ SC.scApply sc t inprec
+      outrec <- SC.scApply sc t inprec
       (st', outs') <- summarizeOutput outrec
       mergedOuts <- fmap Map.fromList . forM (Map.assocs outs') $ \(nm, arr) -> do
         case (Map.lookup nm $ s ^. yosysSequentialOutputFields, Map.lookup nm outs) of
           (Just (ty, _), Just rest) -> do
-            restlen <- liftIO . SC.scNat sc $ fromIntegral i
-            arrlen <- liftIO $ SC.scNat sc 1
-            appended <- liftIO $ SC.scAppend sc restlen arrlen ty rest arr
+            restlen <- SC.scNat sc $ fromIntegral i
+            arrlen <- SC.scNat sc 1
+            appended <- SC.scAppend sc restlen arrlen ty rest arr
             pure (nm, appended)
           _ -> pure (nm, arr)
       pure (st', mergedOuts)
 
   stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
-  initialState <- liftIO $ SC.scFreshVariable sc "initial_state" stateType
+  initialState <- SC.scFreshVariable sc "initial_state" stateType
   (_, outputs) <- foldM (\acc i -> compose1 i acc) (initialState, Map.empty) [0..n-1]
 
   outputRecord <- cryptolRecord sc outputs
-  res <- liftIO $ SC.scAbstractTerms sc [initialState, extendedInputRecord] outputRecord
+  res <- SC.scAbstractTerms sc [initialState, extendedInputRecord] outputRecord
   let cty = C.tFun extendedInputCryptolType extendedOutputCryptolType
 
   pure (res, cty)
@@ -273,30 +268,26 @@ composeYosysSequentialHelper sc s n = do
 -- given number of times. Accessing the initial state produces an
 -- error.
 composeYosysSequential ::
-  forall m.
-  MonadIO m =>
   SC.SharedContext ->
   YosysSequential ->
   Integer ->
-  m SC.TypedTerm
+  IO SC.TypedTerm
 composeYosysSequential sc s n = do
   (t, cty) <- composeYosysSequentialHelper sc s n
   stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
-  initialStateMsg <- liftIO $ SC.scString sc "Attempted to read initial state of sequential circuit"
-  initialState <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [stateType, initialStateMsg]
-  res <- liftIO $ SC.scApply sc t initialState
+  initialStateMsg <- SC.scString sc "Attempted to read initial state of sequential circuit"
+  initialState <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [stateType, initialStateMsg]
+  res <- SC.scApply sc t initialState
   pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) res
 
 -- | Given a SAWCore term with an explicit state, iterate the term the
 -- given number of times. The resulting term has a parameter for the
 -- initial state.
 composeYosysSequentialWithState ::
-  forall m.
-  MonadIO m =>
   SC.SharedContext ->
   YosysSequential ->
   Integer ->
-  m SC.TypedTerm
+  IO SC.TypedTerm
 composeYosysSequentialWithState sc s n = do
   (t, cty) <- composeYosysSequentialHelper sc s n
   scty <- fieldsToCryptolType $ s ^. yosysSequentialStateFields

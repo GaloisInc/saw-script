@@ -90,10 +90,9 @@ yosysIRModgraph ir =
 
 -- | Given a Yosys IR, construct a map from module names to SAWCore terms alongside SAWCore and Cryptol types
 convertYosysIR ::
-  MonadIO m =>
   SC.SharedContext ->
   YosysIR ->
-  m (Map Text ConvertedModule)
+  IO (Map Text ConvertedModule)
 convertYosysIR sc ir = do
   let mg = yosysIRModgraph ir
   let sorted = reverseTopSort $ mg ^. modgraphGraph
@@ -102,7 +101,7 @@ convertYosysIR sc ir = do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
         cm <- convertModule sc env m
         _ <- validateTerm sc ("translating the combinational circuit \"" <> nm <> "\"") $ cm ^. convertedModuleTerm
-        n <- liftIO $ Nonce.freshNonce Nonce.globalNonceGenerator
+        n <- Nonce.freshNonce Nonce.globalNonceGenerator
         let frag = Text.pack . show $ Nonce.indexValue n
         let uri = URI.URI
               { URI.uriScheme = URI.mkScheme "yosys"
@@ -112,7 +111,7 @@ convertYosysIR sc ir = do
               , URI.uriFragment = URI.mkFragment frag
               }
         let ni = SC.ImportedName uri [nm]
-        tc <- liftIO $ SC.scDefineConstant sc ni (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
+        tc <- SC.scDefineConstant sc ni (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
         let cm' = cm { _convertedModuleTerm = tc }
         pure $ Map.insert nm cm' env
     )
@@ -121,10 +120,9 @@ convertYosysIR sc ir = do
 
 -- | Given a Yosys IR, construct a map from module names to TypedTerms
 yosysIRToTypedTerms ::
-  MonadIO m =>
   SC.SharedContext ->
   YosysIR ->
-  m (Map Text SC.TypedTerm)
+  IO (Map Text SC.TypedTerm)
 yosysIRToTypedTerms sc ir = do
   env <- convertYosysIR sc ir
   pure . flip fmap env $ \cm ->
@@ -134,10 +132,9 @@ yosysIRToTypedTerms sc ir = do
 
 -- | Given a Yosys IR, construct a SAWCore record containing terms for each module
 yosysIRToRecordTerm ::
-  MonadIO m =>
   SC.SharedContext ->
   YosysIR ->
-  m SC.TypedTerm
+  IO SC.TypedTerm
 yosysIRToRecordTerm sc ir = do
   env <- convertYosysIR sc ir
   record <- cryptolRecord sc $ view convertedModuleTerm <$> env
@@ -147,11 +144,10 @@ yosysIRToRecordTerm sc ir = do
 
 -- | Given a Yosys IR, construct a value representing a specific module with all submodules inlined
 yosysIRToSequential ::
-  MonadIO m =>
   SC.SharedContext ->
   YosysIR ->
   Text ->
-  m YosysSequential
+  IO YosysSequential
 yosysIRToSequential sc ir nm = do
   case Map.lookup nm $ ir ^. yosysModules of
     Nothing -> throw . YosysError $ mconcat
@@ -173,9 +169,9 @@ yosysIRToSequential sc ir nm = do
 yosys_import :: FilePath -> TopLevel SC.TypedTerm
 yosys_import path = do
   sc <- getSharedContext
-  ir <- loadYosysIR path
-  tt <- yosysIRToRecordTerm sc ir
-  _ <- validateTerm sc "translating combinational circuits" $ SC.ttTerm tt
+  ir <- liftIO $ loadYosysIR path
+  tt <- liftIO $ yosysIRToRecordTerm sc ir
+  _ <- liftIO $ validateTerm sc "translating combinational circuits" $ SC.ttTerm tt
   pure tt
 
 -- | Proves equality between a combinational HDL module and a
@@ -193,7 +189,7 @@ yosys_verify ::
   TopLevel YosysTheorem
 yosys_verify ymod preconds other specs tactic = do
   sc <- getSharedContext
-  newmod <- foldM (flip $ applyOverride sc)
+  newmod <- liftIO $ foldM (flip $ applyOverride sc)
     (SC.ttTerm ymod)
     specs
   mpc <- case preconds of
@@ -201,8 +197,8 @@ yosys_verify ymod preconds other specs tactic = do
     (pc:pcs) -> do
       t <- foldM (\a b -> liftIO $ SC.scAnd sc a b) (SC.ttTerm pc) (SC.ttTerm <$> pcs)
       pure . Just $ SC.TypedTerm (SC.ttType pc) t
-  thm <- buildTheorem sc ymod newmod mpc other
-  prop <- theoremProp sc thm
+  thm <- liftIO $ buildTheorem sc ymod newmod mpc other
+  prop <- liftIO $ theoremProp sc thm
   _ <- Builtins.provePrintPrim tactic prop
   pure thm
 
@@ -214,8 +210,8 @@ yosys_import_sequential ::
   TopLevel YosysSequential
 yosys_import_sequential nm path = do
   sc <- getSharedContext
-  ir <- loadYosysIR path
-  yosysIRToSequential sc ir nm
+  ir <- liftIO $ loadYosysIR path
+  liftIO $ yosysIRToSequential sc ir nm
 
 -- | Extracts a term from the given sequential module with the state
 -- eliminated by iterating the term over the given concrete number of
@@ -229,8 +225,8 @@ yosys_extract_sequential ::
   TopLevel SC.TypedTerm
 yosys_extract_sequential s n = do
   sc <- getSharedContext
-  tt <- composeYosysSequential sc s n
-  _ <- validateTerm sc "composing a sequential term" $ SC.ttTerm tt
+  tt <- liftIO $ composeYosysSequential sc s n
+  _ <- liftIO $ validateTerm sc "composing a sequential term" $ SC.ttTerm tt
   pure tt
 
 -- | Like `yosys_extract_sequential`, but the resulting term has an
@@ -241,8 +237,8 @@ yosys_extract_sequential_with_state ::
   TopLevel SC.TypedTerm
 yosys_extract_sequential_with_state s n = do
   sc <- getSharedContext
-  tt <- composeYosysSequentialWithState sc s n
-  _ <- validateTerm sc "composing a sequential term with state" $ SC.ttTerm tt
+  tt <- liftIO $ composeYosysSequentialWithState sc s n
+  _ <- liftIO $ validateTerm sc "composing a sequential term with state" $ SC.ttTerm tt
   pure tt
 
 -- | Extracts a term from the given sequential module. This term has
@@ -261,4 +257,4 @@ yosys_verify_sequential_sally ::
 yosys_verify_sequential_sally s path q fixed = do
   sc <- getSharedContext
   sym <- liftIO $ Common.newSAWCoreExprBuilder sc False
-  queryModelChecker sym sc s path q $ Set.fromList fixed
+  liftIO $ queryModelChecker sym sc s path q $ Set.fromList fixed
