@@ -135,6 +135,7 @@ textToPrimitiveCellType = Map.fromList
   , ("$bmux"        , CellTypeBmux)
   , ("$dff"         , CellTypeDff)
   , ("$ff"          , CellTypeFf)
+  , ("$_BUF_"       , CellTypeBUF)
   ]
 
 -- | Mapping from primitive cell types to textual representation
@@ -183,6 +184,7 @@ data CellType
   | CellTypeBmux
   | CellTypeDff
   | CellTypeFf
+  | CellTypeBUF
   | CellTypeUnsupportedPrimitive Text
   | CellTypeUserType Text
   deriving (Eq, Ord)

@@ -300,6 +300,9 @@ primCellToMap sc c args =
     -- "$concat" -> _
     CellTypeDff -> pure Nothing
     CellTypeFf -> pure Nothing
+    CellTypeBUF ->
+      do res <- input "A"
+         output res
     CellTypeUnsupportedPrimitive _ -> pure Nothing
     CellTypeUserType _ -> pure Nothing
   where
