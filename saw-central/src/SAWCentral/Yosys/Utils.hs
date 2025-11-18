@@ -206,24 +206,27 @@ cryptolRecordSelectTyped ::
   SC.TypedTerm ->
   Text ->
   IO SC.TypedTerm
-cryptolRecordSelectTyped sc r nm = do
-  fields <- Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$> case SC.ttType r of
-    SC.TypedTermSchema (C.Forall [] [] (C.TRec fs)) -> pure fs
-    _ -> throwIO $ YosysError $ mconcat
-      [ "Type\n"
-      , Text.pack . show $ SC.ttType r
-      , "\nis not a record type"
-      ]
-  cty <- case Map.lookup nm fields of
-    Just cty -> pure cty
-    _ -> throwIO $ YosysError $ mconcat
-      [ "Record type\n"
-      , Text.pack . show $ SC.ttType r
-      , "\ndoes not have field "
-      , nm
-      ]
-  t <- cryptolRecordSelect sc fields (SC.ttTerm r) nm
-  pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
+cryptolRecordSelectTyped sc r nm =
+  do fields <-
+       Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$>
+       case SC.ttType r of
+         SC.TypedTermSchema (C.Forall [] [] (C.TRec fs)) -> pure fs
+         _ -> throwIO $ YosysError $ mconcat
+           [ "Type\n"
+           , Text.pack . show $ SC.ttType r
+           , "\nis not a record type"
+           ]
+     cty <-
+       case Map.lookup nm fields of
+         Just cty -> pure cty
+         _ -> throwIO $ YosysError $ mconcat
+           [ "Record type\n"
+           , Text.pack . show $ SC.ttType r
+           , "\ndoes not have field "
+           , nm
+           ]
+     t <- cryptolRecordSelect sc fields (SC.ttTerm r) nm
+     pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
 
 -- | Construct a SAWCore expression asserting equality between each
 -- field of two records. Both records should be tuples corresponding
@@ -234,33 +237,38 @@ eqBvRecords ::
   SC.Term ->
   SC.Term ->
   IO SC.Term
-eqBvRecords sc cty a b = do
-  fields <- Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$> case cty of
-    C.TRec fs -> pure fs
-    _ -> throwIO $ YosysError $ mconcat
-      [ "Type\n"
-      , Text.pack $ show cty
-      , "\nis not a record type"
-      ]
-  eqs <- forM (Map.assocs fields) $ \(nm, fcty) -> do
-    w <- case fcty of
-      C.TCon (C.TC C.TCSeq) [C.TCon (C.TC (C.TCNum wint)) [], C.TCon (C.TC C.TCBit) []] ->
-        SC.scNat sc $ fromIntegral wint
-      _ -> throwIO $  YosysError $ mconcat
-        [ "Type\n"
-        , Text.pack $ show fcty
-        , "\nis not a bitvector type"
-        ]
-    fa <- cryptolRecordSelect sc fields a nm
-    fb <- cryptolRecordSelect sc fields b nm
-    SC.scBvEq sc w fa fb
-  case eqs of
-    [] -> throwIO $ YosysError $ mconcat
-      [ "Record type\n"
-      , Text.pack $ show cty
-      , "\nhas no fields"
-      ]
-    (e:es) -> foldM (\x y -> SC.scAnd sc x y) e es
+eqBvRecords sc cty a b =
+  do fields <-
+       Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$>
+       case cty of
+         C.TRec fs -> pure fs
+         _ -> throwIO $ YosysError $ mconcat
+           [ "Type\n"
+           , Text.pack $ show cty
+           , "\nis not a record type"
+           ]
+     eqs <-
+       forM (Map.assocs fields) $ \(nm, fcty) ->
+       do w <-
+            case fcty of
+              C.TCon (C.TC C.TCSeq) [C.TCon (C.TC (C.TCNum wint)) [], C.TCon (C.TC C.TCBit) []] ->
+                SC.scNat sc $ fromIntegral wint
+              _ -> throwIO $  YosysError $ mconcat
+                [ "Type\n"
+                , Text.pack $ show fcty
+                , "\nis not a bitvector type"
+                ]
+          fa <- cryptolRecordSelect sc fields a nm
+          fb <- cryptolRecordSelect sc fields b nm
+          SC.scBvEq sc w fa fb
+     case eqs of
+       [] ->
+         throwIO $ YosysError $ mconcat
+         [ "Record type\n"
+         , Text.pack $ show cty
+         , "\nhas no fields"
+         ]
+       (e:es) -> foldM (\x y -> SC.scAnd sc x y) e es
 
 -- | Encode the given string such that is a valid Cryptol identifier.
 -- Since Yosys cell names often look like "\42", this makes it much
@@ -285,14 +293,14 @@ fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIden
 -- that output pattern with the term, and each bit of that pattern
 -- with the corresponding bit of the term.
 deriveTermsByIndices :: (Ord b) => SC.SharedContext -> [b] -> SC.Term -> IO (Map [b] Preterm)
-deriveTermsByIndices _sc rep t = do
-  let len = length rep
-  let bit i = PretermSlice (fromIntegral (len - 1 - i)) 1 (fromIntegral i) t
-  let telems = map bit [0..len-1]
-  pure . Map.fromList $ mconcat
-    [ [(rep, PretermSlice 0 (fromIntegral len) 0 t)]
-    , zip ((:[]) <$> rep) telems
-    ]
+deriveTermsByIndices _sc rep t =
+  do let len = length rep
+     let bit i = PretermSlice (fromIntegral (len - 1 - i)) 1 (fromIntegral i) t
+     let telems = map bit [0..len-1]
+     pure . Map.fromList $ mconcat
+       [ [(rep, PretermSlice 0 (fromIntegral len) 0 t)]
+       , zip ((:[]) <$> rep) telems
+       ]
 
 --------------------------------------------------------------------------------
 -- ** Pre-terms
