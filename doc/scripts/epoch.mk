@@ -26,4 +26,4 @@
 
 # BSD/Linux: date +%s -d "08/22/2025 00:00:00 GMT"
 # OSX: date -j -f "%m/%d/%Y %H:%M:%S %Z" "8/22/2025 00:00:00 GMT" +%s
-SOURCE_DATE_EPOCH=1755820800
+SOURCE_DATE_EPOCH=1763424000
