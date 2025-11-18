@@ -52,3 +52,7 @@ if ! [ -f paths07/paths07.prove0.smt2 ]; then
     exit 1
 fi
 rm -f paths07/paths07.prove0.smt2
+
+# another input
+
+$SAW paths08/test.saw
