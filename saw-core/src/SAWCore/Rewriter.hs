@@ -74,7 +74,6 @@ import SAWCore.Conversion
   , termPat
   , conversionPat
   , runConversion
-  , runTermBuilder
   )
 import SAWCore.Module
   ( ctorName
@@ -86,6 +85,7 @@ import SAWCore.Module
   , ResolvedName(..)
   )
 import SAWCore.Name
+import qualified SAWCore.OpenTerm as OT
 import SAWCore.Panic (panic)
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
@@ -772,7 +772,7 @@ rewriteSharedTerm sc ss t0 =
            -- print (Net.toPat conv)
            case runConversion conv t of
              Nothing -> apply rules t
-             Just tb -> rewriteAll =<< runTermBuilder tb (scGlobalDef sc) (scTermF sc)
+             Just tb -> rewriteAll =<< OT.complete sc tb
 
 data Convertibility = AllRules | ConvertibleRulesOnly
 
@@ -902,7 +902,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
         do 
           case runConversion conv t of
              Nothing -> apply convertibleFlag rules t
-             Just tb -> rewriteAll convertibleFlag =<< runTermBuilder tb (scGlobalDef sc) (scTermF sc)
+             Just tb -> rewriteAll convertibleFlag =<< OT.complete sc tb
 
 
 -- FIXME: is there some way to have sensable term replacement in the presence of loose variables

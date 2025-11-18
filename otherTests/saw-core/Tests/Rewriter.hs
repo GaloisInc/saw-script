@@ -13,7 +13,8 @@ module Tests.Rewriter
   ) where
 
 
-import SAWCore.Conversion
+import SAWCore.OpenTerm (OpenTerm)
+import qualified SAWCore.OpenTerm as OT
 import SAWCore.Prelude
 import SAWCore.Rewriter
 import SAWCore.SharedTerm
@@ -21,8 +22,8 @@ import SAWCore.SharedTerm
 import Test.Tasty
 import Test.Tasty.HUnit
 
-scMkTerm :: SharedContext -> TermBuilder Term -> IO Term
-scMkTerm sc t = runTermBuilder t (scGlobalDef sc) (scTermF sc)
+scMkTerm :: SharedContext -> OpenTerm -> IO Term
+scMkTerm sc t = OT.complete sc t
 
 rewriter_tests :: [TestTree]
 rewriter_tests =
@@ -42,15 +43,17 @@ prelude_bveq_sameL_test =
     x <- scFreshVariable sc "x" bvType
     z <- scFreshVariable sc "z" bvType
     let lhs =
-          mkGlobalDef "Prelude.bvEq"
-            `pureApp` n
-            `pureApp` x
-            `mkApp` (mkGlobalDef "Prelude.bvAdd" `pureApp` n `pureApp` x `pureApp` z)
+          OT.applyGlobal "Prelude.bvEq"
+          [ OT.term n
+          , OT.term x
+          , OT.applyGlobal "Prelude.bvAdd" [OT.term n, OT.term x, OT.term z]
+          ]
     let rhs =
-          mkGlobalDef "Prelude.bvEq"
-            `pureApp` n
-            `mkApp` (mkGlobalDef "Prelude.bvNat" `pureApp` n `mkApp` mkNatLit 0)
-            `pureApp` z
+          OT.applyGlobal "Prelude.bvEq"
+          [ OT.term n
+          , OT.applyGlobal "Prelude.bvNat" [OT.term n, OT.nat 0]
+          , OT.term z
+          ]
     (_, lhs_term) <- rewriteSharedTermTypeSafe sc ss =<< scMkTerm sc lhs
     (_, rhs_term) <- rewriteSharedTermTypeSafe sc ss =<< scMkTerm sc rhs
     assertEqual "Incorrect conversion\n" lhs_term rhs_term

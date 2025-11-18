@@ -55,18 +55,7 @@ module SAWCore.Conversion
   , asBvNatLit
     -- ** Matchable typeclass
   , Matchable(..)
-    -- ** TermBuilder
-  , TermBuilder
-  , runTermBuilder
-  , mkGlobalDef
-  , mkApp
-  , pureApp
-  , mkTuple
-  , mkCtor
-  , mkNatLit
-  , mkVecLit
     -- ** Prelude builders
-  , mkBool
   , mkBvNat
     -- * Conversion
   , Conversion(..)
@@ -93,7 +82,7 @@ module SAWCore.Conversion
   ) where
 
 import Control.Lens (view, _1, _2)
-import Control.Monad (ap, guard, liftM, liftM2, (>=>), (<=<))
+import Control.Monad (guard, liftM2, (>=>), (<=<))
 import Data.Bits
 import qualified Data.Text as Text
 import Data.Map (Map)
@@ -102,6 +91,8 @@ import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
 import SAWCore.Name
+import SAWCore.OpenTerm (OpenTerm)
+import qualified SAWCore.OpenTerm as OT
 import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
 import SAWCore.Recognizer ((:*:)(..))
@@ -333,99 +324,35 @@ instance Matchable (Prim.Vec Term Term) where
 ----------------------------------------------------------------------
 -- Term builders
 
-newtype TermBuilder v =
-  TermBuilder
-  { runTermBuilder ::
-      forall m. Monad m => (Ident -> m Term) -> (TermF Term -> m Term) -> m v
-  }
-
-instance Monad TermBuilder where
-  m >>= h = TermBuilder $ \mg mk -> do
-    r <- runTermBuilder m mg mk
-    runTermBuilder (h r) mg mk
-  return = pure
-
-instance Functor TermBuilder where
-    fmap = liftM
-
-instance Applicative TermBuilder where
-    pure v = TermBuilder $ \_ _ -> pure v
-    (<*>) = ap
-
-mkTermF :: TermF Term -> TermBuilder Term
-mkTermF tf = TermBuilder (\_ mk -> mk tf)
-
-mkGlobalDef :: Ident -> TermBuilder Term
-mkGlobalDef i = TermBuilder (\mg _ -> mg i)
-
-infixl 9 `mkApp`
-infixl 9 `pureApp`
-
-mkApp :: TermBuilder Term -> TermBuilder Term -> TermBuilder Term
-mkApp mx my = do
-  x <- mx
-  y <- my
-  mkTermF (App x y)
-
-pureApp :: TermBuilder Term -> Term -> TermBuilder Term
-pureApp mx y = do
-  x <- mx
-  mkTermF (App x y)
-
-mkTuple :: [TermBuilder Term] -> TermBuilder Term
-mkTuple []       = mkTermF (FTermF UnitValue)
-mkTuple (t : ts) = mkTermF . FTermF =<< (PairValue <$> t <*> mkTuple ts)
-
-mkCtor :: Name -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
-mkCtor i paramsB argsB =
-  foldl mkApp (mkTermF (Constant i)) (paramsB ++ argsB)
-
-mkNatLit :: Natural -> TermBuilder Term
-mkNatLit 0 = mkGlobalDef "Prelude.Zero"
-mkNatLit n = mkGlobalDef "Prelude.NatPos" `mkApp` mkPosLit n
-
-mkPosLit :: Natural -> TermBuilder Term
-mkPosLit n
-  | n <= 1    = mkGlobalDef "Prelude.One"
-  | even n    = mkGlobalDef "Prelude.Bit0" `mkApp` mkPosLit (div n 2)
-  | otherwise = mkGlobalDef "Prelude.Bit1" `mkApp` mkPosLit (div n 2)
-
-mkVecLit :: Term -> V.Vector Term -> TermBuilder Term
-mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
-
-mkBool :: Bool -> TermBuilder Term
-mkBool True  = mkGlobalDef "Prelude.True"
-mkBool False = mkGlobalDef "Prelude.False"
-
-mkBvNat :: Natural -> Integer -> TermBuilder Term
+mkBvNat :: Natural -> Integer -> OpenTerm
 mkBvNat n x = do
-  mkGlobalDef "Prelude.bvNat"
-    `mkApp` (mkNatLit n)
-    `mkApp` (mkNatLit $ fromInteger $ x .&. bitMask (fromIntegral n))
+  OT.applyGlobal "Prelude.bvNat"
+    [OT.nat n, OT.nat $ fromInteger $ x .&. bitMask (fromIntegral n)]
 
 class Buildable a where
-  defaultBuilder :: a -> TermBuilder Term
+  defaultBuilder :: a -> OpenTerm
 
 instance Buildable Term where
-  defaultBuilder = return
+  defaultBuilder = OT.term
 
 instance Buildable Bool where
-  defaultBuilder = mkBool
+  defaultBuilder = OT.bool
 
 instance Buildable Natural where
-  defaultBuilder = mkNatLit
+  defaultBuilder = OT.nat
 
 instance Buildable Integer where
-  defaultBuilder = mkNatLit . fromInteger
+  defaultBuilder = OT.nat . fromInteger
 
 instance Buildable Int where
-  defaultBuilder = mkNatLit . fromIntegral
+  defaultBuilder = OT.nat . fromIntegral
 
 instance (Buildable a, Buildable b) => Buildable (a, b) where
-  defaultBuilder (x, y) = mkTuple [defaultBuilder x, defaultBuilder y]
+  defaultBuilder (x, y) = OT.pair (defaultBuilder x) (defaultBuilder y)
 
-instance Buildable (Prim.Vec Term Term) where
-  defaultBuilder (Prim.Vec t v) = mkVecLit t v
+instance (Buildable a, Buildable b) => Buildable (Prim.Vec a b) where
+  defaultBuilder (Prim.Vec t v) =
+    OT.arrayValue (defaultBuilder t) (V.toList (fmap defaultBuilder v))
 
 instance Buildable Prim.BitVector where
   defaultBuilder (Prim.BV w x) = mkBvNat (fromIntegral w) x
@@ -441,20 +368,20 @@ instance Buildable Prim.BitVector where
 -- is executed are convertible in the SAWCore type system and false
 -- otherwise.
 
-data Conversion = Conversion Bool (Matcher (TermBuilder Term))
+data Conversion = Conversion Bool (Matcher OpenTerm)
 
-runConversion :: Conversion -> Term -> Maybe (TermBuilder Term)
+runConversion :: Conversion -> Term -> Maybe OpenTerm
 runConversion (Conversion _ m) = runMatcher m
 
 conversionPat :: Conversion -> Net.Pat
 conversionPat (Conversion _ m) = matcherPat m
 
--- | Constructs a Conversion from a Matcher (TermBuilder Term)
+-- | Constructs a 'Conversion' from a @Matcher OpenTerm@.
 -- This assumes the default case that the Conversion is
 -- non-convertible; if the Conversion is convertible with regard
 -- to the SAW type system, it should be constructed using
 -- the data constructor.
-newConversion :: Matcher (TermBuilder Term) -> Conversion
+newConversion :: Matcher OpenTerm -> Conversion
 newConversion = Conversion False
 
 -- | This class is meant to include n-ary function types whose
@@ -514,12 +441,12 @@ tupleConversion = Conversion False $ thenMatcher (asTupleSelector asAnyTupleValu
                   Text.pack (show $ length ts)
           ]
       | otherwise =
-          Just (return (ts !! (i - 1)))
+          Just (OT.term (ts !! (i - 1)))
 
 -- | Conversion for selector on a record
 recordConversion :: Conversion
 recordConversion = Conversion False $ thenMatcher (asRecordSelector asAnyRecordValue) action
-  where action (m, i) = fmap return (Map.lookup i m)
+  where action (m, i) = fmap OT.term (Map.lookup i m)
 
 -- | Conversions for operations on Nat literals
 natConversions :: [Conversion]
@@ -530,7 +457,7 @@ natConversions = [ succ_NatLit, addNat_NatLit, subNat_NatLit
 
 succ_NatLit :: Conversion
 succ_NatLit =
-    Conversion True $ thenMatcher asSuccLit (\n -> return $ mkNatLit (n + 1))
+    Conversion True $ thenMatcher asSuccLit (\n -> pure $ OT.nat (n + 1))
 
 addNat_NatLit :: Conversion
 addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Natural -> Natural -> Natural)
@@ -538,7 +465,7 @@ addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Natural -> Natural -> Natura
 subNat_NatLit :: Conversion
 subNat_NatLit = Conversion True $
   thenMatcher (asGlobalDef "Prelude.subNat" <:> asAnyNatLit <:> asAnyNatLit)
-    (\(_ :*: x :*: y) -> if x >= y then Just (mkNatLit (x - y)) else Nothing)
+    (\(_ :*: x :*: y) -> if x >= y then Just (OT.nat (x - y)) else Nothing)
 
 mulNat_NatLit :: Conversion
 mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Natural -> Natural -> Natural)
@@ -550,13 +477,13 @@ divNat_NatLit :: Conversion
 divNat_NatLit = Conversion True $
   thenMatcher (asGlobalDef "Prelude.divNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) ->
-         if y /= 0 then Just (mkNatLit (x `div` y)) else Nothing)
+         if y /= 0 then Just (OT.nat (x `div` y)) else Nothing)
 
 remNat_NatLit :: Conversion
 remNat_NatLit = Conversion True $
   thenMatcher (asGlobalDef "Prelude.remNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) ->
-         if y /= 0 then Just (mkNatLit (x `rem` y)) else Nothing)
+         if y /= 0 then Just (OT.nat (x `rem` y)) else Nothing)
 
 equalNat_NatLit :: Conversion
 equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Natural -> Natural -> Bool)
@@ -640,7 +567,7 @@ atWithDefault_bvNat :: Conversion
 atWithDefault_bvNat =
   Conversion False $
   (\(_ :*: n :*: a :*: d :*: x :*: i) ->
-    if fromIntegral i < width x then mkBool (Prim.at_bv n a x i) else return d) <$>
+    if fromIntegral i < width x then OT.bool (Prim.at_bv n a x i) else OT.term d) <$>
   (asGlobalDef "Prelude.atWithDefault" <:>
    defaultMatcher <:> defaultMatcher <:> asAny <:> asBvNatLit <:> asAnyNatLit)
 
