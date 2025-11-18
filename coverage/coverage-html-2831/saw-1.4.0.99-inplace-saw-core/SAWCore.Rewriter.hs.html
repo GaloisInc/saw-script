@@ -93,18 +93,18 @@ span.spaces    { background: white }
 <span class="lineno">   74 </span>  , termPat
 <span class="lineno">   75 </span>  , conversionPat
 <span class="lineno">   76 </span>  , runConversion
-<span class="lineno">   77 </span>  , runTermBuilder
-<span class="lineno">   78 </span>  )
-<span class="lineno">   79 </span>import SAWCore.Module
-<span class="lineno">   80 </span>  ( ctorName
-<span class="lineno">   81 </span>  , ctorNumParams
-<span class="lineno">   82 </span>  , lookupVarIndexInMap
-<span class="lineno">   83 </span>  , Ctor(..)
-<span class="lineno">   84 </span>  , DataType(..)
-<span class="lineno">   85 </span>  , Def(..)
-<span class="lineno">   86 </span>  , ResolvedName(..)
-<span class="lineno">   87 </span>  )
-<span class="lineno">   88 </span>import SAWCore.Name
+<span class="lineno">   77 </span>  )
+<span class="lineno">   78 </span>import SAWCore.Module
+<span class="lineno">   79 </span>  ( ctorName
+<span class="lineno">   80 </span>  , ctorNumParams
+<span class="lineno">   81 </span>  , lookupVarIndexInMap
+<span class="lineno">   82 </span>  , Ctor(..)
+<span class="lineno">   83 </span>  , DataType(..)
+<span class="lineno">   84 </span>  , Def(..)
+<span class="lineno">   85 </span>  , ResolvedName(..)
+<span class="lineno">   86 </span>  )
+<span class="lineno">   87 </span>import SAWCore.Name
+<span class="lineno">   88 </span>import qualified SAWCore.OpenTerm as OT
 <span class="lineno">   89 </span>import SAWCore.Panic (panic)
 <span class="lineno">   90 </span>import qualified SAWCore.Recognizer as R
 <span class="lineno">   91 </span>import SAWCore.SharedTerm
@@ -791,7 +791,7 @@ span.spaces    { background: white }
 <span class="lineno">  772 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">-- print (Net.toPat conv)</span></span>
 <span class="lineno">  773 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">case runConversion conv t of</span></span>
 <span class="lineno">  774 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; apply rules t</span></span>
-<span class="lineno">  775 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Just tb -&gt; rewriteAll =&lt;&lt; runTermBuilder tb (scGlobalDef sc) (scTermF sc)</span></span></span>
+<span class="lineno">  775 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Just tb -&gt; rewriteAll =&lt;&lt; OT.complete sc tb</span></span></span>
 <span class="lineno">  776 </span>
 <span class="lineno">  777 </span>data Convertibility = AllRules | ConvertibleRulesOnly
 <span class="lineno">  778 </span>
@@ -921,7 +921,7 @@ span.spaces    { background: white }
 <span class="lineno">  902 </span><span class="spaces">        </span><span class="istickedoff">do </span>
 <span class="lineno">  903 </span><span class="spaces">          </span><span class="istickedoff">case runConversion conv t of</span>
 <span class="lineno">  904 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt; apply convertibleFlag rules t</span>
-<span class="lineno">  905 </span><span class="spaces">             </span><span class="istickedoff">Just tb -&gt; rewriteAll convertibleFlag =&lt;&lt; runTermBuilder tb (scGlobalDef sc) (scTermF sc)</span></span>
+<span class="lineno">  905 </span><span class="spaces">             </span><span class="istickedoff">Just tb -&gt; rewriteAll convertibleFlag =&lt;&lt; OT.complete sc tb</span></span>
 <span class="lineno">  906 </span>
 <span class="lineno">  907 </span>
 <span class="lineno">  908 </span>-- FIXME: is there some way to have sensable term replacement in the presence of loose variables

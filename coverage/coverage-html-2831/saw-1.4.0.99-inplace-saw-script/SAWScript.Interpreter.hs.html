@@ -1149,10 +1149,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1130 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1131 </span><span class="spaces">      </span><span class="istickedoff">-- Insert a Nothing in the statement list in the second-to-last</span>
 <span class="lineno"> 1132 </span><span class="spaces">      </span><span class="istickedoff">-- position, asserting that the last statement is a StmtPopdir.</span>
-<span class="lineno"> 1133 </span><span class="spaces">      </span><span class="istickedoff">let stmts' = reverse $ case (reverse $ map Just stmts) of</span>
+<span class="lineno"> 1133 </span><span class="spaces">      </span><span class="istickedoff">let stmts' = reverse $ case reverse stmts of</span>
 <span class="lineno"> 1134 </span><span class="spaces">            </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">[]</span></span>
-<span class="lineno"> 1135 </span><span class="spaces">            </span><span class="istickedoff">Just (SS.StmtPopdir pos) : ss -&gt;</span>
-<span class="lineno"> 1136 </span><span class="spaces">                </span><span class="istickedoff">Just (SS.StmtPopdir <span class="nottickedoff">pos</span>) : Nothing : ss</span>
+<span class="lineno"> 1135 </span><span class="spaces">            </span><span class="istickedoff">SS.StmtPopdir pos : ss -&gt;</span>
+<span class="lineno"> 1136 </span><span class="spaces">                </span><span class="istickedoff">Just (SS.StmtPopdir <span class="nottickedoff">pos</span>) : Nothing : map Just ss</span>
 <span class="lineno"> 1137 </span><span class="spaces">            </span><span class="istickedoff">_ : _ -&gt;</span>
 <span class="lineno"> 1138 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">panic &quot;interpretFile&quot; [&quot;Last statement of file not a popdir&quot;]</span></span>
 <span class="lineno"> 1139 </span><span class="spaces"></span><span class="istickedoff"></span>
