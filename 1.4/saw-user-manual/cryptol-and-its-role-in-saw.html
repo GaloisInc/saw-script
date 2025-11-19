@@ -1,0 +1,392 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cryptol and its Role in SAW &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Loading Code" href="loading-code.html" />
+    <link rel="prev" title="Invoking SAW" href="invoking-saw.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Cryptol and its Role in SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="loading-code.html">Loading Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-coq-theorem-prover.html">Extraction to the Coq theorem prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Cryptol and its Role in SAW</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/cryptol-and-its-role-in-saw.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="cryptol-and-its-role-in-saw">
+<h1>Cryptol and its Role in SAW<a class="headerlink" href="#cryptol-and-its-role-in-saw" title="Link to this heading"></a></h1>
+<p>Cryptol is a domain-specific language originally designed for the
+high-level specification of cryptographic algorithms. It is general
+enough, however, to describe a wide variety of programs, and is
+particularly applicable to describing computations that operate on
+streams of data of some fixed size.</p>
+<!-- N.b. Update the Cryptol repository to publish a canonical version of this. -->
+<p>In addition to being integrated into SAW, Cryptol is a standalone
+language with <a class="reference external" href="https://cdn.prod.website-files.com/673b407e535dbf3b547179dd/677c422f88a92701db5a834d_ProgrammingCryptol.pdf">its own
+manual</a>.</p>
+<p>SAW includes deep support for Cryptol, and in fact requires the use of
+Cryptol for most non-trivial tasks. To fully understand the rest of
+this manual and to effectively use SAW, you will need to develop at least
+a rudimentary understanding of Cryptol.</p>
+<p>The primary use of Cryptol within SAWScript is to construct values of type
+<code class="docutils literal notranslate"><span class="pre">Term</span></code>. Although <code class="docutils literal notranslate"><span class="pre">Term</span></code> values can be constructed from various sources,
+inline Cryptol expressions are the most direct and convenient way to create
+them.</p>
+<p>Specifically, a Cryptol expression can be placed inside double curly
+braces (<code class="docutils literal notranslate"><span class="pre">{{</span></code> and <code class="docutils literal notranslate"><span class="pre">}}</span></code>), resulting in a value of type <code class="docutils literal notranslate"><span class="pre">Term</span></code>. As a very
+simple example, there is no built-in integer addition operation in
+SAWScript. However, we can use Cryptol’s built-in integer addition operator
+within SAWScript as follows:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let t = {{ 0x22 + 0x33 }}</span>
+<span class="go">sawscript&gt; print t</span>
+<span class="go">85</span>
+<span class="go">sawscript&gt; :type t</span>
+<span class="go">Term</span>
+</pre></div>
+</div>
+<p>Although it printed out in the same way as an <code class="docutils literal notranslate"><span class="pre">Int</span></code>, it is important to
+note that <code class="docutils literal notranslate"><span class="pre">t</span></code> actually has type <code class="docutils literal notranslate"><span class="pre">Term</span></code>. We can see how this term is
+represented internally, before being evaluated, with the <code class="docutils literal notranslate"><span class="pre">print_term</span></code>
+function.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; print_term t</span>
+<span class="go">let { x@1 = Prelude.Vec 8 Prelude.Bool</span>
+<span class="go">      x@2 = Cryptol.TCNum 8</span>
+<span class="go">      x@3 = Cryptol.PLiteralSeqBool x@2</span>
+<span class="go">    }</span>
+<span class="go"> in Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool x@2)</span>
+<span class="go">      (Cryptol.ecNumber (Cryptol.TCNum 34) x@1 x@3)</span>
+<span class="go">      (Cryptol.ecNumber (Cryptol.TCNum 51) x@1 x@3)</span>
+</pre></div>
+</div>
+<p>For the moment, it’s not important to understand what this output means.
+We show it only to clarify that <code class="docutils literal notranslate"><span class="pre">Term</span></code> values have their own internal
+structure that goes beyond what exists in SAWScript. The internal
+representation of <code class="docutils literal notranslate"><span class="pre">Term</span></code> values is in a language called SAWCore. The
+full semantics of SAWCore are beyond the scope of this manual.</p>
+<p>The text constructed by <code class="docutils literal notranslate"><span class="pre">print_term</span></code> can also be accessed
+programmatically (instead of printing to the screen) using the
+<code class="docutils literal notranslate"><span class="pre">show_term</span></code> function, which returns a <code class="docutils literal notranslate"><span class="pre">String</span></code>. The <code class="docutils literal notranslate"><span class="pre">show_term</span></code> function
+is not a command, so it executes directly and does not need <code class="docutils literal notranslate"><span class="pre">&lt;-</span></code> to bind
+its result. Therefore, the following will have the same result as the
+<code class="docutils literal notranslate"><span class="pre">print_term</span></code> command above:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let s = show_term t</span>
+<span class="go">sawscript&gt; :type s</span>
+<span class="go">String</span>
+<span class="go">sawscript&gt; print s</span>
+<span class="go">&lt;same as above&gt;</span>
+</pre></div>
+</div>
+<p>Numbers are printed in decimal notation by default when printing terms,
+but the following two commands can change that behavior.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">set_ascii</span> <span class="pre">:</span> <span class="pre">Bool</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code>, when passed <code class="docutils literal notranslate"><span class="pre">true</span></code>, makes
+subsequent <code class="docutils literal notranslate"><span class="pre">print_term</span></code> or <code class="docutils literal notranslate"><span class="pre">show_term</span></code> commands print sequences of bytes
+as ASCII strings (and doesn’t affect printing of anything else).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set_base</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code> prints all bit vectors in the given
+base, which can be between 2 and 36 (inclusive).</p></li>
+</ul>
+<p>A <code class="docutils literal notranslate"><span class="pre">Term</span></code> that represents an integer (any bit vector, as affected by
+<code class="docutils literal notranslate"><span class="pre">set_base</span></code>) can be translated into a SAWScript <code class="docutils literal notranslate"><span class="pre">Int</span></code> using the
+<code class="docutils literal notranslate"><span class="pre">eval_int</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Int</span></code> function. This function returns an
+<code class="docutils literal notranslate"><span class="pre">Int</span></code> if the <code class="docutils literal notranslate"><span class="pre">Term</span></code> can be represented as one, and fails at runtime
+otherwise.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; print (eval_int t)</span>
+<span class="go">85</span>
+<span class="go">sawscript&gt; print (eval_int {{ True }})</span>
+
+<span class="go">&quot;eval_int&quot; (&lt;stdin&gt;:1:1):</span>
+<span class="go">eval_int: argument is not a finite bitvector</span>
+<span class="go">sawscript&gt; print (eval_int {{ [True] }})</span>
+<span class="go">1</span>
+</pre></div>
+</div>
+<p>Similarly, values of type <code class="docutils literal notranslate"><span class="pre">Bit</span></code> in Cryptol can be translated into values
+of type <code class="docutils literal notranslate"><span class="pre">Bool</span></code> in SAWScript using the <code class="docutils literal notranslate"><span class="pre">eval_bool</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Bool</span></code> function:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let b = {{ True }}</span>
+<span class="go">sawscript&gt; print_term b</span>
+<span class="go">Prelude.True</span>
+<span class="go">sawscript&gt; print (eval_bool b)</span>
+<span class="go">true</span>
+</pre></div>
+</div>
+<p>Anything with sequence type in Cryptol can be translated into a list of
+<code class="docutils literal notranslate"><span class="pre">Term</span></code> values in SAWScript using the <code class="docutils literal notranslate"><span class="pre">eval_list</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">[Term]</span></code> function.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let l = {{ [0x01, 0x02, 0x03] }}</span>
+<span class="go">sawscript&gt; print_term l</span>
+<span class="go">let { x@1 = Prelude.Vec 8 Prelude.Bool</span>
+<span class="go">      x@2 = Cryptol.PLiteralSeqBool (Cryptol.TCNum 8)</span>
+<span class="go">    }</span>
+<span class="go"> in [Cryptol.ecNumber (Cryptol.TCNum 1) x@1 x@2</span>
+<span class="go">    ,Cryptol.ecNumber (Cryptol.TCNum 2) x@1 x@2</span>
+<span class="go">    ,Cryptol.ecNumber (Cryptol.TCNum 3) x@1 x@2]</span>
+<span class="go">sawscript&gt; print (eval_list l)</span>
+<span class="go">[Cryptol.ecNumber (Cryptol.TCNum 1) (Prelude.Vec 8 Prelude.Bool)</span>
+<span class="go">  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))</span>
+<span class="go">,Cryptol.ecNumber (Cryptol.TCNum 2) (Prelude.Vec 8 Prelude.Bool)</span>
+<span class="go">  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))</span>
+<span class="go">,Cryptol.ecNumber (Cryptol.TCNum 3) (Prelude.Vec 8 Prelude.Bool)</span>
+<span class="go">  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))]</span>
+</pre></div>
+</div>
+<p>Finally, a list of <code class="docutils literal notranslate"><span class="pre">Term</span></code> values in SAWScript can be collapsed into a single
+<code class="docutils literal notranslate"><span class="pre">Term</span></code> with sequence type using the <code class="docutils literal notranslate"><span class="pre">list_term</span> <span class="pre">:</span> <span class="pre">[Term]</span> <span class="pre">-&gt;</span> <span class="pre">Term</span></code> function,
+which is the inverse of <code class="docutils literal notranslate"><span class="pre">eval_list</span></code>.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let ts = eval_list l</span>
+<span class="go">sawscript&gt; let l = list_term ts</span>
+<span class="go">sawscript&gt; print_term l</span>
+<span class="go">let { x@1 = Prelude.Vec 8 Prelude.Bool</span>
+<span class="go">      x@2 = Cryptol.PLiteralSeqBool (Cryptol.TCNum 8)</span>
+<span class="go">    }</span>
+<span class="go"> in [Cryptol.ecNumber (Cryptol.TCNum 1) x@1 x@2</span>
+<span class="go">    ,Cryptol.ecNumber (Cryptol.TCNum 2) x@1 x@2</span>
+<span class="go">    ,Cryptol.ecNumber (Cryptol.TCNum 3) x@1 x@2]</span>
+</pre></div>
+</div>
+<p>In addition to being able to extract integer and Boolean values from
+Cryptol expressions, <code class="docutils literal notranslate"><span class="pre">Term</span></code> values can be injected into Cryptol
+expressions. When SAWScript evaluates a Cryptol expression between <code class="docutils literal notranslate"><span class="pre">{{</span></code>
+and <code class="docutils literal notranslate"><span class="pre">}}</span></code> delimiters, it does so with several extra bindings in scope:</p>
+<ul class="simple">
+<li><p>Any variable in scope that has SAWScript type <code class="docutils literal notranslate"><span class="pre">Bool</span></code> is visible in
+Cryptol expressions as a value of type <code class="docutils literal notranslate"><span class="pre">Bit</span></code>.</p></li>
+<li><p>Any variable in scope that has SAWScript type <code class="docutils literal notranslate"><span class="pre">Int</span></code> is visible in
+Cryptol expressions as a <em>type variable</em>. Type variables can be
+demoted to numeric bit vector values using the backtick (<code class="docutils literal notranslate"><span class="pre">`</span></code>)
+operator.</p></li>
+<li><p>Any variable in scope that has SAWScript type <code class="docutils literal notranslate"><span class="pre">Term</span></code> is visible in
+Cryptol expressions as a value with the Cryptol type corresponding to
+the internal type of the term. The power of this conversion is that
+the <code class="docutils literal notranslate"><span class="pre">Term</span></code> does not need to have originally been derived from a
+Cryptol expression.</p></li>
+</ul>
+<p>In addition to these rules, bindings created at the Cryptol level,
+either from included files or inside Cryptol quoting brackets, are
+visible only to later Cryptol expressions, and not as SAWScript
+variables.</p>
+<p>To make these rules more concrete, consider the following examples. If
+we bind a SAWScript <code class="docutils literal notranslate"><span class="pre">Int</span></code>, we can use it as a Cryptol type variable. If
+we create a <code class="docutils literal notranslate"><span class="pre">Term</span></code> variable that internally has function type, we can
+apply it to an argument within a Cryptol expression, but not at the
+SAWScript level:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let n = 8</span>
+<span class="go">sawscript&gt; :type n</span>
+<span class="go">Int</span>
+<span class="go">sawscript&gt; let {{ f (x : [n]) = x + 1 }}</span>
+<span class="go">sawscript&gt; :type {{ f }}</span>
+<span class="go">Term</span>
+<span class="go">sawscript&gt; :type f</span>
+
+<span class="go">&lt;stdin&gt;:1:1-1:2: unbound variable: &quot;f&quot; (&lt;stdin&gt;:1:1-1:2)</span>
+<span class="go">sawscript&gt; print {{ f 2 }}</span>
+<span class="go">3</span>
+</pre></div>
+</div>
+<p>If <code class="docutils literal notranslate"><span class="pre">f</span></code> was a binding of a SAWScript variable to a <code class="docutils literal notranslate"><span class="pre">Term</span></code> of function
+type, we would get a different error:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let f = {{ \(x : [n]) -&gt; x + 1 }}</span>
+<span class="go">sawscript&gt; :type {{ f }}</span>
+<span class="go">Term</span>
+<span class="go">sawscript&gt; :type f</span>
+<span class="go">Term</span>
+<span class="go">sawscript&gt; print {{ f 2 }}</span>
+<span class="go">3</span>
+<span class="go">sawscript&gt; print (f 2)</span>
+
+<span class="go">type mismatch: Int -&gt; t.0 and Term</span>
+<span class="go"> at &quot;_&quot; (REPL)</span>
+<span class="go"> mismatched type constructors: (-&gt;) and Term</span>
+</pre></div>
+</div>
+<p>One subtlety of dealing with <code class="docutils literal notranslate"><span class="pre">Term</span></code>s constructed from Cryptol is that
+because the Cryptol expressions themselves are type checked by the
+Cryptol type checker, and because they may make use of other <code class="docutils literal notranslate"><span class="pre">Term</span></code>
+values already in scope, they are not type checked until the Cryptol
+brackets are evaluated. So type errors at the Cryptol level may occur at
+runtime from the SAWScript perspective (though they occur before the
+Cryptol expressions are run).</p>
+<p>So far, we have talked about using Cryptol <em>value</em> expressions. However,
+SAWScript can also work with Cryptol <em>types</em>. The most direct way to
+refer to a Cryptol type is to use type brackets: <code class="docutils literal notranslate"><span class="pre">{|</span></code> and <code class="docutils literal notranslate"><span class="pre">|}</span></code>. Any
+Cryptol type written between these brackets becomes a <code class="docutils literal notranslate"><span class="pre">Type</span></code> value in
+SAWScript. Some types in Cryptol are <em>numeric</em> (also known as <em>size</em>)
+types, and correspond to non-negative integers. These can be translated
+into SAWScript integers with the <code class="docutils literal notranslate"><span class="pre">eval_size</span></code> function. For example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let {{ type n = 16 }}</span>
+<span class="go">sawscript&gt; eval_size {| n |}</span>
+<span class="go">16</span>
+<span class="go">sawscript&gt; eval_size {| 16 |}</span>
+<span class="go">16</span>
+</pre></div>
+</div>
+<p>For non-numeric types, <code class="docutils literal notranslate"><span class="pre">eval_size</span></code> fails at runtime:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; eval_size {| [16] |}</span>
+
+<span class="go">&quot;eval_size&quot; (&lt;stdin&gt;:1:1):</span>
+<span class="go">eval_size: not a numeric type</span>
+</pre></div>
+</div>
+<p>In addition to the use of brackets to write Cryptol expressions inline,
+several built-in functions can extract <code class="docutils literal notranslate"><span class="pre">Term</span></code> values from Cryptol files
+in other ways. The <code class="docutils literal notranslate"><span class="pre">import</span></code> command at the top level imports all
+top-level definitions from a Cryptol file and places them in scope
+within later bracketed expressions. This includes <a class="reference external" href="https://galoisinc.github.io/cryptol/master/FFI.html">Cryptol <code class="docutils literal notranslate"><span class="pre">foreign</span></code>
+declarations</a>. If a
+<a class="reference external" href="https://galoisinc.github.io/cryptol/master/FFI.html#cryptol-implementation-of-foreign-functions">Cryptol implementation of a foreign
+function</a>
+is present, then it will be used as the definition when reasoning about
+the function. Otherwise, the function will be imported as an opaque
+constant with no definition.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">cryptol_load</span></code> command behaves similarly, but returns a
+<code class="docutils literal notranslate"><span class="pre">CryptolModule</span></code> instead. If any <code class="docutils literal notranslate"><span class="pre">CryptolModule</span></code> is in scope, its
+contents are available qualified with the name of the <code class="docutils literal notranslate"><span class="pre">CryptolModule</span></code>
+variable. A specific definition can be explicitly extracted from a
+<code class="docutils literal notranslate"><span class="pre">CryptolModule</span></code> using the <code class="docutils literal notranslate"><span class="pre">cryptol_extract</span></code> command:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cryptol_extract</span> <span class="pre">:</span> <span class="pre">CryptolModule</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code></p></li>
+</ul>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="invoking-saw.html" class="btn btn-neutral float-left" title="Invoking SAW" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="loading-code.html" class="btn btn-neutral float-right" title="Loading Code" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.4
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,177 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAWScript Language Reference &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../../../_static/copybutton.js?v=f281be69"></script>
+      <script src="../../../_static/js/hoverxref.js"></script>
+      <script src="../../../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../../../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../../../_static/versions.js?v=302bdcf2"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="prev" title="Deprecated Items" href="../deprecated-items.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../structure-of-sawscript.html">Structure of SAWScript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../invoking-saw.html">Invoking SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../loading-code.html">Loading Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../symbolic-execution.html">Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../symbolic-termination.html">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../the-term-type.html">The Term Type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../transforming-term-values.html">Transforming Term Values</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../proofs-about-terms.html">Proofs about Terms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../extraction-to-the-coq-theorem-prover.html">Extraction to the Coq theorem prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../index.html">Appendices</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../glossary.html">Glossary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../command-reference.html">Command Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../repl-reference.html">REPL Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../deprecated-items.html">Deprecated Items</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">SAWScript Language Reference</a><ul class="simple">
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">SAW User Manual</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Appendices</a></li>
+      <li class="breadcrumb-item active">SAWScript Language Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../_sources/saw-user-manual/appendices/sawscript-language-reference/index.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="sawscript-language-reference">
+<h1>SAWScript Language Reference<a class="headerlink" href="#sawscript-language-reference" title="Link to this heading"></a></h1>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This section is under construction!</p>
+</div>
+<div class="toctree-wrapper compound">
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../deprecated-items.html" class="btn btn-neutral float-left" title="Deprecated Items" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.4
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,517 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Overrides and compositional verification &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Static items" href="static-items.html" />
+    <link rel="prev" title="Compound data types" href="compound-data-types.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Rust Verification with SAW</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="about-mir-json.html">About <code class="docutils literal notranslate"><span class="pre">mir-json</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-basics.html">SAW basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference-types.html">Reference types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compound-data-types.html">Compound data types</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Overrides and compositional verification</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#overrides-and-mutable-references">Overrides and mutable references</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#unsafe-overrides">Unsafe overrides</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="static-items.html">Static items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="case-study-salsa20.html">Case study: Salsa20</a></li>
+<li class="toctree-l2"><a class="reference internal" href="a-final-word.html">A final word</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../saw-user-manual/index.html">SAW User Manual</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Rust Verification with SAW</a></li>
+      <li class="breadcrumb-item active">Overrides and compositional verification</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/rust-verification-with-saw/overrides-and-compositional-verification.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="overrides-and-compositional-verification">
+<h1>Overrides and compositional verification<a class="headerlink" href="#overrides-and-compositional-verification" title="Link to this heading"></a></h1>
+<p>Up until this point, all uses of <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> in this tutorial have provided an
+empty list (<code class="docutils literal notranslate"><span class="pre">[]</span></code>) of overrides. This means that any time SAW has simulated a
+function which calls another function, it will step into the definition of the
+callee function and verify its behavior alongside the behavior of the callee
+function. This is a fine thing to do, but it can be inefficient. For example,
+consider a function like this:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">x1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">g</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">x2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">g</span><span class="p">(</span><span class="n">x1</span><span class="p">);</span>
+<span class="w">    </span><span class="n">g</span><span class="p">(</span><span class="n">x2</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Here, the caller function <code class="docutils literal notranslate"><span class="pre">f</span></code> invokes the callee function <code class="docutils literal notranslate"><span class="pre">g</span></code> three separate
+times. If we verify <code class="docutils literal notranslate"><span class="pre">f</span></code> with <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> as we have done up until this point,
+then SAW must analyze the behavior of <code class="docutils literal notranslate"><span class="pre">g</span></code> three separate times. This is
+wasteful, and especially so if <code class="docutils literal notranslate"><span class="pre">g</span></code> is a large and complicated function.</p>
+<p>This is where <em>compositional verification</em> enters the picture. The idea behind
+compositional verification is that when we prove properties of a caller
+function, we can reuse properties that we have already proved about callee
+functions. These properties are captured as <em>override specifications</em>, which
+are also referred to by the shorthand term <em>overrides</em>. When a caller invokes a
+callee with a corresponding override specification, the override’s properties
+are applied without needing to re-simulate the entire function.</p>
+<p>As it turns out, the command needed to produce an override specification is
+already familiar to us—it’s <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>! If you examine the type of this
+command:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_verify</span>
+<span class="go">MIRModule -&gt; String -&gt; [MIRSpec] -&gt; Bool -&gt; MIRSetup () -&gt; ProofScript () -&gt; TopLevel MIRSpec</span>
+</pre></div>
+</div>
+<p>The returned value is a <code class="docutils literal notranslate"><span class="pre">MIRSpec</span></code>, which captures the behavior of the function
+that was verified as an override spec. This override can then be passed to
+another call to <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> to use as part of a larger proof.</p>
+<p>Let’s now try compositional verification in practice. To do so, we will first
+prove a spec for the <code class="docutils literal notranslate"><span class="pre">g</span></code> function above. For demonstration purposes, we will
+pick a simplistic implementation of <code class="docutils literal notranslate"><span class="pre">g</span></code>:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">g</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span><span class="p">.</span><span class="n">wrapping_add</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Note that we don’t really <em>have</em> to use compositional verification when <code class="docutils literal notranslate"><span class="pre">g</span></code> is
+this simple, as SAW is capable of reasoning about <code class="docutils literal notranslate"><span class="pre">g</span></code>’s behavior directly when
+proving a spec for <code class="docutils literal notranslate"><span class="pre">f</span></code>. It’s still worth going along with this exercise,
+however, as the same principles of compositional verification apply whether the
+implementation of <code class="docutils literal notranslate"><span class="pre">g</span></code> is small or large.</p>
+<p>The first step of compositional verification is to prove a spec for <code class="docutils literal notranslate"><span class="pre">g</span></code>, the
+callee function:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">g_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="n">g_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::g&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">g_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>There’s nothing that different about this particular proof from the proofs
+we’ve seen before. The only notable difference is that we bind the result of
+calling <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> to a <code class="docutils literal notranslate"><span class="pre">MIRSpec</span></code> value that we name <code class="docutils literal notranslate"><span class="pre">g_ov</span></code> (short for “<code class="docutils literal notranslate"><span class="pre">g</span></code>
+override”). This part is important, as we will need to use <code class="docutils literal notranslate"><span class="pre">g_ov</span></code> shortly.</p>
+<p>The next step is to write a spec for <code class="docutils literal notranslate"><span class="pre">f</span></code>. Since <code class="docutils literal notranslate"><span class="pre">g</span></code> adds <code class="docutils literal notranslate"><span class="pre">1</span></code> to its argument,
+<code class="docutils literal notranslate"><span class="pre">f</span></code> will add <code class="docutils literal notranslate"><span class="pre">3</span></code> to its argument:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>Again, nothing too surprising. Now let’s prove <code class="docutils literal notranslate"><span class="pre">f</span></code> against <code class="docutils literal notranslate"><span class="pre">f_spec</span></code> by using
+<code class="docutils literal notranslate"><span class="pre">g_ov</span></code> as a compositional override:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Here, note that instead of passing an empty list (<code class="docutils literal notranslate"><span class="pre">[]</span></code>) as we have done before,
+we now pass a list containing <code class="docutils literal notranslate"><span class="pre">g_ov</span></code>. This informs <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> that whenever
+it simulates a call to <code class="docutils literal notranslate"><span class="pre">g</span></code>, it should reuse the properties captured in <code class="docutils literal notranslate"><span class="pre">g_ov</span></code>.
+In general, we can pass as many overrides as we want (we will see examples of
+this later in the tutorial), but for now, one override will suffice.</p>
+<p>Let’s run the proof of <code class="docutils literal notranslate"><span class="pre">f</span></code> against <code class="docutils literal notranslate"><span class="pre">f_spec</span></code>, making sure to pay attention to
+the output of SAW:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[19:06:17.392] Verifying overrides/96c5af24::f[0] ...</span>
+<span class="go">[19:06:17.406] Simulating overrides/96c5af24::f[0] ...</span>
+<span class="go">[19:06:17.407] Matching 1 overrides of  overrides/96c5af24::g[0] ...</span>
+<span class="go">[19:06:17.407] Branching on 1 override variants of overrides/96c5af24::g[0] ...</span>
+<span class="go">[19:06:17.407] Applied override! overrides/96c5af24::g[0]</span>
+<span class="go">[19:06:17.407] Matching 1 overrides of  overrides/96c5af24::g[0] ...</span>
+<span class="go">[19:06:17.407] Branching on 1 override variants of overrides/96c5af24::g[0] ...</span>
+<span class="go">[19:06:17.407] Applied override! overrides/96c5af24::g[0]</span>
+<span class="go">[19:06:17.407] Matching 1 overrides of  overrides/96c5af24::g[0] ...</span>
+<span class="go">[19:06:17.407] Branching on 1 override variants of overrides/96c5af24::g[0] ...</span>
+<span class="go">[19:06:17.407] Applied override! overrides/96c5af24::g[0]</span>
+<span class="go">[19:06:17.407] Checking proof obligations overrides/96c5af24::f[0] ...</span>
+<span class="go">[19:06:17.422] Proof succeeded! overrides/96c5af24::f[0]</span>
+</pre></div>
+</div>
+<p>We’ve now proven <code class="docutils literal notranslate"><span class="pre">f</span></code> compositionally! The first two lines (“<code class="docutils literal notranslate"><span class="pre">Verifying</span> <span class="pre">...</span></code>”
+and “<code class="docutils literal notranslate"><span class="pre">Simulating</span> <span class="pre">...</span></code>”) and the last two lines (“<code class="docutils literal notranslate"><span class="pre">Checking</span> <span class="pre">proof</span> <span class="pre">obligations</span> <span class="pre">...</span></code>” and “<code class="docutils literal notranslate"><span class="pre">Proof</span> <span class="pre">succeeded!</span> <span class="pre">...</span></code>”) are the same as before, but this time, we
+have some additional lines of output in between:</p>
+<ul class="simple">
+<li><p>Whenever SAW prints “<code class="docutils literal notranslate"><span class="pre">Matching</span> <span class="pre">&lt;N&gt;</span> <span class="pre">overrides</span> <span class="pre">of</span> <span class="pre">&lt;function&gt;</span></code>”, that’s when you
+know that SAW is about to simulate a call to <code class="docutils literal notranslate"><span class="pre">&lt;function&gt;</span></code>. At that point, SAW
+will check to see how many overrides (<code class="docutils literal notranslate"><span class="pre">&lt;N&gt;</span></code>) for <code class="docutils literal notranslate"><span class="pre">&lt;function&gt;</span></code> are available.</p></li>
+<li><p>Whenever SAW prints “<code class="docutils literal notranslate"><span class="pre">Branching</span> <span class="pre">on</span> <span class="pre">&lt;N&gt;</span> <span class="pre">override</span> <span class="pre">variants</span> <span class="pre">of</span> <span class="pre">&lt;function&gt;</span></code>”, SAW is
+trying to figure out which of the <code class="docutils literal notranslate"><span class="pre">&lt;N&gt;</span></code> overrides to apply. In this example,
+there is only a single override, so the choice is easy. In cases where there
+are multiple overrides, however, SAW may have to work harder (possibly even
+consulting an SMT solver) to figure out which override to use.</p></li>
+<li><p>If SAW successfully picks an override to apply, it will print
+“<code class="docutils literal notranslate"><span class="pre">Applied</span> <span class="pre">override!</span> <span class="pre">...</span></code>”.</p></li>
+</ul>
+<p>In the example above, we used a single <code class="docutils literal notranslate"><span class="pre">g</span></code> override that applies for all
+possible arguments. In general, however, there is no requirement that overrides
+must work for all arguments. In fact, it is quite common for SAW verification
+efforts to write different specifications for the same function, but with
+different arguments. We can then provide multiple overrides for the same
+function as part of a compositional verification, and SAW will be able to pick
+the right override depending on the shape of the argument when invoking the
+function being overridden.</p>
+<p>For example, let’s suppose that we wrote different <code class="docutils literal notranslate"><span class="pre">g</span></code> specs, one where the
+argument to <code class="docutils literal notranslate"><span class="pre">g</span></code> is even, and another where the argument to <code class="docutils literal notranslate"><span class="pre">g</span></code> is odd:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">g_even_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="kr">let</span><span class="w"> </span><span class="n">g_odd_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="n">g_even_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::g&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">g_even_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+<span class="n">g_odd_ov</span><span class="w">  </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::g&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">g_odd_spec</span><span class="w">  </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>We can then prove <code class="docutils literal notranslate"><span class="pre">f</span></code> compositionally by passing both of the <code class="docutils literal notranslate"><span class="pre">g</span></code> overrides to
+<code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_even_ov</span><span class="p">,</span><span class="w"> </span><span class="n">g_odd_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Like before, this will successfully verify. The only different now is that SAW
+will print output involving two overrides instead of just one:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[20:48:07.649] Simulating overrides/96c5af24::f[0] ...</span>
+<span class="go">[20:48:07.650] Matching 2 overrides of  overrides/96c5af24::g[0] ...</span>
+<span class="go">[20:48:07.650] Branching on 2 override variants of overrides/96c5af24::g[0] ...</span>
+<span class="go">[20:48:07.652] Applied override! overrides/96c5af24::g[0]</span>
+<span class="go">...</span>
+</pre></div>
+</div>
+<p>Keep in mind that if you provide at least one override for a function as part
+of a compositional verification, then SAW <em>must</em> apply an override whenever it
+invokes that function during simulation. If SAW cannot find a matching
+override, then the verification will fail. For instance, consider what would
+happen if you tried proving <code class="docutils literal notranslate"><span class="pre">f</span></code> like so:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_even_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>This time, we supply one override for <code class="docutils literal notranslate"><span class="pre">g</span></code> that only matches when the argument
+is even. This is a problem, as SAW will not be able to find a matching override
+when the argument is odd. Indeed, SAW will fail to verify this:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[20:53:29.588] Verifying overrides/96c5af24::f[0] ...</span>
+<span class="go">[20:53:29.602] Simulating overrides/96c5af24::f[0] ...</span>
+<span class="go">[20:53:29.602] Matching 1 overrides of  overrides/96c5af24::g[0] ...</span>
+<span class="go">[20:53:29.602] Branching on 1 override variants of overrides/96c5af24::g[0] ...</span>
+<span class="go">[20:53:29.603] Applied override! overrides/96c5af24::g[0]</span>
+<span class="go">[20:53:29.603] Matching 1 overrides of  overrides/96c5af24::g[0] ...</span>
+<span class="go">[20:53:29.603] Branching on 1 override variants of overrides/96c5af24::g[0] ...</span>
+<span class="go">[20:53:29.604] Applied override! overrides/96c5af24::g[0]</span>
+<span class="go">[20:53:29.604] Matching 1 overrides of  overrides/96c5af24::g[0] ...</span>
+<span class="go">[20:53:29.604] Branching on 1 override variants of overrides/96c5af24::g[0] ...</span>
+<span class="go">[20:53:29.605] Applied override! overrides/96c5af24::g[0]</span>
+<span class="go">[20:53:29.605] Symbolic simulation completed with side conditions.</span>
+<span class="go">[20:53:29.606] Checking proof obligations overrides/96c5af24::f[0] ...</span>
+<span class="go">[20:53:29.623] Subgoal failed: overrides/96c5af24::f[0] No override specification applies for overrides/96c5af24::g[0].</span>
+<span class="go">Arguments:</span>
+<span class="go">- c@26:bv</span>
+<span class="go">Run SAW with --sim-verbose=3 to see a description of each override.</span>
+<span class="go">[20:53:29.623] SolverStats {solverStatsSolvers = fromList [&quot;SBV-&gt;Z3&quot;], solverStatsGoalSize = 388}</span>
+<span class="go">[20:53:29.624] ----------Counterexample----------</span>
+<span class="go">[20:53:29.624]   x: 1</span>
+<span class="go">...</span>
+<span class="go">Proof failed.</span>
+</pre></div>
+</div>
+<p>Here, we can see that <code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">override</span> <span class="pre">specification</span> <span class="pre">applies</span></code>, and SAW also
+generates a counterexample of <code class="docutils literal notranslate"><span class="pre">x:</span> <span class="pre">1</span></code>. Sure enough, <code class="docutils literal notranslate"><span class="pre">1</span></code> is an odd number!</p>
+<section id="overrides-and-mutable-references">
+<h2>Overrides and mutable references<a class="headerlink" href="#overrides-and-mutable-references" title="Link to this heading"></a></h2>
+<p>Compositional overrides provide great power, as they effectively allow you to
+skip over certain functions when simulating them and replace them with simpler
+implementations. With great power comes great responsibility, however. In
+particular, one must be careful when using overrides for functions that modify
+mutable references. If an override does not properly capture the behavior of a
+mutable reference, it could potentially lead to incorrect proofs.</p>
+<p>This is the sort of thing that is best explained with an example, so consider
+these two functions:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">side_effect</span><span class="p">(</span><span class="n">a</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="o">*</span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">foo</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">b</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
+<span class="w">    </span><span class="n">side_effect</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">b</span><span class="p">);</span>
+<span class="w">    </span><span class="n">b</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">side_effect</span></code> function does not return anything interesting; it is only
+ever invoked to perform a side effect of changing the mutable reference <code class="docutils literal notranslate"><span class="pre">a</span></code> to
+point to <code class="docutils literal notranslate"><span class="pre">0</span></code>. The <code class="docutils literal notranslate"><span class="pre">foo</span></code> function invokes <code class="docutils literal notranslate"><span class="pre">side_effect</span></code>, and as a result, it
+will always return <code class="docutils literal notranslate"><span class="pre">0</span></code>, regardless of what the argument to <code class="docutils literal notranslate"><span class="pre">foo</span></code> is. No
+surprises just yet.</p>
+<p>Now let’s make a first attempt at verifying <code class="docutils literal notranslate"><span class="pre">foo</span></code> using compositional
+verification. First, we will write a spec for <code class="docutils literal notranslate"><span class="pre">side_effect</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">a_ref</span><span class="p">];</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code> is somewhat odd. Although it goes through the effort of
+allocating a mutable reference <code class="docutils literal notranslate"><span class="pre">a_ref</span></code> and initializing it, nothing about this
+spec states that <code class="docutils literal notranslate"><span class="pre">a_ref</span></code> will point to <code class="docutils literal notranslate"><span class="pre">0</span></code> after the function has been invoked.
+This omission is strange, but not outright wrong—the spec just underspecifies
+what the behavior of the function is. Indeed, SAW will successfully verify this
+spec using <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">side_effect_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides_mut::side_effect&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Next, let’s try to write a spec for <code class="docutils literal notranslate"><span class="pre">foo</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>At this point, alarm bells should be going off in your head. This spec
+incorrectly states that <code class="docutils literal notranslate"><span class="pre">foo(x)</span></code> should return <code class="docutils literal notranslate"><span class="pre">x</span></code>, but it should actually
+return <code class="docutils literal notranslate"><span class="pre">0</span></code>! This looks wrong, but consider what would happen if you tried to
+verify this compositionally using our <code class="docutils literal notranslate"><span class="pre">side_effect_ov</span></code> override:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides_mut::foo&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">side_effect_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>If SAW were to simulate <code class="docutils literal notranslate"><span class="pre">foo(x)</span></code>, it would invoke create a temporary variable
+<code class="docutils literal notranslate"><span class="pre">b</span></code> and assign it to the value <code class="docutils literal notranslate"><span class="pre">x</span></code>, and then it would invoke <code class="docutils literal notranslate"><span class="pre">side_effect(&amp;mut</span> <span class="pre">b)</span></code>. At this point, the <code class="docutils literal notranslate"><span class="pre">side_effect_ov</span></code> override would apply. According to
+<code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code>, the argument to <code class="docutils literal notranslate"><span class="pre">side_effect</span></code> is not modified at all after
+the function returns. This means that when the <code class="docutils literal notranslate"><span class="pre">foo</span></code> function returns <code class="docutils literal notranslate"><span class="pre">b</span></code>, it
+will still retain its initial value of <code class="docutils literal notranslate"><span class="pre">x</span></code>. This shows that if we were to use
+<code class="docutils literal notranslate"><span class="pre">side_effect_ov</span></code>, we could prove something that’s blatantly false!</p>
+<p>Now that we’ve made you sweat a little bit, it’s time for some good news: SAW
+won’t <em>actually</em> let you prove <code class="docutils literal notranslate"><span class="pre">foo_spec</span></code>. If you try this compositional proof
+in practice, SAW will catch your mistake:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[14:50:29.170] Verifying overrides_mut/11e47708::foo[0] ...</span>
+<span class="go">[14:50:29.181] Simulating overrides_mut/11e47708::foo[0] ...</span>
+<span class="go">[14:50:29.181] Matching 1 overrides of  overrides_mut/11e47708::side_effect[0] ...</span>
+<span class="go">[14:50:29.181] Branching on 1 override variants of overrides_mut/11e47708::side_effect[0] ...</span>
+<span class="go">...</span>
+<span class="go">State of memory allocated in precondition (at overrides-mut-fail.saw:6:12) not described in postcondition</span>
+</pre></div>
+</div>
+<p>The line of code that SAW points to in the “<code class="docutils literal notranslate"><span class="pre">State</span> <span class="pre">of</span> <span class="pre">memory</span> <span class="pre">...</span></code>” error
+message is:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>SAW informs us that although we allocated the mutable reference <code class="docutils literal notranslate"><span class="pre">a_ref</span></code>, we
+never indicated what it should point to after the function has returned. This
+is an acceptable (if somewhat unusual) thing to do when verifying
+<code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code> using <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>, but it is <em>not</em> acceptable to do this
+when using this spec as an override. To avoid unsound behavior like what is
+described above, any override that allocates a mutable reference in its
+preconditions <em>must</em> declare what its value should be in the postconditions, no
+exceptions.</p>
+<p>Thankfully, repairing this spec is relatively straightforward. Simply add a
+<code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> statement in the postconditions of <code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">a_ref</span><span class="p">];</span>
+
+<span class="w">  </span><span class="c c-Singleline">// This is new</span>
+<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>Then use the correct return value in <code class="docutils literal notranslate"><span class="pre">foo_spec</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+
+<span class="w">  </span><span class="c c-Singleline">// This is new</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>And now the compositional proof of <code class="docutils literal notranslate"><span class="pre">foo_spec</span></code> works!</p>
+</section>
+<section id="unsafe-overrides">
+<h2>Unsafe overrides<a class="headerlink" href="#unsafe-overrides" title="Link to this heading"></a></h2>
+<p>Now that we’ve made it this far into the tutorial, it’s time to teach you a
+more advanced technique: <em>unsafe</em> overrides. Up until this point, we have
+relied on SAW to check all of our work, and this is usually what you’d want
+from a formal verification tool. In certain circumstances, however, it can be
+useful to say “I know what I’m doing, SAW—just believe me when I say this spec
+is valid!” In order to say this, you can use <code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_unsafe_assume_spec</span>
+<span class="go">MIRModule -&gt; String -&gt; MIRSetup () -&gt; TopLevel MIRSpec</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code> is <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>’s cousin who likes to live a little
+more dangerously. Unlike <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>, the specification that you pass to
+<code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code> (the <code class="docutils literal notranslate"><span class="pre">MIRSetup</span> <span class="pre">()</span></code> argument) is <em>not</em> checked for full
+correctness. That is, <code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code> will bypass SAW’s usual symbolic
+execution pipeline, which is why one does not need to pass a <code class="docutils literal notranslate"><span class="pre">ProofScript</span></code>
+argument (e.g., <code class="docutils literal notranslate"><span class="pre">z3</span></code>) to <code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code>. SAW will believe whatever
+spec you supply <code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code> to be valid, and the <code class="docutils literal notranslate"><span class="pre">MIRSpec</span></code> that
+<code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code> returns can then be used in later compositional
+verifications.</p>
+<p>Why would you want to do this? The main reason is that writing proofs can be
+difficult, and sometimes, there are certain functions in a SAW verification
+effort that are disproportionately harder to write a spec for than others. It
+is tempting to write specs for each function in sequence, but this can run the
+risk of getting stuck on a particularly hard-to-verify function, blocking
+progress on other parts of the proofs.</p>
+<p>In these situations, <code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code> can be a useful prototyping tool.
+One can use <code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code> to assume a spec for the hard-to-verify
+function and then proceed with the remaining parts of the proof. Of course, you
+should make an effort to go back and prove the hard-to-verify function’s spec
+later, but it can be nice to try something else first.</p>
+<p>For example, here is how one can unsafely assume <code class="docutils literal notranslate"><span class="pre">g_spec</span></code> and use it in a
+compositional proof of <code class="docutils literal notranslate"><span class="pre">f_spec</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">g_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_unsafe_assume_spec</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::g&quot;</span><span class="w"> </span><span class="n">g_spec</span><span class="p">;</span>
+<span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>It should be emphasized that when we say “<code class="docutils literal notranslate"><span class="pre">unsafe</span></code>”, we really mean it.
+<code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code> can be used to prove specs that are blatantly wrong,
+so use it with caution.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="compound-data-types.html" class="btn btn-neutral float-left" title="Compound data types" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="static-items.html" class="btn btn-neutral float-right" title="Static items" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.4
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

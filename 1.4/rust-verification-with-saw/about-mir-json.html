@@ -1,0 +1,418 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About mir-json &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="SAW basics" href="saw-basics.html" />
+    <link rel="prev" title="Prerequisites" href="prerequisites.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Rust Verification with SAW</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">About <code class="docutils literal notranslate"><span class="pre">mir-json</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-first-example-with-saw-rustc">A first example with <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-saw-rust-library-path-environment-variable">The <code class="docutils literal notranslate"><span class="pre">SAW_RUST_LIBRARY_PATH</span></code> environment variable</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#a-note-about-generics">A note about generics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#identifiers">Identifiers</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="saw-basics.html">SAW basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference-types.html">Reference types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compound-data-types.html">Compound data types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overrides-and-compositional-verification.html">Overrides and compositional verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="static-items.html">Static items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="case-study-salsa20.html">Case study: Salsa20</a></li>
+<li class="toctree-l2"><a class="reference internal" href="a-final-word.html">A final word</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../saw-user-manual/index.html">SAW User Manual</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Rust Verification with SAW</a></li>
+      <li class="breadcrumb-item active">About <code class="docutils literal notranslate"><span class="pre">mir-json</span></code></li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/rust-verification-with-saw/about-mir-json.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="about-mir-json">
+<h1>About <code class="docutils literal notranslate"><span class="pre">mir-json</span></code><a class="headerlink" href="#about-mir-json" title="Link to this heading"></a></h1>
+<p>We are interested in verifying code written in Rust, but Rust is an extremely
+rich programming language that has many distinct language features. To make the
+process of verifying Rust simpler, SAW targets an intermediate language used in
+the Rust compiler called <a class="reference external" href="https://blog.rust-lang.org/2016/04/19/MIR.html">MIR</a>
+(short for “Mid-level IR”). MIR takes the variety of different features and
+syntactic extensions in Rust and boils them down to a minimal subset that is
+easier for a computer program to analyze.</p>
+<p>The process of extracting MIR code that is suitable for SAW’s needs is somewhat
+tricky, so we wrote a suite of tools called <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> to automate this
+process.  <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> provides a plugin for tools like <code class="docutils literal notranslate"><span class="pre">rustc</span></code> and <code class="docutils literal notranslate"><span class="pre">cargo</span></code> that
+lets you compile Rust code as you normally would and produce an additional
+<code class="docutils literal notranslate"><span class="pre">.json</span></code> file as output. This <code class="docutils literal notranslate"><span class="pre">.json</span></code> file contains the MIR code that was
+produced internally by the Rust compiler, with some additional minor tweaks to
+make it suitable for SAW’s needs.</p>
+<p><code class="docutils literal notranslate"><span class="pre">mir-json</span></code> is not a single tool but rather a suite of related tools that
+leverage the same underlying plugin. For SAW purposes, the two <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> tools
+that are most relevant are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code>: A thin wrapper around <code class="docutils literal notranslate"><span class="pre">rustc</span></code> (the Rust compiler), which is
+suitable for individual <code class="docutils literal notranslate"><span class="pre">.rs</span></code> files.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cargo-saw-build</span></code>: A thin wrapper around the <code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">build</span></code> command, which is
+suitable for <code class="docutils literal notranslate"><span class="pre">cargo</span></code>-based Rust projects.</p></li>
+</ul>
+<p>Most of the examples in this tutorial involve self-contained examples, which
+will use <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code>. Later in the tutorial, we will examine a Salsa20 case
+study that involves a <code class="docutils literal notranslate"><span class="pre">cargo</span></code>-based project, which will use <code class="docutils literal notranslate"><span class="pre">cargo-saw-build</span></code>.</p>
+<section id="a-first-example-with-saw-rustc">
+<h2>A first example with <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code><a class="headerlink" href="#a-first-example-with-saw-rustc" title="Link to this heading"></a></h2>
+<p>Let’s try out <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> on a small example file, which we’ll name
+<code class="docutils literal notranslate"><span class="pre">first-example.rs</span></code>:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">id_u8</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u8</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>This is the identity function, but specialized to the type <code class="docutils literal notranslate"><span class="pre">u8</span></code>. We can compile
+this with <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> like so:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw-rustc<span class="w"> </span>first-example.rs
+<span class="go">&lt;snip&gt;</span>
+<span class="go">note: Emitting MIR for first_example/abef32c5::id_u8</span>
+
+<span class="go">linking 1 mir files into first-example.linked-mir.json</span>
+<span class="go">&lt;snip&gt;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> prints out some additional information that <code class="docutils literal notranslate"><span class="pre">rustc</span></code> alone does not
+print, and we have displayed the parts of this information that are most
+interesting. In particular:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> notes that is is <code class="docutils literal notranslate"><span class="pre">Emitting</span> <span class="pre">MIR</span> <span class="pre">for</span> <span class="pre">first_example/abef32c5::id_u8</span></code>,
+where <code class="docutils literal notranslate"><span class="pre">first_example/abef32c5::id_u8</span></code> is the full <em>identifier</em> used to uniquely
+refer to the <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> function. It’s entirely possible that the <code class="docutils literal notranslate"><span class="pre">abef32c5</span></code>
+bit will look different on your machine; we’ll talk more about identifiers in
+the “Identifiers” section.</p></li>
+<li><p>Once <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> produced a MIR JSON file named
+<code class="docutils literal notranslate"><span class="pre">first-example.linked-mir.json</span></code>. This is an important bit of information, as
+SAW will ingest this JSON file.</p></li>
+</ul>
+<p>If you’d like, you can inspect the <code class="docutils literal notranslate"><span class="pre">first-example.linked-mir.json</span></code> file with
+JSON tools (e.g., <a class="reference external" href="https://jqlang.github.io/jq/"><code class="docutils literal notranslate"><span class="pre">jq</span></code></a>), but it is not
+important to understand everything that is going on there. This is
+machine-generated JSON, and as such, it is not meant to be particularly
+readable by human eyes.</p>
+</section>
+<section id="the-saw-rust-library-path-environment-variable">
+<span id="saw-rust-lib-path-env-var"></span><h2>The <code class="docutils literal notranslate"><span class="pre">SAW_RUST_LIBRARY_PATH</span></code> environment variable<a class="headerlink" href="#the-saw-rust-library-path-environment-variable" title="Link to this heading"></a></h2>
+<p>Rust has a large set of standard libraries that ship with the compiler, and
+parts of the standard library are quite low-level and tricky. SAW’s primary
+objective is to provide a tool that can analyze code in a tractable way. For
+this reason, SAW sometimes needs to invoke simplified versions of Rust standard
+library functions that are more reasonable for an SMT-based tool like SAW to
+handle. These simplified functions are equivalent in behavior, but avoid using
+problematic code patterns (e.g., gnarly pointer arithmetic or the
+<a class="reference external" href="https://doc.rust-lang.org/std/intrinsics/fn.transmute.html"><code class="docutils literal notranslate"><span class="pre">transmute</span></code></a>
+function).</p>
+<p>If you are only ever compiling self-contained pieces of code with <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code>,
+there is a good chance that you can get away without needing to use SAW’s
+custom version of the Rust standard libraries. However, if you ever need to
+build something more complicated than that (e.g., the Salsa20 case study later
+in this tutorial), then you <em>will</em> need the custom libraries. For this reason,
+it is worthwhile to teach SAW the location of the custom libraries now.</p>
+<p>At present, the best way to obtain the custom version of the Rust standard
+libraries is to perform the following steps:</p>
+<ol class="arabic">
+<li><p>Clone the <a class="reference external" href="https://github.com/GaloisInc/mir-json"><code class="docutils literal notranslate"><span class="pre">mir-json</span></code></a> repo like so:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/GaloisInc/mir-json
+<span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>mir-json
+</pre></div>
+</div>
+</li>
+<li><p>Follow the instructions laid out in the <a class="reference external" href="https://github.com/GaloisInc/mir-json#installation-instructions"><code class="docutils literal notranslate"><span class="pre">mir-json</span></code> installation
+instructions</a>
+in order to install <code class="docutils literal notranslate"><span class="pre">mir-json</span></code>.</p></li>
+<li><p>Run the <code class="docutils literal notranslate"><span class="pre">mir-json-translate-libs</span></code> utility:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>mir-json-translate-libs
+</pre></div>
+</div>
+<p>This will compile the custom versions of the Rust standard libraries using
+<code class="docutils literal notranslate"><span class="pre">mir-json</span></code>, placing the results under the <code class="docutils literal notranslate"><span class="pre">rlibs</span></code> subdirectory.</p>
+</li>
+<li><p>Finally, define a <code class="docutils literal notranslate"><span class="pre">SAW_RUST_LIBRARY_PATH</span></code> environment variable that points
+to the newly created <code class="docutils literal notranslate"><span class="pre">rlibs</span></code> subdirectory:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">SAW_RUST_LIBRARY_PATH</span><span class="o">=</span>&lt;...&gt;/mir-json/rlibs
+</pre></div>
+</div>
+</li>
+</ol>
+<p>An upcoming release of SAW will include these custom libraries pre-built, which
+will greatly simplify the steps above. Either way, you will need to set the
+<code class="docutils literal notranslate"><span class="pre">SAW_RUST_LIBRARY_PATH</span></code> environment variable to point to the location of the
+custom libraries.</p>
+</section>
+<section id="a-note-about-generics">
+<h2>A note about generics<a class="headerlink" href="#a-note-about-generics" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> function above is likely not how most Rust programmers would define
+the identity function. Instead, it would seem more natural to define it
+generically, that is, by parameterizing the function by a type parameter:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">id</span><span class="o">&lt;</span><span class="n">A</span><span class="o">&gt;</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="nc">A</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">A</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>If you compile this with <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code>, however, the resulting JSON file will
+lack a definition for <code class="docutils literal notranslate"><span class="pre">id</span></code>! We can see this by using <code class="docutils literal notranslate"><span class="pre">jq</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw-rustc<span class="w"> </span>generics-take-1.rs
+<span class="go">&lt;snip&gt;</span>
+<span class="gp">$ </span>jq<span class="w"> </span>.<span class="w"> </span>generics-take-1.linked-mir.json
+<span class="go">{</span>
+<span class="go">  &quot;fns&quot;: [],</span>
+<span class="go">  &quot;adts&quot;: [],</span>
+<span class="go">  &quot;statics&quot;: [],</span>
+<span class="go">  &quot;vtables&quot;: [],</span>
+<span class="go">  &quot;traits&quot;: [],</span>
+<span class="go">  &quot;intrinsics&quot;: [],</span>
+<span class="go">  &quot;tys&quot;: [],</span>
+<span class="go">  &quot;roots&quot;: []</span>
+<span class="go">}</span>
+</pre></div>
+</div>
+<p>What is going on here? This is the result of an important design choice that
+SAW makes: <em>SAW only supports verifying monomorphic functions</em>. To be more
+precise, SAW’s approach to symbolic simulation requires all of the code being
+simulated to have fixed types without any type parameters.</p>
+<p>In order to verify a function using generics in your Rust code, you must
+provide a separate, monomorphic function that calls into the generic function.
+For example, you can rewrite the example above like so:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">id</span><span class="o">&lt;</span><span class="n">A</span><span class="o">&gt;</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="nc">A</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">A</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span>
+<span class="p">}</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">id_u8</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u8</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">id</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>If you compile this version with <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code>, you’ll see:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw-rustc<span class="w"> </span>generics-take-2.rs
+<span class="go">&lt;snip&gt;</span>
+<span class="go">note: Emitting MIR for generics_take_2/8b1bf337::id_u8</span>
+
+<span class="go">note: Emitting MIR for generics_take_2/8b1bf337::id::_instaddce72e1232152c[0]</span>
+
+<span class="go">linking 1 mir files into generics-take-2.linked-mir.json</span>
+<span class="go">&lt;snip&gt;</span>
+</pre></div>
+</div>
+<p>This time, the resulting JSON file contains a definition for <code class="docutils literal notranslate"><span class="pre">id_u8</span></code>. The
+reason that this works is because when <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> calls <code class="docutils literal notranslate"><span class="pre">id</span></code>, the Rust compile
+will generate a specialized version of <code class="docutils literal notranslate"><span class="pre">id</span></code> where <code class="docutils literal notranslate"><span class="pre">A</span></code> is instantiated with the
+type <code class="docutils literal notranslate"><span class="pre">u8</span></code>. This specialized version of <code class="docutils literal notranslate"><span class="pre">id</span></code> is named
+<code class="docutils literal notranslate"><span class="pre">id::_instaddce72e1232152c[0]</span></code> in the output above. (You don’t have to remember
+this name, thankfully!)</p>
+<p>Although the resulting JSON file contains a definition for <code class="docutils literal notranslate"><span class="pre">id_u8</span></code>, it does
+<em>not</em> contain a definition for the generic <code class="docutils literal notranslate"><span class="pre">id</span></code> function. As a result, SAW will
+only be able to verify the <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> function from this file. If you are ever in
+doubt about which functions are accessible for verification with SAW, you can
+check this with <code class="docutils literal notranslate"><span class="pre">jq</span></code> like so:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>jq<span class="w"> </span><span class="s1">&#39;.intrinsics | map(.name)&#39;</span><span class="w"> </span>generics-take-2.linked-mir.json
+<span class="go">[</span>
+<span class="go">  &quot;generics_take_2/8b1bf337::id_u8&quot;,</span>
+<span class="go">  &quot;generics_take_2/8b1bf337::id::_instaddce72e1232152c[0]&quot;</span>
+<span class="go">]</span>
+</pre></div>
+</div>
+<p>Here, “intrinsics” are monomorphic functions that are visible to SAW. Note that
+<code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> will optimize away all definitions that are not accessible from one
+of these intrinsic functions. This explains why the original program that only
+defined a generic <code class="docutils literal notranslate"><span class="pre">id</span></code> function resulted in a definition-less JSON file, as
+that program did not contain monomorphic functions (and therefore no
+intrinsics).</p>
+<p>Generally speaking, we prefer to verify functions that are defined directly in
+the Rust source code, such as <code class="docutils literal notranslate"><span class="pre">id_u8</span></code>, as these functions’ names are more
+stable than the specialized versions of functions that the compiler generates,
+such as <code class="docutils literal notranslate"><span class="pre">id::_instaddce72e1232152c[0]</span></code>. Do note that SAW is capable of
+verifying both types of functions, however. (We will see an example of
+verifying an autogenerated function in the Salsa20 case study later in this
+tutorial.)</p>
+</section>
+<section id="identifiers">
+<h2>Identifiers<a class="headerlink" href="#identifiers" title="Link to this heading"></a></h2>
+<p>When you compile a function named <code class="docutils literal notranslate"><span class="pre">id_u8</span></code>, <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> will expand it to a much
+longer name such as <code class="docutils literal notranslate"><span class="pre">first_example/abef32c5::id_u8</span></code>. This longer name is called
+an <em>identifier</em>, and it provides a globally unique name for that function. In
+the small examples we’ve seen up to this point, there hasn’t been any risk of
+name collisions, but you could imagine compiling this code alongside another
+file (or crate) that also defines an <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> function. If that happens, then it
+is essential that we can tell apart all of the different <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> functions, and
+identifiers provide us the mechanism for doing so.</p>
+<p>Let’s take a closer look at what goes into an identifier. In general, an identifier
+will look like the following:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">crate</span> <span class="n">name</span><span class="o">&gt;/&lt;</span><span class="n">disambiguator</span><span class="o">&gt;</span><span class="p">::</span><span class="o">&lt;</span><span class="n">function</span> <span class="n">path</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">&lt;crate</span> <span class="pre">name&gt;</span></code> is the name of the crate in which the function is defined. All
+of the examples we’ve seen up to this point have been defined in standalone
+files, and as a result, the crate name has been the same as the file name, but
+without the <code class="docutils literal notranslate"><span class="pre">.rs</span></code> extension and with all hyphens replaced with underscores
+(e.g., <code class="docutils literal notranslate"><span class="pre">first-example.rs</span></code> is given the crate name <code class="docutils literal notranslate"><span class="pre">first_example</span></code>). In
+<code class="docutils literal notranslate"><span class="pre">cargo</span></code>-based projects, the crate name will likely differ from the file name.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&lt;disambiguator&gt;</span></code> is a hash of the crate and its dependencies. In extreme
+cases, it is possible for two different crates to have identical crate names,
+in which case the disambiguator must be used to distinguish between the two
+crates. In the common case, however, most crate names will correspond to
+exactly one disambiguator. (More on this in a bit.)</p>
+<p><code class="docutils literal notranslate"><span class="pre">&lt;function</span> <span class="pre">path&gt;</span></code> is the path to the function within the crate. Sometimes, this
+is as simple as the function name itself. In other cases, a function path may
+involve multiple <em>segments</em>, depending on the module hierarchy for the program
+being verified. For instance, a <code class="docutils literal notranslate"><span class="pre">read</span></code> function located in
+<code class="docutils literal notranslate"><span class="pre">core/src/ptr/mod.rs</span></code> will have the identifier:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">core</span><span class="o">/&lt;</span><span class="n">disambiguator</span><span class="o">&gt;</span><span class="p">::</span><span class="n">ptr</span><span class="p">::</span><span class="n">read</span>
+</pre></div>
+</div>
+<p>Where <code class="docutils literal notranslate"><span class="pre">core</span></code> is the crate name and <code class="docutils literal notranslate"><span class="pre">ptr::read</span></code> is the function path, which
+has two segments <code class="docutils literal notranslate"><span class="pre">ptr</span></code> and <code class="docutils literal notranslate"><span class="pre">read</span></code>. There are also some special forms of
+segments that appear for functions defined in certain language constructs.
+For instance, if a function is defined in an <code class="docutils literal notranslate"><span class="pre">impl</span></code> block, then it will have
+<code class="docutils literal notranslate"><span class="pre">{impl}</span></code> as one of its segments, e.g.,</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">core</span><span class="o">/&lt;</span><span class="n">disambiguator</span><span class="o">&gt;</span><span class="p">::</span><span class="n">ptr</span><span class="p">::</span><span class="n">const_ptr</span><span class="p">::{</span><span class="n">impl</span><span class="p">}::</span><span class="n">offset</span>
+</pre></div>
+</div>
+<p>The most cumbersome part of writing an identifier is the disambiguator, as it
+is extremely sensitive to changes in the code (not to mention hard to remember
+and type). Luckily, the vast majority of crate names correspond to exactly one
+disambiguator, and we can exploit this fact to abbreviate identifiers that live
+in such crates. For instance, we can abbreviate this identifier:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">core</span><span class="o">/&lt;</span><span class="n">disambiguator</span><span class="o">&gt;</span><span class="p">::</span><span class="n">ptr</span><span class="p">::</span><span class="n">read</span>
+</pre></div>
+</div>
+<p>To simply:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">core</span><span class="p">::</span><span class="n">ptr</span><span class="p">::</span><span class="n">read</span>
+</pre></div>
+</div>
+<p>We will adopt the latter, shorter notation throughout the rest of the tutorial.
+SAW also understands this shorthand, so we will also use this notation when
+passing identifiers to SAW commands.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="prerequisites.html" class="btn btn-neutral float-left" title="Prerequisites" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="saw-basics.html" class="btn btn-neutral float-right" title="SAW basics" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.4
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

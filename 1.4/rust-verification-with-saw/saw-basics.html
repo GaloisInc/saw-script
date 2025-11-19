@@ -1,0 +1,541 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAW basics &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Reference types" href="reference-types.html" />
+    <link rel="prev" title="About mir-json" href="about-mir-json.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Rust Verification with SAW</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="about-mir-json.html">About <code class="docutils literal notranslate"><span class="pre">mir-json</span></code></a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">SAW basics</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-first-saw-example">A first SAW example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cryptol">Cryptol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#terms-and-other-types"><code class="docutils literal notranslate"><span class="pre">Term</span></code>s and other types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#preconditions-and-postconditions">Preconditions and postconditions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="reference-types.html">Reference types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compound-data-types.html">Compound data types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overrides-and-compositional-verification.html">Overrides and compositional verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="static-items.html">Static items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="case-study-salsa20.html">Case study: Salsa20</a></li>
+<li class="toctree-l2"><a class="reference internal" href="a-final-word.html">A final word</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../saw-user-manual/index.html">SAW User Manual</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Rust Verification with SAW</a></li>
+      <li class="breadcrumb-item active">SAW basics</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/rust-verification-with-saw/saw-basics.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="saw-basics">
+<h1>SAW basics<a class="headerlink" href="#saw-basics" title="Link to this heading"></a></h1>
+<section id="a-first-saw-example">
+<h2>A first SAW example<a class="headerlink" href="#a-first-saw-example" title="Link to this heading"></a></h2>
+<p>We now have the knowledge necessary to compile Rust code in a way that is
+suitable for SAW. Let’s put our skills to the test and verify something! We will
+build on the example from above, which we will put into a file named
+<code class="docutils literal notranslate"><span class="pre">saw-basics.rs</span></code>:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">id</span><span class="o">&lt;</span><span class="n">A</span><span class="o">&gt;</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="nc">A</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">A</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span>
+<span class="p">}</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">id_u8</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u8</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">id</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Our goal is to verify the correctness of the <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> function. However, it is
+meaningless to talk about whether a function is correct without having a
+<em>specification</em> for how the function should behave. This is where SAW enters
+the picture. SAW provides a scripting language named <em>SAWScript</em> that allows
+you to write a precise specification for describing a function’s behavior. For
+example, here is a specification that captures the intended behavior of
+<code class="docutils literal notranslate"><span class="pre">id_u8</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">id_u8_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>At a high level, this specification says that <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> is a function that accepts
+a single argument of type <code class="docutils literal notranslate"><span class="pre">u8</span></code>, and it returns its argument unchanged. Nothing
+too surprising there, but this example illustrates many of the concepts that one
+must use when working with SAW. Let’s unpack what this is doing, line by line:</p>
+<ul>
+<li><p>In SAWScript, specifications are ordinary values that are defined with <code class="docutils literal notranslate"><span class="pre">let</span></code>.
+In this example, we are defining a specification named <code class="docutils literal notranslate"><span class="pre">id_u8_spec</span></code>.</p></li>
+<li><p>Specifications are defined using “<code class="docutils literal notranslate"><span class="pre">do</span></code>-notation”. That is, they are assembled
+by writing <code class="docutils literal notranslate"><span class="pre">do</span> <span class="pre">{</span> <span class="pre">&lt;stmt&gt;;</span> <span class="pre">&lt;stmt&gt;;</span> <span class="pre">...;</span> <span class="pre">&lt;stmt&gt;;</span> <span class="pre">}</span></code>, where each <code class="docutils literal notranslate"><span class="pre">&lt;stmt&gt;</span></code> is a
+statement that declares some property about the function being verified. A
+statement can optionally bind a variable that can be passed to later
+statements, which is accomplished by writing <code class="docutils literal notranslate"><span class="pre">&lt;var&gt;</span> <span class="pre">&lt;-</span> <span class="pre">&lt;stmt&gt;</span></code>.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&lt;-</span> <span class="pre">mir_fresh_var</span> <span class="pre">&quot;x&quot;</span> <span class="pre">mir_u8;</span></code> line declares that <code class="docutils literal notranslate"><span class="pre">x</span></code> is a fresh
+variable of type <code class="docutils literal notranslate"><span class="pre">u8</span></code> (represented by <code class="docutils literal notranslate"><span class="pre">mir_u8</span></code> in SAWScript) that has some
+unspecified value. In SAW parlance, we refer to these unspecified values as
+<em>symbolic</em> values. SAW uses an SMT solver under the hood to reason about
+symbolic values.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">&quot;x&quot;</span></code> string indicates what name the variable <code class="docutils literal notranslate"><span class="pre">x</span></code> should have when sent
+to the underlying SMT solver. This is primarily meant as a debugging aid, and
+it is not required that the string match the name of the SAWScript variable.
+(For instance, you could just as well have passed <code class="docutils literal notranslate"><span class="pre">&quot;x_smt&quot;</span></code> or something
+else.)</p>
+</li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">mir_execute_func</span> <span class="pre">[mir_term</span> <span class="pre">x];</span></code> line declares that the function should
+be invoked with <code class="docutils literal notranslate"><span class="pre">x</span></code> as the argument. For technical reasons, we pass
+<code class="docutils literal notranslate"><span class="pre">mir_term</span> <span class="pre">x</span></code> to <code class="docutils literal notranslate"><span class="pre">mir_execute_func</span></code> rather than just <code class="docutils literal notranslate"><span class="pre">x</span></code>; we will go over what
+<code class="docutils literal notranslate"><span class="pre">mir_term</span></code> does later in the tutorial.</p></li>
+<li><p>Finally, the <code class="docutils literal notranslate"><span class="pre">mir_return</span> <span class="pre">(mir_term</span> <span class="pre">x);</span></code> line declares that the function should
+return <code class="docutils literal notranslate"><span class="pre">x</span></code> once it has finished.</p></li>
+</ul>
+<p>Now that we have a specification in hand, it’s time to prove that <code class="docutils literal notranslate"><span class="pre">id_u8</span></code>
+actually adheres to the spec. To do so, we need to load the MIR JSON version of
+<code class="docutils literal notranslate"><span class="pre">id_u8</span></code> into SAW, which is done with the <code class="docutils literal notranslate"><span class="pre">mir_load_module</span></code> command:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_load_module</span><span class="w"> </span><span class="s2">&quot;saw-basics.linked-mir.json&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>This <code class="docutils literal notranslate"><span class="pre">m</span></code> variable contains the definition of <code class="docutils literal notranslate"><span class="pre">id_u8</span></code>, as well as the other code
+defined in the program. We can then pass <code class="docutils literal notranslate"><span class="pre">m</span></code> to the <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> command, which
+actually verifies that <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> behaves according to <code class="docutils literal notranslate"><span class="pre">id_u8_spec</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;saw_basics::id_u8&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">id_u8_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Here is what is going on in this command:</p>
+<ul class="simple">
+<li><p>The <code class="docutils literal notranslate"><span class="pre">m</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;saw_basics::id_u8&quot;</span></code> arguments instruct SAW to verify the
+<code class="docutils literal notranslate"><span class="pre">id_u8</span></code> function located in the <code class="docutils literal notranslate"><span class="pre">saw_basics</span></code> crate defined in <code class="docutils literal notranslate"><span class="pre">m</span></code>. Note that
+we are using the shorthand identifier notation here, so we are allowed to omit
+the disambiguator for the <code class="docutils literal notranslate"><span class="pre">saw_basics</span></code> crate.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">[]</span></code> argument indicates that we will not provide any function overrides to
+use when SAW simulates the <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> function. (We will go over how overrides
+work later in the tutorial.)</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">false</span></code> argument indicates that SAW should not use path satisfiability
+checking when analyzing the function. Path satisfiability checking is an
+advanced SAW feature that we will not be making use of in this tutorial, so we
+will always use <code class="docutils literal notranslate"><span class="pre">false</span></code> here.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">id_u8_spec</span></code> argument indicates that <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> should be checked against the
+specification defined by <code class="docutils literal notranslate"><span class="pre">id_u8_spec</span></code>.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">z3</span></code> argument indicates that SAW should use the Z3 SMT solver to solve
+any proof goals that are generated during verification. SAW also supports
+other SMT solvers, although we will mostly use Z3 in this tutorial.</p></li>
+</ul>
+<p>Putting this all together, our complete <code class="docutils literal notranslate"><span class="pre">saw-basics.saw</span></code> file is:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">enable_experimental</span><span class="p">;</span>
+
+<span class="kr">let</span><span class="w"> </span><span class="n">id_u8_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_load_module</span><span class="w"> </span><span class="s2">&quot;saw-basics.linked-mir.json&quot;</span><span class="p">;</span>
+
+<span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;saw_basics::id_u8&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">id_u8_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>One minor detail that we left out until just now is that the SAW’s interface to
+MIR is still experimental, so you must explicitly opt into it with the
+<code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code> command.</p>
+<p>Now that everything is in place, we can check this proof like so:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw<span class="w"> </span>saw-basics.saw
+
+
+
+<span class="go">[16:14:07.006] Loading file &quot;saw-basics.saw&quot;</span>
+<span class="go">[16:14:07.009] Verifying saw_basics/f77ebf43::id_u8[0] ...</span>
+<span class="go">[16:14:07.017] Simulating saw_basics/f77ebf43::id_u8[0] ...</span>
+<span class="go">[16:14:07.017] Checking proof obligations saw_basics/f77ebf43::id_u8[0] ...</span>
+<span class="go">[16:14:07.017] Proof succeeded! saw_basics/f77ebf43::id_u8[0]</span>
+</pre></div>
+</div>
+<p>Tada! SAW was successfully able to prove that <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> adheres to its spec.</p>
+</section>
+<section id="cryptol">
+<h2>Cryptol<a class="headerlink" href="#cryptol" title="Link to this heading"></a></h2>
+<p>The spec in the previous section is nice and simple. It’s also not very
+interesting, as it’s fairly obvious at a glance that <code class="docutils literal notranslate"><span class="pre">id_u8</span></code>’s implementation
+is correct. Most of the time, we want to verify more complicated functions
+where the correspondence between the specification and the implementation is
+not always so clear.</p>
+<p>For example, consider this function, which multiplies a number by two:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">times_two</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="c1">// Gotta go fast</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The straightforward way to implement this function would be to return <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">x</span></code>,
+but the author of this function <em>really</em> cared about performance. As such, the
+author applied a micro-optimization that computes the multiplication with a
+single left-shift (<code class="docutils literal notranslate"><span class="pre">&lt;&lt;</span></code>). This is the sort of scenario where we are pretty sure
+that the optimized version of the code is equivalent to the original version,
+but it would be nice for SAW to check this.</p>
+<p>Let’s write a specification for the <code class="docutils literal notranslate"><span class="pre">times_two</span></code> function:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">times_two_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>This spec introduces code delimited by double curly braces <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">...</span> <span class="pre">}}</span></code>, which
+is a piece of syntax that we haven’t seen before. The code in between the curly
+braces is written in <a class="reference external" href="http://cryptol.net/documentation.html">Cryptol</a>, a
+language designed for writing high-level specifications of various algorithms.
+Cryptol supports most arithmetic operations, so <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">x</span></code> works exactly as you
+would expect. Also note that the <code class="docutils literal notranslate"><span class="pre">x</span></code> variable was originally bound in the
+SAWScript language, but it is possible to embed <code class="docutils literal notranslate"><span class="pre">x</span></code> into the Cryptol language
+by referencing <code class="docutils literal notranslate"><span class="pre">x</span></code> within the curly braces. (We’ll say more about how this
+embedding works later.)</p>
+<p><code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">2</span> <span class="pre">*</span> <span class="pre">x</span> <span class="pre">}}</span></code> takes the Cryptol expression <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">x</span></code> and lifts it to a SAW
+expression. As such, this SAW spec declares that the function takes a single
+<code class="docutils literal notranslate"><span class="pre">u32</span></code>-typed argument <code class="docutils literal notranslate"><span class="pre">x</span></code> and returns <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">x</span></code>. We could have also wrote the
+specification to declare that the function returns <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&lt;&lt;</span> <span class="pre">1</span></code>, but that would
+have defeated the point of this exercise: we specifically want to check that
+the function against a spec that is as simple and readable as possible.</p>
+<p>Our full SAW file is:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">enable_experimental</span><span class="p">;</span>
+
+<span class="kr">let</span><span class="w"> </span><span class="n">times_two_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_load_module</span><span class="w"> </span><span class="s2">&quot;times-two.linked-mir.json&quot;</span><span class="p">;</span>
+
+<span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;times_two::times_two&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">times_two_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Which we can verify is correct like so:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw<span class="w"> </span>times-two.saw
+
+
+
+<span class="go">[17:51:35.469] Loading file &quot;times-two.saw&quot;</span>
+<span class="go">[17:51:35.497] Verifying times_two/6f4e41af::times_two[0] ...</span>
+<span class="go">[17:51:35.512] Simulating times_two/6f4e41af::times_two[0] ...</span>
+<span class="go">[17:51:35.513] Checking proof obligations times_two/6f4e41af::times_two[0] ...</span>
+<span class="go">[17:51:35.527] Proof succeeded! times_two/6f4e41af::times_two[0]</span>
+</pre></div>
+</div>
+<p>Nice! Even though the <code class="docutils literal notranslate"><span class="pre">times_two</span></code> function does not literally return <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">x</span></code>,
+SAW is able to confirm that the function behaves as if it were implemented that
+way.</p>
+</section>
+<section id="terms-and-other-types">
+<h2><code class="docutils literal notranslate"><span class="pre">Term</span></code>s and other types<a class="headerlink" href="#terms-and-other-types" title="Link to this heading"></a></h2>
+<p>Now that we know how Cryptol can be used within SAW, we can go back and explain
+what the <code class="docutils literal notranslate"><span class="pre">mir_term</span></code> function does. It is helpful to examine the type of
+<code class="docutils literal notranslate"><span class="pre">mir_term</span></code> by using SAW’s interactive mode. To do so, run the <code class="docutils literal notranslate"><span class="pre">saw</span></code> binary
+without any other arguments:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw
+</pre></div>
+</div>
+<p>Then run <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code> (to enable MIR-related commands) and run <code class="docutils literal notranslate"><span class="pre">:type</span> <span class="pre">mir_term</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; enable_experimental</span>
+<span class="go">sawscript&gt; :type mir_term</span>
+<span class="go">Term -&gt; MIRValue</span>
+</pre></div>
+</div>
+<p>Here, we see that <code class="docutils literal notranslate"><span class="pre">mir_term</span></code> accepts a <code class="docutils literal notranslate"><span class="pre">Term</span></code> as an argument and returns a
+<code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>. In this context, the <code class="docutils literal notranslate"><span class="pre">Term</span></code> type represents a Cryptol value, and
+the <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> type represents SAW-related MIR values. <code class="docutils literal notranslate"><span class="pre">Term</span></code>s can be thought
+of as a subset of <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>s, and the <code class="docutils literal notranslate"><span class="pre">mir_term</span></code> function is used to promote a
+<code class="docutils literal notranslate"><span class="pre">Term</span></code> to a <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>.</p>
+<p>Most other MIR-related commands work over <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>s, as can be seen with
+SAW’s <code class="docutils literal notranslate"><span class="pre">:type</span></code> command:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_execute_func</span>
+<span class="go">[MIRValue] -&gt; MIRSetup ()</span>
+<span class="go">sawscript&gt; :type mir_return</span>
+<span class="go">MIRValue -&gt; MIRSetup ()</span>
+</pre></div>
+</div>
+<p>Note that <code class="docutils literal notranslate"><span class="pre">MIRSetup</span></code> is the type of statements in a MIR specification, and two
+<code class="docutils literal notranslate"><span class="pre">MIRSetup</span></code>-typed commands can be chained together by using <code class="docutils literal notranslate"><span class="pre">do</span></code>-notation.
+Writing <code class="docutils literal notranslate"><span class="pre">MIRSetup</span> <span class="pre">()</span></code> means that the statement does not return anything
+interesting, and the use of <code class="docutils literal notranslate"><span class="pre">()</span></code> here is very much analogous to how <code class="docutils literal notranslate"><span class="pre">()</span></code> is
+used in Rust. There are other <code class="docutils literal notranslate"><span class="pre">MIRSetup</span></code>-typed commands that <em>do</em> return
+something interesting, as is the case with <code class="docutils literal notranslate"><span class="pre">mir_fresh_var</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_fresh_var</span>
+<span class="go">String -&gt; MIRType -&gt; MIRSetup Term</span>
+</pre></div>
+</div>
+<p>This command returns a <code class="docutils literal notranslate"><span class="pre">MIRSetup</span> <span class="pre">Term</span></code>, which means that when you write <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&lt;-</span> <span class="pre">mir_fresh_var</span> <span class="pre">...</span> <span class="pre">...</span></code> in a MIR specification, then <code class="docutils literal notranslate"><span class="pre">x</span></code> will be bound at type
+<code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p>
+<p>Values of type <code class="docutils literal notranslate"><span class="pre">Term</span></code> have the property that they can be embedded into Cryptol
+expression that are enclosed in double curly braces <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">...</span> <span class="pre">}}</span></code>. This is why
+our earlier <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">2</span> <span class="pre">*</span> <span class="pre">x</span> <span class="pre">}}</span></code> example works, as <code class="docutils literal notranslate"><span class="pre">x</span></code> is of type <code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p>
+</section>
+<section id="preconditions-and-postconditions">
+<h2>Preconditions and postconditions<a class="headerlink" href="#preconditions-and-postconditions" title="Link to this heading"></a></h2>
+<p>As a sanity check, let’s write a naïve version of <code class="docutils literal notranslate"><span class="pre">times_two</span></code> that explicitly
+returns <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">x</span></code>:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">times_two_ref</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">x</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>It seems like we should be able to verify this <code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> function using
+the same spec that we used for <code class="docutils literal notranslate"><span class="pre">times_two</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;times_two::times_two_ref&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">times_two_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Somewhat surprisingly, SAW fails to verify this function:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw<span class="w"> </span>times-two-ref-fail.saw
+
+
+
+<span class="go">[18:58:22.578] Loading file &quot;times-two-ref-fail.saw&quot;</span>
+<span class="go">[18:58:22.608] Verifying times_two/56182919::times_two_ref[0] ...</span>
+<span class="go">[18:58:22.621] Simulating times_two/56182919::times_two_ref[0] ...</span>
+<span class="go">[18:58:22.622] Checking proof obligations times_two/56182919::times_two_ref[0] ...</span>
+<span class="go">[18:58:22.640] Subgoal failed: times_two/56182919::times_two_ref[0] attempt to compute `const 2_u32 * move _2`, which would overflow</span>
+<span class="go">[18:58:22.640] SolverStats {solverStatsSolvers = fromList [&quot;SBV-&gt;Z3&quot;], solverStatsGoalSize = 375}</span>
+<span class="go">[18:58:22.640] ----------Counterexample----------</span>
+<span class="go">[18:58:22.640]   x: 2147483648</span>
+<span class="go">[18:58:22.640] Stack trace:</span>
+<span class="go">&quot;mir_verify&quot; (times-two-ref-fail.saw:11:1-11:11)</span>
+<span class="go">Proof failed.</span>
+</pre></div>
+</div>
+<p>The “<code class="docutils literal notranslate"><span class="pre">which</span> <span class="pre">would</span> <span class="pre">overflow</span></code>” portion of the error message suggests what went
+wrong. When a Rust program is compiled with debug settings (which is the
+default for <code class="docutils literal notranslate"><span class="pre">rustc</span></code> and <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code>), arithmetic operations such as
+multiplication will check if the result of the operation can fit in the
+requested number of bits. If not, the program will raise an error.</p>
+<p>In this case, we must make the result of multiplication fit in a <code class="docutils literal notranslate"><span class="pre">u32</span></code>, which
+can represent values in the range <code class="docutils literal notranslate"><span class="pre">0</span></code> to <code class="docutils literal notranslate"><span class="pre">2^^32</span> <span class="pre">-</span> <span class="pre">1</span></code> (where <code class="docutils literal notranslate"><span class="pre">^^</span></code> is Cryptol’s
+exponentiation operator). But it is possible to take a number in this range,
+multiply it by two, and have the result fall outside of the range. In fact, SAW
+gives us a counterexample with exactly this number: <code class="docutils literal notranslate"><span class="pre">2147483648</span></code>, which can
+also be written as <code class="docutils literal notranslate"><span class="pre">2^^31</span></code>. Multiplying this by two yields <code class="docutils literal notranslate"><span class="pre">2^^32</span></code>, which is
+just outside of the range of values expressible with <code class="docutils literal notranslate"><span class="pre">u32</span></code>. SAW’s duties
+include checking that a function cannot fail at runtime, so this function falls
+afoul of that check.</p>
+<p>Note that we didn’t have this problem with the original definition of
+<code class="docutils literal notranslate"><span class="pre">times_two</span></code> because the semantics of <code class="docutils literal notranslate"><span class="pre">&lt;&lt;</span></code> are such that if the result is too
+large to fit in the requested type, then the result will <em>overflow</em>, i.e., wrap
+back around to zero and count up. This means that <code class="docutils literal notranslate"><span class="pre">(2^^31)</span> <span class="pre">&lt;&lt;</span> <span class="pre">1</span></code> evaluates to
+<code class="docutils literal notranslate"><span class="pre">0</span></code> rather than raising an error. Cryptol’s multiplication operation also
+performs integer overflow (unlike Rust in debug settings), which is why we
+didn’t notice any overflow-related issues when verifying <code class="docutils literal notranslate"><span class="pre">times_two</span></code>.</p>
+<p>There are two possible ways that we can repair this. One way is to rewrite
+<code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> to use Rust’s
+<a class="reference external" href="https://doc.rust-lang.org/std/primitive.u32.html#method.wrapping_mul"><code class="docutils literal notranslate"><span class="pre">wrapping_mul</span></code></a>
+function, a variant of multiplication that always uses integer overflow.  This
+work around the issue, but it is a bit more verbose.</p>
+<p>The other way is to make our spec more precise such that we only verify
+<code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> for particular inputs. Although <code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> will run into
+overflow-related issues when the argument is <code class="docutils literal notranslate"><span class="pre">2^^31</span></code> or greater, it is
+perfectly fine for inputs smaller than <code class="docutils literal notranslate"><span class="pre">2^^31</span></code>. We can encode such an
+assumption in SAW by adding a <em>precondition</em>. To do so, we write a slightly
+modified version of <code class="docutils literal notranslate"><span class="pre">times_two_spec</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">times_two_ref_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">2</span><span class="o">^^</span><span class="mi">31</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>The most notable change is the <code class="docutils literal notranslate"><span class="pre">mir_precond</span> <span class="pre">{{</span> <span class="pre">x</span> <span class="pre">&lt;</span> <span class="pre">2^^31</span> <span class="pre">}};</span></code> line.
+<code class="docutils literal notranslate"><span class="pre">mir_precond</span></code> (where “<code class="docutils literal notranslate"><span class="pre">precond</span></code>” is short for “precondition”) is a command that
+takes a <code class="docutils literal notranslate"><span class="pre">Term</span></code> argument that contains a boolean predicate, such as <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">x</span> <span class="pre">&lt;</span> <span class="pre">2^^31</span> <span class="pre">}}</span></code>. Declaring a precondition requires that this predicate must hold
+during verification, and any values of <code class="docutils literal notranslate"><span class="pre">x</span></code> that do not satisfy this predicate
+are not considered.</p>
+<p>By doing this, we have limited the range of the function from <code class="docutils literal notranslate"><span class="pre">0</span></code> to <code class="docutils literal notranslate"><span class="pre">2^^31</span> <span class="pre">-</span> <span class="pre">1</span></code>, which is exactly the range of values for which <code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> is well
+defined. SAW will confirm this if we run it:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;times_two::times_two_ref&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">times_two_ref_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[19:23:53.480] Verifying times_two/56182919::times_two_ref[0] ...</span>
+<span class="go">[19:23:53.496] Simulating times_two/56182919::times_two_ref[0] ...</span>
+<span class="go">[19:23:53.497] Checking proof obligations times_two/56182919::times_two_ref[0] ...</span>
+<span class="go">[19:23:53.531] Proof succeeded! times_two/56182919::times_two_ref[0]</span>
+</pre></div>
+</div>
+<p>We can add as many preconditions to a spec as we see fit. For instance, if we
+only want to verify <code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> for positive integers, we could add an
+additional assumption:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">times_two_ref_positive_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span><span class="w"> </span><span class="c c-Singleline">// The input must be positive</span>
+<span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">2</span><span class="o">^^</span><span class="mi">31</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>In addition to preconditions, SAW also supports postconditions. Whereas
+preconditions represent conditions that must hold <em>before</em> invoking a function,
+postconditions represent conditions that must hold <em>after</em> invoking a function.
+We have already seen one type of postcondition in the form of the <code class="docutils literal notranslate"><span class="pre">mir_return</span></code>
+command, which imposes a postcondition on what the return value must be equal
+to.</p>
+<p>We can introduce additional postconditions with the <code class="docutils literal notranslate"><span class="pre">mir_postcond</span></code> command.
+For example, if we call <code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> with a positive argument, then it
+should be the case that the return value should be strictly greater than the
+argument value. We can check for this using <code class="docutils literal notranslate"><span class="pre">mir_postcond</span></code> like so:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">times_two_ref_positive_postcond_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span><span class="w"> </span><span class="c c-Singleline">// The input must be positive</span>
+<span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">2</span><span class="o">^^</span><span class="mi">31</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_postcond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nf">x</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span><span class="w"> </span><span class="c c-Singleline">// Argument value &lt; return value</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>An additional convenience that SAW offers is the <code class="docutils literal notranslate"><span class="pre">mir_assert</span></code> command.
+<code class="docutils literal notranslate"><span class="pre">mir_assert</span></code> has the same type as <code class="docutils literal notranslate"><span class="pre">mir_precond</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_postcond</span></code>, but
+<code class="docutils literal notranslate"><span class="pre">mir_assert</span></code> can be used to declare both preconditions <em>and</em> postconditions.
+The difference is where <code class="docutils literal notranslate"><span class="pre">mir_assert</span></code> appears in a specification. If
+<code class="docutils literal notranslate"><span class="pre">mir_assert</span></code> is used before the call to <code class="docutils literal notranslate"><span class="pre">mir_execute_func</span></code>, then it declares a
+precondition. If <code class="docutils literal notranslate"><span class="pre">mir_assert</span></code> is used after the call to <code class="docutils literal notranslate"><span class="pre">mir_execute_func</span></code>,
+then it declares a postcondition.</p>
+<p>For example, we can rewrite <code class="docutils literal notranslate"><span class="pre">times_two_ref_positive_postcond_spec</span></code> to use
+<code class="docutils literal notranslate"><span class="pre">mir_assert</span></code>s like so:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">times_two_ref_positive_postcond_assert_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_assert</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span><span class="w"> </span><span class="c c-Singleline">// The input must be positive</span>
+<span class="w">  </span><span class="n">mir_assert</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">2</span><span class="o">^^</span><span class="mi">31</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_assert</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nf">x</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span><span class="w"> </span><span class="c c-Singleline">// Argument value &lt; return value</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>The choice of whether to use <code class="docutils literal notranslate"><span class="pre">mir_precond</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_postcond</span></code> versus <code class="docutils literal notranslate"><span class="pre">mir_assert</span></code> is
+mostly a matter personal taste.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="about-mir-json.html" class="btn btn-neutral float-left" title="About mir-json" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="reference-types.html" class="btn btn-neutral float-right" title="Reference types" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.4
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,377 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Extraction to the Coq theorem prover &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Formal Deprecation Process" href="formal-deprecation-process.html" />
+    <link rel="prev" title="Proofs about Terms" href="proofs-about-terms.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="loading-code.html">Loading Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Extraction to the Coq theorem prover</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#support-library">Support Library</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cryptol-module-extraction">Cryptol module extraction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#proofs-involving-uninterpreted-functions">Proofs involving uninterpreted functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#translation-limitations-and-caveats">Translation limitations and caveats</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#recursive-programs">Recursive programs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#type-coercions">Type coercions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#error-terms">Error terms</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Extraction to the Coq theorem prover</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/extraction-to-the-coq-theorem-prover.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="extraction-to-the-coq-theorem-prover">
+<h1>Extraction to the Coq theorem prover<a class="headerlink" href="#extraction-to-the-coq-theorem-prover" title="Link to this heading"></a></h1>
+<p>In addition to the (semi-)automatic and compositional proof modes
+already discussed above, SAW has experimental support for exporting
+Cryptol and SAWCore values as terms to the Coq proof assistant<a class="footnote-reference brackets" href="#id3" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>5<span class="fn-bracket">]</span></a>.
+This is intended to support more manual proof efforts for properties
+that go beyond what SAW can support (for example, proofs requiring
+induction) or for connecting to preexisting formalizations in Coq
+of useful algorithms (e.g. the fiat crypto library<a class="footnote-reference brackets" href="#id4" id="id2" role="doc-noteref"><span class="fn-bracket">[</span>6<span class="fn-bracket">]</span></a>).</p>
+<p>This support consists of two related pieces. The first piece is a library of
+formalizations of the primitives underlying Cryptol and SAWCore and
+various supporting concepts that help bridge the conceptual gap
+between SAW and Coq.  The second piece is a term translation
+that maps the syntactic forms of SAWCore onto corresponding
+concepts in Coq syntax, designed to dovetail with the concepts
+defined in the support library.  SAWCore is a quite similar language
+to the core calculus underlying Coq, so much of this translation is
+quite straightforward; however, the languages are not exactly
+equivalent, and there are some tricky cases that mostly arise from
+Cryptol code that can only be partially supported.  We will note
+these restrictions later in the manual.</p>
+<p>We expect this extraction process to work with a fairly wide range of Coq
+versions, as we are not using bleeding-edge Coq features. It has been
+most fully tested with Coq version 8.13.2.</p>
+<section id="support-library">
+<h2>Support Library<a class="headerlink" href="#support-library" title="Link to this heading"></a></h2>
+<p>In order to make use of SAW’s extraction capabilities, one must first
+compile the support library using Coq so that the included definitions
+and theorems can be referenced by the extracted code. From the top
+directory of the SAW source tree, the source code for this support
+library can be found in the <code class="docutils literal notranslate"><span class="pre">saw-core-coq/coq</span></code> subdirectory.
+In this subdirectory you will find a <code class="docutils literal notranslate"><span class="pre">_CoqProject</span></code> and a <code class="docutils literal notranslate"><span class="pre">Makefile</span></code>.
+A simple <code class="docutils literal notranslate"><span class="pre">make</span></code> invocation should be enough to compile
+all the necessary files, assuming Coq is installed and <code class="docutils literal notranslate"><span class="pre">coqc</span></code> is
+available in the user’s <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. HTML documentation for the support
+library can also be generated by <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">html</span></code> from the same directory.</p>
+<p>Once the library is compiled, the recommended way to import
+it into your subsequent development is by adding the following
+lines to your <code class="docutils literal notranslate"><span class="pre">_CoqProject</span></code> file:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>-Q &lt;SAWDIR&gt;/saw-core-coq/coq/generated/CryptolToCoq CryptolToCoq
+-Q &lt;SAWDIR&gt;/saw-core-coq/coq/handwritten/CryptolToCoq CryptolToCoq
+</pre></div>
+</div>
+<p>Here <code class="docutils literal notranslate"><span class="pre">&lt;SAWDIR&gt;</span></code> refers to the location on your system where the
+SAWScript source tree is checked out. This will add the relevant
+library files to the <code class="docutils literal notranslate"><span class="pre">CryptolToCoq</span></code> namespace, where the extraction
+process will expect to find them.</p>
+<p>The support library for extraction is broken into two parts: those
+files which are handwritten, versus those that are automatically
+generated. The handwritten files are generally fairly readable and
+are reasonable for human inspection; they define most of the
+interesting pipe-fitting that allows Cryptol and SAWCore definitions
+to connect to corresponding Coq concepts.  In particular the
+file <code class="docutils literal notranslate"><span class="pre">SAWCoreScaffolding.v</span></code> file defines most of the bindings of base
+types to Coq types, and the <code class="docutils literal notranslate"><span class="pre">SAWCoreVectorsAsCoqVectors.v</span></code> defines the
+core bitvector operations. The automatically generated files are direct
+translations of the SAWCore source files
+(<code class="docutils literal notranslate"><span class="pre">saw-core/prelude/Prelude.sawcore</span></code> and
+<code class="docutils literal notranslate"><span class="pre">cryptol-saw-core/saw/Cryptol.sawcore</span></code>) that correspond to the
+standard libraries for SAWCore and Cryptol, respectively.</p>
+<p>The autogenerated files are intended to be kept up-to-date with
+changes in the corresponding <code class="docutils literal notranslate"><span class="pre">sawcore</span></code> files, and end users should
+not need to generate them. Nonetheless, if they are out of sync for some
+reason, these files may be regenerated using the <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable
+by running <code class="docutils literal notranslate"><span class="pre">(cd</span> <span class="pre">saw-core-coq;</span> <span class="pre">saw</span> <span class="pre">saw/generate_scaffolding.saw)</span></code>
+from the top-level of the SAW source directory before compiling them
+with Coq as described above.</p>
+<p>You may also note some additional files and concepts in the standard
+library, such as <code class="docutils literal notranslate"><span class="pre">CompM.v</span></code>, and a variety of lemmas and definitions
+related to it. These definitions are related to the “heapster” system,
+which form a separate use-case for the SAWCore to Coq translation.
+These definitions will not be used for code extracted from Cryptol.</p>
+</section>
+<section id="cryptol-module-extraction">
+<h2>Cryptol module extraction<a class="headerlink" href="#cryptol-module-extraction" title="Link to this heading"></a></h2>
+<p>There are several modes of use for the SAW to Coq term extraction
+facility, but the easiest to use is whole Cryptol module extraction.
+This will extract all the definitions in the given Cryptol module,
+together with it’s transitive dependencies, into a single Coq module
+which can then be compiled and pulled into subsequence developments.</p>
+<p>Suppose we have a Cryptol source file named <code class="docutils literal notranslate"><span class="pre">source.cry</span></code> and we want
+to generate a Coq file named <code class="docutils literal notranslate"><span class="pre">output.v</span></code>.  We can accomplish this by
+running the following commands in saw (either directly from the <code class="docutils literal notranslate"><span class="pre">saw</span></code>
+command prompt, or via a script file)</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">enable_experimental</span><span class="p">;</span>
+<span class="n">write_coq_cryptol_module</span><span class="w"> </span><span class="s2">&quot;source.cry&quot;</span><span class="w"> </span><span class="s2">&quot;output.v&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">[];</span>
+</pre></div>
+</div>
+<p>In this default mode, identifiers in the Cryptol source will be
+directly translated into identifiers in Coq. This may occasionally
+cause problems if source identifiers clash with Coq keywords or
+preexisting definitions. The third argument to
+<code class="docutils literal notranslate"><span class="pre">write_coq_cryptol_module</span></code> can be used to remap such names if
+necessary by giving a list of <code class="docutils literal notranslate"><span class="pre">(in,out)</span></code> pairs of names.  The fourth
+argument is a list of source identifiers to skip translating, if
+desired.  Authoritative online documentation for this command can be
+obtained directly from the <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable via <code class="docutils literal notranslate"><span class="pre">:help</span> <span class="pre">write_coq_cryptol_module</span></code> after <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code>.</p>
+<p>The resulting “output.v” file will have some of the usual hallmarks of
+computer-generated code; it will have poor formatting and, explicit
+parenthesis and fully-qualified names.  Thankfully, once loaded into
+Coq, the Coq pretty-printer will do a much better job of rendering
+these terms in a somewhat human-readable way.</p>
+</section>
+<section id="proofs-involving-uninterpreted-functions">
+<h2>Proofs involving uninterpreted functions<a class="headerlink" href="#proofs-involving-uninterpreted-functions" title="Link to this heading"></a></h2>
+<p>It is possible to write a Cryptol module that references uninterpreted
+functions by using the <code class="docutils literal notranslate"><span class="pre">primitive</span></code> keyword to declare them in your
+Cryptol source. Primitive Cryptol declarations will be translated into
+Coq section variables; as usual in Coq, uses of these section
+variables will be translated into additional parameters to the
+definitions from outside the section.  In this way, consumers of
+the translated module can instantiate the declared Cryptol functions
+with corresponding terms in subsequent Coq developments.</p>
+<p>Although the Cryptol interpreter itself will not be able to compute
+with declared but undefined functions of this sort, they can be used
+both to provide specifications for functions to be verified with
+<code class="docutils literal notranslate"><span class="pre">llvm_verify</span></code> or <code class="docutils literal notranslate"><span class="pre">jvm_verify</span></code> and also for Coq extraction.</p>
+<p>For example, if I write the following Cryptol source file:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">primitive</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="kt">Integer</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kt">Integer</span>
+
+<span class="nf">g</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="kt">Integer</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kt">Bool</span>
+<span class="nf">g</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="p">(</span><span class="n">f</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span>
+</pre></div>
+</div>
+<p>After extraction, the generated term <code class="docutils literal notranslate"><span class="pre">g</span></code> will have Coq type:</p>
+<div class="highlight-coq notranslate"><div class="highlight"><pre><span></span><span class="o">(</span><span class="n">Integer</span> <span class="o">-&gt;</span> <span class="n">Integer</span><span class="o">)</span> <span class="o">-&gt;</span> <span class="n">Integer</span> <span class="o">-&gt;</span> <span class="n">Bool</span>
+</pre></div>
+</div>
+</section>
+<section id="translation-limitations-and-caveats">
+<h2>Translation limitations and caveats<a class="headerlink" href="#translation-limitations-and-caveats" title="Link to this heading"></a></h2>
+<p>Translation from Cryptol to Coq has a number of fundamental
+limitations that must be addressed. The most severe of these is that
+Cryptol is a fully general-recursive language, and may exhibit runtime
+errors directly via calls to the <code class="docutils literal notranslate"><span class="pre">error</span></code> primitive, or via partial
+operations (such as indexing a sequence out-of-bounds).  The internal
+language of Coq, by contrast, is a strongly-normalizing language of
+total functions.  As such, our translation is unable to extract all
+Cryptol programs.</p>
+<section id="recursive-programs">
+<h3>Recursive programs<a class="headerlink" href="#recursive-programs" title="Link to this heading"></a></h3>
+<p>The most severe of the currently limitations for our system
+is that the translation is unable to translate any recursive Cryptol
+program.  Doing this would require us to attempt to find some
+termination argument for the recursive function sufficient to satisfy
+Coq; for now, no attempt is made to do so. if you attempt to
+extract a recursive function, SAW will produce an error
+about a “malformed term” with <code class="docutils literal notranslate"><span class="pre">Prelude.fix</span></code> as the head symbol.</p>
+<p>Certain limited kinds of recursion are available via the
+<code class="docutils literal notranslate"><span class="pre">foldl</span></code> Cryptol primitive operation, which is translated directly
+into a fold operation in Coq. This is sufficient for many basic
+iterative algorithms.</p>
+</section>
+<section id="type-coercions">
+<h3>Type coercions<a class="headerlink" href="#type-coercions" title="Link to this heading"></a></h3>
+<p>Another limitation of the translation system is that Cryptol uses SMT
+solvers during its typechecking process and uses the results of solver
+proofs to justify some of its typing judgments. When extracting these
+terms to Coq, type equality coercions must be generated. Currently, we
+do not have a good way to transport the reasoning done inside
+Cryptol’s typechecker into Coq, so we just supply a very simple <code class="docutils literal notranslate"><span class="pre">Ltac</span></code>
+tactic to discharge these coercions (see <code class="docutils literal notranslate"><span class="pre">solveUnsafeAssert</span></code> in
+<code class="docutils literal notranslate"><span class="pre">CryptolPrimitivesForSAWCoreExtra.v</span></code>).  This tactic is able to
+discover simple coercions, but for anything nontrivial it may
+fail. The result will be a typechecking failure when compiling the
+generated code in Coq when the tactic fails. If you encounter this
+problem, it may be possible to enhance the <code class="docutils literal notranslate"><span class="pre">solveUnsafeAssert</span></code> tactic
+to cover your use case.</p>
+</section>
+<section id="error-terms">
+<h3>Error terms<a class="headerlink" href="#error-terms" title="Link to this heading"></a></h3>
+<p>A final caveat that is worth mentioning is that Cryptol can sometimes
+produce runtime errors. These can arise from explicit calls to the
+<code class="docutils literal notranslate"><span class="pre">error</span></code> primitive, or from partially defined operations (e.g.,
+division by zero or sequence access out of bounds).  Such instances
+are translated to occurrences of an unrealized Coq axiom named <code class="docutils literal notranslate"><span class="pre">error</span></code>.
+In order to avoid introducing an inconsistent environment, the <code class="docutils literal notranslate"><span class="pre">error</span></code>
+axiom is restricted to apply only to inhabited types. All the types
+arising from Cryptol programs are inhabited, so this is no problem
+in principle. However, collecting and passing this information around
+on the Coq side is a little tricky.</p>
+<p>The main technical device we use here is the <code class="docutils literal notranslate"><span class="pre">Inhabited</span></code> type class;
+it simply asserts that a type has some distinguished inhabitant.  We
+provide instances for the base types and type constructors arising
+from Cryptol, so the necessary instances ought to be automatically
+constructed when needed.  However, polymorphic Cryptol functions add
+some complications, as type arguments must also come together with
+evidence that they are inhabited. The translation process takes care
+to add the necessary <code class="docutils literal notranslate"><span class="pre">Inhabited</span></code> arguments, so everything ought to
+work out. However, if Coq typechecking of generated code fails with
+errors about <code class="docutils literal notranslate"><span class="pre">Inhabited</span></code> class instances, it likely represents some
+problem with this aspect of the translation.</p>
+</section>
+</section>
+</section>
+<hr class="footnotes docutils" />
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="id3" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">5</a><span class="fn-bracket">]</span></span>
+<p><a class="reference external" href="https://coq.inria.fr">https://coq.inria.fr</a></p>
+</aside>
+<aside class="footnote brackets" id="id4" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id2">6</a><span class="fn-bracket">]</span></span>
+<p><a class="reference external" href="https://github.com/mit-plv/fiat-crypto">https://github.com/mit-plv/fiat-crypto</a></p>
+</aside>
+</aside>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="proofs-about-terms.html" class="btn btn-neutral float-left" title="Proofs about Terms" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="formal-deprecation-process.html" class="btn btn-neutral float-right" title="Formal Deprecation Process" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.4
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

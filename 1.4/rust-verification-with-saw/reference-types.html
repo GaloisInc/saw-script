@@ -1,0 +1,321 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reference types &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Compound data types" href="compound-data-types.html" />
+    <link rel="prev" title="SAW basics" href="saw-basics.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Rust Verification with SAW</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="about-mir-json.html">About <code class="docutils literal notranslate"><span class="pre">mir-json</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-basics.html">SAW basics</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Reference types</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#convenience-mir-ref-of-and-mir-ref-of-mut">Convenience: <code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="compound-data-types.html">Compound data types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overrides-and-compositional-verification.html">Overrides and compositional verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="static-items.html">Static items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="case-study-salsa20.html">Case study: Salsa20</a></li>
+<li class="toctree-l2"><a class="reference internal" href="a-final-word.html">A final word</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../saw-user-manual/index.html">SAW User Manual</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Rust Verification with SAW</a></li>
+      <li class="breadcrumb-item active">Reference types</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/rust-verification-with-saw/reference-types.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="reference-types">
+<h1>Reference types<a class="headerlink" href="#reference-types" title="Link to this heading"></a></h1>
+<p>All of the examples we have seen up to this point involve simple integer types
+such as <code class="docutils literal notranslate"><span class="pre">u8</span></code> and <code class="docutils literal notranslate"><span class="pre">u32</span></code>. While these are useful, Rust’s type system features
+much more than just integers. A key part of Rust’s type system are its
+reference types. For example, in this <code class="docutils literal notranslate"><span class="pre">read_ref</span></code> function:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">read_ref</span><span class="p">(</span><span class="n">r</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="o">*</span><span class="n">r</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The function reads the value that <code class="docutils literal notranslate"><span class="pre">r</span></code> (of type <code class="docutils literal notranslate"><span class="pre">&amp;u32</span></code>) points to and returns
+it. Writing SAW specifications involving references is somewhat trickier than
+with other types of values because we must also specify what memory the
+reference points to. SAW provides a special command for doing this called
+<code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_alloc</span>
+<span class="go">MIRType -&gt; MIRSetup MIRValue</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> will allocate a reference value with enough space to hold a value
+of the given <code class="docutils literal notranslate"><span class="pre">MIRType</span></code>.  Unlike <code class="docutils literal notranslate"><span class="pre">mir_fresh_var</span></code>, <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> returns a
+<code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> instead of a <code class="docutils literal notranslate"><span class="pre">Term</span></code>.  We mentioned before that <code class="docutils literal notranslate"><span class="pre">Term</span></code>s are only a
+subset of <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>s, and this is one of the reasons why. Cryptol does not
+have a notion of reference values, but <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>s do. As a result, you cannot
+embed the result of a call to <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> in a Cryptol expression.</p>
+<p><code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> must be used with some care. Here is a first, not-quite-correct
+attempt at writing a spec for <code class="docutils literal notranslate"><span class="pre">read_ref</span></code> using <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">read_ref_fail_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">r</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">r</span><span class="p">];</span>
+<span class="w">  </span><span class="c c-Singleline">// mir_return ??;</span>
+<span class="p">};</span>
+
+<span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_load_module</span><span class="w"> </span><span class="s2">&quot;ref-basics.linked-mir.json&quot;</span><span class="p">;</span>
+
+<span class="n">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;ref_basics::read_ref&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">read_ref_fail_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>As the comment suggests, it’s not entirely clear what this spec should return.
+We can’t return <code class="docutils literal notranslate"><span class="pre">r</span></code>, since <code class="docutils literal notranslate"><span class="pre">read_ref</span></code> returns something of type <code class="docutils literal notranslate"><span class="pre">u32</span></code>, not
+<code class="docutils literal notranslate"><span class="pre">&amp;u32</span></code>. On the other hand, we don’t have any values of type <code class="docutils literal notranslate"><span class="pre">u32</span></code> lying around
+that are obviously the right thing to use here. Nevertheless, it’s not required
+for a SAW spec to include a <code class="docutils literal notranslate"><span class="pre">mir_return</span></code> statement, so let’s see what happens
+if we verify this as-is:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw<span class="w"> </span>ref-basics-fail.saw
+
+
+
+<span class="go">[20:13:27.224] Loading file &quot;ref-basics-fail.saw&quot;</span>
+<span class="go">[20:13:27.227] Verifying ref_basics/54ae7b63::read_ref[0] ...</span>
+<span class="go">[20:13:27.235] Simulating ref_basics/54ae7b63::read_ref[0] ...</span>
+<span class="go">[20:13:27.235] Stack trace:</span>
+<span class="go">&quot;mir_verify&quot; (ref-basics-fail.saw:11:1-11:11)</span>
+<span class="go">Symbolic execution failed.</span>
+<span class="go">Abort due to assertion failure:</span>
+<span class="go">  ref-basics.rs:2:5: 2:7: error: in ref_basics/54ae7b63::read_ref[0]</span>
+<span class="go">  attempted to read empty mux tree</span>
+</pre></div>
+</div>
+<p>Clearly, SAW didn’t like what we gave it. The reason this happens is although
+we allocated memory for the reference <code class="docutils literal notranslate"><span class="pre">r</span></code>, we never told SAW what value should
+live in that memory. When SAW simulated the <code class="docutils literal notranslate"><span class="pre">read_ref</span></code> function, it attempted
+to dereference <code class="docutils literal notranslate"><span class="pre">r</span></code>, which pointed to uninitialized memory. This is constitutes
+an error in SAW, which is what this “<code class="docutils literal notranslate"><span class="pre">attempted</span> <span class="pre">to</span> <span class="pre">read</span> <span class="pre">empty</span> <span class="pre">mux</span> <span class="pre">tree</span></code>”
+business is about.</p>
+<p>SAW provides a <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> command to declare what value a reference should
+point to:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_points_to</span>
+<span class="go">MIRValue -&gt; MIRValue -&gt; MIRSetup ()</span>
+</pre></div>
+</div>
+<p>Here, the first <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> argument represents a reference value, and the
+second <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> argument represents the value that the reference should point
+to. In our spec for <code class="docutils literal notranslate"><span class="pre">read_ref</span></code>, we can declare that the reference should point
+to a symbolic <code class="docutils literal notranslate"><span class="pre">u32</span></code> value like so:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">read_ref_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">r_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">r_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;r_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">r_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">r_val</span><span class="p">);</span>
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">r_ref</span><span class="p">];</span>
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">r_val</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>We have renamed <code class="docutils literal notranslate"><span class="pre">r</span></code> to <code class="docutils literal notranslate"><span class="pre">r_ref</span></code> in this revised spec to more easily distinguish
+it from <code class="docutils literal notranslate"><span class="pre">r_val</span></code>, which is the value that <code class="docutils literal notranslate"><span class="pre">r_ref</span></code> is declared to point to using
+<code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code>. In this version of the spec, it is clear that we should return
+<code class="docutils literal notranslate"><span class="pre">r_val</span></code> using <code class="docutils literal notranslate"><span class="pre">mir_return</span></code>, as <code class="docutils literal notranslate"><span class="pre">r_val</span></code> is exactly the value that will be
+computed by dereferencing <code class="docutils literal notranslate"><span class="pre">r_ref</span></code>.</p>
+<p>This pattern, where a call to <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> to followed by a call
+to <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code>, is common with function specs that involve references.
+Later in the tutorial, we will see other examples of <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> where the
+reference argument does not come from <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code>.</p>
+<p>The argument to <code class="docutils literal notranslate"><span class="pre">read_ref</span></code> is an immutable reference, so the implementation of
+the function is not allowed to modify the memory that the argument points to.
+Rust also features mutable references that do permit modifying the underlying
+memory, as seen in this <code class="docutils literal notranslate"><span class="pre">swap</span></code> function:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">swap</span><span class="p">(</span><span class="n">a</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">a_tmp</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">*</span><span class="n">a</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">b_tmp</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">*</span><span class="n">b</span><span class="p">;</span>
+
+<span class="w">    </span><span class="o">*</span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">b_tmp</span><span class="p">;</span>
+<span class="w">    </span><span class="o">*</span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">a_tmp</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>A corresponding spec for <code class="docutils literal notranslate"><span class="pre">swap</span></code> is:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">swap_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
+
+<span class="w">  </span><span class="n">b_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">b_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;b_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">b_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">b_val</span><span class="p">);</span>
+
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">a_ref</span><span class="p">,</span><span class="w"> </span><span class="n">b_ref</span><span class="p">];</span>
+
+<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">b_val</span><span class="p">);</span>
+<span class="w">  </span><span class="n">mir_points_to</span><span class="w"> </span><span class="n">b_ref</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>There are two interesting things worth calling out in this spec:</p>
+<ol class="arabic simple">
+<li><p>Instead of allocating the reference values with <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>, we instead use
+<code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code>. This is a consequence of the fact that <code class="docutils literal notranslate"><span class="pre">&amp;mut</span> <span class="pre">u32</span></code> is a
+different type from <code class="docutils literal notranslate"><span class="pre">&amp;mut</span></code> in Rust (and in MIR), and and such, we need a
+separate <code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> to get the types right.</p></li>
+<li><p>This spec features calls to <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> before <em>and</em> after
+<code class="docutils literal notranslate"><span class="pre">mir_execute_func</span></code>. This is because the values that <code class="docutils literal notranslate"><span class="pre">a_ref</span></code> and <code class="docutils literal notranslate"><span class="pre">b_ref</span></code> point
+to before calling the function are different than the values that they point
+to after calling the function. The two uses to <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> after the
+function has been called swap the order of <code class="docutils literal notranslate"><span class="pre">a_val</span></code> and <code class="docutils literal notranslate"><span class="pre">b_val</span></code>, reflecting
+the fact that the <code class="docutils literal notranslate"><span class="pre">swap</span></code> function itself swaps the values that the references
+point to.</p></li>
+</ol>
+<section id="convenience-mir-ref-of-and-mir-ref-of-mut">
+<h2>Convenience: <code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span></code><a class="headerlink" href="#convenience-mir-ref-of-and-mir-ref-of-mut" title="Link to this heading"></a></h2>
+<p>Because this pattern of allocating a reference and initializing it with
+<code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> is so common, SAW provides helpers: <code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> for immutable
+references and <code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span></code> for mutable references.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_ref_of</span>
+<span class="go">MIRValue -&gt; MIRSetup MIRValue</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> combines <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> into a single operation,
+returning a reference to the specified value. Likewise <code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span></code>
+combines <code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code>. This portion of a spec:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">s &lt;- mir_alloc (mir_adt s_adt);</span>
+<span class="go">s_val &lt;- mir_fresh_expanded_value &quot;s_val&quot; (mir_adt s_adt);</span>
+<span class="go">mir_points_to s s_val;</span>
+</pre></div>
+</div>
+<p>can be rewritten more concisely as:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">s_val &lt;- mir_fresh_expanded_value &quot;s_val&quot; (mir_adt s_adt);</span>
+<span class="go">s &lt;- mir_ref_of s_val;</span>
+</pre></div>
+</div>
+<p>This version mirrors how one would write the function in Rust, where a <code class="docutils literal notranslate"><span class="pre">&amp;T</span></code>
+points to an already-initialized value. Using <code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> encourages that
+style and avoids the risk of forgetting to initialize allocated memory.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="saw-basics.html" class="btn btn-neutral float-left" title="SAW basics" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="compound-data-types.html" class="btn btn-neutral float-right" title="Compound data types" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.4
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,456 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Example: Find First Set &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Using SMT-Lib Solvers" href="using-smt-lib-solvers.html" />
+    <link rel="prev" title="Introduction" href="introduction.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">LLVM/Java Verification with SAW</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Example: Find First Set</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#reference-implementation">Reference Implementation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#alternative-implementations">Alternative Implementations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#generating-llvm-code">Generating LLVM Code</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#equivalence-proof">Equivalence Proof</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cross-language-proofs">Cross-Language Proofs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="using-smt-lib-solvers.html">Using SMT-Lib Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="external-sat-solvers.html">External SAT Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compositional-proofs.html">Compositional Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-interpreter.html">Interactive Interpreter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="other-examples.html">Other Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../saw-user-manual/index.html">SAW User Manual</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">LLVM/Java Verification with SAW</a></li>
+      <li class="breadcrumb-item active">Example: Find First Set</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/llvm-java-verification-with-saw/example-find-first-set.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="example-find-first-set">
+<h1>Example: Find First Set<a class="headerlink" href="#example-find-first-set" title="Link to this heading"></a></h1>
+<p>As a first example, we consider showing the equivalence of several quite
+different implementations of the POSIX <code class="docutils literal notranslate"><span class="pre">ffs</span></code> function, which identifies
+the position of the first <code class="docutils literal notranslate"><span class="pre">1</span></code> bit in a word. The function takes an
+integer as input, treated as a vector of bits, and returns another
+integer which indicates the index of the first bit set (zero being the
+least significant). This function can be implemented in several ways
+with different performance and code clarity tradeoffs, and we would like
+to show those different implementations are equivalent.</p>
+<section id="reference-implementation">
+<h2>Reference Implementation<a class="headerlink" href="#reference-implementation" title="Link to this heading"></a></h2>
+<p>One simple implementation takes the form of a loop with an index
+initialized to zero, and a mask initialized to have the least
+significant bit set. On each iteration, we increment the index, and
+shift the mask to the left. Then we can use a bitwise “and” operation to
+test the bit at the index indicated by the index variable. The following
+C code (which is also in the <code class="docutils literal notranslate"><span class="pre">ffs.c</span></code> file on GitHub) uses this approach.</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">uint32_t</span><span class="w"> </span><span class="nf">ffs_ref</span><span class="p">(</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">word</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">    </span><span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">word</span><span class="p">)</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">    </span><span class="k">for</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">cnt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">cnt</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">32</span><span class="p">;</span><span class="w"> </span><span class="n">cnt</span><span class="o">++</span><span class="p">)</span>
+<span class="w">        </span><span class="k">if</span><span class="p">(((</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">word</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">i</span><span class="p">;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="c1">// notreached</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>This implementation is relatively straightforward, and a proficient C
+programmer would probably have little difficulty believing its
+correctness. However, the number of branches taken during execution
+could be as many as 32, depending on the input value. It’s possible to
+implement the same algorithm with significantly fewer branches, and no
+backward branches.</p>
+</section>
+<section id="alternative-implementations">
+<h2>Alternative Implementations<a class="headerlink" href="#alternative-implementations" title="Link to this heading"></a></h2>
+<p>An alternative implementation, taken by the following function (also in
+<code class="docutils literal notranslate"><span class="pre">ffs.c</span></code>), treats the bits of the input word in chunks, allowing
+sequences of zero bits to be skipped over more quickly.</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">uint32_t</span><span class="w"> </span><span class="nf">ffs_imp</span><span class="p">(</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0xffff</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">16</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&gt;&gt;=</span><span class="w"> </span><span class="mi">16</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x00ff</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">8</span><span class="p">;</span><span class="w">  </span><span class="n">i</span><span class="w"> </span><span class="o">&gt;&gt;=</span><span class="w"> </span><span class="mi">8</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x000f</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">4</span><span class="p">;</span><span class="w">  </span><span class="n">i</span><span class="w"> </span><span class="o">&gt;&gt;=</span><span class="w"> </span><span class="mi">4</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x0003</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w">  </span><span class="n">i</span><span class="w"> </span><span class="o">&gt;&gt;=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="o">+</span><span class="p">((</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x01</span><span class="p">))</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Another optimized version, in the following rather mysterious program
+(also in <code class="docutils literal notranslate"><span class="pre">ffs.c</span></code>), based on the <code class="docutils literal notranslate"><span class="pre">ffs</span></code> implementation in <a class="reference external" href="http://musl.libc.org/">musl
+libc</a>.</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">uint32_t</span><span class="w"> </span><span class="nf">ffs_musl</span><span class="w"> </span><span class="p">(</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">x</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="k">static</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="n">debruijn32</span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">23</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">29</span><span class="p">,</span><span class="w"> </span><span class="mi">24</span><span class="p">,</span><span class="w"> </span><span class="mi">19</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">30</span><span class="p">,</span><span class="w"> </span><span class="mi">27</span><span class="p">,</span><span class="w"> </span><span class="mi">25</span><span class="p">,</span><span class="w"> </span><span class="mi">11</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">13</span><span class="p">,</span>
+<span class="w">    </span><span class="mi">31</span><span class="p">,</span><span class="w"> </span><span class="mi">22</span><span class="p">,</span><span class="w"> </span><span class="mi">28</span><span class="p">,</span><span class="w"> </span><span class="mi">18</span><span class="p">,</span><span class="w"> </span><span class="mi">26</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span><span class="w"> </span><span class="mi">21</span><span class="p">,</span><span class="w"> </span><span class="mi">17</span><span class="p">,</span><span class="w"> </span><span class="mi">9</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">15</span><span class="p">,</span><span class="w"> </span><span class="mi">14</span>
+<span class="w">  </span><span class="p">};</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">debruijn32</span><span class="p">[(</span><span class="n">x</span><span class="o">&amp;-</span><span class="n">x</span><span class="p">)</span><span class="o">*</span><span class="mh">0x076be629</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">27</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>These optimized versions are much less obvious than the reference
+implementation. They might be faster, but how do we gain confidence
+that they calculate the same results as the reference implementation?</p>
+<p>Finally, consider a buggy implementation which is correct on all but one
+possible input (also in <code class="docutils literal notranslate"><span class="pre">ffs.c</span></code>). Although contrived, this program
+represents a case where traditional testing – as opposed to
+verification – is unlikely to be helpful.</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">uint32_t</span><span class="w"> </span><span class="nf">ffs_bug</span><span class="p">(</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">word</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// injected bug:</span>
+<span class="w">    </span><span class="k">if</span><span class="p">(</span><span class="n">word</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mh">0x101010</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="mi">4</span><span class="p">;</span><span class="w"> </span><span class="c1">// instead of 5</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">ffs_ref</span><span class="p">(</span><span class="n">word</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>SAWScript allows us to state these problems concisely, and to quickly
+and automatically 1) prove the equivalence of the reference and
+optimized implementations on all possible inputs, and 2) find an input
+exhibiting the bug in the third version.</p>
+</section>
+<section id="generating-llvm-code">
+<h2>Generating LLVM Code<a class="headerlink" href="#generating-llvm-code" title="Link to this heading"></a></h2>
+<p>SAW can analyze LLVM code, but most programs are originally written in a
+higher-level language such as C, as in our example. Therefore, the C
+code must be translated to LLVM, using something like the following
+command:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>clang<span class="w"> </span>-g<span class="w"> </span>-c<span class="w"> </span>-emit-llvm<span class="w"> </span>-o<span class="w"> </span>ffs.bc<span class="w"> </span>ffs.c
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">-g</span></code> flag instructs <code class="docutils literal notranslate"><span class="pre">clang</span></code> to include debugging information, which
+is useful in SAW to refer to variables and struct fields using the same
+names as in C. We have tested SAW successfully with versions of <code class="docutils literal notranslate"><span class="pre">clang</span></code>
+from 3.6 to 7.0. Please report it as a bug <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues">on
+GitHub</a> if SAW fails to
+parse any LLVM bitcode file.</p>
+<p>This command, and following command examples in this tutorial, can be
+run from the <code class="docutils literal notranslate"><span class="pre">code</span></code> directory <a class="reference external" href="https://github.com/GaloisInc/saw-script/tree/master/doc/tutorial/code">on
+GitHub</a>.
+A <code class="docutils literal notranslate"><span class="pre">Makefile</span></code> also exists in that directory, providing quick shortcuts
+for tasks like this. For instance, we can get the same effect as the
+previous command by running:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>make<span class="w"> </span>ffs.bc
+</pre></div>
+</div>
+</section>
+<section id="equivalence-proof">
+<h2>Equivalence Proof<a class="headerlink" href="#equivalence-proof" title="Link to this heading"></a></h2>
+<p>We now show how to use SAWScript to prove the equivalence of the
+reference and implementation versions of the FFS algorithm, and
+exhibit the bug in the buggy implementation.</p>
+<p>A SAWScript program is typically structured as a sequence of commands,
+potentially along with definitions of functions that abstract over
+commonly-used combinations of commands.</p>
+<p>The following script (in <code class="docutils literal notranslate"><span class="pre">ffs_llvm.saw</span></code>) is sufficient to automatically
+prove the equivalence of <code class="docutils literal notranslate"><span class="pre">ffs_ref</span></code> with <code class="docutils literal notranslate"><span class="pre">ffs_imp</span></code> and <code class="docutils literal notranslate"><span class="pre">ffs_musl</span></code>, and
+identify the bug in <code class="docutils literal notranslate"><span class="pre">ffs_bug</span></code>.</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">set_base</span><span class="w"> </span><span class="mi">16</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Extracting reference term: ffs_ref&quot;</span><span class="p">;</span>
+<span class="n">l</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_load_module</span><span class="w"> </span><span class="s2">&quot;ffs.bc&quot;</span><span class="p">;</span>
+<span class="n">ffs_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_extract</span><span class="w"> </span><span class="n">l</span><span class="w"> </span><span class="s2">&quot;ffs_ref&quot;</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Extracting implementation term: ffs_imp&quot;</span><span class="p">;</span>
+<span class="n">ffs_imp</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_extract</span><span class="w"> </span><span class="n">l</span><span class="w"> </span><span class="s2">&quot;ffs_imp&quot;</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Extracting implementation term: ffs_musl&quot;</span><span class="p">;</span>
+<span class="n">ffs_musl</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_extract</span><span class="w"> </span><span class="n">l</span><span class="w"> </span><span class="s2">&quot;ffs_musl&quot;</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Extracting buggy term: ffs_bug&quot;</span><span class="p">;</span>
+<span class="n">ffs_bug</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_extract</span><span class="w"> </span><span class="n">l</span><span class="w"> </span><span class="s2">&quot;ffs_bug&quot;</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Proving equivalence: ffs_ref == ffs_imp&quot;</span><span class="p">;</span>
+<span class="kr">let</span><span class="w"> </span><span class="n">thm1</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">ffs_ref</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">ffs_imp</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">result</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">prove</span><span class="w"> </span><span class="n">abc</span><span class="w"> </span><span class="n">thm1</span><span class="p">;</span>
+<span class="n">print</span><span class="w"> </span><span class="n">result</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Proving equivalence: ffs_ref == ffs_musl&quot;</span><span class="p">;</span>
+<span class="kr">let</span><span class="w"> </span><span class="n">thm2</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">ffs_ref</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">ffs_musl</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">result</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">prove</span><span class="w"> </span><span class="n">abc</span><span class="w"> </span><span class="n">thm2</span><span class="p">;</span>
+<span class="n">print</span><span class="w"> </span><span class="n">result</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Finding bug via sat search: ffs_ref != ffs_bug&quot;</span><span class="p">;</span>
+<span class="kr">let</span><span class="w"> </span><span class="n">thm3</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">ffs_ref</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">!</span><span class="ow">=</span><span class="w"> </span><span class="nf">ffs_bug</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">result</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">sat</span><span class="w"> </span><span class="n">abc</span><span class="w"> </span><span class="n">thm3</span><span class="p">;</span>
+<span class="n">print</span><span class="w"> </span><span class="n">result</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Finding bug via failed proof: ffs_ref == ffs_bug&quot;</span><span class="p">;</span>
+<span class="kr">let</span><span class="w"> </span><span class="n">thm4</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">ffs_ref</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">ffs_bug</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">result</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">prove</span><span class="w"> </span><span class="n">abc</span><span class="w"> </span><span class="n">thm4</span><span class="p">;</span>
+<span class="n">print</span><span class="w"> </span><span class="n">result</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Done.&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>In this script, the <code class="docutils literal notranslate"><span class="pre">print</span></code> commands simply display text for the user.
+The <code class="docutils literal notranslate"><span class="pre">llvm_extract</span></code> command instructs the SAWScript interpreter
+to perform symbolic simulation of the given C function (e.g., <code class="docutils literal notranslate"><span class="pre">ffs_ref</span></code>)
+from a given bitcode file (e.g., <code class="docutils literal notranslate"><span class="pre">ffs.bc</span></code>), and return a term
+representing the semantics of the function.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">let</span></code> statement then constructs a new term corresponding to the
+assertion of equality between two existing terms.  Arbitrary
+Cryptol expressions can be embedded within SAWScript; to distinguish
+Cryptol code from SAWScript commands, the Cryptol code is placed
+within double brackets <code class="docutils literal notranslate"><span class="pre">{{</span></code> and <code class="docutils literal notranslate"><span class="pre">}}</span></code>.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">prove</span></code> command can verify the validity of such an assertion, or
+produce a counter-example that invalidates it. The <code class="docutils literal notranslate"><span class="pre">abc</span></code> parameter
+indicates what theorem prover to use; SAWScript offers support for many
+other SAT and SMT solvers as well as user definable simplification
+tactics.</p>
+<p>Similarly, the <code class="docutils literal notranslate"><span class="pre">sat</span></code> command works in the opposite direction to <code class="docutils literal notranslate"><span class="pre">prove</span></code>.
+It attempts to find a value for which the given assertion is true, and
+fails if there is no such value.</p>
+<p>If the <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable is in your PATH, you can run the script above with</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw<span class="w"> </span>ffs_llvm.saw
+
+
+
+<span class="go">Loading file &quot;ffs_llvm.saw&quot;</span>
+<span class="go">Extracting reference term: ffs_ref</span>
+<span class="go">Extracting implementation term: ffs_imp</span>
+<span class="go">Extracting implementation term: ffs_musl</span>
+<span class="go">Extracting buggy term: ffs_bug</span>
+<span class="go">Proving equivalence: ffs_ref == ffs_imp</span>
+<span class="go">Valid</span>
+<span class="go">Proving equivalence: ffs_ref == ffs_musl</span>
+<span class="go">Valid</span>
+<span class="go">Finding bug via sat search: ffs_ref != ffs_bug</span>
+<span class="go">Sat: [x = 0x101010]</span>
+<span class="go">Finding bug via failed proof: ffs_ref == ffs_bug</span>
+<span class="go">prove: 1 unsolved subgoal(s)</span>
+<span class="go">Invalid: [x = 0x101010]</span>
+<span class="go">Done.</span>
+</pre></div>
+</div>
+<p>Note that both explicitly searching for an input exhibiting the bug
+(with <code class="docutils literal notranslate"><span class="pre">sat</span></code>) and attempting to prove the false equivalence (with
+<code class="docutils literal notranslate"><span class="pre">prove</span></code>) exhibit the bug. Symmetrically, we could use <code class="docutils literal notranslate"><span class="pre">sat</span></code> to prove the
+equivalence of <code class="docutils literal notranslate"><span class="pre">ffs_ref</span></code> and <code class="docutils literal notranslate"><span class="pre">ffs_imp</span></code>, by checking that the
+corresponding disequality is unsatisfiable. Indeed, this exactly what
+happens behind the scenes: <code class="docutils literal notranslate"><span class="pre">prove</span> <span class="pre">abc</span> <span class="pre">&lt;goal&gt;</span></code> is essentially <code class="docutils literal notranslate"><span class="pre">not</span> <span class="pre">(sat</span> <span class="pre">abc</span> <span class="pre">(not</span> <span class="pre">&lt;goal&gt;))</span></code>.</p>
+</section>
+<section id="cross-language-proofs">
+<h2>Cross-Language Proofs<a class="headerlink" href="#cross-language-proofs" title="Link to this heading"></a></h2>
+<p>We can implement the FFS algorithm in Java with code almost identical
+to the C version.</p>
+<p>The reference version (in <code class="docutils literal notranslate"><span class="pre">FFS.java</span></code>) uses a loop, like the C version:</p>
+<div class="highlight-java notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="kd">static</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="nf">ffs_ref</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">word</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">        </span><span class="k">if</span><span class="p">(</span><span class="n">word</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">        </span><span class="k">for</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">cnt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">cnt</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">32</span><span class="p">;</span><span class="w"> </span><span class="n">cnt</span><span class="o">++</span><span class="p">)</span>
+<span class="w">            </span><span class="k">if</span><span class="p">(((</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">word</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+<span class="w">                </span><span class="k">return</span><span class="w"> </span><span class="n">i</span><span class="p">;</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>And the efficient implementation uses a fixed sequence of masking and
+shifting operations:</p>
+<div class="highlight-java notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="kd">static</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="nf">ffs_imp</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kt">byte</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">((</span><span class="n">i</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0xffff</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">16</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&gt;&gt;=</span><span class="w"> </span><span class="mi">16</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">((</span><span class="n">i</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x00ff</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">+=</span><span class="w">  </span><span class="mi">8</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&gt;&gt;=</span><span class="w">  </span><span class="mi">8</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">((</span><span class="n">i</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x000f</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">+=</span><span class="w">  </span><span class="mi">4</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&gt;&gt;=</span><span class="w">  </span><span class="mi">4</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">((</span><span class="n">i</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x0003</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">+=</span><span class="w">  </span><span class="mi">2</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&gt;&gt;=</span><span class="w">  </span><span class="mi">2</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="o">+</span><span class="p">((</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x01</span><span class="p">));</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>Although in this case we can look at the C and Java code and see that
+they perform almost identical operations, the low-level operators
+available in C and Java do differ somewhat. Therefore, it would be
+nice to be able to gain confidence that they do, indeed, perform the
+same operation.</p>
+<p>We can do this with a process very similar to that used to compare the
+reference and implementation versions of the algorithm in a single
+language.</p>
+<p>First, we compile the Java code to a JVM class file.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>javac<span class="w"> </span>-g<span class="w"> </span>FFS.java
+</pre></div>
+</div>
+<p>Like with <code class="docutils literal notranslate"><span class="pre">clang</span></code>, the <code class="docutils literal notranslate"><span class="pre">-g</span></code> flag instructs <code class="docutils literal notranslate"><span class="pre">javac</span></code> to include debugging
+information, which can be useful to preserve variable names.</p>
+<p>Using <code class="docutils literal notranslate"><span class="pre">saw</span></code> with Java code requires a command-line option <code class="docutils literal notranslate"><span class="pre">-b</span></code> that
+locates Java. Run the code in this section with the command:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw<span class="w"> </span>-b<span class="w"> </span>&lt;path<span class="w"> </span>to<span class="w"> </span>directory<span class="w"> </span>where<span class="w"> </span>Java<span class="w"> </span>lives&gt;<span class="w"> </span>ffs_compare.saw
+</pre></div>
+</div>
+<p>Alternatively, if Java is located on your <code class="docutils literal notranslate"><span class="pre">PATH</span></code>, you can omit the <code class="docutils literal notranslate"><span class="pre">-b</span></code>
+option entirely.</p>
+<p>Both Oracle JDK and OpenJDK versions 6 through 8 work well with SAW.
+SAW also includes experimental support for JDK 9 and later. Code that only
+involves primitive data types (such as <code class="docutils literal notranslate"><span class="pre">FFS.java</span></code> above) is known to work well
+under JDK 9+, but there are some as-of-yet unresolved issues in verifying code
+involving classes such as <code class="docutils literal notranslate"><span class="pre">String</span></code>. For more information on these issues, refer
+to <a class="reference external" href="https://github.com/GaloisInc/crucible/issues/641">this GitHub issue</a>.</p>
+<p>Now we can do the proof both within and across languages (from
+<code class="docutils literal notranslate"><span class="pre">ffs_compare.saw</span></code>):</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">import</span><span class="w"> </span><span class="s2">&quot;ffs.cry&quot;</span><span class="p">;</span>
+<span class="n">j</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">java_load_class</span><span class="w"> </span><span class="s2">&quot;FFS&quot;</span><span class="p">;</span>
+<span class="n">java_ffs_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">jvm_extract</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="s2">&quot;ffs_ref&quot;</span><span class="p">;</span>
+<span class="n">java_ffs_imp</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">jvm_extract</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="s2">&quot;ffs_imp&quot;</span><span class="p">;</span>
+
+<span class="n">l</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_load_module</span><span class="w"> </span><span class="s2">&quot;ffs.bc&quot;</span><span class="p">;</span>
+<span class="n">c_ffs_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_extract</span><span class="w"> </span><span class="n">l</span><span class="w"> </span><span class="s2">&quot;ffs_ref&quot;</span><span class="p">;</span>
+<span class="n">c_ffs_imp</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_extract</span><span class="w"> </span><span class="n">l</span><span class="w"> </span><span class="s2">&quot;ffs_imp&quot;</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;java ref &lt;-&gt; java imp&quot;</span><span class="p">;</span>
+<span class="kr">let</span><span class="w"> </span><span class="n">thm1</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">java_ffs_ref</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">java_ffs_imp</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">prove_print</span><span class="w"> </span><span class="n">abc</span><span class="w"> </span><span class="n">thm1</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;c ref &lt;-&gt; c imp&quot;</span><span class="p">;</span>
+<span class="kr">let</span><span class="w"> </span><span class="n">thm2</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">c_ffs_ref</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">c_ffs_imp</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">prove_print</span><span class="w"> </span><span class="n">abc</span><span class="w"> </span><span class="n">thm2</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;java imp &lt;-&gt; c imp&quot;</span><span class="p">;</span>
+<span class="kr">let</span><span class="w"> </span><span class="n">thm3</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">java_ffs_imp</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">c_ffs_imp</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">prove_print</span><span class="w"> </span><span class="n">abc</span><span class="w"> </span><span class="n">thm3</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;cryptol imp &lt;-&gt; c imp&quot;</span><span class="p">;</span>
+<span class="kr">let</span><span class="w"> </span><span class="n">thm4</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">ffs_imp</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">c_ffs_imp</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">prove_print</span><span class="w"> </span><span class="n">abc</span><span class="w"> </span><span class="n">thm4</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;cryptol imp &lt;-&gt; cryptol ref&quot;</span><span class="p">;</span>
+<span class="kr">let</span><span class="w"> </span><span class="n">thm5</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">ffs_imp</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">ffs_ref</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">prove_print</span><span class="w"> </span><span class="n">abc</span><span class="w"> </span><span class="n">thm5</span><span class="p">;</span>
+
+<span class="n">print</span><span class="w"> </span><span class="s2">&quot;Done.&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Here, the <code class="docutils literal notranslate"><span class="pre">jvm_extract</span></code> function works like <code class="docutils literal notranslate"><span class="pre">llvm_extract</span></code>, but on a
+Java class and method name. The <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> command works similarly
+to the <code class="docutils literal notranslate"><span class="pre">prove</span></code> followed by <code class="docutils literal notranslate"><span class="pre">print</span></code> combination used for the LLVM
+example above.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="introduction.html" class="btn btn-neutral float-left" title="Introduction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="using-smt-lib-solvers.html" class="btn btn-neutral float-right" title="Using SMT-Lib Solvers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.4
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
