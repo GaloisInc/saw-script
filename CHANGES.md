@@ -280,7 +280,7 @@ This release supports [version
 * Fix a bug that would cause SAW to crash when verifying a `mir_return`
   statement returning a `Vec` that was allocated in a postcondition.
 
-# Version 1.4 -- date still TBD
+# Version 1.4 -- 2025-11-18
 
 This release supports [version
 4](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#4) of
