@@ -1952,7 +1952,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1933 </span><span class="spaces">    </span><span class="istickedoff">filterFirstOrderVars mmap fovars absvars ((x, t) : es) =</span>
 <span class="lineno"> 1934 </span><span class="spaces">      </span><span class="istickedoff">case evalFOT mmap t of</span>
 <span class="lineno"> 1935 </span><span class="spaces">         </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">filterFirstOrderVars mmap fovars (Set.insert (vnIndex x) absvars) es</span></span>
-<span class="lineno"> 1936 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert x <span class="nottickedoff">fot</span> fovars) absvars es</span>
+<span class="lineno"> 1936 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert x fot fovars) absvars es</span>
 <span class="lineno"> 1937 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1938 </span><span class="spaces">    </span><span class="istickedoff">processAssert mmap tp =</span>
 <span class="lineno"> 1939 </span><span class="spaces">      </span><span class="istickedoff">case asEqTrue tp of</span>
@@ -1969,7 +1969,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1950 </span><span class="spaces">                </span><span class="istickedoff">let tp' = tp</span>
 <span class="lineno"> 1951 </span><span class="spaces">                </span><span class="istickedoff">case evalFOT mmap tp' of</span>
 <span class="lineno"> 1952 </span><span class="spaces">                  </span><span class="istickedoff">Just fot -&gt;</span>
-<span class="lineno"> 1953 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((nm, <span class="nottickedoff">fot</span>) : vars) xs body</span>
+<span class="lineno"> 1953 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((nm, fot) : vars) xs body</span>
 <span class="lineno"> 1954 </span><span class="spaces">                  </span><span class="istickedoff">Nothing</span>
 <span class="lineno"> 1955 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">IntSet.null (foldr IntSet.delete (freeVars body) (map (vnIndex . fst) vars))</span> -&gt;</span>
 <span class="lineno"> 1956 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">case asEqTrue tp' of</span></span>

@@ -1529,7 +1529,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1510 </span><span class="spaces">        </span><span class="istickedoff">rhs' &lt;- case declOpts of</span>
 <span class="lineno"> 1511 </span><span class="spaces">                  </span><span class="istickedoff">TopLevelDeclGroup _ -&gt;</span>
 <span class="lineno"> 1512 </span><span class="spaces">                    </span><span class="istickedoff">do nmi &lt;- importName nm</span>
-<span class="lineno"> 1513 </span><span class="spaces">                       </span><span class="istickedoff">scDefineConstant sc nmi rhs <span class="nottickedoff">t'</span></span>
+<span class="lineno"> 1513 </span><span class="spaces">                       </span><span class="istickedoff">scDefineConstant sc nmi rhs t'</span>
 <span class="lineno"> 1514 </span><span class="spaces">                  </span><span class="istickedoff">NestedDeclGroup -&gt;</span>
 <span class="lineno"> 1515 </span><span class="spaces">                    </span><span class="istickedoff">return rhs</span>
 <span class="lineno"> 1516 </span><span class="spaces">        </span><span class="istickedoff">return env0 { envE = Map.insert nm rhs' (envE env0)</span>

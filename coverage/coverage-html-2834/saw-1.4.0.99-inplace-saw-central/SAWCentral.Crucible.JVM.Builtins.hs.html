@@ -432,7 +432,7 @@ span.spaces    { background: white }
 <span class="lineno">  413 </span><span class="spaces">             </span><span class="istickedoff">JVMPointsToField _ a fid _ -&gt; (<span class="nottickedoff">as</span>, <span class="nottickedoff">es</span>, Map.insertWith <span class="nottickedoff">(++)</span> a [fid] fs)</span>
 <span class="lineno">  414 </span><span class="spaces">             </span><span class="istickedoff">JVMPointsToStatic{} -&gt; (<span class="nottickedoff">as</span>, <span class="nottickedoff">es</span>, fs)</span>
 <span class="lineno">  415 </span><span class="spaces">             </span><span class="istickedoff">JVMPointsToElem _ a i _ -&gt; (as, Map.insertWith <span class="nottickedoff">(++)</span> a [i] es, fs)</span>
-<span class="lineno">  416 </span><span class="spaces">             </span><span class="istickedoff">JVMPointsToArray _ a _ -&gt; (Set.insert a as, es, fs)</span>
+<span class="lineno">  416 </span><span class="spaces">             </span><span class="istickedoff">JVMPointsToArray _ a _ -&gt; (Set.insert a as, <span class="nottickedoff">es</span>, fs)</span>
 <span class="lineno">  417 </span><span class="spaces">     </span><span class="istickedoff">let (updatedArrays, updatedElems, updatedFields) =</span>
 <span class="lineno">  418 </span><span class="spaces">           </span><span class="istickedoff">foldr addUpdates (Set.empty, Map.empty, Map.empty) postPointsTos</span>
 <span class="lineno">  419 </span><span class="spaces"></span><span class="istickedoff"></span>
