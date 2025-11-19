@@ -230,14 +230,20 @@ jobs:
       # apparently impossible to restrict scheduled runs to the
       # original repository; they will also always run in forks.
       # See https://github.com/orgs/community/discussions/16109.
-      - if: matrix.ghc == '9.4.8' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
+      - if: matrix.ghc == '9.4.8' &&
+            github.event.pull_request.head.repo.fork == false &&
+            github.repository_owner == 'GaloisInc' &&
+            github.actor != 'dependabot[bot]'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '9.4.8' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
+      - if: matrix.ghc == '9.4.8' &&
+            github.event.pull_request.head.repo.fork == false &&
+            github.repository_owner == 'GaloisInc' &&
+            github.actor != 'dependabot[bot]'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
@@ -314,7 +320,10 @@ jobs:
     # Run this piece only on tag builds, which in practice means release
     # tags only. Skip running it on forks as well, because we won't have
     # the signing key there.
-    if: github.event_name == 'push' && needs.config.outputs.tag == 'true' && github.repository_owner == 'GaloisInc'
+    if: github.event_name == 'push' &&
+        needs.config.outputs.tag == 'true' &&
+        github.repository_owner == 'GaloisInc' &&
+        github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
     steps:
@@ -392,7 +401,10 @@ jobs:
     # will trigger a branch run, and then tagging it will trigger a
     # separate tag run.
     #
-    if: github.event_name == 'push' && needs.config.outputs.release == 'false' && github.repository_owner == 'GaloisInc'
+    if: github.event_name == 'push' &&
+        needs.config.outputs.release == 'false' &&
+        github.repository_owner == 'GaloisInc' &&
+        github.actor != 'dependabot[bot]'
     strategy:
       matrix:
         os: [ubuntu-24.04]
@@ -739,8 +751,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Do not run this job in forks, as the deployment to GitHub pages will fail
     # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
-    # organization (see #2216).
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
+    # organization (see #2216). Also exclude dependabot, because it apparently
+    # works like a fork but isn't one. See crucible #1642 for discussion.
+    if: github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.fork == false &&
+        github.repository_owner == 'GaloisInc' &&
+        github.actor != 'dependabot[bot]'
     strategy:
       matrix:
         suite: ['integration-tests']
@@ -843,7 +859,9 @@ jobs:
     # will be available. As noted above, scheduled runs also happen in
     # forks. It would be nice to run all of it but the final push step,
     # but we appear to need docker login to build.
-    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true') && github.repository_owner == 'GaloisInc'
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true') &&
+        github.repository_owner == 'GaloisInc' &&
+        github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
