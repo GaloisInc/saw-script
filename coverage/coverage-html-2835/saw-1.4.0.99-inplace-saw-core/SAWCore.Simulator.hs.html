@@ -335,7 +335,7 @@ span.spaces    { background: white }
 <span class="lineno">  316 </span><span class="spaces">          </span><span class="istickedoff">do e' &lt;- apply e x</span>
 <span class="lineno">  317 </span><span class="spaces">             </span><span class="istickedoff">go e' xs args</span>
 <span class="lineno">  318 </span><span class="spaces">        </span><span class="istickedoff">RecursiveArg zs _ixs -&gt;</span>
-<span class="lineno">  319 </span><span class="spaces">          </span><span class="istickedoff">do e1 &lt;- apply e x</span>
+<span class="lineno">  319 </span><span class="spaces">          </span><span class="istickedoff">do e1 &lt;- apply e <span class="nottickedoff">x</span></span>
 <span class="lineno">  320 </span><span class="spaces">             </span><span class="istickedoff">recx &lt;- delay (mk_rec_arg (length zs) x)</span>
 <span class="lineno">  321 </span><span class="spaces">             </span><span class="istickedoff">e2 &lt;- apply e1 recx</span>
 <span class="lineno">  322 </span><span class="spaces">             </span><span class="istickedoff">go e2 xs args</span>
@@ -643,7 +643,7 @@ span.spaces    { background: white }
 <span class="lineno">  624 </span><span class="spaces">    </span><span class="istickedoff">recEval (t@STApp{ stAppIndex = i, stAppTermF = tf }) =</span>
 <span class="lineno">  625 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup i memo of</span>
 <span class="lineno">  626 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; force x</span>
-<span class="lineno">  627 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; evalTermF <span class="nottickedoff">cfg</span> lam recEval tf env</span>
+<span class="lineno">  627 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; evalTermF <span class="nottickedoff">cfg</span> <span class="nottickedoff">lam</span> recEval tf env</span>
 <span class="lineno">  628 </span><span class="spaces">      </span><span class="istickedoff">where memo = if closedTerm t then memoClosed else memoLocal</span></span>
 <span class="lineno">  629 </span>
 <span class="lineno">  630 </span>{-# SPECIALIZE evalOpen ::
