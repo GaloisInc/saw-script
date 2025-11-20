@@ -1,0 +1,125 @@
+let lemma s = do {thm <- prove_core trivial s; print thm;};
+
+lemma "Eq Pos (posInc One) (Bit0 One)";
+lemma "(x : Pos) -> Eq Pos (posInc (Bit0 x)) (Bit1 x)";
+lemma "(x : Pos) -> Eq Pos (posInc (Bit1 x)) (Bit0 (posInc x))";
+
+lemma "(y : Pos) -> Eq Pos (posAdd One One) (Bit0 One)";
+lemma "(y : Pos) -> Eq Pos (posAdd One (Bit0 y)) (Bit1 y)";
+lemma "(y : Pos) -> Eq Pos (posAdd One (Bit1 y)) (Bit0 (posInc y))";
+lemma "(x : Pos) -> Eq Pos (posAdd (Bit0 x) One) (Bit1 x)";
+lemma "(x : Pos) -> Eq Pos (posAdd (Bit1 x) One) (Bit0 (posInc x))";
+lemma "(x y : Pos) -> Eq Pos (posAdd (Bit0 x) (Bit0 y)) (Bit0 (posAdd x y))";
+lemma "(x y : Pos) -> Eq Pos (posAdd (Bit0 x) (Bit1 y)) (Bit1 (posAdd x y))";
+lemma "(x y : Pos) -> Eq Pos (posAdd (Bit1 x) (Bit0 y)) (Bit1 (posAdd x y))";
+lemma "(x y : Pos) -> Eq Pos (posAdd (Bit1 x) (Bit1 y)) (Bit0 (posInc (posAdd x y)))";
+
+lemma "(x : Pos) -> Eq Pos (posMul x One) x";
+lemma "(x y : Pos) -> Eq Pos (posMul x (Bit0 y)) (Bit0 (posMul x y))";
+lemma "(x y : Pos) -> Eq Pos (posMul x (Bit1 y)) (posAdd x (Bit0 (posMul x y)))";
+
+lemma "(k : Bool) -> Eq Bool (posCmp One One k) k";
+lemma "(y : Pos) -> (k : Bool) -> Eq Bool (posCmp One (Bit0 y) k) True";
+lemma "(y : Pos) -> (k : Bool) -> Eq Bool (posCmp One (Bit1 y) k) True";
+lemma "(x : Pos) -> (k : Bool) -> Eq Bool (posCmp (Bit0 x) One k) False";
+lemma "(x : Pos) -> (k : Bool) -> Eq Bool (posCmp (Bit1 x) One k) False";
+lemma "(x y : Pos) -> (k : Bool) -> Eq Bool (posCmp (Bit0 x) (Bit0 y) k) (posCmp x y k)";
+lemma "(x y : Pos) -> (k : Bool) -> Eq Bool (posCmp (Bit0 x) (Bit1 y) k) (posCmp x y True)";
+lemma "(x y : Pos) -> (k : Bool) -> Eq Bool (posCmp (Bit1 x) (Bit0 y) k) (posCmp x y False)";
+lemma "(x y : Pos) -> (k : Bool) -> Eq Bool (posCmp (Bit1 x) (Bit1 y) k) (posCmp x y k)";
+
+lemma "Eq Bool (posLe One One) True";
+lemma "(y : Pos) -> Eq Bool (posLe One (Bit0 y)) True";
+lemma "(y : Pos) -> Eq Bool (posLe One (Bit1 y)) True";
+lemma "(x : Pos) -> Eq Bool (posLe (Bit0 x) One) False";
+lemma "(x : Pos) -> Eq Bool (posLe (Bit1 x) One) False";
+lemma "(x y : Pos) -> Eq Bool (posLe (Bit0 x) (Bit0 y)) (posLe x y)";
+lemma "(x y : Pos) -> Eq Bool (posLe (Bit0 x) (Bit1 y)) (posLe x y)";
+lemma "(x y : Pos) -> Eq Bool (posLe (Bit1 x) (Bit0 y)) (posLt x y)";
+lemma "(x y : Pos) -> Eq Bool (posLe (Bit1 x) (Bit1 y)) (posLe x y)";
+
+lemma "Eq Bool (posLt One One) False";
+lemma "(y : Pos) -> Eq Bool (posLt One (Bit0 y)) True";
+lemma "(y : Pos) -> Eq Bool (posLt One (Bit1 y)) True";
+lemma "(x : Pos) -> Eq Bool (posLt (Bit0 x) One) False";
+lemma "(x : Pos) -> Eq Bool (posLt (Bit1 x) One) False";
+lemma "(x y : Pos) -> Eq Bool (posLt (Bit0 x) (Bit0 y)) (posLt x y)";
+lemma "(x y : Pos) -> Eq Bool (posLt (Bit0 x) (Bit1 y)) (posLe x y)";
+lemma "(x y : Pos) -> Eq Bool (posLt (Bit1 x) (Bit0 y)) (posLt x y)";
+lemma "(x y : Pos) -> Eq Bool (posLt (Bit1 x) (Bit1 y)) (posLt x y)";
+
+lemma "Eq Nat (Succ Zero) (NatPos One)";
+lemma "(x : Pos) -> Eq Nat (Succ (NatPos x)) (NatPos (posInc x))";
+
+lemma "Eq Nat (addNat Zero Zero) Zero";
+lemma "(y : Pos) -> Eq Nat (addNat Zero (NatPos y)) (NatPos y)";
+lemma "(x : Pos) -> Eq Nat (addNat (NatPos x) Zero) (NatPos x)";
+lemma "(x y : Pos) -> Eq Nat (addNat (NatPos x) (NatPos y)) (NatPos (posAdd x y))";
+
+lemma "Eq Nat (mulNat Zero Zero) Zero";
+lemma "(y : Pos) -> Eq Nat (mulNat Zero (NatPos y)) Zero";
+lemma "(x : Pos) -> Eq Nat (mulNat (NatPos x) Zero) Zero";
+lemma "(x y : Pos) -> Eq Nat (mulNat (NatPos x) (NatPos y)) (NatPos (posMul x y))";
+
+//lemma "Eq Nat (expNat Zero Zero) (NatPos One)";
+lemma "(y : Pos) -> Eq Nat (expNat Zero (NatPos y)) Zero";
+lemma "(x : Pos) -> Eq Nat (expNat (NatPos x) Zero) (NatPos One)";
+lemma "(x y : Pos) -> Eq Nat (expNat (NatPos x) (NatPos y)) (NatPos (posExp x y))";
+
+lemma "Eq Bool (equalNat Zero Zero) True";
+lemma "(y : Pos) -> Eq Bool (equalNat Zero (NatPos y)) False";
+lemma "(x : Pos) -> Eq Bool (equalNat (NatPos x) Zero) False";
+lemma "(x y : Pos) -> Eq Bool (equalNat (NatPos x) (NatPos y)) (posEq x y)";
+
+lemma "Eq Bool (ltNat Zero Zero) False";
+lemma "(y : Pos) -> Eq Bool (ltNat Zero (NatPos y)) True";
+lemma "(x : Pos) -> Eq Bool (ltNat (NatPos x) Zero) False";
+lemma "(x y : Pos) -> Eq Bool (ltNat (NatPos x) (NatPos y)) (posLt x y)";
+
+lemma "Eq Bool (leNat Zero Zero) True";
+lemma "(y : Pos) -> Eq Bool (leNat Zero (NatPos y)) True";
+lemma "(x : Pos) -> Eq Bool (leNat (NatPos x) Zero) False";
+lemma "(x y : Pos) -> Eq Bool (leNat (NatPos x) (NatPos y)) (posLe x y)";
+
+lemma "Eq Nat (widthNat Zero) 0";
+lemma "Eq Nat (widthNat (NatPos One)) 1";
+lemma "(x : Pos) -> Eq Nat (widthNat (NatPos (Bit0 x))) (Succ (widthNat (NatPos x)))";
+lemma "(x : Pos) -> Eq Nat (widthNat (NatPos (Bit1 x))) (Succ (widthNat (NatPos x)))";
+
+lemma "Eq Pos (BitM One) One";
+lemma "(x : Pos) -> Eq Pos (BitM (Bit0 x)) (Bit1 (BitM x))";
+lemma "(x : Pos) -> Eq Pos (BitM (Bit1 x)) (Bit1 (Bit0 x))";
+
+lemma "Eq Z (dblZ ZZero) ZZero";
+lemma "(x : Pos) -> Eq Z (dblZ (ZPos x)) (ZPos (Bit0 x))";
+lemma "(x : Pos) -> Eq Z (dblZ (ZNeg x)) (ZNeg (Bit0 x))";
+
+lemma "Eq Z (dblZinc ZZero) (ZPos One)";
+lemma "(x : Pos) -> Eq Z (dblZinc (ZPos x)) (ZPos (Bit1 x))";
+lemma "(x : Pos) -> Eq Z (dblZinc (ZNeg x)) (ZNeg (BitM x))";
+
+lemma "Eq Z (dblZdec ZZero) (ZNeg One)";
+lemma "(x : Pos) -> Eq Z (dblZdec (ZPos x)) (ZPos (BitM x))";
+lemma "(x : Pos) -> Eq Z (dblZdec (ZNeg x)) (ZNeg (Bit1 x))";
+
+lemma "(y : Pos) -> Eq Z (posSub One One) ZZero";
+lemma "(y : Pos) -> Eq Z (posSub One (Bit0 y)) (ZNeg (BitM y))";
+lemma "(y : Pos) -> Eq Z (posSub One (Bit1 y)) (ZNeg (Bit0 y))";
+lemma "(x : Pos) -> Eq Z (posSub (Bit0 x) One) (ZPos (BitM x))";
+lemma "(x : Pos) -> Eq Z (posSub (Bit1 x) One) (ZPos (Bit0 x))";
+lemma "(x y : Pos) -> Eq Z (posSub (Bit0 x) (Bit0 y)) (dblZ (posSub x y))";
+lemma "(x y : Pos) -> Eq Z (posSub (Bit0 x) (Bit1 y)) (dblZdec (posSub x y))";
+lemma "(x y : Pos) -> Eq Z (posSub (Bit1 x) (Bit0 y)) (dblZinc (posSub x y))";
+lemma "(x y : Pos) -> Eq Z (posSub (Bit1 x) (Bit1 y)) (dblZ (posSub x y))";
+
+lemma "Eq Z (subNZ Zero Zero) ZZero";
+lemma "(y : Pos) -> Eq Z (subNZ Zero (NatPos y)) (ZNeg y)";
+lemma "(x : Pos) -> Eq Z (subNZ (NatPos x) Zero) (ZPos x)";
+lemma "(x y : Pos) -> Eq Z (subNZ (NatPos x) (NatPos y)) (posSub x y)";
+
+lemma "Eq Nat (ZtoNat ZZero) Zero";
+lemma "(x : Pos) -> Eq Nat (ZtoNat (ZPos x)) (NatPos x)";
+lemma "(x : Pos) -> Eq Nat (ZtoNat (ZNeg x)) Zero";
+
+lemma "Eq Nat (doubleNat Zero) Zero";
+lemma "(x : Pos) -> Eq Nat (doubleNat (NatPos x)) (NatPos (Bit0 x))";
