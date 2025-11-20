@@ -1,0 +1,3 @@
+ Loading file "err064.saw"
+ err064.saw:9:12-9:13: Unbound variable: "x" (err064.saw:9:12-9:13)
+FAILED

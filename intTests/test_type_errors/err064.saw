@@ -1,0 +1,13 @@
+// make sure nested do-blocks are scoped
+// (cut-down version of the example from #2824)
+
+let f = do {
+    let g = do {
+        x <- return 42;
+        return ();
+    };
+    return x;
+};
+
+q <- f;
+print q;
