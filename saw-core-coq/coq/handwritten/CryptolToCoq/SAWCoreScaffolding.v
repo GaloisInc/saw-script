@@ -5,6 +5,7 @@ From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
 From Coq Require Export Logic.Eqdep.
+From Coq Require Import Arith.PeanoNat.
 
 
 (***
@@ -206,8 +207,10 @@ Global Instance Inhabited_Nat : Inhabited Nat :=
 Global Instance Inhabited_nat : Inhabited nat :=
   MkInhabited nat 0%nat.
 
-Global Hint Resolve (0%nat : nat) : inh.
-Global Hint Resolve (0%nat : Nat) : inh.
+Definition inh_nat_witness : nat := 0%nat.
+Definition inh_Nat_witness : Nat := 0%nat.
+Global Hint Resolve inh_nat_witness : inh.
+Global Hint Resolve inh_Nat_witness : inh.
 
 Definition IsLeNat := @le.
 Definition IsLeNat_base (n:nat) : IsLeNat n n := le_n n.
@@ -350,8 +353,10 @@ Global Instance Inhabited_Intger : Inhabited Integer :=
 Global Instance Inhabited_Z : Inhabited Z :=
   MkInhabited Z 0%Z.
 
-Global Hint Resolve (0%Z : Z) : inh.
-Global Hint Resolve (0%Z : Integer) : inh.
+Definition inh_Z_witness : Z := 0%Z.
+Definition inh_Integer_witness : Integer := 0%Z.
+Global Hint Resolve inh_Z_witness : inh.
+Global Hint Resolve inh_Integer_witness : inh.
 
 
 (***
