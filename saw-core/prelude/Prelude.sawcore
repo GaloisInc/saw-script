@@ -969,14 +969,16 @@ mulNat =
 
 -- | Natural exponentiation
 expNat : Nat -> Nat -> Nat;
-expNat =
-  Nat#rec (\ (_ : Nat) -> Nat -> Nat)
-  (\ (_ : Nat) -> Zero)
-  (\ (x : Pos) ->
+expNat m n =
+  Nat#rec (\ (_ : Nat) -> Nat)
+  (NatPos One)
+  (\ (y : Pos) ->
    Nat#rec (\ (_ : Nat) -> Nat)
-   (NatPos One)
-   (\ (y : Pos) -> NatPos (posExp x y))
-  );
+   Zero
+   (\ (x : Pos) -> NatPos (posExp x y))
+   m
+  )
+  n;
 
 equalNat : Nat -> Nat -> Bool;
 equalNat =
