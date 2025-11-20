@@ -1088,6 +1088,50 @@ subNat : Nat -> Nat -> Nat;
 subNat x y = ZtoNat (subNZ x y);
 
 --------------------------------------------------------------------------------
+-- Division on Nat
+
+doubleNat : Nat -> Nat;
+doubleNat =
+  Nat#rec (\ (_ : Nat) -> Nat)
+  Zero
+  (\ (x : Pos) -> NatPos (Bit0 x));
+
+posDivMod : Pos -> Nat -> Nat * Nat;
+posDivMod x d =
+  Pos_cases (Nat * Nat)
+  (ite (Nat * Nat) (equalNat d 1) (1, 0) (0, 1))
+  (\ (_ : Pos) (qr : Nat * Nat) ->
+    (\ (r' : Nat) ->
+      ite (Nat * Nat) (leNat d r')
+      (Succ (doubleNat qr.(1)), subNat r' d)
+      (doubleNat qr.(1), r')
+    )
+    (doubleNat qr.(2))
+  )
+  (\ (_ : Pos) (qr : Nat * Nat) ->
+    (\ (r' : Nat) ->
+      ite (Nat * Nat) (leNat d r')
+      (Succ (doubleNat qr.(1)), subNat r' d)
+      (doubleNat qr.(1), r')
+    )
+    (Succ (doubleNat qr.(2)))
+  )
+  x;
+
+-- | Natural division and modulus
+divModNat: Nat -> Nat -> Nat * Nat;
+divModNat =
+  Nat#rec (\ (_ : Nat) -> Nat -> Nat * Nat)
+  (\ (d : Nat) -> (0, 0))
+  posDivMod;
+
+divNat : Nat -> Nat -> Nat;
+divNat x y = (divModNat x y).(1);
+
+modNat : Nat -> Nat -> Nat;
+modNat x y = (divModNat x y).(2);
+
+--------------------------------------------------------------------------------
 -- Induction on Natural Numbers
 
 data AccessiblePos : Pos -> sort 0 where {
@@ -1246,15 +1290,6 @@ ifEqNatWithProof : (a : sort 0) -> (m n : Nat) -> a -> (eqNat m n -> a) -> a;
 ifEqNatWithProof a m n x f =
   ifWithProof a (equalNat m n) x
     (\ (pf:Eq Bool (equalNat m n) True) -> f (equalNatToEqNat m n pf));
-
--- | Natural division and modulus
-primitive divModNat : Nat -> Nat -> Nat * Nat;
-
-divNat : Nat -> Nat -> Nat;
-divNat x y = (divModNat x y).(1);
-
-modNat : Nat -> Nat -> Nat;
-modNat x y = (divModNat x y).(2);
 
 -- There are implicit constructors from integer literals.
 
