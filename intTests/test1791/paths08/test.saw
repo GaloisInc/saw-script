@@ -1,0 +1,6 @@
+enable_experimental;
+
+let main : TopLevel () = do {
+   load_sawcore_from_file "test.sawcore";
+   return ();
+};

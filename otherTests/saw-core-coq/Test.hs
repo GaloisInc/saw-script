@@ -1,9 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns #-}
 
 {- |
 Module      : Main
@@ -14,129 +12,102 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Main where
+module Main (main) where
 
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import qualified Data.Map as Map
-import qualified Data.Text as Text
-import Prettyprinter
+import Control.Monad ( unless, foldM )
+import Control.Monad.Reader ( liftIO )
+import Data.List ( intercalate )
+import Data.Maybe ( fromMaybe )
+import System.Directory ( getCurrentDirectory, findExecutable
+                        , doesDirectoryExist )
+import System.Environment ( lookupEnv )
+import System.Exit ( ExitCode (ExitSuccess), exitFailure )
+import System.FilePath ( (</>), pathSeparator, searchPathSeparator
+                       , takeDirectory, takeFileName, isAbsolute )
+import System.IO ( hPutStrLn, stderr )
+import System.Process ( readCreateProcessWithExitCode
+                      , shell, CreateProcess (..) )
+import Test.Tasty ( defaultMain, localOption, mkTimeout, TestTree )
+import Test.Tasty.HUnit ( testCase, (@=?) )
 
--- import qualified Language.Coq.Pretty as Coq
--- import CryptolSAWCore.CryptolEnv
-import SAWCore.Module
-import SAWCore.Prelude (preludeModule)
-import SAWCore.SharedTerm
-import SAWCore.Typechecker
-import qualified SAWCore.Parser.AST as Un
-import SAWCoreCoq.Coq
+data EnvVarSpec = EV String String
+                  -- ^ single string value
+                | EVp String Char [String]
+                  -- ^ accumulative path with separator
 
-configuration :: TranslationConfiguration
-configuration = TranslationConfiguration {
-    constantRenaming = [],
-    constantSkips = [],
-    monadicTranslation = False,
-    postPreamble = "",
-    vectorModule   = "SAWCoreVectorsAsCoqVectors"
- }
+updEnvVars :: String -> String -> [EnvVarSpec] -> [EnvVarSpec]
+updEnvVars n v [] = [EV n v | v /= ""]
+updEnvVars n v (EV  n'   v' : evs) | n == n' = EV  n (if v == "" then v' else v) : evs
+updEnvVars n v (EVp n' s v' : evs) | n == n' = EVp n s (v' <> [v]) : evs
+updEnvVars n v (ev : evs) = ev : updEnvVars n v evs
 
--- Creating a bunch of terms with no sharing, for testing purposes
+envVarAssocList :: [EnvVarSpec] -> [(String, String)]
+envVarAssocList = map envVarAssoc
+  where
+    envVarAssoc (EV  n v)    = (n, v)
+    envVarAssoc (EVp n s vs) = (n, intercalate [s] vs)
 
-natOf :: Integer -> IO Term
-natOf i = do
-  sc <- mkSharedContext
-  scNat sc (fromInteger i)
+-- | Returns the environment variable assocList to use for running
+-- each individual test.
+testParams :: FilePath -> (String -> IO ()) -> IO [(String, String)]
+testParams base verbose = do
+  here <- getCurrentDirectory
+  let absTestBase = if isAbsolute base then base
+                    else here </> base
 
-aVector :: IO Term
-aVector = do
-  sc   <- mkSharedContext
-  typ  <- scNatType sc
-  args <- mapM (natOf) [0, 1, 2]
-  scVector sc typ args
+  -- try to determine where the saw binary is in case there are other
+  -- executables there (e.g. z3, etc.)
+  sawExe <- findExecutable "saw" >>= pure . \case
+              Just e -> e
+              _      -> "" -- may be supplied via env var
 
-aRecord :: IO Term
-aRecord = do
-  sc   <- mkSharedContext
-  nat  <- natOf 2
-  unit <- scUnitValue sc
-  scRecord sc $ Map.fromList [("natField", nat), ("unitField", unit)]
+  verbose $ "Found saw: " <> sawExe
+  let eVars0 = [ EV  "HOME"     absTestBase
+               , EVp "PATH"     searchPathSeparator [takeDirectory sawExe]
+               , EV  "TESTBASE" absTestBase
+               , EV  "DIRSEP"   [pathSeparator]
+               , EV  "CPSEP"    [searchPathSeparator]
 
-aRecordType :: IO Term
-aRecordType = do
-  sc       <- mkSharedContext
-  natType  <- scNatType  sc
-  unitType <- scUnitType sc
-  scRecordType sc [("natField", natType), ("unitField", unitType)]
+               -- The eval is used to protect the evaluation of the
+               -- single-quoted arguments supplied below when run in a
+               -- bash test.sh script.
+               , EVp "SAW"      ' ' ["eval", "saw"]
+               ]
+      addEnvVar evs e = do v <- lookupEnv e
+                           pure $ updEnvVars e (fromMaybe "" v) evs
+  -- override eVars0 with any environment variables set in this process
+  e1 <- foldM addEnvVar eVars0 [ "SAW", "PATH", "SAW_SOLVER_CACHE_PATH"]
 
-translate :: Monad m => ModuleMap -> Term -> Term -> m (Doc ann)
-translate mm term ty = do
-  let result = translateTermAsDeclImports configuration mm "MyDefinition" term ty
-  case result of
-    Left  e -> error $ show e
-    Right r -> return r
+  pure $ envVarAssocList e1
 
-preludeName :: Un.ModuleName
-preludeName = Un.moduleName preludeModule
-
-checkTermVar :: Un.UTermVar -> Ident
-checkTermVar tv = mkIdent preludeName (Text.pack $ Un.termVarString tv) -- FIXME
-
-checkTermCtx :: SCIOMonad m => Un.UTermCtx -> m [(Ident, Term)]
-checkTermCtx ctx = mapM checkUntypedBinder ctx
-
-checkUntypedBinder :: SCIOMonad m => (Un.UTermVar, Un.UTerm) -> m (Ident, Term)
-checkUntypedBinder (ident, term) =
-  (,) <$> pure (checkTermVar ident) <*> checkUntypedTerm term
-
-type SCIOMonad m = ( MonadIO m, MonadReader SharedContext m )
-
-checkUntypedTerm :: SCIOMonad m => Un.UTerm -> m Term
-checkUntypedTerm term = do
-  sc <- ask
-  et <- liftIO $ do
-    inferCompleteTerm sc (Just preludeName) term
-  case et of
-    Left  e -> error $ show e
-    Right t -> return t
-
-getPreludeModule :: SCIOMonad m => m Module
-getPreludeModule = do
-  sc <- ask
-  liftIO $ scFindModule sc preludeName
-
-getPreludeDataType :: SCIOMonad m => Text.Text -> m DataType
-getPreludeDataType name = do
-  prelude <- getPreludeModule
-  case findDataType prelude name of
-    Nothing -> error $ Text.unpack name ++ " not found"
-    Just dt -> return dt
-
-translateSAWCorePrelude :: IO ()
-translateSAWCorePrelude = do
-  sc <- mkSharedContext
-  -- In order to get test data types, we load the Prelude
-  tcInsertModule sc preludeModule
-  mm <- scGetModuleMap sc
-  flip runReaderT sc $ do
-
-    prelude <- getPreludeModule
-
-    liftIO $ do
-      putStrLn "From Coq.Strings  Require Import String."
-      putStrLn "From CryptolToCoq Require Import SAWCoreScaffolding."
-      putStrLn ""
-
-    let doc = translateSAWModule configuration mm prelude
-
-    liftIO $ putStrLn $ show doc
-
--- translateCryptolPrelude :: IO ()
--- translateCryptolPrelude = do
---   sc <- mkSharedContext
---   cryptolEnv <- initCryptolEnv sc
---   forM_ (Map.assocs $ eTermEnv cryptolEnv) $ \ (a, b) -> do
---     putStrLn $ show a
---   return ()
-
+-- | Tests SAWCore to Coq translation by turning the `./test.sh` script into a
+--   Tasty test. TODO: this is mostly duplicated from `intTests/IntegrationTests.hs`.
 main :: IO ()
-main = translateSAWCorePrelude
+main = do
+  -- Run tests with VERBOSE=y environment variable for extra output.
+  verbose <- lookupEnv "VERBOSE" >>= pure . \case
+    Just "y" -> putStrLn
+    _        -> const $ pure ()
+  found <- doesDirectoryExist base
+
+  unless found $ do
+    curwd <- getCurrentDirectory
+    hPutStrLn stderr $ "FAILURE: cannot find test directory " <> base <> " from " <> curwd
+    exitFailure
+
+  envVars <- testParams base verbose
+  verbose $ "ENV: " <> show envVars
+  defaultMain $
+    localOption (mkTimeout $ 500 * 1000 * 1000) $  -- 500 second timeout in usecs
+    mkTest envVars
+  where
+    base :: FilePath
+    base = "otherTests" </> "saw-core-coq"
+
+    mkTest :: [(String,String)] -> TestTree
+    mkTest envVars = testCase (takeFileName base) $ do
+      let cmd = (shell "bash test.sh") { cwd = Just base, env = Just envVars }
+      (r, o, e) <- liftIO $ readCreateProcessWithExitCode cmd ""
+      unless (r == ExitSuccess) $ putStrLn o >> hPutStrLn stderr e
+      ExitSuccess @=? r
+

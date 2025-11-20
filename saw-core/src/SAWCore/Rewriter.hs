@@ -73,7 +73,6 @@ import SAWCore.Conversion
   , termPat
   , conversionPat
   , runConversion
-  , runTermBuilder
   )
 import SAWCore.Module
   ( ctorName
@@ -85,6 +84,7 @@ import SAWCore.Module
   , ResolvedName(..)
   )
 import SAWCore.Name
+import qualified SAWCore.OpenTerm as OT
 import SAWCore.Panic (panic)
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
@@ -621,20 +621,6 @@ asRecordRedex t =
          Just t' -> return t'
          Nothing -> fail "Record field not found"
 
--- | An iota redex whose argument is a concrete nautral number; specifically,
---   this function recognizes
---
---   > RecursorApp rec _ n
-asNatIotaRedex :: R.Recognizer Term (Term, Term, Natural)
-asNatIotaRedex t =
-  do (r_m_f1_f2, arg) <- R.asApp t
-     (r_m_f1, f2) <- R.asApp r_m_f1_f2
-     (r_m, f1) <- R.asApp r_m_f1
-     (r, _m) <- R.asApp r_m
-     _ <- R.asRecursorApp r
-     n <- R.asNat arg
-     Just (f1, f2, n)
-
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
 
@@ -683,8 +669,6 @@ reduceSharedTerm sc (asBetaRedex -> Just (vn, _, body, arg)) =
   Just <$> scInstantiate sc (IntMap.singleton (vnIndex vn) arg) body
 reduceSharedTerm _ (asPairRedex -> Just t) = pure (Just t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = pure (Just t)
-reduceSharedTerm sc (asNatIotaRedex -> Just (f1, f2, n)) =
-  Just <$> scReduceNatRecursor sc f1 f2 n
 reduceSharedTerm sc
   (R.asApp -> Just (R.asApplyAll -> (R.asRecursorApp -> Just (r, crec),
                                      splitAt (recursorNumParams crec) -> (params, motive : elims_ixs)), arg))
@@ -830,7 +814,7 @@ rewriteSharedTerm sc ss t0 =
         do 
           case runConversion conv t of
              Nothing -> apply convertibleFlag rules t
-             Just tb -> rewriteAll convertibleFlag =<< runTermBuilder tb (scGlobalDef sc) (scTermF sc)
+             Just tb -> rewriteAll convertibleFlag =<< OT.complete sc tb
 
 
 -- FIXME: is there some way to have sensable term replacement in the presence of loose variables
