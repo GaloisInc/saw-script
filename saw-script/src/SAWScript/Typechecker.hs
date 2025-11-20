@@ -314,6 +314,24 @@ initialRW varenv tyenv = RW {
     warnings = []
 }
 
+-- | Enter a scope
+pushScope :: TI ()
+pushScope = do
+  varenv <- gets varEnv
+  tyenv <- gets tyEnv
+  let varenv' = ScopedMap.push varenv
+      tyenv' = ScopedMap.push tyenv
+  modify (\rw -> rw { varEnv = varenv', tyEnv = tyenv' })
+
+-- | Leave a scope
+popScope :: TI ()
+popScope = do
+  varenv <- gets varEnv
+  tyenv <- gets tyEnv
+  let varenv' = ScopedMap.pop varenv
+      tyenv' = ScopedMap.pop tyenv
+  modify (\rw -> rw { varEnv = varenv', tyEnv = tyenv' })
+
 -- Get a fresh unification var number.
 getFreshTypeIndex :: TI TypeIndex
 getFreshTypeIndex = do
@@ -913,15 +931,6 @@ addVar x pos rb ty = do
 addVars :: Rebindable -> [(Name, Pos, Schema)] -> TI ()
 addVars rb bindings = mapM_ (\(x, pos, ty) -> addVar x pos rb ty) bindings
 
--- Add xs with type tys to the environment, while running m.
-withVars :: Rebindable -> [(Name, Pos, Schema)] -> TI a -> TI a
-withVars rb bindings m = do
-    save <- gets varEnv
-    addVars rb bindings
-    result <- m
-    modify (\rw -> rw { varEnv = save })
-    return result
-
 -- Add all the vars in a pattern to the environment.
 --
 -- (Note that the pattern should have already been processed so it
@@ -930,21 +939,13 @@ addPattern :: Pattern -> TI ()
 addPattern pat = addVars ReadOnlyVar bindings
   where bindings = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
 
--- Add all the vars in a pattern to the environment, while running m.
---
--- (Note that the pattern should have already been processed so it
--- contains types; hence the irrefutable Just t.)
-withPattern :: Pattern -> TI a -> TI a
-withPattern pat m = withVars ReadOnlyVar bindings m
-  where bindings = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
-
 -- Add all the vars in a list of patterns to the environment, while
 -- running m.
 --
 -- (Note that the patterns should have already been processed so they
 -- contain types; hence the irrefutable Just t.)
-withPatterns :: [Pattern] -> TI a -> TI a
-withPatterns pats m = withVars ReadOnlyVar allbindings m
+addPatterns :: [Pattern] -> TI ()
+addPatterns pats = addVars ReadOnlyVar allbindings
   where
      bindings pat = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
      allbindings = concatMap bindings pats
@@ -957,14 +958,6 @@ addPatternSchema :: Pattern -> Rebindable -> Schema -> TI ()
 addPatternSchema pat rb ty = addVars rb bindings
   where bindings = patternBindingsWithSchema pat ty
 
--- Add all the vars in a pattern to the environment, while running m.
---
--- Variant version that uses the passed-in schema to produce the types
--- and ignoring the types already loaded into the pattern.
-withPatternSchema :: Pattern -> Schema -> TI a -> TI a
-withPatternSchema pat ty m = withVars ReadOnlyVar bindings m
-  where bindings = patternBindingsWithSchema pat ty
-
 -- Add all the vars in a declaration to the environment.
 --
 -- Do nothing if there's no type schema in this declaration yet.
@@ -974,26 +967,13 @@ addDecl _rb (Decl _ _ Nothing _) = return ()
 addDecl rb (Decl _ p (Just s) _) = addPatternSchema p rb s
 
 -- Add all the vars in a declaration to the environment, while running m.
---
--- Do nothing if there's no type schema in this declaration yet.
--- XXX: is that reasonable? shouldn't it panic?
-withDecl :: Decl -> TI a -> TI a
-withDecl (Decl _ _ Nothing _) m = m
-withDecl (Decl _ p (Just s) _) m = withPatternSchema p s m
-
--- Add all the vars in a declaration to the environment, while running m.
 addDeclGroup :: Rebindable -> DeclGroup -> TI ()
 addDeclGroup rb (NonRecursive d) = addDecl rb d
 addDeclGroup rb (Recursive ds) = mapM_ (addDecl rb) ds
 
--- Add all the vars in a declaration to the environment, while running m.
-withDeclGroup :: DeclGroup -> TI a -> TI a
-withDeclGroup (NonRecursive d) m = withDecl d m
-withDeclGroup (Recursive ds) m = foldr withDecl m ds
-
--- Wrap the action m with some abstract type variables.
-withAbstractTyVars :: Map Name (Pos, Kind) -> TI a -> TI a
-withAbstractTyVars vars m = do
+-- Add some abstract type variables.
+addAbstractTyVars :: Map Name (Pos, Kind) -> TI ()
+addAbstractTyVars vars = do
     let insertOne x (_pos, kind) tyenv =
             ScopedMap.insert x (Current, AbstractType kind) tyenv
         insertAll tyenv =
@@ -1001,9 +981,6 @@ withAbstractTyVars vars m = do
     tyenv <- gets tyEnv
     let tyenv' = insertAll tyenv
     modify (\rw -> rw { tyEnv = tyenv' })
-    result <- m
-    modify (\rw -> rw { tyEnv = tyenv })
-    return result
 
 --
 -- Infer the type for an expression.
@@ -1032,10 +1009,9 @@ inferExpr (ln, expr) = case expr of
       ctx <- getFreshTyVar pos
       tyResult <- getFreshTyVar pos
       let ty = tBlock (PosInferred InfTerm pos) ctx tyResult
-      saveVarEnv <- gets varEnv
-      saveTyEnv <- gets tyEnv
+      pushScope
       body' <- inferBlock ln pos ctx ty body
-      modify (\rw -> rw { varEnv = saveVarEnv, tyEnv = saveTyEnv })
+      popScope
       return (Block pos body', ty)
 
   Tuple pos es -> do
@@ -1136,7 +1112,10 @@ inferExpr (ln, expr) = case expr of
 
   Lambda pos mname pat body -> do
       (typat, pat') <- inferPattern ln ReadOnlyVar pat
-      (body', tybody) <- withPattern pat' $ inferExpr (ln, body)
+      pushScope
+      addPattern pat'
+      (body', tybody) <- inferExpr (ln, body)
+      popScope
       let e' = Lambda pos mname pat' body'
           ty = tFun (PosInferred InfContext (getPos body)) typat tybody
       return (e', ty)
@@ -1154,7 +1133,10 @@ inferExpr (ln, expr) = case expr of
 
   Let pos dg body -> do
       dg' <- inferDeclGroup ReadOnlyVar dg
-      (body', ty) <- withDeclGroup dg' (inferExpr (ln, body))
+      pushScope
+      addDeclGroup ReadOnlyVar dg'
+      (body', ty) <- inferExpr (ln, body)
+      popScope
       let e' = Let pos dg' body'
       return (e', ty)
 
@@ -1708,16 +1690,21 @@ inferDecl rebindable d@(Decl pos pat _ e) = do
     -- Add abstract type variables for the foralls while we check the body.
     -- Note: this is a variable declaration. It doesn't add types; the types
     -- get forall-bound in the type scheme by the `generalize` call.
-    withAbstractTyVars foralls $ do
-        -- Check the body and check the pattern against the body.
-        (e', t) <- inferExpr (cname, e)
-        pat' <- checkPattern rebindable cname t pat
+    pushScope
+    addAbstractTyVars foralls
 
-        -- Use `generalize` to build the type scheme.
-        ~[(pat'', e1, s)] <- generalize foralls' [pat'] [e'] [t]
+    -- Check the body and check the pattern against the body.
+    (e', t) <- inferExpr (cname, e)
+    pat' <- checkPattern rebindable cname t pat
 
-        -- Return the updated `Decl`
-        return (Decl pos pat'' (Just s) e1)
+    -- Use `generalize` to build the type scheme.
+    ~[(pat'', e1, s)] <- generalize foralls' [pat'] [e'] [t]
+
+    -- Drop the abstract type variables
+    popScope
+
+    -- Return the updated `Decl`
+    return (Decl pos pat'' (Just s) e1)
 
 -- | Type inference for a system of mutually recursive declarations.
 --
@@ -1747,33 +1734,48 @@ inferRecDecls ds = do
 
     -- Add abstract type variables for the foralls while we check the
     -- bodies.
-    withAbstractTyVars foralls $ do
-      -- Check the patterns first to get types.
-      (_ts, pats') <- unzip <$> mapM (inferPattern cname ReadOnlyVar) pats
+    pushScope
+    addAbstractTyVars foralls
 
-      -- Check all the expressions in an environment that includes
-      -- all the bound variables.
-      let checkOneExpr (Decl _pos p _ e) = inferExpr (getPatternContext p, e)
-      (es, tys) <- fmap unzip $ withPatterns pats' $ mapM checkOneExpr ds
+    -- Check the patterns first to get types.
+    (_ts, pats') <- unzip <$> mapM (inferPattern cname ReadOnlyVar) pats
 
-      -- Only functions can be recursive. Check each participant.
-      zipWithM_ (\d ty -> requireFunction (getPos d) ty) ds tys
+    -- Check all the expressions in an environment that includes all
+    -- the bound variables.
+    --
+    -- FUTURE: we only need a second nested scope here because we run
+    -- all the patterns through checkPattern a second time; if we do
+    -- that after the addPatterns, every declaration is a "duplicate"
+    -- and things go plop. It seems there ought to be a better way of
+    -- handling all this that doesn't require visiting the patterns
+    -- twice.
+    pushScope
+    addPatterns pats'
+    let checkOneExpr (Decl _pos p _ e) = inferExpr (getPatternContext p, e)
+    (es, tys) <- unzip <$> mapM checkOneExpr ds
+    popScope
 
-      -- pats' has already been checked once, which will have inserted
-      -- unification vars for any missing types. Running it through
-      -- again will have no further effect, so we can ignore the
-      -- theoretically-updated-again patterns returned by checkPattern.
-      sequence_ $ zipWith (checkPattern ReadOnlyVar (getPatternContext firstPat)) tys pats'
+    -- Only functions can be recursive. Check each participant.
+    zipWithM_ (\d ty -> requireFunction (getPos d) ty) ds tys
 
-      -- Run generalize and get back a list of updated expressions and
-      -- type schemes.
-      patetys <- generalize foralls' pats' es tys
+    -- pats' has already been checked once, which will have inserted
+    -- unification vars for any missing types. Running it through
+    -- again will have no further effect, so we can ignore the
+    -- theoretically-updated-again patterns returned by checkPattern.
+    sequence_ $ zipWith (checkPattern ReadOnlyVar (getPatternContext firstPat)) tys pats'
 
-      -- Generate the updated declarations.
-      let rebuild pos (pat, e1, ty) = Decl pos pat (Just ty) e1
-          ds' = zipWith rebuild (map getPos ds) patetys
+    -- Run generalize and get back a list of updated expressions and
+    -- type schemes.
+    patetys <- generalize foralls' pats' es tys
 
-      return ds'
+    -- Drop the abstract type variables.
+    popScope
+
+    -- Generate the updated declarations.
+    let rebuild pos (pat, e1, ty) = Decl pos pat (Just ty) e1
+        ds' = zipWith rebuild (map getPos ds) patetys
+
+    return ds'
 
 -- Type inference for a decl group.
 inferDeclGroup :: Rebindable -> DeclGroup -> TI DeclGroup
