@@ -33,17 +33,19 @@ import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 
+import qualified SAWSupport.ScopedMap as ScopedMap
+import SAWSupport.ScopedMap (ScopedMap)
 import SAWSupport.Pretty (pShow)
 
 import SAWCentral.AST
-import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars'(..), isDeprecated)
+import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), SubstituteTyVars'(..), isDeprecated)
 import SAWScript.Panic (panic)
 import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
 
 -- short names for the environment types we use
-type VarEnv = Map Name (Pos, PrimitiveLifecycle, Rebindable, Schema)
-type TyEnv = Map Name (PrimitiveLifecycle, NamedType)
+type VarEnv = ScopedMap Name (Pos, PrimitiveLifecycle, Rebindable, Schema)
+type TyEnv = ScopedMap Name (PrimitiveLifecycle, NamedType)
 
 
 ------------------------------------------------------------
@@ -269,28 +271,13 @@ instance Show ContextName where
 ------------------------------------------------------------
 -- Pass context
 
---
--- The monad for this pass is "TI", which is composed of a "readonly"
--- part (which is not constant or readonly, but where changes are
--- scoped by the recursive structure of the code) and a read-write
--- part that accumulates as we move through the code.
---
--- XXX: the "readonly" part is used to implement scoping, which is
--- fine in theory, but in practice because we have declarations that
--- update the environment, the recursive structure of the code does
--- not naturally match the scoping. The result is that the recursive
--- structure of the code has been twisted around to make it work;
--- that isn't desirable and the organization should probably be
--- revised.
---
--- Anyhow, the elements of the context are split across RO and RW
--- below.
---
-
+-- | The monad for this pass is "TI", which is composed of a read-only
+--   part plus a read-write part that accumulates as we move through the
+--   code.
 newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
     deriving (Functor, Applicative, Monad, MonadReader RO, MonadState RW)
 
--- | The "readonly" portion
+-- | The read-only portion
 data RO = RO {
     -- | The variable availability (lifecycle set)
     primsAvail :: Set PrimitiveLifecycle
@@ -373,11 +360,11 @@ applyCurrentSubst t = do
 --
 -- The type t has already been checked, so it's ok to panic if it refers
 -- to something in the typedef collection that's not visible.
-resolveCurrentTypedefs :: SubstituteTyVars' t => t -> TI t
+resolveCurrentTypedefs :: SubstituteTyVars t => t -> TI t
 resolveCurrentTypedefs t = do
     avail <- asks primsAvail
     s <- gets tyEnv
-    return $ substituteTyVars' avail s t
+    return $ substituteTyVars avail s t
 
 -- Get the unification vars that are used in the current variable typing
 -- and named type environments.
@@ -396,6 +383,10 @@ resolveCurrentTypedefs t = do
 -- when it didn't search the named type environment, but that leak has
 -- been corrected.
 --
+-- dholland 20251120: If it does turn out to be a problem, we can now
+-- also get shadowed values out of the environment by adding a suitable
+-- variant of @elems@ to `ScopedMap`.
+--
 -- Note that we apply the current substitution first. This means that
 -- the caller must also apply the current substitution before reasoning
 -- about what unification vars do and don't appear.
@@ -405,8 +396,8 @@ unifyVarsInEnvs :: TI (Map TypeIndex Pos)
 unifyVarsInEnvs = do
     venv <- gets varEnv
     tenv <- gets tyEnv
-    vtys <- mapM applyCurrentSubst $ Map.elems venv
-    ttys <- mapM applyCurrentSubst $ Map.elems tenv
+    vtys <- mapM applyCurrentSubst $ ScopedMap.allElems venv
+    ttys <- mapM applyCurrentSubst $ ScopedMap.allElems tenv
     return $ Map.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
 
 -- Get the named type vars that occur as keys in the current type name
@@ -414,7 +405,7 @@ unifyVarsInEnvs = do
 namedVarDefinitions :: TI (Set Name)
 namedVarDefinitions = do
     env <- gets tyEnv
-    return $ Map.keysSet env
+    return $ ScopedMap.allKeysSet env
 
 -- Get the position and name of the first binding in a pattern,
 -- for use as context info when printing messages. If there's a
@@ -851,7 +842,7 @@ inspectTypeFTVs kind ty = case ty of
         return Map.empty
     TyVar pos x -> do
         tyenv <- gets tyEnv
-        case Map.lookup x tyenv of
+        case ScopedMap.lookup x tyenv of
             Nothing -> return $ Map.singleton x (pos, kind)
             Just _ -> return $ Map.empty
 
@@ -915,7 +906,7 @@ inferField cname (n,e) = do
 addVar :: Name -> Pos -> Rebindable -> Schema -> TI ()
 addVar x pos rb ty = do
     env <- gets varEnv
-    let env' = Map.insert x (pos, Current, rb, ty) env
+    let env' = ScopedMap.insert x (pos, Current, rb, ty) env
     modify (\rw -> rw { varEnv = env' })
 
 -- Add xs with type tys to the environment.
@@ -1004,7 +995,7 @@ withDeclGroup (Recursive ds) m = foldr withDecl m ds
 withAbstractTyVars :: Map Name (Pos, Kind) -> TI a -> TI a
 withAbstractTyVars vars m = do
     let insertOne x (_pos, kind) tyenv =
-            Map.insert x (Current, AbstractType kind) tyenv
+            ScopedMap.insert x (Current, AbstractType kind) tyenv
         insertAll tyenv =
             Map.foldrWithKey insertOne tyenv vars
     tyenv <- gets tyEnv
@@ -1113,7 +1104,7 @@ inferExpr (ln, expr) = case expr of
   Var pos x -> do
       avail <- asks primsAvail
       env <- gets varEnv
-      case Map.lookup x env of
+      case ScopedMap.lookup x env of
         Nothing -> do
           recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
           t <- getFreshTyVar pos
@@ -1215,7 +1206,7 @@ inferPattern cname rebindable pat =
     PVar allpos xpos x mt ->
       do t <- resolveType allpos mt
          env <- gets varEnv
-         case Map.lookup x env of
+         case ScopedMap.lookup x env of
              Nothing -> pure ()
              Just (prevpos, lc, prevrb, tyscheme) -> case rebindable of
                  RebindableVar -> do
@@ -1284,8 +1275,8 @@ addTypedef :: Name -> Type -> TI ()
 addTypedef a ty = do
     avail <- asks primsAvail
     env <- gets tyEnv
-    let ty' = substituteTyVars' avail env ty
-        env' = Map.insert a (Current, ConcreteType ty') env
+    let ty' = substituteTyVars avail env ty
+        env' = ScopedMap.insert a (Current, ConcreteType ty') env
     modify (\rw -> rw { tyEnv = env' })
 
 -- break a monadic type down into its monad and value types, if it is one
@@ -1478,7 +1469,7 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
         StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
             tyenv <- gets tyEnv
-            case Map.lookup a tyenv of
+            case ScopedMap.lookup a tyenv of
                 Nothing -> do
                     let s' = StmtTypedef allpos apos a ty'
                     addTypedef a ty'
@@ -1873,7 +1864,7 @@ checkType kind ty = case ty of
   TyVar pos x -> do
       avail <- asks primsAvail
       tyenv <- gets tyEnv
-      case Map.lookup x tyenv of
+      case ScopedMap.lookup x tyenv of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ Text.unpack x)
               getErrorTyVar pos
@@ -2034,7 +2025,7 @@ typesMatch avail tenv schema'found schema'expected =
         ty'expected <- unpack schema'expected
         matches ty'found ty'expected
   in
-  case evalTIWithEnv avail Map.empty tenv match of
+  case evalTIWithEnv avail ScopedMap.empty tenv match of
     (Left _errors, _warnings) -> False          -- not actually reachable
     (Right b, _warnings) -> b                   -- return match success/failure
 
@@ -2085,7 +2076,7 @@ checkSchema contextLC tyenv schema = do
           WarnDeprecated -> [Current, WarnDeprecated]
           HideDeprecated -> [Current, WarnDeprecated, HideDeprecated]
           Experimental -> [Current, Experimental]
-  evalTIWithEnv avail Map.empty tyenv check
+  evalTIWithEnv avail ScopedMap.empty tyenv check
 
 -- | Check a schema (type) pattern as used by :search. (This is an
 -- external interface.)
