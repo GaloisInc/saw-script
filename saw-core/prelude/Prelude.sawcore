@@ -870,13 +870,13 @@ posEq =
   )
   (\ (x : Pos) (rx : Pos -> Bool) ->
    Pos_cases Bool
-   True
+   False
    (\ (y : Pos) (_ : Bool) -> rx y)
    (\ (y : Pos) (_ : Bool) -> False)
   )
   (\ (x : Pos) (rx : Pos -> Bool) ->
    Pos_cases Bool
-   True
+   False
    (\ (y : Pos) (_ : Bool) -> False)
    (\ (y : Pos) (_ : Bool) -> rx y)
   );
