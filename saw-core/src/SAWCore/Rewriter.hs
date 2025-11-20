@@ -40,7 +40,6 @@ module SAWCore.Rewriter
   , shallowRule
   -- * Term rewriting
   , rewriteSharedTerm
-  , rewriteSharedTermTypeSafe
   -- * Matching
   , scMatch
   -- * Miscellaneous
@@ -686,99 +685,12 @@ reduceSharedTerm sc
            _ -> pure Nothing
 reduceSharedTerm _ _ = pure Nothing
 
+data Convertibility = AllRules | ConvertibleRulesOnly
+
 -- | Rewriter for shared terms.  The annotations of any used rules are collected
 --   and returned in the result set.
 rewriteSharedTerm :: forall a. Ord a => SharedContext -> Simpset a -> Term -> IO (Set a, Term)
 rewriteSharedTerm sc ss t0 =
-    do cache <- newCache
-       let ?cache = cache
-       setRef <- newIORef mempty
-       let ?annSet = setRef
-       t <- rewriteAll t0
-       anns <- readIORef setRef
-       pure (anns, t)
-
-  where
-    rewriteAll :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) => Term -> IO Term
-    rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
-        useCache ?cache tidx (traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop)
-
-    traverseTF :: (Term -> IO Term) -> TermF Term -> IO (TermF Term)
-    traverseTF f tf =
-      case tf of
-        -- Maintain invariant that types on Lambda/Pi binders should
-        -- exactly match types on the bound variables in the body.
-        Variable {} -> pure tf
-        Lambda x t1 t2 ->
-          do t1' <- f t1
-             var <- scVariable sc x t1'
-             t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
-             t2'' <- f t2'
-             pure (Lambda x t1' t2'')
-        Pi x t1 t2 ->
-          do t1' <- f t1
-             var <- scVariable sc x t1'
-             t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
-             t2'' <- f t2'
-             pure (Pi x t1' t2'')
-        _ -> traverse f tf
-
-    rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) => Term -> IO Term
-    rewriteTop t =
-      do mt <- reduceSharedTerm sc t
-         case mt of
-           Nothing -> apply (Net.unify_term ss (termPat t)) t
-           Just t' -> rewriteAll t'
-
-    recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> IO ()
-    recordAnn Nothing  = return ()
-    recordAnn (Just a) = modifyIORef' ?annSet (Set.insert a)
-
-    apply :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
-             [Either (RewriteRule a) Conversion] -> Term -> IO Term
-    apply [] t = return t
-    apply (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do
-      result <- scMatch sc ctxt lhs t
-      case result of
-        Nothing -> apply rules t
-        Just inst
-          | lhs == rhs ->
-            -- This should never happen because we avoid inserting
-            -- reflexive rules into simp sets in the first place.
-            do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
-                          "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm PPS.defaultOpts lhs
-               apply rules t
-          | IntMap.keysSet inst /= IntSet.fromList (map (vnIndex . fst) ctxt) ->
-            do putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
-                 ++ scPrettyTerm PPS.defaultOpts lhs
-               apply rules t
-          | permutative ->
-            do
-              t' <- scInstantiate sc inst rhs
-              case termWeightLt t' t of
-                True -> recordAnn annotation >> rewriteAll t' -- keep the result only if it is "smaller"
-                False -> apply rules t
-          | shallow ->
-            -- do not to further rewriting to the result of a "shallow" rule
-            do recordAnn annotation
-               scInstantiate sc inst rhs
-          | otherwise ->
-            do -- putStrLn "REWRITING:"
-               -- print lhs
-               recordAnn annotation
-               rewriteAll =<< scInstantiate sc inst rhs
-    apply (Right conv : rules) t =
-        do -- putStrLn "REWRITING:"
-           -- print (Net.toPat conv)
-           case runConversion conv t of
-             Nothing -> apply rules t
-             Just tb -> rewriteAll =<< OT.complete sc tb
-
-data Convertibility = AllRules | ConvertibleRulesOnly
-
--- | Type-safe rewriter for shared terms
-rewriteSharedTermTypeSafe :: forall a. Ord a => SharedContext -> Simpset a -> Term -> IO (Set a, Term)
-rewriteSharedTermTypeSafe sc ss t0 =
     do cache <- newCache
        let ?cache = cache
        setRef <- newIORef mempty
@@ -960,7 +872,7 @@ hoistIfs sc t = do
               ]
    let ss :: Simpset () = addRules rules emptySimpset
 
-   (t', conds) <- doHoistIfs sc ss cache . snd =<< rewriteSharedTermTypeSafe sc ss t
+   (t', conds) <- doHoistIfs sc ss cache . snd =<< rewriteSharedTerm sc ss t
 
    -- remove duplicate conditions from the list, as muxing in SAW can result in
    -- many copies of the same condition, which cause a performance issue

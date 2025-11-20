@@ -54,6 +54,6 @@ prelude_bveq_sameL_test =
           , OT.applyGlobal "Prelude.bvNat" [OT.term n, OT.nat 0]
           , OT.term z
           ]
-    (_, lhs_term) <- rewriteSharedTermTypeSafe sc ss =<< scMkTerm sc lhs
-    (_, rhs_term) <- rewriteSharedTermTypeSafe sc ss =<< scMkTerm sc rhs
+    (_, lhs_term) <- rewriteSharedTerm sc ss =<< scMkTerm sc lhs
+    (_, rhs_term) <- rewriteSharedTerm sc ss =<< scMkTerm sc rhs
     assertEqual "Incorrect conversion\n" lhs_term rhs_term
