@@ -1,8 +1,8 @@
-From Coq.Lists          Require Import List.
-From Coq.Numbers.NatInt Require        NZLog.
-From Coq.Strings        Require        String.
-From CryptolToCoq       Require Import SAWCoreScaffolding.
-From Coq                Require Import ZifyClasses.
+From Stdlib.Lists          Require Import List.
+From Stdlib.Numbers.NatInt Require        NZLog.
+From Stdlib.Strings        Require        String.
+From CryptolToCoq          Require Import SAWCoreScaffolding.
+From Stdlib                Require Import ZifyClasses.
 
 Import ListNotations.
 

@@ -1,9 +1,9 @@
  Loading file "test_arithmetic.saw"
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -28,9 +28,9 @@ Definition TestArith : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWC
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -53,9 +53,9 @@ Definition TestArith_DivZero : CryptolPrimitivesForSAWCore.seq (CryptolPrimitive
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -78,9 +78,9 @@ Definition TestArith_Div : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesFor
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -103,9 +103,9 @@ Definition TestArith_Mod : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesFor
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -129,9 +129,9 @@ Definition TestArith_AndOr : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesF
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -154,9 +154,9 @@ Definition TestArith_Xor : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesFor
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -178,9 +178,9 @@ Definition TestArith_Complement : CryptolPrimitivesForSAWCore.seq (CryptolPrimit
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -202,9 +202,9 @@ Definition TestArith_Negate : CryptolPrimitivesForSAWCore.seq (CryptolPrimitives
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -225,9 +225,9 @@ Definition TestArith_ShiftLeft : CryptolPrimitivesForSAWCore.seq (CryptolPrimiti
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -248,9 +248,9 @@ Definition TestArith_ShiftRight : CryptolPrimitivesForSAWCore.seq (CryptolPrimit
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -286,9 +286,9 @@ Definition TestArith_SignExtend : CryptolPrimitivesForSAWCore.seq (CryptolPrimit
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.

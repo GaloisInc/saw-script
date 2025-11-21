@@ -1,9 +1,9 @@
  Loading file "test_typelevel.saw"
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -24,9 +24,9 @@ Definition TestTypelvl_MaxWidth : Coq.Init.Datatypes.bool :=
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -47,9 +47,9 @@ Definition TestTypelvl_MinWidth : Coq.Init.Datatypes.bool :=
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -69,9 +69,9 @@ Definition TestTypelvl_Arith1 (u1218 : Type) {Inh_u1218 : SAWCoreScaffolding.Inh
 
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.

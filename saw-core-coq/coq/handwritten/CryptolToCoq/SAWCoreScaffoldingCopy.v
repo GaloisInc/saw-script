@@ -1,6 +1,6 @@
-From Coq Require Import Lists.List.
-From Coq Require Import Numbers.NatInt.NZLog.
-From Coq Require Import Strings.String.
+From Stdlib Require Import Lists.List.
+From Stdlib Require Import Numbers.NatInt.NZLog.
+From Stdlib Require Import Strings.String.
 
 From Ornamental Require Import Ornaments.
 

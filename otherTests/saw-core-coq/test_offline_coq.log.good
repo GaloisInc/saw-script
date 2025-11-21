@@ -2,9 +2,9 @@
 === test_offline_coq1_prove0.v ===
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -32,9 +32,9 @@ Definition goal : Prop :=
 === test_offline_coq2_prove0.v ===
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -55,9 +55,9 @@ Definition goal : Prop :=
 === test_offline_coq3_prove0.v ===
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -81,9 +81,9 @@ Definition goal : Prop :=
 === test_offline_coq4_prove0.v ===
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -106,9 +106,9 @@ Definition goal : Prop :=
 === test_offline_coq5_prove0.v ===
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -132,9 +132,9 @@ Definition goal : Prop :=
 === test_offline_coq6_prove0.v ===
 
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.

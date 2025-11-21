@@ -1,10 +1,10 @@
 (* This module contains additional definitions that can only be defined after *)
 (* the Cryptol prelude has been defined. *)
 
-From Coq          Require Import Lia.
-From Coq          Require Import Lists.List.
-From Coq          Require Import String.
-From Coq          Require Import Vectors.Vector.
+From Stdlib       Require Import Lia.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCorePrelude.
 Import SAWCorePrelude.
