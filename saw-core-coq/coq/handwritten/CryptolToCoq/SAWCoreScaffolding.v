@@ -1,11 +1,11 @@
-From Coq Require Import ZArith.BinInt.
-From Coq Require Import ZArith.Zdiv.
-From Coq Require Import NArith.NArith.
-From Coq Require Import Lists.List.
-From Coq Require        Numbers.NatInt.NZLog.
-From Coq Require Import Strings.String.
-From Coq Require Export Logic.Eqdep.
-From Coq Require Import Arith.PeanoNat.
+From Stdlib Require Import ZArith.BinInt.
+From Stdlib Require Import ZArith.Zdiv.
+From Stdlib Require Import NArith.NArith.
+From Stdlib Require Import Lists.List.
+From Stdlib Require        Numbers.NatInt.NZLog.
+From Stdlib Require Import Strings.String.
+From Stdlib Require Export Logic.Eqdep.
+From Stdlib Require Import Arith.PeanoNat.
 
 
 (***

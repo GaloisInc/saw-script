@@ -1,7 +1,7 @@
 (* This file contains definitions that seemed missing from Coq.Vectors.Vector *)
 
-From Coq         Require Import PeanoNat.
-From Coq.Vectors Require Vector.
+From Stdlib         Require Import PeanoNat.
+From Stdlib.Vectors Require Vector.
 
 Fixpoint zip {a b : Type} {n : nat} (xs : Vector.t a n) (ys : Vector.t b n) : Vector.t (a * b) n.
   refine (

@@ -51,9 +51,9 @@ text = pretty
 preamble :: TranslationConfiguration -> Doc ann
 preamble (TranslationConfiguration { vectorModule, postPreamble }) = text [i|
 (** Mandatory imports from saw-core-coq *)
-From Coq Require Import Lists.List.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import #{vectorModule}.
 Import VectorNotations.
