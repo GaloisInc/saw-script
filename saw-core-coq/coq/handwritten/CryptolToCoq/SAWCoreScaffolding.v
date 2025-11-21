@@ -102,7 +102,7 @@ Definition or     := orb.
 (** DEPRECATED: Use [xorb] instead. *)
 Definition xor    := xorb.
 
-Definition boolEq := Coq.Bool.Bool.eqb.
+Definition boolEq := Stdlib.Bool.Bool.eqb.
 
 Global Instance Inhabited_Unit : Inhabited UnitType :=
   MkInhabited UnitType tt.

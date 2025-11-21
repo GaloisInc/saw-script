@@ -34,7 +34,7 @@ Preprocess Module SCS as SCS'.
   Definition not      := negb.
   Definition or     := orb.
   Definition xor    := xorb.
-  Definition boolEq := Coq.Bool.Bool.eqb.
+  Definition boolEq := Stdlib.Bool.Bool.eqb.
   Theorem boolEq__eq (b1 b2:Bool) : Eq Bool (boolEq b1 b2) (ite Bool b1 b2 (not b2)).
   Proof.
     destruct b1, b2; reflexivity.

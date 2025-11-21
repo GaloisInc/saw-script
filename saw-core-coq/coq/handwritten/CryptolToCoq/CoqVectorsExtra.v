@@ -1,4 +1,4 @@
-(* This file contains definitions that seemed missing from Coq.Vectors.Vector *)
+(* This file contains definitions that seemed missing from Stdlib.Vectors.Vector *)
 
 From Stdlib         Require Import PeanoNat.
 From Stdlib.Vectors Require Vector.

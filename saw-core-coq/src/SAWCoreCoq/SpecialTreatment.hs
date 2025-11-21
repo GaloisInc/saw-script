@@ -175,32 +175,32 @@ skip = IdentSpecialTreatment
 -- | The Coq built-in @Datatypes@ module
 datatypesModule :: ModuleName
 datatypesModule =
-  mkModuleName ["Coq", "Init", "Datatypes"]
+  mkModuleName ["Init", "Datatypes"]
 
 -- | The Coq built-in @Logic@ module
 logicModule :: ModuleName
 logicModule =
-  mkModuleName ["Coq", "Init", "Logic"]
+  mkModuleName ["Init", "Logic"]
 
 -- | The Coq built-in @String@ module.
 stringModule :: ModuleName
 stringModule =
-  mkModuleName ["Coq", "Strings", "String"]
+  mkModuleName ["Stdlib", "Strings", "String"]
 
 -- | The Coq built-in @BinNums@ module.
 binNumsModule :: ModuleName
 binNumsModule =
-  mkModuleName ["Coq", "Numbers", "BinNums"]
+  mkModuleName ["Stdlib", "Numbers", "BinNums"]
 
 -- | The Coq built-in @BinPos@ module.
 binPosModule :: ModuleName
 binPosModule =
-  mkModuleName ["Coq", "PArith", "BinPos"]
+  mkModuleName ["Stdlib", "PArith", "BinPos"]
 
 -- | The Coq built-in @BinInt@ module.
 binIntModule :: ModuleName
 binIntModule =
-  mkModuleName ["Coq", "ZArith", "BinInt"]
+  mkModuleName ["Stdlib", "ZArith", "BinInt"]
 
 -- | The @SAWCoreScaffolding@ module
 sawDefinitionsModule :: ModuleName
