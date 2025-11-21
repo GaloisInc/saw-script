@@ -1,0 +1,684 @@
+{
+  "creator": "Yosys 0.59 (git sha1 5df4c20be, aarch64-linux-gnu-g++ 11.4.0-1ubuntu1~22.04 -fPIC -O3)",
+  "modules": {
+    "add4": {
+      "attributes": {
+        "top": "00000000000000000000000000000001",
+        "architecture": "add4arch",
+        "library": "work",
+        "hdlname": "add4",
+        "src_entity": "adder.vhd:46.8-46.12",
+        "src": "adder.vhd:54.14-54.22"
+      },
+      "ports": {
+        "a": {
+          "direction": "input",
+          "upto": 1,
+          "bits": [ 2, 3, 4, 5 ]
+        },
+        "b": {
+          "direction": "input",
+          "upto": 1,
+          "bits": [ 6, 7, 8, 9 ]
+        },
+        "res": {
+          "direction": "output",
+          "upto": 1,
+          "bits": [ 10, 11, 12, 13 ]
+        }
+      },
+      "cells": {
+        "full0": {
+          "hide_name": 0,
+          "type": "full_default(fullarch)",
+          "parameters": {
+          },
+          "attributes": {
+            "src": "adder.vhd:60.3-60.8"
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "cin": "input",
+            "cout": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 5 ],
+            "b": [ 9 ],
+            "cin": [ "0" ],
+            "cout": [ 14 ],
+            "s": [ 13 ]
+          }
+        },
+        "full1": {
+          "hide_name": 0,
+          "type": "full_default(fullarch)",
+          "parameters": {
+          },
+          "attributes": {
+            "src": "adder.vhd:61.3-61.8"
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "cin": "input",
+            "cout": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 4 ],
+            "b": [ 8 ],
+            "cin": [ 14 ],
+            "cout": [ 15 ],
+            "s": [ 12 ]
+          }
+        },
+        "full2": {
+          "hide_name": 0,
+          "type": "full_default(fullarch)",
+          "parameters": {
+          },
+          "attributes": {
+            "src": "adder.vhd:62.3-62.8"
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "cin": "input",
+            "cout": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 3 ],
+            "b": [ 7 ],
+            "cin": [ 15 ],
+            "cout": [ 16 ],
+            "s": [ 11 ]
+          }
+        },
+        "full3": {
+          "hide_name": 0,
+          "type": "full_default(fullarch)",
+          "parameters": {
+          },
+          "attributes": {
+            "src": "adder.vhd:63.3-63.8"
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "cin": "input",
+            "cout": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 2 ],
+            "b": [ 6 ],
+            "cin": [ 16 ],
+            "cout": [ 17 ],
+            "s": [ 10 ]
+          }
+        }
+      },
+      "netnames": {
+        "$verific$full0$adder.vhd:60$3": {
+          "hide_name": 1,
+          "bits": [ 18 ],
+          "attributes": {
+          }
+        },
+        "$verific$full0$adder.vhd:60$4": {
+          "hide_name": 1,
+          "bits": [ 19 ],
+          "attributes": {
+          }
+        },
+        "$verific$full0$adder.vhd:60$5": {
+          "hide_name": 1,
+          "bits": [ 20 ],
+          "attributes": {
+          }
+        },
+        "$verific$full0$adder.vhd:60$6": {
+          "hide_name": 1,
+          "bits": [ 21 ],
+          "attributes": {
+          }
+        },
+        "$verific$full0$adder.vhd:60$7": {
+          "hide_name": 1,
+          "bits": [ 22 ],
+          "attributes": {
+          }
+        },
+        "$verific$full1$adder.vhd:61$10": {
+          "hide_name": 1,
+          "bits": [ 23 ],
+          "attributes": {
+          }
+        },
+        "$verific$full1$adder.vhd:61$11": {
+          "hide_name": 1,
+          "bits": [ 24 ],
+          "attributes": {
+          }
+        },
+        "$verific$full1$adder.vhd:61$12": {
+          "hide_name": 1,
+          "bits": [ 25 ],
+          "attributes": {
+          }
+        },
+        "$verific$full1$adder.vhd:61$8": {
+          "hide_name": 1,
+          "bits": [ 26 ],
+          "attributes": {
+          }
+        },
+        "$verific$full1$adder.vhd:61$9": {
+          "hide_name": 1,
+          "bits": [ 27 ],
+          "attributes": {
+          }
+        },
+        "$verific$full2$adder.vhd:62$13": {
+          "hide_name": 1,
+          "bits": [ 28 ],
+          "attributes": {
+          }
+        },
+        "$verific$full2$adder.vhd:62$14": {
+          "hide_name": 1,
+          "bits": [ 29 ],
+          "attributes": {
+          }
+        },
+        "$verific$full2$adder.vhd:62$15": {
+          "hide_name": 1,
+          "bits": [ 30 ],
+          "attributes": {
+          }
+        },
+        "$verific$full2$adder.vhd:62$16": {
+          "hide_name": 1,
+          "bits": [ 31 ],
+          "attributes": {
+          }
+        },
+        "$verific$full2$adder.vhd:62$17": {
+          "hide_name": 1,
+          "bits": [ 32 ],
+          "attributes": {
+          }
+        },
+        "$verific$full3$adder.vhd:63$18": {
+          "hide_name": 1,
+          "bits": [ 33 ],
+          "attributes": {
+          }
+        },
+        "$verific$full3$adder.vhd:63$19": {
+          "hide_name": 1,
+          "bits": [ 34 ],
+          "attributes": {
+          }
+        },
+        "$verific$full3$adder.vhd:63$20": {
+          "hide_name": 1,
+          "bits": [ 35 ],
+          "attributes": {
+          }
+        },
+        "$verific$full3$adder.vhd:63$21": {
+          "hide_name": 1,
+          "bits": [ 36 ],
+          "attributes": {
+          }
+        },
+        "$verific$full3$adder.vhd:63$22": {
+          "hide_name": 1,
+          "bits": [ 37 ],
+          "attributes": {
+          }
+        },
+        "$verific$n1$1": {
+          "hide_name": 1,
+          "bits": [ "0" ],
+          "attributes": {
+          }
+        },
+        "a": {
+          "hide_name": 0,
+          "bits": [ 2, 3, 4, 5 ],
+          "upto": 1,
+          "attributes": {
+            "src": "adder.vhd:48.5-48.6"
+          }
+        },
+        "b": {
+          "hide_name": 0,
+          "bits": [ 6, 7, 8, 9 ],
+          "upto": 1,
+          "attributes": {
+            "src": "adder.vhd:49.5-49.6"
+          }
+        },
+        "full0cout": {
+          "hide_name": 0,
+          "bits": [ 14 ],
+          "attributes": {
+            "src": "adder.vhd:55.10-55.19"
+          }
+        },
+        "full1cout": {
+          "hide_name": 0,
+          "bits": [ 15 ],
+          "attributes": {
+            "src": "adder.vhd:56.10-56.19"
+          }
+        },
+        "full2cout": {
+          "hide_name": 0,
+          "bits": [ 16 ],
+          "attributes": {
+            "src": "adder.vhd:57.10-57.19"
+          }
+        },
+        "ignore": {
+          "hide_name": 0,
+          "bits": [ 17 ],
+          "attributes": {
+            "src": "adder.vhd:58.10-58.16"
+          }
+        },
+        "res": {
+          "hide_name": 0,
+          "bits": [ 10, 11, 12, 13 ],
+          "upto": 1,
+          "attributes": {
+            "src": "adder.vhd:50.5-50.8"
+          }
+        }
+      }
+    },
+    "full_default(fullarch)": {
+      "attributes": {
+        "architecture": "fullarch",
+        "library": "work",
+        "hdlname": "full",
+        "src_entity": "adder.vhd:22.8-22.12",
+        "src": "adder.vhd:32.14-32.22"
+      },
+      "ports": {
+        "a": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "b": {
+          "direction": "input",
+          "bits": [ 3 ]
+        },
+        "cin": {
+          "direction": "input",
+          "bits": [ 4 ]
+        },
+        "cout": {
+          "direction": "output",
+          "bits": [ 5 ]
+        },
+        "s": {
+          "direction": "output",
+          "bits": [ 6 ]
+        }
+      },
+      "cells": {
+        "$verific$i4$adder.vhd:39$32": {
+          "hide_name": 1,
+          "type": "$or",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000001",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000000001",
+            "Y_WIDTH": "00000000000000000000000000000001"
+          },
+          "attributes": {
+            "src": "adder.vhd:39.11-39.27"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 7 ],
+            "B": [ 8 ],
+            "Y": [ 9 ]
+          }
+        },
+        "$verific$i5$adder.vhd:39$33": {
+          "hide_name": 1,
+          "type": "$_BUF_",
+          "parameters": {
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "A": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 9 ],
+            "Y": [ 5 ]
+          }
+        },
+        "half0": {
+          "hide_name": 0,
+          "type": "half_default(halfarch)",
+          "parameters": {
+          },
+          "attributes": {
+            "src": "adder.vhd:37.3-37.8"
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "c": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 2 ],
+            "b": [ 3 ],
+            "c": [ 7 ],
+            "s": [ 10 ]
+          }
+        },
+        "half1": {
+          "hide_name": 0,
+          "type": "half_default(halfarch)",
+          "parameters": {
+          },
+          "attributes": {
+            "src": "adder.vhd:38.3-38.8"
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "c": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 10 ],
+            "b": [ 4 ],
+            "c": [ 8 ],
+            "s": [ 6 ]
+          }
+        }
+      },
+      "netnames": {
+        "$verific$half0$adder.vhd:37$24": {
+          "hide_name": 1,
+          "bits": [ 11 ],
+          "attributes": {
+          }
+        },
+        "$verific$half0$adder.vhd:37$25": {
+          "hide_name": 1,
+          "bits": [ 12 ],
+          "attributes": {
+          }
+        },
+        "$verific$half0$adder.vhd:37$26": {
+          "hide_name": 1,
+          "bits": [ 13 ],
+          "attributes": {
+          }
+        },
+        "$verific$half0$adder.vhd:37$27": {
+          "hide_name": 1,
+          "bits": [ 14 ],
+          "attributes": {
+          }
+        },
+        "$verific$half1$adder.vhd:38$28": {
+          "hide_name": 1,
+          "bits": [ 15 ],
+          "attributes": {
+          }
+        },
+        "$verific$half1$adder.vhd:38$29": {
+          "hide_name": 1,
+          "bits": [ 16 ],
+          "attributes": {
+          }
+        },
+        "$verific$half1$adder.vhd:38$30": {
+          "hide_name": 1,
+          "bits": [ 17 ],
+          "attributes": {
+          }
+        },
+        "$verific$half1$adder.vhd:38$31": {
+          "hide_name": 1,
+          "bits": [ 18 ],
+          "attributes": {
+          }
+        },
+        "$verific$n12$23": {
+          "hide_name": 1,
+          "bits": [ 9 ],
+          "attributes": {
+          }
+        },
+        "a": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "src": "adder.vhd:24.5-24.6"
+          }
+        },
+        "b": {
+          "hide_name": 0,
+          "bits": [ 3 ],
+          "attributes": {
+            "src": "adder.vhd:25.5-25.6"
+          }
+        },
+        "cin": {
+          "hide_name": 0,
+          "bits": [ 4 ],
+          "attributes": {
+            "src": "adder.vhd:26.5-26.8"
+          }
+        },
+        "cout": {
+          "hide_name": 0,
+          "bits": [ 5 ],
+          "attributes": {
+            "src": "adder.vhd:27.5-27.9"
+          }
+        },
+        "half0c": {
+          "hide_name": 0,
+          "bits": [ 7 ],
+          "attributes": {
+            "src": "adder.vhd:33.10-33.16"
+          }
+        },
+        "half0s": {
+          "hide_name": 0,
+          "bits": [ 10 ],
+          "attributes": {
+            "src": "adder.vhd:34.10-34.16"
+          }
+        },
+        "half1c": {
+          "hide_name": 0,
+          "bits": [ 8 ],
+          "attributes": {
+            "src": "adder.vhd:35.10-35.16"
+          }
+        },
+        "s": {
+          "hide_name": 0,
+          "bits": [ 6 ],
+          "attributes": {
+            "src": "adder.vhd:28.5-28.6"
+          }
+        }
+      }
+    },
+    "half_default(halfarch)": {
+      "attributes": {
+        "architecture": "halfarch",
+        "library": "work",
+        "hdlname": "half",
+        "src_entity": "adder.vhd:4.8-4.12",
+        "src": "adder.vhd:13.14-13.22"
+      },
+      "ports": {
+        "a": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "b": {
+          "direction": "input",
+          "bits": [ 3 ]
+        },
+        "c": {
+          "direction": "output",
+          "bits": [ 4 ]
+        },
+        "s": {
+          "direction": "output",
+          "bits": [ 5 ]
+        }
+      },
+      "cells": {
+        "$verific$i4$adder.vhd:15$36": {
+          "hide_name": 1,
+          "type": "$and",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000001",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000000001",
+            "Y_WIDTH": "00000000000000000000000000000001"
+          },
+          "attributes": {
+            "src": "adder.vhd:15.8-15.15"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 2 ],
+            "B": [ 3 ],
+            "Y": [ 6 ]
+          }
+        },
+        "$verific$i5$adder.vhd:15$37": {
+          "hide_name": 1,
+          "type": "$_BUF_",
+          "parameters": {
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "A": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 6 ],
+            "Y": [ 4 ]
+          }
+        },
+        "$verific$i6$adder.vhd:16$38": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000001",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000000001",
+            "Y_WIDTH": "00000000000000000000000000000001"
+          },
+          "attributes": {
+            "src": "adder.vhd:16.8-16.15"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 2 ],
+            "B": [ 3 ],
+            "Y": [ 7 ]
+          }
+        },
+        "$verific$i7$adder.vhd:16$39": {
+          "hide_name": 1,
+          "type": "$_BUF_",
+          "parameters": {
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "A": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 7 ],
+            "Y": [ 5 ]
+          }
+        }
+      },
+      "netnames": {
+        "$verific$n4$34": {
+          "hide_name": 1,
+          "bits": [ 6 ],
+          "attributes": {
+          }
+        },
+        "$verific$n6$35": {
+          "hide_name": 1,
+          "bits": [ 7 ],
+          "attributes": {
+          }
+        },
+        "a": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "src": "adder.vhd:6.5-6.6"
+          }
+        },
+        "b": {
+          "hide_name": 0,
+          "bits": [ 3 ],
+          "attributes": {
+            "src": "adder.vhd:7.5-7.6"
+          }
+        },
+        "c": {
+          "hide_name": 0,
+          "bits": [ 4 ],
+          "attributes": {
+            "src": "adder.vhd:8.5-8.6"
+          }
+        },
+        "s": {
+          "hide_name": 0,
+          "bits": [ 5 ],
+          "attributes": {
+            "src": "adder.vhd:9.5-9.6"
+          }
+        }
+      }
+    }
+  }
+}
