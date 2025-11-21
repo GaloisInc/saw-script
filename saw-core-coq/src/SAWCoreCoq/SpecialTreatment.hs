@@ -370,6 +370,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("maxNat",    mapsTo sawDefinitionsModule "maxNat")
   , ("Nat__rec",  mapsTo sawDefinitionsModule "Nat__rec")
   , ("if0Nat",    mapsTo sawDefinitionsModule "if0Nat")
+  , ("doubleNat", skip)
   ]
 
   -- Binary numerals
@@ -398,6 +399,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("ZPos",      mapsTo binIntModule "Zpos")
   , ("ZNeg",      mapsTo binIntModule "Zneg")
   , ("subNZ",     skip)
+  , ("posDivMod", skip)
   ]
 
   -- Vectors

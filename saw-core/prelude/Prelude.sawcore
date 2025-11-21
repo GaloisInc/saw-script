@@ -309,31 +309,36 @@ piCong1 r x y eq =
 --------------------------------------------------------------------------------
 -- Booleans
 
--- Boolean is a primitive type, because it is handled specially by some of the
--- back-ends (e.g., the SAT/SMT solvers)
-primitive Bool : sort 0;
-primitive True : Bool;
-primitive False : Bool;
+data Bool : sort 0 where {
+    True : Bool;
+    False : Bool;
+  }
 
--- Elimination form for Bool is dependent if-then-else. It is declared
--- as a primitive because Bool is. It also rearranges the arguments to
--- look more like normal if-then-else.
-primitive iteDep : (p : Bool -> sort 1) -> (b:Bool) ->
-                    p True -> p False -> p b;
+-- Elimination form for Bool is dependent if-then-else.
+-- It rearranges the arguments to look like normal if-then-else.
+iteDep : (p : Bool -> sort 1) -> (b:Bool) -> p True -> p False -> p b;
+iteDep p b f1 f2 = Bool#rec1 p f1 f2 b;
 
 -- Reduction rules for iteDep
-axiom iteDep_True : (p : Bool -> sort 1) -> (f1:p True) -> (f2:p False) ->
-                     Eq (p True) (iteDep p True f1 f2) f1;
-axiom iteDep_False : (p : Bool -> sort 1) -> (f1:p True) -> (f2:p False) ->
-                      Eq (p False) (iteDep p False f1 f2) f2;
+iteDep_True :
+  (p : Bool -> sort 1) -> (f1:p True) -> (f2:p False) ->
+  Eq (p True) (iteDep p True f1 f2) f1;
+iteDep_True p f1 f2 = Refl (p True) f1;
 
--- Non-dependent if-then-else; this is a primitive because it is handled
--- specially by some of the back-ends (e.g., the SAT/SMT solvers)
-primitive ite : (a : sort 1) -> Bool -> a -> a -> a;
+iteDep_False :
+  (p : Bool -> sort 1) -> (f1:p True) -> (f2:p False) ->
+  Eq (p False) (iteDep p False f1 f2) f2;
+iteDep_False p f1 f2 = Refl (p False) f2;
+
+-- Non-dependent if-then-else
+ite : (a : sort 1) -> Bool -> a -> a -> a;
+ite a b x y = Bool#rec1 (\ (_ : Bool) -> a) x y b;
 
 -- ite should be the same as iteDep
-axiom ite_eq_iteDep : (a:sort 1) -> (b:Bool) -> (x y:a) ->
-                       Eq a (ite a b x y) (iteDep (\ (_:Bool) -> a) b x y);
+ite_eq_iteDep :
+  (a:sort 1) -> (b:Bool) -> (x y:a) ->
+  Eq a (ite a b x y) (iteDep (\ (_:Bool) -> a) b x y);
+ite_eq_iteDep a b x y = Refl a (ite a b x y);
 
 ite_true (a : sort 1) (x y : a) : Eq a (ite a True x y) x =
   trans a (ite a True x y) (iteDep (\ (b:Bool) -> a) True x y) x
@@ -362,30 +367,40 @@ ifWithProof a b x f = iteWithProof a b f (\(_:Eq Bool b False) -> x);
 -- The Boolean operations
 --
 
-primitive not : Bool -> Bool;
-axiom not__eq : (b:Bool) -> Eq Bool (not b) (ite Bool b False True);
+not : Bool -> Bool;
+not b = ite Bool b False True;
 
-primitive and : Bool -> Bool -> Bool;
-axiom and__eq : (b1 b2:Bool) -> Eq Bool (and b1 b2) (ite Bool b1 b2 False);
+and : Bool -> Bool -> Bool;
+and b1 b2 = ite Bool b1 b2 False;
 
-primitive or : Bool -> Bool -> Bool;
-axiom or__eq : (b1 b2:Bool) -> Eq Bool (or b1 b2) (ite Bool b1 True b2);
+or : Bool -> Bool -> Bool;
+or b1 b2 = ite Bool b1 True b2;
 
-primitive xor : Bool -> Bool -> Bool;
-axiom xor__eq : (b1 b2:Bool) ->
-                 Eq Bool (xor b1 b2) (ite Bool b1 (not b2) b2);
+xor : Bool -> Bool -> Bool;
+xor b1 b2 = ite Bool b1 (not b2) b2;
 
 -- Decidable Boolean equality, also known as iff
-primitive boolEq : Bool -> Bool -> Bool;
-axiom boolEq__eq : (b1 b2:Bool) ->
-                    Eq Bool (boolEq b1 b2) (ite Bool b1 b2 (not b2));
+boolEq : Bool -> Bool -> Bool;
+boolEq b1 b2 = ite Bool b1 b2 (not b2);
 
--- Implies is not a primitive, as it is not mapped by any of the simulator
--- back-ends; instead, it is just defined in terms of or and not
+not__eq : (b:Bool) -> Eq Bool (not b) (ite Bool b False True);
+not__eq b = Refl Bool (not b);
+
+and__eq : (b1 b2:Bool) -> Eq Bool (and b1 b2) (ite Bool b1 b2 False);
+and__eq b1 b2 = Refl Bool (and b1 b2);
+
+or__eq : (b1 b2:Bool) -> Eq Bool (or b1 b2) (ite Bool b1 True b2);
+or__eq b1 b2 = Refl Bool (or b1 b2);
+
+xor__eq : (b1 b2:Bool) -> Eq Bool (xor b1 b2) (ite Bool b1 (not b2) b2);
+xor__eq b1 b2 = Refl Bool (xor b1 b2);
+
+boolEq__eq : (b1 b2:Bool) -> Eq Bool (boolEq b1 b2) (ite Bool b1 b2 (not b2));
+boolEq__eq b1 b2 = Refl Bool (boolEq b1 b2);
+
 implies : Bool -> Bool -> Bool;
 implies = \ (a:Bool) (b:Bool) -> or (not a) b;
 
--- FIXME: this rule should be derived by scDefRewriteRules
 implies__eq : (a b:Bool) -> Eq Bool (implies a b) (or (not a) b);
 implies__eq a b = Refl Bool (implies a b);
 
@@ -870,13 +885,13 @@ posEq =
   )
   (\ (x : Pos) (rx : Pos -> Bool) ->
    Pos_cases Bool
-   True
+   False
    (\ (y : Pos) (_ : Bool) -> rx y)
    (\ (y : Pos) (_ : Bool) -> False)
   )
   (\ (x : Pos) (rx : Pos -> Bool) ->
    Pos_cases Bool
-   True
+   False
    (\ (y : Pos) (_ : Bool) -> False)
    (\ (y : Pos) (_ : Bool) -> rx y)
   );
@@ -954,14 +969,16 @@ mulNat =
 
 -- | Natural exponentiation
 expNat : Nat -> Nat -> Nat;
-expNat =
-  Nat#rec (\ (_ : Nat) -> Nat -> Nat)
-  (\ (_ : Nat) -> Zero)
-  (\ (x : Pos) ->
+expNat m n =
+  Nat#rec (\ (_ : Nat) -> Nat)
+  (NatPos One)
+  (\ (y : Pos) ->
    Nat#rec (\ (_ : Nat) -> Nat)
-   (NatPos One)
-   (\ (y : Pos) -> NatPos (posExp x y))
-  );
+   Zero
+   (\ (x : Pos) -> NatPos (posExp x y))
+   m
+  )
+  n;
 
 equalNat : Nat -> Nat -> Bool;
 equalNat =
@@ -1086,6 +1103,50 @@ ZtoNat = Z_cases Nat Zero NatPos (\ (_ : Pos) -> Zero);
 
 subNat : Nat -> Nat -> Nat;
 subNat x y = ZtoNat (subNZ x y);
+
+--------------------------------------------------------------------------------
+-- Division on Nat
+
+doubleNat : Nat -> Nat;
+doubleNat =
+  Nat#rec (\ (_ : Nat) -> Nat)
+  Zero
+  (\ (x : Pos) -> NatPos (Bit0 x));
+
+posDivMod : Pos -> Nat -> Nat * Nat;
+posDivMod x d =
+  Pos_cases (Nat * Nat)
+  (ite (Nat * Nat) (equalNat d 1) (1, 0) (0, 1))
+  (\ (_ : Pos) (qr : Nat * Nat) ->
+    (\ (r' : Nat) ->
+      ite (Nat * Nat) (leNat d r')
+      (Succ (doubleNat qr.(1)), subNat r' d)
+      (doubleNat qr.(1), r')
+    )
+    (doubleNat qr.(2))
+  )
+  (\ (_ : Pos) (qr : Nat * Nat) ->
+    (\ (r' : Nat) ->
+      ite (Nat * Nat) (leNat d r')
+      (Succ (doubleNat qr.(1)), subNat r' d)
+      (doubleNat qr.(1), r')
+    )
+    (Succ (doubleNat qr.(2)))
+  )
+  x;
+
+-- | Natural division and modulus
+divModNat: Nat -> Nat -> Nat * Nat;
+divModNat =
+  Nat#rec (\ (_ : Nat) -> Nat -> Nat * Nat)
+  (\ (d : Nat) -> (0, 0))
+  posDivMod;
+
+divNat : Nat -> Nat -> Nat;
+divNat x y = (divModNat x y).(1);
+
+modNat : Nat -> Nat -> Nat;
+modNat x y = (divModNat x y).(2);
 
 --------------------------------------------------------------------------------
 -- Induction on Natural Numbers
@@ -1246,15 +1307,6 @@ ifEqNatWithProof : (a : sort 0) -> (m n : Nat) -> a -> (eqNat m n -> a) -> a;
 ifEqNatWithProof a m n x f =
   ifWithProof a (equalNat m n) x
     (\ (pf:Eq Bool (equalNat m n) True) -> f (equalNatToEqNat m n pf));
-
--- | Natural division and modulus
-primitive divModNat : Nat -> Nat -> Nat * Nat;
-
-divNat : Nat -> Nat -> Nat;
-divNat x y = (divModNat x y).(1);
-
-modNat : Nat -> Nat -> Nat;
-modNat x y = (divModNat x y).(2);
 
 -- There are implicit constructors from integer literals.
 

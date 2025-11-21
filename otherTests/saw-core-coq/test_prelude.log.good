@@ -133,11 +133,7 @@ Definition piCong0 : forall (r : Type), forall (x : Type), forall (y : Type), fo
 Definition piCong1 : forall (r : Type), forall (x : Type), forall (y : Type), forall (_1 : @Coq.Init.Logic.eq Type x y), @Coq.Init.Logic.eq Type (forall (_2 : r), x) (forall (_2 : r), y) :=
   fun (r : Type) (x : Type) (y : Type) (eq : @Coq.Init.Logic.eq Type x y) => SAWCoreScaffolding.Eq__rec Type x (fun (y' : Type) (eq' : @Coq.Init.Logic.eq Type x y') => @Coq.Init.Logic.eq Type (forall (_1 : r), x) (forall (_1 : r), y')) (@Coq.Init.Logic.eq_refl Type (forall (_1 : r), x)) y eq.
 
-(* "Prelude.Bool" was skipped *)
-
-(* "Prelude.True" was skipped *)
-
-(* "Prelude.False" was skipped *)
+(* Prelude.Bool was skipped *)
 
 (* "Prelude.iteDep" was skipped *)
 
@@ -163,21 +159,21 @@ Definition ifWithProof : forall (a : Type), forall (b : Coq.Init.Datatypes.bool)
 
 (* "Prelude.not" was skipped *)
 
-(* "Prelude.not__eq" was skipped *)
-
 (* "Prelude.and" was skipped *)
-
-(* "Prelude.and__eq" was skipped *)
 
 (* "Prelude.or" was skipped *)
 
-(* "Prelude.or__eq" was skipped *)
-
 (* "Prelude.xor" was skipped *)
 
-(* "Prelude.xor__eq" was skipped *)
-
 (* "Prelude.boolEq" was skipped *)
+
+(* "Prelude.not__eq" was skipped *)
+
+(* "Prelude.and__eq" was skipped *)
+
+(* "Prelude.or__eq" was skipped *)
+
+(* "Prelude.xor__eq" was skipped *)
 
 (* "Prelude.boolEq__eq" was skipped *)
 
@@ -444,7 +440,7 @@ Definition maybe : forall (a : Type), forall (b : Type), forall (_1 : b), forall
 (* "Prelude.posExp" was skipped *)
 
 Definition posEq : forall (_1 : Coq.PArith.BinPos.positive), forall (_2 : Coq.PArith.BinPos.positive), Coq.Init.Datatypes.bool :=
-  SAWCoreScaffolding.Pos_cases (forall (_1 : Coq.PArith.BinPos.positive), Coq.Init.Datatypes.bool) (SAWCoreScaffolding.Pos_cases Coq.Init.Datatypes.bool Coq.Init.Datatypes.true (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false) (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false)) (fun (x : Coq.PArith.BinPos.positive) (rx : forall (_1 : Coq.PArith.BinPos.positive), Coq.Init.Datatypes.bool) => SAWCoreScaffolding.Pos_cases Coq.Init.Datatypes.bool Coq.Init.Datatypes.true (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => rx y) (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false)) (fun (x : Coq.PArith.BinPos.positive) (rx : forall (_1 : Coq.PArith.BinPos.positive), Coq.Init.Datatypes.bool) => SAWCoreScaffolding.Pos_cases Coq.Init.Datatypes.bool Coq.Init.Datatypes.true (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false) (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => rx y)).
+  SAWCoreScaffolding.Pos_cases (forall (_1 : Coq.PArith.BinPos.positive), Coq.Init.Datatypes.bool) (SAWCoreScaffolding.Pos_cases Coq.Init.Datatypes.bool Coq.Init.Datatypes.true (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false) (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false)) (fun (x : Coq.PArith.BinPos.positive) (rx : forall (_1 : Coq.PArith.BinPos.positive), Coq.Init.Datatypes.bool) => SAWCoreScaffolding.Pos_cases Coq.Init.Datatypes.bool Coq.Init.Datatypes.false (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => rx y) (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false)) (fun (x : Coq.PArith.BinPos.positive) (rx : forall (_1 : Coq.PArith.BinPos.positive), Coq.Init.Datatypes.bool) => SAWCoreScaffolding.Pos_cases Coq.Init.Datatypes.bool Coq.Init.Datatypes.false (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false) (fun (y : Coq.PArith.BinPos.positive) (_1 : Coq.Init.Datatypes.bool) => rx y)).
 
 Definition posCmp : forall (_1 : Coq.PArith.BinPos.positive), forall (_2 : Coq.PArith.BinPos.positive), forall (_3 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool :=
   SAWCoreScaffolding.Pos_cases (forall (_1 : Coq.PArith.BinPos.positive), forall (_2 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (SAWCoreScaffolding.Pos_cases (forall (_1 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (fun (k : Coq.Init.Datatypes.bool) => k) (fun (y : Coq.PArith.BinPos.positive) (_1 : forall (_1 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (k : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.true) (fun (y : Coq.PArith.BinPos.positive) (_1 : forall (_1 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (k : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.true)) (fun (x : Coq.PArith.BinPos.positive) (rx : forall (_1 : Coq.PArith.BinPos.positive), forall (_2 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) => SAWCoreScaffolding.Pos_cases (forall (_1 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (fun (k : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false) (fun (y : Coq.PArith.BinPos.positive) (_1 : forall (_1 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (k : Coq.Init.Datatypes.bool) => rx y k) (fun (y : Coq.PArith.BinPos.positive) (_1 : forall (_1 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (k : Coq.Init.Datatypes.bool) => rx y Coq.Init.Datatypes.true)) (fun (x : Coq.PArith.BinPos.positive) (rx : forall (_1 : Coq.PArith.BinPos.positive), forall (_2 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) => SAWCoreScaffolding.Pos_cases (forall (_1 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (fun (k : Coq.Init.Datatypes.bool) => Coq.Init.Datatypes.false) (fun (y : Coq.PArith.BinPos.positive) (_1 : forall (_1 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (k : Coq.Init.Datatypes.bool) => rx y Coq.Init.Datatypes.false) (fun (y : Coq.PArith.BinPos.positive) (_1 : forall (_1 : Coq.Init.Datatypes.bool), Coq.Init.Datatypes.bool) (k : Coq.Init.Datatypes.bool) => rx y k)).
@@ -502,6 +498,18 @@ Definition ZtoNat : forall (_1 : Coq.ZArith.BinInt.Z), Coq.Init.Datatypes.nat :=
   Z_cases Coq.Init.Datatypes.nat SAWCoreScaffolding.Zero Coq.PArith.BinPos.Pos.to_nat (fun (_1 : Coq.PArith.BinPos.positive) => SAWCoreScaffolding.Zero).
 
 (* "Prelude.subNat" was skipped *)
+
+(* "Prelude.doubleNat" was skipped *)
+
+(* "Prelude.posDivMod" was skipped *)
+
+(* "Prelude.divModNat" was skipped *)
+
+Definition divNat : forall (_1 : Coq.Init.Datatypes.nat), forall (_2 : Coq.Init.Datatypes.nat), Coq.Init.Datatypes.nat :=
+  fun (x : Coq.Init.Datatypes.nat) (y : Coq.Init.Datatypes.nat) => fst (SAWCoreScaffolding.divModNat x y).
+
+Definition modNat : forall (_1 : Coq.Init.Datatypes.nat), forall (_2 : Coq.Init.Datatypes.nat), Coq.Init.Datatypes.nat :=
+  fun (x : Coq.Init.Datatypes.nat) (y : Coq.Init.Datatypes.nat) => snd (SAWCoreScaffolding.divModNat x y).
 
 (* Prelude.AccessiblePos was skipped *)
 
@@ -570,14 +578,6 @@ Axiom equalNatToEqNat : forall (m : Coq.Init.Datatypes.nat), forall (n : Coq.Ini
 Definition ifEqNatWithProof : forall (a : Type), forall (m : Coq.Init.Datatypes.nat), forall (n : Coq.Init.Datatypes.nat), forall (_1 : a), forall (_2 : forall (_2 : eqNat m n), a), a :=
   fun (a : Type) (m : Coq.Init.Datatypes.nat) (n : Coq.Init.Datatypes.nat) (x : a) (f : forall (_1 : eqNat m n), a) => let var__0   := SAWCoreScaffolding.equalNat m n in
   ifWithProof a var__0 x (fun (pf : @Coq.Init.Logic.eq Coq.Init.Datatypes.bool var__0 Coq.Init.Datatypes.true) => f (equalNatToEqNat m n pf)).
-
-(* "Prelude.divModNat" was skipped *)
-
-Definition divNat : forall (_1 : Coq.Init.Datatypes.nat), forall (_2 : Coq.Init.Datatypes.nat), Coq.Init.Datatypes.nat :=
-  fun (x : Coq.Init.Datatypes.nat) (y : Coq.Init.Datatypes.nat) => fst (SAWCoreScaffolding.divModNat x y).
-
-Definition modNat : forall (_1 : Coq.Init.Datatypes.nat), forall (_2 : Coq.Init.Datatypes.nat), Coq.Init.Datatypes.nat :=
-  fun (x : Coq.Init.Datatypes.nat) (y : Coq.Init.Datatypes.nat) => snd (SAWCoreScaffolding.divModNat x y).
 
 Definition natCase : forall (p : forall (_1 : Coq.Init.Datatypes.nat), Type), forall (_1 : p SAWCoreScaffolding.Zero), forall (_2 : forall (n : Coq.Init.Datatypes.nat), p (SAWCoreScaffolding.Succ n)), forall (n : Coq.Init.Datatypes.nat), p n :=
   fun (p : forall (_1 : Coq.Init.Datatypes.nat), Type) (z : p SAWCoreScaffolding.Zero) (s : forall (n : Coq.Init.Datatypes.nat), p (SAWCoreScaffolding.Succ n)) => SAWCoreScaffolding.Nat__rec p z (fun (n : Coq.Init.Datatypes.nat) (r : p n) => s n).
