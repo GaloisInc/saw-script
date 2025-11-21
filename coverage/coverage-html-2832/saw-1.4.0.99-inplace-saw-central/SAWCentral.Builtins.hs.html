@@ -1541,7 +1541,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1522 </span>rewritePrim :: SV.SAWSimpset -&gt; TypedTerm -&gt; TopLevel TypedTerm
 <span class="lineno"> 1523 </span><span class="decl"><span class="istickedoff">rewritePrim ss (TypedTerm schema t) = do</span>
 <span class="lineno"> 1524 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 1525 </span><span class="spaces">  </span><span class="istickedoff">(_,t') &lt;- io $ rewriteSharedTermTypeSafe sc ss t</span>
+<span class="lineno"> 1525 </span><span class="spaces">  </span><span class="istickedoff">(_,t') &lt;- io $ rewriteSharedTerm sc ss t</span>
 <span class="lineno"> 1526 </span><span class="spaces">  </span><span class="istickedoff">return (TypedTerm schema t')</span></span>
 <span class="lineno"> 1527 </span>
 <span class="lineno"> 1528 </span>unfold_term :: [Text] -&gt; TypedTerm -&gt; TopLevel TypedTerm

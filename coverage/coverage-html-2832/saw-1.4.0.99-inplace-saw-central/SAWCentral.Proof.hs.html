@@ -410,7 +410,7 @@ span.spaces    { background: white }
 <span class="lineno">  391 </span>-- | Rewrite the proposition using the provided Simpset
 <span class="lineno">  392 </span>simplifyProp :: Ord a =&gt; SharedContext -&gt; Simpset a -&gt; Prop -&gt; IO (Set a, Prop)
 <span class="lineno">  393 </span><span class="decl"><span class="istickedoff">simplifyProp sc ss (Prop tm) =</span>
-<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">do (a, tm') &lt;- rewriteSharedTermTypeSafe sc ss tm</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">do (a, tm') &lt;- rewriteSharedTerm sc ss tm</span>
 <span class="lineno">  395 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">a</span>, Prop tm')</span></span>
 <span class="lineno">  396 </span>
 <span class="lineno">  397 </span>-- | Rewrite the propositions using the provided Simpset
@@ -505,8 +505,8 @@ span.spaces    { background: white }
 <span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff">loop t =</span>
 <span class="lineno">  487 </span><span class="spaces">      </span><span class="istickedoff">case asPi t of</span>
 <span class="lineno">  488 </span><span class="spaces">        </span><span class="istickedoff">Just (nm, tp, body) -&gt;</span>
-<span class="lineno">  489 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do pf &lt;- loop =&lt;&lt; lift (scWhnf sc body)</span></span>
-<span class="lineno">  490 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">lift $ scLambda sc nm tp pf</span></span>
+<span class="lineno">  489 </span><span class="spaces">          </span><span class="istickedoff">do pf &lt;- loop =&lt;&lt; lift (scWhnf sc body)</span>
+<span class="lineno">  490 </span><span class="spaces">             </span><span class="istickedoff">lift $ scLambda sc nm tp pf</span>
 <span class="lineno">  491 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  492 </span><span class="spaces">          </span><span class="istickedoff">case asEq t of</span>
 <span class="lineno">  493 </span><span class="spaces">            </span><span class="istickedoff">Just (tp, x, _y) -&gt;</span>

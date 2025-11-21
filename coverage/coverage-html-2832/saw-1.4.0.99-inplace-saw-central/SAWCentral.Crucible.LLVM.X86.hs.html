@@ -340,7 +340,7 @@ span.spaces    { background: white }
 <span class="lineno">  321 </span><span class="spaces">  </span><span class="istickedoff">let ptrCmpDefault = do</span>
 <span class="lineno">  322 </span><span class="spaces">        </span><span class="istickedoff">undef &lt;- Macaw.mkUndefinedBool sym &quot;ptr_cmp&quot;</span>
 <span class="lineno">  323 </span><span class="spaces">        </span><span class="istickedoff">W4.itePred <span class="nottickedoff">sym</span> both_bits res_both_bits</span>
-<span class="lineno">  324 </span><span class="spaces">          </span><span class="istickedoff">=&lt;&lt; W4.itePred <span class="nottickedoff">sym</span> ok_both_ptrs res_both_ptrs undef</span>
+<span class="lineno">  324 </span><span class="spaces">          </span><span class="istickedoff">=&lt;&lt; W4.itePred <span class="nottickedoff">sym</span> ok_both_ptrs <span class="nottickedoff">res_both_ptrs</span> undef</span>
 <span class="lineno">  325 </span><span class="spaces">  </span><span class="istickedoff">case fixpointSelect of</span>
 <span class="lineno">  326 </span><span class="spaces">    </span><span class="istickedoff">SimpleFixpointCHC{} -&gt;</span>
 <span class="lineno">  327 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if | Just True &lt;- W4.asConstantPred both_bits -&gt;</span></span>

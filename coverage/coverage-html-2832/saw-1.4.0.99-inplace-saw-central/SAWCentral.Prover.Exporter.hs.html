@@ -492,115 +492,123 @@ span.spaces    { background: white }
 <span class="lineno">  473 </span><span class="spaces">  </span><span class="istickedoff">case Coq.translateTermAsDeclImports configuration <span class="nottickedoff">mm</span> (Coq.Ident (Text.unpack name)) t tp of</span>
 <span class="lineno">  474 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwTopLevel $ &quot;Error translating: &quot; ++ show err</span></span>
 <span class="lineno">  475 </span><span class="spaces">    </span><span class="istickedoff">Right doc -&gt; io $ case path of</span>
-<span class="lineno">  476 </span><span class="spaces">      </span><span class="istickedoff">&quot;&quot; -&gt; <span class="nottickedoff">print doc</span></span>
-<span class="lineno">  477 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; writeFile path (show doc)</span></span>
-<span class="lineno">  478 </span>
-<span class="lineno">  479 </span>writeCoqProp ::
-<span class="lineno">  480 </span>  Text -&gt;
-<span class="lineno">  481 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  482 </span>  [Text] -&gt;
-<span class="lineno">  483 </span>  FilePath -&gt;
-<span class="lineno">  484 </span>  Prop -&gt;
-<span class="lineno">  485 </span>  TopLevel ()
-<span class="lineno">  486 </span><span class="decl"><span class="nottickedoff">writeCoqProp name notations skips path t =</span>
-<span class="lineno">  487 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  488 </span><span class="spaces">     </span><span class="nottickedoff">tm &lt;- io (propToTerm sc t)</span>
-<span class="lineno">  489 </span><span class="spaces">     </span><span class="nottickedoff">writeCoqTerm name notations skips path tm</span></span>
-<span class="lineno">  490 </span>
-<span class="lineno">  491 </span>-- | Write out a representation of a Cryptol module in Gallina syntax for Coq.
-<span class="lineno">  492 </span>writeCoqCryptolModule ::
-<span class="lineno">  493 </span>  -- | Path to module to export
-<span class="lineno">  494 </span>  FilePath -&gt;
-<span class="lineno">  495 </span>  -- | Path for output Coq file
-<span class="lineno">  496 </span>  FilePath -&gt;
-<span class="lineno">  497 </span>  -- | Pairs of notation substitutions: operator on the left will be replaced
-<span class="lineno">  498 </span>  -- with the identifier on the right
-<span class="lineno">  499 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  500 </span>  -- | List of identifiers to skip during translation
-<span class="lineno">  501 </span>  [Text] -&gt;
-<span class="lineno">  502 </span>  TopLevel ()
-<span class="lineno">  503 </span><span class="decl"><span class="nottickedoff">writeCoqCryptolModule inputFile outputFile notations skips = io $ do</span>
-<span class="lineno">  504 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
-<span class="lineno">  505 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
-<span class="lineno">  506 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadCryptolModule sc</span>
-<span class="lineno">  507 </span><span class="spaces">  </span><span class="nottickedoff">let ?fileReader = BS.readFile</span>
-<span class="lineno">  508 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- initCryptolEnv sc</span>
-<span class="lineno">  509 </span><span class="spaces">  </span><span class="nottickedoff">cryptolPrimitivesForSAWCoreModule &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
-<span class="lineno">  510 </span><span class="spaces">  </span><span class="nottickedoff">(cm, _) &lt;- loadCryptolModule sc env inputFile</span>
-<span class="lineno">  511 </span><span class="spaces">               </span><span class="nottickedoff">-- NOTE: implementation of loadCryptolModule, now uses this default:</span>
-<span class="lineno">  512 </span><span class="spaces">               </span><span class="nottickedoff">--   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}</span>
-<span class="lineno">  513 </span><span class="spaces">  </span><span class="nottickedoff">cry_env &lt;- mkCryEnv env</span>
-<span class="lineno">  514 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno">  515 </span><span class="spaces">  </span><span class="nottickedoff">let ?mm = mm</span>
-<span class="lineno">  516 </span><span class="spaces">  </span><span class="nottickedoff">let cryptolPreludeDecls =</span>
-<span class="lineno">  517 </span><span class="spaces">        </span><span class="nottickedoff">map Coq.Ident $</span>
-<span class="lineno">  518 </span><span class="spaces">        </span><span class="nottickedoff">mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)</span>
-<span class="lineno">  519 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
-<span class="lineno">  520 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCoreExtra $</span>
-<span class="lineno">  521 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCore $</span>
-<span class="lineno">  522 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
-<span class="lineno">  523 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
-<span class="lineno">  524 </span><span class="spaces">        </span><span class="nottickedoff">coqTranslationConfiguration notations skips</span>
-<span class="lineno">  525 </span><span class="spaces">  </span><span class="nottickedoff">let nm = Coq.Ident (takeBaseName inputFile)</span>
-<span class="lineno">  526 </span><span class="spaces">  </span><span class="nottickedoff">res &lt;- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm</span>
-<span class="lineno">  527 </span><span class="spaces">  </span><span class="nottickedoff">case res of</span>
-<span class="lineno">  528 </span><span class="spaces">    </span><span class="nottickedoff">Left e -&gt; putStrLn $ show e</span>
-<span class="lineno">  529 </span><span class="spaces">    </span><span class="nottickedoff">Right cmDoc -&gt;</span>
-<span class="lineno">  530 </span><span class="spaces">      </span><span class="nottickedoff">writeFile outputFile</span>
-<span class="lineno">  531 </span><span class="spaces">      </span><span class="nottickedoff">(show . vcat $ [ Coq.preamble configuration, cmDoc])</span></span>
-<span class="lineno">  532 </span>
-<span class="lineno">  533 </span>nameOfSAWCorePrelude :: Un.ModuleName
-<span class="lineno">  534 </span><span class="decl"><span class="nottickedoff">nameOfSAWCorePrelude = Un.moduleName preludeModule</span></span>
-<span class="lineno">  535 </span>
-<span class="lineno">  536 </span>nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
-<span class="lineno">  537 </span><span class="decl"><span class="nottickedoff">nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule</span></span>
-<span class="lineno">  538 </span>
-<span class="lineno">  539 </span>writeCoqSAWCorePrelude ::
-<span class="lineno">  540 </span>  FilePath -&gt;
-<span class="lineno">  541 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  542 </span>  [Text] -&gt;
-<span class="lineno">  543 </span>  IO ()
-<span class="lineno">  544 </span><span class="decl"><span class="nottickedoff">writeCoqSAWCorePrelude outputFile notations skips = do</span>
-<span class="lineno">  545 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
-<span class="lineno">  546 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
-<span class="lineno">  547 </span><span class="spaces">  </span><span class="nottickedoff">mm  &lt;- scGetModuleMap sc</span>
-<span class="lineno">  548 </span><span class="spaces">  </span><span class="nottickedoff">m   &lt;- scFindModule sc nameOfSAWCorePrelude</span>
-<span class="lineno">  549 </span><span class="spaces">  </span><span class="nottickedoff">let configuration = coqTranslationConfiguration notations skips</span>
-<span class="lineno">  550 </span><span class="spaces">  </span><span class="nottickedoff">let doc = Coq.translateSAWModule configuration mm m</span>
-<span class="lineno">  551 </span><span class="spaces">  </span><span class="nottickedoff">writeFile outputFile (show . vcat $ [ Coq.preamble configuration, doc ])</span></span>
-<span class="lineno">  552 </span>
-<span class="lineno">  553 </span>writeCoqCryptolPrimitivesForSAWCore ::
-<span class="lineno">  554 </span>  FilePath -&gt;
-<span class="lineno">  555 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  556 </span>  [Text] -&gt;
-<span class="lineno">  557 </span>  IO ()
-<span class="lineno">  558 </span><span class="decl"><span class="nottickedoff">writeCoqCryptolPrimitivesForSAWCore cryFile notations skips = do</span>
-<span class="lineno">  559 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- mkSharedContext</span>
-<span class="lineno">  560 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadPreludeModule sc</span>
-<span class="lineno">  561 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadCryptolModule sc</span>
-<span class="lineno">  562 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadModule sc (emptyModule (mkModuleName [&quot;CryptolPrimitivesForSAWCore&quot;]))</span>
-<span class="lineno">  563 </span><span class="spaces">  </span><span class="nottickedoff">m  &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
-<span class="lineno">  564 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno">  565 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
-<span class="lineno">  566 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
-<span class="lineno">  567 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
-<span class="lineno">  568 </span><span class="spaces">        </span><span class="nottickedoff">coqTranslationConfiguration notations skips</span>
-<span class="lineno">  569 </span><span class="spaces">  </span><span class="nottickedoff">let doc = Coq.translateSAWModule configuration mm m</span>
-<span class="lineno">  570 </span><span class="spaces">  </span><span class="nottickedoff">writeFile cryFile (show . vcat $ [ Coq.preamble configuration</span>
-<span class="lineno">  571 </span><span class="spaces">                                   </span><span class="nottickedoff">, doc</span>
-<span class="lineno">  572 </span><span class="spaces">                                   </span><span class="nottickedoff">])</span></span>
-<span class="lineno">  573 </span>
-<span class="lineno">  574 </span>-- | Tranlsate a SAWCore term into an AIG
-<span class="lineno">  575 </span>bitblastPrim :: (AIG.IsAIG l g) =&gt; AIG.Proxy l g -&gt; SharedContext -&gt; Term -&gt; IO (AIG.Network l g)
-<span class="lineno">  576 </span><span class="decl"><span class="istickedoff">bitblastPrim proxy sc t = do</span>
-<span class="lineno">  577 </span><span class="spaces"></span><span class="istickedoff">{-</span>
-<span class="lineno">  578 </span><span class="spaces">  </span><span class="istickedoff">let s = ttSchema t'</span>
-<span class="lineno">  579 </span><span class="spaces">  </span><span class="istickedoff">case s of</span>
-<span class="lineno">  580 </span><span class="spaces">    </span><span class="istickedoff">C.Forall [] [] _ -&gt; return ()</span>
-<span class="lineno">  581 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; fail $ &quot;Attempting to bitblast a term with a polymorphic type: &quot; ++ pretty s</span>
-<span class="lineno">  582 </span><span class="spaces"></span><span class="istickedoff">-}</span>
-<span class="lineno">  583 </span><span class="spaces">  </span><span class="istickedoff">BBSim.withBitBlastedTerm <span class="nottickedoff">proxy</span> sc mempty t $ \be ls -&gt; do</span>
-<span class="lineno">  584 </span><span class="spaces">    </span><span class="istickedoff">return (AIG.Network be (toList ls))</span></span>
+<span class="lineno">  476 </span><span class="spaces">      </span><span class="istickedoff">&quot;&quot;  -&gt; <span class="nottickedoff">print doc</span></span>
+<span class="lineno">  477 </span><span class="spaces">      </span><span class="istickedoff">&quot;-&quot; -&gt; <span class="nottickedoff">print doc</span></span>
+<span class="lineno">  478 </span><span class="spaces">      </span><span class="istickedoff">_   -&gt; writeFile path (show doc)</span></span>
+<span class="lineno">  479 </span>
+<span class="lineno">  480 </span>writeCoqProp ::
+<span class="lineno">  481 </span>  Text -&gt;
+<span class="lineno">  482 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  483 </span>  [Text] -&gt;
+<span class="lineno">  484 </span>  FilePath -&gt;
+<span class="lineno">  485 </span>  Prop -&gt;
+<span class="lineno">  486 </span>  TopLevel ()
+<span class="lineno">  487 </span><span class="decl"><span class="nottickedoff">writeCoqProp name notations skips path t =</span>
+<span class="lineno">  488 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  489 </span><span class="spaces">     </span><span class="nottickedoff">tm &lt;- io (propToTerm sc t)</span>
+<span class="lineno">  490 </span><span class="spaces">     </span><span class="nottickedoff">writeCoqTerm name notations skips path tm</span></span>
+<span class="lineno">  491 </span>
+<span class="lineno">  492 </span>-- | Write out a representation of a Cryptol module in Gallina syntax for Coq.
+<span class="lineno">  493 </span>writeCoqCryptolModule ::
+<span class="lineno">  494 </span>  -- | Path to module to export
+<span class="lineno">  495 </span>  FilePath -&gt;
+<span class="lineno">  496 </span>  -- | Path for output Coq file
+<span class="lineno">  497 </span>  FilePath -&gt;
+<span class="lineno">  498 </span>  -- | Pairs of notation substitutions: operator on the left will be replaced
+<span class="lineno">  499 </span>  -- with the identifier on the right
+<span class="lineno">  500 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  501 </span>  -- | List of identifiers to skip during translation
+<span class="lineno">  502 </span>  [Text] -&gt;
+<span class="lineno">  503 </span>  TopLevel ()
+<span class="lineno">  504 </span><span class="decl"><span class="nottickedoff">writeCoqCryptolModule inputFile outputFile notations skips = io $ do</span>
+<span class="lineno">  505 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
+<span class="lineno">  506 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
+<span class="lineno">  507 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadCryptolModule sc</span>
+<span class="lineno">  508 </span><span class="spaces">  </span><span class="nottickedoff">let ?fileReader = BS.readFile</span>
+<span class="lineno">  509 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- initCryptolEnv sc</span>
+<span class="lineno">  510 </span><span class="spaces">  </span><span class="nottickedoff">cryptolPrimitivesForSAWCoreModule &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
+<span class="lineno">  511 </span><span class="spaces">  </span><span class="nottickedoff">(cm, _) &lt;- loadCryptolModule sc env inputFile</span>
+<span class="lineno">  512 </span><span class="spaces">               </span><span class="nottickedoff">-- NOTE: implementation of loadCryptolModule, now uses this default:</span>
+<span class="lineno">  513 </span><span class="spaces">               </span><span class="nottickedoff">--   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}</span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="nottickedoff">cry_env &lt;- mkCryEnv env</span>
+<span class="lineno">  515 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
+<span class="lineno">  516 </span><span class="spaces">  </span><span class="nottickedoff">let ?mm = mm</span>
+<span class="lineno">  517 </span><span class="spaces">  </span><span class="nottickedoff">let cryptolPreludeDecls =</span>
+<span class="lineno">  518 </span><span class="spaces">        </span><span class="nottickedoff">map Coq.Ident $</span>
+<span class="lineno">  519 </span><span class="spaces">        </span><span class="nottickedoff">mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)</span>
+<span class="lineno">  520 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
+<span class="lineno">  521 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCoreExtra $</span>
+<span class="lineno">  522 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCore $</span>
+<span class="lineno">  523 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
+<span class="lineno">  524 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
+<span class="lineno">  525 </span><span class="spaces">        </span><span class="nottickedoff">coqTranslationConfiguration notations skips</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="nottickedoff">let nm = Coq.Ident (takeBaseName inputFile)</span>
+<span class="lineno">  527 </span><span class="spaces">  </span><span class="nottickedoff">res &lt;- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm</span>
+<span class="lineno">  528 </span><span class="spaces">  </span><span class="nottickedoff">case res of</span>
+<span class="lineno">  529 </span><span class="spaces">    </span><span class="nottickedoff">Left e -&gt; putStrLn $ show e</span>
+<span class="lineno">  530 </span><span class="spaces">    </span><span class="nottickedoff">Right cmDoc -&gt; do</span>
+<span class="lineno">  531 </span><span class="spaces">      </span><span class="nottickedoff">let doc = vcat [ Coq.preamble configuration, cmDoc ]</span>
+<span class="lineno">  532 </span><span class="spaces">      </span><span class="nottickedoff">case outputFile of</span>
+<span class="lineno">  533 </span><span class="spaces">        </span><span class="nottickedoff">&quot;&quot;  -&gt; print doc</span>
+<span class="lineno">  534 </span><span class="spaces">        </span><span class="nottickedoff">&quot;-&quot; -&gt; print doc</span>
+<span class="lineno">  535 </span><span class="spaces">        </span><span class="nottickedoff">_   -&gt; writeFile outputFile $ show doc</span></span>
+<span class="lineno">  536 </span>
+<span class="lineno">  537 </span>nameOfSAWCorePrelude :: Un.ModuleName
+<span class="lineno">  538 </span><span class="decl"><span class="nottickedoff">nameOfSAWCorePrelude = Un.moduleName preludeModule</span></span>
+<span class="lineno">  539 </span>
+<span class="lineno">  540 </span>nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
+<span class="lineno">  541 </span><span class="decl"><span class="nottickedoff">nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule</span></span>
+<span class="lineno">  542 </span>
+<span class="lineno">  543 </span>writeCoqSAWCorePrelude ::
+<span class="lineno">  544 </span>  FilePath -&gt;
+<span class="lineno">  545 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  546 </span>  [Text] -&gt;
+<span class="lineno">  547 </span>  IO ()
+<span class="lineno">  548 </span><span class="decl"><span class="nottickedoff">writeCoqSAWCorePrelude outputFile notations skips = do</span>
+<span class="lineno">  549 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
+<span class="lineno">  550 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
+<span class="lineno">  551 </span><span class="spaces">  </span><span class="nottickedoff">mm  &lt;- scGetModuleMap sc</span>
+<span class="lineno">  552 </span><span class="spaces">  </span><span class="nottickedoff">m   &lt;- scFindModule sc nameOfSAWCorePrelude</span>
+<span class="lineno">  553 </span><span class="spaces">  </span><span class="nottickedoff">let configuration = coqTranslationConfiguration notations skips</span>
+<span class="lineno">  554 </span><span class="spaces">  </span><span class="nottickedoff">let doc = vcat [ Coq.preamble configuration, Coq.translateSAWModule configuration mm m ]</span>
+<span class="lineno">  555 </span><span class="spaces">  </span><span class="nottickedoff">case outputFile of</span>
+<span class="lineno">  556 </span><span class="spaces">    </span><span class="nottickedoff">&quot;&quot;  -&gt; print doc</span>
+<span class="lineno">  557 </span><span class="spaces">    </span><span class="nottickedoff">&quot;-&quot; -&gt; print doc</span>
+<span class="lineno">  558 </span><span class="spaces">    </span><span class="nottickedoff">_   -&gt; writeFile outputFile $ show doc</span></span>
+<span class="lineno">  559 </span>
+<span class="lineno">  560 </span>writeCoqCryptolPrimitivesForSAWCore ::
+<span class="lineno">  561 </span>  FilePath -&gt;
+<span class="lineno">  562 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  563 </span>  [Text] -&gt;
+<span class="lineno">  564 </span>  IO ()
+<span class="lineno">  565 </span><span class="decl"><span class="nottickedoff">writeCoqCryptolPrimitivesForSAWCore cryFile notations skips = do</span>
+<span class="lineno">  566 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- mkSharedContext</span>
+<span class="lineno">  567 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadPreludeModule sc</span>
+<span class="lineno">  568 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadCryptolModule sc</span>
+<span class="lineno">  569 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadModule sc (emptyModule (mkModuleName [&quot;CryptolPrimitivesForSAWCore&quot;]))</span>
+<span class="lineno">  570 </span><span class="spaces">  </span><span class="nottickedoff">m  &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
+<span class="lineno">  571 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
+<span class="lineno">  572 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
+<span class="lineno">  573 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
+<span class="lineno">  574 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
+<span class="lineno">  575 </span><span class="spaces">        </span><span class="nottickedoff">coqTranslationConfiguration notations skips</span>
+<span class="lineno">  576 </span><span class="spaces">  </span><span class="nottickedoff">let doc = vcat [ Coq.preamble configuration, Coq.translateSAWModule configuration mm m ]</span>
+<span class="lineno">  577 </span><span class="spaces">  </span><span class="nottickedoff">case cryFile of</span>
+<span class="lineno">  578 </span><span class="spaces">    </span><span class="nottickedoff">&quot;&quot;  -&gt; print doc</span>
+<span class="lineno">  579 </span><span class="spaces">    </span><span class="nottickedoff">&quot;-&quot; -&gt; print doc</span>
+<span class="lineno">  580 </span><span class="spaces">    </span><span class="nottickedoff">_   -&gt; writeFile cryFile $ show doc</span></span>
+<span class="lineno">  581 </span>
+<span class="lineno">  582 </span>-- | Tranlsate a SAWCore term into an AIG
+<span class="lineno">  583 </span>bitblastPrim :: (AIG.IsAIG l g) =&gt; AIG.Proxy l g -&gt; SharedContext -&gt; Term -&gt; IO (AIG.Network l g)
+<span class="lineno">  584 </span><span class="decl"><span class="istickedoff">bitblastPrim proxy sc t = do</span>
+<span class="lineno">  585 </span><span class="spaces"></span><span class="istickedoff">{-</span>
+<span class="lineno">  586 </span><span class="spaces">  </span><span class="istickedoff">let s = ttSchema t'</span>
+<span class="lineno">  587 </span><span class="spaces">  </span><span class="istickedoff">case s of</span>
+<span class="lineno">  588 </span><span class="spaces">    </span><span class="istickedoff">C.Forall [] [] _ -&gt; return ()</span>
+<span class="lineno">  589 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; fail $ &quot;Attempting to bitblast a term with a polymorphic type: &quot; ++ pretty s</span>
+<span class="lineno">  590 </span><span class="spaces"></span><span class="istickedoff">-}</span>
+<span class="lineno">  591 </span><span class="spaces">  </span><span class="istickedoff">BBSim.withBitBlastedTerm <span class="nottickedoff">proxy</span> sc mempty t $ \be ls -&gt; do</span>
+<span class="lineno">  592 </span><span class="spaces">    </span><span class="istickedoff">return (AIG.Network be (toList ls))</span></span>
 
 </pre>
 </body>

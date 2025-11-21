@@ -1183,7 +1183,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1164 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asRecordSelector -&gt; Just (t, n)) = go (ElimProj n : xs) t</span>
 <span class="lineno"> 1165 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asPairSelector -&gt; Just (t, i))   = go (ElimPair i : xs) t</span>
 <span class="lineno"> 1166 </span><span class="spaces">    </span><span class="istickedoff">go (ElimApp x : xs)       (asLambda -&gt; Just (vn, _, body))  = betaReduce xs [(vn, x)] body</span>
-<span class="lineno"> 1167 </span><span class="spaces">    </span><span class="istickedoff">go (ElimPair i : xs)      (asPairValue -&gt; Just (a, b))      = <span class="nottickedoff">go xs (if i then b else a)</span></span>
+<span class="lineno"> 1167 </span><span class="spaces">    </span><span class="istickedoff">go (ElimPair i : xs)      (asPairValue -&gt; Just (a, b))      = go xs (if <span class="tickonlyfalse">i</span> then <span class="nottickedoff">b</span> else a)</span>
 <span class="lineno"> 1168 </span><span class="spaces">    </span><span class="istickedoff">go (ElimProj fld : xs)    (asRecordValue -&gt; Just elems)     = case Map.lookup fld elems of</span>
 <span class="lineno"> 1169 </span><span class="spaces">                                                                    </span><span class="istickedoff">Just t -&gt; go xs t</span>
 <span class="lineno"> 1170 </span><span class="spaces">                                                                    </span><span class="istickedoff">Nothing -&gt;</span>
@@ -1440,7 +1440,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1421 </span><span class="spaces">               </span><span class="istickedoff">Just (Map.lookup fld -&gt; Just f_tp) -&gt; return f_tp</span>
 <span class="lineno"> 1422 </span><span class="spaces">               </span><span class="istickedoff">Just _ -&gt; <span class="nottickedoff">fail &quot;Record field not in record type&quot;</span></span>
 <span class="lineno"> 1423 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;Record project of non-record type&quot;</span></span>
-<span class="lineno"> 1424 </span><span class="spaces">        </span><span class="istickedoff">Sort s _ -&gt; <span class="nottickedoff">lift $ scSort sc (sortOf s)</span></span>
+<span class="lineno"> 1424 </span><span class="spaces">        </span><span class="istickedoff">Sort s _ -&gt; lift $ scSort sc (sortOf s)</span>
 <span class="lineno"> 1425 </span><span class="spaces">        </span><span class="istickedoff">ArrayValue tp vs -&gt; lift $ do</span>
 <span class="lineno"> 1426 </span><span class="spaces">          </span><span class="istickedoff">n &lt;- scNat sc (fromIntegral (V.length vs))</span>
 <span class="lineno"> 1427 </span><span class="spaces">          </span><span class="istickedoff">scVecType sc n tp</span>

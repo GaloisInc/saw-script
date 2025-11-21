@@ -275,7 +275,7 @@ span.spaces    { background: white }
 <span class="lineno">  256 </span><span class="decl"><span class="istickedoff">asPos (asGlobalApply &quot;Prelude.One&quot; -&gt; Just []) = pure 1</span>
 <span class="lineno">  257 </span><span class="spaces"></span><span class="istickedoff">asPos (asGlobalApply &quot;Prelude.Bit0&quot; -&gt; Just [asPos -&gt; Just n]) = pure (2*n)</span>
 <span class="lineno">  258 </span><span class="spaces"></span><span class="istickedoff">asPos (asGlobalApply &quot;Prelude.Bit1&quot; -&gt; Just [asPos -&gt; Just n]) = pure (2*n+1)</span>
-<span class="lineno">  259 </span><span class="spaces"></span><span class="istickedoff">asPos _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  259 </span><span class="spaces"></span><span class="istickedoff">asPos _ = Nothing</span></span>
 <span class="lineno">  260 </span>
 <span class="lineno">  261 </span>asNat :: Recognizer Term Natural
 <span class="lineno">  262 </span><span class="decl"><span class="istickedoff">asNat (asGlobalApply preludeZeroIdent -&gt; Just []) = pure 0</span>
