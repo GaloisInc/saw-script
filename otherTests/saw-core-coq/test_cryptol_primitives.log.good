@@ -10,7 +10,6 @@ Import VectorNotations.
 
 (** Post-preamble section specified by you *)
 From CryptolToCoq Require Import SAWCorePrelude.
-Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCorePreludeExtra.
 
 
