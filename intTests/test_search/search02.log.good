@@ -16,6 +16,7 @@ lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
 llvm_array : Int -> LLVMType -> LLVMType
 llvm_pointer : LLVMType -> LLVMType
+mergesimpsets : Simpset -> Simpset -> Simpset
 mir_array : Int -> MIRType -> MIRType
 mir_mux_values : Term -> MIRValue -> MIRValue -> MIRValue
 mir_raw_ptr_const : MIRType -> MIRType
