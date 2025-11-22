@@ -1183,7 +1183,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1164 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asRecordSelector -&gt; Just (t, n)) = go (ElimProj n : xs) t</span>
 <span class="lineno"> 1165 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asPairSelector -&gt; Just (t, i))   = go (ElimPair i : xs) t</span>
 <span class="lineno"> 1166 </span><span class="spaces">    </span><span class="istickedoff">go (ElimApp x : xs)       (asLambda -&gt; Just (vn, _, body))  = betaReduce xs [(vn, x)] body</span>
-<span class="lineno"> 1167 </span><span class="spaces">    </span><span class="istickedoff">go (ElimPair i : xs)      (asPairValue -&gt; Just (a, b))      = <span class="nottickedoff">go xs (if i then b else a)</span></span>
+<span class="lineno"> 1167 </span><span class="spaces">    </span><span class="istickedoff">go (ElimPair i : xs)      (asPairValue -&gt; Just (a, b))      = go xs (if <span class="tickonlyfalse">i</span> then <span class="nottickedoff">b</span> else a)</span>
 <span class="lineno"> 1168 </span><span class="spaces">    </span><span class="istickedoff">go (ElimProj fld : xs)    (asRecordValue -&gt; Just elems)     = case Map.lookup fld elems of</span>
 <span class="lineno"> 1169 </span><span class="spaces">                                                                    </span><span class="istickedoff">Just t -&gt; go xs t</span>
 <span class="lineno"> 1170 </span><span class="spaces">                                                                    </span><span class="istickedoff">Nothing -&gt;</span>

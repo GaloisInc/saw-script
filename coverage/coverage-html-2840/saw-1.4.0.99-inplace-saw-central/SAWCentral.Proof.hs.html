@@ -505,8 +505,8 @@ span.spaces    { background: white }
 <span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff">loop t =</span>
 <span class="lineno">  487 </span><span class="spaces">      </span><span class="istickedoff">case asPi t of</span>
 <span class="lineno">  488 </span><span class="spaces">        </span><span class="istickedoff">Just (nm, tp, body) -&gt;</span>
-<span class="lineno">  489 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do pf &lt;- loop =&lt;&lt; lift (scWhnf sc body)</span></span>
-<span class="lineno">  490 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">lift $ scLambda sc nm tp pf</span></span>
+<span class="lineno">  489 </span><span class="spaces">          </span><span class="istickedoff">do pf &lt;- loop =&lt;&lt; lift (scWhnf sc body)</span>
+<span class="lineno">  490 </span><span class="spaces">             </span><span class="istickedoff">lift $ scLambda sc nm tp pf</span>
 <span class="lineno">  491 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  492 </span><span class="spaces">          </span><span class="istickedoff">case asEq t of</span>
 <span class="lineno">  493 </span><span class="spaces">            </span><span class="istickedoff">Just (tp, x, _y) -&gt;</span>
