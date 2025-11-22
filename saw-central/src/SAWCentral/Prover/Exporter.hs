@@ -425,7 +425,6 @@ withImportSAWCorePrelude :: Coq.TranslationConfiguration  -> Coq.TranslationConf
 withImportSAWCorePrelude config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
   config { Coq.postPreamble = postPreamble ++ unlines
    [ "From CryptolToCoq Require Import SAWCorePrelude."
-   , "Import SAWCorePrelude."
    ]
   }
 
@@ -442,7 +441,6 @@ withImportCryptolPrimitivesForSAWCore ::
 withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
   config { Coq.postPreamble = postPreamble ++ unlines
    [ "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
-   , "Import CryptolPrimitivesForSAWCore."
    ]
   }
 

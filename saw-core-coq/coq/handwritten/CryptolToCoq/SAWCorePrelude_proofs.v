@@ -1,8 +1,8 @@
-From Coq Require Import Init.Nat.
-From Coq Require Import Lists.List.
-From Coq Require Import Morphisms.
-From Coq Require Import String.
-From Coq Require Import Vectors.Vector.
+From Stdlib Require Import Init.Nat.
+From Stdlib Require Import Lists.List.
+From Stdlib Require Import Morphisms.
+From Stdlib Require Import String.
+From Stdlib Require Import Vectors.Vector.
 
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.
