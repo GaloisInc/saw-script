@@ -126,6 +126,7 @@ The produced file `adder.json` can then be loaded into SAW with `yosys_import`.
 > The generated module names are not guaranteed to be valid Cryptol field names, so it is a good idea to sanity check
 > your JSON file before loading, and at least removing parenthesis from the names with sed:
 > `sed -i '' 's/)//g' adder.json && sed -i '' 's/(//g' adder.json`
+> This preprocessing is needed until [#2841](https://github.com/GaloisInc/saw-script/issues/2841) is fixed.
 
 :::{code-block} console
 $ saw
@@ -134,7 +135,7 @@ sawscript> enable_experimental
 sawscript> m <- yosys_import "adder.json"
 sawscript> :type m
 Term
-sawscript> return (type m)
+sawscript> print (type m)
 [23:57:14.492] {add4 : {a : [4], b : [4]} -> {res : [4]},
  full_Bfullarch : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]},
  half_Bhalfarch : {a : [1], b : [1]} -> {c : [1], s : [1]}}
@@ -144,9 +145,9 @@ sawscript> return (type m)
 We can access the fields of this record like we would any Cryptol record, and call the functions within like any Cryptol function.
 
 :::{code-block} console
-sawscript> return (type {{ m.add4 }})
+sawscript> print (type {{ m.add4 }})
 [00:00:25.255] {a : [4], b : [4]} -> {res : [4]}
-sawscript> return (eval_int {{ (m.add4 { a = 1, b = 2 }).res }})
+sawscript> print (eval_int {{ (m.add4 { a = 1, b = 2 }).res }})
 [00:02:07.329] 3
 :::
 
