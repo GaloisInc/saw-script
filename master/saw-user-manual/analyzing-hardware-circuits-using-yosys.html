@@ -195,9 +195,9 @@ First, a half-adder:</p>
 
 <span class="k">entity</span><span class="w"> </span><span class="nc">add4</span><span class="w"> </span><span class="k">is</span>
 <span class="w">  </span><span class="k">port</span><span class="w"> </span><span class="p">(</span>
-<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic_vector</span><span class="p">(</span><span class="mi">0</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span>
-<span class="w">    </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic_vector</span><span class="p">(</span><span class="mi">0</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span>
-<span class="w">    </span><span class="n">res</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic_vector</span><span class="p">(</span><span class="mi">0</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span>
+<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic_vector</span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="k">downto</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+<span class="w">    </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic_vector</span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="k">downto</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+<span class="w">    </span><span class="n">res</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic_vector</span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="k">downto</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
 <span class="w">  </span><span class="p">);</span>
 <span class="k">end</span><span class="w"> </span><span class="nc">add4</span><span class="p">;</span>
 
@@ -220,24 +220,37 @@ If all of the code above is in a file <code class="docutils literal notranslate"
 <span class="gp">$ </span>yosys<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;ghdl add4; write_json adder.json&#39;</span>
 </pre></div>
 </div>
-<p>The produced file <code class="docutils literal notranslate"><span class="pre">adder.json</span></code> can then be loaded into SAW with <code class="docutils literal notranslate"><span class="pre">yosys_import</span></code>:</p>
+<blockquote>
+<div><p><strong>Side Note:</strong> this assumes the ghdl plugin was properly installed, see https://github.com/ghdl/ghdl-yosys-plugin
+for installation details.</p>
+</div></blockquote>
+<p>The produced file <code class="docutils literal notranslate"><span class="pre">adder.json</span></code> can then be loaded into SAW with <code class="docutils literal notranslate"><span class="pre">yosys_import</span></code>.</p>
+<blockquote>
+<div><p><strong>Side Note:</strong> different versions of Yosys and GHDL may produce slightly different naming for the inner modules.
+TabbyCAD may produce different inner module names as well, so you would need to adjust the script below
+accordingly to account for different module names.</p>
+<p>The generated module names are not guaranteed to be valid Cryptol field names, so it is a good idea to sanity check
+your JSON file before loading, and at least removing parenthesis from the names with sed:
+<code class="docutils literal notranslate"><span class="pre">sed</span> <span class="pre">-i</span> <span class="pre">''</span> <span class="pre">'s/)//g'</span> <span class="pre">adder.json</span> <span class="pre">&amp;&amp;</span> <span class="pre">sed</span> <span class="pre">-i</span> <span class="pre">''</span> <span class="pre">'s/(//g'</span> <span class="pre">adder.json</span></code>
+This preprocessing is needed until <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/2841">#2841</a> is fixed.</p>
+</div></blockquote>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw
 <span class="go">...</span>
 <span class="go">sawscript&gt; enable_experimental</span>
 <span class="go">sawscript&gt; m &lt;- yosys_import &quot;adder.json&quot;</span>
 <span class="go">sawscript&gt; :type m</span>
 <span class="go">Term</span>
-<span class="go">sawscript&gt; type m</span>
+<span class="go">sawscript&gt; print (type m)</span>
 <span class="go">[23:57:14.492] {add4 : {a : [4], b : [4]} -&gt; {res : [4]},</span>
-<span class="go"> full : {a : [1], b : [1], cin : [1]} -&gt; {cout : [1], s : [1]},</span>
-<span class="go"> half : {a : [1], b : [1]} -&gt; {c : [1], s : [1]}}</span>
+<span class="go"> full_Bfullarch : {a : [1], b : [1], cin : [1]} -&gt; {cout : [1], s : [1]},</span>
+<span class="go"> half_Bhalfarch : {a : [1], b : [1]} -&gt; {c : [1], s : [1]}}</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">yosys_import</span></code> returns a <code class="docutils literal notranslate"><span class="pre">Term</span></code> with a Cryptol record type, where the fields correspond to each VHDL module.
 We can access the fields of this record like we would any Cryptol record, and call the functions within like any Cryptol function.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; type {{ m.add4 }}</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; print (type {{ m.add4 }})</span>
 <span class="go">[00:00:25.255] {a : [4], b : [4]} -&gt; {res : [4]}</span>
-<span class="go">sawscript&gt; eval_int {{ (m.add4 { a = 1, b = 2 }).res }}</span>
+<span class="go">sawscript&gt; print (eval_int {{ (m.add4 { a = 1, b = 2 }).res }})</span>
 <span class="go">[00:02:07.329] 3</span>
 </pre></div>
 </div>
@@ -264,8 +277,9 @@ For example, consider the following Cryptol specifications for one-bit and four-
 <span class="nf">cryadd4</span><span class="w"> </span><span class="n">inp</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">res</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">b</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
-<p>We can prove equivalence between <code class="docutils literal notranslate"><span class="pre">cryfull</span></code> and the VHDL <code class="docutils literal notranslate"><span class="pre">full</span></code> module:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; full_spec &lt;- yosys_verify {{ m.full }} [] {{ cryfull }} [] w4;</span>
+<p>If the Cryptol code above is in a file named <code class="docutils literal notranslate"><span class="pre">adder.cry</span></code>, we can prove equivalence between <code class="docutils literal notranslate"><span class="pre">cryfull</span></code> and the VHDL <code class="docutils literal notranslate"><span class="pre">full</span></code> module:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; import &quot;adder.cry&quot;</span>
+<span class="go">sawscript&gt; full_spec &lt;- yosys_verify {{ m.full }} [] {{ cryfull }} [] w4;</span>
 </pre></div>
 </div>
 <p>The result <code class="docutils literal notranslate"><span class="pre">full_spec</span></code> can then be used as an “override” when proving equivalence between <code class="docutils literal notranslate"><span class="pre">cryadd4</span></code> and the VHDL <code class="docutils literal notranslate"><span class="pre">add4</span></code> module:</p>
@@ -274,7 +288,7 @@ For example, consider the following Cryptol specifications for one-bit and four-
 </div>
 <p>The above could also be accomplished through the use of <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> and term rewriting, but it is much more verbose.</p>
 <p><code class="docutils literal notranslate"><span class="pre">yosys_verify</span></code> may also be given a list of preconditions under which the equivalence holds.
-For example, consider the following Cryptol specification for <code class="docutils literal notranslate"><span class="pre">full</span></code> that ignores the <code class="docutils literal notranslate"><span class="pre">cin</span></code> bit:</p>
+For example, consider the following Cryptol specification for <code class="docutils literal notranslate"><span class="pre">full</span></code> that ignores the <code class="docutils literal notranslate"><span class="pre">cin</span></code> bit (save them into a <code class="docutils literal notranslate"><span class="pre">cryfullnocarry.cry</span></code> file):</p>
 <div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">cryfullnocarry</span><span class="w"> </span><span class="kt">:</span><span class="w">  </span><span class="p">{</span><span class="n">a</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">cin</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">{</span><span class="n">cout</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
 <span class="nf">cryfullnocarry</span><span class="w"> </span><span class="n">inp</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">cout</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="n">cout</span><span class="p">],</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
 <span class="w">  </span><span class="kr">where</span><span class="w"> </span><span class="p">[</span><span class="n">cout</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">]</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">zext</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">zext</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">b</span>
@@ -282,14 +296,15 @@ For example, consider the following Cryptol specification for <code class="docut
 </div>
 <p>This is not equivalent to <code class="docutils literal notranslate"><span class="pre">full</span></code> in general, but it is if constrained to inputs where <code class="docutils literal notranslate"><span class="pre">cin</span> <span class="pre">=</span> <span class="pre">0</span></code>.
 We may express that precondition like so:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; full_nocarry_spec &lt;- yosys_verify {{ adderm.full }} [{{\(inp : {a : [1], b : [1], cin : [1]}) -&gt; inp.cin == 0}}] {{ cryfullnocarry }} [] w4;</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; import &quot;cryfullnocarry.cry&quot;</span>
+<span class="go">sawscript&gt; full_nocarry_spec &lt;- yosys_verify {{ m.full_Bfullarch }} [{{\(inp : {a : [1], b : [1], cin : [1]}) -&gt; inp.cin == 0}}] {{ cryfullnocarry }} [] w4;</span>
 </pre></div>
 </div>
 <p>The resulting override <code class="docutils literal notranslate"><span class="pre">full_nocarry_spec</span></code> may still be used in the proof for <code class="docutils literal notranslate"><span class="pre">add4</span></code> (this is accomplished by rewriting to a conditional expression).</p>
 </section>
 <section id="api-reference">
 <h2>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h2>
-<p>N.B: The following commands must first be enabled using <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code>.</p>
+<p>The following commands must first be enabled using <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code>.</p>
 <ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">yosys_import</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code> produces a <code class="docutils literal notranslate"><span class="pre">Term</span></code> given the path to a JSON file produced by the Yosys <code class="docutils literal notranslate"><span class="pre">write_json</span></code> command.
 The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.
