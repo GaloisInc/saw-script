@@ -178,7 +178,7 @@ cryadd4 : {a : [4], b : [4]} -> {res : [4]}
 cryadd4 inp = { res = inp.a + inp.b }
 :::
 
-If the Cryptol code above is in a file `adder.cry`, we can prove equivalence between `cryfull` and the VHDL `full` module:
+If the Cryptol code above is in a file named `adder.cry`, we can prove equivalence between `cryfull` and the VHDL `full` module:
 
 :::{code-block} console
 sawscript> import "adder.cry"
