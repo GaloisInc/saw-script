@@ -194,7 +194,7 @@ sawscript> add4_spec <- yosys_verify {{ m.add4 }} [] {{ cryadd4 }} [full_spec] w
 The above could also be accomplished through the use of `prove_print` and term rewriting, but it is much more verbose.
 
 `yosys_verify` may also be given a list of preconditions under which the equivalence holds.
-For example, consider the following Cryptol specification for `full` that ignores the `cin` bit (save them into `cryfullnocarry.cry` file):
+For example, consider the following Cryptol specification for `full` that ignores the `cin` bit (save them into a `cryfullnocarry.cry` file):
 
 :::{code-block} cryptol
 cryfullnocarry :  {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
