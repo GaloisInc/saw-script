@@ -14,6 +14,7 @@ module SAWCentral.Yosys.Cell where
 
 import Control.Lens ((^.))
 
+import qualified Data.Aeson as Aeson
 import Data.Char (digitToInt)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -314,7 +315,13 @@ primCellToMap sc c args =
     connSigned :: Text -> Bool
     connSigned onm =
       case Map.lookup (onm <> "_SIGNED") $ c ^. cellParameters of
-        Just t -> textBinNat t > 0
+        Just (Aeson.Number n) -> n > 0
+        Just (Aeson.String t) -> textBinNat t > 0
+        Just v ->
+          panic "cellToTerm"
+            [ "Expected SIGNED parameter to be a number or a string,"
+            , "but encountered " <> Text.pack (show v)
+            ]
         Nothing -> False
     connWidthNat :: Text -> Natural
     connWidthNat onm =
