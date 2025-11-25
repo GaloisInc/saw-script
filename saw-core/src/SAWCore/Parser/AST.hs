@@ -42,6 +42,7 @@ module SAWCore.Parser.AST
   , moduleCtorDecls
   , moduleTypedDataDecls
   , moduleTypedCtorDecls
+  , prettyUTerm
   ) where
 
 import Data.Hashable
@@ -52,10 +53,14 @@ import GHC.Generics (Generic)
 import qualified Language.Haskell.TH.Syntax as TH
 import Numeric.Natural
 
+import qualified Prettyprinter as PP
+
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.Name (ModuleName, mkModuleName)
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
-  ( Sort, mkSort, propSort, sortOf
+  ( Sort(..), mkSort, propSort, sortOf
   , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
   , FieldName
   , LocalName
@@ -267,3 +272,141 @@ mkTupleSelector t i
   | i == 1    = PairLeft t
   | i > 1     = mkTupleSelector (PairRight t) (i - 1)
   | otherwise = error "mkTupleSelector: non-positive index"
+
+--------------------------------------------------------------------------------
+-- Pretty printing
+
+-- | Deconstruct nested left-associated 'App' constructors.
+asApps :: UTerm -> (UTerm, [UTerm])
+asApps uterm = go uterm []
+  where
+    go t ts =
+      case t of
+        App t1 t2 -> go t1 (t2 : ts)
+        _ -> (t, ts)
+
+-- | Deconstruct nested left-associated 'PairValue' constructors.
+asPairValues :: UTerm -> (UTerm, [UTerm])
+asPairValues uterm = go uterm []
+  where
+    go t ts =
+      case t of
+        PairValue _ t1 t2 -> go t1 (t2 : ts)
+        _ -> (t, ts)
+
+flagsPrefix :: SortFlags -> Text
+flagsPrefix (SortFlags i q) =
+  (if i then "i" else "") <> (if q then "q" else "")
+
+ppSort :: Sort -> Text
+ppSort (TypeSort n) = "sort " <> Text.pack (show n)
+ppSort PropSort = "Prop"
+
+prettyPiBinding :: (UTermVar, UTerm) -> PPS.Doc
+prettyPiBinding (v, t) =
+  case v of
+    TermVar (PosPair _ str) ->
+      PP.parens (PP.pretty str PP.<+> PP.colon </> prettyPrecUTerm 1 t)
+    UnusedVar _ ->
+      prettyPrecUTerm 2 t
+
+prettyUTermVar :: UTermVar -> PPS.Doc
+prettyUTermVar v =
+  case v of
+    TermVar (PosPair _ str) -> PP.pretty str
+    UnusedVar _ -> "_"
+
+prettyLambdaBinding :: (UTermVar, UTerm) -> PPS.Doc
+prettyLambdaBinding (v, t) =
+  PP.parens (prettyUTermVar v PP.<+> PP.colon </> prettyPrecUTerm 1 t)
+
+
+prettyUTermCtx :: UTermCtx -> PPS.Doc
+prettyUTermCtx ctx = PP.sep (map prettyLambdaBinding ctx)
+
+ppRecursorSuffix :: Sort -> Text
+ppRecursorSuffix s =
+  case s of
+    PropSort -> "ind"
+    TypeSort 0 -> "rec"
+    TypeSort n -> "rec" <> Text.pack (show n)
+
+prettyField :: Text -> (PosPair FieldName, UTerm) -> PPS.Doc
+prettyField op (fname, t) =
+  PP.pretty (val fname) PP.<+> PP.pretty op </> prettyPrecUTerm 1 t
+
+prettyUTerm :: UTerm -> PPS.Doc
+prettyUTerm t = prettyPrecUTerm 0 t
+
+-- | Precedence values:
+-- 0: type ascription
+-- 1: lambda or pi expression
+-- 2: infix '*' operator
+-- 3: function application
+-- 4: atomic expression
+--
+-- Term0 := Term1 | Term1 ':' Term1
+-- Term1 := Term2 | Term2 '->' Term1 | '\\' VarCtx '->' Term1
+-- Term2 := Term3 | Term3 '*' Term2
+-- Term3 := Term4 | Term3 Term4
+-- Term4 (atomic)
+prettyPrecUTerm :: Int -> UTerm -> PPS.Doc
+prettyPrecUTerm prec uterm =
+  case uterm of
+    Name x -> PP.pretty (val x)
+    Sort _ s flags -> PP.pretty (flagsPrefix flags <> ppSort s)
+    App _ _ ->
+      let (e, es) = asApps uterm
+      in PP.nest 2 (wrap prec 3 (foldl (</>) (prettyPrecUTerm 3 e) (map (prettyPrecUTerm 4) es)))
+    Lambda _ ctx body ->
+      PP.nest 1 (wrap prec 1 ("\\" PP.<+> prettyUTermCtx ctx PP.<+> "->" </> prettyPrecUTerm 1 body))
+    Pi _ ctx body ->
+      wrap prec 1 (foldr (\a b -> a PP.<+> "->" </> b) (prettyPrecUTerm 1 body) (map prettyPiBinding ctx))
+    Recursor x s -> PP.pretty (val x <> "#" <> ppRecursorSuffix s)
+    UnitValue _ -> PP.parens mempty
+    UnitType _ -> "#" <> PP.parens mempty
+    RecordValue _ fs ->
+      PP.group (PP.nest 1 (PP.braces (commaSepFill (map (prettyField "=") fs))))
+    RecordType _ fs ->
+      PP.group (PP.nest 1 ("#" <> PP.braces (commaSepFill (map (prettyField ":") fs))))
+    RecordProj t1 fname ->
+      prettyPrecUTerm 4 t1 <> "." <> PP.pretty fname
+    PairValue _ _ _ ->
+      let (t1, ts) = asPairValues uterm
+      in PP.group (PP.nest 1 (PP.parens (commaSepFill (map prettyUTerm (t1 : ts)))))
+    PairType _ t1 t2 ->
+      wrap prec 2 (PP.sep [prettyPrecUTerm 3 t1, "*" PP.<+> prettyPrecUTerm 2 t2])
+    PairLeft t1 ->
+      prettyPrecUTerm 4 t1 <> ".1"
+    PairRight t1 ->
+      prettyPrecUTerm 4 t1 <> ".2"
+    TypeConstraint t1 _ t2 ->
+      wrap prec 0 (PP.sep [prettyPrecUTerm 1 t1 PP.<+> ":", prettyPrecUTerm 1 t2])
+    NatLit _ n ->
+      PP.pretty n
+    StringLit _ s ->
+      PP.pretty (show s)
+    VecLit _ ts ->
+      PP.group (PP.nest 1 (PP.brackets (commaSepFill (map prettyUTerm ts))))
+    BVLit _ bs -> "0b" <> mconcat [ if b then "1" else "0" | b <- bs ]
+    BadTerm _ -> "<BadTerm>"
+
+-- | Print a comma-separated list. Lay out each item on a single line
+-- if it will fit. If an item requires multiple lines, then start it
+-- on its own line.
+commaSepFill :: [PPS.Doc] -> PPS.Doc
+commaSepFill xs = fillSep (PP.punctuate PP.comma xs)
+  where
+    fillSep [] = mempty
+    fillSep (d0 : ds) = foldl (\a d -> a <> PP.group (PP.line <> d)) d0 ds
+
+wrap :: Int -> Int -> PPS.Doc -> PPS.Doc
+wrap contextPrec myPrec doc = optParens (myPrec < contextPrec) doc
+
+optParens :: Bool -> PPS.Doc -> PPS.Doc
+optParens b body
+  | b = PP.nest 1 (PP.parens body)
+  | otherwise = body
+
+(</>) :: PPS.Doc -> PPS.Doc -> PPS.Doc
+x </> y = x <> PP.group (PP.line <> y)
