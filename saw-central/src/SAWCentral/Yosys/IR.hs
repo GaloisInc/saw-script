@@ -19,7 +19,6 @@ module SAWCentral.Yosys.IR where
 import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
-import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
 import qualified Data.Maybe as Maybe
@@ -136,6 +135,7 @@ textToPrimitiveCellType = Map.fromList
   , ("$bmux"        , CellTypeBmux)
   , ("$dff"         , CellTypeDff)
   , ("$ff"          , CellTypeFf)
+  , ("$_BUF_"       , CellTypeBUF)
   ]
 
 -- | Mapping from primitive cell types to textual representation
@@ -184,6 +184,7 @@ data CellType
   | CellTypeBmux
   | CellTypeDff
   | CellTypeFf
+  | CellTypeBUF
   | CellTypeUnsupportedPrimitive Text
   | CellTypeUserType Text
   deriving (Eq, Ord)
@@ -305,8 +306,8 @@ instance Aeson.FromJSON YosysIR where
     pure YosysIR{..}
 
 -- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
-loadYosysIR :: MonadIO m => FilePath -> m YosysIR
-loadYosysIR p = liftIO $ Aeson.eitherDecodeFileStrict p >>= \case
+loadYosysIR :: FilePath -> IO YosysIR
+loadYosysIR p = Aeson.eitherDecodeFileStrict p >>= \case
   Left err -> throw . YosysError $ Text.pack err
   Right ir -> pure ir
 

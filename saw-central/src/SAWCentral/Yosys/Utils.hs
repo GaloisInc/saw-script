@@ -16,9 +16,7 @@ Stability   : experimental
 module SAWCentral.Yosys.Utils where
 
 import Control.Monad (forM, foldM)
-import Control.Monad.IO.Class (MonadIO(..))
-import Control.Exception (Exception, throw)
-import Control.Monad.Catch (MonadThrow)
+import Control.Exception (Exception, throwIO)
 
 import Data.Bifunctor (bimap)
 import qualified Data.List as List
@@ -140,60 +138,57 @@ reverseTopSort =
 #endif
 
 -- | Check that a SAWCore term is well-typed, throwing an exception otherwise.
-validateTerm :: MonadIO m => SC.SharedContext -> Text -> SC.Term -> m SC.Term
-validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc t) >>= \case
-  Right _ -> pure t
-  Left err ->
-    throw
-    . YosysErrorTypeError msg
-    . Text.pack
-    . unlines
-    $ SC.TC.prettyTCError err
+validateTerm :: SC.SharedContext -> Text -> SC.Term -> IO SC.Term
+validateTerm sc msg t =
+  do result <- SC.TC.scTypeCheck sc t
+     case result of
+       Right _ -> pure t
+       Left err ->
+         throwIO $
+         YosysErrorTypeError msg $
+         Text.pack $ unlines $ SC.TC.prettyTCError err
 
 -- | Check that a SAWCore term is well-typed and has a specific type
-validateTermAtType :: MonadIO m => SC.SharedContext -> Text ->
-                      SC.Term -> SC.Term -> m ()
+validateTermAtType :: SC.SharedContext -> Text -> SC.Term -> SC.Term -> IO ()
 validateTermAtType sc msg trm tp =
-  liftIO (SC.TC.runTCM (SC.TC.typeInferComplete trm >>= \tp_trm ->
-                         SC.TC.checkSubtype tp_trm tp) sc) >>= \case
-  Right _ -> return ()
-  Left err ->
-    throw
-    . YosysErrorTypeError msg
-    . Text.pack
-    . unlines
-    $ SC.TC.prettyTCError err
+  do let check =
+           do tp_trm <- SC.TC.typeInferComplete trm
+              SC.TC.checkSubtype tp_trm tp
+     result <- SC.TC.runTCM check sc
+     case result of
+       Right _ -> pure ()
+       Left err ->
+         throwIO $
+         YosysErrorTypeError msg $
+         Text.pack $ unlines $ SC.TC.prettyTCError err
 
 -- | Produce a SAWCore tuple type corresponding to a Cryptol record type with the given fields.
 cryptolRecordType ::
-  MonadIO m =>
   SC.SharedContext ->
   Map Text SC.Term ->
-  m SC.Term
+  IO SC.Term
 cryptolRecordType sc fields =
-  liftIO $ SC.scTupleType sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
+  SC.scTupleType sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
 
 -- | Produce a SAWCore tuple corresponding to a Cryptol record with the given fields.
 cryptolRecord ::
-  MonadIO m =>
   SC.SharedContext ->
   Map Text SC.Term ->
-  m SC.Term
+  IO SC.Term
 cryptolRecord sc fields =
-  liftIO $ SC.scTuple sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
+  SC.scTuple sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
 
 -- | Produce a SAWCore tuple index corresponding to a lookup in a Cryptol record with the given fields.
 cryptolRecordSelect ::
-  MonadIO m =>
   SC.SharedContext ->
   Map Text a ->
   SC.Term ->
   Text ->
-  m SC.Term
+  IO SC.Term
 cryptolRecordSelect sc fields r nm =
   case List.elemIndex nm ord of
-    Just i -> liftIO $ SC.scTupleSelector sc r (i + 1) (length ord)
-    Nothing -> throw . YosysError $ mconcat
+    Just i -> SC.scTupleSelector sc r (i + 1) (length ord)
+    Nothing -> throwIO $ YosysError $ mconcat
       [ "Could not build record selector term for field name \""
       , nm
       , "\" on record term: "
@@ -207,67 +202,73 @@ cryptolRecordSelect sc fields r nm =
 -- Cryptol record. The record fields are inferred from the Cryptol
 -- type attached to the `TypedTerm`.
 cryptolRecordSelectTyped ::
-  MonadIO m =>
   SC.SharedContext ->
   SC.TypedTerm ->
   Text ->
-  m SC.TypedTerm
-cryptolRecordSelectTyped sc r nm = do
-  fields <- Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$> case SC.ttType r of
-    SC.TypedTermSchema (C.Forall [] [] (C.TRec fs)) -> pure fs
-    _ -> throw . YosysError $ mconcat
-      [ "Type\n"
-      , Text.pack . show $ SC.ttType r
-      , "\nis not a record type"
-      ]
-  cty <- case Map.lookup nm fields of
-    Just cty -> pure cty
-    _ -> throw . YosysError $ mconcat
-      [ "Record type\n"
-      , Text.pack . show $ SC.ttType r
-      , "\ndoes not have field "
-      , nm
-      ]
-  t <- cryptolRecordSelect sc fields (SC.ttTerm r) nm
-  pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
+  IO SC.TypedTerm
+cryptolRecordSelectTyped sc r nm =
+  do fields <-
+       Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$>
+       case SC.ttType r of
+         SC.TypedTermSchema (C.Forall [] [] (C.TRec fs)) -> pure fs
+         _ -> throwIO $ YosysError $ mconcat
+           [ "Type\n"
+           , Text.pack . show $ SC.ttType r
+           , "\nis not a record type"
+           ]
+     cty <-
+       case Map.lookup nm fields of
+         Just cty -> pure cty
+         _ -> throwIO $ YosysError $ mconcat
+           [ "Record type\n"
+           , Text.pack . show $ SC.ttType r
+           , "\ndoes not have field "
+           , nm
+           ]
+     t <- cryptolRecordSelect sc fields (SC.ttTerm r) nm
+     pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
 
 -- | Construct a SAWCore expression asserting equality between each
 -- field of two records. Both records should be tuples corresponding
 -- to the specified Cryptol record type.
 eqBvRecords ::
-  (MonadIO m, MonadThrow m) =>
   SC.SharedContext ->
   C.Type ->
   SC.Term ->
   SC.Term ->
-  m SC.Term
-eqBvRecords sc cty a b = do
-  fields <- Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$> case cty of
-    C.TRec fs -> pure fs
-    _ -> throw . YosysError $ mconcat
-      [ "Type\n"
-      , Text.pack $ show cty
-      , "\nis not a record type"
-      ]
-  eqs <- forM (Map.assocs fields) $ \(nm, fcty) -> do
-    w <- case fcty of
-      C.TCon (C.TC C.TCSeq) [C.TCon (C.TC (C.TCNum wint)) [], C.TCon (C.TC C.TCBit) []] ->
-        liftIO . SC.scNat sc $ fromIntegral wint
-      _ -> throw . YosysError $ mconcat
-        [ "Type\n"
-        , Text.pack $ show fcty
-        , "\nis not a bitvector type"
-        ]
-    fa <- cryptolRecordSelect sc fields a nm
-    fb <- cryptolRecordSelect sc fields b nm
-    liftIO $ SC.scBvEq sc w fa fb
-  case eqs of
-    [] -> throw . YosysError $ mconcat
-      [ "Record type\n"
-      , Text.pack $ show cty
-      , "\nhas no fields"
-      ]
-    (e:es) -> foldM (\x y -> liftIO $ SC.scAnd sc x y) e es
+  IO SC.Term
+eqBvRecords sc cty a b =
+  do fields <-
+       Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$>
+       case cty of
+         C.TRec fs -> pure fs
+         _ -> throwIO $ YosysError $ mconcat
+           [ "Type\n"
+           , Text.pack $ show cty
+           , "\nis not a record type"
+           ]
+     eqs <-
+       forM (Map.assocs fields) $ \(nm, fcty) ->
+       do w <-
+            case fcty of
+              C.TCon (C.TC C.TCSeq) [C.TCon (C.TC (C.TCNum wint)) [], C.TCon (C.TC C.TCBit) []] ->
+                SC.scNat sc $ fromIntegral wint
+              _ -> throwIO $  YosysError $ mconcat
+                [ "Type\n"
+                , Text.pack $ show fcty
+                , "\nis not a bitvector type"
+                ]
+          fa <- cryptolRecordSelect sc fields a nm
+          fb <- cryptolRecordSelect sc fields b nm
+          SC.scBvEq sc w fa fb
+     case eqs of
+       [] ->
+         throwIO $ YosysError $ mconcat
+         [ "Record type\n"
+         , Text.pack $ show cty
+         , "\nhas no fields"
+         ]
+       (e:es) -> foldM (\x y -> SC.scAnd sc x y) e es
 
 -- | Encode the given string such that is a valid Cryptol identifier.
 -- Since Yosys cell names often look like "\42", this makes it much
@@ -278,31 +279,28 @@ cellIdentifier = Text.pack . zEncodeString . Text.unpack
 -- | Build a SAWCore type corresponding to the Cryptol record type
 -- with the given field types.
 fieldsToType ::
-  MonadIO m =>
   SC.SharedContext ->
   Map Text (SC.Term, C.Type) ->
-  m SC.Term
+  IO SC.Term
 fieldsToType sc = cryptolRecordType sc . fmap fst
 
 -- | Build a Cryptol record type with the given field types
 fieldsToCryptolType ::
-  MonadIO m =>
-  Map Text (SC.Term, C.Type) ->
-  m C.Type
+  Map Text (SC.Term, C.Type) -> IO C.Type
 fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIdent snd <$> Map.assocs fields
 
 -- | Given a bit pattern ([b]) and a term, construct a map associating
 -- that output pattern with the term, and each bit of that pattern
 -- with the corresponding bit of the term.
-deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] Preterm)
-deriveTermsByIndices _sc rep t = do
-  let len = length rep
-  let bit i = PretermSlice (fromIntegral (len - 1 - i)) 1 (fromIntegral i) t
-  let telems = map bit [0..len-1]
-  pure . Map.fromList $ mconcat
-    [ [(rep, PretermSlice 0 (fromIntegral len) 0 t)]
-    , zip ((:[]) <$> rep) telems
-    ]
+deriveTermsByIndices :: (Ord b) => SC.SharedContext -> [b] -> SC.Term -> IO (Map [b] Preterm)
+deriveTermsByIndices _sc rep t =
+  do let len = length rep
+     let bit i = PretermSlice (fromIntegral (len - 1 - i)) 1 (fromIntegral i) t
+     let telems = map bit [0..len-1]
+     pure . Map.fromList $ mconcat
+       [ [(rep, PretermSlice 0 (fromIntegral len) 0 t)]
+       , zip ((:[]) <$> rep) telems
+       ]
 
 --------------------------------------------------------------------------------
 -- ** Pre-terms
@@ -365,7 +363,7 @@ scPreterm sc p =
          i' <- SC.scNat sc i
          SC.scSingle sc boolty =<< SC.scAt sc n' boolty t i'
     PretermSlice i j k t ->
-      do boolty <- liftIO $ SC.scBoolType sc
+      do boolty <- SC.scBoolType sc
          i' <- SC.scNat sc i
          j' <- SC.scNat sc j
          k' <- SC.scNat sc k
