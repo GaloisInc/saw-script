@@ -280,6 +280,9 @@ This release supports [version
 * Fix a bug that would cause SAW to crash when verifying a `mir_return`
   statement returning a `Vec` that was allocated in a postcondition.
 
+* Fix a bug that would cause `yosys_import` to fail to parse JSON files
+  produced using Yosys's `-compat-int` flag.
+
 # Version 1.4 -- 2025-11-18
 
 This release supports [version

@@ -235,7 +235,12 @@ asUserType cellType =
 data Cell bs = Cell
   { _cellHideName :: Bool -- ^ Whether the cell's name is human-readable
   , _cellType :: CellType -- ^ The cell type
-  , _cellParameters :: Map Text Text -- ^ Metadata parameters
+    -- NB: Yosys's documentation for write_json doesn't impose any restrictions
+    -- on what type parameter values may take on, so we opt to be as permissive
+    -- as possible by using Aeson Values. Most of the time, these Values will
+    -- be strings, but they can also be numbers on occasion (e.g., if you call
+    -- write_json using the -compat-int flag).
+  , _cellParameters :: Map Text Aeson.Value -- ^ Metadata parameters
   , _cellAttributes :: Aeson.Value -- currently unused
   , _cellPortDirections :: Map Text Direction -- ^ Direction for each cell connection
   , _cellConnections :: Map Text bs -- ^ Bitrep for each cell connection

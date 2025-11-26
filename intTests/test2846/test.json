@@ -1,0 +1,478 @@
+{
+  "creator": "Yosys 0.50+111 (git sha1 d1222c57a, aarch64-apple-darwin23.5-clang++ 18.1.8 -fPIC -O3)",
+  "modules": {
+    "add4": {
+      "attributes": {
+      },
+      "ports": {
+        "a": {
+          "direction": "input",
+          "bits": [ 2, 3, 4, 5 ]
+        },
+        "b": {
+          "direction": "input",
+          "bits": [ 6, 7, 8, 9 ]
+        },
+        "res": {
+          "direction": "output",
+          "bits": [ 10, 11, 12, 13 ]
+        }
+      },
+      "cells": {
+        "full0": {
+          "hide_name": 0,
+          "type": "full",
+          "parameters": {
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "cin": "input",
+            "cout": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 2 ],
+            "b": [ 6 ],
+            "cin": [ "0" ],
+            "cout": [ 14 ],
+            "s": [ 10 ]
+          }
+        },
+        "full1": {
+          "hide_name": 0,
+          "type": "full",
+          "parameters": {
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "cin": "input",
+            "cout": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 3 ],
+            "b": [ 7 ],
+            "cin": [ 14 ],
+            "cout": [ 15 ],
+            "s": [ 11 ]
+          }
+        },
+        "full2": {
+          "hide_name": 0,
+          "type": "full",
+          "parameters": {
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "cin": "input",
+            "cout": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 4 ],
+            "b": [ 8 ],
+            "cin": [ 15 ],
+            "cout": [ 16 ],
+            "s": [ 12 ]
+          }
+        },
+        "full3": {
+          "hide_name": 0,
+          "type": "full",
+          "parameters": {
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "cin": "input",
+            "cout": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 5 ],
+            "b": [ 9 ],
+            "cin": [ 16 ],
+            "cout": [ 17 ],
+            "s": [ 13 ]
+          }
+        }
+      },
+      "netnames": {
+        "$auto$ghdl.cc:806:import_module$1": {
+          "hide_name": 1,
+          "bits": [ 14 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$2": {
+          "hide_name": 1,
+          "bits": [ 10 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$3": {
+          "hide_name": 1,
+          "bits": [ 15 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$4": {
+          "hide_name": 1,
+          "bits": [ 11 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$5": {
+          "hide_name": 1,
+          "bits": [ 16 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$6": {
+          "hide_name": 1,
+          "bits": [ 12 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$7": {
+          "hide_name": 1,
+          "bits": [ 17 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$8": {
+          "hide_name": 1,
+          "bits": [ 13 ],
+          "attributes": {
+          }
+        },
+        "a": {
+          "hide_name": 0,
+          "bits": [ 2, 3, 4, 5 ],
+          "attributes": {
+          }
+        },
+        "b": {
+          "hide_name": 0,
+          "bits": [ 6, 7, 8, 9 ],
+          "attributes": {
+          }
+        },
+        "full0cout": {
+          "hide_name": 0,
+          "bits": [ 14 ],
+          "attributes": {
+          }
+        },
+        "full1cout": {
+          "hide_name": 0,
+          "bits": [ 15 ],
+          "attributes": {
+          }
+        },
+        "full2cout": {
+          "hide_name": 0,
+          "bits": [ 16 ],
+          "attributes": {
+          }
+        },
+        "res": {
+          "hide_name": 0,
+          "bits": [ 10, 11, 12, 13 ],
+          "attributes": {
+          }
+        }
+      }
+    },
+    "full": {
+      "attributes": {
+      },
+      "ports": {
+        "a": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "b": {
+          "direction": "input",
+          "bits": [ 3 ]
+        },
+        "cin": {
+          "direction": "input",
+          "bits": [ 4 ]
+        },
+        "cout": {
+          "direction": "output",
+          "bits": [ 5 ]
+        },
+        "s": {
+          "direction": "output",
+          "bits": [ 6 ]
+        }
+      },
+      "cells": {
+        "\\25": {
+          "hide_name": 0,
+          "type": "$or",
+          "parameters": {
+            "A_SIGNED": 0,
+            "A_WIDTH": 1,
+            "B_SIGNED": 0,
+            "B_WIDTH": 1,
+            "Y_WIDTH": 1
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 7 ],
+            "B": [ 8 ],
+            "Y": [ 5 ]
+          }
+        },
+        "half0": {
+          "hide_name": 0,
+          "type": "half",
+          "parameters": {
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "c": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 2 ],
+            "b": [ 3 ],
+            "c": [ 7 ],
+            "s": [ 9 ]
+          }
+        },
+        "half1": {
+          "hide_name": 0,
+          "type": "half",
+          "parameters": {
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "a": "input",
+            "b": "input",
+            "c": "output",
+            "s": "output"
+          },
+          "connections": {
+            "a": [ 9 ],
+            "b": [ 4 ],
+            "c": [ 8 ],
+            "s": [ 6 ]
+          }
+        }
+      },
+      "netnames": {
+        "$auto$ghdl.cc:806:import_module$10": {
+          "hide_name": 1,
+          "bits": [ 9 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$11": {
+          "hide_name": 1,
+          "bits": [ 8 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$12": {
+          "hide_name": 1,
+          "bits": [ 6 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$13": {
+          "hide_name": 1,
+          "bits": [ 5 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$9": {
+          "hide_name": 1,
+          "bits": [ 7 ],
+          "attributes": {
+          }
+        },
+        "a": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+          }
+        },
+        "b": {
+          "hide_name": 0,
+          "bits": [ 3 ],
+          "attributes": {
+          }
+        },
+        "cin": {
+          "hide_name": 0,
+          "bits": [ 4 ],
+          "attributes": {
+          }
+        },
+        "cout": {
+          "hide_name": 0,
+          "bits": [ 5 ],
+          "attributes": {
+          }
+        },
+        "half0c": {
+          "hide_name": 0,
+          "bits": [ 7 ],
+          "attributes": {
+          }
+        },
+        "half0s": {
+          "hide_name": 0,
+          "bits": [ 9 ],
+          "attributes": {
+          }
+        },
+        "half1c": {
+          "hide_name": 0,
+          "bits": [ 8 ],
+          "attributes": {
+          }
+        },
+        "s": {
+          "hide_name": 0,
+          "bits": [ 6 ],
+          "attributes": {
+          }
+        }
+      }
+    },
+    "half": {
+      "attributes": {
+      },
+      "ports": {
+        "a": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "b": {
+          "direction": "input",
+          "bits": [ 3 ]
+        },
+        "c": {
+          "direction": "output",
+          "bits": [ 4 ]
+        },
+        "s": {
+          "direction": "output",
+          "bits": [ 5 ]
+        }
+      },
+      "cells": {
+        "\\28": {
+          "hide_name": 0,
+          "type": "$and",
+          "parameters": {
+            "A_SIGNED": 0,
+            "A_WIDTH": 1,
+            "B_SIGNED": 0,
+            "B_WIDTH": 1,
+            "Y_WIDTH": 1
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 2 ],
+            "B": [ 3 ],
+            "Y": [ 4 ]
+          }
+        },
+        "\\29": {
+          "hide_name": 0,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": 0,
+            "A_WIDTH": 1,
+            "B_SIGNED": 0,
+            "B_WIDTH": 1,
+            "Y_WIDTH": 1
+          },
+          "attributes": {
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 2 ],
+            "B": [ 3 ],
+            "Y": [ 5 ]
+          }
+        }
+      },
+      "netnames": {
+        "$auto$ghdl.cc:806:import_module$14": {
+          "hide_name": 1,
+          "bits": [ 4 ],
+          "attributes": {
+          }
+        },
+        "$auto$ghdl.cc:806:import_module$15": {
+          "hide_name": 1,
+          "bits": [ 5 ],
+          "attributes": {
+          }
+        },
+        "a": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+          }
+        },
+        "b": {
+          "hide_name": 0,
+          "bits": [ 3 ],
+          "attributes": {
+          }
+        },
+        "c": {
+          "hide_name": 0,
+          "bits": [ 4 ],
+          "attributes": {
+          }
+        },
+        "s": {
+          "hide_name": 0,
+          "bits": [ 5 ],
+          "attributes": {
+          }
+        }
+      }
+    }
+  }
+}
