@@ -496,8 +496,8 @@ bitBlastTerm be sc addlPrims t = do
   freeShapes <- traverse (asFiniteType sc) (map snd frees)
   _retShape <- asFiniteType sc ret -- ensure return type is valid
   argVars <- traverse (newVars' be) argShapes
-  freeVars <- traverse (newVars be) freeShapes
-  let freeMap = Map.fromList $ zip (map (vnIndex . fst) frees) freeVars
+  fvs <- traverse (newVars be) freeShapes
+  let freeMap = Map.fromList $ zip (map (vnIndex . fst) frees) fvs
   modmap <- scGetModuleMap sc
   bval <- bitBlastBasic be modmap addlPrims freeMap t
   bval' <- applyAll bval argVars

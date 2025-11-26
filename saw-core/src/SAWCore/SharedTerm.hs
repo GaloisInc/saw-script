@@ -23,7 +23,9 @@ module SAWCore.SharedTerm
   , Term -- exported as abstract
   , unwrapTermF
   , termIndex
-  , termSortOrType
+  , varTypes
+  , freeVars
+  , closedTerm
   , TermIndex
   , scImport
   , alphaEquiv

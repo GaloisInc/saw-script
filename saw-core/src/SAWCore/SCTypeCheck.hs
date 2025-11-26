@@ -70,7 +70,6 @@ import qualified SAWCore.Term.Certified as SC
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTermInCtx)
-import SAWCore.Term.Raw
 
 -- | The state for a type-checking computation = a memoization table
 type TCState = IntMap SC.Term
@@ -317,15 +316,14 @@ typeInferCompleteWHNF a =
 instance TypeInfer Term where
   typeInfer t = SC.rawType <$> typeInferComplete t
   typeInferComplete t =
-    case t of
-      STApp{stAppIndex = i, stAppTermF = tf} ->
-        do table <- get
-           case IntMap.lookup i table of
-             Just x -> pure x
-             Nothing ->
-               do x <- withErrorTerm t $ typeInferComplete tf
-                  modify (IntMap.insert i x)
-                  pure x
+    do table <- get
+       let i = termIndex t
+       case IntMap.lookup i table of
+         Just x -> pure x
+         Nothing ->
+           do x <- withErrorTerm t $ typeInferComplete (unwrapTermF t)
+              modify (IntMap.insert i x)
+              pure x
 
 -- Type inference for TermF Term dispatches to that for TermF SC.Term by
 -- calling inference on all the sub-components and extending the context inside

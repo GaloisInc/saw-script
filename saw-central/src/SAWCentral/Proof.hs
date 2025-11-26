@@ -158,7 +158,6 @@ import SAWCore.SATQuery
 import SAWCore.Name (DisplayNameEnv, Name(..), VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import SAWCore.Term.Raw
 import SAWCore.FiniteValue (FirstOrderValue)
 import SAWCore.Term.Pretty
   (ppTermWithNames, ppTermContainerWithNames, showTerm, scPrettyTerm)
@@ -1358,11 +1357,8 @@ propsSubset sc ps1 ps2 =
   -- convertibility check.
   and <$> sequence [ if idSubset (unProp x) then pure True else propsElem sc x ps2 | x <- ps1 ]
   where
-    ps2Ids = foldr (\x idents -> case (unProp x) of
-                                   STApp{ stAppIndex = ident } -> Set.insert ident idents
-                   )
-                   Set.empty ps2
-    idSubset STApp{ stAppIndex = ident } = Set.member ident ps2Ids
+    ps2Ids = foldr (\x ids -> Set.insert (termIndex (unProp x)) ids) Set.empty ps2
+    idSubset t = Set.member (termIndex t) ps2Ids
 
 -- exists y in ps where x == y
 propsElem :: SharedContext -> Prop -> [Prop] -> IO Bool

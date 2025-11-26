@@ -70,7 +70,6 @@ import SAWCore.SharedTerm
 
 import SAWCore.Simulator.Value
 import SAWCore.Term.Functor
-import SAWCore.Term.Raw
 import qualified SAWCore.Simulator.Prims as Prims
 
 type Id = Identity
@@ -506,12 +505,14 @@ mkMemoClosed cfg t =
     subterms = fmap fst $ IntMap.filter (IntSet.null . snd) $ State.execState (go t) IntMap.empty
 
     go :: Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
-    go (STApp{ stAppIndex = i, stAppTermF = tf }) =
+    go t' =
       do memo <- State.get
+         let i = termIndex t'
          case IntMap.lookup i memo of
            Just (_, b) -> pure b
            Nothing ->
-             do b <- termf tf
+             do let tf = unwrapTermF t'
+                b <- termf tf
                 State.modify (IntMap.insert i (tf, b))
                 pure b
 
@@ -552,8 +553,8 @@ evalClosedTermF :: (VMonadLazy l, Show (Extra l)) =>
 evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf IntMap.empty
   where
     lam = evalOpen cfg memoClosed
-    recEval (STApp{ stAppIndex = i }) =
-      case IntMap.lookup i memoClosed of
+    recEval t =
+      case IntMap.lookup (termIndex t) memoClosed of
         Just x -> force x
         Nothing -> panic "evalClosedTermF" ["internal error"]
 
@@ -579,13 +580,15 @@ mkMemoLocal :: forall l. (VMonadLazy l, Show (Extra l)) =>
 mkMemoLocal cfg memoClosed t env = go mempty t
   where
     go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))
-    go memo (t'@STApp{ stAppIndex = i, stAppTermF = tf })
+    go memo t'
       | closedTerm t' = pure memo
       | otherwise =
+        let i = termIndex t' in
         case IntMap.lookup i memo of
           Just _ -> pure memo
           Nothing ->
-            do memo' <- goTermF memo tf
+            do let tf = unwrapTermF t'
+               memo' <- goTermF memo tf
                thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env)
                pure (IntMap.insert i thunk memo')
     goTermF :: IntMap (Thunk l) -> TermF Term -> EvalM l (IntMap (Thunk l))
@@ -621,10 +624,10 @@ evalLocalTermF :: (VMonadLazy l, Show (Extra l)) =>
 evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 env
   where
     lam = evalOpen cfg memoClosed
-    recEval (t@STApp{ stAppIndex = i, stAppTermF = tf }) =
-      case IntMap.lookup i memo of
+    recEval t =
+      case IntMap.lookup (termIndex t) memo of
         Just x -> force x
-        Nothing -> evalTermF cfg lam recEval tf env
+        Nothing -> evalTermF cfg lam recEval (unwrapTermF t) env
       where memo = if closedTerm t then memoClosed else memoLocal
 
 {-# SPECIALIZE evalOpen ::
@@ -649,10 +652,10 @@ evalOpen :: forall l. (VMonadLazy l, Show (Extra l)) =>
 evalOpen cfg memoClosed t env = do
   memoLocal <- mkMemoLocal cfg memoClosed t env
   let eval :: Term -> MValue l
-      eval (t'@STApp{ stAppIndex = i, stAppTermF = tf }) =
-        case IntMap.lookup i memo of
+      eval t' =
+        case IntMap.lookup (termIndex t') memo of
           Just x -> force x
-          Nothing -> evalF tf
+          Nothing -> evalF (unwrapTermF t')
         where memo = if closedTerm t' then memoClosed else memoLocal
       evalF :: TermF Term -> MValue l
       evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env

@@ -14,7 +14,6 @@ import SAWCore.Module
 import SAWCore.Name
 import SAWCore.Prelude
 import SAWCore.SharedTerm
-import SAWCore.Term.Raw
 
 
 namedMsg :: NameInfo -> String -> String

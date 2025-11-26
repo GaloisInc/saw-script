@@ -26,13 +26,13 @@ import Text.URI
 import SAWCore.Name
 import SAWCore.SharedTerm
   ( SharedContext
+  , TermIndex
   , scFreshVarName
   , scRegisterName
   , scResolveNameByURI
   )
 import qualified SAWCore.SharedTerm as Raw
 import SAWCore.Term.Functor
-import SAWCore.Term.Raw (TermIndex)
 import SAWCore.Term.Certified
 
 --------------------------------------------------------------------------------
