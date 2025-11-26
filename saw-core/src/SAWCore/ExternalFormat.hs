@@ -88,16 +88,17 @@ scWriteExternal t0 =
           State.put (m, Map.insert (vnIndex vn) (Left (vnName vn)) nms, lns, x)
 
     go :: Raw.Term -> WriteM Int
-    go Raw.STApp{ Raw.stAppIndex = i, Raw.stAppTermF = tf } = do
-      (memo, _, _, _) <- State.get
-      case Map.lookup i memo of
-        Just x -> return x
-        Nothing -> do
-          tf' <- traverse go tf
-          body <- writeTermF tf'
-          x <- memoize i
-          output (unwords [show x, body])
-          return x
+    go t =
+      do let i = Raw.termIndex t
+         (memo, _, _, _) <- State.get
+         case Map.lookup i memo of
+           Just x -> pure x
+           Nothing -> do
+             tf' <- traverse go (Raw.unwrapTermF t)
+             body <- writeTermF tf'
+             x <- memoize i
+             output (unwords [show x, body])
+             pure x
 
     writeTermF :: TermF Int -> WriteM String
     writeTermF tf =

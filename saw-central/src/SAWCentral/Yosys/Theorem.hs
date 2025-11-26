@@ -180,13 +180,13 @@ applyOverride sc thm t = do
   cache <- SC.newCache
   let
     go :: SC.Term -> IO SC.Term
-    go s@SC.STApp { SC.stAppIndex = aidx, SC.stAppTermF = tf } =
-      SC.useCache cache aidx $
-      case tf of
+    go s =
+      SC.useCache cache (SC.termIndex s) $
+      case SC.unwrapTermF s of
         SC.Constant (SC.Name idx _)
           | idx == tidx -> theoremReplacement sc thm
           | otherwise -> pure s
-        _ -> SC.scTermF sc =<< traverse go tf
+        _ -> SC.scTermF sc =<< traverse go (SC.unwrapTermF s)
   ft <- go unfolded
   validateTerm sc
     ("applying an override for " <> URI.render (thm ^. theoremURI))
