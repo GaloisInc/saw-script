@@ -131,6 +131,7 @@ module SAWCore.SharedTerm
   , scWhnf
   , scConvertibleEval
   , scConvertible
+  , scSubtype
     -- ** Type checking
   , scTypeOf
   , asSort

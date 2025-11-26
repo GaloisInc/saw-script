@@ -41,14 +41,13 @@ module SAWCore.Term.Certified
   , scString
   ) where
 
-import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 
 import SAWCore.Name
 import SAWCore.Recognizer
-import SAWCore.SharedTerm (SharedContext, alphaEquiv, unwrapTermF)
+import SAWCore.SharedTerm (SharedContext, scSubtype)
 import qualified SAWCore.SharedTerm as Raw
 import SAWCore.Term.Functor
 
@@ -68,30 +67,6 @@ rawTerm (Term trm) = trm
 -- are convertible up to 'natConversions'.
 scTypeConvertible :: SharedContext -> Raw.Term -> Raw.Term -> IO Bool
 scTypeConvertible sc t1 t2 = Raw.scConvertibleEval sc Raw.scWhnf True t1 t2
-
--- | Check whether one type is a subtype of another: Either they are
--- convertible, or they are both Pi types with convertible argument
--- types and result sorts @s1@ and @s2@ with @s1 <= s2@.
-scSubtype :: SharedContext -> Raw.Term -> Raw.Term -> IO Bool
-scSubtype sc t1 t2
-  | alphaEquiv t1 t2 = pure True
-  | otherwise =
-    do t1' <- Raw.scWhnf sc t1
-       t2' <- Raw.scWhnf sc t2
-       case (t1', t2') of
-         (asSort -> Just s1, asSort -> Just s2) ->
-           pure (s1 <= s2)
-         (unwrapTermF -> Pi x1 a1 b1, unwrapTermF -> Pi x2 a2 b2)
-           | x1 == x2 ->
-             (&&) <$> scTypeConvertible sc a1 a2 <*> scSubtype sc b1 b2
-           | otherwise ->
-             do conv1 <- scTypeConvertible sc a1 a2
-                var1 <- Raw.scVariable sc x1 a1
-                b2' <- Raw.scInstantiate sc (IntMap.singleton (vnIndex x2) var1) b2
-                conv2 <- scSubtype sc b1 b2'
-                pure (conv1 && conv2)
-         _ ->
-           scTypeConvertible sc t1' t2'
 
 --------------------------------------------------------------------------------
 -- * Operations on typed terms

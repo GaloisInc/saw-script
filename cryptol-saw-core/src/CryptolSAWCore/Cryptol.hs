@@ -91,7 +91,6 @@ import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck               as SC
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName, Name(..))
-import SAWCore.Term.Certified (scSubtype)
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import SAWCore.Term.Pretty (showTerm)
 
