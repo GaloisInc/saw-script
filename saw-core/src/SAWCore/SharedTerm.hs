@@ -55,6 +55,7 @@ module SAWCore.SharedTerm
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
+  , scRecursor
   , scRecursorType
   , scReduceRecursor
   , allowedElimSort
