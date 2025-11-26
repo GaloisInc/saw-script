@@ -24,7 +24,6 @@ module SAWCore.SCTypeCheck
   , TCM
   , runTCM
   , rethrowTCError
-  , withEmptyTCState
   , atPos
   , LiftTCM(..)
   , TypeInfer(..)
@@ -42,9 +41,7 @@ import Control.Monad (forM_, mapM, unless, void)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
-import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT)
 
-import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -71,9 +68,6 @@ import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTermInCtx)
 
--- | The state for a type-checking computation = a memoization table
-type TCState = IntMap SC.Term
-
 -- | The 'ReaderT' environment for a type-checking computation.
 type TCEnv = SharedContext
 
@@ -81,33 +75,21 @@ type TCEnv = SharedContext
 --
 -- * Maintains a 'SharedContext';
 --
--- * Memoizes the most general type inferred for each expression; AND
---
 -- * Can throw 'TCError's
-newtype TCM a = TCM (ReaderT TCEnv (StateT TCState (ExceptT TCError IO)) a)
+newtype TCM a = TCM (ReaderT TCEnv (ExceptT TCError IO) a)
   deriving (Functor, Applicative, Monad, MonadFail, MonadIO,
-            MonadReader TCEnv, MonadState TCState, MonadError TCError)
+            MonadReader TCEnv, MonadError TCError)
 
 -- | Run a type-checking computation in a given context, starting from the empty
 -- memoization table
 runTCM ::
   TCM a -> SharedContext -> IO (Either TCError a)
 runTCM (TCM m) sc =
-  runExceptT $ evalStateT (runReaderT m sc) IntMap.empty
+  runExceptT $ runReaderT m sc
 
 -- | Augment and rethrow any 'TCError' thrown by the given computation.
 rethrowTCError :: (MonadError TCError m) => (TCError -> TCError) -> m a -> m a
 rethrowTCError f m = catchError m (throwError . f)
-
--- | Clear the memoization table before running the sub-computation,
--- and restore it afterward.
-withEmptyTCState :: (MonadState TCState m) => m a -> m a
-withEmptyTCState m =
-  do saved_table <- get
-     put IntMap.empty
-     a <- m
-     put saved_table
-     pure a
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- 'ErrorTerm' constructor
