@@ -26,6 +26,7 @@ module SAWCore.SharedTerm
   , varTypes
   , freeVars
   , closedTerm
+  , termSortOrType
   , TermIndex
   , scImport
   , alphaEquiv
