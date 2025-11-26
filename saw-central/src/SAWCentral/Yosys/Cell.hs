@@ -318,6 +318,8 @@ primCellToMap sc c args =
         Just (Aeson.Number n) -> n > 0
         Just (Aeson.String t) -> textBinNat t > 0
         Just v ->
+          -- XXX This should not be a panic, as it is possible to trigger this
+          -- with a malformed input file.
           panic "cellToTerm"
             [ "Expected SIGNED parameter to be a number or a string,"
             , "but encountered " <> Text.pack (show v)
@@ -326,6 +328,8 @@ primCellToMap sc c args =
     connWidthNat :: Text -> Natural
     connWidthNat onm =
       case Map.lookup onm $ c ^. cellConnections of
+        -- XXX This should not be a panic, as it is possible to trigger this
+        -- with a malformed input file.
         Nothing -> panic "cellToTerm" ["Missing expected output name for " <> nm <> " cell"]
         Just bits -> fromIntegral $ length bits
     connWidth :: Text -> IO SC.Term
@@ -335,6 +339,8 @@ primCellToMap sc c args =
     input :: Text -> IO CellTerm
     input inpNm =
       case Map.lookup inpNm args of
+        -- XXX This should not be a panic, as it is possible to trigger this
+        -- with a malformed input file.
         Nothing -> panic "cellToTerm" [nm <> " missing input " <> inpNm]
         Just a -> pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)
 
