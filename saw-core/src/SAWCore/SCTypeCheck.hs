@@ -16,7 +16,6 @@ module SAWCore.SCTypeCheck
   ( scTypeCheck
   , scTypeCheckError
   , scTypeCheckComplete
-  , scTypeCheckCompleteError
   , scConvertible
   , scCheckSubtype
   , TCError(..)
@@ -277,14 +276,6 @@ scTypeCheckError sc t0 =
 -- evaluated to WHNF as necessary, and the returned type is in WHNF.
 scTypeCheck :: TypeInfer a => SharedContext -> a -> IO (Either TCError Term)
 scTypeCheck sc t0 = runTCM (typeInfer t0) sc
-
--- | Infer the type of an @a@ and complete it to a term using
--- 'scTypeCheckComplete', calling 'fail' on failure
-scTypeCheckCompleteError ::
-  TypeInfer a => SharedContext -> a -> IO SC.Term
-scTypeCheckCompleteError sc t0 =
-  either (fail . unlines . prettyTCError) return =<<
-  scTypeCheckComplete sc t0
 
 -- | Infer the type of an @a@ and complete it to a term, ensuring in the
 -- process that the entire term is well-formed and that all internal type
