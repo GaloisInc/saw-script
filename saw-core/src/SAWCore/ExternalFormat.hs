@@ -10,7 +10,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 module SAWCore.ExternalFormat (
-  scWriteExternal, scReadExternal, scReadExternalTyped
+  scWriteExternal, scReadExternal
   ) where
 
 import qualified Control.Monad.State.Strict as State
@@ -158,11 +158,8 @@ data ReadState =
 
 type ReadM = State.StateT ReadState IO
 
-scReadExternal :: SharedContext -> String -> IO Raw.Term
-scReadExternal sc input = rawTerm <$> scReadExternalTyped sc input
-
-scReadExternalTyped :: SharedContext -> String -> IO Term
-scReadExternalTyped sc input =
+scReadExternal :: SharedContext -> String -> IO Term
+scReadExternal sc input =
   case lines input of
     ( (words -> ["SAWCoreTerm", final]) : nmlist : rows ) ->
       case readNames nmlist of

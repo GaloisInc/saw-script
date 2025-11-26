@@ -95,7 +95,7 @@ newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SC.Term }
 complete :: SharedContext -> OpenTerm -> IO Term
 complete sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (SC.rawTerm <$> termM) sc
+  runTCM termM sc
 
 -- | \"Complete\" an 'OpenTerm' to a closed term for its type
 completeType :: SharedContext -> OpenTerm -> IO Term
@@ -279,7 +279,7 @@ applyPi (OpenTerm m_f) (OpenTerm m_arg) =
   OpenTerm $
   do f <- m_f
      arg <- m_arg
-     ret <- applyPiTyped (NotFuncTypeInApp f arg) (SC.rawTerm f) arg
+     ret <- applyPiTyped (NotFuncTypeInApp f arg) f arg
      typeInferComplete ret
 
 -- | Get the argument type of a function type, 'fail'ing if the input term is
@@ -287,10 +287,10 @@ applyPi (OpenTerm m_f) (OpenTerm m_arg) =
 piArg :: OpenTerm -> OpenTerm
 piArg (OpenTerm m) =
   OpenTerm $ m >>= \case
-  (unwrapTermF . SC.rawTerm -> Pi _ tp _) -> typeInferComplete tp
+  (unwrapTermF -> Pi _ tp _) -> typeInferComplete tp
   t ->
     fail ("piArg: not a pi type: " ++
-          scPrettyTermInCtx PPS.defaultOpts [] (SC.rawTerm t))
+          scPrettyTermInCtx PPS.defaultOpts [] t)
 
 -- | Build a lambda abstraction as an 'OpenTerm'
 lambda :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
