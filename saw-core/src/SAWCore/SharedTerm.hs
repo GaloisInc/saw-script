@@ -1301,9 +1301,7 @@ scWhnf sc t0 =
      let ?cache = cache in memo t0
   where
     memo :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
-    memo t =
-      case t of
-        STApp { stAppIndex = i } -> useCache ?cache i (go [] t)
+    memo t = useCache ?cache (termIndex t) (go [] t)
 
     go :: (?cache :: Cache IO TermIndex Term) => [WHNFElim] -> Term -> IO Term
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
@@ -1388,13 +1386,15 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
    go c IntMap.empty tm1 tm2
 
  where whnf :: Cache IO TermIndex Term -> Term -> IO (TermF Term)
-       whnf c t@(STApp{ stAppIndex = idx}) =
-         unwrapTermF <$> useCache c idx (eval sc t)
+       whnf c t =
+         unwrapTermF <$> useCache c (termIndex t) (eval sc t)
 
        go :: Cache IO TermIndex Term -> IntMap VarIndex -> Term -> Term -> IO Bool
-       go _c vm (STApp{stAppIndex = idx1, stAppVarTypes = vt1}) (STApp{stAppIndex = idx2})
-         | IntMap.disjoint vt1 vm && idx1 == idx2 = pure True   -- succeed early case
-       go c vm t1 t2 = join (goF c vm <$> whnf c t1 <*> whnf c t2)
+       go c vm t1 t2
+         | IntMap.disjoint (varTypes t1) vm && termIndex t1 == termIndex t2 =
+             pure True -- succeed early case
+         | otherwise =
+             join (goF c vm <$> whnf c t1 <*> whnf c t2)
 
        goF :: Cache IO TermIndex Term -> IntMap VarIndex -> TermF Term -> TermF Term -> IO Bool
 
@@ -1519,8 +1519,8 @@ scImport sc t0 =
        go cache t0
   where
     go :: Cache IO TermIndex Term -> Term -> IO Term
-    go cache (STApp{ stAppIndex = idx, stAppTermF = tf}) =
-          useCache cache idx (scTermF sc =<< traverse (go cache) tf)
+    go cache t =
+      useCache cache (termIndex t) (scTermF sc =<< traverse (go cache) (unwrapTermF t))
 
 --------------------------------------------------------------------------------
 -- Beta Normalization
@@ -1541,7 +1541,7 @@ scInstantiateBeta sc sub t0 =
      let rangeVars = foldMap freeVars sub
      cache <- newCacheIntMap
      let memo :: Term -> IO Term
-         memo t@STApp{stAppIndex = i} = useCache cache i (go t)
+         memo t = useCache cache (termIndex t) (go t)
          go :: Term -> IO Term
          go t
            | IntSet.disjoint domainVars (freeVars t) = pure t
@@ -1634,7 +1634,7 @@ scBetaNormalizeAux sc sub t0 args0 =
      -- that change the substitution must start a new memo table.
      cache <- newCacheIntMap
      let memo :: Term -> IO Term
-         memo t@STApp{ stAppIndex = i } = useCache cache i (go t [])
+         memo t = useCache cache (termIndex t) (go t [])
          go :: Term -> [Term] -> IO Term
          go t args =
            case unwrapTermF t of
@@ -2800,11 +2800,9 @@ isConstFoldTerm sc unint t
       pure (isJust (go mempty t))
   | otherwise = pure False
     where
-    go !vis term =
-      case term of
-        STApp { stAppIndex = idx, stAppTermF = termF }
-          | IntSet.member idx vis -> Just vis
-          | otherwise -> goF (IntSet.insert idx vis) termF
+    go !vis term
+      | IntSet.member (termIndex term) vis = Just vis
+      | otherwise = goF (IntSet.insert (termIndex term) vis) (unwrapTermF term)
     goF vis tf =
       case tf of
         Constant c
@@ -2822,17 +2820,18 @@ getAllVars t = Map.toList (getAllVarsMap t)
 -- | Return a map of all free variables in the given term with their
 -- types.
 getAllVarsMap :: Term -> Map VarName Term
-getAllVarsMap t = State.evalState (go t) IntMap.empty
+getAllVarsMap t0 = State.evalState (go t0) IntMap.empty
   where
     go :: Term -> State.State (IntMap (Map VarName Term)) (Map VarName Term)
-    go STApp{ stAppIndex = i, stAppTermF = tf, stAppVarTypes = vt }
-      | IntMap.null vt = pure Map.empty
+    go t
+      | closedTerm t = pure Map.empty
       | otherwise =
         do memo <- State.get
+           let i = termIndex t
            case IntMap.lookup i memo of
              Just vars -> pure vars
              Nothing ->
-               do vars <- termf tf
+               do vars <- termf (unwrapTermF t)
                   State.modify' (IntMap.insert i vars)
                   pure vars
     termf :: TermF Term -> State.State (IntMap (Map VarName Term)) (Map VarName Term)
@@ -2850,11 +2849,11 @@ getAllVarsMap t = State.evalState (go t) IntMap.empty
         _ -> Fold.fold <$> traverse go tf
 
 getConstantSet :: Term -> Map VarIndex NameInfo
-getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
+getConstantSet t0 = snd $ go (IntSet.empty, Map.empty) t0
   where
-    go acc@(idxs, names) (STApp{ stAppIndex = i, stAppTermF = tf})
-      | IntSet.member i idxs = acc
-      | otherwise = termf (IntSet.insert i idxs, names) tf
+    go acc@(idxs, names) t
+      | IntSet.member (termIndex t) idxs = acc
+      | otherwise = termf (IntSet.insert (termIndex t) idxs, names) (unwrapTermF t)
 
     termf acc@(idxs, names) tf =
       case tf of
@@ -2871,9 +2870,7 @@ scInstantiate sc vmap t0 =
      let rangeVars = foldMap freeVars vmap
      tcache <- newCacheIntMap
      let memo :: Term -> IO Term
-         memo t =
-           case t of
-             STApp {stAppIndex = i} -> useCache tcache i (go t)
+         memo t = useCache tcache (termIndex t) (go t)
          go :: Term -> IO Term
          go t
            | IntSet.disjoint domainVars (freeVars t) = pure t
@@ -2978,8 +2975,8 @@ scUnfoldConstants sc unfold t0 =
              Just (ResolvedDef d) -> defBody d
              _ -> Nothing
      let go :: Term -> ChangeT IO Term
-         go t@STApp{stAppIndex = idx, stAppTermF = tf} =
-           case tf of
+         go t =
+           case unwrapTermF t of
              Constant nm
                | unfold nm
                , Just rhs <- getRhs nm -> taint (go rhs)
@@ -2988,8 +2985,8 @@ scUnfoldConstants sc unfold t0 =
                | IntMap.member (vnIndex x) (varTypes t0) ->
                  -- Avoid modifying types of free variables to preserve Term invariant
                  pure t
-             _ ->
-               useChangeCache tcache idx $
+             tf ->
+               useChangeCache tcache (termIndex t) $
                whenModified t (scTermF sc) (traverse go tf)
      commitChangeT (go t0)
 
@@ -3010,7 +3007,7 @@ scUnfoldConstantsBeta sc unfold t0 =
              Just (ResolvedDef d) -> defBody d
              _ -> Nothing
      let memo :: Term -> ChangeT IO Term
-         memo t@STApp{stAppIndex = i} = useChangeCache tcache i (go t)
+         memo t = useChangeCache tcache (termIndex t) (go t)
          go :: Term -> ChangeT IO Term
          go (asApplyAll -> (asConstant -> Just nm, args))
            | unfold nm, Just rhs <- getRhs nm =
@@ -3048,10 +3045,10 @@ scUnfoldOnceFixConstantSet sc b names t0 = do
         | otherwise =
           return t
   let go :: Term -> IO Term
-      go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
-        case tf of
+      go t = useCache cache (termIndex t) $
+        case unwrapTermF t of
           Constant (Name nmidx _) | Just rhs <- getRhs nmidx -> unfold t nmidx rhs
-          _ -> scTermF sc =<< traverse go tf
+          tf -> scTermF sc =<< traverse go tf
   go t0
 
 -- | Return the number of DAG nodes used by the given @Term@.
@@ -3064,9 +3061,9 @@ scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)
 scSharedSizeAux :: (Integer, Set TermIndex) -> Term -> (Integer, Set TermIndex)
 scSharedSizeAux = go
   where
-    go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf })
-      | Set.member idx seen = (sz, seen)
-      | otherwise = foldl' go (strictPair (sz + 1) (Set.insert idx seen)) tf
+    go (sz, seen) t
+      | Set.member (termIndex t) seen = (sz, seen)
+      | otherwise = foldl' go (strictPair (sz + 1) (Set.insert (termIndex t) seen)) (unwrapTermF t)
 
 strictPair :: a -> b -> (a, b)
 strictPair x y = x `seq` y `seq` (x, y)
@@ -3082,8 +3079,8 @@ scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)
 scTreeSizeAux :: (Integer, Map TermIndex Integer) -> Term -> (Integer, Map TermIndex Integer)
 scTreeSizeAux = go
   where
-    go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf }) =
-      case Map.lookup idx seen of
+    go (sz, seen) t =
+      case Map.lookup (termIndex t) seen of
         Just sz' -> (sz + sz', seen)
-        Nothing -> (sz + sz', Map.insert idx sz' seen')
-          where (sz', seen') = foldl' go (1, seen) tf
+        Nothing -> (sz + sz', Map.insert (termIndex t) sz' seen')
+          where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)
