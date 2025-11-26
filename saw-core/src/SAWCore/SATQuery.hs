@@ -15,7 +15,6 @@ import Data.Foldable (foldrM)
 import SAWCore.Name
 import SAWCore.FiniteValue
 import SAWCore.SharedTerm
-import SAWCore.Term.Raw (varTypes)
 
 -- | This datatype represents a satisfiability query that might
 --   be dispatched to a solver.  It carries a series of assertions

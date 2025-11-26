@@ -45,7 +45,6 @@ import SAWCore.Parser.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
 import SAWCore.Term.Pretty (showTerm)
-import SAWCore.Term.Raw (freeVars)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import qualified SAWCore.Term.Certified as SC

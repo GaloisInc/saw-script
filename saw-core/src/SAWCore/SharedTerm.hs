@@ -20,7 +20,12 @@ module SAWCore.SharedTerm
   , NameInfo(..)
   , ppName
     -- * Shared terms
-  , Term(..)
+  , Term -- exported as abstract
+  , unwrapTermF
+  , termIndex
+  , varTypes
+  , freeVars
+  , closedTerm
   , TermIndex
   , scImport
   , alphaEquiv

@@ -90,7 +90,6 @@ import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTerm)
-import SAWCore.Term.Raw
 import qualified SAWCore.TermNet as Net
 import SAWCore.Prelude.Constants
 
@@ -264,8 +263,8 @@ scMatch sc ctxt pat term =
     -- to the free variables of x to make it equal to y.
     -- The IntSet contains the VarIndexes named variables that are locally bound.
     match :: IntSet -> Term -> Term -> MatchState -> MaybeT IO MatchState
-    match _ t@(STApp{stAppIndex = i}) (STApp{stAppIndex = j}) s
-      | closedTerm t && i == j = return s
+    match _ x y s
+      | closedTerm x && termIndex x == termIndex y = pure s
     match locals x y s@(MatchState m cs) =
       -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm PPS.defaultOpts x) >>
       -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm PPS.defaultOpts y) >>
@@ -702,8 +701,9 @@ rewriteSharedTerm sc ss t0 =
   where
 
     rewriteAll :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) => Convertibility -> Term  -> IO Term
-    rewriteAll convertibleFlag STApp{ stAppIndex = tidx, stAppTermF = tf } =
-        useCache ?cache tidx (rewriteTermF convertibleFlag tf >>= scTermF sc >>= rewriteTop convertibleFlag)
+    rewriteAll convertibleFlag t =
+        useCache ?cache (termIndex t)
+        (rewriteTermF convertibleFlag (unwrapTermF t) >>= scTermF sc >>= rewriteTop convertibleFlag)
 
     rewriteTermF :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
                     Convertibility -> TermF Term -> IO (TermF Term)
@@ -911,7 +911,7 @@ doHoistIfs :: Ord a =>
 doHoistIfs sc ss hoistCache = go
 
  where go :: Term -> IO (HoistIfs s)
-       go t@(STApp{ stAppIndex = idx, stAppTermF = tf}) = useCache hoistCache idx $ top t tf
+       go t = useCache hoistCache (termIndex t) $ top t (unwrapTermF t)
 
        top :: Term -> TermF Term -> IO (HoistIfs s)
        top t tf =

@@ -162,9 +162,7 @@ bindSAWTerm ::
   IO (B.Expr n bt)
 bindSAWTerm sym st bt t = do
   ch_r <- readIORef $ saw_elt_cache_r st
-  let midx =
-        case t of
-          SC.STApp { SC.stAppIndex = idx } -> Just idx
+  let midx = Just (SC.termIndex t)
   case midx >>= flip IntMap.lookup ch_r of
     Just (Some var) -> do
       Just Refl <- return $ testEquality bt (B.exprType var)

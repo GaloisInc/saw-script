@@ -117,7 +117,6 @@ import SAWCore.Name (VarName(..))
 import SAWCore.SATQuery
 import SAWCore.ExternalFormat
 import SAWCore.SharedTerm
-import SAWCore.Term.Raw (varTypes)
 
 import SAWCentral.Options
 import SAWCentral.Proof

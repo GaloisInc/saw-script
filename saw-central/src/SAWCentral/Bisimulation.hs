@@ -93,7 +93,6 @@ import SAWCore.Name
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (showTerm)
-import SAWCore.Term.Raw
 import SAWCore.Recognizer
 
 import CryptolSAWCore.TypedTerm
@@ -305,11 +304,9 @@ extractApp constant term =
       case acc of
         Just res -> (seen, Just res)
         Nothing ->
-          case t of
-            STApp{ stAppIndex = i, stAppTermF = tf } ->
-              if IntSet.member i seen
-              then (seen, acc)
-              else termf (IntSet.insert i seen, acc) tf
+          if IntSet.member (termIndex t) seen
+          then (seen, acc)
+          else termf (IntSet.insert (termIndex t) seen, acc) (unwrapTermF t)
 
     termf :: (IntSet, Maybe (TermF Term))
           -> TermF Term
@@ -692,19 +689,19 @@ replaceConstantTerm :: TypedTerm
                     -> Term
                     -- ^ 'Term' to perform replacement in
                     -> State.StateT ReplaceState TopLevel Term
-replaceConstantTerm constant constantRetType term = do
-  sc <- lift getSharedContext
-  case term of
-    STApp{ stAppIndex = i, stAppTermF = termF } -> do
-      table <- State.gets rsMemo
-      case Map.lookup i table of
-        Just x -> return x
-        Nothing -> do
-          termF' <- replaceConstantTermF termF
-          term' <- liftIO $ scTermF sc termF'
-          let table' = Map.insert i term' table
-          State.modify$ \st -> st { rsMemo = table' }
-          return term'
+replaceConstantTerm constant constantRetType term =
+  do sc <- lift getSharedContext
+     let i = termIndex term
+     table <- State.gets rsMemo
+     case Map.lookup i table of
+       Just x -> pure x
+       Nothing ->
+         do let termF = unwrapTermF term
+            termF' <- replaceConstantTermF termF
+            term' <- liftIO $ scTermF sc termF'
+            let table' = Map.insert i term' table
+            State.modify $ \st -> st { rsMemo = table' }
+            pure term'
   where
     -- | Partner function to 'replaceConstantTerm' that operates over 'TermF's.
     replaceConstantTermF

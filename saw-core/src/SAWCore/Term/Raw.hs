@@ -11,6 +11,7 @@ module SAWCore.Term.Raw
   ( Term(..)
   , TermIndex
   , unwrapTermF
+  , termIndex
   , alphaEquiv
   , varTypes
   , freeVars
@@ -153,6 +154,9 @@ alphaEquiv = term IntMap.empty
 
 unwrapTermF :: Term -> TermF Term
 unwrapTermF STApp{stAppTermF = tf} = tf
+
+termIndex :: Term -> TermIndex
+termIndex STApp{ stAppIndex = i } = i
 
 instance Ord Term where
   compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | i == j = EQ

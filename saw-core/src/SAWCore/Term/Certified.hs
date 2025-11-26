@@ -52,11 +52,10 @@ import Numeric.Natural (Natural)
 import SAWCore.Module (Ctor(..), DataType(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Name
 import SAWCore.Recognizer
-import SAWCore.SharedTerm (SharedContext)
+import SAWCore.SharedTerm (SharedContext, alphaEquiv, unwrapTermF)
 import qualified SAWCore.SharedTerm as Raw
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (showTerm)
-import SAWCore.Term.Raw (alphaEquiv, unwrapTermF)
 
 --------------------------------------------------------------------------------
 -- * Certified typed terms

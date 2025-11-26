@@ -168,7 +168,6 @@ import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import SAWCore.Term.Pretty (showTerm)
-import SAWCore.Term.Raw (closedTerm)
 
 import SAWCoreWhat4.ReturnTrip
 

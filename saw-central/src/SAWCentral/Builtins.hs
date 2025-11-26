@@ -74,7 +74,6 @@ import SAWCore.SharedTerm
 import SAWCore.Typechecker (tcInsertModule, inferCompleteTerm)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
-import SAWCore.Term.Raw
 import CryptolSAWCore.TypedTerm
 
 import SAWCore.Prim (rethrowEvalError)

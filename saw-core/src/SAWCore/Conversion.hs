@@ -98,9 +98,9 @@ import qualified SAWCore.Prim as Prim
 import SAWCore.Recognizer ((:*:)(..))
 import SAWCore.Prim
 import qualified SAWCore.Recognizer as R
+import SAWCore.SharedTerm (Term, unwrapTermF)
 import qualified SAWCore.TermNet as Net
 import SAWCore.Term.Functor
-import SAWCore.Term.Raw
 
 -- | A hack to allow storage of conversions in a term net.
 instance Eq Conversion where

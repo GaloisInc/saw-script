@@ -103,7 +103,6 @@ import SAWCore.Name (mkModuleName)
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset)
 import SAWCore.SharedTerm
-import SAWCore.Term.Raw (closedTerm)
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 import qualified CryptolSAWCore.Prelude as CryptolSAW
