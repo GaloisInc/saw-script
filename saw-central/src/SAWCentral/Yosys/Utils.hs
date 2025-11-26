@@ -138,22 +138,14 @@ reverseTopSort =
 #endif
 
 -- | Check that a SAWCore term is well-typed, throwing an exception otherwise.
+-- XXX: delete
 validateTerm :: SC.SharedContext -> Text -> SC.Term -> IO SC.Term
-validateTerm sc msg t =
-  do result <- SC.TC.scTypeCheck sc t
-     case result of
-       Right _ -> pure t
-       Left err ->
-         throwIO $
-         YosysErrorTypeError msg $
-         Text.pack $ unlines $ SC.TC.prettyTCError err
+validateTerm _sc _msg t = pure t
 
 -- | Check that a SAWCore term is well-typed and has a specific type
 validateTermAtType :: SC.SharedContext -> Text -> SC.Term -> SC.Term -> IO ()
 validateTermAtType sc msg trm tp =
-  do let check =
-           do tp_trm <- SC.TC.typeInferComplete trm
-              SC.TC.checkSubtype tp_trm tp
+  do let check = SC.TC.checkSubtype trm tp
      result <- SC.TC.runTCM check sc
      case result of
        Right _ -> pure ()

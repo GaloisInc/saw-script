@@ -88,7 +88,6 @@ import qualified SAWCore.Simulator.Concrete as SC
 import qualified SAWCore.Simulator.Value as SC
 import SAWCore.Prim (BitVector(..))
 import SAWCore.SharedTerm
-import SAWCore.SCTypeCheck               as SC
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName, Name(..))
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
@@ -1947,29 +1946,21 @@ importMatches sc env (C.Let decl : matches) =
 --     [integration] tests, but dial down run-time checks for general use.
 --
 assertSAWCoreTypeChecks :: Show i => SharedContext -> i -> Term -> Maybe Term -> IO ()
-assertSAWCoreTypeChecks sc ident term mType =
-  do result <- SC.scTypeCheck sc term
-     case result of
-       Right ty1 ->
-           case mType of
-             Nothing  ->
-               pure ()
-             Just ty2 ->
-               when False $
-                 -- N.B. currently unreachable to reduce run-time impact:
-                 do
-                 eq <- scConvertible sc True ty1 ty2
-                 unless eq $
-                   panic "assertSAWCoreTypeChecks" [
-                       "Expected type " <> Text.pack (showTerm ty1),
-                       "does not match the inferred type " <> Text.pack (showTerm ty2)
-                   ]
-       Left err ->
-           panic "assertSAWCoreTypeChecks" ([
-               "Internal type error when checking " <> Text.pack (show ident) <> ":"
-           ] ++
-               map Text.pack (SC.prettyTCError err)
-           )
+assertSAWCoreTypeChecks sc _ident term mType =
+  do ty1 <- scTypeOf sc term
+     case mType of
+       Nothing  ->
+         pure ()
+       Just ty2 ->
+         when False $
+           -- N.B. currently unreachable to reduce run-time impact:
+           do
+           eq <- scConvertible sc True ty1 ty2
+           unless eq $
+             panic "assertSAWCoreTypeChecks" [
+                 "Expected type " <> Text.pack (showTerm ty1),
+                 "does not match the inferred type " <> Text.pack (showTerm ty2)
+             ]
 
 
 -- | When possible, convert back from a SAWCore type to a Cryptol Type, or Kind.

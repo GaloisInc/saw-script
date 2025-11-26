@@ -316,12 +316,6 @@ typeInferCompleteWHNF a =
   do t <- typeInferComplete a
      liftTCM SC.scWhnf t
 
--- Type inference for Term dispatches to type inference on TermF Term, but uses
--- memoization to avoid repeated work
-instance TypeInfer Term where
-  typeInfer t = liftTCM SC.scTypeOf =<< typeInferComplete t
-  typeInferComplete t = pure t
-
 -- Type inference for TermF SC.Term is the main workhorse. Intuitively, this
 -- represents the case where each immediate subterm of a term is labeled with
 -- its (most general) type.

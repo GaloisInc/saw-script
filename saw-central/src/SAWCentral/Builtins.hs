@@ -1245,7 +1245,7 @@ proveByBVInduction ::
 proveByBVInduction script t =
   do sc <- getSharedContext
      opts <- getTopLevelPPOpts
-     ty <- io $ scTypeCheckError sc (ttTerm t)
+     ty <- io $ scTypeOf sc (ttTerm t)
      io (checkInductionScheme sc opts [] ty) >>= \case
        Nothing -> badTy opts ty
        Just ([],_) -> badTy opts ty
@@ -1276,10 +1276,7 @@ proveByBVInduction script t =
             -- The result type of the theorem.
             --
             --   (x : Vec w Bool) -> p x
-            thmResult <- io $
-                do t3   <- scPiList sc pis tbody
-                   _    <- scTypeCheckError sc t3 -- sanity check
-                   return t3
+            thmResult <- io $ scPiList sc pis tbody
 
             -- The type of the main hypothesis to the induction scheme. This is what
             -- the user will ultimately be asked to prove. Note that this includes
@@ -1365,10 +1362,7 @@ proveByBVInduction script t =
                    trefl  <- scGlobalApply sc "Prelude.IsLeNat_base" [tsz']
                    indHypArg <- scApplyBeta sc indHypProof varH
                    ind    <- scGlobalApply sc "Prelude.Nat_complete_induction" ([indMotive,indHypArg,tsz'] ++ vars ++ [trefl])
-                   ind''  <- scAbstractTerms sc (varH : vars) ind
-
-                   _tp    <- scTypeCheckError sc ind'' -- sanity check
-                   return ind''
+                   scAbstractTerms sc (varH : vars) ind
 
             indAppTT <- io $ mkTypedTerm sc indApp
 
@@ -1589,7 +1583,7 @@ check_term tt = do
   opts <- getTopLevelPPOpts
   cenv <- SV.getCryptolEnv
   let t = ttTerm tt
-  ty <- io $ scTypeCheckError sc t
+  ty <- io $ scTypeOf sc t
   expectedTy <-
     case ttType tt of
       TypedTermSchema schema -> io $ importSchemaCEnv sc cenv schema
@@ -1665,7 +1659,6 @@ generalize_term vars tt =
   do tvs <- traverse checkVar vars
      sc <- getSharedContext
      tm <- io $ scPiList sc (map (\tv -> (tvName tv, tvType tv)) tvs) (ttTerm tt)
-     _tp <- io $ scTypeCheckError sc tm -- sanity check the term
      io $ mkTypedTerm sc tm
 
   where

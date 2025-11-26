@@ -103,7 +103,7 @@ completeType sc ot = scTypeOf sc =<< complete sc ot
 
 -- | Embed a 'Term' into an 'OpenTerm'.
 term :: Term -> OpenTerm
-term t = OpenTerm $ typeInferComplete t
+term t = OpenTerm $ pure t
 
 -- | Return type of an 'OpenTerm' as an 'OpenTerm'.
 typeOf :: OpenTerm -> OpenTerm
@@ -256,7 +256,7 @@ global ident =
 
 -- | Build an 'OpenTerm' for a named variable.
 variable :: VarName -> Term -> OpenTerm
-variable x t = OpenTerm (liftTCM scVariable x t >>= typeInferComplete)
+variable x t = OpenTerm (liftTCM scVariable x t)
 
 -- | Apply an 'OpenTerm' to another.
 app :: OpenTerm -> OpenTerm -> OpenTerm
@@ -279,15 +279,14 @@ applyPi (OpenTerm m_f) (OpenTerm m_arg) =
   OpenTerm $
   do f <- m_f
      arg <- m_arg
-     ret <- applyPiTyped (NotFuncTypeInApp f arg) f arg
-     typeInferComplete ret
+     applyPiTyped (NotFuncTypeInApp f arg) f arg
 
 -- | Get the argument type of a function type, 'fail'ing if the input term is
 -- not a function type
 piArg :: OpenTerm -> OpenTerm
 piArg (OpenTerm m) =
   OpenTerm $ m >>= \case
-  (unwrapTermF -> Pi _ tp _) -> typeInferComplete tp
+  (unwrapTermF -> Pi _ tp _) -> pure tp
   t ->
     fail ("piArg: not a pi type: " ++
           scPrettyTermInCtx PPS.defaultOpts [] t)
