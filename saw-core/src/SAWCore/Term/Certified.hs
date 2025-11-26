@@ -11,7 +11,6 @@ module SAWCore.Term.Certified
   ( Term -- abstract
   , rawTerm
   , scTypeOf
-  , scTypeConvertible
   , scSubtype
   , scWhnf
     -- * Building certified terms
@@ -60,13 +59,6 @@ data Term = Term Raw.Term
 -- | The raw term of a 'Term'.
 rawTerm :: Term -> Raw.Term
 rawTerm (Term trm) = trm
-
---------------------------------------------------------------------------------
-
--- | Check if two terms are "convertible for type-checking", meaning that they
--- are convertible up to 'natConversions'.
-scTypeConvertible :: SharedContext -> Raw.Term -> Raw.Term -> IO Bool
-scTypeConvertible sc t1 t2 = Raw.scConvertibleEval sc Raw.scWhnf True t1 t2
 
 --------------------------------------------------------------------------------
 -- * Operations on typed terms
