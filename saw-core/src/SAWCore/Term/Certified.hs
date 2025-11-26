@@ -10,7 +10,6 @@ Portability : non-portable (language extensions)
 module SAWCore.Term.Certified
   ( Term -- abstract
   , rawTerm
-  , rawType
   , scTypeOf
   , scTypeConvertible
   , scSubtype
@@ -42,39 +41,26 @@ module SAWCore.Term.Certified
   , scString
   ) where
 
-import Control.Monad (unless)
 import qualified Data.IntMap as IntMap
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 
-import SAWCore.Module (Ctor(..), DataType(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.SharedTerm (SharedContext, alphaEquiv, unwrapTermF)
 import qualified SAWCore.SharedTerm as Raw
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty (showTerm)
 
 --------------------------------------------------------------------------------
 -- * Certified typed terms
 
--- | An abstract datatype pairing a well-formed 'Raw.Term' with its type.
--- A 'Term' represents a typing judgment of the form @e : t@, where
--- @e@ is the raw term and @t@ is its type.
-data Term =
-  Term
-  Raw.Term -- ^ value
-  Raw.Term -- ^ type
+-- | An abstract datatype containing a well-formed 'Raw.Term'.
+data Term = Term Raw.Term
 
 -- | The raw term of a 'Term'.
 rawTerm :: Term -> Raw.Term
-rawTerm (Term trm _) = trm
-
--- | The type of a 'Term' as a raw term.
-rawType :: Term -> Raw.Term
-rawType (Term _ typ) = typ
+rawTerm (Term trm) = trm
 
 --------------------------------------------------------------------------------
 
@@ -112,180 +98,94 @@ scSubtype sc t1 t2
 
 -- | Compute the type of a 'Term'.
 scTypeOf :: SharedContext -> Term -> IO Term
-scTypeOf sc (Term _ tp) =
-  do tp_tp <- Raw.scTypeOf sc tp
-     pure (Term tp tp_tp)
+scTypeOf sc (Term tm) = Term <$> Raw.scTypeOf sc tm
 
 -- | Reduce a 'Cterm' to weak head-normal form..
 scWhnf :: SharedContext -> Term -> IO Term
-scWhnf sc (Term tm tp) =
-  do tm' <- Raw.scWhnf sc tm
-     pure (Term tm' tp)
+scWhnf sc (Term tm) = Term <$> Raw.scWhnf sc tm
 
 scGlobal :: SharedContext -> Ident -> IO Term
-scGlobal sc ident =
-  do tm <- Raw.scGlobalDef sc ident
-     tp <- Raw.scTypeOfIdent sc ident
-     pure (Term tm tp)
+scGlobal sc ident = Term <$> Raw.scGlobalDef sc ident
 
 --------------------------------------------------------------------------------
 -- * Building certified terms
 
 -- possible errors: not a pi type, bad argument type, context mismatch
 scApply :: SharedContext -> Term -> Term -> IO Term
-scApply sc f arg =
-  do tm <- Raw.scApply sc (rawTerm f) (rawTerm arg)
-     (vnIndex -> i, t1, t2) <- ensurePi sc (rawType f)
-     ok <- scSubtype sc (rawType arg) t1
-     unless ok $ fail $ unlines $
-       ["Not a subtype", "expected: " ++ showTerm t1, "got: " ++ showTerm (rawType arg)]
-     tp <- Raw.scInstantiateBeta sc (IntMap.singleton i (rawTerm arg)) t2
-     pure (Term tm tp)
+scApply sc f arg = Term <$> Raw.scApply sc (rawTerm f) (rawTerm arg)
 
 -- possible errors: not a type, context mismatch, variable free in context
 scLambda :: SharedContext -> VarName -> Term -> Term -> IO Term
-scLambda sc x t body =
-  do _s <- ensureSort sc (rawType t)
-     tm <- Raw.scLambda sc x (rawTerm t) (rawTerm body)
-     tp <- Raw.scPi sc x (rawTerm t) (rawType body)
-     pure (Term tm tp)
+scLambda sc x t body = Term <$> Raw.scLambda sc x (rawTerm t) (rawTerm body)
 
 -- possible errors: not a variable, context mismatch, variable free in context
 scAbstract :: SharedContext -> Term -> Term -> IO Term
 scAbstract sc var body =
   case asVariable (rawTerm var) of
     Nothing -> fail "scAbstract: Not a variable"
-    Just (x, _) ->
-      do tm <- Raw.scLambda sc x (rawType var) (rawTerm body)
-         tp <- Raw.scPi sc x (rawType var) (rawType body)
-         pure (Term tm tp)
+    Just (x, ty) -> Term <$> Raw.scLambda sc x ty (rawTerm body)
 
 -- possible errors: not a type, context mismatch, variable free in context
 scPi :: SharedContext -> VarName -> Term -> Term -> IO Term
-scPi sc x t body =
-  do tm <- Raw.scPi sc x (rawTerm t) (rawTerm body)
-     s1 <- ensureSort sc (rawType t)
-     s2 <- ensureSort sc (rawType body)
-     tp <- Raw.scSort sc (piSort s1 s2)
-     pure (Term tm tp)
+scPi sc x t body = Term <$> Raw.scPi sc x (rawTerm t) (rawTerm body)
 
 scGeneralize :: SharedContext -> Term -> Term -> IO Term
 scGeneralize sc var body =
   case asVariable (rawTerm var) of
     Nothing -> fail "scGeneralize: Not a variable"
-    Just (x, _) ->
-      do tp <- scTypeOf sc var
-         scPi sc x tp body
+    Just (x, ty) -> scPi sc x (Term ty) body
 
 -- possible errors: not a type, context mismatch
 scFun :: SharedContext -> Term -> Term -> IO Term
-scFun sc a b =
-  do tm <- Raw.scFun sc (rawTerm a) (rawTerm b)
-     sa <- ensureSort sc (rawType a)
-     sb <- ensureSort sc (rawType b)
-     tp <- Raw.scSort sc (piSort sa sb)
-     pure (Term tm tp)
+scFun sc a b = Term <$> Raw.scFun sc (rawTerm a) (rawTerm b)
 
 -- possible errors: constant not defined
 scConstant :: SharedContext -> Name -> IO Term
-scConstant sc nm =
-  do tm <- Raw.scConst sc nm
-     tp <- Raw.scTypeOfName sc nm
-     pure (Term tm tp)
+scConstant sc nm = Term <$> Raw.scConst sc nm
 
 -- possible errors: not a type
 scVariable :: SharedContext -> VarName -> Term -> IO Term
-scVariable sc vn t =
-  do _s <- ensureSort sc (rawType t)
-     let tp = rawTerm t
-     tm <- Raw.scVariable sc vn tp
-     pure (Term tm tp)
+scVariable sc vn t = Term <$> Raw.scVariable sc vn (rawTerm t)
 
 -- possible errors: none
 scUnitValue :: SharedContext -> IO Term
-scUnitValue sc =
-  do tm <- Raw.scUnitValue sc
-     tp <- Raw.scUnitType sc
-     pure (Term tm tp)
+scUnitValue sc = Term <$> Raw.scUnitValue sc
 
 -- possible errors: none
 scUnitType :: SharedContext -> IO Term
-scUnitType sc =
-  do tm <- Raw.scUnitType sc
-     tp <- Raw.scSort sc (mkSort 0)
-     pure (Term tm tp)
+scUnitType sc = Term <$> Raw.scUnitType sc
 
 -- possible errors: none (could redesign to require types in sort 0)
 scPairValue :: SharedContext -> Term -> Term -> IO Term
-scPairValue sc x y =
-  do tm <- Raw.scPairValue sc (rawTerm x) (rawTerm y)
-     tp <- Raw.scPairType sc (rawType x) (rawType y)
-     pure (Term tm tp)
+scPairValue sc x y = Term <$> Raw.scPairValue sc (rawTerm x) (rawTerm y)
 
 -- possible errors: not a type
 scPairType :: SharedContext -> Term -> Term -> IO Term
-scPairType sc x y =
-  do tm <- Raw.scPairType sc (rawTerm x) (rawTerm y)
-     sx <- ensureSort sc (rawType x)
-     sy <- ensureSort sc (rawType y)
-     tp <- Raw.scSort sc (max sx sy)
-     pure (Term tm tp)
+scPairType sc x y = Term <$> Raw.scPairType sc (rawTerm x) (rawTerm y)
 
 -- possible errors: not a pair
 scPairLeft :: SharedContext -> Term -> IO Term
-scPairLeft sc x =
-  do tm <- Raw.scPairLeft sc (rawTerm x)
-     tp <- fst <$> ensurePairType sc (rawType x)
-     pure (Term tm tp)
+scPairLeft sc x = Term <$> Raw.scPairLeft sc (rawTerm x)
 
 -- possible errors: not a pair
 scPairRight :: SharedContext -> Term -> IO Term
-scPairRight sc x =
-  do tm <- Raw.scPairRight sc (rawTerm x)
-     tp <- snd <$> ensurePairType sc (rawType x)
-     pure (Term tm tp)
+scPairRight sc x = Term <$> Raw.scPairRight sc (rawTerm x)
 
 -- possible errors: not a datatype, bad elimination sort
 scRecursor :: SharedContext -> Name -> Sort -> IO Term
-scRecursor sc nm s =
-  do mm <- Raw.scGetModuleMap sc
-     case lookupVarIndexInMap (nameIndex nm) mm of
-       Just (ResolvedDataType dt) ->
-         do unless (Raw.allowedElimSort dt s) $ fail "Disallowed propositional elimination"
-            let d = dtName dt
-            let nparams = length (dtParams dt)
-            let nixs = length (dtIndices dt)
-            let ctorOrder = map ctorName (dtCtors dt)
-            let crec = CompiledRecursor d s nparams nixs ctorOrder
-            tm <- Raw.scFlatTermF sc (Recursor crec)
-            tp <- Raw.scRecursorType sc dt s
-            pure (Term tm tp)
-       _ ->
-         fail "datatype not found"
+scRecursor sc nm s = Term <$> Raw.scRecursor sc nm s
 
 -- possible errors: field not a type, context mismatch
 scRecordType :: SharedContext -> [(FieldName, Term)] -> IO Term
-scRecordType sc fields =
-  do tm <- Raw.scRecordType sc (map (fmap rawTerm) fields)
-     sorts <- traverse (ensureSort sc . rawType . snd) fields
-     tp <- Raw.scSort sc (foldl max (mkSort 0) sorts)
-     pure (Term tm tp)
+scRecordType sc fields = Term <$> Raw.scRecordType sc (map (fmap rawTerm) fields)
 
 -- possible errors: duplicate field name
 scRecordValue :: SharedContext -> [(FieldName, Term)] -> IO Term
-scRecordValue sc fields =
-  do tm <- Raw.scFlatTermF sc $ RecordValue (map (fmap rawTerm) fields)
-     tp <- Raw.scRecordType sc (map (fmap rawType) fields)
-     pure (Term tm tp)
+scRecordValue sc fields = Term <$> Raw.scRecord sc (fmap rawTerm (Map.fromList fields))
 
 -- possible errors: not a record type, field name not found
 scRecordProj :: SharedContext -> Term -> FieldName -> IO Term
-scRecordProj sc t fname =
-  do tm <- Raw.scRecordSelect sc (rawTerm t) fname
-     tps <- ensureRecordType sc (rawType t)
-     case Map.lookup fname tps of
-       Nothing -> fail "scRecordProj: field name not found"
-       Just tp -> pure (Term tm tp)
+scRecordProj sc t fname = Term <$> Raw.scRecordSelect sc (rawTerm t) fname
 
 -- no possible errors
 scSort :: SharedContext -> Sort -> IO Term
@@ -294,59 +194,16 @@ scSort sc s = scSortWithFlags sc s noFlags
 -- | A variant of 'scSort' that also takes a 'SortFlags' argument.
 -- No possible errors.
 scSortWithFlags :: SharedContext -> Sort -> SortFlags -> IO Term
-scSortWithFlags sc s flags =
-  do tm <- Raw.scFlatTermF sc (Sort s flags)
-     tp <- Raw.scSort sc (sortOf s)
-     pure (Term tm tp)
+scSortWithFlags sc s flags = Term <$> Raw.scSortWithFlags sc s flags
 
 -- no possible errors
 scNat :: SharedContext -> Natural -> IO Term
-scNat sc n =
-  do tm <- Raw.scNat sc n
-     tp <- Raw.scNatType sc
-     pure (Term tm tp)
+scNat sc n = Term <$> Raw.scNat sc n
 
 -- possible errors: context mismatch, element type not a type, element wrong type
 scVector :: SharedContext -> Term -> [Term] -> IO Term
-scVector sc e xs =
-  do -- TODO: check that all xs have type e
-     tm <- Raw.scVector sc (rawTerm e) (map rawTerm xs)
-     n <- Raw.scNat sc (fromIntegral (length xs))
-     tp <- Raw.scVecType sc n (rawTerm e)
-     pure (Term tm tp)
+scVector sc e xs = Term <$> Raw.scVector sc (rawTerm e) (map rawTerm xs)
 
 -- no possible errors
 scString :: SharedContext -> Text -> IO Term
-scString sc s =
-  do tm <- Raw.scString sc s
-     tp <- Raw.scStringType sc
-     pure (Term tm tp)
-
---------------------------------------------------------------------------------
--- * Utility functions
-
-ensureRecognizer :: String -> SharedContext -> (Raw.Term -> Maybe a) -> Raw.Term -> IO a
-ensureRecognizer s sc f trm =
-  case f trm of
-    Just a -> pure a
-    Nothing ->
-      do trm' <- Raw.scWhnf sc trm
-         case f trm' of
-           Just a -> pure a
-           Nothing ->
-             fail $ "ensureRecognizer: Expected " ++ s ++ ", found: " ++ showTerm trm'
-
-ensureSort :: SharedContext -> Raw.Term -> IO Sort
-ensureSort sc tp = ensureRecognizer "Sort" sc asSort tp
-
-ensurePi :: SharedContext -> Raw.Term -> IO (VarName, Raw.Term, Raw.Term)
-ensurePi sc tp = ensureRecognizer "Pi" sc asPi tp
-
-ensurePairType :: SharedContext -> Raw.Term -> IO (Raw.Term, Raw.Term)
-ensurePairType sc tp = ensureRecognizer "PairType" sc asPairType tp
-
-ensureRecordType :: SharedContext -> Raw.Term -> IO (Map FieldName Raw.Term)
-ensureRecordType sc tp = ensureRecognizer "RecordType" sc asRecordType tp
-
-piSort :: Sort -> Sort -> Sort
-piSort s1 s2 = if s2 == propSort then propSort else max s1 s2
+scString sc s = Term <$> Raw.scString sc s

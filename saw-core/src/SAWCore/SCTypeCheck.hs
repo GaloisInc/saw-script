@@ -33,6 +33,7 @@ module SAWCore.SCTypeCheck
   , typeInferCompleteWHNF
   , checkSubtype
   , ensureSort
+  , ensureSortType
   , applyPiTyped
   , compileRecursor
   ) where
@@ -194,7 +195,7 @@ prettyTCError e = runReader (helper e) Nothing where
                 , return "For term:"
                 , ishow (SC.rawTerm f)
                 , return "With type:"
-                , ishow (SC.rawType f)
+                , tyshow (SC.rawTerm f)
                 , return "To argument:"
                 , ishow (SC.rawTerm arg) ]
   helper (NotTupleType ty) =
@@ -205,7 +206,7 @@ prettyTCError e = runReader (helper e) Nothing where
                 , ishow ty ]
   helper (NotRecordType t) =
       ppWithPos [ return "Record field projection with non-record type"
-                , ishow (SC.rawType t)
+                , tyshow (SC.rawTerm t)
                 , return "In term:"
                 , ishow (SC.rawTerm t) ]
   helper (BadRecordField n ty) =
@@ -215,7 +216,7 @@ prettyTCError e = runReader (helper e) Nothing where
       ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
   helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ show str)]
   helper (SubtypeFailure trm tp2) =
-      ppWithPos [ return "Inferred type", ishow (SC.rawType trm),
+      ppWithPos [ return "Inferred type", tyshow (SC.rawTerm trm),
                   return "Not a subtype of expected type", ishow tp2,
                   return "For term", ishow (SC.rawTerm trm) ]
   helper EmptyVectorLit = ppWithPos [ return "Empty vector literal"]
@@ -241,7 +242,7 @@ prettyTCError e = runReader (helper e) Nothing where
     cont <- helper err
     return (info ++ cont)
   helper (ExpectedRecursor ttm) =
-    ppWithPos [ return "Expected recursor value", ishow (SC.rawTerm ttm), ishow (SC.rawType ttm)]
+    ppWithPos [ return "Expected recursor value", ishow (SC.rawTerm ttm), tyshow (SC.rawTerm ttm)]
 
   -- | Add prefix to every line, but remove final trailing newline
   indent :: String -> String -> String
@@ -251,6 +252,14 @@ prettyTCError e = runReader (helper e) Nothing where
   ishow tm =
     -- return $ show tm
     pure $ indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm
+
+  tyshow :: Term -> PPErrM String
+  tyshow t =
+    case termSortOrType t of
+      Left s ->
+        pure $ indent "  " $ show s
+      Right tm ->
+        pure $ indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm
 
   sortSuffix :: Sort -> String
   sortSuffix s =
@@ -314,7 +323,7 @@ typeInferCompleteWHNF a =
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work
 instance TypeInfer Term where
-  typeInfer t = SC.rawType <$> typeInferComplete t
+  typeInfer t = SC.rawTerm <$> (liftTCM SC.scTypeOf =<< typeInferComplete t)
   typeInferComplete t =
     do table <- get
        let i = termIndex t
@@ -329,7 +338,7 @@ instance TypeInfer Term where
 -- calling inference on all the sub-components and extending the context inside
 -- of the binding forms
 instance TypeInfer (TermF Term) where
-  typeInfer tf = SC.rawType <$> typeInferComplete tf
+  typeInfer tf = SC.rawTerm <$> (liftTCM SC.scTypeOf =<< typeInferComplete tf)
   typeInferComplete tf =
     case tf of
       FTermF ftf ->
@@ -355,7 +364,7 @@ instance TypeInfer (TermF Term) where
 
 -- Type inference for FlatTermF Term dispatches to that for FlatTermF SC.Term.
 instance TypeInfer (FlatTermF Term) where
-  typeInfer ftf = SC.rawType <$> typeInferComplete ftf
+  typeInfer ftf = SC.rawTerm <$> (liftTCM SC.scTypeOf =<< typeInferComplete ftf)
   typeInferComplete ftf =
     typeInferComplete =<< mapM typeInferComplete ftf
 
@@ -363,7 +372,7 @@ instance TypeInfer (FlatTermF Term) where
 -- represents the case where each immediate subterm of a term is labeled with
 -- its (most general) type.
 instance TypeInfer (TermF SC.Term) where
-  typeInfer tf = SC.rawType <$> typeInferComplete tf
+  typeInfer tf = SC.rawTerm <$> (liftTCM SC.scTypeOf =<< typeInferComplete tf)
   typeInferComplete tf =
     withErrorCTermF tf (inferTermF tf)
 
@@ -372,7 +381,7 @@ instance TypeInfer (TermF SC.Term) where
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF SC.Term) where
   typeInfer ftf =
-    SC.rawType <$> inferFlatTermF ftf
+    SC.rawTerm <$> (liftTCM SC.scTypeOf =<< inferFlatTermF ftf)
   typeInferComplete ftf =
     withErrorCTermF (FTermF ftf) (inferFlatTermF ftf)
 
@@ -385,15 +394,16 @@ inferTermF tf =
       inferFlatTermF ftf
     App t1 t2 ->
       do let err = NotFuncTypeInApp t1 t2
-         (_nm, arg_tp, _ret_tp) <- ensurePiType err (SC.rawType t1)
+         ty1 <- liftTCM SC.scTypeOf t1
+         (_nm, arg_tp, _ret_tp) <- ensurePiType err (SC.rawTerm ty1)
          checkSubtype t2 arg_tp
          liftTCM SC.scApply t1 t2
     Lambda x t1 t2 ->
-      do void $ ensureSort (SC.rawType t1)
+      do void $ ensureSortType (SC.rawTerm t1)
          liftTCM SC.scLambda x t1 t2
     Pi x t1 t2 ->
-      do void $ ensureSort (SC.rawType t1)
-         void $ ensureSort (SC.rawType t2)
+      do void $ ensureSortType (SC.rawTerm t1)
+         void $ ensureSortType (SC.rawTerm t2)
          liftTCM SC.scPi x t1 t2
     Constant nm ->
       do mm <- liftTCM scGetModuleMap
@@ -415,14 +425,14 @@ inferFlatTermF ftf =
     PairValue t1 t2 ->
       liftTCM SC.scPairValue t1 t2
     PairType t1 t2 ->
-      do void $ ensureSort (SC.rawType t1)
-         void $ ensureSort (SC.rawType t2)
+      do void $ ensureSortType (SC.rawTerm t1)
+         void $ ensureSortType (SC.rawTerm t2)
          liftTCM SC.scPairType t1 t2
     PairLeft t ->
-      do void $ ensurePairType (SC.rawType t)
+      do void $ ensurePairType =<< liftTCM scTypeOf (SC.rawTerm t)
          liftTCM SC.scPairLeft t
     PairRight t ->
-      do void $ ensurePairType (SC.rawType t)
+      do void $ ensurePairType =<< liftTCM scTypeOf (SC.rawTerm t)
          liftTCM SC.scPairRight t
     Recursor r ->
       do mm <- liftTCM scGetModuleMap
@@ -432,19 +442,20 @@ inferFlatTermF ftf =
            Just (ResolvedDataType _dt) -> liftTCM SC.scRecursor d s
            _ -> throwTCError $ NoSuchDataType (nameInfo d)
     RecordType elems ->
-      do void $ mapM (ensureSort . SC.rawType . snd) elems
+      do void $ mapM (ensureSortType . SC.rawTerm . snd) elems
          liftTCM SC.scRecordType elems
     RecordValue elems ->
       liftTCM SC.scRecordValue elems
     RecordProj t fld ->
-      do ts <- ensureRecordType (NotRecordType t) (SC.rawType t)
+      do ty <- liftTCM scTypeOf (SC.rawTerm t)
+         ts <- ensureRecordType (NotRecordType t) ty
          unless (Map.member fld ts) $
-           throwTCError $ BadRecordField fld (SC.rawType t)
+           throwTCError $ BadRecordField fld ty
          liftTCM SC.scRecordProj t fld
     Sort s flags ->
       liftTCM SC.scSortWithFlags s flags
     ArrayValue tp vs ->
-      do void $ ensureSort (SC.rawType tp)
+      do void $ ensureSortType (SC.rawTerm tp)
          tp' <- typeCheckWHNF (SC.rawTerm tp)
          forM_ vs $ \v_elem -> checkSubtype v_elem tp'
          liftTCM SC.scVector tp (V.toList vs)
@@ -470,6 +481,10 @@ ensureRecognizer f err trm =
   typeCheckWHNF trm >>= \case
   (f -> Just a) -> return a
   _ -> throwTCError err
+
+-- | Ensure the type of a 'Term' is a sort, and return that sort.
+ensureSortType :: Term -> TCM Sort
+ensureSortType t = either pure ensureSort (termSortOrType t)
 
 -- | Ensure a 'Term' is a sort, normalizing if necessary, and return that sort
 ensureSort :: Term -> TCM Sort
@@ -498,7 +513,7 @@ typeCheckWHNF = liftTCM scWhnf
 -- types, i.e., that both have type Sort s for some s.
 checkSubtype :: SC.Term -> Term -> TCM ()
 checkSubtype arg req_tp =
-  do arg_tp' <- liftTCM scWhnf (SC.rawType arg)
+  do arg_tp' <- liftTCM scWhnf =<< liftTCM scTypeOf (SC.rawTerm arg)
      req_tp' <- liftTCM scWhnf req_tp
      ok <- isSubtype arg_tp' req_tp'
      if ok then return () else throwTCError $ SubtypeFailure arg req_tp

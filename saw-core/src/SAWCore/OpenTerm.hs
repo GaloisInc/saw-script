@@ -99,9 +99,7 @@ complete sc (OpenTerm termM) =
 
 -- | \"Complete\" an 'OpenTerm' to a closed term for its type
 completeType :: SharedContext -> OpenTerm -> IO Term
-completeType sc (OpenTerm termM) =
-  either (fail . show) return =<<
-  runTCM (SC.rawType <$> termM) sc
+completeType sc ot = scTypeOf sc =<< complete sc ot
 
 -- | Embed a 'Term' into an 'OpenTerm'.
 term :: Term -> OpenTerm
