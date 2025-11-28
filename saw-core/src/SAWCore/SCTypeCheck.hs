@@ -132,19 +132,15 @@ data TCError
   | BadTupleIndex Int Term
   | NotRecordType SC.Term
   | BadRecordField FieldName Term
-  | DanglingVar Int
   | UnboundName Text
   | SubtypeFailure SC.Term Term
   | EmptyVectorLit
   | NoSuchDataType NameInfo
-  | NoSuchCtor NameInfo
   | NoSuchConstant NameInfo
-  | NotFullyAppliedRec NameInfo
   | MalformedRecursor NameInfo Sort String
   | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorTerm Term TCError
-  | ExpectedRecursor SC.Term
 
 
 -- | Throw a type-checking error
@@ -189,8 +185,6 @@ prettyTCError e = runReader (helper e) Nothing where
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (DanglingVar n) =
-      ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
   helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ show str)]
   helper (SubtypeFailure trm tp2) =
       ppWithPos [ return "Inferred type", tyshow trm,
@@ -199,12 +193,8 @@ prettyTCError e = runReader (helper e) Nothing where
   helper EmptyVectorLit = ppWithPos [ return "Empty vector literal"]
   helper (NoSuchDataType d) =
     ppWithPos [ return ("No such data type: " ++ show d)]
-  helper (NoSuchCtor c) =
-    ppWithPos [ return ("No such constructor: " ++ show c) ]
   helper (NoSuchConstant c) =
     ppWithPos [ return ("No such constant: " ++ show c) ]
-  helper (NotFullyAppliedRec i) =
-      ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
   helper (MalformedRecursor d s reason) =
       ppWithPos [ return "Malformed recursor",
                   pure (indent "  " (Text.unpack (toAbsoluteName d) ++ sortSuffix s)),
@@ -218,8 +208,6 @@ prettyTCError e = runReader (helper e) Nothing where
                       , ishow tm ]
     cont <- helper err
     return (info ++ cont)
-  helper (ExpectedRecursor ttm) =
-    ppWithPos [ return "Expected recursor value", ishow ttm, tyshow ttm]
 
   -- | Add prefix to every line, but remove final trailing newline
   indent :: String -> String -> String
