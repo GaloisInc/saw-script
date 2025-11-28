@@ -17,7 +17,6 @@ module SAWCore.SCTypeCheck
   , scTypeCheckError
   , scTypeCheckComplete
   , scConvertible
-  , scCheckSubtype
   , TCError(..)
   , prettyTCError
   , throwTCError
@@ -254,13 +253,6 @@ scTypeCheck sc t0 = runTCM (typeInfer t0) sc
 scTypeCheckComplete ::
   TypeInfer a => SharedContext -> a -> IO (Either TCError SC.Term)
 scTypeCheckComplete sc t0 = runTCM (typeInferComplete t0) sc
-
--- | Check that one type is a subtype of another using 'checkSubtype', calling
--- 'fail' on failure
-scCheckSubtype :: SharedContext -> SC.Term -> Term -> IO ()
-scCheckSubtype sc arg req_tp =
-  either (fail . unlines . prettyTCError) return =<<
-  runTCM (checkSubtype arg req_tp) sc
 
 -- | The class of things that we can infer types of. The 'typeInfer' method
 -- returns the most general (with respect to subtyping) type of its input.
