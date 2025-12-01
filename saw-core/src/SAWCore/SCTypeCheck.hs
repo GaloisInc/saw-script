@@ -23,9 +23,12 @@ module SAWCore.SCTypeCheck
   , TCM
   , runTCM
   , rethrowTCError
+  , withErrorUTerm
   , atPos
   , LiftTCM(..)
   , TypeInfer(..)
+  , inferTermF
+  , inferFlatTermF
   , typeCheckWHNF
   , typeInferCompleteWHNF
   , checkSubtype
@@ -49,7 +52,7 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
+import qualified SAWSupport.Pretty as PPS (defaultOpts, render)
 
 import SAWCore.Module
   ( ctorName
@@ -60,6 +63,7 @@ import SAWCore.Module
   , ResolvedName(..)
   )
 import SAWCore.Name
+import SAWCore.Parser.AST (UTerm, prettyUTerm)
 import SAWCore.Parser.Position
 import SAWCore.Recognizer
 import qualified SAWCore.Term.Certified as SC
@@ -102,6 +106,11 @@ withErrorTermF tf tcm =
      withErrorTerm t tcm
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
+-- 'ErrorUTerm' constructor
+withErrorUTerm :: MonadError TCError m => UTerm -> m a -> m a
+withErrorUTerm t = rethrowTCError (ErrorUTerm t)
+
+-- | Run a type-checking computation @m@ and tag any error it throws with the
 -- given position, using the 'ErrorPos' constructor, unless that error is
 -- already tagged with a position
 atPos :: (MonadError TCError m) => Pos -> m a -> m a
@@ -140,6 +149,7 @@ data TCError
   | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorTerm Term TCError
+  | ErrorUTerm UTerm TCError
 
 
 -- | Throw a type-checking error
@@ -207,6 +217,14 @@ prettyTCError e = runReader (helper e) Nothing where
                       , ishow tm ]
     cont <- helper err
     return (info ++ cont)
+  helper (ErrorUTerm t err) =
+    do info <-
+         ppWithPos
+         [ pure ("While typechecking term:")
+         , pure $ indent "  " $ PPS.render PPS.defaultOpts (prettyUTerm t)
+         ]
+       cont <- helper err
+       pure (info ++ cont)
 
   -- | Add prefix to every line, but remove final trailing newline
   indent :: String -> String -> String
