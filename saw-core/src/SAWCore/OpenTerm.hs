@@ -95,17 +95,15 @@ newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SC.Term }
 complete :: SharedContext -> OpenTerm -> IO Term
 complete sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (SC.rawTerm <$> termM) sc
+  runTCM termM sc
 
 -- | \"Complete\" an 'OpenTerm' to a closed term for its type
 completeType :: SharedContext -> OpenTerm -> IO Term
-completeType sc (OpenTerm termM) =
-  either (fail . show) return =<<
-  runTCM (SC.rawType <$> termM) sc
+completeType sc ot = scTypeOf sc =<< complete sc ot
 
 -- | Embed a 'Term' into an 'OpenTerm'.
 term :: Term -> OpenTerm
-term t = OpenTerm $ typeInferComplete t
+term t = OpenTerm $ pure t
 
 -- | Return type of an 'OpenTerm' as an 'OpenTerm'.
 typeOf :: OpenTerm -> OpenTerm
@@ -116,7 +114,7 @@ typeOf (OpenTerm m) =
 -- | Build an 'OpenTerm' from a 'FlatTermF'
 flat :: FlatTermF OpenTerm -> OpenTerm
 flat ftf = OpenTerm $
-  (sequence (fmap unOpenTerm ftf) >>= typeInferComplete)
+  (sequence (fmap unOpenTerm ftf) >>= inferFlatTermF)
 
 -- | Build an 'OpenTerm' for a sort
 sort :: Sort -> OpenTerm
@@ -236,20 +234,20 @@ record :: [(FieldName, OpenTerm)] -> OpenTerm
 record flds_ts =
   OpenTerm $ do let (flds,ots) = unzip flds_ts
                 ts <- mapM unOpenTerm ots
-                typeInferComplete $ RecordValue $ zip flds ts
+                inferFlatTermF $ RecordValue $ zip flds ts
 
 -- | Build a record type as an 'OpenTerm'
 recordType :: [(FieldName, OpenTerm)] -> OpenTerm
 recordType flds_ts =
   OpenTerm $ do let (flds,ots) = unzip flds_ts
                 ts <- mapM unOpenTerm ots
-                typeInferComplete $ RecordType $ zip flds ts
+                inferFlatTermF $ RecordType $ zip flds ts
 
 -- | Project a field from a record
 projRecord :: OpenTerm -> FieldName -> OpenTerm
 projRecord (OpenTerm m) f =
   OpenTerm $ do t <- m
-                typeInferComplete $ RecordProj t f
+                inferFlatTermF $ RecordProj t f
 
 -- | Build an 'OpenTerm' for a global name with a definition
 global :: Ident -> OpenTerm
@@ -258,12 +256,12 @@ global ident =
 
 -- | Build an 'OpenTerm' for a named variable.
 variable :: VarName -> Term -> OpenTerm
-variable x t = OpenTerm (liftTCM scVariable x t >>= typeInferComplete)
+variable x t = OpenTerm (liftTCM scVariable x t)
 
 -- | Apply an 'OpenTerm' to another.
 app :: OpenTerm -> OpenTerm -> OpenTerm
 app (OpenTerm f) (OpenTerm arg) =
-  OpenTerm ((App <$> f <*> arg) >>= typeInferComplete)
+  OpenTerm ((App <$> f <*> arg) >>= inferTermF)
 
 -- | Apply an 'OpenTerm' to a list of zero or more arguments.
 apply :: OpenTerm -> [OpenTerm] -> OpenTerm
@@ -281,27 +279,26 @@ applyPi (OpenTerm m_f) (OpenTerm m_arg) =
   OpenTerm $
   do f <- m_f
      arg <- m_arg
-     ret <- applyPiTyped (NotFuncTypeInApp f arg) (SC.rawTerm f) arg
-     typeInferComplete ret
+     applyPiTyped (NotFuncTypeInApp f arg) f arg
 
 -- | Get the argument type of a function type, 'fail'ing if the input term is
 -- not a function type
 piArg :: OpenTerm -> OpenTerm
 piArg (OpenTerm m) =
   OpenTerm $ m >>= \case
-  (unwrapTermF . SC.rawTerm -> Pi _ tp _) -> typeInferComplete tp
+  (unwrapTermF -> Pi _ tp _) -> pure tp
   t ->
     fail ("piArg: not a pi type: " ++
-          scPrettyTermInCtx PPS.defaultOpts [] (SC.rawTerm t))
+          scPrettyTermInCtx PPS.defaultOpts [] t)
 
 -- | Build a lambda abstraction as an 'OpenTerm'
 lambda :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
 lambda x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
      vn <- liftTCM scFreshVarName x
-     var <- typeInferComplete $ Variable vn tp
+     var <- inferTermF $ Variable vn tp
      body <- unOpenTerm (body_f (OpenTerm (pure var)))
-     typeInferComplete $ Lambda vn tp body
+     inferTermF $ Lambda vn tp body
 
 -- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
 lambdas :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
@@ -315,9 +312,9 @@ piType :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
 piType x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
      nm <- liftTCM scFreshVarName x
-     var <- typeInferComplete $ Variable nm tp
+     var <- inferTermF $ Variable nm tp
      body <- unOpenTerm (body_f (OpenTerm (pure var)))
-     typeInferComplete $ Pi nm tp body
+     inferTermF $ Pi nm tp body
 
 -- | Build a non-dependent function type.
 arrow :: OpenTerm -> OpenTerm -> OpenTerm
@@ -325,7 +322,7 @@ arrow t1 t2 =
   OpenTerm $
   do t1' <- unOpenTerm t1
      t2' <- unOpenTerm t2
-     typeInferComplete $ Pi wildcardVarName t1' t2'
+     inferTermF $ Pi wildcardVarName t1' t2'
 
 -- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
 piMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->

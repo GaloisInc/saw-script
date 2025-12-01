@@ -868,7 +868,7 @@ checkSequent sc ppOpts (HypFocusedSequent (FB hs1 h hs2) gs) =
 --   mistake has allowed us to build an ill-typed Prop.
 checkProp :: SharedContext -> PPS.Opts -> Prop -> IO ()
 checkProp sc ppOpts (Prop t) =
-  do ty <- TC.scTypeCheckError sc t
+  do ty <- scTypeOf sc t
      case asSort ty of
         Just s | s == propSort -> return ()
         _ -> fail $ unlines ["Term is not a prop!", scPrettyTerm ppOpts t, scPrettyTerm ppOpts ty]
@@ -1222,9 +1222,7 @@ specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc
  where
   loop p [] = return (Prop p)
   loop p (t:ts) =
-    do t' <- TC.typeInferComplete t
-       p_typed <- TC.typeInferComplete p
-       p' <- TC.applyPiTyped (TC.NotFuncTypeInApp p_typed t') p t'
+    do p' <- TC.applyPiTyped (TC.NotFuncTypeInApp p t) p t
        loop p' ts
 
 -- | Admit the given theorem without evidence.
@@ -1538,8 +1536,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
     -- Check a theorem applied to a term. This explicitly instantiates
     -- a Pi binder with the given term.
     checkApply nenv mkSqt (Prop p) (Left tm:es) =
-      do let m = do tm' <- TC.typeInferComplete tm
-                    p_typed <- TC.typeInferComplete p
+      do let m = do tm' <- pure tm
+                    p_typed <- pure p
                     let err = TC.NotFuncTypeInApp p_typed tm'
                     TC.applyPiTyped err p tm'
          res <- TC.runTCM m sc
@@ -1556,7 +1554,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
       ProofTerm tm ->
         case sequentState sqt of
           ConclFocus (Prop ptm) _ ->
-            do ty <- TC.scTypeCheckError sc tm
+            do ty <- scTypeOf sc tm
                ok <- scConvertible sc True ptm ty
                unless ok $ fail $ unlines
                    [ "Proof term does not prove the required proposition"
@@ -2225,7 +2223,7 @@ tacticTrivial sc = Tactic \goal ->
         Left err -> fail err
         Right pf ->
            do let gp = unProp g
-              ty <- liftIO $ TC.scTypeCheckError sc pf
+              ty <- liftIO $ scTypeOf sc pf
               ok <- liftIO $ scConvertible sc True gp ty
               unless ok $ fail $ unlines
                 [ "The trivial tactic cannot prove this equality"
@@ -2241,7 +2239,7 @@ tacticExact sc tm = Tactic \goal ->
     HypFocus _ _ -> fail "tactic exact: cannot apply exact in a hypothesis"
     ConclFocus g _ ->
       do let gp = unProp g
-         ty <- liftIO $ TC.scTypeCheckError sc tm
+         ty <- liftIO $ scTypeOf sc tm
          ok <- liftIO $ scConvertible sc True gp ty
          unless ok $ fail $ unlines
              [ "Proof term does not prove the required proposition"

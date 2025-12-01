@@ -10,7 +10,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 module SAWCore.ExternalFormat (
-  scWriteExternal, scReadExternal, scReadExternalTyped
+  scWriteExternal, scReadExternal
   ) where
 
 import qualified Control.Monad.State.Strict as State
@@ -24,14 +24,6 @@ import Text.Read (readMaybe)
 import Text.URI
 
 import SAWCore.Name
-import SAWCore.SharedTerm
-  ( SharedContext
-  , TermIndex
-  , scFreshVarName
-  , scRegisterName
-  , scResolveNameByURI
-  )
-import qualified SAWCore.SharedTerm as Raw
 import SAWCore.Term.Functor
 import SAWCore.Term.Certified
 
@@ -61,7 +53,7 @@ readNames xs = Map.fromList <$> (mapM readName =<< readMaybe xs)
           pure (idx, Right (ImportedName uri' as))
 
 -- | Render to external text format
-scWriteExternal :: Raw.Term -> String
+scWriteExternal :: Term -> String
 scWriteExternal t0 =
     let (x, (_, nms, lns, _)) = State.runState (go t0) (Map.empty, Map.empty, [], 1)
     in unlines $
@@ -87,14 +79,14 @@ scWriteExternal t0 =
        do (m, nms, lns, x) <- State.get
           State.put (m, Map.insert (vnIndex vn) (Left (vnName vn)) nms, lns, x)
 
-    go :: Raw.Term -> WriteM Int
+    go :: Term -> WriteM Int
     go t =
-      do let i = Raw.termIndex t
+      do let i = termIndex t
          (memo, _, _, _) <- State.get
          case Map.lookup i memo of
            Just x -> pure x
            Nothing -> do
-             tf' <- traverse go (Raw.unwrapTermF t)
+             tf' <- traverse go (unwrapTermF t)
              body <- writeTermF tf'
              x <- memoize i
              output (unwords [show x, body])
@@ -158,11 +150,8 @@ data ReadState =
 
 type ReadM = State.StateT ReadState IO
 
-scReadExternal :: SharedContext -> String -> IO Raw.Term
-scReadExternal sc input = rawTerm <$> scReadExternalTyped sc input
-
-scReadExternalTyped :: SharedContext -> String -> IO Term
-scReadExternalTyped sc input =
+scReadExternal :: SharedContext -> String -> IO Term
+scReadExternal sc input =
   case lines input of
     ( (words -> ["SAWCoreTerm", final]) : nmlist : rows ) ->
       case readNames nmlist of

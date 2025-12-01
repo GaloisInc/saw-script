@@ -32,7 +32,6 @@ import SAWCore.FiniteValue
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer (asVariable)
 import SAWCore.SharedTerm
-import SAWCore.SCTypeCheck (scTypeCheckError)
 import SAWCore.Term.Pretty (ppTerm)
 
 -- Typed terms -----------------------------------------------------------------
@@ -119,7 +118,7 @@ applyTypedTerm sc x y = applyTypedTerms sc x [y]
 applyTypedTerms :: SharedContext -> TypedTerm -> [TypedTerm] -> IO TypedTerm
 applyTypedTerms sc (TypedTerm _ fn) args =
   do trm <- foldM (scApply sc) fn (map ttTerm args)
-     ty <- scTypeCheckError sc trm
+     ty <- scTypeOf sc trm
      -- NB, scCryptolType can behave in strange ways due to the non-injectivity
      -- of the mapping from Cryptol to SAWCore types. Perhaps we would be better
      -- to combine the incoming type information instead of applying and then
