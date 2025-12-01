@@ -100,289 +100,288 @@ span.spaces    { background: white }
 <span class="lineno">   81 </span>import SAWCore.Panic
 <span class="lineno">   82 </span>import SAWCore.Term.Functor
 <span class="lineno">   83 </span>import SAWCore.Term.Pretty
-<span class="lineno">   84 </span>import SAWCore.Term.Raw
-<span class="lineno">   85 </span>import SAWCore.SharedTerm
-<span class="lineno">   86 </span>import qualified SAWCore.Term.Certified as SC
-<span class="lineno">   87 </span>import SAWCore.SCTypeCheck
+<span class="lineno">   84 </span>import SAWCore.SharedTerm
+<span class="lineno">   85 </span>import qualified SAWCore.Term.Certified as SC
+<span class="lineno">   86 </span>import SAWCore.SCTypeCheck
+<span class="lineno">   87 </span>
 <span class="lineno">   88 </span>
-<span class="lineno">   89 </span>
-<span class="lineno">   90 </span>-- | An open term is represented as a type-checking computation that computes a
-<span class="lineno">   91 </span>-- SAW core term and its type
-<span class="lineno">   92 </span>newtype OpenTerm = OpenTerm { <span class="istickedoff"><span class="decl"><span class="istickedoff">unOpenTerm</span></span></span> :: TCM SC.Term }
-<span class="lineno">   93 </span>
-<span class="lineno">   94 </span>-- | \&quot;Complete\&quot; an 'OpenTerm' to a closed term or 'fail' on type-checking
-<span class="lineno">   95 </span>-- error
-<span class="lineno">   96 </span>complete :: SharedContext -&gt; OpenTerm -&gt; IO Term
-<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">complete sc (OpenTerm termM) =</span>
-<span class="lineno">   98 </span><span class="spaces">  </span><span class="istickedoff">either <span class="nottickedoff">(fail . show)</span> return =&lt;&lt;</span>
-<span class="lineno">   99 </span><span class="spaces">  </span><span class="istickedoff">runTCM (SC.rawTerm &lt;$&gt; termM) sc</span></span>
-<span class="lineno">  100 </span>
-<span class="lineno">  101 </span>-- | \&quot;Complete\&quot; an 'OpenTerm' to a closed term for its type
-<span class="lineno">  102 </span>completeType :: SharedContext -&gt; OpenTerm -&gt; IO Term
-<span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">completeType sc (OpenTerm termM) =</span>
-<span class="lineno">  104 </span><span class="spaces">  </span><span class="nottickedoff">either (fail . show) return =&lt;&lt;</span>
-<span class="lineno">  105 </span><span class="spaces">  </span><span class="nottickedoff">runTCM (SC.rawType &lt;$&gt; termM) sc</span></span>
-<span class="lineno">  106 </span>
-<span class="lineno">  107 </span>-- | Embed a 'Term' into an 'OpenTerm'.
-<span class="lineno">  108 </span>term :: Term -&gt; OpenTerm
-<span class="lineno">  109 </span><span class="decl"><span class="istickedoff">term t = OpenTerm $ typeInferComplete t</span></span>
-<span class="lineno">  110 </span>
-<span class="lineno">  111 </span>-- | Return type of an 'OpenTerm' as an 'OpenTerm'.
-<span class="lineno">  112 </span>typeOf :: OpenTerm -&gt; OpenTerm
-<span class="lineno">  113 </span><span class="decl"><span class="nottickedoff">typeOf (OpenTerm m) =</span>
-<span class="lineno">  114 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do t &lt;- m</span>
-<span class="lineno">  115 </span><span class="spaces">                </span><span class="nottickedoff">liftTCM SC.scTypeOf t</span></span>
-<span class="lineno">  116 </span>
-<span class="lineno">  117 </span>-- | Build an 'OpenTerm' from a 'FlatTermF'
-<span class="lineno">  118 </span>flat :: FlatTermF OpenTerm -&gt; OpenTerm
-<span class="lineno">  119 </span><span class="decl"><span class="istickedoff">flat ftf = OpenTerm $</span>
-<span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">(sequence (fmap unOpenTerm ftf) &gt;&gt;= typeInferComplete)</span></span>
-<span class="lineno">  121 </span>
-<span class="lineno">  122 </span>-- | Build an 'OpenTerm' for a sort
-<span class="lineno">  123 </span>sort :: Sort -&gt; OpenTerm
-<span class="lineno">  124 </span><span class="decl"><span class="nottickedoff">sort s = flat (Sort s noFlags)</span></span>
-<span class="lineno">  125 </span>
-<span class="lineno">  126 </span>-- | Build an 'OpenTerm' for a natural number literal
-<span class="lineno">  127 </span>nat :: Natural -&gt; OpenTerm
-<span class="lineno">  128 </span><span class="decl"><span class="istickedoff">nat n = OpenTerm $ liftTCM SC.scNat n</span></span>
-<span class="lineno">  129 </span>
-<span class="lineno">  130 </span>-- | The 'OpenTerm' for the unit value
-<span class="lineno">  131 </span>unit :: OpenTerm
-<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">unit = flat UnitValue</span></span>
-<span class="lineno">  133 </span>
-<span class="lineno">  134 </span>-- | The 'OpenTerm' for the unit type
-<span class="lineno">  135 </span>unitType :: OpenTerm
-<span class="lineno">  136 </span><span class="decl"><span class="nottickedoff">unitType = flat UnitType</span></span>
-<span class="lineno">  137 </span>
-<span class="lineno">  138 </span>-- | Build a SAW core string literal.
-<span class="lineno">  139 </span>stringLit :: Text -&gt; OpenTerm
-<span class="lineno">  140 </span><span class="decl"><span class="nottickedoff">stringLit = flat . StringLit</span></span>
-<span class="lineno">  141 </span>
-<span class="lineno">  142 </span>-- | Return the SAW core type @String@ of strings.
-<span class="lineno">  143 </span>stringType :: OpenTerm
-<span class="lineno">  144 </span><span class="decl"><span class="nottickedoff">stringType = global &quot;Prelude.String&quot;</span></span>
-<span class="lineno">  145 </span>
-<span class="lineno">  146 </span>-- | The 'True' value as a SAW core term
-<span class="lineno">  147 </span>true :: OpenTerm
-<span class="lineno">  148 </span><span class="decl"><span class="nottickedoff">true = global &quot;Prelude.True&quot;</span></span>
-<span class="lineno">  149 </span>
-<span class="lineno">  150 </span>-- | The 'False' value as a SAW core term
-<span class="lineno">  151 </span>false :: OpenTerm
-<span class="lineno">  152 </span><span class="decl"><span class="nottickedoff">false = global &quot;Prelude.False&quot;</span></span>
-<span class="lineno">  153 </span>
-<span class="lineno">  154 </span>-- | Convert a 'Bool' to a SAW core term
-<span class="lineno">  155 </span>bool :: Bool -&gt; OpenTerm
-<span class="lineno">  156 </span><span class="decl"><span class="nottickedoff">bool True = global &quot;Prelude.True&quot;</span>
-<span class="lineno">  157 </span><span class="spaces"></span><span class="nottickedoff">bool False = global &quot;Prelude.False&quot;</span></span>
-<span class="lineno">  158 </span>
-<span class="lineno">  159 </span>-- | The 'Bool' type as a SAW core term
-<span class="lineno">  160 </span>boolType :: OpenTerm
-<span class="lineno">  161 </span><span class="decl"><span class="istickedoff">boolType = global &quot;Prelude.Bool&quot;</span></span>
-<span class="lineno">  162 </span>
-<span class="lineno">  163 </span>-- | Build an 'OpenTerm' for an array literal
-<span class="lineno">  164 </span>arrayValue :: OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm
-<span class="lineno">  165 </span><span class="decl"><span class="nottickedoff">arrayValue tp elems =</span>
-<span class="lineno">  166 </span><span class="spaces">  </span><span class="nottickedoff">flat $ ArrayValue tp $ V.fromList elems</span></span>
-<span class="lineno">  167 </span>
-<span class="lineno">  168 </span>-- | Create a SAW core term for a bitvector literal
-<span class="lineno">  169 </span>bvLit :: [Bool] -&gt; OpenTerm
-<span class="lineno">  170 </span><span class="decl"><span class="nottickedoff">bvLit bits =</span>
-<span class="lineno">  171 </span><span class="spaces">  </span><span class="nottickedoff">arrayValue boolType $ map bool bits</span></span>
-<span class="lineno">  172 </span>
-<span class="lineno">  173 </span>-- | Create a SAW core term for a vector type
-<span class="lineno">  174 </span>vectorType :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  175 </span><span class="decl"><span class="istickedoff">vectorType n a = applyGlobal &quot;Prelude.Vec&quot; [n,a]</span></span>
-<span class="lineno">  176 </span>
-<span class="lineno">  177 </span>-- | Create a SAW core term for the type of a bitvector
-<span class="lineno">  178 </span>bvType :: Integral a =&gt; a -&gt; OpenTerm
-<span class="lineno">  179 </span><span class="decl"><span class="istickedoff">bvType n =</span>
-<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">apply (global &quot;Prelude.Vec&quot;)</span>
-<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">[nat (fromIntegral n), boolType]</span></span>
-<span class="lineno">  182 </span>
-<span class="lineno">  183 </span>-- | Build an 'OpenTerm' for a pair
-<span class="lineno">  184 </span>pair :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  185 </span><span class="decl"><span class="istickedoff">pair t1 t2 = flat $ PairValue t1 t2</span></span>
-<span class="lineno">  186 </span>
-<span class="lineno">  187 </span>-- | Build an 'OpenTerm' for a pair type
-<span class="lineno">  188 </span>pairType :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  189 </span><span class="decl"><span class="nottickedoff">pairType t1 t2 = flat $ PairType t1 t2</span></span>
-<span class="lineno">  190 </span>
-<span class="lineno">  191 </span>-- | Build an 'OpenTerm' for the left projection of a pair
-<span class="lineno">  192 </span>pairLeft :: OpenTerm -&gt; OpenTerm
-<span class="lineno">  193 </span><span class="decl"><span class="istickedoff">pairLeft t = flat $ PairLeft t</span></span>
-<span class="lineno">  194 </span>
-<span class="lineno">  195 </span>-- | Build an 'OpenTerm' for the right projection of a pair
-<span class="lineno">  196 </span>pairRight :: OpenTerm -&gt; OpenTerm
-<span class="lineno">  197 </span><span class="decl"><span class="istickedoff">pairRight t = flat $ PairRight t</span></span>
-<span class="lineno">  198 </span>
-<span class="lineno">  199 </span>-- | Build a right-nested tuple as an 'OpenTerm'
-<span class="lineno">  200 </span>tuple :: [OpenTerm] -&gt; OpenTerm
-<span class="lineno">  201 </span><span class="decl"><span class="nottickedoff">tuple = foldr pair unit</span></span>
-<span class="lineno">  202 </span>
-<span class="lineno">  203 </span>-- | Build a right-nested tuple type as an 'OpenTerm'
-<span class="lineno">  204 </span>tupleType :: [OpenTerm] -&gt; OpenTerm
-<span class="lineno">  205 </span><span class="decl"><span class="nottickedoff">tupleType = foldr pairType unitType</span></span>
-<span class="lineno">  206 </span>
-<span class="lineno">  207 </span>-- | Project the @n@th element of a right-nested tuple type
-<span class="lineno">  208 </span>projTuple :: Integer -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  209 </span><span class="decl"><span class="nottickedoff">projTuple 0 t = pairLeft t</span>
-<span class="lineno">  210 </span><span class="spaces"></span><span class="nottickedoff">projTuple i t = projTuple (i-1) (pairRight t)</span></span>
-<span class="lineno">  211 </span>
-<span class="lineno">  212 </span>-- | Build a right-nested tuple as an 'OpenTerm' but without adding a final unit
-<span class="lineno">  213 </span>-- as the right-most element
-<span class="lineno">  214 </span>tuple' :: [OpenTerm] -&gt; OpenTerm
-<span class="lineno">  215 </span><span class="decl"><span class="istickedoff">tuple' [] = unit</span>
-<span class="lineno">  216 </span><span class="spaces"></span><span class="istickedoff">tuple' ts = foldr1 pair ts</span></span>
-<span class="lineno">  217 </span>
-<span class="lineno">  218 </span>-- | Build a right-nested tuple type as an 'OpenTerm' but without adding a final
-<span class="lineno">  219 </span>-- unit type as the right-most element
-<span class="lineno">  220 </span>tupleType' :: [OpenTerm] -&gt; OpenTerm
-<span class="lineno">  221 </span><span class="decl"><span class="nottickedoff">tupleType' [] = unitType</span>
-<span class="lineno">  222 </span><span class="spaces"></span><span class="nottickedoff">tupleType' ts = foldr1 pairType ts</span></span>
-<span class="lineno">  223 </span>
-<span class="lineno">  224 </span>-- | Project the @i@th element from a term of a right-nested tuple term that
-<span class="lineno">  225 </span>-- does not have a final unit type as the right-most type. The first argument is
-<span class="lineno">  226 </span>-- the number of types used to make the tuple type and the second is the index.
-<span class="lineno">  227 </span>projTuple' :: Natural -&gt; Natural -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  228 </span><span class="decl"><span class="istickedoff">projTuple' 0 _ _ =</span>
-<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">panic &quot;projTupleOpenTerm'&quot; [&quot;Projection of empty tuple!&quot;]</span></span>
-<span class="lineno">  230 </span><span class="spaces"></span><span class="istickedoff">projTuple' 1 0 tup = tup</span>
-<span class="lineno">  231 </span><span class="spaces"></span><span class="istickedoff">projTuple' _ 0 tup = pairLeft tup</span>
-<span class="lineno">  232 </span><span class="spaces"></span><span class="istickedoff">projTuple' len i tup =</span>
-<span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">projTuple' (len-1) (i-1) $ pairRight tup</span></span>
-<span class="lineno">  234 </span>
-<span class="lineno">  235 </span>-- | Build a record value as an 'OpenTerm'
-<span class="lineno">  236 </span>record :: [(FieldName, OpenTerm)] -&gt; OpenTerm
-<span class="lineno">  237 </span><span class="decl"><span class="nottickedoff">record flds_ts =</span>
-<span class="lineno">  238 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do let (flds,ots) = unzip flds_ts</span>
-<span class="lineno">  239 </span><span class="spaces">                </span><span class="nottickedoff">ts &lt;- mapM unOpenTerm ots</span>
-<span class="lineno">  240 </span><span class="spaces">                </span><span class="nottickedoff">typeInferComplete $ RecordValue $ zip flds ts</span></span>
-<span class="lineno">  241 </span>
-<span class="lineno">  242 </span>-- | Build a record type as an 'OpenTerm'
-<span class="lineno">  243 </span>recordType :: [(FieldName, OpenTerm)] -&gt; OpenTerm
-<span class="lineno">  244 </span><span class="decl"><span class="nottickedoff">recordType flds_ts =</span>
-<span class="lineno">  245 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do let (flds,ots) = unzip flds_ts</span>
-<span class="lineno">  246 </span><span class="spaces">                </span><span class="nottickedoff">ts &lt;- mapM unOpenTerm ots</span>
-<span class="lineno">  247 </span><span class="spaces">                </span><span class="nottickedoff">typeInferComplete $ RecordType $ zip flds ts</span></span>
-<span class="lineno">  248 </span>
-<span class="lineno">  249 </span>-- | Project a field from a record
-<span class="lineno">  250 </span>projRecord :: OpenTerm -&gt; FieldName -&gt; OpenTerm
-<span class="lineno">  251 </span><span class="decl"><span class="nottickedoff">projRecord (OpenTerm m) f =</span>
-<span class="lineno">  252 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do t &lt;- m</span>
-<span class="lineno">  253 </span><span class="spaces">                </span><span class="nottickedoff">typeInferComplete $ RecordProj t f</span></span>
-<span class="lineno">  254 </span>
-<span class="lineno">  255 </span>-- | Build an 'OpenTerm' for a global name with a definition
-<span class="lineno">  256 </span>global :: Ident -&gt; OpenTerm
-<span class="lineno">  257 </span><span class="decl"><span class="istickedoff">global ident =</span>
-<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">OpenTerm (liftTCM SC.scGlobal ident)</span></span>
-<span class="lineno">  259 </span>
-<span class="lineno">  260 </span>-- | Build an 'OpenTerm' for a named variable.
-<span class="lineno">  261 </span>variable :: VarName -&gt; Term -&gt; OpenTerm
-<span class="lineno">  262 </span><span class="decl"><span class="nottickedoff">variable x t = OpenTerm (liftTCM scVariable x t &gt;&gt;= typeInferComplete)</span></span>
-<span class="lineno">  263 </span>
-<span class="lineno">  264 </span>-- | Apply an 'OpenTerm' to another.
-<span class="lineno">  265 </span>app :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  266 </span><span class="decl"><span class="istickedoff">app (OpenTerm f) (OpenTerm arg) =</span>
-<span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">OpenTerm ((App &lt;$&gt; f &lt;*&gt; arg) &gt;&gt;= typeInferComplete)</span></span>
-<span class="lineno">  268 </span>
-<span class="lineno">  269 </span>-- | Apply an 'OpenTerm' to a list of zero or more arguments.
-<span class="lineno">  270 </span>apply :: OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm
-<span class="lineno">  271 </span><span class="decl"><span class="istickedoff">apply = foldl app</span></span>
-<span class="lineno">  272 </span>
-<span class="lineno">  273 </span>-- | Apply a named global to a list of zero or more arguments.
-<span class="lineno">  274 </span>applyGlobal :: Ident -&gt; [OpenTerm] -&gt; OpenTerm
-<span class="lineno">  275 </span><span class="decl"><span class="istickedoff">applyGlobal ident = apply (global ident)</span></span>
-<span class="lineno">  276 </span>
-<span class="lineno">  277 </span>-- | Compute the output type of applying a function of a given type to an
-<span class="lineno">  278 </span>-- argument. That is, given @tp@ and @arg@, compute the type of applying any @f@
-<span class="lineno">  279 </span>-- of type @tp@ to @arg@.
-<span class="lineno">  280 </span>applyPi :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  281 </span><span class="decl"><span class="nottickedoff">applyPi (OpenTerm m_f) (OpenTerm m_arg) =</span>
-<span class="lineno">  282 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $</span>
-<span class="lineno">  283 </span><span class="spaces">  </span><span class="nottickedoff">do f &lt;- m_f</span>
-<span class="lineno">  284 </span><span class="spaces">     </span><span class="nottickedoff">arg &lt;- m_arg</span>
-<span class="lineno">  285 </span><span class="spaces">     </span><span class="nottickedoff">ret &lt;- applyPiTyped (NotFuncTypeInApp f arg) (SC.rawTerm f) arg</span>
-<span class="lineno">  286 </span><span class="spaces">     </span><span class="nottickedoff">typeInferComplete ret</span></span>
-<span class="lineno">  287 </span>
-<span class="lineno">  288 </span>-- | Get the argument type of a function type, 'fail'ing if the input term is
-<span class="lineno">  289 </span>-- not a function type
-<span class="lineno">  290 </span>piArg :: OpenTerm -&gt; OpenTerm
-<span class="lineno">  291 </span><span class="decl"><span class="nottickedoff">piArg (OpenTerm m) =</span>
-<span class="lineno">  292 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ m &gt;&gt;= \case</span>
-<span class="lineno">  293 </span><span class="spaces">  </span><span class="nottickedoff">(unwrapTermF . SC.rawTerm -&gt; Pi _ tp _) -&gt; typeInferComplete tp</span>
-<span class="lineno">  294 </span><span class="spaces">  </span><span class="nottickedoff">t -&gt;</span>
-<span class="lineno">  295 </span><span class="spaces">    </span><span class="nottickedoff">fail (&quot;piArg: not a pi type: &quot; ++</span>
-<span class="lineno">  296 </span><span class="spaces">          </span><span class="nottickedoff">scPrettyTermInCtx PPS.defaultOpts [] (SC.rawTerm t))</span></span>
-<span class="lineno">  297 </span>
-<span class="lineno">  298 </span>-- | Build a lambda abstraction as an 'OpenTerm'
-<span class="lineno">  299 </span>lambda :: LocalName -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
-<span class="lineno">  300 </span><span class="decl"><span class="istickedoff">lambda x (OpenTerm tpM) body_f = OpenTerm $</span>
-<span class="lineno">  301 </span><span class="spaces">  </span><span class="istickedoff">do tp &lt;- tpM</span>
-<span class="lineno">  302 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftTCM scFreshVarName x</span>
-<span class="lineno">  303 </span><span class="spaces">     </span><span class="istickedoff">var &lt;- typeInferComplete $ Variable vn tp</span>
-<span class="lineno">  304 </span><span class="spaces">     </span><span class="istickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
-<span class="lineno">  305 </span><span class="spaces">     </span><span class="istickedoff">typeInferComplete $ Lambda vn tp body</span></span>
-<span class="lineno">  306 </span>
-<span class="lineno">  307 </span>-- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
-<span class="lineno">  308 </span>lambdas :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
-<span class="lineno">  309 </span>                       OpenTerm
-<span class="lineno">  310 </span><span class="decl"><span class="nottickedoff">lambdas xs_tps body_f =</span>
-<span class="lineno">  311 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(x,tp) rest_f xs -&gt;</span>
-<span class="lineno">  312 </span><span class="spaces">          </span><span class="nottickedoff">lambda x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []</span></span>
-<span class="lineno">  313 </span>
-<span class="lineno">  314 </span>-- | Build a Pi abstraction as an 'OpenTerm'
-<span class="lineno">  315 </span>piType :: LocalName -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
-<span class="lineno">  316 </span><span class="decl"><span class="nottickedoff">piType x (OpenTerm tpM) body_f = OpenTerm $</span>
-<span class="lineno">  317 </span><span class="spaces">  </span><span class="nottickedoff">do tp &lt;- tpM</span>
-<span class="lineno">  318 </span><span class="spaces">     </span><span class="nottickedoff">nm &lt;- liftTCM scFreshVarName x</span>
-<span class="lineno">  319 </span><span class="spaces">     </span><span class="nottickedoff">var &lt;- typeInferComplete $ Variable nm tp</span>
-<span class="lineno">  320 </span><span class="spaces">     </span><span class="nottickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
-<span class="lineno">  321 </span><span class="spaces">     </span><span class="nottickedoff">typeInferComplete $ Pi nm tp body</span></span>
-<span class="lineno">  322 </span>
-<span class="lineno">  323 </span>-- | Build a non-dependent function type.
-<span class="lineno">  324 </span>arrow :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  325 </span><span class="decl"><span class="nottickedoff">arrow t1 t2 =</span>
-<span class="lineno">  326 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $</span>
-<span class="lineno">  327 </span><span class="spaces">  </span><span class="nottickedoff">do t1' &lt;- unOpenTerm t1</span>
-<span class="lineno">  328 </span><span class="spaces">     </span><span class="nottickedoff">t2' &lt;- unOpenTerm t2</span>
-<span class="lineno">  329 </span><span class="spaces">     </span><span class="nottickedoff">typeInferComplete $ Pi wildcardVarName t1' t2'</span></span>
-<span class="lineno">  330 </span>
-<span class="lineno">  331 </span>-- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
-<span class="lineno">  332 </span>piMulti :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
-<span class="lineno">  333 </span>                   OpenTerm
-<span class="lineno">  334 </span><span class="decl"><span class="nottickedoff">piMulti xs_tps body_f =</span>
-<span class="lineno">  335 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(x,tp) rest_f xs -&gt;</span>
-<span class="lineno">  336 </span><span class="spaces">          </span><span class="nottickedoff">piType x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []</span></span>
-<span class="lineno">  337 </span>
-<span class="lineno">  338 </span>-- | Build a let expression as an 'OpenTerm'. This is equivalent to
-<span class="lineno">  339 </span>-- &gt; 'apply' ('lambda' x tp body) rhs
-<span class="lineno">  340 </span>mkLet ::
-<span class="lineno">  341 </span>  LocalName -&gt; OpenTerm -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
-<span class="lineno">  342 </span><span class="decl"><span class="nottickedoff">mkLet x tp rhs body_f = app (lambda x tp body_f) rhs</span></span>
-<span class="lineno">  343 </span>
-<span class="lineno">  344 </span>-- | Build a let expression as an 'OpenTerm'. This is equivalent to
-<span class="lineno">  345 </span>-- &gt; 'apply' ('lambda' x tp body) rhs
-<span class="lineno">  346 </span>sawLet ::
-<span class="lineno">  347 </span>  LocalName -&gt; OpenTerm -&gt; OpenTerm -&gt; OpenTerm -&gt;
-<span class="lineno">  348 </span>  (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
-<span class="lineno">  349 </span><span class="decl"><span class="nottickedoff">sawLet x tp tp_ret rhs body_f =</span>
-<span class="lineno">  350 </span><span class="spaces">  </span><span class="nottickedoff">apply (global &quot;Prelude.sawLet&quot;)</span>
-<span class="lineno">  351 </span><span class="spaces">  </span><span class="nottickedoff">[tp, tp_ret, rhs, lambda x tp body_f]</span></span>
-<span class="lineno">  352 </span>
-<span class="lineno">  353 </span>-- | Build a bitvector type with the given length
-<span class="lineno">  354 </span>bitvectorType :: OpenTerm -&gt; OpenTerm
-<span class="lineno">  355 </span><span class="decl"><span class="nottickedoff">bitvectorType w =</span>
-<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">applyGlobal &quot;Prelude.Vec&quot; [w, global &quot;Prelude.Bool&quot;]</span></span>
-<span class="lineno">  357 </span>
-<span class="lineno">  358 </span>-- | Build a SAW core term for a list with the given element type
-<span class="lineno">  359 </span>list :: OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm
-<span class="lineno">  360 </span><span class="decl"><span class="nottickedoff">list tp elems =</span>
-<span class="lineno">  361 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\x l -&gt; applyGlobal &quot;Prelude.Cons&quot; [tp, x, l])</span>
-<span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">(applyGlobal &quot;Prelude.Nil&quot; [tp]) elems</span></span>
-<span class="lineno">  363 </span>
-<span class="lineno">  364 </span>-- | Build the type @Either a b@ from types @a@ and @b@
-<span class="lineno">  365 </span>eitherType :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  366 </span><span class="decl"><span class="nottickedoff">eitherType a b = applyGlobal &quot;Prelude.Either&quot; [a, b]</span></span>
+<span class="lineno">   89 </span>-- | An open term is represented as a type-checking computation that computes a
+<span class="lineno">   90 </span>-- SAW core term and its type
+<span class="lineno">   91 </span>newtype OpenTerm = OpenTerm { <span class="istickedoff"><span class="decl"><span class="istickedoff">unOpenTerm</span></span></span> :: TCM SC.Term }
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>-- | \&quot;Complete\&quot; an 'OpenTerm' to a closed term or 'fail' on type-checking
+<span class="lineno">   94 </span>-- error
+<span class="lineno">   95 </span>complete :: SharedContext -&gt; OpenTerm -&gt; IO Term
+<span class="lineno">   96 </span><span class="decl"><span class="istickedoff">complete sc (OpenTerm termM) =</span>
+<span class="lineno">   97 </span><span class="spaces">  </span><span class="istickedoff">either <span class="nottickedoff">(fail . show)</span> return =&lt;&lt;</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="istickedoff">runTCM (SC.rawTerm &lt;$&gt; termM) sc</span></span>
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>-- | \&quot;Complete\&quot; an 'OpenTerm' to a closed term for its type
+<span class="lineno">  101 </span>completeType :: SharedContext -&gt; OpenTerm -&gt; IO Term
+<span class="lineno">  102 </span><span class="decl"><span class="nottickedoff">completeType sc (OpenTerm termM) =</span>
+<span class="lineno">  103 </span><span class="spaces">  </span><span class="nottickedoff">either (fail . show) return =&lt;&lt;</span>
+<span class="lineno">  104 </span><span class="spaces">  </span><span class="nottickedoff">runTCM (SC.rawType &lt;$&gt; termM) sc</span></span>
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>-- | Embed a 'Term' into an 'OpenTerm'.
+<span class="lineno">  107 </span>term :: Term -&gt; OpenTerm
+<span class="lineno">  108 </span><span class="decl"><span class="istickedoff">term t = OpenTerm $ typeInferComplete t</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>-- | Return type of an 'OpenTerm' as an 'OpenTerm'.
+<span class="lineno">  111 </span>typeOf :: OpenTerm -&gt; OpenTerm
+<span class="lineno">  112 </span><span class="decl"><span class="nottickedoff">typeOf (OpenTerm m) =</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do t &lt;- m</span>
+<span class="lineno">  114 </span><span class="spaces">                </span><span class="nottickedoff">liftTCM SC.scTypeOf t</span></span>
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>-- | Build an 'OpenTerm' from a 'FlatTermF'
+<span class="lineno">  117 </span>flat :: FlatTermF OpenTerm -&gt; OpenTerm
+<span class="lineno">  118 </span><span class="decl"><span class="istickedoff">flat ftf = OpenTerm $</span>
+<span class="lineno">  119 </span><span class="spaces">  </span><span class="istickedoff">(sequence (fmap unOpenTerm ftf) &gt;&gt;= typeInferComplete)</span></span>
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>-- | Build an 'OpenTerm' for a sort
+<span class="lineno">  122 </span>sort :: Sort -&gt; OpenTerm
+<span class="lineno">  123 </span><span class="decl"><span class="nottickedoff">sort s = flat (Sort s noFlags)</span></span>
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>-- | Build an 'OpenTerm' for a natural number literal
+<span class="lineno">  126 </span>nat :: Natural -&gt; OpenTerm
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">nat n = OpenTerm $ liftTCM SC.scNat n</span></span>
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span>-- | The 'OpenTerm' for the unit value
+<span class="lineno">  130 </span>unit :: OpenTerm
+<span class="lineno">  131 </span><span class="decl"><span class="istickedoff">unit = flat UnitValue</span></span>
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>-- | The 'OpenTerm' for the unit type
+<span class="lineno">  134 </span>unitType :: OpenTerm
+<span class="lineno">  135 </span><span class="decl"><span class="nottickedoff">unitType = flat UnitType</span></span>
+<span class="lineno">  136 </span>
+<span class="lineno">  137 </span>-- | Build a SAW core string literal.
+<span class="lineno">  138 </span>stringLit :: Text -&gt; OpenTerm
+<span class="lineno">  139 </span><span class="decl"><span class="nottickedoff">stringLit = flat . StringLit</span></span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>-- | Return the SAW core type @String@ of strings.
+<span class="lineno">  142 </span>stringType :: OpenTerm
+<span class="lineno">  143 </span><span class="decl"><span class="nottickedoff">stringType = global &quot;Prelude.String&quot;</span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>-- | The 'True' value as a SAW core term
+<span class="lineno">  146 </span>true :: OpenTerm
+<span class="lineno">  147 </span><span class="decl"><span class="nottickedoff">true = global &quot;Prelude.True&quot;</span></span>
+<span class="lineno">  148 </span>
+<span class="lineno">  149 </span>-- | The 'False' value as a SAW core term
+<span class="lineno">  150 </span>false :: OpenTerm
+<span class="lineno">  151 </span><span class="decl"><span class="nottickedoff">false = global &quot;Prelude.False&quot;</span></span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>-- | Convert a 'Bool' to a SAW core term
+<span class="lineno">  154 </span>bool :: Bool -&gt; OpenTerm
+<span class="lineno">  155 </span><span class="decl"><span class="nottickedoff">bool True = global &quot;Prelude.True&quot;</span>
+<span class="lineno">  156 </span><span class="spaces"></span><span class="nottickedoff">bool False = global &quot;Prelude.False&quot;</span></span>
+<span class="lineno">  157 </span>
+<span class="lineno">  158 </span>-- | The 'Bool' type as a SAW core term
+<span class="lineno">  159 </span>boolType :: OpenTerm
+<span class="lineno">  160 </span><span class="decl"><span class="istickedoff">boolType = global &quot;Prelude.Bool&quot;</span></span>
+<span class="lineno">  161 </span>
+<span class="lineno">  162 </span>-- | Build an 'OpenTerm' for an array literal
+<span class="lineno">  163 </span>arrayValue :: OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm
+<span class="lineno">  164 </span><span class="decl"><span class="nottickedoff">arrayValue tp elems =</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="nottickedoff">flat $ ArrayValue tp $ V.fromList elems</span></span>
+<span class="lineno">  166 </span>
+<span class="lineno">  167 </span>-- | Create a SAW core term for a bitvector literal
+<span class="lineno">  168 </span>bvLit :: [Bool] -&gt; OpenTerm
+<span class="lineno">  169 </span><span class="decl"><span class="nottickedoff">bvLit bits =</span>
+<span class="lineno">  170 </span><span class="spaces">  </span><span class="nottickedoff">arrayValue boolType $ map bool bits</span></span>
+<span class="lineno">  171 </span>
+<span class="lineno">  172 </span>-- | Create a SAW core term for a vector type
+<span class="lineno">  173 </span>vectorType :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  174 </span><span class="decl"><span class="istickedoff">vectorType n a = applyGlobal &quot;Prelude.Vec&quot; [n,a]</span></span>
+<span class="lineno">  175 </span>
+<span class="lineno">  176 </span>-- | Create a SAW core term for the type of a bitvector
+<span class="lineno">  177 </span>bvType :: Integral a =&gt; a -&gt; OpenTerm
+<span class="lineno">  178 </span><span class="decl"><span class="istickedoff">bvType n =</span>
+<span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">apply (global &quot;Prelude.Vec&quot;)</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">[nat (fromIntegral n), boolType]</span></span>
+<span class="lineno">  181 </span>
+<span class="lineno">  182 </span>-- | Build an 'OpenTerm' for a pair
+<span class="lineno">  183 </span>pair :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  184 </span><span class="decl"><span class="istickedoff">pair t1 t2 = flat $ PairValue t1 t2</span></span>
+<span class="lineno">  185 </span>
+<span class="lineno">  186 </span>-- | Build an 'OpenTerm' for a pair type
+<span class="lineno">  187 </span>pairType :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  188 </span><span class="decl"><span class="nottickedoff">pairType t1 t2 = flat $ PairType t1 t2</span></span>
+<span class="lineno">  189 </span>
+<span class="lineno">  190 </span>-- | Build an 'OpenTerm' for the left projection of a pair
+<span class="lineno">  191 </span>pairLeft :: OpenTerm -&gt; OpenTerm
+<span class="lineno">  192 </span><span class="decl"><span class="istickedoff">pairLeft t = flat $ PairLeft t</span></span>
+<span class="lineno">  193 </span>
+<span class="lineno">  194 </span>-- | Build an 'OpenTerm' for the right projection of a pair
+<span class="lineno">  195 </span>pairRight :: OpenTerm -&gt; OpenTerm
+<span class="lineno">  196 </span><span class="decl"><span class="istickedoff">pairRight t = flat $ PairRight t</span></span>
+<span class="lineno">  197 </span>
+<span class="lineno">  198 </span>-- | Build a right-nested tuple as an 'OpenTerm'
+<span class="lineno">  199 </span>tuple :: [OpenTerm] -&gt; OpenTerm
+<span class="lineno">  200 </span><span class="decl"><span class="nottickedoff">tuple = foldr pair unit</span></span>
+<span class="lineno">  201 </span>
+<span class="lineno">  202 </span>-- | Build a right-nested tuple type as an 'OpenTerm'
+<span class="lineno">  203 </span>tupleType :: [OpenTerm] -&gt; OpenTerm
+<span class="lineno">  204 </span><span class="decl"><span class="nottickedoff">tupleType = foldr pairType unitType</span></span>
+<span class="lineno">  205 </span>
+<span class="lineno">  206 </span>-- | Project the @n@th element of a right-nested tuple type
+<span class="lineno">  207 </span>projTuple :: Integer -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">projTuple 0 t = pairLeft t</span>
+<span class="lineno">  209 </span><span class="spaces"></span><span class="nottickedoff">projTuple i t = projTuple (i-1) (pairRight t)</span></span>
+<span class="lineno">  210 </span>
+<span class="lineno">  211 </span>-- | Build a right-nested tuple as an 'OpenTerm' but without adding a final unit
+<span class="lineno">  212 </span>-- as the right-most element
+<span class="lineno">  213 </span>tuple' :: [OpenTerm] -&gt; OpenTerm
+<span class="lineno">  214 </span><span class="decl"><span class="istickedoff">tuple' [] = unit</span>
+<span class="lineno">  215 </span><span class="spaces"></span><span class="istickedoff">tuple' ts = foldr1 pair ts</span></span>
+<span class="lineno">  216 </span>
+<span class="lineno">  217 </span>-- | Build a right-nested tuple type as an 'OpenTerm' but without adding a final
+<span class="lineno">  218 </span>-- unit type as the right-most element
+<span class="lineno">  219 </span>tupleType' :: [OpenTerm] -&gt; OpenTerm
+<span class="lineno">  220 </span><span class="decl"><span class="nottickedoff">tupleType' [] = unitType</span>
+<span class="lineno">  221 </span><span class="spaces"></span><span class="nottickedoff">tupleType' ts = foldr1 pairType ts</span></span>
+<span class="lineno">  222 </span>
+<span class="lineno">  223 </span>-- | Project the @i@th element from a term of a right-nested tuple term that
+<span class="lineno">  224 </span>-- does not have a final unit type as the right-most type. The first argument is
+<span class="lineno">  225 </span>-- the number of types used to make the tuple type and the second is the index.
+<span class="lineno">  226 </span>projTuple' :: Natural -&gt; Natural -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  227 </span><span class="decl"><span class="istickedoff">projTuple' 0 _ _ =</span>
+<span class="lineno">  228 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">panic &quot;projTupleOpenTerm'&quot; [&quot;Projection of empty tuple!&quot;]</span></span>
+<span class="lineno">  229 </span><span class="spaces"></span><span class="istickedoff">projTuple' 1 0 tup = tup</span>
+<span class="lineno">  230 </span><span class="spaces"></span><span class="istickedoff">projTuple' _ 0 tup = pairLeft tup</span>
+<span class="lineno">  231 </span><span class="spaces"></span><span class="istickedoff">projTuple' len i tup =</span>
+<span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">projTuple' (len-1) (i-1) $ pairRight tup</span></span>
+<span class="lineno">  233 </span>
+<span class="lineno">  234 </span>-- | Build a record value as an 'OpenTerm'
+<span class="lineno">  235 </span>record :: [(FieldName, OpenTerm)] -&gt; OpenTerm
+<span class="lineno">  236 </span><span class="decl"><span class="nottickedoff">record flds_ts =</span>
+<span class="lineno">  237 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do let (flds,ots) = unzip flds_ts</span>
+<span class="lineno">  238 </span><span class="spaces">                </span><span class="nottickedoff">ts &lt;- mapM unOpenTerm ots</span>
+<span class="lineno">  239 </span><span class="spaces">                </span><span class="nottickedoff">typeInferComplete $ RecordValue $ zip flds ts</span></span>
+<span class="lineno">  240 </span>
+<span class="lineno">  241 </span>-- | Build a record type as an 'OpenTerm'
+<span class="lineno">  242 </span>recordType :: [(FieldName, OpenTerm)] -&gt; OpenTerm
+<span class="lineno">  243 </span><span class="decl"><span class="nottickedoff">recordType flds_ts =</span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do let (flds,ots) = unzip flds_ts</span>
+<span class="lineno">  245 </span><span class="spaces">                </span><span class="nottickedoff">ts &lt;- mapM unOpenTerm ots</span>
+<span class="lineno">  246 </span><span class="spaces">                </span><span class="nottickedoff">typeInferComplete $ RecordType $ zip flds ts</span></span>
+<span class="lineno">  247 </span>
+<span class="lineno">  248 </span>-- | Project a field from a record
+<span class="lineno">  249 </span>projRecord :: OpenTerm -&gt; FieldName -&gt; OpenTerm
+<span class="lineno">  250 </span><span class="decl"><span class="nottickedoff">projRecord (OpenTerm m) f =</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do t &lt;- m</span>
+<span class="lineno">  252 </span><span class="spaces">                </span><span class="nottickedoff">typeInferComplete $ RecordProj t f</span></span>
+<span class="lineno">  253 </span>
+<span class="lineno">  254 </span>-- | Build an 'OpenTerm' for a global name with a definition
+<span class="lineno">  255 </span>global :: Ident -&gt; OpenTerm
+<span class="lineno">  256 </span><span class="decl"><span class="istickedoff">global ident =</span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="istickedoff">OpenTerm (liftTCM SC.scGlobal ident)</span></span>
+<span class="lineno">  258 </span>
+<span class="lineno">  259 </span>-- | Build an 'OpenTerm' for a named variable.
+<span class="lineno">  260 </span>variable :: VarName -&gt; Term -&gt; OpenTerm
+<span class="lineno">  261 </span><span class="decl"><span class="nottickedoff">variable x t = OpenTerm (liftTCM scVariable x t &gt;&gt;= typeInferComplete)</span></span>
+<span class="lineno">  262 </span>
+<span class="lineno">  263 </span>-- | Apply an 'OpenTerm' to another.
+<span class="lineno">  264 </span>app :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  265 </span><span class="decl"><span class="istickedoff">app (OpenTerm f) (OpenTerm arg) =</span>
+<span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">OpenTerm ((App &lt;$&gt; f &lt;*&gt; arg) &gt;&gt;= typeInferComplete)</span></span>
+<span class="lineno">  267 </span>
+<span class="lineno">  268 </span>-- | Apply an 'OpenTerm' to a list of zero or more arguments.
+<span class="lineno">  269 </span>apply :: OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm
+<span class="lineno">  270 </span><span class="decl"><span class="istickedoff">apply = foldl app</span></span>
+<span class="lineno">  271 </span>
+<span class="lineno">  272 </span>-- | Apply a named global to a list of zero or more arguments.
+<span class="lineno">  273 </span>applyGlobal :: Ident -&gt; [OpenTerm] -&gt; OpenTerm
+<span class="lineno">  274 </span><span class="decl"><span class="istickedoff">applyGlobal ident = apply (global ident)</span></span>
+<span class="lineno">  275 </span>
+<span class="lineno">  276 </span>-- | Compute the output type of applying a function of a given type to an
+<span class="lineno">  277 </span>-- argument. That is, given @tp@ and @arg@, compute the type of applying any @f@
+<span class="lineno">  278 </span>-- of type @tp@ to @arg@.
+<span class="lineno">  279 </span>applyPi :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  280 </span><span class="decl"><span class="nottickedoff">applyPi (OpenTerm m_f) (OpenTerm m_arg) =</span>
+<span class="lineno">  281 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $</span>
+<span class="lineno">  282 </span><span class="spaces">  </span><span class="nottickedoff">do f &lt;- m_f</span>
+<span class="lineno">  283 </span><span class="spaces">     </span><span class="nottickedoff">arg &lt;- m_arg</span>
+<span class="lineno">  284 </span><span class="spaces">     </span><span class="nottickedoff">ret &lt;- applyPiTyped (NotFuncTypeInApp f arg) (SC.rawTerm f) arg</span>
+<span class="lineno">  285 </span><span class="spaces">     </span><span class="nottickedoff">typeInferComplete ret</span></span>
+<span class="lineno">  286 </span>
+<span class="lineno">  287 </span>-- | Get the argument type of a function type, 'fail'ing if the input term is
+<span class="lineno">  288 </span>-- not a function type
+<span class="lineno">  289 </span>piArg :: OpenTerm -&gt; OpenTerm
+<span class="lineno">  290 </span><span class="decl"><span class="nottickedoff">piArg (OpenTerm m) =</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ m &gt;&gt;= \case</span>
+<span class="lineno">  292 </span><span class="spaces">  </span><span class="nottickedoff">(unwrapTermF . SC.rawTerm -&gt; Pi _ tp _) -&gt; typeInferComplete tp</span>
+<span class="lineno">  293 </span><span class="spaces">  </span><span class="nottickedoff">t -&gt;</span>
+<span class="lineno">  294 </span><span class="spaces">    </span><span class="nottickedoff">fail (&quot;piArg: not a pi type: &quot; ++</span>
+<span class="lineno">  295 </span><span class="spaces">          </span><span class="nottickedoff">scPrettyTermInCtx PPS.defaultOpts [] (SC.rawTerm t))</span></span>
+<span class="lineno">  296 </span>
+<span class="lineno">  297 </span>-- | Build a lambda abstraction as an 'OpenTerm'
+<span class="lineno">  298 </span>lambda :: LocalName -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
+<span class="lineno">  299 </span><span class="decl"><span class="istickedoff">lambda x (OpenTerm tpM) body_f = OpenTerm $</span>
+<span class="lineno">  300 </span><span class="spaces">  </span><span class="istickedoff">do tp &lt;- tpM</span>
+<span class="lineno">  301 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftTCM scFreshVarName x</span>
+<span class="lineno">  302 </span><span class="spaces">     </span><span class="istickedoff">var &lt;- typeInferComplete $ Variable vn tp</span>
+<span class="lineno">  303 </span><span class="spaces">     </span><span class="istickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
+<span class="lineno">  304 </span><span class="spaces">     </span><span class="istickedoff">typeInferComplete $ Lambda vn tp body</span></span>
+<span class="lineno">  305 </span>
+<span class="lineno">  306 </span>-- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
+<span class="lineno">  307 </span>lambdas :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
+<span class="lineno">  308 </span>                       OpenTerm
+<span class="lineno">  309 </span><span class="decl"><span class="nottickedoff">lambdas xs_tps body_f =</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(x,tp) rest_f xs -&gt;</span>
+<span class="lineno">  311 </span><span class="spaces">          </span><span class="nottickedoff">lambda x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []</span></span>
+<span class="lineno">  312 </span>
+<span class="lineno">  313 </span>-- | Build a Pi abstraction as an 'OpenTerm'
+<span class="lineno">  314 </span>piType :: LocalName -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
+<span class="lineno">  315 </span><span class="decl"><span class="nottickedoff">piType x (OpenTerm tpM) body_f = OpenTerm $</span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="nottickedoff">do tp &lt;- tpM</span>
+<span class="lineno">  317 </span><span class="spaces">     </span><span class="nottickedoff">nm &lt;- liftTCM scFreshVarName x</span>
+<span class="lineno">  318 </span><span class="spaces">     </span><span class="nottickedoff">var &lt;- typeInferComplete $ Variable nm tp</span>
+<span class="lineno">  319 </span><span class="spaces">     </span><span class="nottickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
+<span class="lineno">  320 </span><span class="spaces">     </span><span class="nottickedoff">typeInferComplete $ Pi nm tp body</span></span>
+<span class="lineno">  321 </span>
+<span class="lineno">  322 </span>-- | Build a non-dependent function type.
+<span class="lineno">  323 </span>arrow :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  324 </span><span class="decl"><span class="nottickedoff">arrow t1 t2 =</span>
+<span class="lineno">  325 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $</span>
+<span class="lineno">  326 </span><span class="spaces">  </span><span class="nottickedoff">do t1' &lt;- unOpenTerm t1</span>
+<span class="lineno">  327 </span><span class="spaces">     </span><span class="nottickedoff">t2' &lt;- unOpenTerm t2</span>
+<span class="lineno">  328 </span><span class="spaces">     </span><span class="nottickedoff">typeInferComplete $ Pi wildcardVarName t1' t2'</span></span>
+<span class="lineno">  329 </span>
+<span class="lineno">  330 </span>-- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
+<span class="lineno">  331 </span>piMulti :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
+<span class="lineno">  332 </span>                   OpenTerm
+<span class="lineno">  333 </span><span class="decl"><span class="nottickedoff">piMulti xs_tps body_f =</span>
+<span class="lineno">  334 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(x,tp) rest_f xs -&gt;</span>
+<span class="lineno">  335 </span><span class="spaces">          </span><span class="nottickedoff">piType x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []</span></span>
+<span class="lineno">  336 </span>
+<span class="lineno">  337 </span>-- | Build a let expression as an 'OpenTerm'. This is equivalent to
+<span class="lineno">  338 </span>-- &gt; 'apply' ('lambda' x tp body) rhs
+<span class="lineno">  339 </span>mkLet ::
+<span class="lineno">  340 </span>  LocalName -&gt; OpenTerm -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
+<span class="lineno">  341 </span><span class="decl"><span class="nottickedoff">mkLet x tp rhs body_f = app (lambda x tp body_f) rhs</span></span>
+<span class="lineno">  342 </span>
+<span class="lineno">  343 </span>-- | Build a let expression as an 'OpenTerm'. This is equivalent to
+<span class="lineno">  344 </span>-- &gt; 'apply' ('lambda' x tp body) rhs
+<span class="lineno">  345 </span>sawLet ::
+<span class="lineno">  346 </span>  LocalName -&gt; OpenTerm -&gt; OpenTerm -&gt; OpenTerm -&gt;
+<span class="lineno">  347 </span>  (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
+<span class="lineno">  348 </span><span class="decl"><span class="nottickedoff">sawLet x tp tp_ret rhs body_f =</span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="nottickedoff">apply (global &quot;Prelude.sawLet&quot;)</span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="nottickedoff">[tp, tp_ret, rhs, lambda x tp body_f]</span></span>
+<span class="lineno">  351 </span>
+<span class="lineno">  352 </span>-- | Build a bitvector type with the given length
+<span class="lineno">  353 </span>bitvectorType :: OpenTerm -&gt; OpenTerm
+<span class="lineno">  354 </span><span class="decl"><span class="nottickedoff">bitvectorType w =</span>
+<span class="lineno">  355 </span><span class="spaces">  </span><span class="nottickedoff">applyGlobal &quot;Prelude.Vec&quot; [w, global &quot;Prelude.Bool&quot;]</span></span>
+<span class="lineno">  356 </span>
+<span class="lineno">  357 </span>-- | Build a SAW core term for a list with the given element type
+<span class="lineno">  358 </span>list :: OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm
+<span class="lineno">  359 </span><span class="decl"><span class="nottickedoff">list tp elems =</span>
+<span class="lineno">  360 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\x l -&gt; applyGlobal &quot;Prelude.Cons&quot; [tp, x, l])</span>
+<span class="lineno">  361 </span><span class="spaces">  </span><span class="nottickedoff">(applyGlobal &quot;Prelude.Nil&quot; [tp]) elems</span></span>
+<span class="lineno">  362 </span>
+<span class="lineno">  363 </span>-- | Build the type @Either a b@ from types @a@ and @b@
+<span class="lineno">  364 </span>eitherType :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  365 </span><span class="decl"><span class="nottickedoff">eitherType a b = applyGlobal &quot;Prelude.Either&quot; [a, b]</span></span>
 
 </pre>
 </body>

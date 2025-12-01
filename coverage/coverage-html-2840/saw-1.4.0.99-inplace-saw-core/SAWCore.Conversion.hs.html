@@ -117,9 +117,9 @@ span.spaces    { background: white }
 <span class="lineno">   98 </span>import SAWCore.Recognizer ((:*:)(..))
 <span class="lineno">   99 </span>import SAWCore.Prim
 <span class="lineno">  100 </span>import qualified SAWCore.Recognizer as R
-<span class="lineno">  101 </span>import qualified SAWCore.TermNet as Net
-<span class="lineno">  102 </span>import SAWCore.Term.Functor
-<span class="lineno">  103 </span>import SAWCore.Term.Raw
+<span class="lineno">  101 </span>import SAWCore.SharedTerm (Term, unwrapTermF)
+<span class="lineno">  102 </span>import qualified SAWCore.TermNet as Net
+<span class="lineno">  103 </span>import SAWCore.Term.Functor
 <span class="lineno">  104 </span>
 <span class="lineno">  105 </span>-- | A hack to allow storage of conversions in a term net.
 <span class="lineno">  106 </span>instance <span class="decl"><span class="nottickedoff">Eq Conversion</span></span> where
