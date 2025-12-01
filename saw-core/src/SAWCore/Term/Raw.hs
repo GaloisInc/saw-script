@@ -72,6 +72,8 @@ data Term
        -- ^ The type of this term, represented a 'Sort' or another 'Term'.
        -- Invariant: This field must never contain a 'Right' with a term
        -- that is a 'Sort'; if the type is a 'Sort' then 'Left' is required.
+       -- Making 'Sort' a special case lets us avoid storing an infinite
+       -- tower of types inside every term.
      }
   deriving (Show)
 
