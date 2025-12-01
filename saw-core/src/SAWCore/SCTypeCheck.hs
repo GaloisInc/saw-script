@@ -37,7 +37,7 @@ import Control.Applicative
 import Control.Monad (forM_, mapM, unless, void)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
 
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)
@@ -139,87 +139,83 @@ data TCError
 throwTCError :: (MonadError TCError m) => TCError -> m a
 throwTCError e = throwError e
 
-type PPErrM = Reader (Maybe Pos)
-
 -- | Pretty-print a type-checking error
 prettyTCError :: TCError -> [String]
-prettyTCError e = runReader (helper e) Nothing where
+prettyTCError e = helper Nothing e where
 
-  ppWithPos :: [PPErrM String] -> PPErrM [String]
-  ppWithPos str_ms =
-    do strs <- mapM id str_ms
-       maybe_p <- ask
-       case maybe_p of
-         Just p -> return (ppPos p : strs)
-         Nothing -> return strs
+  ppWithPos :: Maybe Pos -> [String] -> [String]
+  ppWithPos maybe_p strs =
+    case maybe_p of
+      Just p -> ppPos p : strs
+      Nothing -> strs
 
-  helper :: TCError -> PPErrM [String]
-  helper (NotSort ty) = ppWithPos [ return "Not a sort" , ishow ty ]
-  helper (NotFuncTypeInApp f arg) =
-      ppWithPos [ return "Function application with non-function type"
-                , return "For term:"
-                , ishow f
-                , return "With type:"
-                , tyshow f
-                , return "To argument:"
-                , ishow arg ]
-  helper (NotTupleType ty) =
-      ppWithPos [ return "Tuple field projection with non-tuple type" ,
-                  ishow ty ]
-  helper (BadTupleIndex n ty) =
-      ppWithPos [ return ("Bad tuple index (" ++ show n ++ ") for type")
-                , ishow ty ]
-  helper (NotRecordType t) =
-      ppWithPos [ return "Record field projection with non-record type"
-                , tyshow t
-                , return "In term:"
-                , ishow t ]
-  helper (BadRecordField n ty) =
-      ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
-                , ishow ty ]
-  helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ show str)]
-  helper (SubtypeFailure trm tp2) =
-      ppWithPos [ return "Inferred type", tyshow trm,
-                  return "Not a subtype of expected type", ishow tp2,
-                  return "For term", ishow trm ]
-  helper EmptyVectorLit = ppWithPos [ return "Empty vector literal"]
-  helper (NoSuchDataType d) =
-    ppWithPos [ return ("No such data type: " ++ show d)]
-  helper (NoSuchConstant c) =
-    ppWithPos [ return ("No such constant: " ++ show c) ]
-  helper (MalformedRecursor d s reason) =
-      ppWithPos [ return "Malformed recursor",
-                  pure (indent "  " (Text.unpack (toAbsoluteName d) ++ sortSuffix s)),
-                  pure reason ]
-  helper (DeclError nm reason) =
-    ppWithPos [ return ("Malformed declaration for " ++ show nm), return reason ]
-  helper (ErrorPos p err) =
-    local (\_ -> Just p) $ helper err
-  helper (ErrorUTerm t err) =
-    do info <-
-         ppWithPos
-         [ pure ("While typechecking term:")
-         , pure $ indent "  " $ PPS.render PPS.defaultOpts (prettyUTerm t)
-         ]
-       cont <- helper err
-       pure (info ++ cont)
+  helper :: Maybe Pos -> TCError -> [String]
+  helper mp err =
+    case err of
+      NotSort ty ->
+        ppWithPos mp [ "Not a sort" , ishow ty ]
+      NotFuncTypeInApp f arg ->
+        ppWithPos mp [ "Function application with non-function type"
+                     , "For term:"
+                     , ishow f
+                     , "With type:"
+                     , tyshow f
+                     , "To argument:"
+                     , ishow arg ]
+      NotTupleType ty ->
+        ppWithPos mp [ "Tuple field projection with non-tuple type"
+                     , ishow ty ]
+      BadTupleIndex n ty ->
+        ppWithPos mp [ "Bad tuple index (" ++ show n ++ ") for type"
+                     , ishow ty ]
+      NotRecordType t ->
+        ppWithPos mp [ "Record field projection with non-record type"
+                     , tyshow t
+                     , "In term:"
+                     , ishow t ]
+      BadRecordField n ty ->
+        ppWithPos mp [ "Bad record field (" ++ show n ++ ") for type"
+                     , ishow ty ]
+      UnboundName str ->
+        ppWithPos mp [ "Unbound name: " ++ show str ]
+      SubtypeFailure trm tp2 ->
+        ppWithPos mp [ "Inferred type", tyshow trm,
+                       "Not a subtype of expected type", ishow tp2,
+                       "For term", ishow trm ]
+      EmptyVectorLit ->
+        ppWithPos mp [ "Empty vector literal"]
+      NoSuchDataType d ->
+        ppWithPos mp [ "No such data type: " ++ show d ]
+      NoSuchConstant c ->
+        ppWithPos mp [ "No such constant: " ++ show c ]
+      MalformedRecursor d s reason ->
+        ppWithPos mp [ "Malformed recursor"
+                     , indent "  " (Text.unpack (toAbsoluteName d) ++ sortSuffix s)
+                     , reason ]
+      DeclError nm reason ->
+        ppWithPos mp [ "Malformed declaration for " ++ show nm, reason ]
+      ErrorPos p err' ->
+        helper (Just p) err'
+      ErrorUTerm t err' ->
+        ppWithPos mp [ "While typechecking term:"
+                     , indent "  " $ PPS.render PPS.defaultOpts (prettyUTerm t)
+                     ]
+        ++ helper mp err'
 
   -- | Add prefix to every line, but remove final trailing newline
   indent :: String -> String -> String
   indent prefix s = init (unlines (map (prefix ++) (lines s)))
 
-  ishow :: Term -> PPErrM String
-  ishow tm =
-    -- return $ show tm
-    pure $ indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm
+  ishow :: Term -> String
+  ishow tm = indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm
 
-  tyshow :: Term -> PPErrM String
+  tyshow :: Term -> String
   tyshow t =
     case termSortOrType t of
       Left s ->
-        pure $ indent "  " $ show s
+        indent "  " $ show s
       Right tm ->
-        pure $ indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm
+        indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm
 
   sortSuffix :: Sort -> String
   sortSuffix s =
