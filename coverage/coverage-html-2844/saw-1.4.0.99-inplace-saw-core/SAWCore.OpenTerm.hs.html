@@ -133,7 +133,7 @@ span.spaces    { background: white }
 <span class="lineno">  114 </span>-- | Build an 'OpenTerm' from a 'FlatTermF'
 <span class="lineno">  115 </span>flat :: FlatTermF OpenTerm -&gt; OpenTerm
 <span class="lineno">  116 </span><span class="decl"><span class="istickedoff">flat ftf = OpenTerm $</span>
-<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">(sequence (fmap unOpenTerm ftf) &gt;&gt;= typeInferComplete)</span></span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">(sequence (fmap unOpenTerm ftf) &gt;&gt;= inferFlatTermF)</span></span>
 <span class="lineno">  118 </span>
 <span class="lineno">  119 </span>-- | Build an 'OpenTerm' for a sort
 <span class="lineno">  120 </span>sort :: Sort -&gt; OpenTerm
@@ -253,20 +253,20 @@ span.spaces    { background: white }
 <span class="lineno">  234 </span><span class="decl"><span class="nottickedoff">record flds_ts =</span>
 <span class="lineno">  235 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do let (flds,ots) = unzip flds_ts</span>
 <span class="lineno">  236 </span><span class="spaces">                </span><span class="nottickedoff">ts &lt;- mapM unOpenTerm ots</span>
-<span class="lineno">  237 </span><span class="spaces">                </span><span class="nottickedoff">typeInferComplete $ RecordValue $ zip flds ts</span></span>
+<span class="lineno">  237 </span><span class="spaces">                </span><span class="nottickedoff">inferFlatTermF $ RecordValue $ zip flds ts</span></span>
 <span class="lineno">  238 </span>
 <span class="lineno">  239 </span>-- | Build a record type as an 'OpenTerm'
 <span class="lineno">  240 </span>recordType :: [(FieldName, OpenTerm)] -&gt; OpenTerm
 <span class="lineno">  241 </span><span class="decl"><span class="nottickedoff">recordType flds_ts =</span>
 <span class="lineno">  242 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do let (flds,ots) = unzip flds_ts</span>
 <span class="lineno">  243 </span><span class="spaces">                </span><span class="nottickedoff">ts &lt;- mapM unOpenTerm ots</span>
-<span class="lineno">  244 </span><span class="spaces">                </span><span class="nottickedoff">typeInferComplete $ RecordType $ zip flds ts</span></span>
+<span class="lineno">  244 </span><span class="spaces">                </span><span class="nottickedoff">inferFlatTermF $ RecordType $ zip flds ts</span></span>
 <span class="lineno">  245 </span>
 <span class="lineno">  246 </span>-- | Project a field from a record
 <span class="lineno">  247 </span>projRecord :: OpenTerm -&gt; FieldName -&gt; OpenTerm
 <span class="lineno">  248 </span><span class="decl"><span class="nottickedoff">projRecord (OpenTerm m) f =</span>
 <span class="lineno">  249 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ do t &lt;- m</span>
-<span class="lineno">  250 </span><span class="spaces">                </span><span class="nottickedoff">typeInferComplete $ RecordProj t f</span></span>
+<span class="lineno">  250 </span><span class="spaces">                </span><span class="nottickedoff">inferFlatTermF $ RecordProj t f</span></span>
 <span class="lineno">  251 </span>
 <span class="lineno">  252 </span>-- | Build an 'OpenTerm' for a global name with a definition
 <span class="lineno">  253 </span>global :: Ident -&gt; OpenTerm
@@ -280,7 +280,7 @@ span.spaces    { background: white }
 <span class="lineno">  261 </span>-- | Apply an 'OpenTerm' to another.
 <span class="lineno">  262 </span>app :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
 <span class="lineno">  263 </span><span class="decl"><span class="istickedoff">app (OpenTerm f) (OpenTerm arg) =</span>
-<span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">OpenTerm ((App &lt;$&gt; f &lt;*&gt; arg) &gt;&gt;= typeInferComplete)</span></span>
+<span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">OpenTerm ((App &lt;$&gt; f &lt;*&gt; arg) &gt;&gt;= inferTermF)</span></span>
 <span class="lineno">  265 </span>
 <span class="lineno">  266 </span>-- | Apply an 'OpenTerm' to a list of zero or more arguments.
 <span class="lineno">  267 </span>apply :: OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm
@@ -315,9 +315,9 @@ span.spaces    { background: white }
 <span class="lineno">  296 </span><span class="decl"><span class="istickedoff">lambda x (OpenTerm tpM) body_f = OpenTerm $</span>
 <span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">do tp &lt;- tpM</span>
 <span class="lineno">  298 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftTCM scFreshVarName x</span>
-<span class="lineno">  299 </span><span class="spaces">     </span><span class="istickedoff">var &lt;- typeInferComplete $ Variable vn tp</span>
+<span class="lineno">  299 </span><span class="spaces">     </span><span class="istickedoff">var &lt;- inferTermF $ Variable vn tp</span>
 <span class="lineno">  300 </span><span class="spaces">     </span><span class="istickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
-<span class="lineno">  301 </span><span class="spaces">     </span><span class="istickedoff">typeInferComplete $ Lambda vn tp body</span></span>
+<span class="lineno">  301 </span><span class="spaces">     </span><span class="istickedoff">inferTermF $ Lambda vn tp body</span></span>
 <span class="lineno">  302 </span>
 <span class="lineno">  303 </span>-- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
 <span class="lineno">  304 </span>lambdas :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
@@ -331,9 +331,9 @@ span.spaces    { background: white }
 <span class="lineno">  312 </span><span class="decl"><span class="nottickedoff">piType x (OpenTerm tpM) body_f = OpenTerm $</span>
 <span class="lineno">  313 </span><span class="spaces">  </span><span class="nottickedoff">do tp &lt;- tpM</span>
 <span class="lineno">  314 </span><span class="spaces">     </span><span class="nottickedoff">nm &lt;- liftTCM scFreshVarName x</span>
-<span class="lineno">  315 </span><span class="spaces">     </span><span class="nottickedoff">var &lt;- typeInferComplete $ Variable nm tp</span>
+<span class="lineno">  315 </span><span class="spaces">     </span><span class="nottickedoff">var &lt;- inferTermF $ Variable nm tp</span>
 <span class="lineno">  316 </span><span class="spaces">     </span><span class="nottickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
-<span class="lineno">  317 </span><span class="spaces">     </span><span class="nottickedoff">typeInferComplete $ Pi nm tp body</span></span>
+<span class="lineno">  317 </span><span class="spaces">     </span><span class="nottickedoff">inferTermF $ Pi nm tp body</span></span>
 <span class="lineno">  318 </span>
 <span class="lineno">  319 </span>-- | Build a non-dependent function type.
 <span class="lineno">  320 </span>arrow :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
@@ -341,7 +341,7 @@ span.spaces    { background: white }
 <span class="lineno">  322 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $</span>
 <span class="lineno">  323 </span><span class="spaces">  </span><span class="nottickedoff">do t1' &lt;- unOpenTerm t1</span>
 <span class="lineno">  324 </span><span class="spaces">     </span><span class="nottickedoff">t2' &lt;- unOpenTerm t2</span>
-<span class="lineno">  325 </span><span class="spaces">     </span><span class="nottickedoff">typeInferComplete $ Pi wildcardVarName t1' t2'</span></span>
+<span class="lineno">  325 </span><span class="spaces">     </span><span class="nottickedoff">inferTermF $ Pi wildcardVarName t1' t2'</span></span>
 <span class="lineno">  326 </span>
 <span class="lineno">  327 </span>-- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
 <span class="lineno">  328 </span>piMulti :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
