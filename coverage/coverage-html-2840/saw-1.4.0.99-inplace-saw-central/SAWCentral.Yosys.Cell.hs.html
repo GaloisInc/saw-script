@@ -129,7 +129,7 @@ span.spaces    { background: white }
 <span class="lineno">  110 </span><span class="decl"><span class="istickedoff">primCellToTerm sc c args =</span>
 <span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">do mm &lt;- primCellToMap sc c args</span>
 <span class="lineno">  112 </span><span class="spaces">     </span><span class="istickedoff">mt &lt;- traverse (cryptolRecord <span class="nottickedoff">sc</span>) mm</span>
-<span class="lineno">  113 </span><span class="spaces">     </span><span class="istickedoff">traverse (validateTerm sc <span class="nottickedoff">typeCheckMsg</span>) mt</span>
+<span class="lineno">  113 </span><span class="spaces">     </span><span class="istickedoff">traverse (validateTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">typeCheckMsg</span>) mt</span>
 <span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">typeCheckMsg :: Text</span>
 <span class="lineno">  116 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">typeCheckMsg = mconcat</span></span>

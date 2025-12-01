@@ -405,11 +405,11 @@ span.spaces    { background: white }
 <span class="lineno">  386 </span>--   types and @=@ for values.
 <span class="lineno">  387 </span>ppRecord :: Bool -&gt; [(FieldName, PPS.Doc)] -&gt; PPS.Doc
 <span class="lineno">  388 </span><span class="decl"><span class="istickedoff">ppRecord type_p alist =</span>
-<span class="lineno">  389 </span><span class="spaces">  </span><span class="istickedoff">(if type_p then (pretty '#' &lt;&gt;) else id) $</span>
+<span class="lineno">  389 </span><span class="spaces">  </span><span class="istickedoff">(if <span class="tickonlytrue">type_p</span> then (pretty '#' &lt;&gt;) else <span class="nottickedoff">id</span>) $</span>
 <span class="lineno">  390 </span><span class="spaces">  </span><span class="istickedoff">encloseSep lbrace rbrace comma $ map ppField alist</span>
 <span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  392 </span><span class="spaces">    </span><span class="istickedoff">ppField (fld, rhs) = group (nest 2 (vsep [pretty fld &lt;+&gt; op_str, rhs]))</span>
-<span class="lineno">  393 </span><span class="spaces">    </span><span class="istickedoff">op_str = if type_p then &quot;:&quot; else &quot;=&quot;</span></span>
+<span class="lineno">  393 </span><span class="spaces">    </span><span class="istickedoff">op_str = if <span class="tickonlytrue">type_p</span> then &quot;:&quot; else <span class="nottickedoff">&quot;=&quot;</span></span></span>
 <span class="lineno">  394 </span>
 <span class="lineno">  395 </span>-- | Pretty-print a projection / selector &quot;x.f&quot;
 <span class="lineno">  396 </span>ppProj :: FieldName -&gt; PPS.Doc -&gt; PPS.Doc
@@ -462,8 +462,8 @@ span.spaces    { background: white }
 <span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">RecordType alist -&gt;</span>
 <span class="lineno">  444 </span><span class="spaces">      </span><span class="istickedoff">ppRecord True &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; ppTerm' <span class="nottickedoff">PrecTerm</span> t) alist</span>
 <span class="lineno">  445 </span><span class="spaces">    </span><span class="istickedoff">RecordValue alist -&gt;</span>
-<span class="lineno">  446 </span><span class="spaces">      </span><span class="istickedoff">ppRecord False &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; ppTerm' <span class="nottickedoff">PrecTerm</span> t) alist</span>
-<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">RecordProj e fld -&gt; ppProj fld &lt;$&gt; ppTerm' <span class="nottickedoff">PrecArg</span> e</span>
+<span class="lineno">  446 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppRecord False &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; ppTerm' PrecTerm t) alist</span></span>
+<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">RecordProj e fld -&gt; <span class="nottickedoff">ppProj fld &lt;$&gt; ppTerm' PrecArg e</span></span>
 <span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">Sort s h -&gt; return (viaShow h &lt;&gt; viaShow s)</span>
 <span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue (asBoolType -&gt; Just _) args</span>
 <span class="lineno">  450 </span><span class="spaces">      </span><span class="istickedoff">| Just bits &lt;- <span class="nottickedoff">mapM asBool $ V.toList args</span> -&gt;</span>
@@ -690,7 +690,7 @@ span.spaces    { background: white }
 <span class="lineno">  671 </span><span class="spaces">  </span><span class="istickedoff">withVarNames ctx $</span>
 <span class="lineno">  672 </span><span class="spaces">  </span><span class="istickedoff">-- reserve other free variables next, so they are disambiguated</span>
 <span class="lineno">  673 </span><span class="spaces">  </span><span class="istickedoff">withVarNames (Set.toList (termVarNames trm) \\ ctx) $</span>
-<span class="lineno">  674 </span><span class="spaces">  </span><span class="istickedoff">ppTermWithMemoTable PrecTerm False trm</span></span>
+<span class="lineno">  674 </span><span class="spaces">  </span><span class="istickedoff">ppTermWithMemoTable <span class="nottickedoff">PrecTerm</span> <span class="nottickedoff">False</span> trm</span></span>
 <span class="lineno">  675 </span>
 <span class="lineno">  676 </span>
 <span class="lineno">  677 </span>-- | Pretty-print a term and render it to a string

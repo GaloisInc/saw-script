@@ -118,7 +118,7 @@ span.spaces    { background: white }
 <span class="lineno">   99 </span><span class="spaces">       </span><span class="istickedoff">(\env v -&gt;</span>
 <span class="lineno">  100 </span><span class="spaces">          </span><span class="istickedoff">do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v</span>
 <span class="lineno">  101 </span><span class="spaces">             </span><span class="istickedoff">cm &lt;- convertModule sc env m</span>
-<span class="lineno">  102 </span><span class="spaces">             </span><span class="istickedoff">_ &lt;- validateTerm sc <span class="nottickedoff">(&quot;translating the combinational circuit \&quot;&quot; &lt;&gt; nm &lt;&gt; &quot;\&quot;&quot;)</span> $ cm ^. convertedModuleTerm</span>
+<span class="lineno">  102 </span><span class="spaces">             </span><span class="istickedoff">_ &lt;- validateTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">(&quot;translating the combinational circuit \&quot;&quot; &lt;&gt; nm &lt;&gt; &quot;\&quot;&quot;)</span> $ <span class="nottickedoff">cm ^. convertedModuleTerm</span></span>
 <span class="lineno">  103 </span><span class="spaces">             </span><span class="istickedoff">n &lt;- Nonce.freshNonce Nonce.globalNonceGenerator</span>
 <span class="lineno">  104 </span><span class="spaces">             </span><span class="istickedoff">let frag = Text.pack . show $ Nonce.indexValue n</span>
 <span class="lineno">  105 </span><span class="spaces">             </span><span class="istickedoff">let uri = URI.URI</span>
@@ -189,7 +189,7 @@ span.spaces    { background: white }
 <span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
 <span class="lineno">  171 </span><span class="spaces">     </span><span class="istickedoff">ir &lt;- liftIO $ loadYosysIR path</span>
 <span class="lineno">  172 </span><span class="spaces">     </span><span class="istickedoff">tt &lt;- liftIO $ yosysIRToRecordTerm sc ir</span>
-<span class="lineno">  173 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- liftIO $ validateTerm sc <span class="nottickedoff">&quot;translating combinational circuits&quot;</span> $ SC.ttTerm tt</span>
+<span class="lineno">  173 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- liftIO $ validateTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">&quot;translating combinational circuits&quot;</span> $ <span class="nottickedoff">SC.ttTerm tt</span></span>
 <span class="lineno">  174 </span><span class="spaces">     </span><span class="istickedoff">pure tt</span></span>
 <span class="lineno">  175 </span>
 <span class="lineno">  176 </span>-- | Proves equality between a combinational HDL module and a
@@ -245,7 +245,7 @@ span.spaces    { background: white }
 <span class="lineno">  226 </span><span class="decl"><span class="istickedoff">yosys_extract_sequential s n =</span>
 <span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
 <span class="lineno">  228 </span><span class="spaces">     </span><span class="istickedoff">tt &lt;- liftIO $ composeYosysSequential sc s n</span>
-<span class="lineno">  229 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- liftIO $ validateTerm sc <span class="nottickedoff">&quot;composing a sequential term&quot;</span> $ SC.ttTerm tt</span>
+<span class="lineno">  229 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- liftIO $ validateTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">&quot;composing a sequential term&quot;</span> $ <span class="nottickedoff">SC.ttTerm tt</span></span>
 <span class="lineno">  230 </span><span class="spaces">     </span><span class="istickedoff">pure tt</span></span>
 <span class="lineno">  231 </span>
 <span class="lineno">  232 </span>-- | Like `yosys_extract_sequential`, but the resulting term has an

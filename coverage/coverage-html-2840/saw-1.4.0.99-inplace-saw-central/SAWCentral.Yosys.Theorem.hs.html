@@ -92,7 +92,7 @@ span.spaces    { background: white }
 <span class="lineno">   73 </span><span class="spaces">     </span><span class="istickedoff">func &lt;- SC.scAbstractTerms sc [r] res</span>
 <span class="lineno">   74 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">cty = C.tFun (thm ^. theoremInputCryptolType) C.tBit</span></span>
 <span class="lineno">   75 </span><span class="spaces">     </span><span class="istickedoff">SC.TypedTerm <span class="nottickedoff">(SC.TypedTermSchema $ C.tMono cty)</span></span>
-<span class="lineno">   76 </span><span class="spaces">       </span><span class="istickedoff">&lt;$&gt; validateTerm sc</span>
+<span class="lineno">   76 </span><span class="spaces">       </span><span class="istickedoff">&lt;$&gt; validateTerm <span class="nottickedoff">sc</span></span>
 <span class="lineno">   77 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">(&quot;constructing a proposition while verifying &quot; &lt;&gt; URI.render (thm ^. theoremURI))</span></span>
 <span class="lineno">   78 </span><span class="spaces">       </span><span class="istickedoff">func</span></span>
 <span class="lineno">   79 </span>
@@ -113,7 +113,7 @@ span.spaces    { background: white }
 <span class="lineno">   94 </span><span class="spaces">               </span><span class="istickedoff">elseCase &lt;- SC.scApply sc (thm ^. theoremModule) r</span>
 <span class="lineno">   95 </span><span class="spaces">               </span><span class="istickedoff">SC.scIte sc (thm ^. theoremOutputType) precond thenCase elseCase</span>
 <span class="lineno">   96 </span><span class="spaces">     </span><span class="istickedoff">ft &lt;- SC.scAbstractTerms sc [r] body</span>
-<span class="lineno">   97 </span><span class="spaces">     </span><span class="istickedoff">validateTerm sc</span>
+<span class="lineno">   97 </span><span class="spaces">     </span><span class="istickedoff">validateTerm <span class="nottickedoff">sc</span></span>
 <span class="lineno">   98 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">(&quot;constructing an override replacement for &quot; &lt;&gt; URI.render (thm ^. theoremURI))</span></span>
 <span class="lineno">   99 </span><span class="spaces">       </span><span class="istickedoff">ft</span></span>
 <span class="lineno">  100 </span>
@@ -207,7 +207,7 @@ span.spaces    { background: white }
 <span class="lineno">  188 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; pure s</span>
 <span class="lineno">  189 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; SC.scTermF sc =&lt;&lt; traverse go (SC.unwrapTermF s)</span>
 <span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">ft &lt;- go unfolded</span>
-<span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">validateTerm sc</span>
+<span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">validateTerm <span class="nottickedoff">sc</span></span>
 <span class="lineno">  192 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(&quot;applying an override for &quot; &lt;&gt; URI.render (thm ^. theoremURI))</span></span>
 <span class="lineno">  193 </span><span class="spaces">    </span><span class="istickedoff">ft</span></span>
 

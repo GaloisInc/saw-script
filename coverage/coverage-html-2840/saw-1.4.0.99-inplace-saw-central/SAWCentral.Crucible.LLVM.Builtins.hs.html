@@ -460,7 +460,7 @@ span.spaces    { background: white }
 <span class="lineno">  441 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  442 </span><span class="spaces">          </span><span class="istickedoff">extracted_func_const &lt;-</span>
 <span class="lineno">  443 </span><span class="spaces">            </span><span class="istickedoff">io $ scDefineConstant shared_context nmi extracted_func</span>
-<span class="lineno">  444 </span><span class="spaces">            </span><span class="istickedoff">=&lt;&lt; scTypeOf shared_context extracted_func</span>
+<span class="lineno">  444 </span><span class="spaces">            </span><span class="istickedoff">=&lt;&lt; scTypeOf <span class="nottickedoff">shared_context</span> extracted_func</span>
 <span class="lineno">  445 </span><span class="spaces">          </span><span class="istickedoff">input_terms &lt;- io $ scVariables shared_context input_parameters</span>
 <span class="lineno">  446 </span><span class="spaces">          </span><span class="istickedoff">applied_extracted_func &lt;- io $ scApplyAll shared_context extracted_func_const input_terms</span>
 <span class="lineno">  447 </span><span class="spaces">          </span><span class="istickedoff">applied_extracted_func_selectors &lt;-</span>
@@ -2386,7 +2386,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2367 </span><span class="spaces">  </span><span class="istickedoff">do alignment &lt;- coerceAlignment align_bytes</span>
 <span class="lineno"> 2368 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_symbolic_alloc&quot;</span>
 <span class="lineno"> 2369 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- lift $ lift getSharedContext</span>
-<span class="lineno"> 2370 </span><span class="spaces">     </span><span class="istickedoff">sz_ty &lt;- liftIO $ Cryptol.scCryptolType sc =&lt;&lt; scTypeOf sc sz</span>
+<span class="lineno"> 2370 </span><span class="spaces">     </span><span class="istickedoff">sz_ty &lt;- liftIO $ Cryptol.scCryptolType sc =&lt;&lt; scTypeOf <span class="nottickedoff">sc</span> sz</span>
 <span class="lineno"> 2371 </span><span class="spaces">     </span><span class="istickedoff">case sz_ty of</span>
 <span class="lineno"> 2372 </span><span class="spaces">       </span><span class="istickedoff">Just (Right tp)</span>
 <span class="lineno"> 2373 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">Just 64 == asCryptolBVType tp</span> -&gt; return <span class="nottickedoff">()</span></span>

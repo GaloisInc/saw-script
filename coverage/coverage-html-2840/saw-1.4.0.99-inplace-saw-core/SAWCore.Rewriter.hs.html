@@ -730,7 +730,7 @@ span.spaces    { background: white }
 <span class="lineno">  711 </span><span class="spaces">        </span><span class="istickedoff">case tf of</span>
 <span class="lineno">  712 </span><span class="spaces">          </span><span class="istickedoff">FTermF ftf -&gt; FTermF &lt;$&gt; rewriteFTermF convertibleFlag ftf</span>
 <span class="lineno">  713 </span><span class="spaces">          </span><span class="istickedoff">App e1 e2 -&gt;</span>
-<span class="lineno">  714 </span><span class="spaces">              </span><span class="istickedoff">do t1 &lt;- scTypeOf sc e1</span>
+<span class="lineno">  714 </span><span class="spaces">              </span><span class="istickedoff">do t1 &lt;- scTypeOf <span class="nottickedoff">sc</span> e1</span>
 <span class="lineno">  715 </span><span class="spaces">                 </span><span class="istickedoff">t1' &lt;- scWhnf sc t1</span>
 <span class="lineno">  716 </span><span class="spaces">                 </span><span class="istickedoff">case unwrapTermF t1' of</span>
 <span class="lineno">  717 </span><span class="spaces">                   </span><span class="istickedoff">-- If type of e1 is not a dependent type, we can use any rule to rewrite e2</span>
@@ -906,7 +906,7 @@ span.spaces    { background: white }
 <span class="lineno">  887 </span>
 <span class="lineno">  888 </span>splitCond :: Ord a =&gt; SharedContext -&gt; Simpset a -&gt; Term -&gt; Term -&gt; IO Term
 <span class="lineno">  889 </span><span class="decl"><span class="istickedoff">splitCond sc ss c t = do</span>
-<span class="lineno">  890 </span><span class="spaces">   </span><span class="istickedoff">ty &lt;- scTypeOf sc t</span>
+<span class="lineno">  890 </span><span class="spaces">   </span><span class="istickedoff">ty &lt;- scTypeOf <span class="nottickedoff">sc</span> t</span>
 <span class="lineno">  891 </span><span class="spaces">   </span><span class="istickedoff">trueTerm  &lt;- scBool sc True</span>
 <span class="lineno">  892 </span><span class="spaces">   </span><span class="istickedoff">falseTerm &lt;- scBool sc False</span>
 <span class="lineno">  893 </span><span class="spaces"></span><span class="istickedoff"></span>

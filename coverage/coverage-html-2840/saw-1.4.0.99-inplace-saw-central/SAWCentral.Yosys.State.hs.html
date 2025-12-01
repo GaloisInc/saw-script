@@ -197,7 +197,7 @@ span.spaces    { background: white }
 <span class="lineno">  178 </span><span class="spaces">     </span><span class="istickedoff">-- construct result</span>
 <span class="lineno">  179 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- SC.scAbstractTerms sc [domainRecord] outputRecord</span>
 <span class="lineno">  180 </span><span class="spaces">     </span><span class="istickedoff">-- ty &lt;- SC.scFun sc domainRecordType codomainRecordType</span>
-<span class="lineno">  181 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- validateTerm sc <span class="nottickedoff">&quot;translating a sequential circuit&quot;</span> t</span>
+<span class="lineno">  181 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- validateTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">&quot;translating a sequential circuit&quot;</span> <span class="nottickedoff">t</span></span>
 <span class="lineno">  182 </span><span class="spaces">     </span><span class="istickedoff">let cty = C.tFun domainCryptolRecordType codomainCryptolRecordType</span>
 <span class="lineno">  183 </span><span class="spaces">     </span><span class="istickedoff">pure YosysSequential</span>
 <span class="lineno">  184 </span><span class="spaces">       </span><span class="istickedoff">{ _yosysSequentialTerm = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t</span>

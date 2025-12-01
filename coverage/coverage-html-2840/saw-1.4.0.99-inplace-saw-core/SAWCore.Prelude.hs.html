@@ -55,7 +55,7 @@ span.spaces    { background: white }
 <span class="lineno">   36 </span>--   The returned term will be of type @Bool@.
 <span class="lineno">   37 </span>scEq :: SharedContext -&gt; Term -&gt; Term -&gt; IO Term
 <span class="lineno">   38 </span><span class="decl"><span class="istickedoff">scEq sc x y = do</span>
-<span class="lineno">   39 </span><span class="spaces">  </span><span class="istickedoff">xty &lt;- scTypeOf sc x</span>
+<span class="lineno">   39 </span><span class="spaces">  </span><span class="istickedoff">xty &lt;- scTypeOf <span class="nottickedoff">sc</span> x</span>
 <span class="lineno">   40 </span><span class="spaces">  </span><span class="istickedoff">mmap &lt;- scGetModuleMap sc</span>
 <span class="lineno">   41 </span><span class="spaces">  </span><span class="istickedoff">case asFirstOrderTypeValue (evalSharedTerm mmap mempty <span class="nottickedoff">mempty</span> xty) of</span>
 <span class="lineno">   42 </span><span class="spaces">    </span><span class="istickedoff">Just fot -&gt; scDecEq sc fot (Just (x,y))</span>

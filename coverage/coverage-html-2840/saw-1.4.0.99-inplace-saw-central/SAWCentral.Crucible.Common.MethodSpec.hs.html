@@ -399,7 +399,7 @@ span.spaces    { background: white }
 <span class="lineno">  380 </span><span class="spaces">       </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
 <span class="lineno">  381 </span><span class="spaces">       </span><span class="istickedoff">let sc  = saw_ctx st</span>
 <span class="lineno">  382 </span><span class="spaces">       </span><span class="istickedoff">prd' &lt;- toSC <span class="nottickedoff">sym</span> st prd</span>
-<span class="lineno">  383 </span><span class="spaces">       </span><span class="istickedoff">typ  &lt;- scTypeOf sc thn</span>
+<span class="lineno">  383 </span><span class="spaces">       </span><span class="istickedoff">typ  &lt;- scTypeOf <span class="nottickedoff">sc</span> thn</span>
 <span class="lineno">  384 </span><span class="spaces">       </span><span class="istickedoff">res  &lt;- scIte sc typ prd' thn els</span>
 <span class="lineno">  385 </span><span class="spaces">       </span><span class="istickedoff">return (thnSch, res)</span></span>
 <span class="lineno">  386 </span>
