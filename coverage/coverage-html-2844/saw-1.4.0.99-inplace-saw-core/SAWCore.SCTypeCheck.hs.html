@@ -80,8 +80,8 @@ span.spaces    { background: white }
 <span class="lineno">   61 </span>import SAWCore.Parser.AST (UTerm, prettyUTerm)
 <span class="lineno">   62 </span>import SAWCore.Parser.Position
 <span class="lineno">   63 </span>import SAWCore.Recognizer
-<span class="lineno">   64 </span>import SAWCore.SharedTerm
-<span class="lineno">   65 </span>import SAWCore.Term.Certified (scRecordValue)
+<span class="lineno">   64 </span>import qualified SAWCore.Term.Certified as SC
+<span class="lineno">   65 </span>import SAWCore.SharedTerm
 <span class="lineno">   66 </span>import SAWCore.Term.Functor
 <span class="lineno">   67 </span>import SAWCore.Term.Pretty (scPrettyTermInCtx)
 <span class="lineno">   68 </span>
@@ -138,13 +138,13 @@ span.spaces    { background: white }
 <span class="lineno">  119 </span>-- | Errors that can occur during type-checking
 <span class="lineno">  120 </span>data TCError
 <span class="lineno">  121 </span>  = NotSort Term
-<span class="lineno">  122 </span>  | NotFuncTypeInApp Term Term
+<span class="lineno">  122 </span>  | NotFuncTypeInApp SC.Term SC.Term
 <span class="lineno">  123 </span>  | NotTupleType Term
 <span class="lineno">  124 </span>  | BadTupleIndex Int Term
-<span class="lineno">  125 </span>  | NotRecordType Term
+<span class="lineno">  125 </span>  | NotRecordType SC.Term
 <span class="lineno">  126 </span>  | BadRecordField FieldName Term
 <span class="lineno">  127 </span>  | UnboundName Text
-<span class="lineno">  128 </span>  | SubtypeFailure Term Term
+<span class="lineno">  128 </span>  | SubtypeFailure SC.Term Term
 <span class="lineno">  129 </span>  | EmptyVectorLit
 <span class="lineno">  130 </span>  | NoSuchDataType NameInfo
 <span class="lineno">  131 </span>  | NoSuchConstant NameInfo
@@ -258,86 +258,86 @@ span.spaces    { background: white }
 <span class="lineno">  239 </span>
 <span class="lineno">  240 </span>-- | Construct a typed term from a 'TermF' where each subterm has
 <span class="lineno">  241 </span>-- already been labeled with its type.
-<span class="lineno">  242 </span>inferTermF :: TermF Term -&gt; TCM Term
+<span class="lineno">  242 </span>inferTermF :: TermF SC.Term -&gt; TCM SC.Term
 <span class="lineno">  243 </span><span class="decl"><span class="istickedoff">inferTermF tf =</span>
 <span class="lineno">  244 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
 <span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt;</span>
 <span class="lineno">  246 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">inferFlatTermF ftf</span></span>
 <span class="lineno">  247 </span><span class="spaces">    </span><span class="istickedoff">App t1 t2 -&gt;</span>
 <span class="lineno">  248 </span><span class="spaces">      </span><span class="istickedoff">do let err = NotFuncTypeInApp t1 t2</span>
-<span class="lineno">  249 </span><span class="spaces">         </span><span class="istickedoff">ty1 &lt;- liftTCM scTypeOf t1</span>
+<span class="lineno">  249 </span><span class="spaces">         </span><span class="istickedoff">ty1 &lt;- liftTCM SC.scTypeOf t1</span>
 <span class="lineno">  250 </span><span class="spaces">         </span><span class="istickedoff">(_nm, arg_tp, _ret_tp) &lt;- ensurePiType err ty1</span>
 <span class="lineno">  251 </span><span class="spaces">         </span><span class="istickedoff">checkSubtype t2 arg_tp</span>
-<span class="lineno">  252 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scApply t1 t2</span>
+<span class="lineno">  252 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scApply t1 t2</span>
 <span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">Lambda x t1 t2 -&gt;</span>
 <span class="lineno">  254 </span><span class="spaces">      </span><span class="istickedoff">do void $ ensureSortType t1</span>
-<span class="lineno">  255 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scLambda x t1 t2</span>
+<span class="lineno">  255 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scLambda x t1 t2</span>
 <span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">Pi x t1 t2 -&gt;</span>
 <span class="lineno">  257 </span><span class="spaces">      </span><span class="istickedoff">do void $ ensureSortType t1</span>
 <span class="lineno">  258 </span><span class="spaces">         </span><span class="istickedoff">void $ ensureSortType t2</span>
-<span class="lineno">  259 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scPi x t1 t2</span>
+<span class="lineno">  259 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scPi x t1 t2</span>
 <span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">Constant nm -&gt;</span>
 <span class="lineno">  261 </span><span class="spaces">      </span><span class="istickedoff">do mm &lt;- liftTCM scGetModuleMap</span>
 <span class="lineno">  262 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span>
 <span class="lineno">  263 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwTCError $ NoSuchConstant (nameInfo nm)</span></span>
-<span class="lineno">  264 </span><span class="spaces">           </span><span class="istickedoff">Just _ -&gt; liftTCM scConst nm</span>
+<span class="lineno">  264 </span><span class="spaces">           </span><span class="istickedoff">Just _ -&gt; liftTCM SC.scConstant nm</span>
 <span class="lineno">  265 </span><span class="spaces">    </span><span class="istickedoff">Variable vn tp -&gt;</span>
-<span class="lineno">  266 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scVariable vn tp</span></span>
+<span class="lineno">  266 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scVariable vn tp</span></span>
 <span class="lineno">  267 </span>
 <span class="lineno">  268 </span>-- | Construct a typed term from a 'FlatTermF' where each subterm has
 <span class="lineno">  269 </span>-- already been labeled with its type.
-<span class="lineno">  270 </span>inferFlatTermF :: FlatTermF Term -&gt; TCM Term
+<span class="lineno">  270 </span>inferFlatTermF :: FlatTermF SC.Term -&gt; TCM SC.Term
 <span class="lineno">  271 </span><span class="decl"><span class="istickedoff">inferFlatTermF ftf =</span>
 <span class="lineno">  272 </span><span class="spaces">  </span><span class="istickedoff">case ftf of</span>
 <span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">UnitValue -&gt;</span>
-<span class="lineno">  274 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scUnitValue</span>
+<span class="lineno">  274 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scUnitValue</span>
 <span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">UnitType -&gt;</span>
-<span class="lineno">  276 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scUnitType</span>
+<span class="lineno">  276 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scUnitType</span>
 <span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">PairValue t1 t2 -&gt;</span>
-<span class="lineno">  278 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scPairValue t1 t2</span>
+<span class="lineno">  278 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scPairValue t1 t2</span>
 <span class="lineno">  279 </span><span class="spaces">    </span><span class="istickedoff">PairType t1 t2 -&gt;</span>
 <span class="lineno">  280 </span><span class="spaces">      </span><span class="istickedoff">do void $ ensureSortType t1</span>
 <span class="lineno">  281 </span><span class="spaces">         </span><span class="istickedoff">void $ ensureSortType t2</span>
-<span class="lineno">  282 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scPairType t1 t2</span>
+<span class="lineno">  282 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scPairType t1 t2</span>
 <span class="lineno">  283 </span><span class="spaces">    </span><span class="istickedoff">PairLeft t -&gt;</span>
 <span class="lineno">  284 </span><span class="spaces">      </span><span class="istickedoff">do void $ ensurePairType =&lt;&lt; liftTCM scTypeOf t</span>
-<span class="lineno">  285 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scPairLeft t</span>
+<span class="lineno">  285 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scPairLeft t</span>
 <span class="lineno">  286 </span><span class="spaces">    </span><span class="istickedoff">PairRight t -&gt;</span>
 <span class="lineno">  287 </span><span class="spaces">      </span><span class="istickedoff">do void $ ensurePairType =&lt;&lt; liftTCM scTypeOf t</span>
-<span class="lineno">  288 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scPairRight t</span>
+<span class="lineno">  288 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scPairRight t</span>
 <span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff">Recursor r -&gt;</span>
 <span class="lineno">  290 </span><span class="spaces">      </span><span class="istickedoff">do mm &lt;- liftTCM scGetModuleMap</span>
 <span class="lineno">  291 </span><span class="spaces">         </span><span class="istickedoff">let d = recursorDataType r</span>
 <span class="lineno">  292 </span><span class="spaces">         </span><span class="istickedoff">let s = recursorSort r</span>
 <span class="lineno">  293 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex d) mm of</span>
-<span class="lineno">  294 </span><span class="spaces">           </span><span class="istickedoff">Just (ResolvedDataType _dt) -&gt; liftTCM scRecursor d s</span>
+<span class="lineno">  294 </span><span class="spaces">           </span><span class="istickedoff">Just (ResolvedDataType _dt) -&gt; liftTCM SC.scRecursor d s</span>
 <span class="lineno">  295 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType (nameInfo d)</span></span>
 <span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">RecordType elems -&gt;</span>
 <span class="lineno">  297 </span><span class="spaces">      </span><span class="istickedoff">do void $ mapM (ensureSortType . snd) elems</span>
-<span class="lineno">  298 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scRecordType elems</span>
+<span class="lineno">  298 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scRecordType elems</span>
 <span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">RecordValue elems -&gt;</span>
-<span class="lineno">  300 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scRecordValue elems</span>
+<span class="lineno">  300 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scRecordValue elems</span>
 <span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">RecordProj t fld -&gt;</span>
 <span class="lineno">  302 </span><span class="spaces">      </span><span class="istickedoff">do ty &lt;- liftTCM scTypeOf t</span>
 <span class="lineno">  303 </span><span class="spaces">         </span><span class="istickedoff">ts &lt;- ensureRecordType (NotRecordType t) ty</span>
 <span class="lineno">  304 </span><span class="spaces">         </span><span class="istickedoff">unless (Map.member fld ts) $</span>
 <span class="lineno">  305 </span><span class="spaces">           </span><span class="istickedoff">throwTCError $ BadRecordField fld ty</span>
-<span class="lineno">  306 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scRecordSelect t fld</span>
+<span class="lineno">  306 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scRecordProj t fld</span>
 <span class="lineno">  307 </span><span class="spaces">    </span><span class="istickedoff">Sort s flags -&gt;</span>
-<span class="lineno">  308 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scSortWithFlags s flags</span>
+<span class="lineno">  308 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scSortWithFlags s flags</span>
 <span class="lineno">  309 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue tp vs -&gt;</span>
 <span class="lineno">  310 </span><span class="spaces">      </span><span class="istickedoff">do void $ ensureSortType tp</span>
 <span class="lineno">  311 </span><span class="spaces">         </span><span class="istickedoff">tp' &lt;- typeCheckWHNF tp</span>
 <span class="lineno">  312 </span><span class="spaces">         </span><span class="istickedoff">forM_ vs $ \v_elem -&gt; checkSubtype v_elem tp'</span>
-<span class="lineno">  313 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scVector tp (V.toList vs)</span>
+<span class="lineno">  313 </span><span class="spaces">         </span><span class="istickedoff">liftTCM SC.scVector tp (V.toList vs)</span>
 <span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">StringLit s -&gt;</span>
-<span class="lineno">  315 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scString s</span></span>
+<span class="lineno">  315 </span><span class="spaces">      </span><span class="istickedoff">liftTCM SC.scString s</span></span>
 <span class="lineno">  316 </span>
 <span class="lineno">  317 </span>-- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
 <span class="lineno">  318 </span>-- result of substituting @arg@ for @x@ in the result type @b@, i.e.,
 <span class="lineno">  319 </span>-- @[arg/x]b@.
 <span class="lineno">  320 </span>-- If @fun_tp@ is not a pi type, raise the supplied error.
-<span class="lineno">  321 </span>applyPiTyped :: TCError -&gt; Term -&gt; Term -&gt; TCM Term
+<span class="lineno">  321 </span>applyPiTyped :: TCError -&gt; Term -&gt; SC.Term -&gt; TCM Term
 <span class="lineno">  322 </span><span class="decl"><span class="istickedoff">applyPiTyped err fun_tp arg =</span>
 <span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">ensurePiType <span class="nottickedoff">err</span> fun_tp &gt;&gt;= \(nm, arg_tp, ret_tp) -&gt;</span>
 <span class="lineno">  324 </span><span class="spaces">  </span><span class="istickedoff">do checkSubtype arg arg_tp</span>
@@ -382,7 +382,7 @@ span.spaces    { background: white }
 <span class="lineno">  363 </span>
 <span class="lineno">  364 </span>-- | Check that one type is a subtype of another, assuming both arguments are
 <span class="lineno">  365 </span>-- types, i.e., that both have type Sort s for some s.
-<span class="lineno">  366 </span>checkSubtype :: Term -&gt; Term -&gt; TCM ()
+<span class="lineno">  366 </span>checkSubtype :: SC.Term -&gt; Term -&gt; TCM ()
 <span class="lineno">  367 </span><span class="decl"><span class="istickedoff">checkSubtype arg req_tp =</span>
 <span class="lineno">  368 </span><span class="spaces">  </span><span class="istickedoff">do arg_tp' &lt;- liftTCM scWhnf =&lt;&lt; liftTCM scTypeOf arg</span>
 <span class="lineno">  369 </span><span class="spaces">     </span><span class="istickedoff">req_tp' &lt;- liftTCM scWhnf req_tp</span>
