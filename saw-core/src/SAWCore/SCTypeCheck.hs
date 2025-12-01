@@ -13,10 +13,7 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.SCTypeCheck
-  ( scTypeCheck
-  , scTypeCheckError
-  , scTypeCheckComplete
-  , scConvertible
+  ( scConvertible
   , TCError(..)
   , prettyTCError
   , throwTCError
@@ -26,11 +23,9 @@ module SAWCore.SCTypeCheck
   , withErrorUTerm
   , atPos
   , LiftTCM(..)
-  , TypeInfer(..)
   , inferTermF
   , inferFlatTermF
   , typeCheckWHNF
-  , typeInferCompleteWHNF
   , checkSubtype
   , ensureSort
   , ensureSortType
@@ -93,17 +88,6 @@ runTCM (TCM m) sc =
 -- | Augment and rethrow any 'TCError' thrown by the given computation.
 rethrowTCError :: (MonadError TCError m) => (TCError -> TCError) -> m a -> m a
 rethrowTCError f m = catchError m (throwError . f)
-
--- | Run a type-checking computation @m@ and tag any error it throws with the
--- 'ErrorTerm' constructor
-withErrorTerm :: Term -> TCM a -> TCM a
-withErrorTerm tm m = catchError m (throwError . ErrorTerm tm)
-
--- | Lift @withErrorTerm@ to `TermF Term`
-withErrorTermF :: TermF Term -> TCM a -> TCM a
-withErrorTermF tf tcm =
-  do t <- liftTCM scTermF tf
-     withErrorTerm t tcm
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- 'ErrorUTerm' constructor
@@ -252,57 +236,6 @@ prettyTCError e = runReader (helper e) Nothing where
 
 instance Show TCError where
   show = unlines . prettyTCError
-
--- | Infer the type of a term using 'scTypeCheck', calling 'fail' on failure
-scTypeCheckError :: TypeInfer a => SharedContext -> a -> IO Term
-scTypeCheckError sc t0 =
-  either (fail . unlines . prettyTCError) return =<< scTypeCheck sc t0
-
--- | Infer the type of a 'Term', ensuring in the process that the entire term is
--- well-formed and that all internal type annotations are correct. Types are
--- evaluated to WHNF as necessary, and the returned type is in WHNF.
-scTypeCheck :: TypeInfer a => SharedContext -> a -> IO (Either TCError Term)
-scTypeCheck sc t0 = runTCM (typeInfer t0) sc
-
--- | Infer the type of an @a@ and complete it to a term, ensuring in the
--- process that the entire term is well-formed and that all internal type
--- annotations are correct. Types are evaluated to WHNF as necessary, and the
--- returned type is in WHNF, though the returned term may not be.
-scTypeCheckComplete ::
-  TypeInfer a => SharedContext -> a -> IO (Either TCError SC.Term)
-scTypeCheckComplete sc t0 = runTCM (typeInferComplete t0) sc
-
--- | The class of things that we can infer types of. The 'typeInfer' method
--- returns the most general (with respect to subtyping) type of its input.
-class TypeInfer a where
-  -- | Infer the type of an @a@
-  typeInfer :: a -> TCM Term
-  -- | Infer the type of an @a@ and complete it to a 'Term'
-  typeInferComplete :: a -> TCM SC.Term
-
--- | Infer the type of an @a@ and complete it to a 'Term', and then evaluate the
--- resulting term to WHNF
-typeInferCompleteWHNF :: TypeInfer a => a -> TCM SC.Term
-typeInferCompleteWHNF a =
-  do t <- typeInferComplete a
-     liftTCM SC.scWhnf t
-
--- Type inference for TermF SC.Term is the main workhorse. Intuitively, this
--- represents the case where each immediate subterm of a term is labeled with
--- its (most general) type.
-instance TypeInfer (TermF SC.Term) where
-  typeInfer tf = liftTCM SC.scTypeOf =<< typeInferComplete tf
-  typeInferComplete tf =
-    withErrorTermF tf (inferTermF tf)
-
--- Type inference for FlatTermF SC.Term is the main workhorse for flat
--- terms. Intuitively, this represents the case where each immediate subterm of
--- a term has already been labeled with its (most general) type.
-instance TypeInfer (FlatTermF SC.Term) where
-  typeInfer ftf =
-    liftTCM SC.scTypeOf =<< inferFlatTermF ftf
-  typeInferComplete ftf =
-    withErrorTermF (FTermF ftf) (inferFlatTermF ftf)
 
 -- | Construct a typed term from a 'TermF' where each subterm has
 -- already been labeled with its type.
