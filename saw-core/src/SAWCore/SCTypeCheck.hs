@@ -132,7 +132,6 @@ data TCError
   | MalformedRecursor NameInfo Sort String
   | DeclError Text String
   | ErrorPos Pos TCError
-  | ErrorTerm Term TCError
   | ErrorUTerm UTerm TCError
 
 
@@ -196,11 +195,6 @@ prettyTCError e = runReader (helper e) Nothing where
     ppWithPos [ return ("Malformed declaration for " ++ show nm), return reason ]
   helper (ErrorPos p err) =
     local (\_ -> Just p) $ helper err
-  helper (ErrorTerm tm err) = do
-    info <- ppWithPos [ return ("While typechecking term:")
-                      , ishow tm ]
-    cont <- helper err
-    return (info ++ cont)
   helper (ErrorUTerm t err) =
     do info <-
          ppWithPos
