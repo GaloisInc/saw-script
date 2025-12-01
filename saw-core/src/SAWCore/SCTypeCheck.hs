@@ -61,8 +61,8 @@ import SAWCore.Name
 import SAWCore.Parser.AST (UTerm, prettyUTerm)
 import SAWCore.Parser.Position
 import SAWCore.Recognizer
-import qualified SAWCore.Term.Certified as SC
 import SAWCore.SharedTerm
+import SAWCore.Term.Certified (scRecordValue)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTermInCtx)
 
@@ -119,13 +119,13 @@ instance LiftTCM b => LiftTCM (a -> b) where
 -- | Errors that can occur during type-checking
 data TCError
   = NotSort Term
-  | NotFuncTypeInApp SC.Term SC.Term
+  | NotFuncTypeInApp Term Term
   | NotTupleType Term
   | BadTupleIndex Int Term
-  | NotRecordType SC.Term
+  | NotRecordType Term
   | BadRecordField FieldName Term
   | UnboundName Text
-  | SubtypeFailure SC.Term Term
+  | SubtypeFailure Term Term
   | EmptyVectorLit
   | NoSuchDataType NameInfo
   | NoSuchConstant NameInfo
@@ -239,86 +239,86 @@ instance Show TCError where
 
 -- | Construct a typed term from a 'TermF' where each subterm has
 -- already been labeled with its type.
-inferTermF :: TermF SC.Term -> TCM SC.Term
+inferTermF :: TermF Term -> TCM Term
 inferTermF tf =
   case tf of
     FTermF ftf ->
       inferFlatTermF ftf
     App t1 t2 ->
       do let err = NotFuncTypeInApp t1 t2
-         ty1 <- liftTCM SC.scTypeOf t1
+         ty1 <- liftTCM scTypeOf t1
          (_nm, arg_tp, _ret_tp) <- ensurePiType err ty1
          checkSubtype t2 arg_tp
-         liftTCM SC.scApply t1 t2
+         liftTCM scApply t1 t2
     Lambda x t1 t2 ->
       do void $ ensureSortType t1
-         liftTCM SC.scLambda x t1 t2
+         liftTCM scLambda x t1 t2
     Pi x t1 t2 ->
       do void $ ensureSortType t1
          void $ ensureSortType t2
-         liftTCM SC.scPi x t1 t2
+         liftTCM scPi x t1 t2
     Constant nm ->
       do mm <- liftTCM scGetModuleMap
          case lookupVarIndexInMap (nameIndex nm) mm of
            Nothing -> throwTCError $ NoSuchConstant (nameInfo nm)
-           Just _ -> liftTCM SC.scConstant nm
+           Just _ -> liftTCM scConst nm
     Variable vn tp ->
-      liftTCM SC.scVariable vn tp
+      liftTCM scVariable vn tp
 
 -- | Construct a typed term from a 'FlatTermF' where each subterm has
 -- already been labeled with its type.
-inferFlatTermF :: FlatTermF SC.Term -> TCM SC.Term
+inferFlatTermF :: FlatTermF Term -> TCM Term
 inferFlatTermF ftf =
   case ftf of
     UnitValue ->
-      liftTCM SC.scUnitValue
+      liftTCM scUnitValue
     UnitType ->
-      liftTCM SC.scUnitType
+      liftTCM scUnitType
     PairValue t1 t2 ->
-      liftTCM SC.scPairValue t1 t2
+      liftTCM scPairValue t1 t2
     PairType t1 t2 ->
       do void $ ensureSortType t1
          void $ ensureSortType t2
-         liftTCM SC.scPairType t1 t2
+         liftTCM scPairType t1 t2
     PairLeft t ->
       do void $ ensurePairType =<< liftTCM scTypeOf t
-         liftTCM SC.scPairLeft t
+         liftTCM scPairLeft t
     PairRight t ->
       do void $ ensurePairType =<< liftTCM scTypeOf t
-         liftTCM SC.scPairRight t
+         liftTCM scPairRight t
     Recursor r ->
       do mm <- liftTCM scGetModuleMap
          let d = recursorDataType r
          let s = recursorSort r
          case lookupVarIndexInMap (nameIndex d) mm of
-           Just (ResolvedDataType _dt) -> liftTCM SC.scRecursor d s
+           Just (ResolvedDataType _dt) -> liftTCM scRecursor d s
            _ -> throwTCError $ NoSuchDataType (nameInfo d)
     RecordType elems ->
       do void $ mapM (ensureSortType . snd) elems
-         liftTCM SC.scRecordType elems
+         liftTCM scRecordType elems
     RecordValue elems ->
-      liftTCM SC.scRecordValue elems
+      liftTCM scRecordValue elems
     RecordProj t fld ->
       do ty <- liftTCM scTypeOf t
          ts <- ensureRecordType (NotRecordType t) ty
          unless (Map.member fld ts) $
            throwTCError $ BadRecordField fld ty
-         liftTCM SC.scRecordProj t fld
+         liftTCM scRecordSelect t fld
     Sort s flags ->
-      liftTCM SC.scSortWithFlags s flags
+      liftTCM scSortWithFlags s flags
     ArrayValue tp vs ->
       do void $ ensureSortType tp
          tp' <- typeCheckWHNF tp
          forM_ vs $ \v_elem -> checkSubtype v_elem tp'
-         liftTCM SC.scVector tp (V.toList vs)
+         liftTCM scVector tp (V.toList vs)
     StringLit s ->
-      liftTCM SC.scString s
+      liftTCM scString s
 
 -- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
 -- result of substituting @arg@ for @x@ in the result type @b@, i.e.,
 -- @[arg/x]b@.
 -- If @fun_tp@ is not a pi type, raise the supplied error.
-applyPiTyped :: TCError -> Term -> SC.Term -> TCM Term
+applyPiTyped :: TCError -> Term -> Term -> TCM Term
 applyPiTyped err fun_tp arg =
   ensurePiType err fun_tp >>= \(nm, arg_tp, ret_tp) ->
   do checkSubtype arg arg_tp
@@ -363,7 +363,7 @@ typeCheckWHNF = liftTCM scWhnf
 
 -- | Check that one type is a subtype of another, assuming both arguments are
 -- types, i.e., that both have type Sort s for some s.
-checkSubtype :: SC.Term -> Term -> TCM ()
+checkSubtype :: Term -> Term -> TCM ()
 checkSubtype arg req_tp =
   do arg_tp' <- liftTCM scWhnf =<< liftTCM scTypeOf arg
      req_tp' <- liftTCM scWhnf req_tp
