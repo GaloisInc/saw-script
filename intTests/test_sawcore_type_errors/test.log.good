@@ -8,6 +8,9 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:7:1-7:14 (at top level)
 .:1:0:
+While typechecking term:
+  false
+.:1:0:
 Unbound name: "false"
 
  No such data type
@@ -18,6 +21,9 @@ Stack trace:
    (builtin) in fails
    test.saw:4:17-4:54 in parse
    test.saw:10:1-10:35 (at top level)
+.:1:0:
+While typechecking term:
+  String#rec Bool True False
 .:1:0:
 No such data type: ModuleIdentifier Cryptol.String
 
@@ -32,6 +38,9 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:16:1-16:26 (at top level)
 .:1:0:
+While typechecking term:
+  \ (x : True) -> x
+.:1:0:
 Not a sort
   Prelude.Bool
 
@@ -45,8 +54,7 @@ Stack trace:
    test.saw:19:1-19:27 (at top level)
 .:1:11:
 While typechecking term:
-  (x : Prelude.True)
-  -> Prelude.Bool
+  (x : True) -> Bool
 .:1:11:
 Not a sort
   Prelude.Bool
@@ -61,8 +69,7 @@ Stack trace:
    test.saw:22:1-22:28 (at top level)
 .:1:11:
 While typechecking term:
-  (x : Prelude.Bool)
-  -> Prelude.False
+  (x : Bool) -> False
 .:1:11:
 Not a sort
   Prelude.Bool
@@ -77,7 +84,7 @@ Stack trace:
    test.saw:25:1-25:21 (at top level)
 .:1:2:
 While typechecking term:
-  Prelude.True * Prelude.Nat
+  True * Nat
 .:1:2:
 Not a sort
   Prelude.Bool
@@ -92,7 +99,7 @@ Stack trace:
    test.saw:28:1-28:19 (at top level)
 .:1:2:
 While typechecking term:
-  Prelude.Bool * 5
+  Bool * 5
 .:1:2:
 Not a sort
   Prelude.Nat
@@ -107,7 +114,7 @@ Stack trace:
    test.saw:31:1-31:37 (at top level)
 .:1:0:
 While typechecking term:
-  #{foo : Prelude.Bool,bar : Prelude.False}
+  #{foo : Bool, bar : False}
 .:1:0:
 Not a sort
   Prelude.Bool
@@ -120,6 +127,9 @@ Stack trace:
    (builtin) in fails
    test.saw:4:17-4:54 in parse
    test.saw:34:1-34:20 (at top level)
+.:1:0:
+While typechecking term:
+  IsLeNat#rec
 .:1:0:
 Malformed recursor
   Prelude.IsLeNat#rec
@@ -135,7 +145,7 @@ Stack trace:
    test.saw:37:1-37:18 (at top level)
 .:1:0:
 While typechecking term:
-  Prelude.True Prelude.True
+  True True
 .:1:0:
 Function application with non-function type
 For term:
@@ -155,7 +165,7 @@ Stack trace:
    test.saw:40:1-40:15 (at top level)
 .:1:0:
 While typechecking term:
-  Prelude.True.1
+  True.1
 .:1:0:
 Tuple field projection with non-tuple type
   Prelude.Bool
@@ -170,7 +180,7 @@ Stack trace:
    test.saw:43:1-43:18 (at top level)
 .:1:0:
 While typechecking term:
-  Prelude.False.foo
+  False.foo
 .:1:0:
 Record field projection with non-record type
   Prelude.Bool
@@ -187,7 +197,7 @@ Stack trace:
    test.saw:46:1-46:34 (at top level)
 .:1:0:
 While typechecking term:
-  {a = Prelude.True,b = Prelude.False}.c
+  {a = True, b = False}.c
 .:1:0:
 Bad record field ("c") for type
   #{a : Prelude.Bool,b : Prelude.Bool}
@@ -202,7 +212,7 @@ Stack trace:
    test.saw:49:1-49:45 (at top level)
 .:1:1:
 While typechecking term:
-  (\(x : Prelude.Bool) -> Prelude.implies x Prelude.False) 5
+  (\ (x : Bool) -> implies x False) 5
 .:1:1:
 Inferred type
   Prelude.Nat
@@ -219,6 +229,12 @@ Stack trace:
    (builtin) in fails
    test.saw:4:17-4:54 in parse
    test.saw:52:1-52:38 (at top level)
+.:1:1:
+While typechecking term:
+  (\ (x : Vec 0 Bool) -> x) []
+.:1:26:
+While typechecking term:
+  []
 .:1:26:
 Empty vector literal
 
