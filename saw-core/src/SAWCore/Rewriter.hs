@@ -769,7 +769,7 @@ rewriteSharedTerm sc ss t0 =
     rewriteTop convertibleFlag t =
       do mt <- reduceSharedTerm sc t
          case mt of
-           Nothing -> let filteredRules = filter (filterRules convertibleFlag) (Net.unify_term ss (termPat t)) in
+           Nothing -> let filteredRules = filter (filterRules convertibleFlag) (Net.match_term ss (termPat t)) in
               apply convertibleFlag filteredRules t
            Just t' -> rewriteAll convertibleFlag t'
 
