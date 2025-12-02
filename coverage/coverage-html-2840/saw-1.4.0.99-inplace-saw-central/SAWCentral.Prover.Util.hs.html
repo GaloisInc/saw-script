@@ -46,10 +46,10 @@ span.spaces    { background: white }
 <span class="lineno">   27 </span><span class="decl"><span class="nottickedoff">bindAllExts sc body = scLambdaList sc (getAllVars body) body</span></span>
 <span class="lineno">   28 </span>
 <span class="lineno">   29 </span>liftCexBB :: [FiniteType] -&gt; [Bool] -&gt; Either String [FiniteValue]
-<span class="lineno">   30 </span><span class="decl"><span class="nottickedoff">liftCexBB tys bs =</span>
-<span class="lineno">   31 </span><span class="spaces">  </span><span class="nottickedoff">case readFiniteValues tys bs of</span>
-<span class="lineno">   32 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; Left &quot;Failed to lift counterexample&quot;</span>
-<span class="lineno">   33 </span><span class="spaces">    </span><span class="nottickedoff">Just fvs -&gt; Right fvs</span></span>
+<span class="lineno">   30 </span><span class="decl"><span class="istickedoff">liftCexBB tys bs =</span>
+<span class="lineno">   31 </span><span class="spaces">  </span><span class="istickedoff">case readFiniteValues tys bs of</span>
+<span class="lineno">   32 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Left &quot;Failed to lift counterexample&quot;</span></span>
+<span class="lineno">   33 </span><span class="spaces">    </span><span class="istickedoff">Just fvs -&gt; Right fvs</span></span>
 <span class="lineno">   34 </span>
 <span class="lineno">   35 </span>-- | Lift a counterexample containing little-endian words
 <span class="lineno">   36 </span>liftLECexBB :: [FiniteType] -&gt; [Bool] -&gt; Either String [FiniteValue]
