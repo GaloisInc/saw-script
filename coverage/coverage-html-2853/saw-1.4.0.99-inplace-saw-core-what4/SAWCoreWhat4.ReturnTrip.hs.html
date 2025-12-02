@@ -186,7 +186,7 @@ span.spaces    { background: white }
 <span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff">Just (Some var) -&gt;</span>
 <span class="lineno">  168 </span><span class="spaces">      </span><span class="istickedoff">case testEquality bt (B.exprType var) of</span>
 <span class="lineno">  169 </span><span class="spaces">        </span><span class="istickedoff">Just Refl -&gt; pure var</span>
-<span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff">Nothing   -&gt; <span class="nottickedoff">panic &quot;bindSawTerm&quot; [&quot;Type error&quot;]</span></span>
+<span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff">Nothing   -&gt; <span class="nottickedoff">panic &quot;bindSAWTerm&quot; [&quot;Type error&quot;]</span></span>
 <span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
 <span class="lineno">  172 </span><span class="spaces">      </span><span class="istickedoff">sbVar@(B.BoundVarExpr bv) &lt;- freshConstant sym emptySymbol bt</span>
 <span class="lineno">  173 </span><span class="spaces">      </span><span class="istickedoff">B.insertIdxValue (saw_elt_cache st) (B.bvarId bv) (SAWExpr t)</span>
