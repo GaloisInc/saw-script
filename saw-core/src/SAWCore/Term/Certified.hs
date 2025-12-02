@@ -148,7 +148,6 @@ import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.Term.Raw
-import SAWCore.Unique
 
 scGlobal :: SharedContext -> Ident -> IO Term
 scGlobal sc ident = scGlobalDef sc ident
@@ -268,7 +267,12 @@ data SharedContext = SharedContext
   , scURIEnv         :: IORef (Map URI VarIndex)
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scNextVarIndex   :: IORef VarIndex
+  , scNextTermIndex  :: IORef TermIndex
   }
+
+-- | Internal function to get the next available 'TermIndex'. Not exported.
+scFreshTermIndex :: SharedContext -> IO VarIndex
+scFreshTermIndex sc = atomicModifyIORef' (scNextTermIndex sc) (\i -> (i + 1, i))
 
 -- | Internal function to make a 'Term' from a 'TermF' with a given
 -- variable typing context and type.
@@ -280,7 +284,7 @@ scMakeTerm sc vt tf mty =
      case lookupTFM tf mty s of
        Just term -> pure term
        Nothing ->
-         do i <- getUniqueInt
+         do i <- scFreshTermIndex sc
             let term = STApp { stAppIndex = i
                              , stAppHash = hash tf
                              , stAppVarTypes = vt
@@ -379,7 +383,7 @@ scApply sc t1 t2 =
             -- simpler types, so it should always terminate.
             ty <- scInstantiateBeta sc (IntMap.singleton (vnIndex x) t2) ty1b
             let mty = maybe (Right ty) Left (asSort ty)
-            i <- getUniqueInt
+            i <- scFreshTermIndex sc
             let tf = App t1 t2
             let term =
                   STApp
@@ -1573,23 +1577,27 @@ scGlobalApply sc i ts =
 
 
 ------------------------------------------------------------
+
 -- | The default instance of the SharedContext operations.
 mkSharedContext :: IO SharedContext
-mkSharedContext = do
-  vr <- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.
-  cr <- newIORef emptyAppCache
-  gr <- newIORef HMap.empty
-  mod_map_ref <- newIORef emptyModuleMap
-  dr <- newIORef emptyDisplayNameEnv
-  ur <- newIORef Map.empty
-  return SharedContext {
-             scModuleMap = mod_map_ref
-           , scAppCache = cr
-           , scNextVarIndex = vr
-           , scDisplayNameEnv = dr
-           , scURIEnv = ur
-           , scGlobalEnv = gr
-           }
+mkSharedContext =
+  do vr <- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.
+     cr <- newIORef emptyAppCache
+     gr <- newIORef HMap.empty
+     mr <- newIORef emptyModuleMap
+     dr <- newIORef emptyDisplayNameEnv
+     ur <- newIORef Map.empty
+     tr <- newIORef (0 :: TermIndex)
+     pure $
+       SharedContext
+       { scModuleMap = mr
+       , scAppCache = cr
+       , scNextVarIndex = vr
+       , scDisplayNameEnv = dr
+       , scURIEnv = ur
+       , scGlobalEnv = gr
+       , scNextTermIndex = tr
+       }
 
 -- | Instantiate some of the named variables in the term.
 -- The 'IntMap' is keyed by 'VarIndex'.
