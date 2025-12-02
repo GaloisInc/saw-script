@@ -80,7 +80,7 @@ import qualified SAWCore.Prim as Prim
 
 
 -- | A utility type for implementing primitive functions.
---   This type allows primtives to more easily define
+--   This type allows primitives to more easily define
 --   functions that expect certain kinds of arguments,
 --   and allows the simulator to respond gracefully if
 --   the actual arguments don't match the expected filters.
