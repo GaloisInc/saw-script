@@ -1377,11 +1377,9 @@ sequentIsAxiom sc sqt =
 --   of the first sequent is sufficient to prove the second
 sequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
 sequentSubsumes sc sqt1 sqt2 =
-  do let RawSequent hs1 gs1 = sequentToRawSequent sqt1
-     let RawSequent hs2 gs2 = sequentToRawSequent sqt2
-     hypsOK  <- propsSubset sc hs1 hs2
-     conclOK <- propsSubset sc gs1 gs2
-     return (hypsOK && conclOK)
+  do let s1 = sequentToRawSequent sqt1
+     let s2 = sequentToRawSequent sqt2
+     rawSequentSubsumes sc s1 s2
 
 -- | Test if the first given sequent subsumes the
 --   second given sequent. This is a shallow syntactic
@@ -1389,10 +1387,15 @@ sequentSubsumes sc sqt1 sqt2 =
 --   of the first sequent is sufficient to prove the second
 normalizeSequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
 normalizeSequentSubsumes sc sqt1 sqt2 =
-  do RawSequent hs1 gs1 <- normalizeRawSequent sc (sequentToRawSequent sqt1)
-     RawSequent hs2 gs2 <- normalizeRawSequent sc (sequentToRawSequent sqt2)
-     hypsOK  <- propsSubset sc hs1 hs2
-     conclOK <- propsSubset sc gs1 gs2
+  do s1 <- normalizeRawSequent sc (sequentToRawSequent sqt1)
+     s2 <- normalizeRawSequent sc (sequentToRawSequent sqt2)
+     rawSequentSubsumes sc s1 s2
+
+-- | Tests that the first raw sequent subsumes the second.
+rawSequentSubsumes :: SharedContext -> RawSequent Prop -> RawSequent Prop -> IO Bool
+rawSequentSubsumes sc (RawSequent hs1 gs1) (RawSequent hs2 gs2) =
+  do hypsOK  <- propsSubset sc hs1 hs2 -- assumes no *more*
+     conclOK <- propsSubset sc gs2 gs1 -- proves no *less*
      return (hypsOK && conclOK)
 
 -- | Computes a "normalized" sequent. This applies the reversible
@@ -1468,17 +1471,16 @@ normalizeConcl sc p =
            _ -> return (RawSequent [] [p])
 
 normalizeHypBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
-normalizeHypBool sc b =
-  do body <- scWhnf sc b
-     case () of
-       _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
-         -> Just <$> normalizeConclBoolCommit sc p1
+normalizeHypBool sc b
+  -- Don't evaluate to WHNF. That would unfold Prelude.not and Prelude.and
+  | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) b
+  = Just <$> normalizeConclBoolCommit sc p1
 
-         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.and" <@> return <@> return) body
-         -> Just <$> (joinSequent <$> normalizeHypBoolCommit sc p1 <*> normalizeHypBoolCommit sc p2)
+  | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.and" <@> return <@> return) b
+  = Just <$> (joinSequent <$> normalizeHypBoolCommit sc p1 <*> normalizeHypBoolCommit sc p2)
 
-         | otherwise
-         -> return Nothing
+  | otherwise
+  = return Nothing
 
 normalizeHypBoolCommit :: SharedContext -> Term -> IO (RawSequent Prop)
 normalizeHypBoolCommit sc b =
@@ -1488,17 +1490,19 @@ normalizeHypBoolCommit sc b =
                    return (RawSequent [p] [])
 
 normalizeConclBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
-normalizeConclBool sc b =
-  do body <- scWhnf sc b
-     case () of
-       _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
-         -> Just <$> normalizeHypBoolCommit sc p1
+normalizeConclBool sc b
+  -- Don't evaluate to WHNF. That would unfold Prelude.not, Prelude.or and Prelude.implies
+  | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) b
+  = Just <$> normalizeHypBoolCommit sc p1
 
-         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.or" <@> return <@> return) body
-         -> Just <$> (joinSequent <$> normalizeConclBoolCommit sc p1 <*> normalizeConclBoolCommit sc p2)
+  | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.or" <@> return <@> return) b
+  = Just <$> (joinSequent <$> normalizeConclBoolCommit sc p1 <*> normalizeConclBoolCommit sc p2)
 
-         | otherwise
-         -> return Nothing
+  | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.implies" <@> return <@> return) b
+  = Just <$> (joinSequent <$> normalizeHypBoolCommit sc p1 <*> normalizeConclBoolCommit sc p2)
+
+  | otherwise
+  = return Nothing
 
 normalizeConclBoolCommit :: SharedContext -> Term -> IO (RawSequent Prop)
 normalizeConclBoolCommit sc b =
