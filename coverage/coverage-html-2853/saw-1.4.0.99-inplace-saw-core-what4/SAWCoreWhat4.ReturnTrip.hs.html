@@ -1,0 +1,977 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>-----------------------------------------------------------------------
+<span class="lineno">    2 </span>-- |
+<span class="lineno">    3 </span>-- Module           : SAWCoreWhat4.ReturnTrip
+<span class="lineno">    4 </span>-- Description      : Translation from What4 back to SawCore
+<span class="lineno">    5 </span>-- Copyright        : (c) Galois, Inc 2014-2021
+<span class="lineno">    6 </span>-- License          : BSD3
+<span class="lineno">    7 </span>-- Maintainer       : Rob Dockins &lt;rdockins@galois.com&gt;
+<span class="lineno">    8 </span>-- Stability        : provisional
+<span class="lineno">    9 </span>------------------------------------------------------------------------
+<span class="lineno">   10 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">   11 </span>{-# LANGUAGE KindSignatures #-}
+<span class="lineno">   12 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   13 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   14 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   15 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>module SAWCoreWhat4.ReturnTrip
+<span class="lineno">   18 </span>  ( newSAWCoreState
+<span class="lineno">   19 </span>  , SAWCoreState(..)
+<span class="lineno">   20 </span>  , SAWExpr(..)
+<span class="lineno">   21 </span>  , baseSCType
+<span class="lineno">   22 </span>  , bindSAWTerm
+<span class="lineno">   23 </span>  , toSC
+<span class="lineno">   24 </span>  , sawCreateVar
+<span class="lineno">   25 </span>  , sawRegisterSymFunInterp
+<span class="lineno">   26 </span>  , getInputs
+<span class="lineno">   27 </span>  ) where
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>import           Control.Lens
+<span class="lineno">   30 </span>import           Control.Monad
+<span class="lineno">   31 </span>import qualified Data.BitVector.Sized as BV
+<span class="lineno">   32 </span>import           Data.IORef
+<span class="lineno">   33 </span>import           Data.IntMap (IntMap)
+<span class="lineno">   34 </span>import qualified Data.IntMap as IntMap
+<span class="lineno">   35 </span>import           Data.List.NonEmpty (NonEmpty(..))
+<span class="lineno">   36 </span>import           Data.Map ( Map )
+<span class="lineno">   37 </span>import qualified Data.Map as Map
+<span class="lineno">   38 </span>import qualified Data.Parameterized.Context as Ctx
+<span class="lineno">   39 </span>import           Data.Parameterized.Nonce
+<span class="lineno">   40 </span>import           Data.Parameterized.Some
+<span class="lineno">   41 </span>import           Data.Parameterized.TraversableFC
+<span class="lineno">   42 </span>import           Data.Ratio
+<span class="lineno">   43 </span>import           Data.Sequence (Seq)
+<span class="lineno">   44 </span>import qualified Data.Sequence as Seq
+<span class="lineno">   45 </span>import           Data.Word(Word64)
+<span class="lineno">   46 </span>import           Data.Text (Text)
+<span class="lineno">   47 </span>import qualified Data.Text as Text
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>import           What4.BaseTypes
+<span class="lineno">   50 </span>import           What4.Interface
+<span class="lineno">   51 </span>import qualified What4.Expr.ArrayUpdateMap as AUM
+<span class="lineno">   52 </span>import qualified What4.Expr.Builder as B
+<span class="lineno">   53 </span>import qualified What4.Expr.BoolMap as BM
+<span class="lineno">   54 </span>import qualified What4.Expr.WeightedSum as WSum
+<span class="lineno">   55 </span>import qualified What4.SemiRing as B
+<span class="lineno">   56 </span>import           What4.Symbol
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>import qualified SAWCore.Name as SC
+<span class="lineno">   59 </span>import qualified SAWCore.SharedTerm as SC
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>import           SAWCoreWhat4.Panic
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>data SAWCoreState n
+<span class="lineno">   64 </span>  = SAWCoreState
+<span class="lineno">   65 </span>    { <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_ctx</span></span></span>       :: SC.SharedContext                         -- ^ the main SAWCore datastructure for building shared terms
+<span class="lineno">   66 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_inputs</span></span></span>    :: IORef (Seq (SC.VarName, SC.Term))
+<span class="lineno">   67 </span>      -- ^ a record of all the symbolic input variables created so far,
+<span class="lineno">   68 </span>      --   in the order they were created
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_symMap</span></span></span> :: IORef (Map Word64 (SC.SharedContext -&gt; [SC.Term] -&gt; IO SC.Term))
+<span class="lineno">   71 </span>      -- ^ What to do with uninterpreted functions.
+<span class="lineno">   72 </span>      -- The key is the &quot;indexValue&quot; of the &quot;symFunId&quot; for the function
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_elt_cache</span></span></span> :: B.IdxCache n SAWExpr
+<span class="lineno">   75 </span>      -- ^ cache mapping a What4 variable nonce to its corresponding SAWCore term.
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_elt_cache_r</span></span></span> :: IORef (IntMap (Some (B.Expr n)))
+<span class="lineno">   78 </span>      -- ^ reverse cache mapping a SAWCore TermIndex to its corresponding What4 variable.
+<span class="lineno">   79 </span>      -- 'saw_elt_cache' and 'saw_elt_cache_r' implement a bidirectional map between
+<span class="lineno">   80 </span>      -- SAWCore terms and What4 variables.
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>    }
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>newSAWCoreState ::
+<span class="lineno">   85 </span>  SC.SharedContext -&gt;
+<span class="lineno">   86 </span>  IO (SAWCoreState n)
+<span class="lineno">   87 </span><span class="decl"><span class="istickedoff">newSAWCoreState sc =</span>
+<span class="lineno">   88 </span><span class="spaces">  </span><span class="istickedoff">do inpr &lt;- newIORef <span class="nottickedoff">Seq.empty</span></span>
+<span class="lineno">   89 </span><span class="spaces">     </span><span class="istickedoff">ch   &lt;- B.newIdxCache</span>
+<span class="lineno">   90 </span><span class="spaces">     </span><span class="istickedoff">ch_r &lt;- newIORef IntMap.empty</span>
+<span class="lineno">   91 </span><span class="spaces">     </span><span class="istickedoff">mr   &lt;- newIORef <span class="nottickedoff">Map.empty</span></span>
+<span class="lineno">   92 </span><span class="spaces">     </span><span class="istickedoff">return SAWCoreState</span>
+<span class="lineno">   93 </span><span class="spaces">            </span><span class="istickedoff">{ saw_ctx = sc</span>
+<span class="lineno">   94 </span><span class="spaces">            </span><span class="istickedoff">, saw_inputs = inpr</span>
+<span class="lineno">   95 </span><span class="spaces">            </span><span class="istickedoff">, saw_symMap = mr</span>
+<span class="lineno">   96 </span><span class="spaces">            </span><span class="istickedoff">, saw_elt_cache = ch</span>
+<span class="lineno">   97 </span><span class="spaces">            </span><span class="istickedoff">, saw_elt_cache_r = ch_r</span>
+<span class="lineno">   98 </span><span class="spaces">            </span><span class="istickedoff">}</span></span>
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>data SAWExpr (bt :: BaseType) where
+<span class="lineno">  101 </span>  SAWExpr :: !SC.Term -&gt; SAWExpr bt
+<span class="lineno">  102 </span>
+<span class="lineno">  103 </span>  -- This is a term that represents an integer, but has an
+<span class="lineno">  104 </span>  -- implicit integer-to-real conversion.
+<span class="lineno">  105 </span>  IntToRealSAWExpr :: !(SAWExpr BaseIntegerType) -&gt; SAWExpr BaseRealType
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>getInputs :: SAWCoreState n -&gt; IO (Seq (SC.VarName, SC.Term))
+<span class="lineno">  108 </span><span class="decl"><span class="nottickedoff">getInputs st = readIORef (saw_inputs st)</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>baseSCType ::
+<span class="lineno">  111 </span>  sym -&gt;
+<span class="lineno">  112 </span>  SC.SharedContext -&gt;
+<span class="lineno">  113 </span>  BaseTypeRepr tp -&gt;
+<span class="lineno">  114 </span>  IO SC.Term
+<span class="lineno">  115 </span><span class="decl"><span class="istickedoff">baseSCType sym sc bt =</span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">case bt of</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">BaseBoolRepr -&gt; SC.scBoolType sc</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">BaseBVRepr w -&gt; SC.scBitvector sc $ fromIntegral (natValue w)</span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">SC.scIntegerType sc</span></span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff">BaseArrayRepr indexTypes range</span>
+<span class="lineno">  121 </span><span class="spaces">      </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx_type &lt;- indexTypes -&gt;</span>
+<span class="lineno">  122 </span><span class="spaces">        </span><span class="istickedoff">do sc_idx_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc idx_type</span>
+<span class="lineno">  123 </span><span class="spaces">           </span><span class="istickedoff">sc_elm_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc range</span>
+<span class="lineno">  124 </span><span class="spaces">           </span><span class="istickedoff">SC.scArrayType sc sc_idx_type sc_elm_type</span>
+<span class="lineno">  125 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
+<span class="lineno">  126 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support multidimensional Arrays: baseSCType&quot;</span></span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff">BaseFloatRepr _ -&gt;</span>
+<span class="lineno">  128 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support IEEE-754 floating point values: baseSCType&quot;</span></span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">BaseStringRepr _ -&gt;</span>
+<span class="lineno">  130 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support string values: baseSCType&quot;</span></span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">BaseComplexRepr  -&gt;</span>
+<span class="lineno">  132 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support complex values: baseSCType&quot;</span></span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">BaseRealRepr     -&gt;</span>
+<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values: baseSCType&quot;</span></span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">BaseStructRepr ts -&gt;</span>
+<span class="lineno">  136 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">SC.scTupleType sc =&lt;&lt; baseSCTypes ts</span></span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff">baseSCTypes :: Ctx.Assignment BaseTypeRepr args -&gt; IO [SC.Term]</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">baseSCTypes Ctx.Empty = return []</span></span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">baseSCTypes (xs Ctx.:&gt; x) =</span></span>
+<span class="lineno">  141 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do ts &lt;- baseSCTypes xs</span></span>
+<span class="lineno">  142 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">t &lt;- baseSCType sym sc x</span></span>
+<span class="lineno">  143 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return (ts ++ [t])</span></span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>-- | Create a new symbolic variable.
+<span class="lineno">  146 </span>sawCreateVar :: SAWCoreState n
+<span class="lineno">  147 </span>             -&gt; Text -- ^ the name of the variable
+<span class="lineno">  148 </span>             -&gt; SC.Term
+<span class="lineno">  149 </span>             -&gt; IO SC.Term
+<span class="lineno">  150 </span><span class="decl"><span class="istickedoff">sawCreateVar st nm tp = do</span>
+<span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">x &lt;- SC.scFreshVarName sc nm</span>
+<span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- SC.scVariable sc x tp</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">modifyIORef (saw_inputs st) <span class="nottickedoff">(\xs -&gt; xs Seq.|&gt; (x, tp))</span></span>
+<span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">return t</span></span>
+<span class="lineno">  156 </span>
+<span class="lineno">  157 </span>bindSAWTerm ::
+<span class="lineno">  158 </span>  B.ExprBuilder n st fs -&gt;
+<span class="lineno">  159 </span>  SAWCoreState n -&gt;
+<span class="lineno">  160 </span>  BaseTypeRepr bt -&gt;
+<span class="lineno">  161 </span>  SC.Term -&gt;
+<span class="lineno">  162 </span>  IO (B.Expr n bt)
+<span class="lineno">  163 </span><span class="decl"><span class="istickedoff">bindSAWTerm sym st bt t = do</span>
+<span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">ch_r &lt;- readIORef (saw_elt_cache_r st)</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">let idx = SC.termIndex t</span>
+<span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">case IntMap.lookup idx ch_r of</span>
+<span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff">Just (Some var) -&gt;</span>
+<span class="lineno">  168 </span><span class="spaces">      </span><span class="istickedoff">case testEquality bt (B.exprType var) of</span>
+<span class="lineno">  169 </span><span class="spaces">        </span><span class="istickedoff">Just Refl -&gt; pure var</span>
+<span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff">Nothing   -&gt; <span class="nottickedoff">panic &quot;bindSawTerm&quot; [&quot;Type error&quot;]</span></span>
+<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">  172 </span><span class="spaces">      </span><span class="istickedoff">sbVar@(B.BoundVarExpr bv) &lt;- freshConstant sym emptySymbol bt</span>
+<span class="lineno">  173 </span><span class="spaces">      </span><span class="istickedoff">B.insertIdxValue (saw_elt_cache st) (B.bvarId bv) (SAWExpr t)</span>
+<span class="lineno">  174 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef' (saw_elt_cache_r st) (IntMap.insert idx (Some sbVar))</span>
+<span class="lineno">  175 </span><span class="spaces">      </span><span class="istickedoff">pure sbVar</span></span>
+<span class="lineno">  176 </span>
+<span class="lineno">  177 </span>-- | Register an interpretation for a symbolic function. This is not
+<span class="lineno">  178 </span>-- used during simulation, but rather, when we translate Crucible
+<span class="lineno">  179 </span>-- values back into SAW. The interpretation function takes a list of
+<span class="lineno">  180 </span>-- arguments in regular (left-to-right) order.
+<span class="lineno">  181 </span>sawRegisterSymFunInterp ::
+<span class="lineno">  182 </span>  SAWCoreState n -&gt;
+<span class="lineno">  183 </span>  B.ExprSymFn n args ret -&gt;
+<span class="lineno">  184 </span>  (SC.SharedContext -&gt; [SC.Term] -&gt; IO SC.Term) -&gt;
+<span class="lineno">  185 </span>  IO ()
+<span class="lineno">  186 </span><span class="decl"><span class="istickedoff">sawRegisterSymFunInterp st f i =</span>
+<span class="lineno">  187 </span><span class="spaces">  </span><span class="istickedoff">modifyIORef (saw_symMap st) <span class="nottickedoff">(Map.insert (indexValue (B.symFnId f)) i)</span></span></span>
+<span class="lineno">  188 </span>
+<span class="lineno">  189 </span>toSC :: B.ExprBuilder n st fs -&gt; SAWCoreState n -&gt; B.Expr n tp -&gt; IO SC.Term
+<span class="lineno">  190 </span><span class="decl"><span class="istickedoff">toSC sym st elt = evaluateExpr sym st (saw_ctx st) (saw_elt_cache st) elt</span></span>
+<span class="lineno">  191 </span>
+<span class="lineno">  192 </span>
+<span class="lineno">  193 </span>-- | Create a Real SAWELT value from a Rational.
+<span class="lineno">  194 </span>--
+<span class="lineno">  195 </span>-- This fails on non-integer expressions.
+<span class="lineno">  196 </span>scRealLit ::
+<span class="lineno">  197 </span>  sym -&gt;
+<span class="lineno">  198 </span>  SC.SharedContext -&gt;
+<span class="lineno">  199 </span>  Rational -&gt;
+<span class="lineno">  200 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  201 </span><span class="decl"><span class="nottickedoff">scRealLit sym sc r</span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">| denominator r /= 1 =</span>
+<span class="lineno">  203 </span><span class="spaces">    </span><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span>
+<span class="lineno">  204 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  205 </span><span class="spaces">    </span><span class="nottickedoff">IntToRealSAWExpr &lt;$&gt; scIntLit sc (numerator r)</span></span>
+<span class="lineno">  206 </span>
+<span class="lineno">  207 </span>-- | Create a SAWCore term with type 'Integer' from a Haskell Integer.
+<span class="lineno">  208 </span>scIntLit :: SC.SharedContext -&gt; Integer -&gt; IO (SAWExpr BaseIntegerType)
+<span class="lineno">  209 </span><span class="decl"><span class="nottickedoff">scIntLit sc i</span>
+<span class="lineno">  210 </span><span class="spaces">  </span><span class="nottickedoff">| i &gt;= 0 =</span>
+<span class="lineno">  211 </span><span class="spaces">    </span><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scNatToInt sc =&lt;&lt; SC.scNat sc (fromInteger i))</span>
+<span class="lineno">  212 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scIntNeg sc =&lt;&lt; SC.scNatToInt sc =&lt;&lt; SC.scNat sc (fromInteger (negate i)))</span></span>
+<span class="lineno">  214 </span>
+<span class="lineno">  215 </span>scBvLit :: SC.SharedContext -&gt; NatRepr w -&gt; BV.BV w -&gt; IO (SAWExpr (BaseBVType w))
+<span class="lineno">  216 </span><span class="decl"><span class="istickedoff">scBvLit sc w bv = SAWExpr &lt;$&gt; SC.scBvConst sc (natValue w) (BV.asUnsigned bv)</span></span>
+<span class="lineno">  217 </span>
+<span class="lineno">  218 </span>
+<span class="lineno">  219 </span>scRealCmpop ::
+<span class="lineno">  220 </span>  (SC.SharedContext -&gt; SAWExpr BaseIntegerType -&gt; SAWExpr BaseIntegerType -&gt; IO (SAWExpr BaseBoolType)) -&gt;
+<span class="lineno">  221 </span>  sym -&gt;
+<span class="lineno">  222 </span>  SC.SharedContext -&gt;
+<span class="lineno">  223 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  224 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  225 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  226 </span><span class="decl"><span class="nottickedoff">scRealCmpop intOp _ sc (IntToRealSAWExpr x) (IntToRealSAWExpr y) =</span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="nottickedoff">intOp sc x y</span>
+<span class="lineno">  228 </span><span class="spaces"></span><span class="nottickedoff">scRealCmpop _ sym _ _ _ =</span>
+<span class="lineno">  229 </span><span class="spaces">  </span><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span>
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>scRealBinop ::
+<span class="lineno">  232 </span>  (SC.SharedContext -&gt; SAWExpr BaseIntegerType -&gt; SAWExpr BaseIntegerType -&gt; IO (SAWExpr BaseIntegerType)) -&gt;
+<span class="lineno">  233 </span>  sym -&gt;
+<span class="lineno">  234 </span>  SC.SharedContext -&gt;
+<span class="lineno">  235 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  236 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  237 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  238 </span><span class="decl"><span class="nottickedoff">scRealBinop intOp _ sc (IntToRealSAWExpr x) (IntToRealSAWExpr y) =</span>
+<span class="lineno">  239 </span><span class="spaces">  </span><span class="nottickedoff">IntToRealSAWExpr &lt;$&gt; intOp sc x y</span>
+<span class="lineno">  240 </span><span class="spaces"></span><span class="nottickedoff">scRealBinop _ sym _ _ _ =</span>
+<span class="lineno">  241 </span><span class="spaces">  </span><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span>
+<span class="lineno">  242 </span>
+<span class="lineno">  243 </span>
+<span class="lineno">  244 </span>scIntBinop ::
+<span class="lineno">  245 </span>  (SC.SharedContext -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) {- ^ operation on integers -} -&gt;
+<span class="lineno">  246 </span>  SC.SharedContext -&gt;
+<span class="lineno">  247 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  248 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  249 </span>  IO (SAWExpr BaseIntegerType)
+<span class="lineno">  250 </span><span class="decl"><span class="nottickedoff">scIntBinop intOp sc (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="nottickedoff">SAWExpr &lt;$&gt; intOp sc x y</span></span>
+<span class="lineno">  252 </span>
+<span class="lineno">  253 </span>scIntCmpop ::
+<span class="lineno">  254 </span>  (SC.SharedContext -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) {- ^ operation on integers -} -&gt;
+<span class="lineno">  255 </span>  SC.SharedContext -&gt;
+<span class="lineno">  256 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  257 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  258 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  259 </span><span class="decl"><span class="istickedoff">scIntCmpop intOp sc (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">SAWExpr &lt;$&gt; intOp sc x y</span></span>
+<span class="lineno">  261 </span>
+<span class="lineno">  262 </span>scAddReal ::
+<span class="lineno">  263 </span>  sym -&gt;
+<span class="lineno">  264 </span>  SC.SharedContext -&gt;
+<span class="lineno">  265 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  266 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  267 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  268 </span><span class="decl"><span class="nottickedoff">scAddReal = scRealBinop scAddInt</span></span>
+<span class="lineno">  269 </span>
+<span class="lineno">  270 </span>scAddInt :: SC.SharedContext
+<span class="lineno">  271 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  272 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  273 </span>            -&gt; IO (SAWExpr BaseIntegerType)
+<span class="lineno">  274 </span><span class="decl"><span class="nottickedoff">scAddInt = scIntBinop SC.scIntAdd</span></span>
+<span class="lineno">  275 </span>
+<span class="lineno">  276 </span>
+<span class="lineno">  277 </span>scMulReal ::
+<span class="lineno">  278 </span>  sym -&gt;
+<span class="lineno">  279 </span>  SC.SharedContext -&gt;
+<span class="lineno">  280 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  281 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  282 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  283 </span><span class="decl"><span class="nottickedoff">scMulReal = scRealBinop scMulInt</span></span>
+<span class="lineno">  284 </span>
+<span class="lineno">  285 </span>scMulInt ::    SC.SharedContext
+<span class="lineno">  286 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  287 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  288 </span>            -&gt; IO (SAWExpr BaseIntegerType)
+<span class="lineno">  289 </span><span class="decl"><span class="nottickedoff">scMulInt = scIntBinop SC.scIntMul</span></span>
+<span class="lineno">  290 </span>
+<span class="lineno">  291 </span>scIteReal ::
+<span class="lineno">  292 </span>  sym -&gt;
+<span class="lineno">  293 </span>  SC.SharedContext -&gt;
+<span class="lineno">  294 </span>  SC.Term -&gt;
+<span class="lineno">  295 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  296 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  297 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  298 </span><span class="decl"><span class="nottickedoff">scIteReal sym sc p = scRealBinop (\sc' -&gt; scIteInt sc' p) sym sc</span></span>
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>scIteInt :: SC.SharedContext
+<span class="lineno">  301 </span>            -&gt; SC.Term
+<span class="lineno">  302 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  303 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  304 </span>            -&gt; IO (SAWExpr BaseIntegerType)
+<span class="lineno">  305 </span><span class="decl"><span class="nottickedoff">scIteInt sc p = scIntBinop</span>
+<span class="lineno">  306 </span><span class="spaces">    </span><span class="nottickedoff">(\sc' x y -&gt; SC.scIntegerType sc &gt;&gt;= \tp -&gt; SC.scIte sc' tp p x y)</span>
+<span class="lineno">  307 </span><span class="spaces">    </span><span class="nottickedoff">sc</span></span>
+<span class="lineno">  308 </span>
+<span class="lineno">  309 </span>scIte ::
+<span class="lineno">  310 </span>  sym -&gt;
+<span class="lineno">  311 </span>  SC.SharedContext -&gt;
+<span class="lineno">  312 </span>  BaseTypeRepr tp -&gt;
+<span class="lineno">  313 </span>  SAWExpr BaseBoolType -&gt;
+<span class="lineno">  314 </span>  SAWExpr tp -&gt;
+<span class="lineno">  315 </span>  SAWExpr tp -&gt;
+<span class="lineno">  316 </span>  IO (SAWExpr tp)
+<span class="lineno">  317 </span><span class="decl"><span class="istickedoff">scIte sym sc tp (SAWExpr p) x y =</span>
+<span class="lineno">  318 </span><span class="spaces">  </span><span class="istickedoff">case tp of</span>
+<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">BaseRealRepr    -&gt; <span class="nottickedoff">scIteReal sym sc p x y</span></span>
+<span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">scIteInt sc p x y</span></span>
+<span class="lineno">  321 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  322 </span><span class="spaces">      </span><span class="istickedoff">do tp' &lt;- baseSCType <span class="nottickedoff">sym</span> sc tp</span>
+<span class="lineno">  323 </span><span class="spaces">         </span><span class="istickedoff">x' &lt;- termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> x</span>
+<span class="lineno">  324 </span><span class="spaces">         </span><span class="istickedoff">y' &lt;- termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> y</span>
+<span class="lineno">  325 </span><span class="spaces">         </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scIte sc tp' p x' y'</span></span>
+<span class="lineno">  326 </span>
+<span class="lineno">  327 </span>
+<span class="lineno">  328 </span>scRealEq ::
+<span class="lineno">  329 </span>  sym -&gt;
+<span class="lineno">  330 </span>  SC.SharedContext -&gt;
+<span class="lineno">  331 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  332 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  333 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  334 </span><span class="decl"><span class="nottickedoff">scRealEq = scRealCmpop scIntEq</span></span>
+<span class="lineno">  335 </span>
+<span class="lineno">  336 </span>scIntEq :: SC.SharedContext
+<span class="lineno">  337 </span>        -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  338 </span>        -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  339 </span>        -&gt; IO (SAWExpr BaseBoolType)
+<span class="lineno">  340 </span><span class="decl"><span class="istickedoff">scIntEq = scIntCmpop SC.scIntEq</span></span>
+<span class="lineno">  341 </span>
+<span class="lineno">  342 </span>scBoolEq ::
+<span class="lineno">  343 </span>  SC.SharedContext -&gt;
+<span class="lineno">  344 </span>  SAWExpr BaseBoolType -&gt;
+<span class="lineno">  345 </span>  SAWExpr BaseBoolType -&gt;
+<span class="lineno">  346 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  347 </span><span class="decl"><span class="istickedoff">scBoolEq sc (SAWExpr x) (SAWExpr y) = SAWExpr &lt;$&gt; SC.scBoolEq sc x y</span></span>
+<span class="lineno">  348 </span>
+<span class="lineno">  349 </span>scEq ::
+<span class="lineno">  350 </span>  sym -&gt;
+<span class="lineno">  351 </span>  SC.SharedContext -&gt;
+<span class="lineno">  352 </span>  BaseTypeRepr tp -&gt;
+<span class="lineno">  353 </span>  SAWExpr tp -&gt;
+<span class="lineno">  354 </span>  SAWExpr tp -&gt;
+<span class="lineno">  355 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  356 </span><span class="decl"><span class="istickedoff">scEq sym sc tp x y =</span>
+<span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">case tp of</span>
+<span class="lineno">  358 </span><span class="spaces">    </span><span class="istickedoff">BaseBoolRepr    -&gt; scBoolEq sc x y</span>
+<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">BaseRealRepr    -&gt; <span class="nottickedoff">scRealEq sym sc x y</span></span>
+<span class="lineno">  360 </span><span class="spaces">    </span><span class="istickedoff">BaseIntegerRepr -&gt; scIntEq sc x y</span>
+<span class="lineno">  361 </span><span class="spaces">    </span><span class="istickedoff">BaseArrayRepr idxTypes range</span>
+<span class="lineno">  362 </span><span class="spaces">      </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx_type &lt;- <span class="nottickedoff">idxTypes</span> -&gt;</span>
+<span class="lineno">  363 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do let SAWExpr x' = x</span></span>
+<span class="lineno">  364 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">let SAWExpr y' = y</span></span>
+<span class="lineno">  365 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc_idx_type &lt;- baseSCType sym sc idx_type</span></span>
+<span class="lineno">  366 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc_elm_type &lt;- baseSCType sym sc range</span></span>
+<span class="lineno">  367 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; SC.scArrayEq sc sc_idx_type sc_elm_type x' y'</span></span>
+<span class="lineno">  368 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
+<span class="lineno">  369 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unsupported sym (&quot;SAW backend: equality comparison on unsupported multidimensional array type:&quot; ++ show tp)</span></span>
+<span class="lineno">  370 </span><span class="spaces">    </span><span class="istickedoff">BaseBVRepr w    -&gt;</span>
+<span class="lineno">  371 </span><span class="spaces">      </span><span class="istickedoff">do let SAWExpr x' = x</span>
+<span class="lineno">  372 </span><span class="spaces">         </span><span class="istickedoff">let SAWExpr y' = y</span>
+<span class="lineno">  373 </span><span class="spaces">         </span><span class="istickedoff">w' &lt;- SC.scNat sc $ fromIntegral (natValue w)</span>
+<span class="lineno">  374 </span><span class="spaces">         </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvEq sc w' x' y'</span>
+<span class="lineno">  375 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">unsupported sym (&quot;SAW backend: equality comparison on unsupported type:&quot; ++ show tp)</span></span></span>
+<span class="lineno">  376 </span>
+<span class="lineno">  377 </span>
+<span class="lineno">  378 </span>scRealLe, scRealLt ::
+<span class="lineno">  379 </span>  sym -&gt;
+<span class="lineno">  380 </span>  SC.SharedContext -&gt;
+<span class="lineno">  381 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  382 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  383 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  384 </span><span class="decl"><span class="nottickedoff">scRealLe = scRealCmpop scIntLe</span></span>
+<span class="lineno">  385 </span><span class="decl"><span class="nottickedoff">scRealLt = scRealCmpop scIntLt</span></span>
+<span class="lineno">  386 </span>
+<span class="lineno">  387 </span>scIntLe, scIntLt ::
+<span class="lineno">  388 </span>  SC.SharedContext -&gt;
+<span class="lineno">  389 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  390 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  391 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  392 </span><span class="decl"><span class="nottickedoff">scIntLe = scIntCmpop SC.scIntLe</span></span>
+<span class="lineno">  393 </span><span class="decl"><span class="nottickedoff">scIntLt = scIntCmpop SC.scIntLt</span></span>
+<span class="lineno">  394 </span>
+<span class="lineno">  395 </span>scBvAdd ::
+<span class="lineno">  396 </span>  SC.SharedContext -&gt;
+<span class="lineno">  397 </span>  NatRepr w -&gt;
+<span class="lineno">  398 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  399 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  400 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  401 </span><span class="decl"><span class="istickedoff">scBvAdd sc w (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  402 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  403 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvAdd sc n x y</span></span>
+<span class="lineno">  404 </span>
+<span class="lineno">  405 </span>scBvNot ::
+<span class="lineno">  406 </span>  SC.SharedContext -&gt;
+<span class="lineno">  407 </span>  NatRepr w -&gt;
+<span class="lineno">  408 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  409 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  410 </span><span class="decl"><span class="istickedoff">scBvNot sc w (SAWExpr x) =</span>
+<span class="lineno">  411 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  412 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvNot sc n x</span></span>
+<span class="lineno">  413 </span>
+<span class="lineno">  414 </span>scBvMul ::
+<span class="lineno">  415 </span>  SC.SharedContext -&gt;
+<span class="lineno">  416 </span>  NatRepr w -&gt;
+<span class="lineno">  417 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  418 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  419 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  420 </span><span class="decl"><span class="istickedoff">scBvMul sc w (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  421 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  422 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvMul sc n x y</span></span>
+<span class="lineno">  423 </span>
+<span class="lineno">  424 </span>scBvAnd ::
+<span class="lineno">  425 </span>  SC.SharedContext -&gt;
+<span class="lineno">  426 </span>  NatRepr w -&gt;
+<span class="lineno">  427 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  428 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  429 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  430 </span><span class="decl"><span class="istickedoff">scBvAnd sc w (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  431 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  432 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvAnd sc n x y</span></span>
+<span class="lineno">  433 </span>
+<span class="lineno">  434 </span>scBvXor ::
+<span class="lineno">  435 </span>  SC.SharedContext -&gt;
+<span class="lineno">  436 </span>  NatRepr w -&gt;
+<span class="lineno">  437 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  438 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  439 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  440 </span><span class="decl"><span class="istickedoff">scBvXor sc w (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  441 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  442 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvXor sc n x y</span></span>
+<span class="lineno">  443 </span>
+<span class="lineno">  444 </span>termOfSAWExpr ::
+<span class="lineno">  445 </span>  sym -&gt;
+<span class="lineno">  446 </span>  SC.SharedContext -&gt;
+<span class="lineno">  447 </span>  SAWExpr tp -&gt; IO SC.Term
+<span class="lineno">  448 </span><span class="decl"><span class="istickedoff">termOfSAWExpr sym _sc expr =</span>
+<span class="lineno">  449 </span><span class="spaces">  </span><span class="istickedoff">case expr of</span>
+<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">SAWExpr t -&gt; return t</span>
+<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">IntToRealSAWExpr _</span>
+<span class="lineno">  452 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span></span>
+<span class="lineno">  453 </span>
+<span class="lineno">  454 </span>applyExprSymFn ::
+<span class="lineno">  455 </span>  forall n st fs args ret.
+<span class="lineno">  456 </span>  B.ExprBuilder n st fs -&gt;
+<span class="lineno">  457 </span>  SAWCoreState n -&gt;
+<span class="lineno">  458 </span>  SC.SharedContext -&gt;
+<span class="lineno">  459 </span>  B.ExprSymFn n args ret -&gt;
+<span class="lineno">  460 </span>  Ctx.Assignment SAWExpr args -&gt;
+<span class="lineno">  461 </span>  IO (SAWExpr ret)
+<span class="lineno">  462 </span><span class="decl"><span class="nottickedoff">applyExprSymFn sym st sc fn args =</span>
+<span class="lineno">  463 </span><span class="spaces">  </span><span class="nottickedoff">do mp &lt;- readIORef (saw_symMap st)</span>
+<span class="lineno">  464 </span><span class="spaces">     </span><span class="nottickedoff">mk &lt;-</span>
+<span class="lineno">  465 </span><span class="spaces">       </span><span class="nottickedoff">case Map.lookup (indexValue (B.symFnId fn)) mp of</span>
+<span class="lineno">  466 </span><span class="spaces">         </span><span class="nottickedoff">Nothing -&gt; panic &quot;applyExprSymFn&quot; [</span>
+<span class="lineno">  467 </span><span class="spaces">                        </span><span class="nottickedoff">&quot;Unknown symbolic function &quot; &lt;&gt; Text.pack (show fn)</span>
+<span class="lineno">  468 </span><span class="spaces">                    </span><span class="nottickedoff">]</span>
+<span class="lineno">  469 </span><span class="spaces">         </span><span class="nottickedoff">Just mk -&gt; return mk</span>
+<span class="lineno">  470 </span><span class="spaces">     </span><span class="nottickedoff">ts &lt;- evaluateAsgn args</span>
+<span class="lineno">  471 </span><span class="spaces">     </span><span class="nottickedoff">SAWExpr &lt;$&gt; mk sc (reverse ts)</span>
+<span class="lineno">  472 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  473 </span><span class="spaces">    </span><span class="nottickedoff">evaluateAsgn :: Ctx.Assignment SAWExpr args' -&gt; IO [SC.Term]</span>
+<span class="lineno">  474 </span><span class="spaces">    </span><span class="nottickedoff">evaluateAsgn Ctx.Empty = return []</span>
+<span class="lineno">  475 </span><span class="spaces">    </span><span class="nottickedoff">evaluateAsgn (xs Ctx.:&gt; x) =</span>
+<span class="lineno">  476 </span><span class="spaces">      </span><span class="nottickedoff">do vs &lt;- evaluateAsgn xs</span>
+<span class="lineno">  477 </span><span class="spaces">         </span><span class="nottickedoff">v &lt;- termOfSAWExpr sym sc x</span>
+<span class="lineno">  478 </span><span class="spaces">         </span><span class="nottickedoff">return (v : vs)</span></span>
+<span class="lineno">  479 </span>
+<span class="lineno">  480 </span>{- | Declare that we don't support something or other.
+<span class="lineno">  481 </span>This aborts the current path of execution, and adds a proof
+<span class="lineno">  482 </span>obligation to ensure that we won't get there.
+<span class="lineno">  483 </span>These proof obligations are all tagged with &quot;Unsupported&quot;, so that
+<span class="lineno">  484 </span>users of the library can choose if they will try to discharge them,
+<span class="lineno">  485 </span>fail in some other way, or just ignore them. -}
+<span class="lineno">  486 </span>unsupported :: {- OnlineSolver solver =&gt; -} sym -&gt; String -&gt; IO a
+<span class="lineno">  487 </span><span class="decl"><span class="nottickedoff">unsupported _sym x = fail (&quot;Unsupported &quot; &lt;&gt; x)</span></span> -- TODO, something better here....
+<span class="lineno">  488 </span>
+<span class="lineno">  489 </span>
+<span class="lineno">  490 </span>evaluateExpr :: forall n st tp fs.
+<span class="lineno">  491 </span>  B.ExprBuilder n st fs-&gt;
+<span class="lineno">  492 </span>  SAWCoreState n -&gt;
+<span class="lineno">  493 </span>  SC.SharedContext -&gt;
+<span class="lineno">  494 </span>  B.IdxCache n SAWExpr -&gt;
+<span class="lineno">  495 </span>  B.Expr n tp -&gt;
+<span class="lineno">  496 </span>  IO SC.Term
+<span class="lineno">  497 </span><span class="decl"><span class="istickedoff">evaluateExpr sym st sc cache = f <span class="nottickedoff">Map.empty</span></span>
+<span class="lineno">  498 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  499 </span><span class="spaces">    </span><span class="istickedoff">-- Evaluate the element, and expect the result to have the same type.</span>
+<span class="lineno">  500 </span><span class="spaces">    </span><span class="istickedoff">f :: Map SolverSymbol SC.Term -&gt; B.Expr n tp' -&gt; IO SC.Term</span>
+<span class="lineno">  501 </span><span class="spaces">    </span><span class="istickedoff">f env elt = termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> =&lt;&lt; eval <span class="nottickedoff">env</span> elt</span>
+<span class="lineno">  502 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  503 </span><span class="spaces">    </span><span class="istickedoff">eval :: Map SolverSymbol SC.Term -&gt; B.Expr n tp' -&gt; IO (SAWExpr tp')</span>
+<span class="lineno">  504 </span><span class="spaces">    </span><span class="istickedoff">eval env elt = B.idxCacheEval cache elt (go <span class="nottickedoff">env</span> elt)</span>
+<span class="lineno">  505 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  506 </span><span class="spaces">    </span><span class="istickedoff">realFail :: IO a</span>
+<span class="lineno">  507 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">realFail = unsupported sym &quot;SAW backend does not support real values&quot;</span></span>
+<span class="lineno">  508 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  509 </span><span class="spaces">    </span><span class="istickedoff">cplxFail :: IO a</span>
+<span class="lineno">  510 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">cplxFail = unsupported sym &quot;SAW backend does not support complex values&quot;</span></span>
+<span class="lineno">  511 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">floatFail :: IO a</span>
+<span class="lineno">  513 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">floatFail = unsupported sym &quot;SAW backend does not support floating-point values&quot;</span></span>
+<span class="lineno">  514 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  515 </span><span class="spaces">    </span><span class="istickedoff">stringFail :: IO a</span>
+<span class="lineno">  516 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">stringFail = unsupported sym &quot;SAW backend does not support string values&quot;</span></span>
+<span class="lineno">  517 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  518 </span><span class="spaces">    </span><span class="istickedoff">unimplemented :: String -&gt; IO a</span>
+<span class="lineno">  519 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">unimplemented x = unsupported sym $ &quot;SAW backend: not implemented: &quot; ++ x</span></span>
+<span class="lineno">  520 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  521 </span><span class="spaces">    </span><span class="istickedoff">go :: Map SolverSymbol SC.Term -&gt; B.Expr n tp' -&gt; IO (SAWExpr tp')</span>
+<span class="lineno">  522 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  523 </span><span class="spaces">    </span><span class="istickedoff">go _ (B.BoolExpr b _) = SAWExpr &lt;$&gt; SC.scBool sc b</span>
+<span class="lineno">  524 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  525 </span><span class="spaces">    </span><span class="istickedoff">go _ (B.SemiRingLiteral sr x _) =</span>
+<span class="lineno">  526 </span><span class="spaces">      </span><span class="istickedoff">case sr of</span>
+<span class="lineno">  527 </span><span class="spaces">        </span><span class="istickedoff">B.SemiRingBVRepr _ w  -&gt; scBvLit sc w x</span>
+<span class="lineno">  528 </span><span class="spaces">        </span><span class="istickedoff">B.SemiRingIntegerRepr -&gt; <span class="nottickedoff">scIntLit sc x</span></span>
+<span class="lineno">  529 </span><span class="spaces">        </span><span class="istickedoff">B.SemiRingRealRepr    -&gt; <span class="nottickedoff">scRealLit sym sc x</span></span>
+<span class="lineno">  530 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  531 </span><span class="spaces">    </span><span class="istickedoff">go _ (B.StringExpr{}) =</span>
+<span class="lineno">  532 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support string values&quot;</span></span>
+<span class="lineno">  533 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  534 </span><span class="spaces">    </span><span class="istickedoff">go _ (B.FloatExpr{}) =</span>
+<span class="lineno">  535 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support floating-point values&quot;</span></span>
+<span class="lineno">  536 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  537 </span><span class="spaces">    </span><span class="istickedoff">go env (B.BoundVarExpr bv) =</span>
+<span class="lineno">  538 </span><span class="spaces">      </span><span class="istickedoff">case B.bvarKind bv of</span>
+<span class="lineno">  539 </span><span class="spaces">        </span><span class="istickedoff">B.UninterpVarKind -&gt; do</span>
+<span class="lineno">  540 </span><span class="spaces">          </span><span class="istickedoff">tp &lt;- baseSCType <span class="nottickedoff">sym</span> sc (B.bvarType bv)</span>
+<span class="lineno">  541 </span><span class="spaces">          </span><span class="istickedoff">SAWExpr &lt;$&gt; sawCreateVar st nm tp</span>
+<span class="lineno">  542 </span><span class="spaces">            </span><span class="istickedoff">where nm = solverSymbolAsText $ B.bvarName bv</span>
+<span class="lineno">  543 </span><span class="spaces">        </span><span class="istickedoff">B.LatchVarKind -&gt;</span>
+<span class="lineno">  544 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support latch variables&quot;</span></span>
+<span class="lineno">  545 </span><span class="spaces">        </span><span class="istickedoff">B.QuantifierVarKind -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  546 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case Map.lookup (B.bvarName bv) env of</span></span>
+<span class="lineno">  547 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; unsupported sym $ &quot;unbound quantifier variable &quot; &lt;&gt; nm</span></span>
+<span class="lineno">  548 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Just t -&gt; pure (SAWExpr t)</span></span>
+<span class="lineno">  549 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff"></span>where <span class="nottickedoff">nm = Text.unpack $ solverSymbolAsText $ B.bvarName bv</span></span>
+<span class="lineno">  550 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  551 </span><span class="spaces">    </span><span class="istickedoff">go env (B.NonceAppExpr p) =</span>
+<span class="lineno">  552 </span><span class="spaces">      </span><span class="istickedoff">case B.nonceExprApp p of</span>
+<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff">B.Annotation _tpr _n x -&gt;</span>
+<span class="lineno">  554 </span><span class="spaces">          </span><span class="istickedoff">eval <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  555 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  556 </span><span class="spaces">        </span><span class="istickedoff">B.Forall bvar body -&gt;</span>
+<span class="lineno">  557 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case B.bvarType bvar of</span></span>
+<span class="lineno">  558 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">BaseBVRepr wrepr -&gt; do</span></span>
+<span class="lineno">  559 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">w &lt;- SC.scNat sc $ natValue wrepr</span></span>
+<span class="lineno">  560 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ty &lt;- SC.scVecType sc w =&lt;&lt; SC.scBoolType sc</span></span>
+<span class="lineno">  561 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">x &lt;- SC.scFreshVariable sc nm ty</span></span>
+<span class="lineno">  562 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt;</span></span>
+<span class="lineno">  563 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">(SC.scBvForall sc w</span></span>
+<span class="lineno">  564 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">=&lt;&lt; SC.scAbstractTerms sc [x] =&lt;&lt; f (Map.insert (B.bvarName bvar) x env) body)</span></span>
+<span class="lineno">  565 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">where nm = solverSymbolAsText $ B.bvarName bvar</span></span>
+<span class="lineno">  566 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; unsupported sym &quot;SAW backend only supports universal quantifiers over bitvectors&quot;</span></span>
+<span class="lineno">  567 </span><span class="spaces">        </span><span class="istickedoff">B.Exists{} -&gt;</span>
+<span class="lineno">  568 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support existential quantifiers&quot;</span></span>
+<span class="lineno">  569 </span><span class="spaces">        </span><span class="istickedoff">B.ArrayFromFn{} -&gt; <span class="nottickedoff">unimplemented &quot;ArrayFromFn&quot;</span></span>
+<span class="lineno">  570 </span><span class="spaces">        </span><span class="istickedoff">B.MapOverArrays{} -&gt; <span class="nottickedoff">unimplemented &quot;MapOverArrays&quot;</span></span>
+<span class="lineno">  571 </span><span class="spaces">        </span><span class="istickedoff">B.ArrayTrueOnEntries{} -&gt; <span class="nottickedoff">unimplemented &quot;ArrayTrueOnEntries&quot;</span></span>
+<span class="lineno">  572 </span><span class="spaces">        </span><span class="istickedoff">B.FnApp fn asgn -&gt;</span>
+<span class="lineno">  573 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do args &lt;- traverseFC (eval env) asgn</span></span>
+<span class="lineno">  574 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">applyExprSymFn sym st sc fn args</span></span>
+<span class="lineno">  575 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  576 </span><span class="spaces">    </span><span class="istickedoff">go env a0@(B.AppExpr a) =</span>
+<span class="lineno">  577 </span><span class="spaces">      </span><span class="istickedoff">let <span class="nottickedoff">nyi = unsupported sym $</span></span>
+<span class="lineno">  578 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">&quot;Expression form not yet implemented in SAWCore backend:\n&quot;</span></span>
+<span class="lineno">  579 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">++ show a0</span></span>
+<span class="lineno">  580 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  581 </span><span class="spaces">      </span><span class="istickedoff">case B.appExprApp a of</span>
+<span class="lineno">  582 </span><span class="spaces">        </span><span class="istickedoff">B.BaseIte bt _ c xe ye -&gt; join (scIte <span class="nottickedoff">sym</span> sc bt &lt;$&gt; eval <span class="nottickedoff">env</span> c &lt;*&gt; eval <span class="nottickedoff">env</span> xe &lt;*&gt; eval <span class="nottickedoff">env</span> ye)</span>
+<span class="lineno">  583 </span><span class="spaces">        </span><span class="istickedoff">B.BaseEq bt xe ye -&gt; join (scEq <span class="nottickedoff">sym</span> sc bt &lt;$&gt; eval <span class="nottickedoff">env</span> xe &lt;*&gt; eval <span class="nottickedoff">env</span> ye)</span>
+<span class="lineno">  584 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  585 </span><span class="spaces">        </span><span class="istickedoff">B.SemiRingLe sr xe ye -&gt;</span>
+<span class="lineno">  586 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case sr of</span></span>
+<span class="lineno">  587 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">B.OrderedSemiRingRealRepr    -&gt; join (scRealLe sym sc &lt;$&gt; eval env xe &lt;*&gt; eval env ye)</span></span>
+<span class="lineno">  588 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">B.OrderedSemiRingIntegerRepr -&gt; join (scIntLe sc &lt;$&gt; eval env xe &lt;*&gt; eval env ye)</span></span>
+<span class="lineno">  589 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  590 </span><span class="spaces">        </span><span class="istickedoff">B.NotPred x -&gt;</span>
+<span class="lineno">  591 </span><span class="spaces">          </span><span class="istickedoff">goNeg <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  592 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  593 </span><span class="spaces">        </span><span class="istickedoff">B.ConjPred xs -&gt;</span>
+<span class="lineno">  594 </span><span class="spaces">          </span><span class="istickedoff">case BM.viewConjMap xs of</span>
+<span class="lineno">  595 </span><span class="spaces">            </span><span class="istickedoff">BM.ConjTrue -&gt; <span class="nottickedoff">SAWExpr &lt;$&gt; SC.scBool sc True</span></span>
+<span class="lineno">  596 </span><span class="spaces">            </span><span class="istickedoff">BM.ConjFalse -&gt; <span class="nottickedoff">SAWExpr &lt;$&gt; SC.scBool sc False</span></span>
+<span class="lineno">  597 </span><span class="spaces">            </span><span class="istickedoff">BM.Conjuncts (t:|ts) -&gt;</span>
+<span class="lineno">  598 </span><span class="spaces">              </span><span class="istickedoff">let pol (x,BM.Positive) = f <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  599 </span><span class="spaces">                  </span><span class="istickedoff">pol (x,BM.Negative) = termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> =&lt;&lt; goNeg <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  600 </span><span class="spaces">              </span><span class="istickedoff">in SAWExpr &lt;$&gt; join (foldM (SC.scAnd sc) &lt;$&gt; pol t &lt;*&gt; mapM pol ts)</span>
+<span class="lineno">  601 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  602 </span><span class="spaces">        </span><span class="istickedoff">B.SemiRingProd pd -&gt;</span>
+<span class="lineno">  603 </span><span class="spaces">           </span><span class="istickedoff">case WSum.prodRepr pd of</span>
+<span class="lineno">  604 </span><span class="spaces">             </span><span class="istickedoff">B.SemiRingRealRepr -&gt;</span>
+<span class="lineno">  605 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do pd' &lt;- WSum.prodEvalM (scMulReal sym sc) (eval env) pd</span></span>
+<span class="lineno">  606 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">maybe (scRealLit sym sc 1) return pd'</span></span>
+<span class="lineno">  607 </span><span class="spaces">             </span><span class="istickedoff">B.SemiRingIntegerRepr -&gt;</span>
+<span class="lineno">  608 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do pd' &lt;- WSum.prodEvalM (scMulInt sc) (eval env) pd</span></span>
+<span class="lineno">  609 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">maybe (scIntLit sc 1) return pd'</span></span>
+<span class="lineno">  610 </span><span class="spaces">             </span><span class="istickedoff">B.SemiRingBVRepr B.BVArithRepr w -&gt;</span>
+<span class="lineno">  611 </span><span class="spaces">               </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  612 </span><span class="spaces">                  </span><span class="istickedoff">pd' &lt;- WSum.prodEvalM (SC.scBvMul sc n) (f <span class="nottickedoff">env</span>) pd</span>
+<span class="lineno">  613 </span><span class="spaces">                  </span><span class="istickedoff">maybe <span class="nottickedoff">(scBvLit sc w (BV.one w))</span> (return . SAWExpr) pd'</span>
+<span class="lineno">  614 </span><span class="spaces">             </span><span class="istickedoff">B.SemiRingBVRepr B.BVBitsRepr w -&gt;</span>
+<span class="lineno">  615 </span><span class="spaces">               </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  616 </span><span class="spaces">                  </span><span class="istickedoff">pd' &lt;- WSum.prodEvalM (SC.scBvAnd sc n) (f <span class="nottickedoff">env</span>) pd</span>
+<span class="lineno">  617 </span><span class="spaces">                  </span><span class="istickedoff">maybe <span class="nottickedoff">(scBvLit sc w (BV.maxUnsigned w))</span> (return . SAWExpr) pd'</span>
+<span class="lineno">  618 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  619 </span><span class="spaces">        </span><span class="istickedoff">B.SemiRingSum ss -&gt;</span>
+<span class="lineno">  620 </span><span class="spaces">          </span><span class="istickedoff">case WSum.sumRepr ss of</span>
+<span class="lineno">  621 </span><span class="spaces">            </span><span class="istickedoff">B.SemiRingRealRepr -&gt; <span class="nottickedoff">WSum.evalM add smul (scRealLit sym sc) ss</span></span>
+<span class="lineno">  622 </span><span class="spaces">               </span><span class="istickedoff">where <span class="nottickedoff">add x y = scAddReal sym sc x y</span></span>
+<span class="lineno">  623 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">smul 1  e = eval env e</span></span>
+<span class="lineno">  624 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">smul sm e = join $ scMulReal sym sc &lt;$&gt; scRealLit sym sc sm &lt;*&gt; eval env e</span></span>
+<span class="lineno">  625 </span><span class="spaces">            </span><span class="istickedoff">B.SemiRingIntegerRepr -&gt; <span class="nottickedoff">WSum.evalM add smul (scIntLit sc) ss</span></span>
+<span class="lineno">  626 </span><span class="spaces">               </span><span class="istickedoff">where <span class="nottickedoff">add x y = scAddInt sc x y</span></span>
+<span class="lineno">  627 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">smul 1  e = eval env e</span></span>
+<span class="lineno">  628 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">smul sm e = join $ scMulInt sc &lt;$&gt; scIntLit sc sm &lt;*&gt; eval env e</span></span>
+<span class="lineno">  629 </span><span class="spaces">            </span><span class="istickedoff">B.SemiRingBVRepr B.BVArithRepr w -&gt; WSum.evalM add smul (scBvLit sc w) ss</span>
+<span class="lineno">  630 </span><span class="spaces">               </span><span class="istickedoff">where add x y          = scBvAdd sc w x y</span>
+<span class="lineno">  631 </span><span class="spaces">                     </span><span class="istickedoff">smul (BV.BV 1) e = eval <span class="nottickedoff">env</span> e</span>
+<span class="lineno">  632 </span><span class="spaces">                     </span><span class="istickedoff">smul sm e        = join (scBvMul sc w &lt;$&gt; scBvLit sc w sm &lt;*&gt; eval <span class="nottickedoff">env</span> e)</span>
+<span class="lineno">  633 </span><span class="spaces">            </span><span class="istickedoff">B.SemiRingBVRepr B.BVBitsRepr w</span>
+<span class="lineno">  634 </span><span class="spaces">               </span><span class="istickedoff">| ss^.WSum.sumOffset == one -&gt; scBvNot sc w =&lt;&lt; bitwise_eval (ss &amp; WSum.sumOffset .~ BV.zero w)</span>
+<span class="lineno">  635 </span><span class="spaces">               </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; bitwise_eval ss</span>
+<span class="lineno">  636 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  637 </span><span class="spaces">              </span><span class="istickedoff">where one = BV.maxUnsigned w</span>
+<span class="lineno">  638 </span><span class="spaces">                    </span><span class="istickedoff">bitwise_eval = WSum.evalM add smul (scBvLit sc w)</span>
+<span class="lineno">  639 </span><span class="spaces">                    </span><span class="istickedoff">add x y = scBvXor sc w x y</span>
+<span class="lineno">  640 </span><span class="spaces">                    </span><span class="istickedoff">smul sm e</span>
+<span class="lineno">  641 </span><span class="spaces">                       </span><span class="istickedoff">| sm == one = eval <span class="nottickedoff">env</span> e</span>
+<span class="lineno">  642 </span><span class="spaces">                       </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = join (scBvAnd sc w &lt;$&gt; scBvLit sc w sm &lt;*&gt; eval <span class="nottickedoff">env</span> e)</span>
+<span class="lineno">  643 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  644 </span><span class="spaces">        </span><span class="istickedoff">B.RealIsInteger{} -&gt; <span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span>
+<span class="lineno">  645 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  646 </span><span class="spaces">        </span><span class="istickedoff">B.BVOrBits w bs -&gt;</span>
+<span class="lineno">  647 </span><span class="spaces">          </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  648 </span><span class="spaces">             </span><span class="istickedoff">bs' &lt;- traverse (f <span class="nottickedoff">env</span>) (B.bvOrToList bs)</span>
+<span class="lineno">  649 </span><span class="spaces">             </span><span class="istickedoff">case bs' of</span>
+<span class="lineno">  650 </span><span class="spaces">               </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">scBvLit sc w (BV.zero w)</span></span>
+<span class="lineno">  651 </span><span class="spaces">               </span><span class="istickedoff">x:xs -&gt; SAWExpr &lt;$&gt; foldM (SC.scBvOr sc n) x xs</span>
+<span class="lineno">  652 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  653 </span><span class="spaces">        </span><span class="istickedoff">B.BVFill w p -&gt;</span>
+<span class="lineno">  654 </span><span class="spaces">          </span><span class="istickedoff">do bit &lt;- SC.scBoolType sc</span>
+<span class="lineno">  655 </span><span class="spaces">             </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  656 </span><span class="spaces">             </span><span class="istickedoff">x &lt;- f <span class="nottickedoff">env</span> p</span>
+<span class="lineno">  657 </span><span class="spaces">             </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scGlobalApply sc (SC.mkIdent SC.preludeName &quot;replicate&quot;) [n, bit, x]</span>
+<span class="lineno">  658 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  659 </span><span class="spaces">        </span><span class="istickedoff">B.BVTestBit i bv -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  660 </span><span class="spaces">             </span><span class="istickedoff">w &lt;- SC.scNat sc (natValue (bvWidth bv))</span>
+<span class="lineno">  661 </span><span class="spaces">             </span><span class="istickedoff">bit &lt;- SC.scBoolType sc</span>
+<span class="lineno">  662 </span><span class="spaces">             </span><span class="istickedoff">-- NB, SAWCore's `scAt` is big endian</span>
+<span class="lineno">  663 </span><span class="spaces">             </span><span class="istickedoff">let j = natValue (bvWidth bv) - i - 1</span>
+<span class="lineno">  664 </span><span class="spaces">             </span><span class="istickedoff">join (SC.scAt sc w bit &lt;$&gt; f <span class="nottickedoff">env</span> bv &lt;*&gt; SC.scNat sc j)</span>
+<span class="lineno">  665 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  666 </span><span class="spaces">        </span><span class="istickedoff">B.BVSlt x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  667 </span><span class="spaces">             </span><span class="istickedoff">w &lt;- SC.scNat sc (natValue (bvWidth x))</span>
+<span class="lineno">  668 </span><span class="spaces">             </span><span class="istickedoff">join (SC.scBvSLt sc w &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; f <span class="nottickedoff">env</span> y)</span>
+<span class="lineno">  669 </span><span class="spaces">        </span><span class="istickedoff">B.BVUlt x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  670 </span><span class="spaces">             </span><span class="istickedoff">w &lt;- SC.scNat sc (natValue (bvWidth x))</span>
+<span class="lineno">  671 </span><span class="spaces">             </span><span class="istickedoff">join (SC.scBvULt sc w &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; f <span class="nottickedoff">env</span> y)</span>
+<span class="lineno">  672 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  673 </span><span class="spaces">        </span><span class="istickedoff">B.BVUnaryTerm{} -&gt; <span class="nottickedoff">unsupported sym &quot;SAW backend does not support the unary bitvector representation&quot;</span></span>
+<span class="lineno">  674 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  675 </span><span class="spaces">        </span><span class="istickedoff">B.BVUdiv _ x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  676 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue (bvWidth x))</span>
+<span class="lineno">  677 </span><span class="spaces">           </span><span class="istickedoff">join (SC.scBvUDiv sc n &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; f <span class="nottickedoff">env</span> y)</span>
+<span class="lineno">  678 </span><span class="spaces">        </span><span class="istickedoff">B.BVUrem _ x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  679 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue (bvWidth x))</span>
+<span class="lineno">  680 </span><span class="spaces">           </span><span class="istickedoff">join (SC.scBvURem sc n &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; f <span class="nottickedoff">env</span> y)</span>
+<span class="lineno">  681 </span><span class="spaces">        </span><span class="istickedoff">B.BVSdiv _ x y -&gt; <span class="nottickedoff">fmap SAWExpr $ do</span></span>
+<span class="lineno">  682 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">-- NB: bvSDiv applies 'Succ' to its width argument, so we</span></span>
+<span class="lineno">  683 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">-- need to subtract 1 to make the types match.</span></span>
+<span class="lineno">  684 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">n &lt;- SC.scNat sc (natValue (bvWidth x) - 1)</span></span>
+<span class="lineno">  685 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">join (SC.scBvSDiv sc n &lt;$&gt; f env x &lt;*&gt; f env y)</span></span>
+<span class="lineno">  686 </span><span class="spaces">        </span><span class="istickedoff">B.BVSrem _ x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  687 </span><span class="spaces">           </span><span class="istickedoff">-- NB: bvSDiv applies 'Succ' to its width argument, so we</span>
+<span class="lineno">  688 </span><span class="spaces">           </span><span class="istickedoff">-- need to subtract 1 to make the types match.</span>
+<span class="lineno">  689 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue (bvWidth x) - 1)</span>
+<span class="lineno">  690 </span><span class="spaces">           </span><span class="istickedoff">join (SC.scBvSRem sc n &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; f <span class="nottickedoff">env</span> y)</span>
+<span class="lineno">  691 </span><span class="spaces">        </span><span class="istickedoff">B.BVShl _ x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  692 </span><span class="spaces">           </span><span class="istickedoff">let w = natValue (bvWidth x)</span>
+<span class="lineno">  693 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc w</span>
+<span class="lineno">  694 </span><span class="spaces">           </span><span class="istickedoff">join (SC.scBvShl sc n &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; (SC.scBvToNat sc w =&lt;&lt; f <span class="nottickedoff">env</span> y))</span>
+<span class="lineno">  695 </span><span class="spaces">        </span><span class="istickedoff">B.BVLshr _ x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  696 </span><span class="spaces">           </span><span class="istickedoff">let w = natValue (bvWidth x)</span>
+<span class="lineno">  697 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc w</span>
+<span class="lineno">  698 </span><span class="spaces">           </span><span class="istickedoff">join (SC.scBvShr sc n &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; (SC.scBvToNat sc w =&lt;&lt; f <span class="nottickedoff">env</span> y))</span>
+<span class="lineno">  699 </span><span class="spaces">        </span><span class="istickedoff">B.BVAshr _ x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  700 </span><span class="spaces">           </span><span class="istickedoff">let w = natValue (bvWidth x)</span>
+<span class="lineno">  701 </span><span class="spaces">           </span><span class="istickedoff">-- NB: bvSShr applies a `Succ` to its width argument, so we subtract</span>
+<span class="lineno">  702 </span><span class="spaces">           </span><span class="istickedoff">--     1 here to make things match up.</span>
+<span class="lineno">  703 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc (w - 1)</span>
+<span class="lineno">  704 </span><span class="spaces">           </span><span class="istickedoff">join (SC.scBvSShr sc n &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; (SC.scBvToNat sc w =&lt;&lt; f <span class="nottickedoff">env</span> y))</span>
+<span class="lineno">  705 </span><span class="spaces">        </span><span class="istickedoff">B.BVRol w x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  706 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  707 </span><span class="spaces">           </span><span class="istickedoff">bit &lt;- SC.scBoolType sc</span>
+<span class="lineno">  708 </span><span class="spaces">           </span><span class="istickedoff">x' &lt;- f <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  709 </span><span class="spaces">           </span><span class="istickedoff">y' &lt;- SC.scBvToNat sc (natValue w) =&lt;&lt; f <span class="nottickedoff">env</span> y</span>
+<span class="lineno">  710 </span><span class="spaces">           </span><span class="istickedoff">SC.scGlobalApply sc (SC.mkIdent SC.preludeName &quot;rotateL&quot;) [n,bit,x',y']</span>
+<span class="lineno">  711 </span><span class="spaces">        </span><span class="istickedoff">B.BVRor w x y -&gt; <span class="nottickedoff">fmap SAWExpr $ do</span></span>
+<span class="lineno">  712 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">n &lt;- SC.scNat sc (natValue w)</span></span>
+<span class="lineno">  713 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">bit &lt;- SC.scBoolType sc</span></span>
+<span class="lineno">  714 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">x' &lt;- f env x</span></span>
+<span class="lineno">  715 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">y' &lt;- SC.scBvToNat sc (natValue w) =&lt;&lt; f env y</span></span>
+<span class="lineno">  716 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">SC.scGlobalApply sc (SC.mkIdent SC.preludeName &quot;rotateR&quot;) [n,bit,x',y']</span></span>
+<span class="lineno">  717 </span><span class="spaces">        </span><span class="istickedoff">B.BVConcat _ x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  718 </span><span class="spaces">           </span><span class="istickedoff">m &lt;- SC.scNat sc (natValue (bvWidth x))</span>
+<span class="lineno">  719 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue (bvWidth y))</span>
+<span class="lineno">  720 </span><span class="spaces">           </span><span class="istickedoff">t &lt;- SC.scBoolType sc</span>
+<span class="lineno">  721 </span><span class="spaces">           </span><span class="istickedoff">join (SC.scAppend sc m n t &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; f <span class="nottickedoff">env</span> y)</span>
+<span class="lineno">  722 </span><span class="spaces">        </span><span class="istickedoff">B.BVSelect start num x -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  723 </span><span class="spaces">           </span><span class="istickedoff">i &lt;- SC.scNat sc (natValue (bvWidth x) - natValue num - natValue start)</span>
+<span class="lineno">  724 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue num)</span>
+<span class="lineno">  725 </span><span class="spaces">           </span><span class="istickedoff">o &lt;- SC.scNat sc (natValue start)</span>
+<span class="lineno">  726 </span><span class="spaces">           </span><span class="istickedoff">t &lt;- SC.scBoolType sc</span>
+<span class="lineno">  727 </span><span class="spaces">           </span><span class="istickedoff">x' &lt;- f <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  728 </span><span class="spaces">           </span><span class="istickedoff">SC.scSlice sc t i n o x'</span>
+<span class="lineno">  729 </span><span class="spaces">        </span><span class="istickedoff">B.BVZext w' x -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  730 </span><span class="spaces">          </span><span class="istickedoff">let w = bvWidth x</span>
+<span class="lineno">  731 </span><span class="spaces">          </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  732 </span><span class="spaces">          </span><span class="istickedoff">m &lt;- SC.scNat sc (natValue w' - natValue w)</span>
+<span class="lineno">  733 </span><span class="spaces">          </span><span class="istickedoff">x' &lt;- f <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  734 </span><span class="spaces">          </span><span class="istickedoff">SC.scBvUExt sc m n x'</span>
+<span class="lineno">  735 </span><span class="spaces">        </span><span class="istickedoff">B.BVSext w' x -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  736 </span><span class="spaces">          </span><span class="istickedoff">let w = bvWidth x</span>
+<span class="lineno">  737 </span><span class="spaces">          </span><span class="istickedoff">-- NB: width - 1 to make SAWCore types work out</span>
+<span class="lineno">  738 </span><span class="spaces">          </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue w - 1)</span>
+<span class="lineno">  739 </span><span class="spaces">          </span><span class="istickedoff">m &lt;- SC.scNat sc (natValue w' - natValue w)</span>
+<span class="lineno">  740 </span><span class="spaces">          </span><span class="istickedoff">x' &lt;- f <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  741 </span><span class="spaces">          </span><span class="istickedoff">SC.scBvSExt sc m n x'</span>
+<span class="lineno">  742 </span><span class="spaces">        </span><span class="istickedoff">B.BVPopcount w x -&gt;</span>
+<span class="lineno">  743 </span><span class="spaces">          </span><span class="istickedoff">do n  &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  744 </span><span class="spaces">             </span><span class="istickedoff">x' &lt;- f <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  745 </span><span class="spaces">             </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvPopcount sc n x'</span>
+<span class="lineno">  746 </span><span class="spaces">        </span><span class="istickedoff">B.BVCountLeadingZeros w x -&gt;</span>
+<span class="lineno">  747 </span><span class="spaces">          </span><span class="istickedoff">do n  &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  748 </span><span class="spaces">             </span><span class="istickedoff">x' &lt;- f <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  749 </span><span class="spaces">             </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvCountLeadingZeros sc n x'</span>
+<span class="lineno">  750 </span><span class="spaces">        </span><span class="istickedoff">B.BVCountTrailingZeros w x -&gt;</span>
+<span class="lineno">  751 </span><span class="spaces">          </span><span class="istickedoff">do n  &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  752 </span><span class="spaces">             </span><span class="istickedoff">x' &lt;- f <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  753 </span><span class="spaces">             </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvCountTrailingZeros sc n x'</span>
+<span class="lineno">  754 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  755 </span><span class="spaces">        </span><span class="istickedoff">-- Note: SAWCore supports only unidimensional arrays. As a result, What4 multidimensional</span>
+<span class="lineno">  756 </span><span class="spaces">        </span><span class="istickedoff">-- arrays cannot be translated to SAWCore.</span>
+<span class="lineno">  757 </span><span class="spaces">        </span><span class="istickedoff">B.ArrayMap indexTypes range updates arr</span>
+<span class="lineno">  758 </span><span class="spaces">          </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx_type &lt;- indexTypes -&gt;</span>
+<span class="lineno">  759 </span><span class="spaces">            </span><span class="istickedoff">do sc_idx_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc idx_type</span>
+<span class="lineno">  760 </span><span class="spaces">               </span><span class="istickedoff">sc_elm_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc range</span>
+<span class="lineno">  761 </span><span class="spaces">               </span><span class="istickedoff">sc_arr &lt;- f <span class="nottickedoff">env</span> arr</span>
+<span class="lineno">  762 </span><span class="spaces">               </span><span class="istickedoff">SAWExpr &lt;$&gt; foldM</span>
+<span class="lineno">  763 </span><span class="spaces">                 </span><span class="istickedoff">(\sc_acc_arr (Ctx.Empty Ctx.:&gt; idx_lit, elm) -&gt;</span>
+<span class="lineno">  764 </span><span class="spaces">                   </span><span class="istickedoff">do sc_idx &lt;- f <span class="nottickedoff">env</span> =&lt;&lt; indexLit sym idx_lit</span>
+<span class="lineno">  765 </span><span class="spaces">                      </span><span class="istickedoff">sc_elm &lt;- f <span class="nottickedoff">env</span> elm</span>
+<span class="lineno">  766 </span><span class="spaces">                      </span><span class="istickedoff">SC.scArrayUpdate sc sc_idx_type sc_elm_type sc_acc_arr sc_idx sc_elm)</span>
+<span class="lineno">  767 </span><span class="spaces">                 </span><span class="istickedoff">sc_arr</span>
+<span class="lineno">  768 </span><span class="spaces">                 </span><span class="istickedoff">(AUM.toList updates)</span>
+<span class="lineno">  769 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">unimplemented &quot;multidimensional ArrayMap&quot;</span></span>
+<span class="lineno">  770 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  771 </span><span class="spaces">        </span><span class="istickedoff">B.ConstantArray indexTypes range v</span>
+<span class="lineno">  772 </span><span class="spaces">          </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx_type &lt;- indexTypes -&gt;</span>
+<span class="lineno">  773 </span><span class="spaces">            </span><span class="istickedoff">do sc_idx_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc idx_type</span>
+<span class="lineno">  774 </span><span class="spaces">               </span><span class="istickedoff">sc_elm_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc range</span>
+<span class="lineno">  775 </span><span class="spaces">               </span><span class="istickedoff">sc_elm &lt;- f <span class="nottickedoff">env</span> v</span>
+<span class="lineno">  776 </span><span class="spaces">               </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scArrayConstant sc sc_idx_type sc_elm_type sc_elm</span>
+<span class="lineno">  777 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">unimplemented &quot;multidimensional ConstantArray&quot;</span></span>
+<span class="lineno">  778 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  779 </span><span class="spaces">        </span><span class="istickedoff">B.SelectArray range arr indexTerms</span>
+<span class="lineno">  780 </span><span class="spaces">          </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx &lt;- indexTerms</span>
+<span class="lineno">  781 </span><span class="spaces">          </span><span class="istickedoff">, idx_type &lt;- exprType idx -&gt;</span>
+<span class="lineno">  782 </span><span class="spaces">            </span><span class="istickedoff">do sc_idx_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc idx_type</span>
+<span class="lineno">  783 </span><span class="spaces">               </span><span class="istickedoff">sc_elm_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc range</span>
+<span class="lineno">  784 </span><span class="spaces">               </span><span class="istickedoff">sc_arr &lt;- f <span class="nottickedoff">env</span> arr</span>
+<span class="lineno">  785 </span><span class="spaces">               </span><span class="istickedoff">sc_idx &lt;- f <span class="nottickedoff">env</span> idx</span>
+<span class="lineno">  786 </span><span class="spaces">               </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scArrayLookup sc sc_idx_type sc_elm_type sc_arr sc_idx</span>
+<span class="lineno">  787 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">unimplemented &quot;multidimensional SelectArray&quot;</span></span>
+<span class="lineno">  788 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  789 </span><span class="spaces">        </span><span class="istickedoff">B.UpdateArray range indexTypes arr indexTerms v</span>
+<span class="lineno">  790 </span><span class="spaces">          </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx_type &lt;- <span class="nottickedoff">indexTypes</span></span>
+<span class="lineno">  791 </span><span class="spaces">          </span><span class="istickedoff">, Ctx.Empty Ctx.:&gt; idx &lt;- <span class="nottickedoff">indexTerms</span> -&gt;</span>
+<span class="lineno">  792 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">do sc_idx_type &lt;- baseSCType sym sc idx_type</span></span>
+<span class="lineno">  793 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">sc_elm_type &lt;- baseSCType sym sc range</span></span>
+<span class="lineno">  794 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">sc_arr &lt;- f env arr</span></span>
+<span class="lineno">  795 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">sc_idx &lt;- f env idx</span></span>
+<span class="lineno">  796 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">sc_elm &lt;- f env v</span></span>
+<span class="lineno">  797 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; SC.scArrayUpdate sc sc_idx_type sc_elm_type sc_arr sc_idx sc_elm</span></span>
+<span class="lineno">  798 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">unimplemented &quot;multidimensional UpdateArray&quot;</span></span>
+<span class="lineno">  799 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  800 </span><span class="spaces">        </span><span class="istickedoff">B.CopyArray w a_repr dest_arr dest_idx src_arr src_idx len _dest_end_idx _src_end_idx -&gt;</span>
+<span class="lineno">  801 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do sc_w &lt;- SC.scNat sc (natValue w)</span></span>
+<span class="lineno">  802 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_a &lt;- baseSCType sym sc a_repr</span></span>
+<span class="lineno">  803 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_dest_arr &lt;- f env dest_arr</span></span>
+<span class="lineno">  804 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_dest_idx &lt;- f env dest_idx</span></span>
+<span class="lineno">  805 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_src_arr &lt;- f env src_arr</span></span>
+<span class="lineno">  806 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_src_idx &lt;- f env src_idx</span></span>
+<span class="lineno">  807 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_len &lt;- f env len</span></span>
+<span class="lineno">  808 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; SC.scArrayCopy sc sc_w sc_a sc_dest_arr sc_dest_idx sc_src_arr sc_src_idx sc_len</span></span>
+<span class="lineno">  809 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  810 </span><span class="spaces">        </span><span class="istickedoff">B.SetArray w a_repr arr idx val len _end_idx -&gt;</span>
+<span class="lineno">  811 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do sc_w &lt;- SC.scNat sc (natValue w)</span></span>
+<span class="lineno">  812 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_a &lt;- baseSCType sym sc a_repr</span></span>
+<span class="lineno">  813 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_arr &lt;- f env arr</span></span>
+<span class="lineno">  814 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_idx &lt;- f env idx</span></span>
+<span class="lineno">  815 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_val &lt;- f env val</span></span>
+<span class="lineno">  816 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_len &lt;- f env len</span></span>
+<span class="lineno">  817 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; SC.scArraySet sc sc_w sc_a sc_arr sc_idx sc_val sc_len</span></span>
+<span class="lineno">  818 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  819 </span><span class="spaces">        </span><span class="istickedoff">B.EqualArrayRange w a_repr x_arr x_idx y_arr y_idx len _x_end_idx _y_end_idx -&gt;</span>
+<span class="lineno">  820 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do sc_w &lt;- SC.scNat sc (natValue w)</span></span>
+<span class="lineno">  821 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_a &lt;- baseSCType sym sc a_repr</span></span>
+<span class="lineno">  822 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_x_arr &lt;- f env x_arr</span></span>
+<span class="lineno">  823 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_x_idx &lt;- f env x_idx</span></span>
+<span class="lineno">  824 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_y_arr &lt;- f env y_arr</span></span>
+<span class="lineno">  825 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_y_idx &lt;- f env y_idx</span></span>
+<span class="lineno">  826 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">sc_len &lt;- f env len</span></span>
+<span class="lineno">  827 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; SC.scArrayRangeEq sc sc_w sc_a sc_x_arr sc_x_idx sc_y_arr sc_y_idx sc_len</span></span>
+<span class="lineno">  828 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  829 </span><span class="spaces">        </span><span class="istickedoff">B.IntDiv x y -&gt;</span>
+<span class="lineno">  830 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do x' &lt;- f env x</span></span>
+<span class="lineno">  831 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">y' &lt;- f env y</span></span>
+<span class="lineno">  832 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; SC.scIntDiv sc x' y'</span></span>
+<span class="lineno">  833 </span><span class="spaces">        </span><span class="istickedoff">B.IntMod x y -&gt;</span>
+<span class="lineno">  834 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do x' &lt;- f env x</span></span>
+<span class="lineno">  835 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">y' &lt;- f env y</span></span>
+<span class="lineno">  836 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; SC.scIntMod sc x' y'</span></span>
+<span class="lineno">  837 </span><span class="spaces">        </span><span class="istickedoff">B.IntAbs x -&gt;</span>
+<span class="lineno">  838 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">eval env x &gt;&gt;= \case</span></span>
+<span class="lineno">  839 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">SAWExpr z -&gt; SAWExpr &lt;$&gt; (SC.scIntAbs sc z)</span></span>
+<span class="lineno">  840 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  841 </span><span class="spaces">        </span><span class="istickedoff">B.IntDivisible x 0 -&gt;</span>
+<span class="lineno">  842 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do x' &lt;- f env x</span></span>
+<span class="lineno">  843 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scIntEq sc x' =&lt;&lt; SC.scIntegerConst sc 0)</span></span>
+<span class="lineno">  844 </span><span class="spaces">        </span><span class="istickedoff">B.IntDivisible x k -&gt;</span>
+<span class="lineno">  845 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do x' &lt;- f env x</span></span>
+<span class="lineno">  846 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">k' &lt;- SC.scIntegerConst sc (toInteger k)</span></span>
+<span class="lineno">  847 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">z  &lt;- SC.scIntMod sc x' k'</span></span>
+<span class="lineno">  848 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scIntEq sc z =&lt;&lt; SC.scIntegerConst sc 0)</span></span>
+<span class="lineno">  849 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  850 </span><span class="spaces">        </span><span class="istickedoff">B.IntegerToBV x w -&gt;</span>
+<span class="lineno">  851 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do n &lt;- SC.scNat sc (natValue w)</span></span>
+<span class="lineno">  852 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scIntToBv sc n =&lt;&lt; f env x)</span></span>
+<span class="lineno">  853 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  854 </span><span class="spaces">        </span><span class="istickedoff">B.BVToInteger x -&gt;</span>
+<span class="lineno">  855 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do n &lt;- SC.scNat sc (natValue (bvWidth x))</span></span>
+<span class="lineno">  856 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scBvToInt sc n =&lt;&lt; f env x)</span></span>
+<span class="lineno">  857 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  858 </span><span class="spaces">        </span><span class="istickedoff">B.SBVToInteger x -&gt;</span>
+<span class="lineno">  859 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do n &lt;- SC.scNat sc (natValue (bvWidth x))</span></span>
+<span class="lineno">  860 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scSbvToInt sc n =&lt;&lt; f env x)</span></span>
+<span class="lineno">  861 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  862 </span><span class="spaces">        </span><span class="istickedoff">-- Proper support for real and complex numbers will require additional</span>
+<span class="lineno">  863 </span><span class="spaces">        </span><span class="istickedoff">-- work on the SAWCore side</span>
+<span class="lineno">  864 </span><span class="spaces">        </span><span class="istickedoff">B.IntegerToReal x -&gt; <span class="nottickedoff">IntToRealSAWExpr . SAWExpr &lt;$&gt; f env x</span></span>
+<span class="lineno">  865 </span><span class="spaces">        </span><span class="istickedoff">B.RealToInteger x -&gt;</span>
+<span class="lineno">  866 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">eval env x &gt;&gt;= \case</span></span>
+<span class="lineno">  867 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">IntToRealSAWExpr x' -&gt; return x'</span></span>
+<span class="lineno">  868 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; realFail</span></span>
+<span class="lineno">  869 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  870 </span><span class="spaces">        </span><span class="istickedoff">------------------------------------------------------------------------</span>
+<span class="lineno">  871 </span><span class="spaces">        </span><span class="istickedoff">-- Floating point operations</span>
+<span class="lineno">  872 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  873 </span><span class="spaces">        </span><span class="istickedoff">B.FloatNeg{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  874 </span><span class="spaces">        </span><span class="istickedoff">B.FloatAbs{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  875 </span><span class="spaces">        </span><span class="istickedoff">B.FloatSqrt{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  876 </span><span class="spaces">        </span><span class="istickedoff">B.FloatAdd{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  877 </span><span class="spaces">        </span><span class="istickedoff">B.FloatSub{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  878 </span><span class="spaces">        </span><span class="istickedoff">B.FloatMul{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  879 </span><span class="spaces">        </span><span class="istickedoff">B.FloatDiv{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  880 </span><span class="spaces">        </span><span class="istickedoff">B.FloatRem{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  881 </span><span class="spaces">        </span><span class="istickedoff">B.FloatFMA{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  882 </span><span class="spaces">        </span><span class="istickedoff">B.FloatFpEq{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  883 </span><span class="spaces">        </span><span class="istickedoff">B.FloatLe{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  884 </span><span class="spaces">        </span><span class="istickedoff">B.FloatLt{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  885 </span><span class="spaces">        </span><span class="istickedoff">B.FloatIsNaN{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  886 </span><span class="spaces">        </span><span class="istickedoff">B.FloatIsInf{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  887 </span><span class="spaces">        </span><span class="istickedoff">B.FloatIsZero{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  888 </span><span class="spaces">        </span><span class="istickedoff">B.FloatIsPos{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  889 </span><span class="spaces">        </span><span class="istickedoff">B.FloatIsNeg{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  890 </span><span class="spaces">        </span><span class="istickedoff">B.FloatIsSubnorm{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  891 </span><span class="spaces">        </span><span class="istickedoff">B.FloatIsNorm{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  892 </span><span class="spaces">        </span><span class="istickedoff">B.FloatCast{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  893 </span><span class="spaces">        </span><span class="istickedoff">B.FloatRound{} -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  894 </span><span class="spaces">        </span><span class="istickedoff">B.FloatFromBinary{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  895 </span><span class="spaces">        </span><span class="istickedoff">B.BVToFloat{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  896 </span><span class="spaces">        </span><span class="istickedoff">B.SBVToFloat{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  897 </span><span class="spaces">        </span><span class="istickedoff">B.RealToFloat{}  -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  898 </span><span class="spaces">        </span><span class="istickedoff">B.FloatToBV{} -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  899 </span><span class="spaces">        </span><span class="istickedoff">B.FloatToSBV{} -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  900 </span><span class="spaces">        </span><span class="istickedoff">B.FloatToReal{} -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  901 </span><span class="spaces">        </span><span class="istickedoff">B.FloatToBinary{} -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  902 </span><span class="spaces">        </span><span class="istickedoff">B.FloatSpecialFunction{} -&gt; <span class="nottickedoff">floatFail</span></span>
+<span class="lineno">  903 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  904 </span><span class="spaces">        </span><span class="istickedoff">B.RoundReal{} -&gt; <span class="nottickedoff">realFail</span></span>
+<span class="lineno">  905 </span><span class="spaces">        </span><span class="istickedoff">B.RoundEvenReal{} -&gt; <span class="nottickedoff">realFail</span></span>
+<span class="lineno">  906 </span><span class="spaces">        </span><span class="istickedoff">B.FloorReal{} -&gt; <span class="nottickedoff">realFail</span></span>
+<span class="lineno">  907 </span><span class="spaces">        </span><span class="istickedoff">B.CeilReal{} -&gt; <span class="nottickedoff">realFail</span></span>
+<span class="lineno">  908 </span><span class="spaces">        </span><span class="istickedoff">B.RealDiv{} -&gt; <span class="nottickedoff">realFail</span></span>
+<span class="lineno">  909 </span><span class="spaces">        </span><span class="istickedoff">B.RealSqrt{} -&gt; <span class="nottickedoff">realFail</span></span>
+<span class="lineno">  910 </span><span class="spaces">        </span><span class="istickedoff">B.RealSpecialFunction{} -&gt; <span class="nottickedoff">realFail</span></span>
+<span class="lineno">  911 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  912 </span><span class="spaces">        </span><span class="istickedoff">B.Cplx{}     -&gt; <span class="nottickedoff">cplxFail</span></span>
+<span class="lineno">  913 </span><span class="spaces">        </span><span class="istickedoff">B.RealPart{} -&gt; <span class="nottickedoff">cplxFail</span></span>
+<span class="lineno">  914 </span><span class="spaces">        </span><span class="istickedoff">B.ImagPart{} -&gt; <span class="nottickedoff">cplxFail</span></span>
+<span class="lineno">  915 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  916 </span><span class="spaces">        </span><span class="istickedoff">B.StringLength{} -&gt; <span class="nottickedoff">stringFail</span></span>
+<span class="lineno">  917 </span><span class="spaces">        </span><span class="istickedoff">B.StringAppend{} -&gt; <span class="nottickedoff">stringFail</span></span>
+<span class="lineno">  918 </span><span class="spaces">        </span><span class="istickedoff">B.StringContains{} -&gt; <span class="nottickedoff">stringFail</span></span>
+<span class="lineno">  919 </span><span class="spaces">        </span><span class="istickedoff">B.StringIsPrefixOf{} -&gt; <span class="nottickedoff">stringFail</span></span>
+<span class="lineno">  920 </span><span class="spaces">        </span><span class="istickedoff">B.StringIsSuffixOf{} -&gt; <span class="nottickedoff">stringFail</span></span>
+<span class="lineno">  921 </span><span class="spaces">        </span><span class="istickedoff">B.StringIndexOf{} -&gt; <span class="nottickedoff">stringFail</span></span>
+<span class="lineno">  922 </span><span class="spaces">        </span><span class="istickedoff">B.StringSubstring{} -&gt; <span class="nottickedoff">stringFail</span></span>
+<span class="lineno">  923 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  924 </span><span class="spaces">        </span><span class="istickedoff">B.StructCtor{} -&gt; <span class="nottickedoff">nyi</span> -- FIXME</span>
+<span class="lineno">  925 </span><span class="spaces">        </span><span class="istickedoff">B.StructField{} -&gt; <span class="nottickedoff">nyi</span> -- FIXME</span>
+<span class="lineno">  926 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  927 </span><span class="spaces">    </span><span class="istickedoff">-- returns the logical negation of the result of 'go'</span>
+<span class="lineno">  928 </span><span class="spaces">    </span><span class="istickedoff">-- negations are pushed inside conjunctions and less-than-or-equal</span>
+<span class="lineno">  929 </span><span class="spaces">    </span><span class="istickedoff">goNeg :: Map SolverSymbol SC.Term -&gt; B.Expr n BaseBoolType -&gt; IO (SAWExpr BaseBoolType)</span>
+<span class="lineno">  930 </span><span class="spaces">    </span><span class="istickedoff">goNeg env expr =</span>
+<span class="lineno">  931 </span><span class="spaces">      </span><span class="istickedoff">case expr of</span>
+<span class="lineno">  932 </span><span class="spaces">        </span><span class="istickedoff">-- negation of (x /\ y) becomes (~x \/ ~y)</span>
+<span class="lineno">  933 </span><span class="spaces">        </span><span class="istickedoff">B.AppExpr (B.appExprApp -&gt; B.ConjPred xs) -&gt;</span>
+<span class="lineno">  934 </span><span class="spaces">          </span><span class="istickedoff">case BM.viewConjMap xs of</span>
+<span class="lineno">  935 </span><span class="spaces">            </span><span class="istickedoff">BM.ConjTrue -&gt; <span class="nottickedoff">SAWExpr &lt;$&gt; SC.scBool sc False</span></span>
+<span class="lineno">  936 </span><span class="spaces">            </span><span class="istickedoff">BM.ConjFalse -&gt; <span class="nottickedoff">SAWExpr &lt;$&gt; SC.scBool sc True</span></span>
+<span class="lineno">  937 </span><span class="spaces">            </span><span class="istickedoff">BM.Conjuncts (t:|ts) -&gt;</span>
+<span class="lineno">  938 </span><span class="spaces">              </span><span class="istickedoff">let pol (x, BM.Positive) = termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> =&lt;&lt; goNegAtom <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  939 </span><span class="spaces">                  </span><span class="istickedoff">pol (x, BM.Negative) = f <span class="nottickedoff">env</span> x</span>
+<span class="lineno">  940 </span><span class="spaces">              </span><span class="istickedoff">in SAWExpr &lt;$&gt; join (foldM (SC.scOr sc) &lt;$&gt; pol t &lt;*&gt; mapM pol ts)</span>
+<span class="lineno">  941 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; goNegAtom <span class="nottickedoff">env</span> expr</span>
+<span class="lineno">  942 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  943 </span><span class="spaces">    </span><span class="istickedoff">-- returns the logical negation of the result of 'go'</span>
+<span class="lineno">  944 </span><span class="spaces">    </span><span class="istickedoff">-- negations are pushed inside less-than-or-equal</span>
+<span class="lineno">  945 </span><span class="spaces">    </span><span class="istickedoff">goNegAtom :: Map SolverSymbol SC.Term -&gt; B.Expr n BaseBoolType -&gt; IO (SAWExpr BaseBoolType)</span>
+<span class="lineno">  946 </span><span class="spaces">    </span><span class="istickedoff">goNegAtom env expr =</span>
+<span class="lineno">  947 </span><span class="spaces">      </span><span class="istickedoff">case expr of</span>
+<span class="lineno">  948 </span><span class="spaces">        </span><span class="istickedoff">-- negation of (x &lt;= y) becomes (y &lt; x)</span>
+<span class="lineno">  949 </span><span class="spaces">        </span><span class="istickedoff">B.AppExpr (B.appExprApp -&gt; B.SemiRingLe sr xe ye) -&gt;</span>
+<span class="lineno">  950 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case sr of</span></span>
+<span class="lineno">  951 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">B.OrderedSemiRingRealRepr    -&gt; join (scRealLt sym sc &lt;$&gt; eval env ye &lt;*&gt; eval env xe)</span></span>
+<span class="lineno">  952 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">B.OrderedSemiRingIntegerRepr -&gt; join (scIntLt sc &lt;$&gt; eval env ye &lt;*&gt; eval env xe)</span></span>
+<span class="lineno">  953 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; SAWExpr &lt;$&gt; (SC.scNot sc =&lt;&lt; f <span class="nottickedoff">env</span> expr)</span></span>
+<span class="lineno">  954 </span>
+
+</pre>
+</body>
+</html>
