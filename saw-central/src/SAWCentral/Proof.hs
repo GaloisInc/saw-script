@@ -1392,6 +1392,8 @@ normalizeSequentSubsumes sc sqt1 sqt2 =
      rawSequentSubsumes sc s1 s2
 
 -- | Tests that the first raw sequent subsumes the second.
+-- This is a shallow syntactic check that is sufficient to show that a proof
+-- of the first sequent is sufficient to prove the second
 rawSequentSubsumes :: SharedContext -> RawSequent Prop -> RawSequent Prop -> IO Bool
 rawSequentSubsumes sc (RawSequent hs1 gs1) (RawSequent hs2 gs2) =
   do hypsOK  <- propsSubset sc hs1 hs2 -- assumes no *more*
