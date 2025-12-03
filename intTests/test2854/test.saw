@@ -1,0 +1,14 @@
+// A regression test for #2854. Demonstrating the goal_intro_hyp and goal_retract_hyp work
+
+enable_experimental;
+
+prove_core do {
+  x <- goal_intro "x";
+  goal_intro_hyp;
+  goal_apply_hyp 0;
+} "(x : Bool) -> EqTrue (or (not x) x)";
+
+prove_core do {
+  goal_intro_hyp;
+  goal_apply_hyp 0;
+} "EqTrue (or (not True) True)";
