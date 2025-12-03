@@ -12,6 +12,7 @@
 ------------------------------------------------------------------------
 
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ConstraintKinds#-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -55,7 +56,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.Kind (Type)
-import Data.List (genericTake)
+import Data.List (genericTake,intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -950,13 +951,55 @@ mkSymFn sym ref nm args ret =
 -- Importantly: The types of these uninterpreted values are *not*
 -- limited to What4 BaseTypes or FirstOrderTypes.
 
+{- NOTE: How we generate uninterpreted functions
+
+Our strategy is to generate a separate uninterpreted function for each
+base type that is mentioned in the result of the original uninterpreted
+funciton.  This function returns an *array* of values, and the actual results
+of the original function are obtained by selecting elements of this array.
+
+For eaxample, consider a function `f: [16] -> ([4][u8],Bool)`. 
+A call `f x` will be translated like this:
+
+  f_w8:   [16] -> Array Int [u8]  // Uninterpreted
+  f_bool: [16] -> Array Int Bool  // Uninterpreted
+  w8s   = f_w8 x                  // This has some auto generated name
+  bools = f_bool x                // This has some auto generated name
+  
+Value for `f x`:
+  ([ w8s ! 0, w8s ! 1, w8s ! 2, w8s ! 3 ], bools ! 0)
+-}
+
+-- | This is the state we use to generate uninterpreted values.
+type MkUnintState sym = MapF BaseTypeRepr (Arr sym)
+
+-- | For each base type we track the name of the array to project from and
+-- the next index.
+data Arr sym tc = Arr
+  (SymExpr sym (BaseArrayType (Ctx.EmptyCtx Ctx.::> BaseIntegerType) tc))
+  !Integer
+
+-- | Generate a call to an uninterpreted function.
 parseUninterpreted ::
   forall sym.
   (IsSymExprBuilder sym) =>
-  sym -> IORef (SymFnCache sym) ->
-  UnintApp (SymExpr sym) ->
-  TValue (What4 sym) -> IO (SValue sym)
+  sym                         {- ^ How to make symbolic expressions -} ->
+  IORef (SymFnCache sym)      {- ^ Cache of known uninterpreted functions -} ->
+  UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} ->
+  TValue (What4 sym)          {- ^ Type of the function's result -} ->
+  IO (SValue sym)             {- ^ The symbolic value for the call to the uninterpreted function -}
 parseUninterpreted sym ref app ty =
+  evalStateT (parseUninterpreted' sym ref app ty) MapF.empty
+ 
+parseUninterpreted' ::
+  forall sym.
+  (IsSymExprBuilder sym) =>
+  sym ->
+  IORef (SymFnCache sym) ->
+  UnintApp (SymExpr sym) ->
+  TValue (What4 sym) ->
+  StateT (MkUnintState sym) IO (SValue sym)
+parseUninterpreted' sym ref app ty =
   case ty of
     VPiType _ body
       -> pure $ VFun $ \x ->
@@ -974,19 +1017,13 @@ parseUninterpreted sym ref app ty =
     VIntModType n
       -> VIntMod n <$> mkUninterpreted sym ref app BaseIntegerRepr
 
-    -- 0 width bitvector is a constant
-    VVecType 0 VBoolType
-      -> return $ VWord ZBV
+    VVecType n VBoolType ->
+      case somePosNat n of
+        Just (Some (PosNat w)) -> VWord . DBV <$> mkUninterpreted sym ref app (BaseBVRepr w)
+        _                      -> pure (VWord ZBV)
 
-    VVecType n VBoolType
-      | Just (Some (PosNat w)) <- somePosNat n
-      -> (VWord . DBV) <$> mkUninterpreted sym ref app (BaseBVRepr w)
-
-    VVecType n ety
-      ->  do xs <- sequence $
-                  [ parseUninterpreted sym ref (suffixUnintApp ("_a" ++ show i) app) ety
-                  | i <- [0 .. n-1] ]
-             return (VVector (V.fromList (map ready xs)))
+    VVecType n et ->
+      VVector <$> V.replicateM (fromIntegral n) (ready <$> parseUninterpreted' sym ref app et)
 
     VArrayType ity ety
       | Just (Some idx_repr) <- valueAsBaseType ity
@@ -998,15 +1035,15 @@ parseUninterpreted sym ref app ty =
       -> return VUnit
 
     VPairType ty1 ty2
-      -> do x1 <- parseUninterpreted sym ref (suffixUnintApp "_L" app) ty1
-            x2 <- parseUninterpreted sym ref (suffixUnintApp "_R" app) ty2
+      -> do x1 <- parseUninterpreted' sym ref app ty1
+            x2 <- parseUninterpreted' sym ref app ty2
             return (VPair (ready x1) (ready x2))
 
     VRecordType elem_tps
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
-                 parseUninterpreted sym ref (suffixUnintApp ("_" ++ Text.unpack f) app) tp) elem_tps)
+                 parseUninterpreted' sym ref app tp) elem_tps)
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
 
@@ -1016,10 +1053,37 @@ mkUninterpreted ::
   sym -> IORef (SymFnCache sym) ->
   UnintApp (SymExpr sym) ->
   BaseTypeRepr t ->
-  IO (SymExpr sym t)
+  StateT (MkUnintState sym) IO (SymExpr sym t)
 mkUninterpreted sym ref (UnintApp nm args tys) ret =
-  do fn <- mkSymFn sym ref nm tys ret
-     W.applySymFn sym fn args
+  do
+    arrs <- get
+    Arr arr i <-
+      case MapF.lookup ret arrs of
+        Just a -> pure a
+        Nothing ->
+          lift $
+            do 
+              let suff :: BaseTypeRepr a -> String
+                  suff t =
+                    case t of
+                      BaseBoolRepr -> "_bool"
+                      BaseIntegerRepr -> "_int"
+                      BaseBVRepr w -> "_bv" ++ show w
+                      BaseArrayRepr i e -> "_fun" ++ is ++ "_to" ++ suff e
+                        where is = intercalate "_and" (V.toList (Ctx.toVector i suff))
+                      _ -> panic "mkUninterpreted" [ "Unexpected type", Text.pack (show t) ] 
+              fn <- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton BaseIntegerRepr) ret)
+              a  <- W.applySymFn sym fn args
+              pure (Arr a 0)
+    let arr1 :: Arr sym t
+        !arr1 = Arr arr (i + 1)
+    put (MapF.insert ret arr1 arrs)
+    lift $
+      do
+        ind <- W.intLit sym i
+        W.arrayLookup sym arr (Ctx.singleton ind)
+
+
 
 -- | A value of type @UnintApp f@ represents an uninterpreted function
 -- with the given 'String' name, applied to a list of argument values
