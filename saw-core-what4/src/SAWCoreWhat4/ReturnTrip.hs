@@ -161,19 +161,18 @@ bindSAWTerm ::
   SC.Term ->
   IO (B.Expr n bt)
 bindSAWTerm sym st bt t = do
-  ch_r <- readIORef $ saw_elt_cache_r st
-  let midx = Just (SC.termIndex t)
-  case midx >>= flip IntMap.lookup ch_r of
-    Just (Some var) -> do
-      Just Refl <- return $ testEquality bt (B.exprType var)
-      return var
+  ch_r <- readIORef (saw_elt_cache_r st)
+  let idx = SC.termIndex t
+  case IntMap.lookup idx ch_r of
+    Just (Some var) ->
+      case testEquality bt (B.exprType var) of
+        Just Refl -> pure var
+        Nothing   -> panic "bindSAWTerm" ["Type error"]
     Nothing -> do
       sbVar@(B.BoundVarExpr bv) <- freshConstant sym emptySymbol bt
       B.insertIdxValue (saw_elt_cache st) (B.bvarId bv) (SAWExpr t)
-      case midx of
-        Just i -> modifyIORef' (saw_elt_cache_r st) $ IntMap.insert i (Some sbVar)
-        Nothing -> pure ()
-      return sbVar
+      modifyIORef' (saw_elt_cache_r st) (IntMap.insert idx (Some sbVar))
+      pure sbVar
 
 -- | Register an interpretation for a symbolic function. This is not
 -- used during simulation, but rather, when we translate Crucible
