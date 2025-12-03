@@ -295,33 +295,33 @@ span.spaces    { background: white }
 <span class="lineno">  276 </span>
 <span class="lineno">  277 </span>-- | Attempt to split an implication into a hypothesis and a conclusion
 <span class="lineno">  278 </span>splitImpl :: SharedContext -&gt; Prop -&gt; IO (Maybe (Prop, Prop))
-<span class="lineno">  279 </span><span class="decl"><span class="istickedoff">splitImpl sc (Prop p)</span>
-<span class="lineno">  280 </span><span class="spaces">  </span><span class="istickedoff">| Just ( _ :*: h :*: c) &lt;- (isGlobalDef &quot;Prelude.implies&quot; &lt;@&gt; <span class="nottickedoff">return</span> &lt;@&gt; <span class="nottickedoff">return</span>) =&lt;&lt; asEqTrue p</span>
-<span class="lineno">  281 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do h' &lt;- scEqTrue sc h</span></span>
-<span class="lineno">  282 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">c' &lt;- scEqTrue sc c</span></span>
-<span class="lineno">  283 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">return (Just (Prop h', Prop c'))</span></span>
-<span class="lineno">  284 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">-- or (not h) c == implies h c</span>
-<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">| Just ( _ :*: (_ :*: h) :*: c) &lt;- (isGlobalDef &quot;Prelude.or&quot; &lt;@&gt; (isGlobalDef &quot;Prelude.not&quot; &lt;@&gt; return) &lt;@&gt; return) =&lt;&lt; asEqTrue p</span>
-<span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">= do h' &lt;- scEqTrue sc h</span>
-<span class="lineno">  288 </span><span class="spaces">       </span><span class="istickedoff">c' &lt;- scEqTrue sc c</span>
-<span class="lineno">  289 </span><span class="spaces">       </span><span class="istickedoff">return (Just (Prop h', Prop c'))</span>
-<span class="lineno">  290 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">-- or c (not h) == implies h c</span>
-<span class="lineno">  292 </span><span class="spaces">  </span><span class="istickedoff">| Just ( _ :*: c :*: (_ :*: h)) &lt;- <span class="nottickedoff">(isGlobalDef &quot;Prelude.or&quot; &lt;@&gt; return &lt;@&gt; (isGlobalDef &quot;Prelude.not&quot; &lt;@&gt; return)) =&lt;&lt; asEqTrue p</span></span>
-<span class="lineno">  293 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do h' &lt;- scEqTrue sc h</span></span>
-<span class="lineno">  294 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">c' &lt;- scEqTrue sc c</span></span>
-<span class="lineno">  295 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">return (Just (Prop h', Prop c'))</span></span>
-<span class="lineno">  296 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">-- Handle the case of (H1 -&gt; H2), where H1 and H2 are in Prop</span>
-<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">| Just (nm, arg, c) &lt;- <span class="nottickedoff">asPi p</span></span>
-<span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">, <span class="nottickedoff">IntSet.notMember (vnIndex nm) (freeVars c)</span> -- make sure this is a nondependent Pi (AKA arrow type)</span>
-<span class="lineno">  300 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">termToMaybeProp sc arg &gt;&gt;= \case</span></span>
-<span class="lineno">  301 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; return Nothing</span></span>
-<span class="lineno">  302 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Just h  -&gt; return (Just (h, Prop c))</span></span>
-<span class="lineno">  303 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span></span>
-<span class="lineno">  305 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">return Nothing</span></span></span>
+<span class="lineno">  279 </span><span class="decl"><span class="nottickedoff">splitImpl sc (Prop p)</span>
+<span class="lineno">  280 </span><span class="spaces">  </span><span class="nottickedoff">| Just ( _ :*: h :*: c) &lt;- (isGlobalDef &quot;Prelude.implies&quot; &lt;@&gt; return &lt;@&gt; return) =&lt;&lt; asEqTrue p</span>
+<span class="lineno">  281 </span><span class="spaces">  </span><span class="nottickedoff">= do h' &lt;- scEqTrue sc h</span>
+<span class="lineno">  282 </span><span class="spaces">       </span><span class="nottickedoff">c' &lt;- scEqTrue sc c</span>
+<span class="lineno">  283 </span><span class="spaces">       </span><span class="nottickedoff">return (Just (Prop h', Prop c'))</span>
+<span class="lineno">  284 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  285 </span><span class="spaces">  </span><span class="nottickedoff">-- or (not h) c == implies h c</span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="nottickedoff">| Just ( _ :*: (_ :*: h) :*: c) &lt;- (isGlobalDef &quot;Prelude.or&quot; &lt;@&gt; (isGlobalDef &quot;Prelude.not&quot; &lt;@&gt; return) &lt;@&gt; return) =&lt;&lt; asEqTrue p</span>
+<span class="lineno">  287 </span><span class="spaces">  </span><span class="nottickedoff">= do h' &lt;- scEqTrue sc h</span>
+<span class="lineno">  288 </span><span class="spaces">       </span><span class="nottickedoff">c' &lt;- scEqTrue sc c</span>
+<span class="lineno">  289 </span><span class="spaces">       </span><span class="nottickedoff">return (Just (Prop h', Prop c'))</span>
+<span class="lineno">  290 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="nottickedoff">-- or c (not h) == implies h c</span>
+<span class="lineno">  292 </span><span class="spaces">  </span><span class="nottickedoff">| Just ( _ :*: c :*: (_ :*: h)) &lt;- (isGlobalDef &quot;Prelude.or&quot; &lt;@&gt; return &lt;@&gt; (isGlobalDef &quot;Prelude.not&quot; &lt;@&gt; return)) =&lt;&lt; asEqTrue p</span>
+<span class="lineno">  293 </span><span class="spaces">  </span><span class="nottickedoff">= do h' &lt;- scEqTrue sc h</span>
+<span class="lineno">  294 </span><span class="spaces">       </span><span class="nottickedoff">c' &lt;- scEqTrue sc c</span>
+<span class="lineno">  295 </span><span class="spaces">       </span><span class="nottickedoff">return (Just (Prop h', Prop c'))</span>
+<span class="lineno">  296 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  297 </span><span class="spaces">  </span><span class="nottickedoff">-- Handle the case of (H1 -&gt; H2), where H1 and H2 are in Prop</span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="nottickedoff">| Just (nm, arg, c) &lt;- asPi p</span>
+<span class="lineno">  299 </span><span class="spaces">  </span><span class="nottickedoff">, IntSet.notMember (vnIndex nm) (freeVars c) -- make sure this is a nondependent Pi (AKA arrow type)</span>
+<span class="lineno">  300 </span><span class="spaces">  </span><span class="nottickedoff">= termToMaybeProp sc arg &gt;&gt;= \case</span>
+<span class="lineno">  301 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; return Nothing</span>
+<span class="lineno">  302 </span><span class="spaces">      </span><span class="nottickedoff">Just h  -&gt; return (Just (h, Prop c))</span>
+<span class="lineno">  303 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise</span>
+<span class="lineno">  305 </span><span class="spaces">  </span><span class="nottickedoff">= return Nothing</span></span>
 <span class="lineno">  306 </span>
 <span class="lineno">  307 </span>
 <span class="lineno">  308 </span>-- | Attempt to split a sequent into two subgoals. This will only work
@@ -1405,10 +1405,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1386 </span>--   check that is sufficient to show that a proof
 <span class="lineno"> 1387 </span>--   of the first sequent is sufficient to prove the second
 <span class="lineno"> 1388 </span>normalizeSequentSubsumes :: SharedContext -&gt; Sequent -&gt; Sequent -&gt; IO Bool
-<span class="lineno"> 1389 </span><span class="decl"><span class="istickedoff">normalizeSequentSubsumes sc sqt1 sqt2 =</span>
-<span class="lineno"> 1390 </span><span class="spaces">  </span><span class="istickedoff">do s1 &lt;- normalizeRawSequent sc (sequentToRawSequent sqt1)</span>
-<span class="lineno"> 1391 </span><span class="spaces">     </span><span class="istickedoff">s2 &lt;- normalizeRawSequent sc (sequentToRawSequent sqt2)</span>
-<span class="lineno"> 1392 </span><span class="spaces">     </span><span class="istickedoff">rawSequentSubsumes <span class="nottickedoff">sc</span> s1 s2</span></span>
+<span class="lineno"> 1389 </span><span class="decl"><span class="nottickedoff">normalizeSequentSubsumes sc sqt1 sqt2 =</span>
+<span class="lineno"> 1390 </span><span class="spaces">  </span><span class="nottickedoff">do s1 &lt;- normalizeRawSequent sc (sequentToRawSequent sqt1)</span>
+<span class="lineno"> 1391 </span><span class="spaces">     </span><span class="nottickedoff">s2 &lt;- normalizeRawSequent sc (sequentToRawSequent sqt2)</span>
+<span class="lineno"> 1392 </span><span class="spaces">     </span><span class="nottickedoff">rawSequentSubsumes sc s1 s2</span></span>
 <span class="lineno"> 1393 </span>
 <span class="lineno"> 1394 </span>-- | Tests that the first raw sequent subsumes the second.
 <span class="lineno"> 1395 </span>rawSequentSubsumes :: SharedContext -&gt; RawSequent Prop -&gt; RawSequent Prop -&gt; IO Bool
@@ -1447,88 +1447,88 @@ span.spaces    { background: white }
 <span class="lineno"> 1428 </span><span class="spaces">     </span><span class="nottickedoff">return (UnfocusedSequent hs gs)</span></span>
 <span class="lineno"> 1429 </span>
 <span class="lineno"> 1430 </span>normalizeRawSequent :: SharedContext -&gt; RawSequent Prop -&gt; IO (RawSequent Prop)
-<span class="lineno"> 1431 </span><span class="decl"><span class="istickedoff">normalizeRawSequent sc (RawSequent hs gs) =</span>
-<span class="lineno"> 1432 </span><span class="spaces">  </span><span class="istickedoff">do hs' &lt;- mapM (normalizeHyp sc) hs</span>
-<span class="lineno"> 1433 </span><span class="spaces">     </span><span class="istickedoff">gs' &lt;- mapM (normalizeConcl sc) gs</span>
-<span class="lineno"> 1434 </span><span class="spaces">     </span><span class="istickedoff">return (joinSequents (hs' ++ gs'))</span></span>
+<span class="lineno"> 1431 </span><span class="decl"><span class="nottickedoff">normalizeRawSequent sc (RawSequent hs gs) =</span>
+<span class="lineno"> 1432 </span><span class="spaces">  </span><span class="nottickedoff">do hs' &lt;- mapM (normalizeHyp sc) hs</span>
+<span class="lineno"> 1433 </span><span class="spaces">     </span><span class="nottickedoff">gs' &lt;- mapM (normalizeConcl sc) gs</span>
+<span class="lineno"> 1434 </span><span class="spaces">     </span><span class="nottickedoff">return (joinSequents (hs' ++ gs'))</span></span>
 <span class="lineno"> 1435 </span>
 <span class="lineno"> 1436 </span>joinSequent :: RawSequent Prop -&gt; RawSequent Prop -&gt; RawSequent Prop
-<span class="lineno"> 1437 </span><span class="decl"><span class="istickedoff">joinSequent (RawSequent hs1 gs1) (RawSequent hs2 gs2) = RawSequent (hs1 ++ hs2) (gs1 ++ gs2)</span></span>
+<span class="lineno"> 1437 </span><span class="decl"><span class="nottickedoff">joinSequent (RawSequent hs1 gs1) (RawSequent hs2 gs2) = RawSequent (hs1 ++ hs2) (gs1 ++ gs2)</span></span>
 <span class="lineno"> 1438 </span>
 <span class="lineno"> 1439 </span>joinSequents :: [RawSequent Prop] -&gt; RawSequent Prop
-<span class="lineno"> 1440 </span><span class="decl"><span class="istickedoff">joinSequents = foldl joinSequent (RawSequent [] [])</span></span>
+<span class="lineno"> 1440 </span><span class="decl"><span class="nottickedoff">joinSequents = foldl joinSequent (RawSequent [] [])</span></span>
 <span class="lineno"> 1441 </span>
 <span class="lineno"> 1442 </span>
 <span class="lineno"> 1443 </span>normalizeHyp :: SharedContext -&gt; Prop -&gt; IO (RawSequent Prop)
-<span class="lineno"> 1444 </span><span class="decl"><span class="istickedoff">normalizeHyp sc p =</span>
-<span class="lineno"> 1445 </span><span class="spaces">  </span><span class="istickedoff">do t &lt;- scWhnf sc (unProp p)</span>
-<span class="lineno"> 1446 </span><span class="spaces">     </span><span class="istickedoff">case asEqTrue t of</span>
-<span class="lineno"> 1447 </span><span class="spaces">       </span><span class="istickedoff">Just b -&gt; normalizeHypBool <span class="nottickedoff">sc</span> b &gt;&gt;= \case</span>
-<span class="lineno"> 1448 </span><span class="spaces">                   </span><span class="istickedoff">Just sqt -&gt; <span class="nottickedoff">return sqt</span></span>
-<span class="lineno"> 1449 </span><span class="spaces">                   </span><span class="istickedoff">Nothing  -&gt; return (RawSequent [p] [])</span>
-<span class="lineno"> 1450 </span><span class="spaces">       </span><span class="istickedoff">_      -&gt; <span class="nottickedoff">return (RawSequent [p] [])</span></span></span>
+<span class="lineno"> 1444 </span><span class="decl"><span class="nottickedoff">normalizeHyp sc p =</span>
+<span class="lineno"> 1445 </span><span class="spaces">  </span><span class="nottickedoff">do t &lt;- scWhnf sc (unProp p)</span>
+<span class="lineno"> 1446 </span><span class="spaces">     </span><span class="nottickedoff">case asEqTrue t of</span>
+<span class="lineno"> 1447 </span><span class="spaces">       </span><span class="nottickedoff">Just b -&gt; normalizeHypBool sc b &gt;&gt;= \case</span>
+<span class="lineno"> 1448 </span><span class="spaces">                   </span><span class="nottickedoff">Just sqt -&gt; return sqt</span>
+<span class="lineno"> 1449 </span><span class="spaces">                   </span><span class="nottickedoff">Nothing  -&gt; return (RawSequent [p] [])</span>
+<span class="lineno"> 1450 </span><span class="spaces">       </span><span class="nottickedoff">_      -&gt; return (RawSequent [p] [])</span></span>
 <span class="lineno"> 1451 </span>
 <span class="lineno"> 1452 </span>normalizeConcl :: SharedContext -&gt; Prop -&gt; IO (RawSequent Prop)
-<span class="lineno"> 1453 </span><span class="decl"><span class="istickedoff">normalizeConcl sc p =</span>
-<span class="lineno"> 1454 </span><span class="spaces">  </span><span class="istickedoff">do t &lt;- scWhnf sc (unProp p)</span>
-<span class="lineno"> 1455 </span><span class="spaces">     </span><span class="istickedoff">case asEqTrue t of</span>
-<span class="lineno"> 1456 </span><span class="spaces">       </span><span class="istickedoff">Just b -&gt; normalizeConclBool sc b &gt;&gt;= \case</span>
-<span class="lineno"> 1457 </span><span class="spaces">                   </span><span class="istickedoff">Just sqt -&gt; return sqt</span>
-<span class="lineno"> 1458 </span><span class="spaces">                   </span><span class="istickedoff">Nothing  -&gt; return (RawSequent [] [p])</span>
-<span class="lineno"> 1459 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 1460 </span><span class="spaces">         </span><span class="istickedoff">-- handle the case of (H1 -&gt; H2), where H1 and H2 are in Prop</span>
-<span class="lineno"> 1461 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">case asPi t of</span></span>
-<span class="lineno"> 1462 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">Just (nm, arg, body)</span></span>
-<span class="lineno"> 1463 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- check that this is non-dependent Pi (AKA arrow type)</span></span>
-<span class="lineno"> 1464 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">| IntSet.notMember (vnIndex nm) (freeVars body) -&gt;</span></span>
-<span class="lineno"> 1465 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">termToMaybeProp sc arg &gt;&gt;= \case</span></span>
-<span class="lineno"> 1466 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; return (RawSequent [] [p])</span></span>
-<span class="lineno"> 1467 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Just h  -&gt;</span></span>
-<span class="lineno"> 1468 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">do hsqt &lt;- normalizeHyp sc h</span></span>
-<span class="lineno"> 1469 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">gsqt &lt;- normalizeConcl sc (Prop body)</span></span>
-<span class="lineno"> 1470 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">return (joinSequent hsqt gsqt)</span></span>
-<span class="lineno"> 1471 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; return (RawSequent [] [p])</span></span></span>
+<span class="lineno"> 1453 </span><span class="decl"><span class="nottickedoff">normalizeConcl sc p =</span>
+<span class="lineno"> 1454 </span><span class="spaces">  </span><span class="nottickedoff">do t &lt;- scWhnf sc (unProp p)</span>
+<span class="lineno"> 1455 </span><span class="spaces">     </span><span class="nottickedoff">case asEqTrue t of</span>
+<span class="lineno"> 1456 </span><span class="spaces">       </span><span class="nottickedoff">Just b -&gt; normalizeConclBool sc b &gt;&gt;= \case</span>
+<span class="lineno"> 1457 </span><span class="spaces">                   </span><span class="nottickedoff">Just sqt -&gt; return sqt</span>
+<span class="lineno"> 1458 </span><span class="spaces">                   </span><span class="nottickedoff">Nothing  -&gt; return (RawSequent [] [p])</span>
+<span class="lineno"> 1459 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt;</span>
+<span class="lineno"> 1460 </span><span class="spaces">         </span><span class="nottickedoff">-- handle the case of (H1 -&gt; H2), where H1 and H2 are in Prop</span>
+<span class="lineno"> 1461 </span><span class="spaces">         </span><span class="nottickedoff">case asPi t of</span>
+<span class="lineno"> 1462 </span><span class="spaces">           </span><span class="nottickedoff">Just (nm, arg, body)</span>
+<span class="lineno"> 1463 </span><span class="spaces">             </span><span class="nottickedoff">-- check that this is non-dependent Pi (AKA arrow type)</span>
+<span class="lineno"> 1464 </span><span class="spaces">             </span><span class="nottickedoff">| IntSet.notMember (vnIndex nm) (freeVars body) -&gt;</span>
+<span class="lineno"> 1465 </span><span class="spaces">             </span><span class="nottickedoff">termToMaybeProp sc arg &gt;&gt;= \case</span>
+<span class="lineno"> 1466 </span><span class="spaces">               </span><span class="nottickedoff">Nothing -&gt; return (RawSequent [] [p])</span>
+<span class="lineno"> 1467 </span><span class="spaces">               </span><span class="nottickedoff">Just h  -&gt;</span>
+<span class="lineno"> 1468 </span><span class="spaces">                 </span><span class="nottickedoff">do hsqt &lt;- normalizeHyp sc h</span>
+<span class="lineno"> 1469 </span><span class="spaces">                    </span><span class="nottickedoff">gsqt &lt;- normalizeConcl sc (Prop body)</span>
+<span class="lineno"> 1470 </span><span class="spaces">                    </span><span class="nottickedoff">return (joinSequent hsqt gsqt)</span>
+<span class="lineno"> 1471 </span><span class="spaces">           </span><span class="nottickedoff">_ -&gt; return (RawSequent [] [p])</span></span>
 <span class="lineno"> 1472 </span>
 <span class="lineno"> 1473 </span>normalizeHypBool :: SharedContext -&gt; Term -&gt; IO (Maybe (RawSequent Prop))
-<span class="lineno"> 1474 </span><span class="decl"><span class="istickedoff">normalizeHypBool sc b</span>
-<span class="lineno"> 1475 </span><span class="spaces">  </span><span class="istickedoff">-- Don't evaluate to WHNF. That would unfold Prelude.not and Prelude.and</span>
-<span class="lineno"> 1476 </span><span class="spaces">  </span><span class="istickedoff">| Just (_ :*: p1) &lt;- (<span class="nottickedoff">isGlobalDef &quot;Prelude.not&quot;</span> &lt;@&gt; <span class="nottickedoff">return</span>) b</span>
-<span class="lineno"> 1477 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just &lt;$&gt; normalizeConclBoolCommit sc p1</span></span>
-<span class="lineno"> 1478 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1479 </span><span class="spaces">  </span><span class="istickedoff">| Just (_ :*: p1 :*: p2) &lt;- (<span class="nottickedoff">isGlobalDef &quot;Prelude.and&quot; &lt;@&gt; return</span> &lt;@&gt; <span class="nottickedoff">return</span>) b</span>
-<span class="lineno"> 1480 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just &lt;$&gt; (joinSequent &lt;$&gt; normalizeHypBoolCommit sc p1 &lt;*&gt; normalizeHypBoolCommit sc p2)</span></span>
-<span class="lineno"> 1481 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1482 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span></span>
-<span class="lineno"> 1483 </span><span class="spaces">  </span><span class="istickedoff">= return Nothing</span></span>
+<span class="lineno"> 1474 </span><span class="decl"><span class="nottickedoff">normalizeHypBool sc b</span>
+<span class="lineno"> 1475 </span><span class="spaces">  </span><span class="nottickedoff">-- Don't evaluate to WHNF. That would unfold Prelude.not and Prelude.and</span>
+<span class="lineno"> 1476 </span><span class="spaces">  </span><span class="nottickedoff">| Just (_ :*: p1) &lt;- (isGlobalDef &quot;Prelude.not&quot; &lt;@&gt; return) b</span>
+<span class="lineno"> 1477 </span><span class="spaces">  </span><span class="nottickedoff">= Just &lt;$&gt; normalizeConclBoolCommit sc p1</span>
+<span class="lineno"> 1478 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1479 </span><span class="spaces">  </span><span class="nottickedoff">| Just (_ :*: p1 :*: p2) &lt;- (isGlobalDef &quot;Prelude.and&quot; &lt;@&gt; return &lt;@&gt; return) b</span>
+<span class="lineno"> 1480 </span><span class="spaces">  </span><span class="nottickedoff">= Just &lt;$&gt; (joinSequent &lt;$&gt; normalizeHypBoolCommit sc p1 &lt;*&gt; normalizeHypBoolCommit sc p2)</span>
+<span class="lineno"> 1481 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1482 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise</span>
+<span class="lineno"> 1483 </span><span class="spaces">  </span><span class="nottickedoff">= return Nothing</span></span>
 <span class="lineno"> 1484 </span>
 <span class="lineno"> 1485 </span>normalizeHypBoolCommit :: SharedContext -&gt; Term -&gt; IO (RawSequent Prop)
-<span class="lineno"> 1486 </span><span class="decl"><span class="istickedoff">normalizeHypBoolCommit sc b =</span>
-<span class="lineno"> 1487 </span><span class="spaces">  </span><span class="istickedoff">normalizeHypBool <span class="nottickedoff">sc</span> b &gt;&gt;= \case</span>
-<span class="lineno"> 1488 </span><span class="spaces">    </span><span class="istickedoff">Just sqt -&gt; <span class="nottickedoff">return sqt</span></span>
-<span class="lineno"> 1489 </span><span class="spaces">    </span><span class="istickedoff">Nothing  -&gt; do p &lt;- boolToProp sc [] b</span>
-<span class="lineno"> 1490 </span><span class="spaces">                   </span><span class="istickedoff">return (RawSequent [p] [])</span></span>
+<span class="lineno"> 1486 </span><span class="decl"><span class="nottickedoff">normalizeHypBoolCommit sc b =</span>
+<span class="lineno"> 1487 </span><span class="spaces">  </span><span class="nottickedoff">normalizeHypBool sc b &gt;&gt;= \case</span>
+<span class="lineno"> 1488 </span><span class="spaces">    </span><span class="nottickedoff">Just sqt -&gt; return sqt</span>
+<span class="lineno"> 1489 </span><span class="spaces">    </span><span class="nottickedoff">Nothing  -&gt; do p &lt;- boolToProp sc [] b</span>
+<span class="lineno"> 1490 </span><span class="spaces">                   </span><span class="nottickedoff">return (RawSequent [p] [])</span></span>
 <span class="lineno"> 1491 </span>
 <span class="lineno"> 1492 </span>normalizeConclBool :: SharedContext -&gt; Term -&gt; IO (Maybe (RawSequent Prop))
-<span class="lineno"> 1493 </span><span class="decl"><span class="istickedoff">normalizeConclBool sc b</span>
-<span class="lineno"> 1494 </span><span class="spaces">  </span><span class="istickedoff">-- Don't evaluate to WHNF. That would unfold Prelude.not, Prelude.or and Prelude.implies</span>
-<span class="lineno"> 1495 </span><span class="spaces">  </span><span class="istickedoff">| Just (_ :*: p1) &lt;- (isGlobalDef &quot;Prelude.not&quot; &lt;@&gt; return) b</span>
-<span class="lineno"> 1496 </span><span class="spaces">  </span><span class="istickedoff">= Just &lt;$&gt; normalizeHypBoolCommit sc p1</span>
-<span class="lineno"> 1497 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1498 </span><span class="spaces">  </span><span class="istickedoff">| Just (_ :*: p1 :*: p2) &lt;- (isGlobalDef &quot;Prelude.or&quot; &lt;@&gt; return &lt;@&gt; return) b</span>
-<span class="lineno"> 1499 </span><span class="spaces">  </span><span class="istickedoff">= Just &lt;$&gt; (joinSequent &lt;$&gt; normalizeConclBoolCommit sc p1 &lt;*&gt; normalizeConclBoolCommit sc p2)</span>
-<span class="lineno"> 1500 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1501 </span><span class="spaces">  </span><span class="istickedoff">| Just (_ :*: p1 :*: p2) &lt;- (<span class="nottickedoff">isGlobalDef &quot;Prelude.implies&quot; &lt;@&gt; return</span> &lt;@&gt; <span class="nottickedoff">return</span>) b</span>
-<span class="lineno"> 1502 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just &lt;$&gt; (joinSequent &lt;$&gt; normalizeHypBoolCommit sc p1 &lt;*&gt; normalizeConclBoolCommit sc p2)</span></span>
-<span class="lineno"> 1503 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1504 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span></span>
-<span class="lineno"> 1505 </span><span class="spaces">  </span><span class="istickedoff">= return Nothing</span></span>
+<span class="lineno"> 1493 </span><span class="decl"><span class="nottickedoff">normalizeConclBool sc b</span>
+<span class="lineno"> 1494 </span><span class="spaces">  </span><span class="nottickedoff">-- Don't evaluate to WHNF. That would unfold Prelude.not, Prelude.or and Prelude.implies</span>
+<span class="lineno"> 1495 </span><span class="spaces">  </span><span class="nottickedoff">| Just (_ :*: p1) &lt;- (isGlobalDef &quot;Prelude.not&quot; &lt;@&gt; return) b</span>
+<span class="lineno"> 1496 </span><span class="spaces">  </span><span class="nottickedoff">= Just &lt;$&gt; normalizeHypBoolCommit sc p1</span>
+<span class="lineno"> 1497 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1498 </span><span class="spaces">  </span><span class="nottickedoff">| Just (_ :*: p1 :*: p2) &lt;- (isGlobalDef &quot;Prelude.or&quot; &lt;@&gt; return &lt;@&gt; return) b</span>
+<span class="lineno"> 1499 </span><span class="spaces">  </span><span class="nottickedoff">= Just &lt;$&gt; (joinSequent &lt;$&gt; normalizeConclBoolCommit sc p1 &lt;*&gt; normalizeConclBoolCommit sc p2)</span>
+<span class="lineno"> 1500 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1501 </span><span class="spaces">  </span><span class="nottickedoff">| Just (_ :*: p1 :*: p2) &lt;- (isGlobalDef &quot;Prelude.implies&quot; &lt;@&gt; return &lt;@&gt; return) b</span>
+<span class="lineno"> 1502 </span><span class="spaces">  </span><span class="nottickedoff">= Just &lt;$&gt; (joinSequent &lt;$&gt; normalizeHypBoolCommit sc p1 &lt;*&gt; normalizeConclBoolCommit sc p2)</span>
+<span class="lineno"> 1503 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1504 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise</span>
+<span class="lineno"> 1505 </span><span class="spaces">  </span><span class="nottickedoff">= return Nothing</span></span>
 <span class="lineno"> 1506 </span>
 <span class="lineno"> 1507 </span>normalizeConclBoolCommit :: SharedContext -&gt; Term -&gt; IO (RawSequent Prop)
-<span class="lineno"> 1508 </span><span class="decl"><span class="istickedoff">normalizeConclBoolCommit sc b =</span>
-<span class="lineno"> 1509 </span><span class="spaces">  </span><span class="istickedoff">normalizeConclBool sc b &gt;&gt;= \case</span>
-<span class="lineno"> 1510 </span><span class="spaces">    </span><span class="istickedoff">Just sqt -&gt; return sqt</span>
-<span class="lineno"> 1511 </span><span class="spaces">    </span><span class="istickedoff">Nothing  -&gt; do p &lt;- boolToProp sc [] b</span>
-<span class="lineno"> 1512 </span><span class="spaces">                   </span><span class="istickedoff">return (RawSequent [] [p])</span></span>
+<span class="lineno"> 1508 </span><span class="decl"><span class="nottickedoff">normalizeConclBoolCommit sc b =</span>
+<span class="lineno"> 1509 </span><span class="spaces">  </span><span class="nottickedoff">normalizeConclBool sc b &gt;&gt;= \case</span>
+<span class="lineno"> 1510 </span><span class="spaces">    </span><span class="nottickedoff">Just sqt -&gt; return sqt</span>
+<span class="lineno"> 1511 </span><span class="spaces">    </span><span class="nottickedoff">Nothing  -&gt; do p &lt;- boolToProp sc [] b</span>
+<span class="lineno"> 1512 </span><span class="spaces">                   </span><span class="nottickedoff">return (RawSequent [] [p])</span></span>
 <span class="lineno"> 1513 </span>
 <span class="lineno"> 1514 </span>
 <span class="lineno"> 1515 </span>-- | Verify that the given evidence in fact supports the given proposition.
@@ -1627,24 +1627,24 @@ span.spaces    { background: white }
 <span class="lineno"> 1608 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">return (d1 &lt;&gt; d2)</span></span>
 <span class="lineno"> 1609 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1610 </span><span class="spaces">      </span><span class="istickedoff">ApplyHypEvidence n es -&gt;</span>
-<span class="lineno"> 1611 </span><span class="spaces">        </span><span class="istickedoff">case sqt of</span>
-<span class="lineno"> 1612 </span><span class="spaces">          </span><span class="istickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
-<span class="lineno"> 1613 </span><span class="spaces">            </span><span class="istickedoff">case genericDrop n hs of</span>
-<span class="lineno"> 1614 </span><span class="spaces">              </span><span class="istickedoff">(h:_) -&gt;</span>
-<span class="lineno"> 1615 </span><span class="spaces">                </span><span class="istickedoff">do (d,sy,p') &lt;- checkApply <span class="nottickedoff">nenv</span> <span class="nottickedoff">(\g' -&gt; ConclFocusedSequent hs (FB gs1 g' gs2))</span> h es</span>
-<span class="lineno"> 1616 </span><span class="spaces">                   </span><span class="istickedoff">ok &lt;- scConvertible <span class="nottickedoff">sc</span> <span class="nottickedoff">False</span> (unProp g) p'</span>
-<span class="lineno"> 1617 </span><span class="spaces">                   </span><span class="istickedoff">unless ok $ <span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno"> 1611 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">case sqt of</span></span>
+<span class="lineno"> 1612 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span></span>
+<span class="lineno"> 1613 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case genericDrop n hs of</span></span>
+<span class="lineno"> 1614 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">(h:_) -&gt;</span></span>
+<span class="lineno"> 1615 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">do (d,sy,p') &lt;- checkApply nenv (\g' -&gt; ConclFocusedSequent hs (FB gs1 g' gs2)) h es</span></span>
+<span class="lineno"> 1616 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">ok &lt;- scConvertible sc False (unProp g) p'</span></span>
+<span class="lineno"> 1617 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">unless ok $ fail $ unlines</span></span>
 <span class="lineno"> 1618 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Apply evidence does not match the required proposition&quot;</span></span>
 <span class="lineno"> 1619 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, showTerm (unProp g)</span></span>
 <span class="lineno"> 1620 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, showTerm p'</span></span>
 <span class="lineno"> 1621 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1622 </span><span class="spaces">                   </span><span class="istickedoff">return (<span class="nottickedoff">d</span>, <span class="nottickedoff">sy</span>)</span>
-<span class="lineno"> 1623 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1624 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ unlines $</span></span>
+<span class="lineno"> 1622 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">return (d, sy)</span></span>
+<span class="lineno"> 1623 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
+<span class="lineno"> 1624 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; fail $ unlines $</span></span>
 <span class="lineno"> 1625 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Not enough hypotheses in apply hypothesis: &quot; ++ show n</span></span>
 <span class="lineno"> 1626 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">, prettySequent PPS.defaultOpts nenv sqt</span></span>
 <span class="lineno"> 1627 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1628 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ unlines $</span></span>
+<span class="lineno"> 1628 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; fail $ unlines $</span></span>
 <span class="lineno"> 1629 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Apply hypothesis evidence requires a conclusion-focused sequent.&quot;</span></span>
 <span class="lineno"> 1630 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">, prettySequent PPS.defaultOpts nenv sqt</span></span>
 <span class="lineno"> 1631 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -1701,13 +1701,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1682 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">check nenv e' sqt'</span></span>
 <span class="lineno"> 1683 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1684 </span><span class="spaces">      </span><span class="istickedoff">NormalizeSequentEvidence sqt' e' -&gt;</span>
-<span class="lineno"> 1685 </span><span class="spaces">        </span><span class="istickedoff">do ok &lt;- normalizeSequentSubsumes sc sqt' sqt</span>
-<span class="lineno"> 1686 </span><span class="spaces">           </span><span class="istickedoff">unless ok $ <span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno"> 1685 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do ok &lt;- normalizeSequentSubsumes sc sqt' sqt</span></span>
+<span class="lineno"> 1686 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">unless ok $ fail $ unlines</span></span>
 <span class="lineno"> 1687 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Normalized sequent does not subsume goal&quot;</span></span>
 <span class="lineno"> 1688 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, prettySequent PPS.defaultOpts nenv sqt</span></span>
 <span class="lineno"> 1689 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, prettySequent PPS.defaultOpts nenv sqt'</span></span>
 <span class="lineno"> 1690 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1691 </span><span class="spaces">           </span><span class="istickedoff">check <span class="nottickedoff">nenv</span> e' sqt'</span>
+<span class="lineno"> 1691 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">check nenv e' sqt'</span></span>
 <span class="lineno"> 1692 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1693 </span><span class="spaces">      </span><span class="istickedoff">StructuralEvidence sqt' e' -&gt;</span>
 <span class="lineno"> 1694 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do ok &lt;- sequentSubsumes sc sqt' sqt</span></span>
@@ -2081,24 +2081,24 @@ span.spaces    { background: white }
 <span class="lineno"> 2062 </span>--   introducing new hypotheses.  The given integer indicates how many hypotheses
 <span class="lineno"> 2063 </span>--   to introduce.
 <span class="lineno"> 2064 </span>tacticIntroHyps :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Integer -&gt; Tactic m ()
-<span class="lineno"> 2065 </span><span class="decl"><span class="istickedoff">tacticIntroHyps sc n = Tactic \goal -&gt;</span>
-<span class="lineno"> 2066 </span><span class="spaces">  </span><span class="istickedoff">case goalSequent goal of</span>
-<span class="lineno"> 2067 </span><span class="spaces">    </span><span class="istickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
-<span class="lineno"> 2068 </span><span class="spaces">      </span><span class="istickedoff">do (newhs, g') &lt;- liftIO (loop n g)</span>
-<span class="lineno"> 2069 </span><span class="spaces">         </span><span class="istickedoff">let sqt' = ConclFocusedSequent (hs ++ newhs) (FB gs1 g' gs2)</span>
-<span class="lineno"> 2070 </span><span class="spaces">         </span><span class="istickedoff">let goal' = goal{ goalSequent = sqt' }</span>
-<span class="lineno"> 2071 </span><span class="spaces">         </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))</span>
-<span class="lineno"> 2072 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;goal_intro_hyps: conclusion focus required&quot;</span></span>
-<span class="lineno"> 2073 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2074 </span><span class="spaces"> </span><span class="istickedoff">where</span>
-<span class="lineno"> 2075 </span><span class="spaces">   </span><span class="istickedoff">loop i g</span>
-<span class="lineno"> 2076 </span><span class="spaces">     </span><span class="istickedoff">| i &lt;= 0 = return ([],g)</span>
-<span class="lineno"> 2077 </span><span class="spaces">     </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno"> 2078 </span><span class="spaces">         </span><span class="istickedoff">splitImpl sc g &gt;&gt;= \case</span>
-<span class="lineno"> 2079 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;intro_hyps: could not find enough hypotheses to introduce&quot;</span></span>
-<span class="lineno"> 2080 </span><span class="spaces">           </span><span class="istickedoff">Just (h,g') -&gt;</span>
-<span class="lineno"> 2081 </span><span class="spaces">             </span><span class="istickedoff">do (hs,g'') &lt;- loop (i-1) g'</span>
-<span class="lineno"> 2082 </span><span class="spaces">                </span><span class="istickedoff">return (h:hs, g'')</span></span>
+<span class="lineno"> 2065 </span><span class="decl"><span class="nottickedoff">tacticIntroHyps sc n = Tactic \goal -&gt;</span>
+<span class="lineno"> 2066 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent goal of</span>
+<span class="lineno"> 2067 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
+<span class="lineno"> 2068 </span><span class="spaces">      </span><span class="nottickedoff">do (newhs, g') &lt;- liftIO (loop n g)</span>
+<span class="lineno"> 2069 </span><span class="spaces">         </span><span class="nottickedoff">let sqt' = ConclFocusedSequent (hs ++ newhs) (FB gs1 g' gs2)</span>
+<span class="lineno"> 2070 </span><span class="spaces">         </span><span class="nottickedoff">let goal' = goal{ goalSequent = sqt' }</span>
+<span class="lineno"> 2071 </span><span class="spaces">         </span><span class="nottickedoff">return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))</span>
+<span class="lineno"> 2072 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail &quot;goal_intro_hyps: conclusion focus required&quot;</span>
+<span class="lineno"> 2073 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2074 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2075 </span><span class="spaces">   </span><span class="nottickedoff">loop i g</span>
+<span class="lineno"> 2076 </span><span class="spaces">     </span><span class="nottickedoff">| i &lt;= 0 = return ([],g)</span>
+<span class="lineno"> 2077 </span><span class="spaces">     </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno"> 2078 </span><span class="spaces">         </span><span class="nottickedoff">splitImpl sc g &gt;&gt;= \case</span>
+<span class="lineno"> 2079 </span><span class="spaces">           </span><span class="nottickedoff">Nothing -&gt; fail &quot;intro_hyps: could not find enough hypotheses to introduce&quot;</span>
+<span class="lineno"> 2080 </span><span class="spaces">           </span><span class="nottickedoff">Just (h,g') -&gt;</span>
+<span class="lineno"> 2081 </span><span class="spaces">             </span><span class="nottickedoff">do (hs,g'') &lt;- loop (i-1) g'</span>
+<span class="lineno"> 2082 </span><span class="spaces">                </span><span class="nottickedoff">return (h:hs, g'')</span></span>
 <span class="lineno"> 2083 </span>
 <span class="lineno"> 2084 </span>tacticRevertHyp :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Integer -&gt; Tactic m ()
 <span class="lineno"> 2085 </span><span class="decl"><span class="nottickedoff">tacticRevertHyp sc i = Tactic \goal -&gt;</span>
@@ -2121,32 +2121,32 @@ span.spaces    { background: white }
 <span class="lineno"> 2102 </span>-- | Attempt to prove a goal by applying a local hypothesis.  Any hypotheses of
 <span class="lineno"> 2103 </span>--   the applied proposition will generate additional subgoals.
 <span class="lineno"> 2104 </span>tacticApplyHyp :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Integer -&gt; Tactic m ()
-<span class="lineno"> 2105 </span><span class="decl"><span class="istickedoff">tacticApplyHyp sc n = Tactic \goal -&gt;</span>
-<span class="lineno"> 2106 </span><span class="spaces">  </span><span class="istickedoff">case goalSequent goal of</span>
-<span class="lineno"> 2107 </span><span class="spaces">    </span><span class="istickedoff">UnfocusedSequent{} -&gt; <span class="nottickedoff">fail &quot;apply hyp tactic: focus required&quot;</span></span>
-<span class="lineno"> 2108 </span><span class="spaces">    </span><span class="istickedoff">HypFocusedSequent{} -&gt; <span class="nottickedoff">fail &quot;apply hyp tactic: cannot apply in a hypothesis&quot;</span></span>
-<span class="lineno"> 2109 </span><span class="spaces">    </span><span class="istickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
-<span class="lineno"> 2110 </span><span class="spaces">      </span><span class="istickedoff">case genericDrop n hs of</span>
-<span class="lineno"> 2111 </span><span class="spaces">        </span><span class="istickedoff">(h:_) -&gt;</span>
-<span class="lineno"> 2112 </span><span class="spaces">          </span><span class="istickedoff">liftIO (propApply <span class="nottickedoff">sc</span> h g) &gt;&gt;= \case</span>
-<span class="lineno"> 2113 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;apply hyp tactic: no match&quot;</span></span>
-<span class="lineno"> 2114 </span><span class="spaces">            </span><span class="istickedoff">Just newterms -&gt;</span>
-<span class="lineno"> 2115 </span><span class="spaces">              </span><span class="istickedoff">let newgoals =</span>
-<span class="lineno"> 2116 </span><span class="spaces">                    </span><span class="istickedoff">[ <span class="nottickedoff">goal{ goalSequent = ConclFocusedSequent hs (FB gs1 p gs2)</span></span>
-<span class="lineno"> 2117 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">, goalType = goalType goal ++ &quot;.subgoal&quot; ++ show i</span></span>
-<span class="lineno"> 2118 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">}</span></span>
-<span class="lineno"> 2119 </span><span class="spaces">                    </span><span class="istickedoff">| Right p &lt;- newterms</span>
-<span class="lineno"> 2120 </span><span class="spaces">                    </span><span class="istickedoff">| i &lt;- <span class="nottickedoff">[0::Integer ..]</span></span>
-<span class="lineno"> 2121 </span><span class="spaces">                    </span><span class="istickedoff">] in</span>
-<span class="lineno"> 2122 </span><span class="spaces">              </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, newgoals, \es -&gt; ApplyHypEvidence n &lt;$&gt; processEvidence newterms es)</span>
-<span class="lineno"> 2123 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;apply hyp tactic: not enough hypotheses&quot;</span></span>
-<span class="lineno"> 2124 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2125 </span><span class="spaces"> </span><span class="istickedoff">where</span>
-<span class="lineno"> 2126 </span><span class="spaces">   </span><span class="istickedoff">processEvidence :: [Either Term Prop] -&gt; [Evidence] -&gt; IO [Either Term Evidence]</span>
-<span class="lineno"> 2127 </span><span class="spaces">   </span><span class="istickedoff">processEvidence (Left tm : xs) es     = <span class="nottickedoff">(Left tm :) &lt;$&gt; processEvidence xs es</span></span>
-<span class="lineno"> 2128 </span><span class="spaces">   </span><span class="istickedoff">processEvidence (Right _ : xs) (e:es) = <span class="nottickedoff">(Right e :) &lt;$&gt; processEvidence xs es</span></span>
-<span class="lineno"> 2129 </span><span class="spaces">   </span><span class="istickedoff">processEvidence []             []     = pure []</span>
-<span class="lineno"> 2130 </span><span class="spaces">   </span><span class="istickedoff">processEvidence _ _ = <span class="nottickedoff">fail &quot;apply hyp tactic failed: evidence mismatch&quot;</span></span></span>
+<span class="lineno"> 2105 </span><span class="decl"><span class="nottickedoff">tacticApplyHyp sc n = Tactic \goal -&gt;</span>
+<span class="lineno"> 2106 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent goal of</span>
+<span class="lineno"> 2107 </span><span class="spaces">    </span><span class="nottickedoff">UnfocusedSequent{} -&gt; fail &quot;apply hyp tactic: focus required&quot;</span>
+<span class="lineno"> 2108 </span><span class="spaces">    </span><span class="nottickedoff">HypFocusedSequent{} -&gt; fail &quot;apply hyp tactic: cannot apply in a hypothesis&quot;</span>
+<span class="lineno"> 2109 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
+<span class="lineno"> 2110 </span><span class="spaces">      </span><span class="nottickedoff">case genericDrop n hs of</span>
+<span class="lineno"> 2111 </span><span class="spaces">        </span><span class="nottickedoff">(h:_) -&gt;</span>
+<span class="lineno"> 2112 </span><span class="spaces">          </span><span class="nottickedoff">liftIO (propApply sc h g) &gt;&gt;= \case</span>
+<span class="lineno"> 2113 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; fail &quot;apply hyp tactic: no match&quot;</span>
+<span class="lineno"> 2114 </span><span class="spaces">            </span><span class="nottickedoff">Just newterms -&gt;</span>
+<span class="lineno"> 2115 </span><span class="spaces">              </span><span class="nottickedoff">let newgoals =</span>
+<span class="lineno"> 2116 </span><span class="spaces">                    </span><span class="nottickedoff">[ goal{ goalSequent = ConclFocusedSequent hs (FB gs1 p gs2)</span>
+<span class="lineno"> 2117 </span><span class="spaces">                          </span><span class="nottickedoff">, goalType = goalType goal ++ &quot;.subgoal&quot; ++ show i</span>
+<span class="lineno"> 2118 </span><span class="spaces">                          </span><span class="nottickedoff">}</span>
+<span class="lineno"> 2119 </span><span class="spaces">                    </span><span class="nottickedoff">| Right p &lt;- newterms</span>
+<span class="lineno"> 2120 </span><span class="spaces">                    </span><span class="nottickedoff">| i &lt;- [0::Integer ..]</span>
+<span class="lineno"> 2121 </span><span class="spaces">                    </span><span class="nottickedoff">] in</span>
+<span class="lineno"> 2122 </span><span class="spaces">              </span><span class="nottickedoff">return ((), mempty, newgoals, \es -&gt; ApplyHypEvidence n &lt;$&gt; processEvidence newterms es)</span>
+<span class="lineno"> 2123 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail &quot;apply hyp tactic: not enough hypotheses&quot;</span>
+<span class="lineno"> 2124 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2125 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2126 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence :: [Either Term Prop] -&gt; [Evidence] -&gt; IO [Either Term Evidence]</span>
+<span class="lineno"> 2127 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence (Left tm : xs) es     = (Left tm :) &lt;$&gt; processEvidence xs es</span>
+<span class="lineno"> 2128 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence (Right _ : xs) (e:es) = (Right e :) &lt;$&gt; processEvidence xs es</span>
+<span class="lineno"> 2129 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence []             []     = pure []</span>
+<span class="lineno"> 2130 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence _ _ = fail &quot;apply hyp tactic failed: evidence mismatch&quot;</span></span>
 <span class="lineno"> 2131 </span>
 <span class="lineno"> 2132 </span>
 <span class="lineno"> 2133 </span>-- | Attempt to prove a goal by applying the given theorem.  Any hypotheses of
