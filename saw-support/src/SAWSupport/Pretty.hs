@@ -33,8 +33,6 @@ Portability : non-portable (language extensions)
 -- prettyprinter, none of which shared any logic other than the
 -- upstream prettyprinter package.
 --
--- XXX: there's more in MrSolver but it will require untangling.
---
 -- XXX: Someone should try to systematize the naming. In particular
 -- we'd like to have some kind of convention like (perhaps)
 -- "prettyFoo" generates a Doc for a Foo and "ppFoo" generates a Doc
@@ -43,6 +41,9 @@ Portability : non-portable (language extensions)
 -- choice seems preferable to the other way around.) I've done some
 -- of this, but there's a lot more out in the rest of the tree that
 -- ought to be updated to match it.
+--
+-- Update: that convention has now been adopted, but is still not
+-- widely honored.
 --
 -- XXX: should come up with a better name for pShowText, and remove
 -- pShow entirely. These shouldn't be called "show" because they
@@ -93,6 +94,7 @@ module SAWSupport.Pretty (
     replicate,
     commaSepAll,
     render,
+    renderText,
     pShow,
     pShowText,
     showCommaSep,
@@ -281,6 +283,14 @@ commaSepAll ds = case ds of
 render :: Opts -> Doc -> String
 render opts doc =
   TextL.unpack (PP.renderLazy (style (PP.layoutPretty layoutOpts doc)))
+  where
+    -- ribbon width 64, with effectively unlimited right margin
+    layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
+    style = if ppColor opts then PP.reAnnotateS colorStyle else PP.unAnnotateS
+
+renderText :: Opts -> Doc -> Text
+renderText opts doc =
+  PP.renderStrict (style (PP.layoutPretty layoutOpts doc))
   where
     -- ribbon width 64, with effectively unlimited right margin
     layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
