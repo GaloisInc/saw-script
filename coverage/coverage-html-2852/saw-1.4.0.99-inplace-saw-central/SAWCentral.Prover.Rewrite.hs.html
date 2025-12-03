@@ -83,17 +83,16 @@ span.spaces    { background: white }
 <span class="lineno">   64 </span><span class="spaces">         </span><span class="istickedoff">, &quot;bvNat_bvToNat&quot;</span>
 <span class="lineno">   65 </span><span class="spaces">         </span><span class="istickedoff">]</span>
 <span class="lineno">   66 </span><span class="spaces">       </span><span class="istickedoff">defs = map (mkIdent (mkModuleName [&quot;Cryptol&quot;])) [&quot;seq&quot;, &quot;ecEq&quot;, &quot;ecNotEq&quot;]</span>
-<span class="lineno">   67 </span><span class="spaces">       </span><span class="istickedoff">procs = [tupleConversion, recordConversion] ++</span>
-<span class="lineno">   68 </span><span class="spaces">               </span><span class="istickedoff">bvConversions ++ natConversions ++ vecConversions</span></span>
+<span class="lineno">   67 </span><span class="spaces">       </span><span class="istickedoff">procs = bvConversions ++ natConversions ++ vecConversions</span></span>
+<span class="lineno">   68 </span>
 <span class="lineno">   69 </span>
 <span class="lineno">   70 </span>
-<span class="lineno">   71 </span>
-<span class="lineno">   72 </span>defRewrites :: SharedContext -&gt; Ident -&gt; IO [RewriteRule a]
-<span class="lineno">   73 </span><span class="decl"><span class="istickedoff">defRewrites sc ident =</span>
-<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff">scFindDef sc ident &gt;&gt;= \maybe_def -&gt;</span>
-<span class="lineno">   75 </span><span class="spaces">  </span><span class="istickedoff">case maybe_def of</span>
-<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">return []</span></span>
-<span class="lineno">   77 </span><span class="spaces">    </span><span class="istickedoff">Just def -&gt; scDefRewriteRules sc def</span></span>
+<span class="lineno">   71 </span>defRewrites :: SharedContext -&gt; Ident -&gt; IO [RewriteRule a]
+<span class="lineno">   72 </span><span class="decl"><span class="istickedoff">defRewrites sc ident =</span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="istickedoff">scFindDef sc ident &gt;&gt;= \maybe_def -&gt;</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff">case maybe_def of</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">return []</span></span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">Just def -&gt; scDefRewriteRules sc def</span></span>
 
 </pre>
 </body>
