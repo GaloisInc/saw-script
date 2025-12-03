@@ -63,8 +63,6 @@ module SAWCore.Conversion
   , runConversion
   , conversionPat
     -- ** Prelude conversions
-  , tupleConversion
-  , recordConversion
   , natConversions
   , vecConversions
   , bvConversions
@@ -86,14 +84,12 @@ import Control.Monad (guard, liftM2, (>=>), (<=<))
 import Data.Bits
 import qualified Data.Text as Text
 import Data.Map (Map)
-import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
 import SAWCore.Name
 import SAWCore.OpenTerm (OpenTerm)
 import qualified SAWCore.OpenTerm as OT
-import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
 import SAWCore.Recognizer ((:*:)(..))
 import SAWCore.Prim
@@ -429,24 +425,6 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 
 ----------------------------------------------------------------------
 -- Conversions for Prelude operations
-
--- | Conversion for selector on a tuple
-tupleConversion :: Conversion
-tupleConversion = Conversion False $ thenMatcher (asTupleSelector asAnyTupleValue) action
-  where
-    action (ts, i)
-      | i > length ts =
-          panic "SAWCore.tupleConversion" [
-              "index " <> Text.pack (show i) <> " out of bounds; limit is " <>
-                  Text.pack (show $ length ts)
-          ]
-      | otherwise =
-          Just (OT.term (ts !! (i - 1)))
-
--- | Conversion for selector on a record
-recordConversion :: Conversion
-recordConversion = Conversion False $ thenMatcher (asRecordSelector asAnyRecordValue) action
-  where action (m, i) = fmap OT.term (Map.lookup i m)
 
 -- | Conversions for operations on Nat literals
 natConversions :: [Conversion]

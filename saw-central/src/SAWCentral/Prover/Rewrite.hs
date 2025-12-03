@@ -64,8 +64,7 @@ basic_ss sc =
          , "bvNat_bvToNat"
          ]
        defs = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ecEq", "ecNotEq"]
-       procs = [tupleConversion, recordConversion] ++
-               bvConversions ++ natConversions ++ vecConversions
+       procs = bvConversions ++ natConversions ++ vecConversions
 
 
 

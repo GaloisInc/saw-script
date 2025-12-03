@@ -1038,16 +1038,9 @@ data WHNFElim
 -- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
 -- definitions at the top level of a term.
 scWhnf :: SharedContext -> Term -> IO Term
-scWhnf sc t0 =
-  do cache <- newCacheIntMap
-     let ?cache = cache in memo t0
+scWhnf sc t0 = go [] t0
   where
-    memo :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
-    memo t =
-      case t of
-        STApp { stAppIndex = i } -> useCache ?cache i (go [] t)
-
-    go :: (?cache :: Cache IO TermIndex Term) => [WHNFElim] -> Term -> IO Term
+    go :: [WHNFElim] -> Term -> IO Term
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
     go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
@@ -1078,8 +1071,7 @@ scWhnf sc t0 =
 
     go xs                     t                                 = foldM reapply t xs
 
-    betaReduce :: (?cache :: Cache IO TermIndex Term) =>
-      [WHNFElim] -> [(VarName, Term)] -> Term -> IO Term
+    betaReduce :: [WHNFElim] -> [(VarName, Term)] -> Term -> IO Term
     betaReduce (ElimApp x : xs) vs (asLambda -> Just (vn,_,body)) =
       betaReduce xs ((vn, x) : vs) body
     betaReduce xs vs body =

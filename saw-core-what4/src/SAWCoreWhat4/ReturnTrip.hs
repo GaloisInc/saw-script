@@ -167,7 +167,7 @@ bindSAWTerm sym st bt t = do
     Just (Some var) ->
       case testEquality bt (B.exprType var) of
         Just Refl -> pure var
-        Nothing   -> panic "bindSawTerm" ["Type error"]
+        Nothing   -> panic "bindSAWTerm" ["Type error"]
     Nothing -> do
       sbVar@(B.BoundVarExpr bv) <- freshConstant sym emptySymbol bt
       B.insertIdxValue (saw_elt_cache st) (B.bvarId bv) (SAWExpr t)
