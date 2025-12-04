@@ -127,7 +127,10 @@ warnP say pos msg = do
 --   for issuing a single message.
 noteN :: SayFunc m -> Text -> m ()
 noteN say msg =
-    say $ "Notice: " <> msg
+    -- XXX: it is probably good to insert "Notice:" as I'd planned...
+    -- XXX: but not quite yet: it creates a huge test footprint.
+    --say $ "Notice: " <> msg
+    say msg
 
 -- | Backend for `noteP` and `noteX` in `SAWConsole` in terms of a
 --   function `say` for issuing a single message.

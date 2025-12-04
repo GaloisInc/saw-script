@@ -69,13 +69,6 @@ replFileName = "<stdin>"
 ------------------------------------------------------------
 -- REPL commands
 
-failOn :: [Text] -> REPL a
-failOn errs = case (reverse errs) of
-    [] -> panic "failOn" ["Failure with no error messages"]
-    lastMsg : revRestMsgs -> do
-        liftIO $ mapM_ TextIO.putStrLn (reverse revRestMsgs)
-        fail (Text.unpack lastMsg)
-
 cdCmd :: FilePath -> REPL ()
 cdCmd f
     | null f =
@@ -168,11 +161,8 @@ searchCmd str
      let opts = roOptions ro
          environ = rwEnviron rw
          rebindables = rwRebindables rw
-     errs_or_pat <- liftIO $
+     pat <- liftIO $
          Loader.readSchemaPattern opts replFileName environ rebindables avail str
-     pat <- case errs_or_pat of
-           Left errs -> failOn errs
-           Right p -> return p
 
      let primsAvail = rwPrimsAvail rw
      let Environ varenv tyenv _cryenv = environ
@@ -297,11 +287,8 @@ typeOfCmd str
          environ = rwEnviron rw
          rebindables = rwRebindables rw
          avail = rwPrimsAvail rw
-     errs_or_expr <- liftIO $
+     (schema, _expr) <- liftIO $
          Loader.readExpression opts replFileName environ rebindables avail str
-     (schema, _expr) <- case errs_or_expr of
-         Left errs -> failOn errs
-         Right info -> return info
      liftIO $ TextIO.putStrLn $ PPS.pShowText schema
 
 
@@ -399,14 +386,11 @@ executeSAWScriptText str = exceptionProtect $ do
   -- in Value.hs. That will make sure stack traces get printed from anything
   -- that blows up in the loader. (Note that while by default stack traces
   -- from here aren't particularly interesting, we might be in a nested REPL.)
-  errs_or_stmts <- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts replFileName str
-  case errs_or_stmts of
-    Left errs -> failOn errs
-    Right stmts -> do
-         mbPst <- getProofState
-         case mbPst of
-           Nothing -> void $ liftTopLevel (interpretTopStmts True stmts)
-           Just _  -> void $ liftProofScript (interpretTopStmts True stmts)
+  stmts <- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts replFileName str
+  mbPst <- getProofState
+  case mbPst of
+      Nothing -> void $ liftTopLevel (interpretTopStmts True stmts)
+      Just _  -> void $ liftProofScript (interpretTopStmts True stmts)
 
 
 ------------------------------------------------------------

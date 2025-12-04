@@ -26,6 +26,8 @@ import qualified Prettyprinter.Render.String as PP
 import qualified What4.ProgramLoc as W4
 import qualified What4.FunctionName as W4
 
+import SAWSupport.Position as Support
+
 -- Pos ------------------------------------------------------------------------
 
 -- Type inference info, to be used to interpret the positions of
@@ -319,6 +321,9 @@ instance Show Pos where
   show (PosInternal s)       = "[internal:" ++ s ++ "]"
   show PosInsideBuiltin      = "(builtin)"
   show PosREPL               = "REPL"
+
+instance Support.IsPosition Pos where
+  ppPosition pos = Text.pack $ show pos
 
 toW4Loc :: Text.Text -> Pos -> W4.ProgramLoc
 toW4Loc fnm =

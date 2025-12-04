@@ -1113,15 +1113,7 @@ interpretFile file runMain =
   where
     interp = do
       opts <- getOptions
-      errs_or_stmts <- io $ Loader.findAndLoadFileUnchecked opts file
-      stmts <- do
-        case errs_or_stmts of
-          Left errs -> do
-            -- Don't use Text.unlines here; it inserts a newline at
-            -- the end and that produces extra blank lines in the
-            -- output.
-            throwTopLevel $ Text.unpack $ Text.intercalate "\n" errs
-          Right stmts -> pure stmts
+      stmts <- io $ Loader.findAndLoadFileUnchecked opts file
 
       -- Since #2807, to maintain the historical behavior of "main"
       -- we need to run any "main" _inside_ the pushdir/popdir pair
@@ -2311,22 +2303,14 @@ print_value v = do
 dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
 dump_file_AST _bic opts filetxt = do
     let file = Text.unpack filetxt
-    errs_or_stmts <- Loader.findAndLoadFileUnchecked opts file
-    case errs_or_stmts of
-        Left errs ->
-            X.throwIO $ userError $ Text.unpack $ Text.unlines errs
-        Right stmts ->
-            mapM_ print stmts
+    stmts <- Loader.findAndLoadFileUnchecked opts file
+    mapM_ print stmts
 
 parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> IO ()
 parser_printer_roundtrip _bic opts filetxt = do
     let file = Text.unpack filetxt
-    errs_or_stmts <- Loader.findAndLoadFileUnchecked opts file
-    case errs_or_stmts of
-        Left errs ->
-            X.throwIO $ userError $ Text.unpack $ Text.unlines errs
-        Right stmts ->
-            PP.putDoc $ SS.prettyWholeModule stmts
+    stmts <- Loader.findAndLoadFileUnchecked opts file
+    PP.putDoc $ SS.prettyWholeModule stmts
 
 exec :: Text -> [Text] -> Text -> IO Text
 exec name args input = do

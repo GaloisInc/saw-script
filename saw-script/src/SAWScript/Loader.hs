@@ -29,14 +29,17 @@ import System.FilePath (normalise, takeDirectory)
 
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
+import qualified SAWSupport.Position as PosSupport
+import qualified SAWSupport.Console as Cons
 
-import SAWCentral.Position (Pos(..), getPos)
+import qualified SAWCentral.Position as Pos
+import SAWCentral.Position (Pos(..))
 import qualified SAWCentral.Options as Options
 import SAWCentral.Options (Options)
 import SAWCentral.AST
 import SAWCentral.Value (Environ(..), RebindableEnv)
 
-import SAWScript.Panic (panic)
+import SAWScript.Panic (HasCallStack, panic)
 import SAWScript.Token (Token)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
@@ -49,17 +52,11 @@ import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
 --   one of which is an error and therefore fatal. On success, it
 --   returns a (possibly empty) list of messages, which are all
 --   warnings and not fatal, and a result of type a.
-type WithMsgs a = Either [Text] ([Text], a)
-
--- | The messages produced by the typechecker are pairs of position and
---   String. Convert to Text. XXX: the error infrastructure is supposed
---   to be what knows how to print source positions.
-convertTypeMsg :: (Pos, String) -> Text
-convertTypeMsg (pos, msg) =
-    let pos' = Text.pack (show pos)
-        msg' = Text.pack msg
-    in
-    pos' <> ": " <> msg'
+--
+--   The position is a Maybe because errors from the parser come back
+--   with a position already stuffed into the message text, and we would
+--   like to not print another vacuous one along with it.
+type WithMsgs a = Either [(Maybe Pos, Text)] ([(Maybe Pos, Text)], a)
 
 -- | Type shorthand for an include path.
 --
@@ -97,16 +94,13 @@ seenSetInsert x ref = do
 --   FUTURE: if we keep this thing, it would be nice to attach the
 --   source position of the include to the push and pop statements.
 --
-wrapDir :: FilePath -> WithMsgs [Stmt] -> WithMsgs [Stmt]
-wrapDir dir result =
-    case result of
-        Left errs -> Left errs
-        Right (msgs, stmts) ->
-            let stmts' = 
+wrapDir :: FilePath -> IO [Stmt] -> IO [Stmt]
+wrapDir dir m = do
+    stmts <- m
+    -- XXX this is here to avoid reindenting, remove later
+    pure $
                   let pos = PosInternal "pushd/popd derived from include" in
                   [StmtPushdir pos dir] ++ stmts ++ [StmtPopdir pos]
-            in
-            Right (msgs, stmts')
 
 -- | Read some SAWScript text, using the selected parser entry point.
 --
@@ -118,28 +112,23 @@ wrapDir dir result =
 --   suitable placeholder string; that's what ends up in the source
 --   positions in the results.
 --
-readAny :: FilePath -> Text.Text -> ([Token Pos] -> Either ParseError a) -> WithMsgs a
+readAny :: FilePath -> Text -> ([Token Pos] -> Either ParseError a) -> WithMsgs a
 readAny fileName str parser =
-    -- XXX printing of positions properly belongs to the
-    -- message-printing infrastructure.
-    let positionMsg pos msg =
-          Text.pack (show pos) <> ": " <> msg
-    in
     case lexSAW fileName str of
         Left (_verbosity, pos, msg) ->
-            Left [positionMsg pos msg]
+            Left [(Just pos, msg)]
         Right (tokens, optmsg) ->
             let msgs = case optmsg of
                   Nothing -> []
                   Just (Options.Error, _, _) ->
                       panic "readAny" ["Lexer returned an error in the warning slot"]
                   Just (_verbosity, pos, msg) ->
-                      [positionMsg pos msg]
+                      [(Just pos, msg)]
             in
             case parser tokens of
                 Left err ->
                     let err' = Text.pack (show err) in
-                    Left (msgs ++ [err'])
+                    Left (msgs ++ [(Nothing, err')])
                 Right tree ->
                     -- Note: there's no such things as warnings in a
                     -- Happy parser, so there are no more messages to
@@ -148,31 +137,88 @@ readAny fileName str parser =
 
 -- | Use the readAny result to panic if any messages were generated.
 panicOnMsgs :: Text -> WithMsgs a -> a
-panicOnMsgs whoAmI result = case result of
+panicOnMsgs whoAmI result =
+  -- Properly, printing the positions with the errors should be done
+  -- by the error infrastructure. However, the error infrastructure
+  -- necessarily needs to run in `IO`, and we need to _not_ run in
+  -- `IO` here because we're part of initializing the builtins table.
+  -- Do it by hand instead. I don't think it's worth adding extra
+  -- stuff to SAWConsole just to avoid needing this code.
+  let pp (mpos, msg) = case mpos of
+        Nothing -> msg
+        Just pos -> PosSupport.ppPosition pos <> ": " <> msg
+  in
+  case result of
    Left errs ->
-       panic whoAmI ("Unexpected errors:" : errs)
+       panic whoAmI ("Unexpected errors:" : map pp errs)
    Right ([], tree) ->
        tree
    Right (warns, _) ->
-       panic whoAmI ("Unexpected warnings:" : warns)
+       panic whoAmI ("Unexpected warnings:" : map pp warns)
+
+-- | Like `panicOnMsgs` but for typechecker results. XXX: the
+--   typechecker should issue its own messages; if not, it at least
+--   shouldn't be arbitrarily different.
+panicOnMsgs' :: Text -> (Either [(Pos, String)] a, [(Pos, String)]) -> a
+panicOnMsgs' whoAmI (errs_or_results, warns) =
+    let pp (pos, msg) =
+          PosSupport.ppPosition pos <> ": " <> Text.pack msg
+    in
+    case warns of
+        [] -> case errs_or_results of
+            Left errs -> panic whoAmI ("Unexpected errors: " : map pp errs)
+            Right result -> result
+        _ -> panic whoAmI ("Unexpected warnings: " : map pp warns)
 
 -- | Handle the readAny result in IO.
 --
---   Also return in Either, to be consistent with the current interface
---   into this file. Prints any warnings, and return just errors or a
---   result.
---
-dispatchMsgs :: Options -> WithMsgs a -> IO (Either [Text] a)
-dispatchMsgs opts result =
-    let printMsg vrb msg =
-          Options.printOutLn opts vrb (Text.unpack msg)
-    in
+--   Add HasCallStack because if the panic happens we'll want to know
+--   where we came from. XXX: figure out how to get rid of the panic
+--   and remove HasCallStack again.
+dispatchMsgs :: HasCallStack => WithMsgs a -> IO a
+dispatchMsgs result =
     case result of
-        Left errs ->
-            pure $ Left errs
+        Left errs -> do
+            -- FUTURE: might be possible to remove this glop with a
+            -- sufficiently clever IsPosition instance for Maybe a.
+            let pp (mpos, msg) = case mpos of
+                  Nothing -> Cons.errDN msg
+                  Just pos -> Cons.errDP pos msg
+            mapM_ pp errs
+            Cons.checkFail
+            panic "dispatchMsgs" ["checkFail didn't fail"]
         Right (msgs, tree) -> do
-            mapM_ (printMsg Options.Warn) msgs
-            pure $ Right tree
+            let pp (mpos, msg) = case mpos of
+                  Nothing -> Cons.warnN msg
+                  Just pos -> Cons.warnP pos msg
+            mapM_ pp msgs
+            pure tree
+
+-- | Handle a typechecker result in IO.
+--
+--   Add HasCallStack because if the panic happens we'll want to know
+--   where we came from. XXX: figure out how to get rid of the panic
+--   and remove HasCallStack again.
+dispatchMsgs' :: HasCallStack => (Either [(Pos, String)] a, [(Pos, String)]) -> IO a
+dispatchMsgs' (errs_or_result, warns) = do
+    mapM_ (\(pos, msg) -> Cons.warnP pos $ Text.pack msg) warns
+    case errs_or_result of
+        Left errs -> do
+            mapM_ (\(pos, msg) -> Cons.errDP pos $ Text.pack msg) errs
+            Cons.checkFail
+            panic "dispatchMsgs'" ["checkFail didn't fail"]
+        Right tree ->
+            pure tree
+
+-- | Call `readAny` then `panicOnMsgs`.
+readAnyPure :: FilePath -> Text -> ([Token Pos] -> Either ParseError a) -> Text -> a
+readAnyPure fileName str parser whoAmI =
+    panicOnMsgs whoAmI $ readAny fileName str parser
+
+-- | Call `readAny` then `dispatchMsgs`.
+readAnyIO :: FilePath -> Text -> ([Token Pos] -> Either ParseError a) -> IO a
+readAnyIO fileName str parser =
+    dispatchMsgs $ readAny fileName str parser
 
 -- | Run the readAny result through the `Include` module to resolve
 --   @include@ statements.
@@ -181,24 +227,9 @@ dispatchMsgs opts result =
 --   returning the failure.
 --
 resolveIncludes ::
-    Int -> SeenSet -> IncludePath -> Options -> Inc.Processor a ->
-    WithMsgs a ->
-    IO (WithMsgs a)
-resolveIncludes depth seen incpath opts process result =
-    let printMsg vrb msg =
-          Options.printOutLn opts vrb (Text.unpack msg)
-    in
-    case result of
-        Left errs ->
-            pure $ Left errs
-        Right (msgs, tree) -> do
-            result' <- process (includeFile depth seen incpath opts) tree
-            case result' of
-                Left errs -> do
-                    mapM_ (printMsg Options.Warn) msgs
-                    pure $ Left errs
-                Right tree' ->
-                    pure $ Right (msgs, tree')
+    Int -> SeenSet -> IncludePath -> Options -> Inc.Processor a -> a -> IO a
+resolveIncludes depth seen incpath opts process tree =
+    process (includeFile depth seen incpath opts) tree
 
 -- | Read a type schema from a string. This is used to digest the type
 --   signatures for builtins, and the expansions for builtin typedefs.
@@ -228,18 +259,9 @@ readSchemaPure ::
     ScopedMap Name (PrimitiveLifecycle, NamedType) ->
     Text ->
     Schema
-readSchemaPure fakeFileName lc tyenv str = do
-    let result = readAny fakeFileName str parseSchema
-    let result' = case result of
-          Left errs -> Left errs
-          Right (msgs, schema) ->
-              let (errs_or_results, warns) = checkSchema lc tyenv schema
-                  warns' = map convertTypeMsg warns
-              in
-              case errs_or_results of
-                  Left errs -> Left (msgs ++ warns' ++ map convertTypeMsg errs)
-                  Right () -> Right (msgs ++ warns', schema)
-    panicOnMsgs (Text.pack fakeFileName) result'
+readSchemaPure fakeFileName lc tyenv str =
+    let schema = readAnyPure fakeFileName str parseSchema (Text.pack fakeFileName) in
+    panicOnMsgs' (Text.pack fakeFileName) $ checkSchema lc tyenv schema
 
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.
@@ -252,13 +274,12 @@ readSchemaPure fakeFileName lc tyenv str = do
 readSchemaPattern ::
     Options ->
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
-    IO (Either [Text] SchemaPattern)
-readSchemaPattern opts fileName environ rbenv avail str = do
-  let result = readAny fileName str parseSchemaPattern
-  let result' = case result of
-        Left errs -> Left errs
-        Right (msgs, pat) ->
-          let Environ varenv tyenv _cryenv = environ in
+    IO SchemaPattern
+readSchemaPattern _opts fileName environ rbenv avail str = do
+  pat <- readAnyIO fileName str parseSchemaPattern
+  -- XXX this is here to avoid reindenting, remove later
+  do
+          let Environ varenv tyenv _cryenv = environ
 
           -- XXX it should not be necessary to do this munging
           --
@@ -271,14 +292,8 @@ readSchemaPattern opts fileName environ rbenv avail str = do
               rbenv' = Map.map rbsquash rbenv
               varenv'' = Map.union varenv' rbenv'
               varenv''' = ScopedMap.seed varenv''
-          in
-          let (errs_or_results, warns) = checkSchemaPattern avail varenv''' tyenv pat
-              warns' = map convertTypeMsg warns
-          in
-          case errs_or_results of
-              Left errs -> Left (msgs ++ warns' ++ map convertTypeMsg errs)
-              Right results -> Right (msgs ++ warns', results)
-  dispatchMsgs opts result'
+
+          dispatchMsgs' $ checkSchemaPattern avail varenv''' tyenv pat
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
@@ -290,17 +305,16 @@ readSchemaPattern opts fileName environ rbenv avail str = do
 readExpression ::
     Options ->
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
-    IO (Either [Text] (Schema, Expr))
+    IO (Schema, Expr)
 readExpression opts fileName environ rbenv avail str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  let result = readAny fileName str parseExpression
-  result' <- resolveIncludes 0{-depth-} seen incpath opts Inc.processExpr result
-  let result'' = case result' of
-        Left errs -> Left errs
-        Right (msgs, expr) ->
-           let Environ varenv tyenv _cryenvs = environ in
+  expr0 <- readAnyIO fileName str parseExpression
+  expr <- resolveIncludes 0{-depth-} seen incpath opts Inc.processExpr expr0
+  -- XXX this is here to avoid reindenting, remove later
+  do
+           let Environ varenv tyenv _cryenvs = environ
 
            -- XXX it should not be necessary to do this munging
            let squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
@@ -309,17 +323,15 @@ readExpression opts fileName environ rbenv avail str = do
                rbenv' = Map.map rbsquash rbenv
                varenv'' = Map.union varenv' rbenv'
                varenv''' = ScopedMap.seed varenv''
-           in
+
            -- XXX: also it shouldn't be necessary to do this wrappery
-           let pos = getPos expr
+           let pos = Pos.getPos expr
                decl = Decl pos (PWild pos Nothing) Nothing expr
-           in
-           let (errs_or_results, warns) = checkDecl avail varenv''' tyenv decl
-               warns' = map convertTypeMsg warns
-           in
-           case errs_or_results of
-               Left errs -> Left (msgs ++ warns' ++ map convertTypeMsg errs)
-               Right decl' ->
+
+           decl' <- dispatchMsgs' $ checkDecl avail varenv''' tyenv decl
+
+           -- XXX this is here to avoid reindenting, remove later
+           pure $
                    let expr' = dDef decl'
                        schema = case dType decl' of
                          Just sch -> sch
@@ -332,29 +344,27 @@ readExpression opts fileName environ rbenv avail str = do
                                  "Typechecker failed to produce a type"
                              ]
                    in
-                   Right (msgs ++ warns', (schema, expr'))
-  dispatchMsgs opts result''
+                   (schema, expr')
 
 -- | Read statements from a string. This is used by the REPL evaluator.
 --   Doesn't run the typechecker (yet).
 --
 --   May produce more than one statement if the statement given is an
 --   @include@.
-readREPLTextUnchecked :: Options -> FilePath -> Text -> IO (Either [Text] [Stmt])
+readREPLTextUnchecked :: Options -> FilePath -> Text -> IO [Stmt]
 readREPLTextUnchecked opts fileName str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  let result = readAny fileName str parseREPLText
-  result' <- resolveIncludes 0{-depth-} seen incpath opts Inc.processStmts result
-  dispatchMsgs opts result'
+  stmts <- readAnyIO fileName str parseREPLText
+  resolveIncludes 0{-depth-} seen incpath opts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
 -- @-i@/@--import-path@ command-line options). If the file was successfully
 -- found, return the full path. If not, fail by returning `Left`.
 --
-locateFile :: IncludePath -> FilePath -> IO (Either [Text] FilePath)
+locateFile :: IncludePath -> FilePath -> IO FilePath
 locateFile (current, rawdirs) file = do
   -- Replace "." in the search path with the directory the current
   -- file came from, which might or might not be ".".
@@ -365,49 +375,49 @@ locateFile (current, rawdirs) file = do
   mfname <- findFile dirs file
   case mfname of
     Nothing -> do
-        let msgs = [
-                "Couldn't find file: " <> Text.pack file,
-                "  Searched in directories:"
-             ] ++ map (\p -> "    " <> Text.pack p) dirs
-        return $ Left msgs
+        -- XXX make this a pp-doc instead
+        let msg = Text.unlines ([
+                      "Couldn't find file: " <> Text.pack file,
+                      "  Searched in directories:"
+                  ] ++ map (\p -> "    " <> Text.pack p) dirs)
+        -- XXX pass in the include position
+        Cons.errN msg
     Just fname ->
       -- NB: Normalise the path name. The default SAW_IMPORT_PATH contains ".",
       -- and the behavior of filepath's 'normalise' function is to prepend a
       -- search path to the front of the file path that is found, which can
       -- cause paths like "./foo.saw" to be returned. This looks ugly in error
       -- messages, where we would rather display "foo.saw" instead.
-      return $ Right (normalise fname)
+      return $ normalise fname
 
 -- | Load the 'Stmt's in a @.saw@ file.
 --   Doesn't run the typechecker (yet).
 includeFile ::
-    Int -> SeenSet -> IncludePath -> Options -> FilePath -> Bool ->
-    IO (Either [Text] [Stmt])
+    Int -> SeenSet -> IncludePath -> Options -> FilePath -> Bool -> IO [Stmt]
 includeFile depth seen incpath opts fname once = do
-  result <- locateFile incpath fname
-  case result of
-    Left errs -> return $ Left errs
-    Right fname' -> do
+  fname' <- locateFile incpath fname
+  -- XXX this is here to avoid reindenting, remove later
+  do
       alreadySeen <- seenSetMember fname' seen 
       if depth > 128 then
-          pure $ Left ["Maximum include depth exceeded"]
+          -- XXX pass in the include position as well
+          Cons.errX $ "Maximum include depth exceeded"
       else if once && alreadySeen then do
           -- include_once and we've already seen this file
-          Options.printOutLn opts Options.Info $ "Skipping already-included file " ++
-                                                 show fname'
-          pure $ Right []
+          Cons.noteN $ "Skipping already-included file \"" <>
+                       Text.pack fname' <> "\""
+          pure []
       else do
           seenSetInsert fname' seen
           let (_current, dirs) = incpath
               current' = takeDirectory fname'
               incpath' = (current', dirs)
 
-          Options.printOutLn opts Options.Info $ "Loading file " ++ show fname'
+          Cons.noteN $ "Loading file \"" <> Text.pack fname' <> "\""
           ftext <- TextIO.readFile fname'
 
-          let result' = wrapDir current' $ readAny fname ftext parseModule
-          result'' <- resolveIncludes (depth + 1) seen incpath' opts Inc.processStmts result'
-          dispatchMsgs opts result''
+          stmts <- wrapDir current' $ readAnyIO fname ftext parseModule
+          resolveIncludes (depth + 1) seen incpath' opts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
@@ -415,7 +425,7 @@ includeFile depth seen incpath opts fname once = do
 -- found, load it. If not, fail by returning `Left`.
 --
 -- Doesn't run the typechecker (yet).
-findAndLoadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
+findAndLoadFileUnchecked :: Options -> FilePath -> IO [Stmt]
 findAndLoadFileUnchecked opts fp = do
   let depth = 0
   seen <- emptySeenSet

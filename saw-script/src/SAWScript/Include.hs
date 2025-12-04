@@ -10,9 +10,7 @@ Stability   : provisional
 module SAWScript.Include (Processor, processExpr, processStmts) where
 
 import qualified Data.Text as Text
-import Data.Text (Text)
-import qualified Data.IORef as IORef
-import Data.IORef (IORef)
+--import Data.Text (Text)
 
 import SAWCentral.AST
 
@@ -24,33 +22,16 @@ import SAWCentral.AST
 -- The `Bool` argument is @once@ meaning `True` for @include_once@
 -- and `False` for ordinary repeating @include@.
 --
-type Reader = FilePath -> Bool -> IO (Either [Text] [Stmt])
+type Reader = FilePath -> Bool -> IO [Stmt]
 
 -- Type shorthand for the type of process*.
-type Processor a = Reader -> a -> IO (Either [Text] a)
+type Processor a = Reader -> a -> IO a
 
--- | Context for the pass: the reader for include files
---   plus the error messages accumulated so far.
+-- | Context for the pass: the reader for include files.
 --
---   The error list is a list of lists of Text, the idea being that we
---   cons each batch of errors we get back from the reader on the
---   front of the outer list, and read it off at the end with @concat
---   $ reverse errs@.
---
---   Note that we do not _generate_ errors, only pass on errors
---   returned by the reader. For the moment, that does not include
---   warnings, so there's no need to handle warnings in here either.
---
-data Ctx = Ctx {
-    ctxReader :: Reader,
-    ctxErrs :: IORef [[Text]]
+newtype Ctx = Ctx {
+    ctxReader :: Reader
 }
-
-ctxAddErrs :: Ctx -> [Text] -> IO ()
-ctxAddErrs ctx errs = do
-    let errsRef = ctxErrs ctx
-    errlists <- IORef.readIORef errsRef
-    IORef.writeIORef errsRef (errs : errlists)
 
 
 ------------------------------------------------------------
@@ -125,13 +106,7 @@ incs'stmt ctx s0 = case s0 of
     StmtCode{} -> pure [s0]
     StmtImport{} -> pure [s0]
     StmtInclude _pos name once -> do
-        result <- (ctxReader ctx) (Text.unpack name) once
-        case result of
-            Left errs -> do
-                ctxAddErrs ctx errs
-                pure []
-            Right stmts' ->
-                pure stmts'
+        (ctxReader ctx) (Text.unpack name) once
     StmtTypedef{} -> pure [s0]
     StmtPushdir{} -> pure [s0]
     StmtPopdir{} -> pure [s0]
@@ -164,18 +139,14 @@ incs'declgroup ctx dg = case dg of
 ------------------------------------------------------------
 -- External interface
 
-process :: Reader -> (Ctx -> a -> IO a) -> a -> IO (Either [Text] a)
+process :: Reader -> (Ctx -> a -> IO a) -> a -> IO a
 process reader entrypoint tree = do
-    errsRef <- IORef.newIORef []
-    let ctx = Ctx { ctxReader = reader, ctxErrs = errsRef }
+    let ctx = Ctx { ctxReader = reader }
     tree' <- entrypoint ctx tree
-    errlists <- IORef.readIORef errsRef
-    case errlists of
-        [] -> return $ Right tree'
-        _ -> return $ Left (concat $ reverse errlists)
+    return tree'
 
-processExpr :: Reader -> Expr -> IO (Either [Text] Expr)
+processExpr :: Reader -> Expr -> IO Expr
 processExpr reader e = process reader incs'expr e
 
-processStmts :: Reader -> [Stmt] -> IO (Either [Text] [Stmt])
+processStmts :: Reader -> [Stmt] -> IO [Stmt]
 processStmts reader stmts = process reader incs'stmts stmts

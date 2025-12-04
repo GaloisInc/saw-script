@@ -127,8 +127,8 @@ Loading file "include/circ.saw"
 Loading file "include/circ.saw"
 Loading file "include/circ.saw"
 Loading file "include/circ.saw"
+Error: Maximum include depth exceeded
 Stack trace:
    (builtin) (at top level)
-Maximum include depth exceeded
 
 FAILED
