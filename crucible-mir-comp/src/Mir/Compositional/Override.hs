@@ -33,7 +33,6 @@ import Data.Parameterized.Some
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import qualified Data.Vector as V
 import GHC.Stack (HasCallStack)
 
 import qualified What4.Expr.Builder as W4
@@ -88,8 +87,8 @@ printSpec ::
     (IsSymInterface sym, sym ~ MirSym t fs) =>
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
-printSpec ms = do
-    let str = show $ MS.ppMethodSpec (ms ^. msSpec)
+printSpec ms = ovrWithBackend $ \bak ->
+ do let str = show $ MS.ppMethodSpec (ms ^. msSpec)
     let pre = ms ^. msSpec . MS.csPreState
     let post = ms ^. msSpec . MS.csPostState
     -- The formatting here is not very readable, but it includes most of the
@@ -111,12 +110,20 @@ printSpec ms = do
     len <- liftIO $ W4.bvLit sym knownRepr (BV.mkBV knownRepr $ fromIntegral $ BS.length bytes)
 
     let w8 = knownNat @8
+    let byteRepr = BVRepr w8
     byteVals <- forM (BS.unpack bytes) $ \b -> do
         liftIO $ W4.bvLit sym w8 (BV.mkBV w8 $ fromIntegral b)
 
-    let vec = MirVector_Vector $ V.fromList byteVals
-    let vecRef = newConstMirRef sym (MirVectorRepr (BVRepr w8)) vec
-    ptr <- subindexMirRefSim (BVRepr w8) vecRef =<<
+    szSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat
+                    $ toInteger @Int $ BS.length bytes
+    ag <- liftIO $ mirAggregate_uninitIO bak szSym
+    -- TODO: hardcoded size=1
+    ag' <-
+      liftIO $ foldM
+        (\ag' (i, byteVal) -> mirAggregate_setIO bak i 1 byteRepr byteVal ag')
+        ag (zip [0..] byteVals)
+    let agRef = newConstMirRef sym MirAggregateRepr ag'
+    ptr <- subindexMirRefSim byteRepr agRef =<<
         liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
     return $ Empty :> RV ptr :> RV len
 

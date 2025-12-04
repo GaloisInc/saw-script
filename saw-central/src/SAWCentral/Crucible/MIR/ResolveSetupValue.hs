@@ -20,7 +20,6 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , resolveBoolTerm
   , resolveSAWPred
   , indexSeqTerm
-  , indexMirVector
   , indexMirArray
   , usizeBvLit
   , equalValsPred
@@ -72,7 +71,6 @@ import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
 import qualified Data.Text as Text
 import           Data.Text (Text)
-import qualified Data.Vector as V
 import           Data.Void (absurd)
 import           Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
@@ -1157,27 +1155,6 @@ indexSeqTerm sym (sz, elemTp) tm = do
   pure $ \i -> do
     i_tm <- scNat sc (fromIntegral i)
     scAt sc sz_tm elemTp_tm tm i_tm
-
--- | Index into a 'MIRVal' with an 'ArrayShape' 'TypeShape'. Returns 'Nothing'
--- if the index is out of bounds.
-indexMirVector ::
-  MonadIO m =>
-  Sym ->
-  Int {- ^ the index -} ->
-  TypeShape elemTp {- ^ 'TypeShape' of the array elements -} ->
-  Mir.MirVector Sym elemTp {- ^ 'RegValue' of the 'MIRVal' -} ->
-  MaybeT m MIRVal
-indexMirVector sym i elemShp vec =
-  MIRVal elemShp <$>
-    case vec of
-      Mir.MirVector_Vector vs ->
-        MaybeT $ pure $ vs V.!? i
-      Mir.MirVector_PartialVector vs ->
-        MaybeT $ pure $
-          readMaybeType sym "vector element" (shapeType elemShp) <$> vs V.!? i
-      Mir.MirVector_Array array -> liftIO $ do
-        i_sym <- usizeBvLit sym i
-        W4.arrayLookup sym array (Ctx.Empty Ctx.:> i_sym)
 
 -- | Index into a 'MIRVal' with an 'ArrayShape' 'TypeShape'. Returns 'Nothing'
 -- if the index is out of bounds.

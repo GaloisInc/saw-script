@@ -80,10 +80,6 @@ visitRegValueExprs _sym tpr_ v_ f = go tpr_ v_
     go (VariantRepr ctxr) variants = forMWithRepr_ ctxr variants $ \tpr' (VB pe) -> case pe of
         W4.Unassigned -> return ()
         W4.PE p v' -> f p >> go tpr' v'
-    go (MirVectorRepr tpr') vec = case vec of
-        MirVector_Vector v -> mapM_ (go tpr') v
-        MirVector_PartialVector pv -> mapM_ (go (MaybeRepr tpr')) pv
-        MirVector_Array _ -> error $ "visitRegValueExprs: unsupported: MirVector_Array"
     -- For now, we require that all references within a MethodSpec be
     -- nonoverlapping, and ignore the `SymExpr`s inside.  If we ever want to
     -- write a spec for e.g. `f(arr, &arr[i], i)`, where the second reference
