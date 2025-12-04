@@ -812,9 +812,9 @@ span.spaces    { background: white }
 <span class="lineno">  793 </span><span class="spaces">     </span><span class="nottickedoff">execTactic (tacticExact sc (ttTerm tm))</span></span>
 <span class="lineno">  794 </span>
 <span class="lineno">  795 </span>goal_intro_hyp :: ProofScript ()
-<span class="lineno">  796 </span><span class="decl"><span class="nottickedoff">goal_intro_hyp =</span>
-<span class="lineno">  797 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- SV.scriptTopLevel getSharedContext</span>
-<span class="lineno">  798 </span><span class="spaces">     </span><span class="nottickedoff">execTactic (tacticIntroHyps sc 1)</span></span>
+<span class="lineno">  796 </span><span class="decl"><span class="istickedoff">goal_intro_hyp =</span>
+<span class="lineno">  797 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- SV.scriptTopLevel getSharedContext</span>
+<span class="lineno">  798 </span><span class="spaces">     </span><span class="istickedoff">execTactic (tacticIntroHyps sc 1)</span></span>
 <span class="lineno">  799 </span>
 <span class="lineno">  800 </span>goal_intro_hyps :: Integer -&gt; ProofScript ()
 <span class="lineno">  801 </span><span class="decl"><span class="nottickedoff">goal_intro_hyps n =</span>
@@ -847,9 +847,9 @@ span.spaces    { background: white }
 <span class="lineno">  828 </span><span class="spaces">     </span><span class="nottickedoff">execTactic (tacticSpecializeHyp sc (map ttTerm ts))</span></span>
 <span class="lineno">  829 </span>
 <span class="lineno">  830 </span>goal_apply_hyp :: Integer -&gt; ProofScript ()
-<span class="lineno">  831 </span><span class="decl"><span class="nottickedoff">goal_apply_hyp n =</span>
-<span class="lineno">  832 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- SV.scriptTopLevel getSharedContext</span>
-<span class="lineno">  833 </span><span class="spaces">     </span><span class="nottickedoff">execTactic (tacticApplyHyp sc n)</span></span>
+<span class="lineno">  831 </span><span class="decl"><span class="istickedoff">goal_apply_hyp n =</span>
+<span class="lineno">  832 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- SV.scriptTopLevel getSharedContext</span>
+<span class="lineno">  833 </span><span class="spaces">     </span><span class="istickedoff">execTactic (tacticApplyHyp <span class="nottickedoff">sc</span> n)</span></span>
 <span class="lineno">  834 </span>
 <span class="lineno">  835 </span>goal_num_when :: Int -&gt; ProofScript () -&gt; ProofScript ()
 <span class="lineno">  836 </span><span class="decl"><span class="nottickedoff">goal_num_when n script =</span>
@@ -922,7 +922,7 @@ span.spaces    { background: white }
 <span class="lineno">  903 </span>
 <span class="lineno">  904 </span>-- | Bit-blast a proposition check its validity using the RME library.
 <span class="lineno">  905 </span>proveRME :: ProofScript ()
-<span class="lineno">  906 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] Prover.proveRME Set.empty</span></span>
+<span class="lineno">  906 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] <span class="nottickedoff">Prover.proveRME</span> Set.empty</span></span>
 <span class="lineno">  907 </span>
 <span class="lineno">  908 </span>codegenSBV :: SharedContext -&gt; Text -&gt; [Text] -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno">  909 </span><span class="decl"><span class="nottickedoff">codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do</span>
@@ -1079,7 +1079,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1060 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1061 </span>
 <span class="lineno"> 1062 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1063 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
+<span class="lineno"> 1063 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
 <span class="lineno"> 1064 </span>
 <span class="lineno"> 1065 </span>w4_unint_rme :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1066 </span><span class="decl"><span class="istickedoff">w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme</span></span>
@@ -1099,10 +1099,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1080 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1081 </span>
 <span class="lineno"> 1082 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1083 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
+<span class="lineno"> 1083 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
 <span class="lineno"> 1084 </span>
 <span class="lineno"> 1085 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1086 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
+<span class="lineno"> 1086 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
 <span class="lineno"> 1087 </span>
 <span class="lineno"> 1088 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1089 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1192,7 +1192,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1173 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1174 </span>
 <span class="lineno"> 1175 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1176 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
+<span class="lineno"> 1176 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
 <span class="lineno"> 1177 </span>
 <span class="lineno"> 1178 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1179 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>

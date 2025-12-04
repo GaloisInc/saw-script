@@ -361,7 +361,7 @@ span.spaces    { background: white }
 <span class="lineno">  342 </span><span class="decl"><span class="istickedoff">ruleOfTerm t ann =</span>
 <span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">do let (vars, body) = R.asPiList t</span>
 <span class="lineno">  344 </span><span class="spaces">     </span><span class="istickedoff">case R.asGlobalApply eqIdent body of</span>
-<span class="lineno">  345 </span><span class="spaces">       </span><span class="istickedoff">Just [_, x, y] -&gt; mkRewriteRule vars x y False False ann</span>
+<span class="lineno">  345 </span><span class="spaces">       </span><span class="istickedoff">Just [_, x, y] -&gt; mkRewriteRule vars x y False <span class="nottickedoff">False</span> ann</span>
 <span class="lineno">  346 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;ruleOfTerm&quot; [&quot;Illegal argument&quot;]</span></span></span>
 <span class="lineno">  347 </span>
 <span class="lineno">  348 </span>-- Test whether a rewrite rule is permutative
@@ -782,13 +782,13 @@ span.spaces    { background: white }
 <span class="lineno">  763 </span><span class="spaces">    </span><span class="istickedoff">filterRules convertibleFlag (Left RewriteRule{convertible = ruleConvFlag}) =</span>
 <span class="lineno">  764 </span><span class="spaces">      </span><span class="istickedoff">filterRulesFlag convertibleFlag ruleConvFlag</span>
 <span class="lineno">  765 </span><span class="spaces">    </span><span class="istickedoff">filterRules convertibleFlag (Right (Conversion convConvFlag _)) =</span>
-<span class="lineno">  766 </span><span class="spaces">      </span><span class="istickedoff">filterRulesFlag convertibleFlag convConvFlag</span>
+<span class="lineno">  766 </span><span class="spaces">      </span><span class="istickedoff">filterRulesFlag convertibleFlag <span class="nottickedoff">convConvFlag</span></span>
 <span class="lineno">  767 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  768 </span><span class="spaces">    </span><span class="istickedoff">rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =&gt; Convertibility -&gt; Term -&gt; IO Term</span>
 <span class="lineno">  769 </span><span class="spaces">    </span><span class="istickedoff">rewriteTop convertibleFlag t =</span>
 <span class="lineno">  770 </span><span class="spaces">      </span><span class="istickedoff">do mt &lt;- reduceSharedTerm sc t</span>
 <span class="lineno">  771 </span><span class="spaces">         </span><span class="istickedoff">case mt of</span>
-<span class="lineno">  772 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; let filteredRules = filter (filterRules convertibleFlag) (Net.unify_term ss (termPat t)) in</span>
+<span class="lineno">  772 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; let filteredRules = filter (filterRules convertibleFlag) (Net.match_term ss (termPat t)) in</span>
 <span class="lineno">  773 </span><span class="spaces">              </span><span class="istickedoff">apply convertibleFlag filteredRules t</span>
 <span class="lineno">  774 </span><span class="spaces">           </span><span class="istickedoff">Just t' -&gt; rewriteAll convertibleFlag t'</span>
 <span class="lineno">  775 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -832,8 +832,8 @@ span.spaces    { background: white }
 <span class="lineno">  813 </span><span class="spaces">    </span><span class="istickedoff">apply convertibleFlag (Right conv : rules) t =</span>
 <span class="lineno">  814 </span><span class="spaces">        </span><span class="istickedoff">do </span>
 <span class="lineno">  815 </span><span class="spaces">          </span><span class="istickedoff">case runConversion conv t of</span>
-<span class="lineno">  816 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt; apply convertibleFlag rules t</span>
-<span class="lineno">  817 </span><span class="spaces">             </span><span class="istickedoff">Just tb -&gt; rewriteAll convertibleFlag =&lt;&lt; OT.complete sc tb</span></span>
+<span class="lineno">  816 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt; apply <span class="nottickedoff">convertibleFlag</span> rules t</span>
+<span class="lineno">  817 </span><span class="spaces">             </span><span class="istickedoff">Just tb -&gt; rewriteAll <span class="nottickedoff">convertibleFlag</span> =&lt;&lt; OT.complete sc tb</span></span>
 <span class="lineno">  818 </span>
 <span class="lineno">  819 </span>
 <span class="lineno">  820 </span>-- FIXME: is there some way to have sensable term replacement in the presence of loose variables
