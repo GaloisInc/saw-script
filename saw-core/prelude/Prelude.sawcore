@@ -1840,7 +1840,7 @@ data Stream (a : sort 0) : sort 0 where {
   }
 
 injectCode "Coq"
-  "Instance Inhabited_Stream (a:Type) (Ha:Inhabited a) : Inhabited (Stream a) := MkInhabited (Stream a) (MkStream a (fun _ => inhabitant)).";
+  "#[global] Instance Inhabited_Stream (a:Type) (Ha:Inhabited a) : Inhabited (Stream a) := MkInhabited (Stream a) (MkStream a (fun _ => inhabitant)).";
 
 Stream__rec : (a:sort 0) -> (p:Stream a -> sort 0) ->
                ((f:Nat -> a) -> p (MkStream a f)) -> (str:Stream a) -> p str;
