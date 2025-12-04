@@ -961,7 +961,7 @@ of the original function are obtained by selecting elements of this array.
 For example, consider a function `f: [16] -> ([4][8],Bool)`. 
 A call `f x` will be translated like this:
 
-  f_bv8:  [16] -> Array Int [u8]  // Uninterpreted
+  f_bv8:  [16] -> Array Int [8]  // Uninterpreted
   f_bool: [16] -> Array Int Bool  // Uninterpreted
   w8s   = f_bv8 x                 // This has some auto generated name
   bools = f_bool x                // This has some auto generated name
