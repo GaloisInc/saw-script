@@ -1,7 +1,7 @@
 # next -- TBA
 
 This release supports [version
-5](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#5) of
+6](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#6) of
 `mir-json`'s schema.
 
 ## Changes
@@ -248,6 +248,8 @@ This release supports [version
 
 * Add a `mir_vec : MIRModule -> MIRType -> MIRType` function, which provides a
   convenient shorthand for constructing the `Vec<T>` type (for some type `T`).
+
+* Support verifying Rust code up to version 1.91.
 
 ## Bug Fixes
 
