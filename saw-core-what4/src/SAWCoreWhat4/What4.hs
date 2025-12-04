@@ -963,8 +963,8 @@ A call `f x` will be translated like this:
 
   f_bv8:  [16] -> Array Int [8]  // Uninterpreted
   f_bool: [16] -> Array Int Bool  // Uninterpreted
-  w8s   = f_bv8 x                 // This has some auto generated name
-  bools = f_bool x                // This has some auto generated name
+  w8s   = f_bv8 x                 // This has some auto-generated name
+  bools = f_bool x                // This has some auto-generated name
   
 Value for `f x`:
   ([ w8s ! 0, w8s ! 1, w8s ! 2, w8s ! 3 ], bools ! 0)
