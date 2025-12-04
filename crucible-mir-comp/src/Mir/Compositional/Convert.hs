@@ -381,8 +381,8 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
                   elTyTerm <- shapeToTerm' sc elAda elShp
                   liftIO (SAW.scVector sc elTyTerm vals)
 
-            
-                
+
+
         _ -> fail $
             "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
 
