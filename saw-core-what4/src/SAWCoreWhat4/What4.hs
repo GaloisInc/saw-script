@@ -958,7 +958,7 @@ base type that is mentioned in the result of the original uninterpreted
 function.  This function returns an *array* of values, and the actual results
 of the original function are obtained by selecting elements of this array.
 
-For eaxample, consider a function `f: [16] -> ([4][u8],Bool)`. 
+For example, consider a function `f: [16] -> ([4][8],Bool)`. 
 A call `f x` will be translated like this:
 
   f_bv8:  [16] -> Array Int [u8]  // Uninterpreted
