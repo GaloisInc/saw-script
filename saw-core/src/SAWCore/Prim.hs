@@ -63,6 +63,17 @@ packBitVector v = BV (V.length v) (bvToInteger v)
 ------------------------------------------------------------
 -- Primitive operations
 
+-- NOTE: Many of the primitive operations in this section are written
+-- with arguments of unit type '()'.
+-- This is done so that the Haskell function arguments line up in a
+-- 1-to-1 correspondence with the SAWCore function arguments.
+-- Type classes are used to generate matching code for SAWCore terms
+-- based on the Haskell type.
+-- SAWCore uses a binary representation for numeric literals that has
+-- a non-trivial cost to match against; for this reason we use '()'
+-- instead of 'Int' or 'Natural' or 'Integer' for all unused arguments
+-- of SAWCore type 'Nat'.
+
 -- coerce :: (y x :: sort 0) -> Eq (sort 0) x y -> x -> y;
 coerce :: () -> () -> () -> a -> a
 coerce _ _ _ x = x
