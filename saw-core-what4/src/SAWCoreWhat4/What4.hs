@@ -1063,15 +1063,25 @@ mkUninterpreted sym ref (UnintApp nm args tys) ret =
         Nothing ->
           lift $
             do 
-              let suff :: BaseTypeRepr a -> String
+              let suff_asgn i = intercalate "_and" (V.toList (Ctx.toVector i suff))
+
+                  suff :: BaseTypeRepr a -> String
                   suff t =
                     case t of
                       BaseBoolRepr -> "_bool"
                       BaseIntegerRepr -> "_int"
+                      BaseRealRepr -> "_real"
+                      BaseComplexRepr -> "_complex"
                       BaseBVRepr w -> "_bv" ++ show w
-                      BaseArrayRepr i e -> "_fun" ++ is ++ "_to" ++ suff e
-                        where is = intercalate "_and" (V.toList (Ctx.toVector i suff))
-                      _ -> panic "mkUninterpreted" [ "Unexpected type", Text.pack (show t) ] 
+                      BaseFloatRepr (FloatingPointPrecisionRepr x y) -> "_float_" ++ show x ++ "_" ++ show y
+                      BaseStringRepr w -> "_str" ++ strw
+                        where strw = case w of
+                                       Char8Repr -> "8"
+                                       Char16Repr -> "16"
+                                       UnicodeRepr -> "U"
+                      BaseArrayRepr i e -> "_fun" ++ suff_asgn i ++ "_to" ++ suff e
+                      BaseStructRepr flds -> "_struct" ++ suff_asgn flds ++ "_end"
+                        
               fn <- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton BaseIntegerRepr) ret)
               a  <- W.applySymFn sym fn args
               pure (Arr a 0)
