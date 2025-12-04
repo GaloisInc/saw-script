@@ -29,15 +29,18 @@ version of Coq needed for those libraries:
 ```
 sh <(curl -sL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)
 opam init
-opam repo add coq-released https://coq.inria.fr/opam/released
-opam install -y coq-bits
+opam pin add rocq-prover 9.0.0
+opam repo add rocq-released https://rocq-prover.org/opam/released
+opam install coq=9.1.0
+opam pin coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
 ```
 
 If you run into any issue that is probably due to the version mismatch between the `ocamlc`
 and the `ocaml` base system installed on your machine and it can be fixed as explained
 [here](https://github.com/ocaml/opam/issues/3708).
 
-Currently, the Coq support libraries for `saw-core-coq` requires Coq 8.15.
+Currently, the Coq support libraries for `saw-core-coq` requires `rocq-prover`
+version `9.0.0`.
 
 ## Building the and Using the Coq Support Libraries
 
