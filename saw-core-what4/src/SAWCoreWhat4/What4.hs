@@ -971,7 +971,7 @@ Value for `f x`:
 -}
 
 -- | This is the state we use to generate uninterpreted values.
-type MkUnintState sym = MapF BaseTypeRepr (Arr sym)
+type UnintState sym = MapF BaseTypeRepr (Arr sym)
 
 -- | For each base type we track the name of the array to project from and
 -- the next index.
@@ -998,7 +998,7 @@ parseUninterpreted' ::
   IORef (SymFnCache sym) ->
   UnintApp (SymExpr sym) ->
   TValue (What4 sym) ->
-  StateT (MkUnintState sym) IO (SValue sym)
+  StateT (UnintState sym) IO (SValue sym)
 parseUninterpreted' sym ref app ty =
   case ty of
     VPiType _ body
@@ -1053,7 +1053,7 @@ mkUninterpreted ::
   sym -> IORef (SymFnCache sym) ->
   UnintApp (SymExpr sym) ->
   BaseTypeRepr t ->
-  StateT (MkUnintState sym) IO (SymExpr sym t)
+  StateT (UnintState sym) IO (SymExpr sym t)
 mkUninterpreted sym ref (UnintApp nm args tys) ret =
   do
     arrs <- get
