@@ -1,4 +1,3 @@
-From Coq Require Import Numbers.Cyclic.ZModulo.ZModulo.
 From Coq Require Import ZArith.BinInt.
 From Coq Require Import ZArith.Zdiv.
 From Coq Require Import NArith.NArith.
@@ -362,18 +361,17 @@ Global Hint Resolve (0%Z : Integer) : inh.
 (* NOTE: the following will be nonsense for values of n <= 1 *)
 Definition IntMod (n : nat) := Z.
 Definition toIntMod (n : nat) : Integer -> IntMod n := fun i => Z.modulo i (Z.of_nat n).
-Definition fromIntMod (n : nat) : (IntMod n) -> Integer := ZModulo.to_Z (Pos.of_nat n).
-Local Notation "[| a |]_ n" := (to_Z (Pos.of_nat n) a) (at level 0, a at level 99).
+Definition fromIntMod (n : nat) : (IntMod n) -> Integer := fun i => Z.modulo i (Z.of_nat n).
 Definition intModEq (n : nat) (a : IntMod n) (b : IntMod n) : bool
-  := Z.eqb [| a |]_n [| b |]_n.
+  := Z.eqb (fromIntMod n a) (fromIntMod n b).
 Definition intModAdd : forall (n : nat), (IntMod n) -> (IntMod n) -> IntMod n
-  := fun _ => ZModulo.add.
+  := fun _ => Z.add.
 Definition intModSub : forall (n : nat), (IntMod n) -> (IntMod n) -> IntMod n
-  := fun _ => ZModulo.sub.
+  := fun _ => Z.sub.
 Definition intModMul : forall (n : nat), (IntMod n) -> (IntMod n) -> IntMod n
-  := fun _ => ZModulo.mul.
+  := fun _ => Z.mul.
 Definition intModNeg : forall (n : nat), (IntMod n) -> IntMod n
-  := fun _ => ZModulo.opp.
+  := fun _ => Z.opp.
 
 Global Instance Inhabited_IntMod (n:nat) : Inhabited (IntMod n) :=
   MkInhabited (IntMod n) 0%Z.
