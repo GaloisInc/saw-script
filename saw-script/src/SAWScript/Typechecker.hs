@@ -223,7 +223,7 @@ instance AppSubst Stmt where
     StmtLet pos rb dg        -> StmtLet pos rb (appSubst s dg)
     StmtCode allpos spos str -> StmtCode allpos spos str
     StmtImport pos imp       -> StmtImport pos imp
-    StmtInclude pos file     -> StmtInclude pos file
+    StmtInclude pos file once -> StmtInclude pos file once
     StmtTypedef allpos apos a ty -> StmtTypedef allpos apos a (appSubst s ty)
     StmtPushdir pos dir      -> StmtPushdir pos dir
     StmtPopdir pos           -> StmtPopdir pos
@@ -1439,7 +1439,7 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
             return s
         StmtImport _spos _ ->
             return s
-        StmtInclude spos _ -> do
+        StmtInclude spos _ _ -> do
             -- Restrict include to TopLevel. This matches the prior
             -- behavior when it was a builtin function rather than
             -- syntax. FUTURE: consider relaxing the requirement.

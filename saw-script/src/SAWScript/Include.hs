@@ -21,7 +21,10 @@ import SAWCentral.AST
 -- (The file-reader function is passed down to avoid a dependency
 -- cycle.)
 --
-type Reader = FilePath -> IO (Either [Text] [Stmt])
+-- The `Bool` argument is @once@ meaning `True` for @include_once@
+-- and `False` for ordinary repeating @include@.
+--
+type Reader = FilePath -> Bool -> IO (Either [Text] [Stmt])
 
 -- Type shorthand for the type of process*.
 type Processor a = Reader -> a -> IO (Either [Text] a)
@@ -121,8 +124,8 @@ incs'stmt ctx s0 = case s0 of
         pure [s0']
     StmtCode{} -> pure [s0]
     StmtImport{} -> pure [s0]
-    StmtInclude _pos name -> do
-        result <- (ctxReader ctx) (Text.unpack name)
+    StmtInclude _pos name once -> do
+        result <- (ctxReader ctx) (Text.unpack name) once
         case result of
             Left errs -> do
                 ctxAddErrs ctx errs

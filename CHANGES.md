@@ -17,6 +17,13 @@ This release supports [version
   separated by semicolons on a single line.
   It also no longer chokes on lines that contain only comments.
 
+* SAWScript files can now be included with `include_once` as well as
+  plain `include`.
+  An `include_once` will do nothing if the same file has already been
+  included.
+  The concept of "same" used is the same pathname -- the check does
+  not chase symbolic links or consult OS-level file identity markers.
+
 * The `include` functionality in SAWScript is now syntax rather than
   a builtin function.
   This means that `include` is now a reserved word, and assorted wild
