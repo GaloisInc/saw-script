@@ -124,16 +124,26 @@ import SAWCentral.Proof
 
 -- Helper Functions ------------------------------------------------------------
 
--- | Run the given IO action, but if the given 'timeout' (in microseconds) is
--- reached or the action encounters any 'SomeException', 'Left' is returned
+-- | Run the given IO action, but if the given `timeout` (in
+--   microseconds) is reached or the action encounters any
+--   'SomeException', return an error message with `Left`.
 tryWithTimeout :: Int -> IO a -> IO (Either String a)
-tryWithTimeout t_us m = try (timeout t_us m) <&> \case
-  Right (Just a) -> Right a
-  Right Nothing -> let t_str | t_us `mod` 1000000 == 0 = show (t_us `div` 1000000) ++ "s"
-                             | t_us `mod` 1000    == 0 = show (t_us `div` 1000) ++ "ms"
-                             | otherwise               = show t_us ++ "us"
-                    in Left $ "Operation timed out (" ++ t_str ++ ")"
-  Left (exn :: SomeException) -> Left $ show exn
+tryWithTimeout t_us m = do
+  result <- timeout t_us (try m)
+  pure $ case result of
+      Nothing ->
+          -- Timed out
+          let t_str | t_us `mod` 1000000 == 0 = show (t_us `div` 1000000) ++ "s"
+                    | t_us `mod` 1000    == 0 = show (t_us `div` 1000) ++ "ms"
+                    | otherwise               = show t_us ++ "us"
+          in
+          Left $ "Operation timed out (" ++ t_str ++ ")"
+      Just (Right a) ->
+          -- Value returned by `m`
+          Right a
+      Just (Left (exn :: SomeException)) ->
+          -- Exception thrown by `m`
+          Left $ show exn
 
 -- | Encode a 'ByteString' as a hex string
 encodeHex :: ByteString -> String
