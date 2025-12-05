@@ -1810,7 +1810,7 @@ importComp sc env lenT elemT expr mss =
      coerceTerm sc env (C.tSeq lenT' elemT) (C.tSeq lenT elemT) ys
 
 lambdaTuples :: SharedContext -> Env -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO Term
-lambdaTuples sc env _ty expr [] = importExpr sc env expr
+lambdaTuples sc env ty expr [] = importExpr' sc env (C.tMono ty) expr
 lambdaTuples sc env ty expr (args : argss) =
   do f <- lambdaTuple sc env ty expr argss args
      if null args || null argss
