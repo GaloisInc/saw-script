@@ -760,21 +760,6 @@ build_congruence sc tm =
        scGeneralizeTerms sc allVars finalEq
 
 
-filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
-filterCryTerms sc = loop
-  where
-  loop [] = pure []
-  loop (x:xs) =
-    do tp <- Cryptol.scCryptolType sc =<< scTypeOf sc x
-       case tp of
-         Just (Right cty) ->
-           do let x' = TypedTerm (TypedTermSchema (C.tMono cty)) x
-              xs' <- loop xs
-              pure (x':xs')
-
-         _ -> loop xs
-
-
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
   execTactic $ tacticChange $ \goal ->
