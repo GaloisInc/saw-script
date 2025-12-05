@@ -9,7 +9,6 @@ Stability   : provisional
 -}
 module Main where
 
-import Control.Exception
 import Control.Monad
 
 import Data.Char (toLower)
@@ -338,8 +337,6 @@ warn opts msg = do
 loadFile :: Options -> FilePath -> [Text] -> IO ()
 loadFile opts file scriptArgv = do
   processFile opts file scriptArgv REPL.reenterTopLevel REPL.reenterProofScript
-    `catch`
-    (\(ErrorCall msg) -> err opts msg)
 
 main :: IO ()
 main = do

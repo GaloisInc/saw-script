@@ -105,7 +105,8 @@
 -- information as possible without flooding the recipient.
 
 -- re-export HasCallStack for use by the per-library modules
-module SAWSupport.PanicSupport (Panic.HasCallStack, doPanic) where
+-- export PanicException so upper-level code can avoid catching it
+module SAWSupport.PanicSupport (Panic.HasCallStack, PanicException, doPanic) where
 
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
@@ -123,6 +124,9 @@ import qualified SAWVersion.GitRev as GitRev
 --   The argument of the constructor is the component name to use
 --   with the panic message.
 newtype SAWPanic = SAWPanic Text
+
+-- | The resultant type of panic exceptions.
+type PanicException = Panic.Panic SAWPanic
 
 -- | Trigger a panic. This is called by each library's panic function;
 --   the first argument should be the component name, and the second
