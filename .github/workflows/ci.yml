@@ -517,6 +517,7 @@ jobs:
       - run: opam repo add rocq-released https://rocq-prover.org/opam/released
 
       - run: opam pin add -y rocq-prover 9.0.0
+      - run: opam install -y rocq-core=9.1.0 rocq-stdlib=9.0.0
 
       # Install coq-bits from source. FIXME: replace with compatible
       # opam-released version when available.
