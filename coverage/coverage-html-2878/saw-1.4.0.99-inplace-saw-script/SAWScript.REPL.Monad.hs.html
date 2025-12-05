@@ -49,17 +49,17 @@ span.spaces    { background: white }
 <span class="lineno">   30 </span>  , getProofState
 <span class="lineno">   31 </span>  ) where
 <span class="lineno">   32 </span>
-<span class="lineno">   33 </span>import Control.Monad (void)
-<span class="lineno">   34 </span>import Control.Monad.Catch (
-<span class="lineno">   35 </span>    MonadThrow(..), MonadCatch(..), MonadMask(..),
-<span class="lineno">   36 </span>    catchJust
-<span class="lineno">   37 </span> )
-<span class="lineno">   38 </span>import Control.Monad.State (MonadState(..), StateT(..), get, gets, modify)
-<span class="lineno">   39 </span>import Control.Monad.Except (runExceptT)
-<span class="lineno">   40 </span>import Control.Monad.IO.Class (MonadIO(..))
-<span class="lineno">   41 </span>import qualified Control.Exception as X
-<span class="lineno">   42 </span>import System.IO.Error (isUserError, ioeGetErrorString)
-<span class="lineno">   43 </span>import System.Exit (ExitCode)
+<span class="lineno">   33 </span>import Control.Monad.Catch (
+<span class="lineno">   34 </span>    MonadThrow(..), MonadCatch(..), MonadMask(..)
+<span class="lineno">   35 </span> )
+<span class="lineno">   36 </span>import Control.Monad.State (MonadState(..), StateT(..), get, gets, modify)
+<span class="lineno">   37 </span>import Control.Monad.Except (runExceptT)
+<span class="lineno">   38 </span>import Control.Monad.IO.Class (MonadIO(..))
+<span class="lineno">   39 </span>import qualified Control.Exception as X
+<span class="lineno">   40 </span>import System.IO.Error (isUserError, ioeGetErrorString)
+<span class="lineno">   41 </span>import System.Exit (ExitCode)
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>import qualified SAWSupport.PanicSupport as PanicSupport
 <span class="lineno">   44 </span>
 <span class="lineno">   45 </span>import CryptolSAWCore.CryptolEnv
 <span class="lineno">   46 </span>
@@ -76,7 +76,7 @@ span.spaces    { background: white }
 <span class="lineno">   57 </span>
 <span class="lineno">   58 </span>import SAWScript.Panic (panic)
 <span class="lineno">   59 </span>import SAWScript.Interpreter (buildTopLevelEnv)
-<span class="lineno">   60 </span>import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
+<span class="lineno">   60 </span>import SAWScript.ValueOps (TopLevelCheckpoint, makeCheckpoint, restoreCheckpoint)
 <span class="lineno">   61 </span>
 <span class="lineno">   62 </span>
 <span class="lineno">   63 </span>------------------------------------------------------------
@@ -210,43 +210,63 @@ span.spaces    { background: white }
 <span class="lineno">  191 </span>------------------------------------------------------------
 <span class="lineno">  192 </span>-- Exceptions
 <span class="lineno">  193 </span>
-<span class="lineno">  194 </span>-- | Handle generic IO exceptions from `fail` in REPL actions.
-<span class="lineno">  195 </span>catchFail :: REPL a -&gt; (String -&gt; REPL a) -&gt; REPL a
-<span class="lineno">  196 </span><span class="decl"><span class="istickedoff">catchFail m k = catchJust sel m k</span>
-<span class="lineno">  197 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff">sel :: X.IOException -&gt; Maybe String</span>
-<span class="lineno">  199 </span><span class="spaces">    </span><span class="istickedoff">sel e | <span class="tickonlytrue">isUserError e</span> = Just (ioeGetErrorString e)</span>
-<span class="lineno">  200 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>     = <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">  201 </span>
-<span class="lineno">  202 </span>-- | Handle any other exception (except that we ignore async
-<span class="lineno">  203 </span>--   exceptions and exitWith)
-<span class="lineno">  204 </span>--
-<span class="lineno">  205 </span>-- XXX: we do not apparently ignore the exceptions that panic throws,
-<span class="lineno">  206 </span>-- and we probably should.
-<span class="lineno">  207 </span>catchOther :: REPL a -&gt; (X.SomeException -&gt; REPL a) -&gt; REPL a
-<span class="lineno">  208 </span><span class="decl"><span class="istickedoff">catchOther m k = catchJust <span class="nottickedoff">flt</span> m <span class="nottickedoff">k</span></span>
-<span class="lineno">  209 </span><span class="spaces"> </span><span class="istickedoff">where</span>
-<span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">flt e</span></span>
-<span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">| Just (_ :: X.AsyncException) &lt;- X.fromException e = Nothing</span></span>
-<span class="lineno">  212 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">| Just (_ :: ExitCode)       &lt;- X.fromException e = Nothing</span></span>
-<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">| otherwise = Just e</span></span></span>
-<span class="lineno">  214 </span>
-<span class="lineno">  215 </span>-- | Catch the exceptions we expect to catch while running a REPL
-<span class="lineno">  216 </span>--   action.
-<span class="lineno">  217 </span>exceptionProtect :: REPL () -&gt; REPL ()
-<span class="lineno">  218 </span><span class="decl"><span class="istickedoff">exceptionProtect cmd =</span>
-<span class="lineno">  219 </span><span class="spaces">      </span><span class="istickedoff">do chk &lt;- liftIO . makeCheckpoint =&lt;&lt; getTopLevelRW</span>
-<span class="lineno">  220 </span><span class="spaces">         </span><span class="istickedoff">cmd `catchFail`  (handlerFail chk)</span>
-<span class="lineno">  221 </span><span class="spaces">             </span><span class="istickedoff">`catchOther` <span class="nottickedoff">(handlerPrint chk)</span></span>
-<span class="lineno">  222 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">where</span>
-<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">handlerPrint chk e =</span></span>
-<span class="lineno">  225 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do liftIO (putStrLn &quot;&quot; &gt;&gt; putStrLn (X.displayException e))</span></span>
-<span class="lineno">  226 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">void $ liftTopLevel (restoreCheckpoint chk)</span></span>
-<span class="lineno">  227 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">handlerFail chk s =</span>
-<span class="lineno">  229 </span><span class="spaces">      </span><span class="istickedoff">do liftIO (putStrLn &quot;&quot; &gt;&gt; putStrLn s)</span>
-<span class="lineno">  230 </span><span class="spaces">         </span><span class="istickedoff">void $ liftTopLevel (restoreCheckpoint chk)</span></span>
+<span class="lineno">  194 </span>captureError :: TopLevelCheckpoint -&gt; String -&gt; REPL ()
+<span class="lineno">  195 </span><span class="decl"><span class="istickedoff">captureError chk msg = do</span>
+<span class="lineno">  196 </span><span class="spaces">    </span><span class="istickedoff">liftIO $ putStrLn &quot;&quot;</span>
+<span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">liftIO $ putStrLn msg</span>
+<span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff">liftTopLevel $ restoreCheckpoint chk</span></span>
+<span class="lineno">  199 </span>
+<span class="lineno">  200 </span>-- | Inspect and handle or rethrow exceptions.
+<span class="lineno">  201 </span>--
+<span class="lineno">  202 </span>--   Note: this would be cleaner if it used `catches` with multiple
+<span class="lineno">  203 </span>--   cases; however, the docs say nothing about what `catches` does
+<span class="lineno">  204 </span>--   with overlapping cases, or if it actually works currently,
+<span class="lineno">  205 </span>--   whether that's a supported part of the interface.
+<span class="lineno">  206 </span>--
+<span class="lineno">  207 </span>--   FUTURE: with enough cleanup in lower-level code we could make
+<span class="lineno">  208 </span>--   this not need a blanket case and then `catches` becomes viable.
+<span class="lineno">  209 </span>--
+<span class="lineno">  210 </span>--   This logic controls which exceptions the REPL continues executing
+<span class="lineno">  211 </span>--   for. Anything we rethrow here is fatal and will cause the REPL to
+<span class="lineno">  212 </span>--   exit.
+<span class="lineno">  213 </span>--
+<span class="lineno">  214 </span>handleExceptions :: TopLevelCheckpoint -&gt; X.SomeException -&gt; REPL ()
+<span class="lineno">  215 </span><span class="decl"><span class="istickedoff">handleExceptions chk e</span>
+<span class="lineno">  216 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">-- IO exceptions: catch and continue on UserError (this includes</span>
+<span class="lineno">  218 </span><span class="spaces">    </span><span class="istickedoff">-- `fail` calls), but treat anything else as fatal.</span>
+<span class="lineno">  219 </span><span class="spaces">  </span><span class="istickedoff">| Just (e' :: X.IOException) &lt;- X.fromException e =</span>
+<span class="lineno">  220 </span><span class="spaces">        </span><span class="istickedoff">if <span class="tickonlytrue">isUserError e'</span> then</span>
+<span class="lineno">  221 </span><span class="spaces">            </span><span class="istickedoff">captureError chk $ ioeGetErrorString e'</span>
+<span class="lineno">  222 </span><span class="spaces">        </span><span class="istickedoff">else</span>
+<span class="lineno">  223 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">throwM e'</span></span>
+<span class="lineno">  224 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">-- Async exceptions: treat as fatal.</span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">| Just (e' :: X.AsyncException) &lt;- <span class="nottickedoff">X.fromException e</span> =</span>
+<span class="lineno">  227 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwM e'</span></span>
+<span class="lineno">  228 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">-- ExitCode arises when someone makes an explicit call to exit</span>
+<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">-- (`exitSuccess` or `exitWith`); assume they meant it.</span>
+<span class="lineno">  231 </span><span class="spaces">  </span><span class="istickedoff">| Just (e' :: ExitCode) &lt;- <span class="nottickedoff">X.fromException e</span> =</span>
+<span class="lineno">  232 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwM e'</span></span>
+<span class="lineno">  233 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">-- Exceptions generated by panic: treat as fatal.</span>
+<span class="lineno">  235 </span><span class="spaces">  </span><span class="istickedoff">| Just (e' :: PanicSupport.PanicException) &lt;- <span class="nottickedoff">X.fromException e</span> =</span>
+<span class="lineno">  236 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwM e'</span></span>
+<span class="lineno">  237 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">-- Trap anything and everything else. XXX: this is way too broad.</span>
+<span class="lineno">  239 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
+<span class="lineno">  240 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">captureError chk $ X.displayException e</span></span></span>
+<span class="lineno">  241 </span>
+<span class="lineno">  242 </span>
+<span class="lineno">  243 </span>
+<span class="lineno">  244 </span>-- | Catch the exceptions we expect to catch while running a REPL
+<span class="lineno">  245 </span>--   action.
+<span class="lineno">  246 </span>exceptionProtect :: REPL () -&gt; REPL ()
+<span class="lineno">  247 </span><span class="decl"><span class="istickedoff">exceptionProtect cmd = do</span>
+<span class="lineno">  248 </span><span class="spaces">    </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">  249 </span><span class="spaces">    </span><span class="istickedoff">chk &lt;- liftIO $ makeCheckpoint rw</span>
+<span class="lineno">  250 </span><span class="spaces">    </span><span class="istickedoff">cmd `catch` handleExceptions chk</span></span>
 
 </pre>
 </body>
