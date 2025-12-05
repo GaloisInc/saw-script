@@ -348,12 +348,20 @@ checkpointSharedContext sc =
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO SharedContext
 restoreSharedContext scc sc =
-  do writeIORef (scModuleMap sc) (sccModuleMap scc)
+  do -- Ensure that the checkpoint itself is not stale
+     let i = sccTermIndex scc
+     s <- readIORef (scValidTerms sc)
+     unless (IntRangeSet.member i s) $
+       fail $ unlines $
+       [ "Stale checkpoint encountered: index = " ++ show i
+       , "Valid indexes: " ++ show (IntRangeSet.toList s)
+       ]
+     -- Restore saved environments
+     writeIORef (scModuleMap sc) (sccModuleMap scc)
      writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
      writeIORef (scURIEnv sc) (sccURIEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
-     let i = sccTermIndex scc
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
      -- Filter stale terms from AppCache
