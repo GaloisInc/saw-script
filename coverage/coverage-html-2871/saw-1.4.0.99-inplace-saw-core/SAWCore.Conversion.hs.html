@@ -316,7 +316,7 @@ span.spaces    { background: white }
 <span class="lineno">  297 </span>    defaultMatcher :: Matcher a
 <span class="lineno">  298 </span>
 <span class="lineno">  299 </span>instance Matchable () where
-<span class="lineno">  300 </span>    <span class="decl"><span class="istickedoff">defaultMatcher = asVar <span class="nottickedoff">(const (pure ()))</span></span></span>
+<span class="lineno">  300 </span>    <span class="decl"><span class="istickedoff">defaultMatcher = asVar (const (pure <span class="nottickedoff">()</span>))</span></span>
 <span class="lineno">  301 </span>
 <span class="lineno">  302 </span>instance Matchable Term where
 <span class="lineno">  303 </span>    <span class="decl"><span class="istickedoff">defaultMatcher = asAny</span></span>
@@ -413,7 +413,7 @@ span.spaces    { background: white }
 <span class="lineno">  394 </span><span class="spaces">        </span><span class="istickedoff">(thenMatcher (m &lt;:&gt; defaultMatcher) (\(f :*: x) -&gt; Just (f x)))</span></span>
 <span class="lineno">  395 </span>
 <span class="lineno">  396 </span>instance Buildable a =&gt; Conversionable (Maybe a) where
-<span class="lineno">  397 </span>    <span class="decl"><span class="istickedoff">convOfMatcher m = newConversion (thenMatcher m <span class="nottickedoff">(fmap defaultBuilder)</span>)</span></span>
+<span class="lineno">  397 </span>    <span class="decl"><span class="istickedoff">convOfMatcher m = newConversion (thenMatcher m (fmap defaultBuilder))</span></span>
 <span class="lineno">  398 </span>
 <span class="lineno">  399 </span>defaultConvOfMatcher :: Buildable a =&gt; Matcher a -&gt; Conversion
 <span class="lineno">  400 </span><span class="decl"><span class="istickedoff">defaultConvOfMatcher m = newConversion (thenMatcher m (Just . defaultBuilder))</span></span>
@@ -490,92 +490,95 @@ span.spaces    { background: white }
 <span class="lineno">  471 </span><span class="decl"><span class="istickedoff">vecConversions = [at_VecLit, atWithDefault_VecLit, append_VecLit]</span></span>
 <span class="lineno">  472 </span>
 <span class="lineno">  473 </span>at_VecLit :: Conversion
-<span class="lineno">  474 </span><span class="decl"><span class="istickedoff">at_VecLit = globalConv &quot;Prelude.at&quot;</span>
-<span class="lineno">  475 </span><span class="spaces">    </span><span class="istickedoff">(Prim.at :: Int -&gt; Term -&gt; Prim.Vec Term Term -&gt; Int -&gt; Term)</span></span>
-<span class="lineno">  476 </span>
-<span class="lineno">  477 </span>atWithDefault_VecLit :: Conversion
-<span class="lineno">  478 </span><span class="decl"><span class="istickedoff">atWithDefault_VecLit = globalConv &quot;Prelude.atWithDefault&quot;</span>
-<span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(Prim.atWithDefault :: Int -&gt; Term -&gt; Term -&gt; Prim.Vec Term Term -&gt; Int -&gt; Term)</span></span></span>
-<span class="lineno">  480 </span>
-<span class="lineno">  481 </span>append_VecLit :: Conversion
-<span class="lineno">  482 </span><span class="decl"><span class="istickedoff">append_VecLit = globalConv &quot;Prelude.append&quot;</span>
-<span class="lineno">  483 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(Prim.append :: Int -&gt; Int -&gt; Term -&gt; Prim.Vec Term Term -&gt; Prim.Vec Term Term -&gt; Prim.Vec Term Term)</span></span></span>
-<span class="lineno">  484 </span>
-<span class="lineno">  485 </span>
-<span class="lineno">  486 </span>-- | Conversions for operations on bitvector literals
-<span class="lineno">  487 </span>bvConversions :: [Conversion]
-<span class="lineno">  488 </span><span class="decl"><span class="istickedoff">bvConversions =</span>
-<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">[ globalConv &quot;Prelude.bvToNat&quot; Prim.bvToNat</span>
-<span class="lineno">  490 </span><span class="spaces">    </span><span class="istickedoff">, append_bvNat</span>
-<span class="lineno">  491 </span><span class="spaces">    </span><span class="istickedoff">, bvAdd_bvNat</span>
-<span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvAddWithCarry&quot; <span class="nottickedoff">Prim.bvAddWithCarry</span></span>
-<span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">, bvSub_bvNat</span>
-<span class="lineno">  494 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvNeg&quot;  <span class="nottickedoff">Prim.bvNeg</span></span>
-<span class="lineno">  495 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvMul&quot;  <span class="nottickedoff">Prim.bvMul</span></span>
-<span class="lineno">  496 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvUDiv&quot; <span class="nottickedoff">Prim.bvUDiv</span></span>
-<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvURem&quot; <span class="nottickedoff">Prim.bvURem</span></span>
-<span class="lineno">  498 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvSDiv&quot; <span class="nottickedoff">Prim.bvSDiv</span></span>
-<span class="lineno">  499 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvSRem&quot; <span class="nottickedoff">Prim.bvSRem</span></span>
-<span class="lineno">  500 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvShl&quot;  <span class="nottickedoff">Prim.bvShl</span></span>
-<span class="lineno">  501 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvShr&quot;  <span class="nottickedoff">Prim.bvShr</span></span>
-<span class="lineno">  502 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvSShr&quot; <span class="nottickedoff">Prim.bvSShr</span></span>
-<span class="lineno">  503 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvNot&quot;  <span class="nottickedoff">Prim.bvNot</span></span>
-<span class="lineno">  504 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvAnd&quot;  <span class="nottickedoff">Prim.bvAnd</span></span>
-<span class="lineno">  505 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvOr&quot;   <span class="nottickedoff">Prim.bvOr</span></span>
-<span class="lineno">  506 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvXor&quot;  <span class="nottickedoff">Prim.bvXor</span></span>
-<span class="lineno">  507 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvEq&quot;   <span class="nottickedoff">Prim.bvEq</span></span>
-<span class="lineno">  508 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  509 </span><span class="spaces">    </span><span class="istickedoff">, bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat</span>
-<span class="lineno">  510 </span><span class="spaces">    </span><span class="istickedoff">, bvsgt_bvNat, bvsge_bvNat, bvsle_bvNat, bvslt_bvNat</span>
+<span class="lineno">  474 </span><span class="decl"><span class="istickedoff">at_VecLit =</span>
+<span class="lineno">  475 </span><span class="spaces">  </span><span class="istickedoff">globalConv &quot;Prelude.at&quot;</span>
+<span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">(Prim.at :: () -&gt; () -&gt; Prim.Vec Term Term -&gt; Int -&gt; Maybe Term)</span></span>
+<span class="lineno">  477 </span>
+<span class="lineno">  478 </span>atWithDefault_VecLit :: Conversion
+<span class="lineno">  479 </span><span class="decl"><span class="istickedoff">atWithDefault_VecLit =</span>
+<span class="lineno">  480 </span><span class="spaces">  </span><span class="istickedoff">globalConv &quot;Prelude.atWithDefault&quot;</span>
+<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(Prim.atWithDefault :: () -&gt; () -&gt; Term -&gt; Prim.Vec Term Term -&gt; Int -&gt; Term)</span></span></span>
+<span class="lineno">  482 </span>
+<span class="lineno">  483 </span>append_VecLit :: Conversion
+<span class="lineno">  484 </span><span class="decl"><span class="istickedoff">append_VecLit =</span>
+<span class="lineno">  485 </span><span class="spaces">  </span><span class="istickedoff">globalConv &quot;Prelude.append&quot;</span>
+<span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(Prim.append :: Int -&gt; Int -&gt; Term -&gt; Prim.Vec Term Term -&gt; Prim.Vec Term Term -&gt; Prim.Vec Term Term)</span></span></span>
+<span class="lineno">  487 </span>
+<span class="lineno">  488 </span>
+<span class="lineno">  489 </span>-- | Conversions for operations on bitvector literals
+<span class="lineno">  490 </span>bvConversions :: [Conversion]
+<span class="lineno">  491 </span><span class="decl"><span class="istickedoff">bvConversions =</span>
+<span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">[ globalConv &quot;Prelude.bvToNat&quot; Prim.bvToNat</span>
+<span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">, append_bvNat</span>
+<span class="lineno">  494 </span><span class="spaces">    </span><span class="istickedoff">, bvAdd_bvNat</span>
+<span class="lineno">  495 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvAddWithCarry&quot; <span class="nottickedoff">Prim.bvAddWithCarry</span></span>
+<span class="lineno">  496 </span><span class="spaces">    </span><span class="istickedoff">, bvSub_bvNat</span>
+<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvNeg&quot;  <span class="nottickedoff">Prim.bvNeg</span></span>
+<span class="lineno">  498 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvMul&quot;  <span class="nottickedoff">Prim.bvMul</span></span>
+<span class="lineno">  499 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvUDiv&quot; <span class="nottickedoff">Prim.bvUDiv</span></span>
+<span class="lineno">  500 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvURem&quot; <span class="nottickedoff">Prim.bvURem</span></span>
+<span class="lineno">  501 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvSDiv&quot; <span class="nottickedoff">Prim.bvSDiv</span></span>
+<span class="lineno">  502 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvSRem&quot; <span class="nottickedoff">Prim.bvSRem</span></span>
+<span class="lineno">  503 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvShl&quot;  <span class="nottickedoff">Prim.bvShl</span></span>
+<span class="lineno">  504 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvShr&quot;  <span class="nottickedoff">Prim.bvShr</span></span>
+<span class="lineno">  505 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvSShr&quot; <span class="nottickedoff">Prim.bvSShr</span></span>
+<span class="lineno">  506 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvNot&quot;  <span class="nottickedoff">Prim.bvNot</span></span>
+<span class="lineno">  507 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvAnd&quot;  <span class="nottickedoff">Prim.bvAnd</span></span>
+<span class="lineno">  508 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvOr&quot;   <span class="nottickedoff">Prim.bvOr</span></span>
+<span class="lineno">  509 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvXor&quot;  <span class="nottickedoff">Prim.bvXor</span></span>
+<span class="lineno">  510 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvEq&quot;   <span class="nottickedoff">Prim.bvEq</span></span>
 <span class="lineno">  511 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvTrunc&quot; Prim.bvTrunc</span>
-<span class="lineno">  513 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvUExt&quot;  <span class="nottickedoff">Prim.bvUExt</span></span>
-<span class="lineno">  514 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvSExt&quot;  <span class="nottickedoff">Prim.bvSExt</span></span>
-<span class="lineno">  515 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  516 </span><span class="spaces">    </span><span class="istickedoff">, at_bvNat, atWithDefault_bvNat, slice_bvNat</span>
-<span class="lineno">  517 </span><span class="spaces">    </span><span class="istickedoff">, take_bvNat, drop_bvNat</span>
-<span class="lineno">  518 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
-<span class="lineno">  519 </span>
-<span class="lineno">  520 </span>append_bvNat :: Conversion
-<span class="lineno">  521 </span><span class="decl"><span class="istickedoff">append_bvNat = globalConv &quot;Prelude.append&quot; <span class="nottickedoff">Prim.append_bv</span></span></span>
+<span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">, bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat</span>
+<span class="lineno">  513 </span><span class="spaces">    </span><span class="istickedoff">, bvsgt_bvNat, bvsge_bvNat, bvsle_bvNat, bvslt_bvNat</span>
+<span class="lineno">  514 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  515 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvTrunc&quot; Prim.bvTrunc</span>
+<span class="lineno">  516 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvUExt&quot;  <span class="nottickedoff">Prim.bvUExt</span></span>
+<span class="lineno">  517 </span><span class="spaces">    </span><span class="istickedoff">, globalConv &quot;Prelude.bvSExt&quot;  <span class="nottickedoff">Prim.bvSExt</span></span>
+<span class="lineno">  518 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  519 </span><span class="spaces">    </span><span class="istickedoff">, at_bvNat, atWithDefault_bvNat, slice_bvNat</span>
+<span class="lineno">  520 </span><span class="spaces">    </span><span class="istickedoff">, take_bvNat, drop_bvNat</span>
+<span class="lineno">  521 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
 <span class="lineno">  522 </span>
-<span class="lineno">  523 </span>bvAdd_bvNat :: Conversion
-<span class="lineno">  524 </span><span class="decl"><span class="istickedoff">bvAdd_bvNat = globalConv &quot;Prelude.bvAdd&quot; <span class="nottickedoff">Prim.bvAdd</span></span></span>
+<span class="lineno">  523 </span>append_bvNat :: Conversion
+<span class="lineno">  524 </span><span class="decl"><span class="istickedoff">append_bvNat = globalConv &quot;Prelude.append&quot; <span class="nottickedoff">Prim.append_bv</span></span></span>
 <span class="lineno">  525 </span>
-<span class="lineno">  526 </span>bvSub_bvNat :: Conversion
-<span class="lineno">  527 </span><span class="decl"><span class="istickedoff">bvSub_bvNat = globalConv &quot;Prelude.bvSub&quot; <span class="nottickedoff">Prim.bvSub</span></span></span>
+<span class="lineno">  526 </span>bvAdd_bvNat :: Conversion
+<span class="lineno">  527 </span><span class="decl"><span class="istickedoff">bvAdd_bvNat = globalConv &quot;Prelude.bvAdd&quot; <span class="nottickedoff">Prim.bvAdd</span></span></span>
 <span class="lineno">  528 </span>
-<span class="lineno">  529 </span>bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat :: Conversion
-<span class="lineno">  530 </span><span class="decl"><span class="istickedoff">bvugt_bvNat = globalConv &quot;Prelude.bvugt&quot; <span class="nottickedoff">Prim.bvugt</span></span></span>
-<span class="lineno">  531 </span><span class="decl"><span class="istickedoff">bvuge_bvNat = globalConv &quot;Prelude.bvuge&quot; <span class="nottickedoff">Prim.bvuge</span></span></span>
-<span class="lineno">  532 </span><span class="decl"><span class="istickedoff">bvult_bvNat = globalConv &quot;Prelude.bvult&quot; <span class="nottickedoff">Prim.bvult</span></span></span>
-<span class="lineno">  533 </span><span class="decl"><span class="istickedoff">bvule_bvNat = globalConv &quot;Prelude.bvule&quot; <span class="nottickedoff">Prim.bvule</span></span></span>
-<span class="lineno">  534 </span>
-<span class="lineno">  535 </span>bvsgt_bvNat, bvsge_bvNat, bvslt_bvNat, bvsle_bvNat :: Conversion
-<span class="lineno">  536 </span><span class="decl"><span class="istickedoff">bvsgt_bvNat = globalConv &quot;Prelude.bvsgt&quot; <span class="nottickedoff">Prim.bvsgt</span></span></span>
-<span class="lineno">  537 </span><span class="decl"><span class="istickedoff">bvsge_bvNat = globalConv &quot;Prelude.bvsge&quot; <span class="nottickedoff">Prim.bvsge</span></span></span>
-<span class="lineno">  538 </span><span class="decl"><span class="istickedoff">bvslt_bvNat = globalConv &quot;Prelude.bvslt&quot; <span class="nottickedoff">Prim.bvslt</span></span></span>
-<span class="lineno">  539 </span><span class="decl"><span class="istickedoff">bvsle_bvNat = globalConv &quot;Prelude.bvsle&quot; <span class="nottickedoff">Prim.bvsle</span></span></span>
-<span class="lineno">  540 </span>
-<span class="lineno">  541 </span>at_bvNat :: Conversion
-<span class="lineno">  542 </span><span class="decl"><span class="istickedoff">at_bvNat = globalConv &quot;Prelude.at&quot; <span class="nottickedoff">Prim.at_bv</span></span></span>
+<span class="lineno">  529 </span>bvSub_bvNat :: Conversion
+<span class="lineno">  530 </span><span class="decl"><span class="istickedoff">bvSub_bvNat = globalConv &quot;Prelude.bvSub&quot; <span class="nottickedoff">Prim.bvSub</span></span></span>
+<span class="lineno">  531 </span>
+<span class="lineno">  532 </span>bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat :: Conversion
+<span class="lineno">  533 </span><span class="decl"><span class="istickedoff">bvugt_bvNat = globalConv &quot;Prelude.bvugt&quot; <span class="nottickedoff">Prim.bvugt</span></span></span>
+<span class="lineno">  534 </span><span class="decl"><span class="istickedoff">bvuge_bvNat = globalConv &quot;Prelude.bvuge&quot; <span class="nottickedoff">Prim.bvuge</span></span></span>
+<span class="lineno">  535 </span><span class="decl"><span class="istickedoff">bvult_bvNat = globalConv &quot;Prelude.bvult&quot; <span class="nottickedoff">Prim.bvult</span></span></span>
+<span class="lineno">  536 </span><span class="decl"><span class="istickedoff">bvule_bvNat = globalConv &quot;Prelude.bvule&quot; <span class="nottickedoff">Prim.bvule</span></span></span>
+<span class="lineno">  537 </span>
+<span class="lineno">  538 </span>bvsgt_bvNat, bvsge_bvNat, bvslt_bvNat, bvsle_bvNat :: Conversion
+<span class="lineno">  539 </span><span class="decl"><span class="istickedoff">bvsgt_bvNat = globalConv &quot;Prelude.bvsgt&quot; <span class="nottickedoff">Prim.bvsgt</span></span></span>
+<span class="lineno">  540 </span><span class="decl"><span class="istickedoff">bvsge_bvNat = globalConv &quot;Prelude.bvsge&quot; <span class="nottickedoff">Prim.bvsge</span></span></span>
+<span class="lineno">  541 </span><span class="decl"><span class="istickedoff">bvslt_bvNat = globalConv &quot;Prelude.bvslt&quot; <span class="nottickedoff">Prim.bvslt</span></span></span>
+<span class="lineno">  542 </span><span class="decl"><span class="istickedoff">bvsle_bvNat = globalConv &quot;Prelude.bvsle&quot; <span class="nottickedoff">Prim.bvsle</span></span></span>
 <span class="lineno">  543 </span>
-<span class="lineno">  544 </span>atWithDefault_bvNat :: Conversion
-<span class="lineno">  545 </span><span class="decl"><span class="istickedoff">atWithDefault_bvNat =</span>
-<span class="lineno">  546 </span><span class="spaces">  </span><span class="istickedoff">Conversion <span class="nottickedoff">False</span> $</span>
-<span class="lineno">  547 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">(\(_ :*: n :*: a :*: d :*: x :*: i) -&gt;</span></span>
-<span class="lineno">  548 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">if fromIntegral i &lt; width x then OT.bool (Prim.at_bv n a x i) else OT.term d)</span> &lt;$&gt;</span>
-<span class="lineno">  549 </span><span class="spaces">  </span><span class="istickedoff">(asGlobalDef &quot;Prelude.atWithDefault&quot; &lt;:&gt;</span>
-<span class="lineno">  550 </span><span class="spaces">   </span><span class="istickedoff">defaultMatcher &lt;:&gt; defaultMatcher &lt;:&gt; asAny &lt;:&gt; asBvNatLit &lt;:&gt; asAnyNatLit)</span></span>
-<span class="lineno">  551 </span>
-<span class="lineno">  552 </span>take_bvNat :: Conversion
-<span class="lineno">  553 </span><span class="decl"><span class="istickedoff">take_bvNat = globalConv &quot;Prelude.take&quot; <span class="nottickedoff">Prim.take_bv</span></span></span>
+<span class="lineno">  544 </span>at_bvNat :: Conversion
+<span class="lineno">  545 </span><span class="decl"><span class="istickedoff">at_bvNat = globalConv &quot;Prelude.at&quot; <span class="nottickedoff">Prim.at_bv</span></span></span>
+<span class="lineno">  546 </span>
+<span class="lineno">  547 </span>atWithDefault_bvNat :: Conversion
+<span class="lineno">  548 </span><span class="decl"><span class="istickedoff">atWithDefault_bvNat =</span>
+<span class="lineno">  549 </span><span class="spaces">  </span><span class="istickedoff">Conversion <span class="nottickedoff">False</span> $</span>
+<span class="lineno">  550 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">(\(_ :*: n :*: a :*: d :*: x :*: i) -&gt;</span></span>
+<span class="lineno">  551 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">maybe (OT.term d) OT.bool (Prim.at_bv n a x i))</span> &lt;$&gt;</span>
+<span class="lineno">  552 </span><span class="spaces">  </span><span class="istickedoff">(asGlobalDef &quot;Prelude.atWithDefault&quot; &lt;:&gt;</span>
+<span class="lineno">  553 </span><span class="spaces">   </span><span class="istickedoff">defaultMatcher &lt;:&gt; defaultMatcher &lt;:&gt; asAny &lt;:&gt; asBvNatLit &lt;:&gt; defaultMatcher)</span></span>
 <span class="lineno">  554 </span>
-<span class="lineno">  555 </span>drop_bvNat :: Conversion
-<span class="lineno">  556 </span><span class="decl"><span class="istickedoff">drop_bvNat = globalConv &quot;Prelude.drop&quot; <span class="nottickedoff">Prim.drop_bv</span></span></span>
+<span class="lineno">  555 </span>take_bvNat :: Conversion
+<span class="lineno">  556 </span><span class="decl"><span class="istickedoff">take_bvNat = globalConv &quot;Prelude.take&quot; <span class="nottickedoff">Prim.take_bv</span></span></span>
 <span class="lineno">  557 </span>
-<span class="lineno">  558 </span>slice_bvNat :: Conversion
-<span class="lineno">  559 </span><span class="decl"><span class="istickedoff">slice_bvNat = globalConv &quot;Prelude.slice&quot; <span class="nottickedoff">Prim.slice_bv</span></span></span>
+<span class="lineno">  558 </span>drop_bvNat :: Conversion
+<span class="lineno">  559 </span><span class="decl"><span class="istickedoff">drop_bvNat = globalConv &quot;Prelude.drop&quot; <span class="nottickedoff">Prim.drop_bv</span></span></span>
+<span class="lineno">  560 </span>
+<span class="lineno">  561 </span>slice_bvNat :: Conversion
+<span class="lineno">  562 </span><span class="decl"><span class="istickedoff">slice_bvNat = globalConv &quot;Prelude.slice&quot; <span class="nottickedoff">Prim.slice_bv</span></span></span>
 
 </pre>
 </body>
