@@ -18,8 +18,8 @@ From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestTypelvl_MaxWidth : Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xO (Coq.PArith.BinPos.xO Coq.PArith.BinPos.xH)))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
+Definition TestTypelvl_MaxWidth : Init.Datatypes.bool :=
+  let var__0   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
   CryptolPrimitivesForSAWCore.ecEq SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PEqInteger var__0 var__0.
 
 
@@ -41,8 +41,8 @@ From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestTypelvl_MinWidth : Coq.Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Coq.PArith.BinPos.Pos.to_nat (Coq.PArith.BinPos.xI Coq.PArith.BinPos.xH))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
+Definition TestTypelvl_MinWidth : Init.Datatypes.bool :=
+  let var__0   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
   CryptolPrimitivesForSAWCore.ecEq SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PEqInteger var__0 var__0.
 
 
