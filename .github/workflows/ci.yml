@@ -514,9 +514,17 @@ jobs:
         with:
           ocaml-compiler: "4.14"
 
-      - run: opam repo add coq-released https://coq.inria.fr/opam/released
+      - run: opam repo add rocq-released https://rocq-prover.org/opam/released
 
-      - run: opam install -y coq=8.15.2 coq-bits=1.1.0
+      - run: opam pin add -y rocq-prover 9.0.0
+      - run: opam install -y rocq-core=9.1.0 rocq-stdlib=9.0.0
+
+      # Install coq-bits from source. FIXME: replace with compatible
+      # opam-released version when available.
+      - working-directory: saw-core-coq/coq
+        run: |
+          opam install -y coq=9.1.0 # coq-* packages include compatibility shims (e.g., coq_makefile).
+          opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
 
       # FIXME: the following steps generate Coq libraries for the SAW core to
       # Coq translator and builds them; if we do other Coq tests, these steps

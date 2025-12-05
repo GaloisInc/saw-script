@@ -1,16 +1,16 @@
 From Bits Require Import operations.
 From Bits Require Import spec.
 
-From Coq Require Import FunctionalExtensionality.
-From Coq Require Import Lists.List.
-From Coq Require        Numbers.NatInt.NZLog.
-From Coq Require Import Peano_dec.
-From Coq Require Import PeanoNat.
-From Coq Require Import Strings.String.
-From Coq Require Import Vectors.Vector.
-From Coq Require Import Bool.Bool.
-From Coq Require Import BinNums.
-From Coq Require Import ZifyClasses.
+From Stdlib Require Import FunctionalExtensionality.
+From Stdlib Require Import Lists.List.
+From Stdlib Require        Numbers.NatInt.NZLog.
+From Stdlib Require Import Peano_dec.
+From Stdlib Require Import PeanoNat.
+From Stdlib Require Import Strings.String.
+From Stdlib Require Import Vectors.Vector.
+From Stdlib Require Import Bool.Bool.
+From Stdlib Require Import BinNums.
+From Stdlib Require Import ZifyClasses.
 
 From CryptolToCoq Require Import SAWCoreScaffolding.
 
@@ -20,8 +20,8 @@ From mathcomp Require Import ssrbool.
 From mathcomp Require Import fintype.
 From mathcomp Require Import tuple.
 
-From Coq Require Export ZArith.BinIntDef.
-From Coq Require Export PArith.BinPos.
+From Stdlib Require Export ZArith.BinIntDef.
+From Stdlib Require Export PArith.BinPos.
 
 Import VectorNotations.
 

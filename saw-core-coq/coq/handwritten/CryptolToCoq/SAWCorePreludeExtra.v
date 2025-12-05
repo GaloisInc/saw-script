@@ -1,11 +1,11 @@
-From Coq          Require Import Arith.Peano_dec.
-From Coq          Require Import Arith.PeanoNat.
-From Coq          Require Import Lists.List.
-From Coq          Require Import Logic.Eqdep_dec.
-From Coq          Require Import Logic.FunctionalExtensionality.
+From Stdlib       Require Import Arith.Peano_dec.
+From Stdlib       Require Import Arith.PeanoNat.
+From Stdlib       Require Import Lists.List.
+From Stdlib       Require Import Logic.Eqdep_dec.
+From Stdlib       Require Import Logic.FunctionalExtensionality.
 Import ListNotations.
-From Coq          Require Import String.
-From Coq          Require Import Vectors.Vector.
+From Stdlib       Require Import String.
+From Stdlib       Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCorePrelude.
