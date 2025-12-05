@@ -239,7 +239,7 @@ span.spaces    { background: white }
 <span class="lineno">  220 </span><span class="spaces">        </span><span class="istickedoff">if <span class="tickonlytrue">isUserError e'</span> then</span>
 <span class="lineno">  221 </span><span class="spaces">            </span><span class="istickedoff">captureError chk $ ioeGetErrorString e'</span>
 <span class="lineno">  222 </span><span class="spaces">        </span><span class="istickedoff">else</span>
-<span class="lineno">  223 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">throwM e'</span></span>
+<span class="lineno">  223 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">throwM e</span></span>
 <span class="lineno">  224 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">-- Async exceptions: treat as fatal.</span>
 <span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">| Just (e' :: X.AsyncException) &lt;- <span class="nottickedoff">X.fromException e</span> =</span>
