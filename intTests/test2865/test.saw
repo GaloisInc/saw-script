@@ -1,0 +1,9 @@
+// A regression test for #2865. When converting `f` to SAWCore, we need to
+// insert a coercion around `x # zero` to cast it from type `[n + (8 - n)]` to
+// type `[8]`. This test ensures that that coercion is inserted.
+
+let
+{{
+f : {n} (8 >= n) => [1][n] -> [1][8]
+f xs = [x # zero | x <- xs]
+}};
