@@ -30,10 +30,8 @@ module SAWScript.REPL.Monad (
   , getProofState
   ) where
 
-import Control.Monad (void)
 import Control.Monad.Catch (
-    MonadThrow(..), MonadCatch(..), MonadMask(..),
-    catchJust
+    MonadThrow(..), MonadCatch(..), MonadMask(..)
  )
 import Control.Monad.State (MonadState(..), StateT(..), get, gets, modify)
 import Control.Monad.Except (runExceptT)
@@ -57,7 +55,7 @@ import SAWCentral.Value (
 
 import SAWScript.Panic (panic)
 import SAWScript.Interpreter (buildTopLevelEnv)
-import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
+import SAWScript.ValueOps (TopLevelCheckpoint, makeCheckpoint, restoreCheckpoint)
 
 
 ------------------------------------------------------------
@@ -191,40 +189,56 @@ getCryptolEnv = do
 ------------------------------------------------------------
 -- Exceptions
 
--- | Handle generic IO exceptions from `fail` in REPL actions.
-catchFail :: REPL a -> (String -> REPL a) -> REPL a
-catchFail m k = catchJust sel m k
-  where
-    sel :: X.IOException -> Maybe String
-    sel e | isUserError e = Just (ioeGetErrorString e)
-          | otherwise     = Nothing
+captureError :: TopLevelCheckpoint -> String -> REPL ()
+captureError chk msg = do
+    liftIO $ putStrLn ""
+    liftIO $ putStrLn msg
+    liftTopLevel $ restoreCheckpoint chk
 
--- | Handle any other exception (except that we ignore async
---   exceptions and exitWith)
+-- | Inspect and handle or rethrow exceptions.
 --
--- XXX: we do not apparently ignore the exceptions that panic throws,
--- and we probably should.
-catchOther :: REPL a -> (X.SomeException -> REPL a) -> REPL a
-catchOther m k = catchJust flt m k
- where
-  flt e
-    | Just (_ :: X.AsyncException) <- X.fromException e = Nothing
-    | Just (_ :: ExitCode)       <- X.fromException e = Nothing
-    | otherwise = Just e
+--   Note: this would be cleaner if it used `catches` with multiple
+--   cases; however, the docs say nothing about what `catches` does
+--   with overlapping cases, or if it actually works currently,
+--   whether that's a supported part of the interface.
+--
+--   FUTURE: with enough cleanup in lower-level code we could make
+--   this not need a blanket case and then `catches` becomes viable.
+--
+--   This logic controls which exceptions the REPL continues executing
+--   for. Anything we rethrow here is fatal and will cause the REPL to
+--   exit.
+--
+handleExceptions :: TopLevelCheckpoint -> X.SomeException -> REPL ()
+handleExceptions chk e
+
+    -- IO exceptions: catch and continue on UserError (this includes
+    -- `fail` calls), but treat anything else as fatal.
+  | Just (e' :: X.IOException) <- X.fromException e =
+        if isUserError e' then
+            captureError chk $ ioeGetErrorString e'
+        else
+            throwM e'
+
+    -- Async exceptions: treat as fatal.
+  | Just (e' :: X.AsyncException) <- X.fromException e =
+        throwM e'
+
+    -- ExitCode arises when someone makes an explicit call to exit
+    -- (`exitSuccess` or `exitWith`); assume they meant it.
+  | Just (e' :: ExitCode) <- X.fromException e =
+        throwM e'
+
+    -- Trap anything and everything else. XXX: this is way too broad.
+  | otherwise =
+        captureError chk $ X.displayException e
+
+
 
 -- | Catch the exceptions we expect to catch while running a REPL
 --   action.
 exceptionProtect :: REPL () -> REPL ()
-exceptionProtect cmd =
-      do chk <- liftIO . makeCheckpoint =<< getTopLevelRW
-         cmd `catchFail`  (handlerFail chk)
-             `catchOther` (handlerPrint chk)
-
-    where
-    handlerPrint chk e =
-      do liftIO (putStrLn "" >> putStrLn (X.displayException e))
-         void $ liftTopLevel (restoreCheckpoint chk)
-
-    handlerFail chk s =
-      do liftIO (putStrLn "" >> putStrLn s)
-         void $ liftTopLevel (restoreCheckpoint chk)
+exceptionProtect cmd = do
+    rw <- getTopLevelRW
+    chk <- liftIO $ makeCheckpoint rw
+    cmd `catch` handleExceptions chk
