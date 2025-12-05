@@ -50,6 +50,7 @@ import qualified SAWCore.Name as SAW
 import qualified SAWCore.Prelude as SAW
 import qualified SAWCore.Recognizer as SAW
 import qualified SAWCore.SharedTerm as SAW
+import qualified CryptolSAWCore.Prelude as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -158,6 +159,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
 
     sc <- liftIO $ SAW.mkSharedContext
     liftIO $ SAW.scLoadPreludeModule sc
+    liftIO $ SAW.scLoadCryptolModule sc
 
     -- `eval` converts `W4.Expr`s to `SAW.Term`s.  We take what4 exprs from the
     -- context (e.g., in the actual arguments passed to the override) and

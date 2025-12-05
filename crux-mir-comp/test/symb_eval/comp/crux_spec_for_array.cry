@@ -1,0 +1,7 @@
+module test::symb_eval::comp::crux_spec_for_array where
+
+foo : [2][8] -> [2][8]
+foo x = x
+
+goo : [2][8] -> [2][8]
+goo x = foo x
