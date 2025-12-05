@@ -15,6 +15,7 @@ module SAWCentral.Builtins where
 
 import Control.Lens (view)
 import Control.Monad (foldM, unless)
+import Control.Monad.Catch (throwM)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (asks)
@@ -53,6 +54,7 @@ import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
 
 -- saw-support
+import qualified SAWSupport.PanicSupport as PanicSupport
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText)
@@ -1719,8 +1721,13 @@ failsPrim m = do
   x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
     Left (ex :: Ex.SomeException) ->
-      do liftIO $ TextIO.putStrLn "== Anticipated failure message =="
-         liftIO $ print ex
+      case Ex.fromException ex of
+          Just (e :: PanicSupport.PanicException) ->
+              -- Avoid trapping panics
+              throwM e
+          Nothing -> do
+              liftIO $ TextIO.putStrLn "== Anticipated failure message =="
+              liftIO $ print ex
     Right _ ->
       do liftIO $ fail "Expected failure, but succeeded instead!"
 
