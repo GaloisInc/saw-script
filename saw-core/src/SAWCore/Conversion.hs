@@ -471,15 +471,18 @@ vecConversions :: [Conversion]
 vecConversions = [at_VecLit, atWithDefault_VecLit, append_VecLit]
 
 at_VecLit :: Conversion
-at_VecLit = globalConv "Prelude.at"
-    (Prim.at :: Int -> Term -> Prim.Vec Term Term -> Int -> Term)
+at_VecLit =
+  globalConv "Prelude.at"
+    (Prim.at :: () -> () -> Prim.Vec Term Term -> Int -> Maybe Term)
 
 atWithDefault_VecLit :: Conversion
-atWithDefault_VecLit = globalConv "Prelude.atWithDefault"
-    (Prim.atWithDefault :: Int -> Term -> Term -> Prim.Vec Term Term -> Int -> Term)
+atWithDefault_VecLit =
+  globalConv "Prelude.atWithDefault"
+    (Prim.atWithDefault :: () -> () -> Term -> Prim.Vec Term Term -> Int -> Term)
 
 append_VecLit :: Conversion
-append_VecLit = globalConv "Prelude.append"
+append_VecLit =
+  globalConv "Prelude.append"
     (Prim.append :: Int -> Int -> Term -> Prim.Vec Term Term -> Prim.Vec Term Term -> Prim.Vec Term Term)
 
 
@@ -545,9 +548,9 @@ atWithDefault_bvNat :: Conversion
 atWithDefault_bvNat =
   Conversion False $
   (\(_ :*: n :*: a :*: d :*: x :*: i) ->
-    if fromIntegral i < width x then OT.bool (Prim.at_bv n a x i) else OT.term d) <$>
+    maybe (OT.term d) OT.bool (Prim.at_bv n a x i)) <$>
   (asGlobalDef "Prelude.atWithDefault" <:>
-   defaultMatcher <:> defaultMatcher <:> asAny <:> asBvNatLit <:> asAnyNatLit)
+   defaultMatcher <:> defaultMatcher <:> asAny <:> asBvNatLit <:> defaultMatcher)
 
 take_bvNat :: Conversion
 take_bvNat = globalConv "Prelude.take" Prim.take_bv
