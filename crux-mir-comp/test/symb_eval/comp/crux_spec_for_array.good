@@ -1,0 +1,4 @@
+test crux_spec_for_array/<DISAMB>::verification[0]::f_equiv[0]: ok
+test crux_spec_for_array/<DISAMB>::verification[0]::g_equiv[0]: ok
+
+[Crux] Overall status: Valid.
