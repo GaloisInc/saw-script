@@ -70,9 +70,9 @@ span.spaces    { background: white }
 <span class="lineno">   51 </span>preamble :: TranslationConfiguration -&gt; Doc ann
 <span class="lineno">   52 </span><span class="decl"><span class="istickedoff">preamble (TranslationConfiguration { vectorModule, postPreamble }) = text [i|</span>
 <span class="lineno">   53 </span><span class="spaces"></span><span class="istickedoff">(** Mandatory imports from saw-core-coq *)</span>
-<span class="lineno">   54 </span><span class="spaces"></span><span class="istickedoff">From Coq Require Import Lists.List.</span>
-<span class="lineno">   55 </span><span class="spaces"></span><span class="istickedoff">From Coq Require Import String.</span>
-<span class="lineno">   56 </span><span class="spaces"></span><span class="istickedoff">From Coq Require Import Vectors.Vector.</span>
+<span class="lineno">   54 </span><span class="spaces"></span><span class="istickedoff">From Stdlib       Require Import Lists.List.</span>
+<span class="lineno">   55 </span><span class="spaces"></span><span class="istickedoff">From Stdlib       Require Import String.</span>
+<span class="lineno">   56 </span><span class="spaces"></span><span class="istickedoff">From Stdlib       Require Import Vectors.Vector.</span>
 <span class="lineno">   57 </span><span class="spaces"></span><span class="istickedoff">From CryptolToCoq Require Import SAWCoreScaffolding.</span>
 <span class="lineno">   58 </span><span class="spaces"></span><span class="istickedoff">From CryptolToCoq Require Import #{vectorModule}.</span>
 <span class="lineno">   59 </span><span class="spaces"></span><span class="istickedoff">Import VectorNotations.</span>

@@ -1167,7 +1167,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1148 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1149 </span><span class="spaces">    </span><span class="istickedoff">C.EIf e1 e2 e3 -&gt;</span>
 <span class="lineno"> 1150 </span><span class="spaces">      </span><span class="istickedoff">do let ty = fastTypeOf (envC env) e2</span>
-<span class="lineno"> 1151 </span><span class="spaces">         </span><span class="istickedoff">ty' &lt;- importType sc env ty</span>
+<span class="lineno"> 1151 </span><span class="spaces">         </span><span class="istickedoff">ty' &lt;- importType sc <span class="nottickedoff">env</span> ty</span>
 <span class="lineno"> 1152 </span><span class="spaces">         </span><span class="istickedoff">e1' &lt;- importExpr sc env e1</span>
 <span class="lineno"> 1153 </span><span class="spaces">         </span><span class="istickedoff">e2' &lt;- importExpr sc env e2</span>
 <span class="lineno"> 1154 </span><span class="spaces">         </span><span class="istickedoff">e3' &lt;- importExpr' sc env (C.tMono ty) e3</span>
@@ -1829,7 +1829,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1810 </span><span class="spaces">     </span><span class="istickedoff">coerceTerm sc env (C.tSeq lenT' elemT) (C.tSeq lenT elemT) ys</span></span>
 <span class="lineno"> 1811 </span>
 <span class="lineno"> 1812 </span>lambdaTuples :: SharedContext -&gt; Env -&gt; C.Type -&gt; C.Expr -&gt; [[(C.Name, C.Type)]] -&gt; IO Term
-<span class="lineno"> 1813 </span><span class="decl"><span class="istickedoff">lambdaTuples sc env _ty expr [] = importExpr sc env expr</span>
+<span class="lineno"> 1813 </span><span class="decl"><span class="istickedoff">lambdaTuples sc env ty expr [] = importExpr' sc env (C.tMono ty) expr</span>
 <span class="lineno"> 1814 </span><span class="spaces"></span><span class="istickedoff">lambdaTuples sc env ty expr (args : argss) =</span>
 <span class="lineno"> 1815 </span><span class="spaces">  </span><span class="istickedoff">do f &lt;- lambdaTuple sc env ty expr argss args</span>
 <span class="lineno"> 1816 </span><span class="spaces">     </span><span class="istickedoff">if null args || null argss</span>
