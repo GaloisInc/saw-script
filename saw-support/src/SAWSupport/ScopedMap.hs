@@ -49,13 +49,17 @@ module SAWSupport.ScopedMap (
     insert,
     lookup,
     filter,
+    map,
+    union,
     scopedAssocs,
     flatten,
+    allElems,
     allKeys,
     allKeysSet
   ) where
 
-import Prelude hiding (lookup, filter)
+import qualified Prelude as Prelude
+import Prelude hiding (lookup, filter, map)
 
 import qualified Data.List.NonEmpty as N
 import Data.List.NonEmpty (NonEmpty( (:|) ))
@@ -122,13 +126,27 @@ lookup k (ScopedMap (s0 :| more0)) =
 -- | Drop entries that don't match a predicate.
 filter :: Ord k => (v -> Bool) -> ScopedMap k v -> ScopedMap k v
 filter keep (ScopedMap (s :| more)) =
-    ScopedMap (Map.filter keep s :| map (Map.filter keep) more)
+    ScopedMap (Map.filter keep s :| Prelude.map (Map.filter keep) more)
+
+-- | Call a function on each entry. Processes all entries, including
+--   hidden entries in outer scopes.
+map :: Ord k => (v -> v') -> ScopedMap k v -> ScopedMap k v'
+map f (ScopedMap (s :| more)) =
+    ScopedMap (Map.map f s :| Prelude.map (Map.map f) more)
+
+-- | Union. Takes the union of all layers; this may result in inner
+--   entries from one side hiding outer entries in the other. Any
+--   overlaps in the same scope are handled as per Map.union; that is,
+--   the entry from the left-hand map is preferred.
+union :: Ord k => ScopedMap k v -> ScopedMap k v -> ScopedMap k v
+union (ScopedMap (s1 :| more1)) (ScopedMap (s2 :| more2)) =
+    ScopedMap (Map.union s1 s2 :| zipWith Map.union more1 more2)
 
 -- | Return Map.assocs for each scope, preserving the scope boundaries.
 --   The head of the returned list is the most recent scope.
 scopedAssocs :: Ord k => ScopedMap k v -> [[(k, v)]]
 scopedAssocs (ScopedMap scopes) =
-    map Map.assocs $ toList scopes
+    Prelude.map Map.assocs $ toList scopes
 
 -- FUTURE: add scopedKeys, scopedKeysSet
 
@@ -148,6 +166,11 @@ flatten (ScopedMap (s0 :| more0)) =
     visit s0 more0
 
 --FUTURE: add allAssocs
+
+-- | Return all values, ignoring scope.
+allElems :: Ord k => ScopedMap k v -> [v]
+allElems m =
+    Map.elems $ flatten m
 
 -- | Return all keys, ignoring scope.
 allKeys :: Ord k => ScopedMap k v -> [k]
