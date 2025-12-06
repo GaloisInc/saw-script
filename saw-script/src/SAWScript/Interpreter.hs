@@ -1008,15 +1008,15 @@ interpretTopStmt printBinds stmt = do
       -- XXX this is not the right way to do this
       --    - shouldn't have to flatten the environments
       --    - shouldn't be typechecking one statement at a time regardless
-      Environ varenv tyenv _cryenvs <- liftTopLevel $ gets rwEnviron
+      Environ varenv0 tyenv _cryenvs <- liftTopLevel $ gets rwEnviron
       rbenv <- liftTopLevel $ gets rwRebindables
-      let varenv' = Map.map (\(pos, lc, ty, _v, _doc) -> (pos, lc, SS.ReadOnlyVar, ty)) $ ScopedMap.flatten varenv
+      let varenv1 = Map.map (\(pos, lc, ty, _v, _doc) -> (pos, lc, SS.ReadOnlyVar, ty)) $ ScopedMap.flatten varenv0
           rbenv' = Map.map (\(pos, ty, _v) -> (pos, SS.Current, SS.RebindableVar, ty)) rbenv
           -- If anything appears in both, favor the real environment
-          varenv'' = Map.union varenv' rbenv'
-          varenv''' = ScopedMap.seed varenv''
+          varenv2 = Map.union varenv1 rbenv'
+          varenv3 = ScopedMap.seed varenv2
 
-      processTypeCheck $ checkStmt avail varenv''' tyenv ctx stmt
+      processTypeCheck $ checkStmt avail varenv3 tyenv ctx stmt
 
   case stmt' of
 
