@@ -1,5 +1,5 @@
- Loading file "corelexer001.saw"
- Stack trace:
+Loading file "corelexer001.saw"
+Stack trace:
    (builtin) in load_sawcore_from_file
    corelexer001.saw:2:1-2:46 (at top level)
 Module parsing failed:

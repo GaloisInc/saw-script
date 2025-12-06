@@ -1,4 +1,4 @@
- Loading file "test_offline_coq.saw"
+Loading file "test_offline_coq.saw"
 === test_offline_coq1_prove0.v ===
 
 (** Mandatory imports from saw-core-coq *)

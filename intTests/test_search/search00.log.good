@@ -1,5 +1,5 @@
- --------------------------------
- -- LLVMSpec
+--------------------------------
+-- LLVMSpec
 crucible_llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
 crucible_llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 crucible_spec_size : LLVMSpec -> Int
@@ -9,12 +9,12 @@ llvm_spec_solvers : LLVMSpec -> [String]
 llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 10 more matches tagged experimental; use enable_experimental to see them
- --------------------------------
- -- (LLVMSpec -> [String])
+--------------------------------
+-- (LLVMSpec -> [String])
 crucible_spec_solvers : LLVMSpec -> [String]
 llvm_spec_solvers : LLVMSpec -> [String]
- --------------------------------
- -- LLVMSetup
+--------------------------------
+-- LLVMSetup
 crucible_alloc : LLVMType -> LLVMSetup LLVMValue
 crucible_alloc_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
 crucible_alloc_global : String -> LLVMSetup ()
@@ -62,8 +62,8 @@ llvm_unint : [String] -> LLVMSetup ()
 llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 30 more matches tagged experimental; use enable_experimental to see them
- --------------------------------
- -- (LLVMSetup ())
+--------------------------------
+-- (LLVMSetup ())
 crucible_alloc_global : String -> LLVMSetup ()
 crucible_conditional_points_to : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
 crucible_conditional_points_to_untyped : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
@@ -95,16 +95,16 @@ llvm_unint : [String] -> LLVMSetup ()
 llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 19 more matches tagged experimental; use enable_experimental to see them
- --------------------------------
- -- Int String
+--------------------------------
+-- Int String
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
 6 more matches tagged experimental; use enable_experimental to see them
- --------------------------------
- -- String Int
+--------------------------------
+-- String Int
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
 6 more matches tagged experimental; use enable_experimental to see them
- --------------------------------
- -- (TopLevel Int)
+--------------------------------
+-- (TopLevel Int)
 sharpSAT : Term -> TopLevel Int

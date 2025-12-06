@@ -3063,7 +3063,7 @@ primitives = Map.fromList $
   , prim "time"                "{a} TopLevel a -> TopLevel a"
     (pureVal timePrim)
     Current
-    [ "Print the CPU time used by the given TopLevel command." ]
+    [ "Print the elapsed time taken by the given TopLevel command." ]
 
   , prim "with_time"           "{a} TopLevel a -> TopLevel (Int, a)"
     (pureVal withTimePrim)

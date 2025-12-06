@@ -1,5 +1,5 @@
- Loading file "err035.saw"
- Type errors:
+Loading file "err035.saw"
+Type errors:
   err035.saw:5:9-5:19: Kind mismatch: expected "* -> *" but found "*"
   err035.saw:5:26-5:35: Type mismatch.
     Mismatch of types.

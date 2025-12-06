@@ -1,4 +1,4 @@
- Loading file "trace007.saw"
+Loading file "trace007.saw"
 Stack trace:
    (builtin) in print_stack
    trace007.saw:6:36-6:47 in (callback)

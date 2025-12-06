@@ -1,5 +1,5 @@
- Loading file "test5.saw"
- Stack trace:
+Loading file "test5.saw"
+Stack trace:
    (builtin) (at top level)
 test5.saw:2:1-2:2: Unterminated string
 

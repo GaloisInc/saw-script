@@ -1,4 +1,4 @@
- Loading file "test_cryptol_module_simple.saw"
+Loading file "test_cryptol_module_simple.saw"
 
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.

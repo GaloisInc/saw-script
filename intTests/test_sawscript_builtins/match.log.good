@@ -1,11 +1,11 @@
- Loading file "match.saw"
- caseSatResult:
- ("sat",True)
- unsat
- caseProofResult:
- ("Theorem",Theorem (let { x@1 = TCNum 8
+Loading file "match.saw"
+caseSatResult:
+("sat",True)
+unsat
+caseProofResult:
+("Theorem",Theorem (let { x@1 = TCNum 8
       x@2 = seq x@1 Bool
     }
  in (x : x@2)
 -> EqTrue (ecEq x@2 (PEqSeqBool x@1) x x)))
- ("Counterexample",bvNat 8 0)
+("Counterexample",bvNat 8 0)

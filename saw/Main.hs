@@ -89,8 +89,13 @@ options =
               hPutStrLn stderr $ "-v: Invalid verbosity level " ++ v ++
                                  "; try --help"
               exitFailure
-          Just verb ->
-              return opts { verbLevel = verb, printOutFn = printOutWith verb }
+          Just verb -> do
+              let ts = timestamping opts
+              return opts { verbLevel = verb, printOutFn = printOutWith verb ts }
+      setTimestamping opts = do
+          let verb = verbLevel opts
+              ts = Timestamping
+          return opts { timestamping = ts, printOutFn = printOutWith verb ts }
       setSimVerbose v opts = case readMaybe v of
           Nothing -> do
               hPutStrLn stderr $ "-d: Invalid number " ++ v
@@ -163,6 +168,10 @@ options =
 
     noArg setExtraChecks "t" "extra-type-checking" $
             "Perform extra type checking of intermediate values\n" ++
+            "  (default false)",
+
+    noArg setTimestamping "T" "timestamping" $
+            "Timestamp messages printed during execution\n" ++
             "  (default false)",
 
     noArg setShowVersion "V" "version"

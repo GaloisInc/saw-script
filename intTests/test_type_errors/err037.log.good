@@ -1,5 +1,5 @@
- Loading file "err037.saw"
- err037.saw:9:18-9:33: Type mismatch.
+Loading file "err037.saw"
+err037.saw:9:18-9:33: Type mismatch.
     Mismatch of type constructors. Expected: ([]) but got (->)
     err037.saw:9:10-9:15: The type [Int] arises from this type annotation
     err037.saw:7:15-7:35: The type [Int] -> [Int] arises from the context of the term

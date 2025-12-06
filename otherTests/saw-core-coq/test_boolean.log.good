@@ -1,4 +1,4 @@
- Loading file "test_boolean.saw"
+Loading file "test_boolean.saw"
 
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.

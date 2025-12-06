@@ -1,5 +1,5 @@
- Loading file "unify001.saw"
- unify001.saw:8:10-8:11: Type mismatch.
+Loading file "unify001.saw"
+unify001.saw:8:10-8:11: Type mismatch.
     Mismatch of type constructors. Expected: String but got Int
     unify001.saw:8:14-8:20: The type String arises from this type annotation
     unify001.saw:8:10-8:11: The type Int arises from the type of this term

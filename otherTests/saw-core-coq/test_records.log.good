@@ -1,4 +1,4 @@
- Loading file "test_records.saw"
+Loading file "test_records.saw"
 
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
