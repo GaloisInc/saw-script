@@ -562,7 +562,7 @@ finish msb =
     ms' <- liftIO $ substMethodSpec (msb ^. msbSharedContext) sm ms
 
     nonce <- liftIO $ freshNonce ng
-    return $ M.MethodSpec (MethodSpec (msb ^. msbCollectionState) ms') (indexValue nonce)
+    return $ M.MethodSpec (MethodSpec (msb ^. msbCollectionState) ms' sc) (indexValue nonce)
 
   where
     sc = msb ^. msbSharedContext
