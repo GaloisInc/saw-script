@@ -1,15 +1,15 @@
- --------------------------------
- -- (LLVMSpec -> _)
+--------------------------------
+-- (LLVMSpec -> _)
 crucible_spec_size : LLVMSpec -> Int
 crucible_spec_solvers : LLVMSpec -> [String]
 llvm_spec_size : LLVMSpec -> Int
 llvm_spec_solvers : LLVMSpec -> [String]
- --------------------------------
- -- (_ Int)
+--------------------------------
+-- (_ Int)
 goal_num : ProofScript Int
 sharpSAT : Term -> TopLevel Int
- --------------------------------
- -- JVMSetup
+--------------------------------
+-- JVMSetup
 jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue
 jvm_alloc_object : String -> JVMSetup JVMValue
 jvm_array_is : JVMValue -> Term -> JVMSetup ()
@@ -32,8 +32,8 @@ jvm_unint : [String] -> JVMSetup ()
 jvm_unsafe_assume_spec : JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec
 jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
 2 more matches tagged experimental; use enable_experimental to see them
- --------------------------------
- -- (JVMSetup _)
+--------------------------------
+-- (JVMSetup _)
 jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue
 jvm_alloc_object : String -> JVMSetup JVMValue
 jvm_array_is : JVMValue -> Term -> JVMSetup ()

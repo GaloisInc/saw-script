@@ -1,5 +1,5 @@
- Loading file "test.saw"
- Unbound name
+Loading file "test.saw"
+Unbound name
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -13,7 +13,7 @@ While typechecking term:
 .:1:0:
 Unbound name: "false"
 
- No such data type
+No such data type
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -27,9 +27,9 @@ While typechecking term:
 .:1:0:
 No such data type: ModuleIdentifier Cryptol.String
 
- Partially-applied recursors are permitted
- Either#rec Nat
- Not a sort (lambda)
+Partially-applied recursors are permitted
+Either#rec Nat
+Not a sort (lambda)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -44,7 +44,7 @@ While typechecking term:
 Not a sort
   Prelude.Bool
 
- Not a sort (pi)
+Not a sort (pi)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -59,7 +59,7 @@ While typechecking term:
 Not a sort
   Prelude.Bool
 
- Not a sort (pi)
+Not a sort (pi)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -74,7 +74,7 @@ While typechecking term:
 Not a sort
   Prelude.Bool
 
- Not a sort (pair type)
+Not a sort (pair type)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -89,7 +89,7 @@ While typechecking term:
 Not a sort
   Prelude.Bool
 
- Not a sort (pair type)
+Not a sort (pair type)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -104,7 +104,7 @@ While typechecking term:
 Not a sort
   Prelude.Nat
 
- Not a sort (record type)
+Not a sort (record type)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -119,7 +119,7 @@ While typechecking term:
 Not a sort
   Prelude.Bool
 
- Disallowed propositional elimination
+Disallowed propositional elimination
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -135,7 +135,7 @@ Malformed recursor
   Prelude.IsLeNat#rec
 Disallowed propositional elimination
 
- Function application with non-function type
+Function application with non-function type
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -155,7 +155,7 @@ With type:
 To argument:
   Prelude.True
 
- Tuple field projection with non-tuple type
+Tuple field projection with non-tuple type
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -170,7 +170,7 @@ While typechecking term:
 Tuple field projection with non-tuple type
   Prelude.Bool
 
- Record field projection with non-record type
+Record field projection with non-record type
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -187,7 +187,7 @@ Record field projection with non-record type
 In term:
   Prelude.False
 
- Bad record field for type
+Bad record field for type
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -202,7 +202,7 @@ While typechecking term:
 Bad record field ("c") for type
   #{a : Prelude.Bool,b : Prelude.Bool}
 
- Inferred type not a subtype of expected type
+Inferred type not a subtype of expected type
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -221,7 +221,7 @@ Not a subtype of expected type
 For term
   5
 
- Empty vector literal
+Empty vector literal
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -238,7 +238,7 @@ While typechecking term:
 .:1:26:
 Empty vector literal
 
- More variables than length of function type
+More variables than length of function type
 == Anticipated failure message ==
 Stack trace:
    (builtin) in load_sawcore_from_file
@@ -254,7 +254,7 @@ Prelude.Bool
 -> Prelude.Bool
 
 
- Definition without defining equation
+Definition without defining equation
 == Anticipated failure message ==
 Stack trace:
    (builtin) in load_sawcore_from_file
@@ -267,7 +267,7 @@ Malformed declaration for "foo"
 Definition without defining equation
 
 
- Primitive or axiom with definition
+Primitive or axiom with definition
 == Anticipated failure message ==
 Stack trace:
    (builtin) in load_sawcore_from_file
@@ -280,7 +280,7 @@ Malformed declaration for "foo"
 Primitive or axiom with definition
 
 
- Dangling definition without a type
+Dangling definition without a type
 == Anticipated failure message ==
 Stack trace:
    (builtin) in load_sawcore_from_file
@@ -293,7 +293,7 @@ Malformed declaration for "foo"
 Dangling definition without a type
 
 
- Wrong form for type of datatype
+Wrong form for type of datatype
 == Anticipated failure message ==
 Stack trace:
    (builtin) in load_sawcore_from_file
@@ -306,7 +306,7 @@ Malformed declaration for "Foo"
 Wrong form for type of datatype
 
 
- Universe level of parameters should be no greater than that of the datatype
+Universe level of parameters should be no greater than that of the datatype
 == Anticipated failure message ==
 Stack trace:
    (builtin) in load_sawcore_from_file
@@ -319,7 +319,7 @@ Malformed declaration for "Foo"
 Universe level of parameters should be no greater than that of the datatype
 
 
- Universe level of indices should be strictly contained in that of the datatype
+Universe level of indices should be strictly contained in that of the datatype
 == Anticipated failure message ==
 Stack trace:
    (builtin) in load_sawcore_from_file
@@ -332,7 +332,7 @@ Malformed declaration for "Foo"
 Universe level of indices should be strictly contained in that of the datatype
 
 
- Universe level of constructors should be strictly contained in that of the datatype
+Universe level of constructors should be strictly contained in that of the datatype
 == Anticipated failure message ==
 Stack trace:
    (builtin) in load_sawcore_from_file

@@ -1,5 +1,5 @@
- Loading file "err030.saw"
- Type errors:
+Loading file "err030.saw"
+Type errors:
   err030.saw:5:9-5:13: Kind mismatch: expected "* -> *" but found "*"
   err030.saw:5:20-5:29: Type mismatch.
     Mismatch of type constructors. Expected: <Block> but got Type

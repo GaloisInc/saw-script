@@ -1,3 +1,3 @@
- Loading file "err055.saw"
- err055.saw:4:16-4:17: Cannot rebind x: Previous binding was not tagged 'rebindable'
+Loading file "err055.saw"
+err055.saw:4:16-4:17: Cannot rebind x: Previous binding was not tagged 'rebindable'
 FAILED

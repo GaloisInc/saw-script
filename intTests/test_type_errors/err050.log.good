@@ -1,5 +1,5 @@
- Loading file "err050.saw"
- Type errors:
+Loading file "err050.saw"
+Type errors:
   err050.saw:8:9-8:21: Inaccessible variable: "implies_term" (err050.saw:8:9-8:21)
   err050.saw:8:9-8:21: This command is available only after running `enable_experimental`.
 

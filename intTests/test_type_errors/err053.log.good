@@ -1,5 +1,5 @@
- Loading file "err053.saw"
- Type errors:
+Loading file "err053.saw"
+Type errors:
   err053.saw:8:13-8:27: Inaccessible type: "__DEPRECATED__"
   err053.saw:8:13-8:27: This type is available only after running `enable_deprecated`.
 

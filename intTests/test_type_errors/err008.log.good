@@ -1,4 +1,4 @@
- Loading file "err008.saw"
- err008.saw:3:1-3:23: Warning: Monadic bind with the wrong monad; found LLVMSetup but expected TopLevel
- err008.saw:3:1-3:23: Warning: This creates the action but does not execute it; if you meant to do that, prefix the expression with return
- err008.saw:3:1-3:23: Warning: This will become an error in a future release of SAW
+Loading file "err008.saw"
+err008.saw:3:1-3:23: Warning: Monadic bind with the wrong monad; found LLVMSetup but expected TopLevel
+err008.saw:3:1-3:23: Warning: This creates the action but does not execute it; if you meant to do that, prefix the expression with return
+err008.saw:3:1-3:23: Warning: This will become an error in a future release of SAW

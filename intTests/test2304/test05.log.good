@@ -1,7 +1,7 @@
- Loading file "test05.saw"
- ("a",\(u1218 : isort 0) ->
+Loading file "test05.saw"
+("a",\(u1218 : isort 0) ->
   \(_P : PLiteral u1218) -> ecNumber (TCNum 3) u1218 _P)
- ("b",\(u1218 : isort 0) ->
+("b",\(u1218 : isort 0) ->
   \(_P : PLiteral u1218) -> ecNumber (TCNum 4) u1218 _P)
- ("c",\(u1218 : isort 0) ->
+("c",\(u1218 : isort 0) ->
   \(_P : PLiteral u1218) -> ecNumber (TCNum 5) u1218 _P)

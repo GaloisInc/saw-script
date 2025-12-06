@@ -20,13 +20,13 @@
 # directory, as follows, assuming T.saw is one such file:
 #    - run "saw T.saw"
 #    - produce T.rawlog
-#    - produce T.log with timestamps stripped out
+#    - produce a postprocessed T.log
 #    - diff T.log against T.log.good to produce T.diff
 #
 # It will also test all SAW repl scripts (*.isaw) it finds:
 #    - run "saw -B T.isaw"
 #    - produce T.rawlog
-#    - produce T.log with timestamps stripped out
+#    - produce a postprocessed T.log
 #    - diff T.log against T.log.good to produce T.diff
 #
 # Don't use the same names for *.saw and *.isaw files.
@@ -145,9 +145,6 @@ run-tests() {
         # the last 't'), but just adding the g flag to the
         # substitution isn't good enough.
         #
-        # Then, prune the timestamps from the log since they'll never
-        # match.
-        #
         # Furthermore, prune the line number from the results of
         # hitting the Haskell "error" function. SAW isn't supposed to
         # use "error", but it does, and some things trigger it, and
@@ -160,9 +157,6 @@ run-tests() {
             /^proof ([0-9][0-9]*)> /s/^proof ([0-9][0-9]*)> //
             tagain
 
-            /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\] /{
-                s/^..............//
-            }
             /^  error, called at [^ :]*\.hs:[0-9:]* in saw-/s/\.hs:.*/.hs/
         ' | (
             # If there's a custom postprocess script for this test,

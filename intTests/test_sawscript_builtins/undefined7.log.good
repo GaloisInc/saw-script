@@ -1,5 +1,5 @@
- Loading file "undefined7.saw"
- interpret: undefined
+Loading file "undefined7.saw"
+interpret: undefined
 CallStack (from HasCallStack):
   error, called at saw-script/src/SAWScript/Interpreter.hs
 FAILED

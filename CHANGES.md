@@ -6,6 +6,13 @@ This release supports [version
 
 ## Changes
 
+* SAW no longer timestamps (some of) its output by default.
+  If you want the timestamps back, pass the -T option on the command
+  line.
+  For more effective timing (e.g. for benchmarking) use the `time` or
+  `with_time` SAWScript builtins, or time the whole run of the
+  executable with external tools, as needed.
+
 * The REPL no longer gratuitously rejects multiple statements
   separated by semicolons on a single line.
   It also no longer chokes on lines that contain only comments.

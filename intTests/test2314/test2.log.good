@@ -1,5 +1,5 @@
- Loading file "test2.saw"
- Stack trace:
+Loading file "test2.saw"
+Stack trace:
    (builtin) (at top level)
 test2.saw:2:2-2:2: Invalid multiline string
 

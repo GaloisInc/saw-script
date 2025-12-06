@@ -1,5 +1,5 @@
- Loading file "coreparser001.saw"
- Stack trace:
+Loading file "coreparser001.saw"
+Stack trace:
    (builtin) in load_sawcore_from_file
    coreparser001.saw:2:1-2:47 (at top level)
 Module parsing failed:

@@ -1,5 +1,5 @@
- Loading file "testDups.saw"
- 2114
+Loading file "testDups.saw"
+2114
 == Anticipated failure message ==
 Stack trace:
    (builtin) in (callback)
@@ -11,4 +11,4 @@ Cryptol error:
     (at ../test_saw_submodule_access1/D.cry:5:1--5:4, D::d00)
     (at ../test_saw_submodule_access1/F.cry:12:1--12:4, F::d00)
 
- done
+done

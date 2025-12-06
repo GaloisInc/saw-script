@@ -1,5 +1,5 @@
- Loading file "err007.saw"
- err007.saw:2:1-2:4: Type mismatch.
+Loading file "err007.saw"
+err007.saw:2:1-2:4: Type mismatch.
     Mismatch of type constructors. Expected: <Block> but got ([])
     err007.saw:2:1-2:4: The type TopLevel t.0 arises from this type annotation
     err007.saw:2:1-2:4: The type [Int] arises from the type of this term

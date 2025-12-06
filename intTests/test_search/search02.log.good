@@ -1,5 +1,5 @@
- --------------------------------
- -- (a -> a)
+--------------------------------
+-- (a -> a)
 abstract_symbolic : Term -> Term
 add_cryptol_defs : [String] -> Simpset -> Simpset
 add_cryptol_eqs : [String] -> Simpset -> Simpset
@@ -25,20 +25,20 @@ time : {a} TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
 20 more matches tagged experimental; use enable_experimental to see them
 2 more matches tagged deprecated; use enable_deprecated to see them
- --------------------------------
- -- {a} (a -> String)
+--------------------------------
+-- {a} (a -> String)
 show : {a} a -> String
- --------------------------------
- -- {m} (a -> m b)
+--------------------------------
+-- {m} (a -> m b)
 for : {m, a, b} [a] -> (a -> m b) -> m [b]
 return : {m, a} a -> m a
- --------------------------------
- -- {a} ProofScript a
+--------------------------------
+-- {a} ProofScript a
 No matches.
 The following experimental matches require enable_experimental:
 goal_num_ite : {a} Int -> ProofScript a -> ProofScript a -> ProofScript a  (EXPERIMENTAL)
- --------------------------------
- -- {a} a ProofScript
+--------------------------------
+-- {a} a ProofScript
 No matches.
 The following experimental matches require enable_experimental:
 goal_num_ite : {a} Int -> ProofScript a -> ProofScript a -> ProofScript a  (EXPERIMENTAL)

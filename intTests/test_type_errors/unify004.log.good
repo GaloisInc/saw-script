@@ -1,5 +1,5 @@
- Loading file "unify004.saw"
- unify004.saw:8:9-8:10: Type mismatch.
+Loading file "unify004.saw"
+unify004.saw:8:9-8:10: Type mismatch.
     Term is not a function. (Maybe a function is applied to too many arguments?)
     unify004.saw:8:9-8:10: The type t.0 -> t.1 arises from the context of the term
     unify004.saw:7:9-7:10: The type Int arises from the type of this term
