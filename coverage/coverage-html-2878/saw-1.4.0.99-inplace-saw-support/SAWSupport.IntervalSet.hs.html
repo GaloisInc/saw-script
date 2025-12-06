@@ -24,94 +24,96 @@ span.spaces    { background: white }
 <span class="lineno">    5 </span>
 <span class="lineno">    6 </span>-- | An 'IntervalSet' represents a set of disjoint contiguous
 <span class="lineno">    7 </span>-- intervals of type 'Int'.
-<span class="lineno">    8 </span>-- Each interval @(i, j)@ with @i &lt; j@ represents the set of values
-<span class="lineno">    9 </span>-- @[i..j-1]@.
+<span class="lineno">    8 </span>-- Each interval @(i, j)@ with @i &lt;= j@ represents the set of values
+<span class="lineno">    9 </span>-- @[i..j]@.
 <span class="lineno">   10 </span>newtype IntervalSet = IntervalSet (IntMap Int)
-<span class="lineno">   11 </span>
-<span class="lineno">   12 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show IntervalSet</span></span></span></span> where
-<span class="lineno">   13 </span>  <span class="decl"><span class="nottickedoff">show (IntervalSet m) = show m</span></span>
-<span class="lineno">   14 </span>
-<span class="lineno">   15 </span>-- | The empty set.
-<span class="lineno">   16 </span>empty :: IntervalSet
-<span class="lineno">   17 </span><span class="decl"><span class="nottickedoff">empty = IntervalSet IntMap.empty</span></span>
-<span class="lineno">   18 </span>
-<span class="lineno">   19 </span>-- | A set containing a single half-open interval @[i..j-1]@.
-<span class="lineno">   20 </span>singleton :: (Int, Int) -&gt; IntervalSet
-<span class="lineno">   21 </span><span class="decl"><span class="istickedoff">singleton (i, j)</span>
-<span class="lineno">   22 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">i &lt; j</span> = IntervalSet (IntMap.singleton i j)</span>
-<span class="lineno">   23 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">empty</span></span></span>
-<span class="lineno">   24 </span>
-<span class="lineno">   25 </span>-- | Add an interval @[i..j-1]@ to the set.
-<span class="lineno">   26 </span>insert :: (Int, Int) -&gt; IntervalSet -&gt; IntervalSet
-<span class="lineno">   27 </span><span class="decl"><span class="nottickedoff">insert (i, j) (IntervalSet m)</span>
-<span class="lineno">   28 </span><span class="spaces">  </span><span class="nottickedoff">| i &gt;= j = IntervalSet m</span>
-<span class="lineno">   29 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
-<span class="lineno">   30 </span><span class="spaces">    </span><span class="nottickedoff">let -- m1 contains all intervals strictly below i</span>
-<span class="lineno">   31 </span><span class="spaces">        </span><span class="nottickedoff">-- also possibly one interval starting at i'</span>
-<span class="lineno">   32 </span><span class="spaces">        </span><span class="nottickedoff">m1 = IntMap.takeWhileAntitone (&lt; i) m</span>
-<span class="lineno">   33 </span><span class="spaces">        </span><span class="nottickedoff">-- m2 contains all intervals strictly above j</span>
-<span class="lineno">   34 </span><span class="spaces">        </span><span class="nottickedoff">m2 = IntMap.dropWhileAntitone (&lt;= j) m</span>
-<span class="lineno">   35 </span><span class="spaces">        </span><span class="nottickedoff">i' = case IntMap.lookupLE i m of</span>
-<span class="lineno">   36 </span><span class="spaces">               </span><span class="nottickedoff">Nothing -&gt; i</span>
-<span class="lineno">   37 </span><span class="spaces">               </span><span class="nottickedoff">Just (u, v) -&gt; if i &lt;= v then u else i</span>
-<span class="lineno">   38 </span><span class="spaces">        </span><span class="nottickedoff">j' = case IntMap.lookupLE j m of</span>
-<span class="lineno">   39 </span><span class="spaces">               </span><span class="nottickedoff">Nothing -&gt; j</span>
-<span class="lineno">   40 </span><span class="spaces">               </span><span class="nottickedoff">Just (_, v) -&gt; max v j</span>
-<span class="lineno">   41 </span><span class="spaces">    </span><span class="nottickedoff">in IntervalSet (IntMap.insert i' j' (IntMap.union m1 m2))</span></span>
-<span class="lineno">   42 </span>    -- Any interval [u, v) with v &lt; i stays unchanged.
-<span class="lineno">   43 </span>    -- Any interval [u, v) with u &lt;= i &lt;= v is overwritten.
-<span class="lineno">   44 </span>    -- Any interval [u, v) with i &lt; u &lt;= j is removed.
-<span class="lineno">   45 </span>    -- Any interval [u, v) with j &lt; u stays unchanged.
-<span class="lineno">   46 </span>    -- If i falls inside (or coincides with the upper bound of) an
-<span class="lineno">   47 </span>    -- interval [u, v), set i' = u; else i' = i.
-<span class="lineno">   48 </span>    -- If j falls inside an interval [u, v), let j' = v; else j' = j.
-<span class="lineno">   49 </span>    -- Always insert a new interval [i', j').
-<span class="lineno">   50 </span>
-<span class="lineno">   51 </span>-- | Remove an interval @[i..j-1]@ from the set.
-<span class="lineno">   52 </span>delete :: (Int, Int) -&gt; IntervalSet -&gt; IntervalSet
-<span class="lineno">   53 </span><span class="decl"><span class="istickedoff">delete (i, j) (IntervalSet m)</span>
-<span class="lineno">   54 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">i &gt;= j</span> = IntervalSet m</span>
-<span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
-<span class="lineno">   56 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let m1 = IntMap.takeWhileAntitone (&lt; i) m</span></span>
-<span class="lineno">   57 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">m2 = IntMap.dropWhileAntitone (&lt;= j) m</span></span>
-<span class="lineno">   58 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">m1' = case IntMap.lookupLT i m1 of</span></span>
-<span class="lineno">   59 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; m1</span></span>
-<span class="lineno">   60 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Just (u, v) -&gt; if i &lt; v then IntMap.insert u i m1 else m1</span></span>
-<span class="lineno">   61 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">m2' = case IntMap.lookupLE j m of</span></span>
-<span class="lineno">   62 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; m2</span></span>
-<span class="lineno">   63 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Just (_, v) -&gt; if j &lt; v then IntMap.insert j v m2 else m2</span></span>
-<span class="lineno">   64 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">in IntervalSet (IntMap.union m1' m2')</span></span></span>
-<span class="lineno">   65 </span>    -- Any interval [u, v) with v &lt;= i stays unchanged.
-<span class="lineno">   66 </span>    -- Any interval [u, v) with u &lt; i &lt; v is overwritten.
-<span class="lineno">   67 </span>    -- Any interval [u, v) with i &lt;= u &lt;= j is removed.
-<span class="lineno">   68 </span>    -- Any interval [u, v) with j &lt; u stays unchanged.
-<span class="lineno">   69 </span>    -- If i falls inside an interval [u, v), replace it with interval [u, i).
-<span class="lineno">   70 </span>    -- If j falls inside an interval [u, v), insert a new interval [j, v).
-<span class="lineno">   71 </span>
-<span class="lineno">   72 </span>-- | Is a specific value in the set?
-<span class="lineno">   73 </span>member :: Int -&gt; IntervalSet -&gt; Bool
-<span class="lineno">   74 </span><span class="decl"><span class="istickedoff">member x (IntervalSet m) =</span>
-<span class="lineno">   75 </span><span class="spaces">  </span><span class="istickedoff">case IntMap.lookupLE x m of</span>
-<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">False</span></span>
-<span class="lineno">   77 </span><span class="spaces">    </span><span class="istickedoff">Just (_, j) -&gt; x &lt; j</span></span>
-<span class="lineno">   78 </span>
-<span class="lineno">   79 </span>-- | The union of two sets.
-<span class="lineno">   80 </span>union :: IntervalSet -&gt; IntervalSet -&gt; IntervalSet
-<span class="lineno">   81 </span><span class="decl"><span class="nottickedoff">union s1 s2 = foldr insert s1 (toList s2)</span></span>
-<span class="lineno">   82 </span>
-<span class="lineno">   83 </span>-- | The difference of two sets: Remove all members of the second set
-<span class="lineno">   84 </span>-- from the first set.
-<span class="lineno">   85 </span>difference :: IntervalSet -&gt; IntervalSet -&gt; IntervalSet
-<span class="lineno">   86 </span><span class="decl"><span class="nottickedoff">difference s1 s2 = foldr delete s1 (toList s2)</span></span>
-<span class="lineno">   87 </span>
-<span class="lineno">   88 </span>-- | Create a set from a list of half-open intervals.
-<span class="lineno">   89 </span>fromList :: [(Int, Int)] -&gt; IntervalSet
-<span class="lineno">   90 </span><span class="decl"><span class="nottickedoff">fromList = foldr insert empty</span></span>
-<span class="lineno">   91 </span>
-<span class="lineno">   92 </span>-- | Convert the set to a list of disjoint half-open intervals in
-<span class="lineno">   93 </span>-- ascending order.
-<span class="lineno">   94 </span>toList :: IntervalSet -&gt; [(Int, Int)]
-<span class="lineno">   95 </span><span class="decl"><span class="nottickedoff">toList (IntervalSet m) = IntMap.toList m</span></span>
+<span class="lineno">   11 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show IntervalSet</span></span></span></span> where
+<span class="lineno">   14 </span>  <span class="decl"><span class="nottickedoff">show (IntervalSet m) = show m</span></span>
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>-- | The empty set.
+<span class="lineno">   17 </span>empty :: IntervalSet
+<span class="lineno">   18 </span><span class="decl"><span class="nottickedoff">empty = IntervalSet IntMap.empty</span></span>
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>-- | A set containing a single interval @[i..j]@.
+<span class="lineno">   21 </span>singleton :: (Int, Int) -&gt; IntervalSet
+<span class="lineno">   22 </span><span class="decl"><span class="istickedoff">singleton (i, j)</span>
+<span class="lineno">   23 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">i &lt;= j</span> = IntervalSet (IntMap.singleton i j)</span>
+<span class="lineno">   24 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">empty</span></span></span>
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>-- | Add an interval @[i..j]@ to the set.
+<span class="lineno">   27 </span>insert :: (Int, Int) -&gt; IntervalSet -&gt; IntervalSet
+<span class="lineno">   28 </span><span class="decl"><span class="nottickedoff">insert (i, j) (IntervalSet m)</span>
+<span class="lineno">   29 </span><span class="spaces">  </span><span class="nottickedoff">| i &gt; j = IntervalSet m</span>
+<span class="lineno">   30 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">   31 </span><span class="spaces">    </span><span class="nottickedoff">let -- m1 contains all intervals strictly below i</span>
+<span class="lineno">   32 </span><span class="spaces">        </span><span class="nottickedoff">-- also possibly one interval starting at i'</span>
+<span class="lineno">   33 </span><span class="spaces">        </span><span class="nottickedoff">m1 = IntMap.takeWhileAntitone (&lt; i) m</span>
+<span class="lineno">   34 </span><span class="spaces">        </span><span class="nottickedoff">-- m2 contains all intervals strictly above j</span>
+<span class="lineno">   35 </span><span class="spaces">        </span><span class="nottickedoff">m2 = IntMap.dropWhileAntitone (&lt;= j+1) m</span>
+<span class="lineno">   36 </span><span class="spaces">        </span><span class="nottickedoff">i' = case IntMap.lookupLE i m of</span>
+<span class="lineno">   37 </span><span class="spaces">               </span><span class="nottickedoff">Nothing -&gt; i</span>
+<span class="lineno">   38 </span><span class="spaces">               </span><span class="nottickedoff">Just (u, v) -&gt; if i &lt;= v+1 then u else i</span>
+<span class="lineno">   39 </span><span class="spaces">        </span><span class="nottickedoff">j' = case IntMap.lookupLE (j+1) m of</span>
+<span class="lineno">   40 </span><span class="spaces">               </span><span class="nottickedoff">Nothing -&gt; j</span>
+<span class="lineno">   41 </span><span class="spaces">               </span><span class="nottickedoff">Just (_, v) -&gt; max v j</span>
+<span class="lineno">   42 </span><span class="spaces">    </span><span class="nottickedoff">in IntervalSet (IntMap.insert i' j' (IntMap.union m1 m2))</span></span>
+<span class="lineno">   43 </span>    -- Any interval [u..v] with v+1 &lt; i stays unchanged.
+<span class="lineno">   44 </span>    -- Any interval [u..v] with u &lt;= i &lt;= v+1 is overwritten.
+<span class="lineno">   45 </span>    -- Any interval [u..v] with i &lt; u &lt;= j is removed.
+<span class="lineno">   46 </span>    -- Any interval [u..v] with j &lt; u stays unchanged.
+<span class="lineno">   47 </span>    -- If i falls inside (or is adjacent to the upper bound of) an
+<span class="lineno">   48 </span>    -- interval [u..v], set i' = u; else i' = i.
+<span class="lineno">   49 </span>    -- If j falls inside (or is adjacent to the lower bound of) an
+<span class="lineno">   50 </span>    -- interval [u..v], let j' = v; else j' = j.
+<span class="lineno">   51 </span>    -- Always insert a new interval [i'..j'].
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>-- | Remove an interval @[i..j]@ from the set.
+<span class="lineno">   54 </span>delete :: (Int, Int) -&gt; IntervalSet -&gt; IntervalSet
+<span class="lineno">   55 </span><span class="decl"><span class="istickedoff">delete (i, j) (IntervalSet m)</span>
+<span class="lineno">   56 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">i &gt; j</span> = IntervalSet m</span>
+<span class="lineno">   57 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
+<span class="lineno">   58 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let m1 = IntMap.takeWhileAntitone (&lt; i) m</span></span>
+<span class="lineno">   59 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">m2 = IntMap.dropWhileAntitone (&lt;= j) m</span></span>
+<span class="lineno">   60 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">m1' = case IntMap.lookupLT i m1 of</span></span>
+<span class="lineno">   61 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; m1</span></span>
+<span class="lineno">   62 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Just (u, v) -&gt; if i &lt;= v then IntMap.insert u (i-1) m1 else m1</span></span>
+<span class="lineno">   63 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">m2' = case IntMap.lookupLE j m of</span></span>
+<span class="lineno">   64 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; m2</span></span>
+<span class="lineno">   65 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Just (_, v) -&gt; if j &lt; v then IntMap.insert (j+1) v m2 else m2</span></span>
+<span class="lineno">   66 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">in IntervalSet (IntMap.union m1' m2')</span></span></span>
+<span class="lineno">   67 </span>    -- Any interval [u..v] with v &lt; i stays unchanged.
+<span class="lineno">   68 </span>    -- Any interval [u..v] with u &lt; i &lt;= v is overwritten.
+<span class="lineno">   69 </span>    -- Any interval [u..v] with i &lt;= u &lt;= j is removed.
+<span class="lineno">   70 </span>    -- Any interval [u..v] with j &lt; u stays unchanged.
+<span class="lineno">   71 </span>    -- If i falls inside an interval [u..v], replace it with interval [u..i-1].
+<span class="lineno">   72 </span>    -- If j falls inside an interval [u..v], insert a new interval [j+1..v].
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>-- | Is a specific value in the set?
+<span class="lineno">   75 </span>member :: Int -&gt; IntervalSet -&gt; Bool
+<span class="lineno">   76 </span><span class="decl"><span class="istickedoff">member x (IntervalSet m) =</span>
+<span class="lineno">   77 </span><span class="spaces">  </span><span class="istickedoff">case IntMap.lookupLE x m of</span>
+<span class="lineno">   78 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">   79 </span><span class="spaces">    </span><span class="istickedoff">Just (_, j) -&gt; x &lt;= j</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>-- | The union of two sets.
+<span class="lineno">   82 </span>union :: IntervalSet -&gt; IntervalSet -&gt; IntervalSet
+<span class="lineno">   83 </span><span class="decl"><span class="nottickedoff">union s1 s2 = foldr insert s1 (toList s2)</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>-- | The difference of two sets: Remove all members of the second set
+<span class="lineno">   86 </span>-- from the first set.
+<span class="lineno">   87 </span>difference :: IntervalSet -&gt; IntervalSet -&gt; IntervalSet
+<span class="lineno">   88 </span><span class="decl"><span class="nottickedoff">difference s1 s2 = foldr delete s1 (toList s2)</span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>-- | Create a set from a list of intervals.
+<span class="lineno">   91 </span>fromList :: [(Int, Int)] -&gt; IntervalSet
+<span class="lineno">   92 </span><span class="decl"><span class="nottickedoff">fromList = foldr insert empty</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>-- | Convert the set to a list of disjoint intervals in ascending
+<span class="lineno">   95 </span>-- order.
+<span class="lineno">   96 </span>toList :: IntervalSet -&gt; [(Int, Int)]
+<span class="lineno">   97 </span><span class="decl"><span class="nottickedoff">toList (IntervalSet m) = IntMap.toList m</span></span>
 
 </pre>
 </body>
