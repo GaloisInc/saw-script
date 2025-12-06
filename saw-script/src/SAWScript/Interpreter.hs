@@ -859,7 +859,7 @@ interpretDoStmt stmt =
             setCryptolEnv ce'
       SS.StmtImport _ _ ->
           fail "block-level import unimplemented"
-      SS.StmtInclude pos _file ->
+      SS.StmtInclude pos _file _once ->
           panic "interpretDoStmt" [
               "Leftover unresolved include statement",
               "Position: " <> Text.pack (show pos)
@@ -1051,7 +1051,7 @@ interpretTopStmt printBinds stmt = do
          setCryptolEnv cenv'
          --showCryptolEnv
 
-    SS.StmtInclude pos _file ->
+    SS.StmtInclude pos _file _once ->
       panic "interpretTopStmt" [
           "Leftover unresolved include statement",
           "Position: " <> Text.pack (show pos)
