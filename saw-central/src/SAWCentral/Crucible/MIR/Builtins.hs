@@ -2124,7 +2124,9 @@ setupCrucibleContext rm =
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
      sym <- io $ newSAWCoreExprBuilder sc False
-     someBak@(SomeOnlineBackend bak) <- io $ newSAWCoreBackend pathSatSolver sym
+     timeout <- gets rwCrucibleTimeout
+     someBak@(SomeOnlineBackend bak) <- io $
+           newSAWCoreBackendWithTimeout pathSatSolver sym timeout
      let cs     = rm ^. Mir.rmCS
      let col    = cs ^. Mir.collection
      let cfgMap = rm ^. Mir.rmCFGs
