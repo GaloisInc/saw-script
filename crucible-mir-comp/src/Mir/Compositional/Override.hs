@@ -47,10 +47,8 @@ import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
 import qualified SAWCore.Name as SAW
-import qualified SAWCore.Prelude as SAW
 import qualified SAWCore.Recognizer as SAW
 import qualified SAWCore.SharedTerm as SAW
-import qualified CryptolSAWCore.Prelude as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -74,6 +72,7 @@ type MirOverrideMatcher sym a = forall p rorw rtp args ret.
 data MethodSpec = MethodSpec
     { _msCollectionState :: CollectionState
     , _msSpec :: MIRMethodSpec
+    , _msSharedContext :: SAW.SharedContext
     }
 
 makeLenses ''MethodSpec
@@ -130,6 +129,7 @@ enable ::
     OverrideSim (p sym) sym MIR rtp args ret ()
 enable ms = do
     let funcName = ms ^. msSpec . MS.csMethod
+    let sc = ms ^. msSharedContext
     MirHandle _name _sig mh <- case myCS ^? handleMap . ix funcName of
         Just x -> return x
         Nothing -> error $ "MethodSpec has bad method name " ++
@@ -137,7 +137,7 @@ enable ms = do
 
     -- TODO: handle multiple specs for the same function
     bindFnHandle mh $ UseOverride $ mkOverride' (handleName mh) (handleReturnType mh) $
-        runSpec myCS mh (ms ^. msSpec)
+        runSpec sc myCS mh (ms ^. msSpec)
   where
     myCS = ms ^. msCollectionState
 
@@ -145,9 +145,10 @@ enable ms = do
 -- variables for its outputs, and assert its postconditions.
 runSpec :: forall sym p t fs args ret rtp.
     (IsSymInterface sym, sym ~ MirSym t fs) =>
+    SAW.SharedContext ->
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
-runSpec myCS mh ms = ovrWithBackend $ \bak ->
+runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
  do let col = myCS ^. collection
     sym <- getSymInterface
     RegMap argVals <- getOverrideArgs
@@ -156,10 +157,6 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     loc <- liftIO $ W4.getCurrentProgramLoc sym
     let freeVars = Set.fromList $
             ms ^.. MS.csPreState . MS.csFreshVars . each . to SAW.tvName . to SAW.vnIndex
-
-    sc <- liftIO $ SAW.mkSharedContext
-    liftIO $ SAW.scLoadPreludeModule sc
-    liftIO $ SAW.scLoadCryptolModule sc
 
     -- `eval` converts `W4.Expr`s to `SAW.Term`s.  We take what4 exprs from the
     -- context (e.g., in the actual arguments passed to the override) and
