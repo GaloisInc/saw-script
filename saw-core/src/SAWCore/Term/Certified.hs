@@ -363,7 +363,7 @@ restoreSharedContext scc sc =
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
-     modifyIORef' (scValidTerms sc) (IntervalSet.delete (i, j))
+     modifyIORef' (scValidTerms sc) (IntervalSet.delete (i, j-1))
      -- Filter stale terms from AppCache
      modifyIORef' (scAppCache sc) (filterTFM (\t -> termIndex t < i))
      -- scNextVarIndex and scNextTermIndex are left untouched
@@ -1655,7 +1655,7 @@ mkSharedContext =
      scid <- getUniqueInt
      let i0 = scid `shiftL` 48
      tr <- newIORef (i0 :: TermIndex)
-     let j0 = (scid + 1) `shiftL` 48
+     let j0 = i0 + (1 `shiftL` 48 - 1)
      ir <- newIORef (IntervalSet.singleton (i0, j0))
      pure $
        SharedContext
