@@ -199,13 +199,13 @@ jobs:
       # In the next 2 steps, we upload to different names depending on whether
       # the binaries were compiled using HPC or not. This is done to ensure that
       # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: matrix.ghc == '9.4.8' && matrix.hpc == false
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: matrix.ghc == '9.4.8' && matrix.hpc == true
         with:
           path: dist-tests
@@ -269,7 +269,7 @@ jobs:
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
       - if: matrix.ghc == '9.4.8' && matrix.hpc == false
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
           path: "${{ steps.config.outputs.name }}.tar.gz*"
@@ -277,7 +277,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - if: matrix.ghc == '9.4.8' && matrix.hpc == false
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
           path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
@@ -285,7 +285,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - if: matrix.ghc == '9.4.8' && matrix.run-tests && matrix.hpc == false
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           path: dist/bin
           name: ${{ matrix.os }}-bins
@@ -295,7 +295,7 @@ jobs:
         run: .github/ci.sh collect_hpc_files
 
       - if: matrix.hpc == true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           path: hpc.tar.gz
           name: ${{ matrix.os }}-hpc.tar.gz
@@ -338,7 +338,7 @@ jobs:
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: ${{ needs.config.outputs.name }}-sources (full source distribution)
           path: ${{ needs.config.outputs.name }}-sources.tar.gz
@@ -368,7 +368,7 @@ jobs:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
       - name: Upload HTML artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: html_docs
           path: doc/_build/html/
@@ -842,7 +842,7 @@ jobs:
         run: |
           ./compute-coverage.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           path: hpc-html
           name: coverage-html-${{ github.event.number }}
@@ -910,7 +910,7 @@ jobs:
           echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
           echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
 
-      - uses: docker/setup-buildx-action@v1
+      - uses: docker/setup-buildx-action@v3
 
       - uses: crazy-max/ghaction-docker-meta@v1
         name: Labels
@@ -918,13 +918,13 @@ jobs:
         with:
           images: ${{ matrix.image }}
 
-      - uses: docker/login-action@v1
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v2
+      - uses: docker/build-push-action@v6
         with:
           context: .
           tags: ${{ matrix.image }}:${{ steps.common-tag.outputs.common-tag }}
@@ -938,7 +938,7 @@ jobs:
             type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }}
 
       - name: Cache image build
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v6
         continue-on-error: true  # Tolerate cache upload failures - this should be handled better
         with:
           context: .
