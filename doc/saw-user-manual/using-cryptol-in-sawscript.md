@@ -151,7 +151,7 @@ and `}}` delimiters, it does so with several extra bindings in scope:
   Cryptol expression.
 
 In addition to these rules, bindings created at the Cryptol level,
-either from included files or inside Cryptol quoting brackets, are
+either from imported files or inside Cryptol quoting brackets, are
 visible only to later Cryptol expressions, and not as SAWScript
 variables.
 
