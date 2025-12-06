@@ -463,7 +463,7 @@ do-block, and are global at the syntactic top level.
 ### Imports
 
 Import statements import Cryptol code.
-(To bring in more SAWScript code instead, use `include`.
+(To bring in more SAWScript code instead, use `include` or `include_once`.
 See [XXX](XXX).)
 
 An import statement begins with the keyword `import` followed by a
@@ -607,6 +607,12 @@ These include:
    See for example [issue XXX](XXX).
    Note the terminology: `import` is for bringing in Cryptol,
    `include` is for bringing in more SAWScript.
+
+ - `include_once` is like `include`, except that if the same file has
+   already been included it does nothing.
+   (The file is the "same" based on the filename.
+   The test does not chase symlinks or inspect OS-level markers for
+   file identity.)
 
  - `for` takes a list and a monadic action of type `a -> m b`,
    runs the action on each element of the list, and returns a list
