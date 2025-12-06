@@ -1027,15 +1027,15 @@ span.spaces    { background: white }
 <span class="lineno"> 1008 </span><span class="spaces">      </span><span class="istickedoff">-- XXX this is not the right way to do this</span>
 <span class="lineno"> 1009 </span><span class="spaces">      </span><span class="istickedoff">--    - shouldn't have to flatten the environments</span>
 <span class="lineno"> 1010 </span><span class="spaces">      </span><span class="istickedoff">--    - shouldn't be typechecking one statement at a time regardless</span>
-<span class="lineno"> 1011 </span><span class="spaces">      </span><span class="istickedoff">Environ varenv tyenv _cryenvs &lt;- liftTopLevel $ gets rwEnviron</span>
+<span class="lineno"> 1011 </span><span class="spaces">      </span><span class="istickedoff">Environ varenv0 tyenv _cryenvs &lt;- liftTopLevel $ gets rwEnviron</span>
 <span class="lineno"> 1012 </span><span class="spaces">      </span><span class="istickedoff">rbenv &lt;- liftTopLevel $ gets rwRebindables</span>
-<span class="lineno"> 1013 </span><span class="spaces">      </span><span class="istickedoff">let varenv' = Map.map (\(pos, lc, ty, _v, _doc) -&gt; (pos, lc, SS.ReadOnlyVar, ty)) $ ScopedMap.flatten varenv</span>
+<span class="lineno"> 1013 </span><span class="spaces">      </span><span class="istickedoff">let varenv1 = Map.map (\(pos, lc, ty, _v, _doc) -&gt; (pos, lc, SS.ReadOnlyVar, ty)) $ ScopedMap.flatten varenv0</span>
 <span class="lineno"> 1014 </span><span class="spaces">          </span><span class="istickedoff">rbenv' = Map.map (\(pos, ty, _v) -&gt; (pos, SS.Current, SS.RebindableVar, ty)) rbenv</span>
 <span class="lineno"> 1015 </span><span class="spaces">          </span><span class="istickedoff">-- If anything appears in both, favor the real environment</span>
-<span class="lineno"> 1016 </span><span class="spaces">          </span><span class="istickedoff">varenv'' = Map.union varenv' rbenv'</span>
-<span class="lineno"> 1017 </span><span class="spaces">          </span><span class="istickedoff">varenv''' = ScopedMap.seed varenv''</span>
+<span class="lineno"> 1016 </span><span class="spaces">          </span><span class="istickedoff">varenv2 = Map.union varenv1 rbenv'</span>
+<span class="lineno"> 1017 </span><span class="spaces">          </span><span class="istickedoff">varenv3 = ScopedMap.seed varenv2</span>
 <span class="lineno"> 1018 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1019 </span><span class="spaces">      </span><span class="istickedoff">processTypeCheck $ checkStmt avail varenv''' tyenv ctx stmt</span>
+<span class="lineno"> 1019 </span><span class="spaces">      </span><span class="istickedoff">processTypeCheck $ checkStmt avail varenv3 tyenv ctx stmt</span>
 <span class="lineno"> 1020 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1021 </span><span class="spaces">  </span><span class="istickedoff">case stmt' of</span>
 <span class="lineno"> 1022 </span><span class="spaces"></span><span class="istickedoff"></span>
