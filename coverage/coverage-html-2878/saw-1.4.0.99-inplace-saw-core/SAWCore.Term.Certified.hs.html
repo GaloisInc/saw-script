@@ -134,8 +134,8 @@ span.spaces    { background: white }
 <span class="lineno">  115 </span>import Prelude hiding (maximum)
 <span class="lineno">  116 </span>import Text.URI
 <span class="lineno">  117 </span>
-<span class="lineno">  118 </span>import SAWSupport.IntervalSet (IntervalSet)
-<span class="lineno">  119 </span>import qualified SAWSupport.IntervalSet as IntervalSet
+<span class="lineno">  118 </span>import SAWSupport.IntRangeSet (IntRangeSet)
+<span class="lineno">  119 </span>import qualified SAWSupport.IntRangeSet as IntRangeSet
 <span class="lineno">  120 </span>
 <span class="lineno">  121 </span>import SAWCore.Cache
 <span class="lineno">  122 </span>import SAWCore.Module
@@ -301,7 +301,7 @@ span.spaces    { background: white }
 <span class="lineno">  282 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scGlobalEnv</span></span></span>      :: IORef (HashMap Ident Term)
 <span class="lineno">  283 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scNextVarIndex</span></span></span>   :: IORef VarIndex
 <span class="lineno">  284 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scNextTermIndex</span></span></span>  :: IORef TermIndex
-<span class="lineno">  285 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scValidTerms</span></span></span>     :: IORef IntervalSet
+<span class="lineno">  285 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">scValidTerms</span></span></span>     :: IORef IntRangeSet
 <span class="lineno">  286 </span>  }
 <span class="lineno">  287 </span>
 <span class="lineno">  288 </span>-- | Internal function to get the next available 'TermIndex'. Not exported.
@@ -311,10 +311,10 @@ span.spaces    { background: white }
 <span class="lineno">  292 </span>scEnsureValidTerm :: SharedContext -&gt; Term -&gt; IO ()
 <span class="lineno">  293 </span><span class="decl"><span class="istickedoff">scEnsureValidTerm sc t =</span>
 <span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">do s &lt;- readIORef (scValidTerms sc)</span>
-<span class="lineno">  295 </span><span class="spaces">     </span><span class="istickedoff">unless (IntervalSet.member (termIndex t) s) $</span>
+<span class="lineno">  295 </span><span class="spaces">     </span><span class="istickedoff">unless (IntRangeSet.member (termIndex t) s) $</span>
 <span class="lineno">  296 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines $</span></span>
 <span class="lineno">  297 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Stale term encountered: index = &quot; ++ show (termIndex t)</span></span>
-<span class="lineno">  298 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;Valid indexes: &quot; ++ show (IntervalSet.toList s)</span></span>
+<span class="lineno">  298 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;Valid indexes: &quot; ++ show (IntRangeSet.toList s)</span></span>
 <span class="lineno">  299 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, showTerm t</span></span>
 <span class="lineno">  300 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 <span class="lineno">  301 </span>
@@ -370,10 +370,10 @@ span.spaces    { background: white }
 <span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">do -- Ensure that the checkpoint itself is not stale</span>
 <span class="lineno">  352 </span><span class="spaces">     </span><span class="istickedoff">let i = sccTermIndex scc</span>
 <span class="lineno">  353 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- readIORef (scValidTerms sc)</span>
-<span class="lineno">  354 </span><span class="spaces">     </span><span class="istickedoff">unless (IntervalSet.member i s) $</span>
+<span class="lineno">  354 </span><span class="spaces">     </span><span class="istickedoff">unless (IntRangeSet.member i s) $</span>
 <span class="lineno">  355 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines $</span></span>
 <span class="lineno">  356 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Stale checkpoint encountered: index = &quot; ++ show i</span></span>
-<span class="lineno">  357 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;Valid indexes: &quot; ++ show (IntervalSet.toList s)</span></span>
+<span class="lineno">  357 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;Valid indexes: &quot; ++ show (IntRangeSet.toList s)</span></span>
 <span class="lineno">  358 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  359 </span><span class="spaces">     </span><span class="istickedoff">-- Restore saved environments</span>
 <span class="lineno">  360 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scModuleMap sc) <span class="nottickedoff">(sccModuleMap scc)</span></span>
@@ -382,7 +382,7 @@ span.spaces    { background: white }
 <span class="lineno">  363 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scGlobalEnv sc) <span class="nottickedoff">(sccGlobalEnv scc)</span></span>
 <span class="lineno">  364 </span><span class="spaces">     </span><span class="istickedoff">-- Mark 'TermIndex'es created since the checkpoint as invalid</span>
 <span class="lineno">  365 </span><span class="spaces">     </span><span class="istickedoff">j &lt;- readIORef (scNextTermIndex sc)</span>
-<span class="lineno">  366 </span><span class="spaces">     </span><span class="istickedoff">modifyIORef' (scValidTerms sc) (IntervalSet.delete (i, j-1))</span>
+<span class="lineno">  366 </span><span class="spaces">     </span><span class="istickedoff">modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))</span>
 <span class="lineno">  367 </span><span class="spaces">     </span><span class="istickedoff">-- Filter stale terms from AppCache</span>
 <span class="lineno">  368 </span><span class="spaces">     </span><span class="istickedoff">modifyIORef' (scAppCache sc) (filterTFM (\t -&gt; termIndex t &lt; i))</span>
 <span class="lineno">  369 </span><span class="spaces">     </span><span class="istickedoff">-- scNextVarIndex and scNextTermIndex are left untouched</span>
@@ -1675,7 +1675,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1656 </span><span class="spaces">     </span><span class="istickedoff">let i0 = scid `shiftL` 48</span>
 <span class="lineno"> 1657 </span><span class="spaces">     </span><span class="istickedoff">tr &lt;- newIORef (i0 :: TermIndex)</span>
 <span class="lineno"> 1658 </span><span class="spaces">     </span><span class="istickedoff">let j0 = i0 + (1 `shiftL` 48 - 1)</span>
-<span class="lineno"> 1659 </span><span class="spaces">     </span><span class="istickedoff">ir &lt;- newIORef (IntervalSet.singleton (i0, j0))</span>
+<span class="lineno"> 1659 </span><span class="spaces">     </span><span class="istickedoff">ir &lt;- newIORef (IntRangeSet.singleton (i0, j0))</span>
 <span class="lineno"> 1660 </span><span class="spaces">     </span><span class="istickedoff">pure $</span>
 <span class="lineno"> 1661 </span><span class="spaces">       </span><span class="istickedoff">SharedContext</span>
 <span class="lineno"> 1662 </span><span class="spaces">       </span><span class="istickedoff">{ scModuleMap = mr</span>
