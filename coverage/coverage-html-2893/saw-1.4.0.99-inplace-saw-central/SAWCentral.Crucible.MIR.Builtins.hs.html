@@ -718,7 +718,7 @@ span.spaces    { background: white }
 <span class="lineno">  699 </span><span class="spaces">     </span><span class="istickedoff">valTy &lt;- typeOfSetupValue cc env <span class="nottickedoff">nameEnv</span> retVal</span>
 <span class="lineno">  700 </span><span class="spaces">     </span><span class="istickedoff">case mspec ^. MS.csRet of</span>
 <span class="lineno">  701 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  702 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">X.throwM (MIRReturnUnexpected valTy)</span></span>
+<span class="lineno">  702 </span><span class="spaces">         </span><span class="istickedoff">X.throwM (MIRReturnUnexpected valTy)</span>
 <span class="lineno">  703 </span><span class="spaces">       </span><span class="istickedoff">Just retTy -&gt;</span>
 <span class="lineno">  704 </span><span class="spaces">         </span><span class="istickedoff">unless (checkCompatibleTys retTy valTy) $</span>
 <span class="lineno">  705 </span><span class="spaces">         </span><span class="istickedoff">X.throwM (MIRReturnTypeMismatch retTy valTy)</span>
@@ -2452,10 +2452,10 @@ span.spaces    { background: white }
 <span class="lineno"> 2433 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Given:    &quot; ++ show found</span></span>
 <span class="lineno"> 2434 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 2435 </span><span class="spaces">      </span><span class="istickedoff">MIRReturnUnexpected found -&gt;</span>
-<span class="lineno"> 2436 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
-<span class="lineno"> 2437 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;mir_return: Unexpected return value for void method&quot;</span></span>
-<span class="lineno"> 2438 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Given type: &quot; ++ show (PP.pretty found)</span></span>
-<span class="lineno"> 2439 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2436 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
+<span class="lineno"> 2437 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;mir_return: Unexpected return value for void method&quot;</span>
+<span class="lineno"> 2438 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Given type: &quot; ++ show (PP.pretty found)</span>
+<span class="lineno"> 2439 </span><span class="spaces">        </span><span class="istickedoff">]</span>
 <span class="lineno"> 2440 </span><span class="spaces">      </span><span class="istickedoff">MIRReturnTypeMismatch expected found -&gt;</span>
 <span class="lineno"> 2441 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
 <span class="lineno"> 2442 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;mir_return: Return type mismatch&quot;</span>
