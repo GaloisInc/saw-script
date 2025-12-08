@@ -304,6 +304,9 @@ primCellToMap sc c args =
     CellTypeBUF ->
       do res <- input "A"
          output res
+    CellTypeCheck -> pure Nothing
+    CellTypePrint -> pure Nothing
+    CellTypeScopeinfo -> pure Nothing
     CellTypeUnsupportedPrimitive _ -> pure Nothing
     CellTypeUserType _ -> pure Nothing
   where

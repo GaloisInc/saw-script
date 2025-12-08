@@ -292,6 +292,9 @@ This release supports [version
 * Fix a bug that would cause `yosys_import` to fail to parse JSON files
   produced using Yosys's `-compat-int` flag.
 
+* `yosys_import` now parses JSON files containing debugging-related cells
+  (e.g., `$scopeinfo`) instead of failing with a parse error.
+
 # Version 1.4 -- 2025-11-18
 
 This release supports [version
