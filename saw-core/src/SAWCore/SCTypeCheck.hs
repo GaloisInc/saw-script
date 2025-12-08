@@ -13,13 +13,11 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.SCTypeCheck
-  ( scConvertible
-  , TCError(..)
+  ( TCError(..)
   , prettyTCError
   , throwTCError
   , TCM
   , runTCM
-  , rethrowTCError
   , withErrorUTerm
   , atPos
   , LiftTCM(..)
@@ -27,7 +25,6 @@ module SAWCore.SCTypeCheck
   , inferFlatTermF
   , typeCheckWHNF
   , checkSubtype
-  , ensureSort
   , ensureSortType
   , applyPiTyped
   , compileRecursor
