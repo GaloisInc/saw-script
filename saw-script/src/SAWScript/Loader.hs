@@ -21,12 +21,12 @@ import Data.Text (Text)
 --import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
-import Data.Map (Map)
+--import Data.Map (Map)
 import System.Directory
 import System.FilePath (normalise, takeDirectory)
 
 import qualified SAWSupport.ScopedMap as ScopedMap
---import SAWSupport.ScopedMap (ScopedMap)
+import SAWSupport.ScopedMap (ScopedMap)
 
 import SAWCentral.Position (Pos(..), getPos)
 import qualified SAWCentral.Options as Options
@@ -199,7 +199,7 @@ resolveIncludes depth incpath opts process result =
 readSchemaPure ::
     FilePath ->
     PrimitiveLifecycle ->
-    Map Name (PrimitiveLifecycle, NamedType) ->
+    ScopedMap Name (PrimitiveLifecycle, NamedType) ->
     Text ->
     Schema
 readSchemaPure fakeFileName lc tyenv str = do
@@ -235,14 +235,18 @@ readSchemaPattern opts fileName environ rbenv avail str = do
           let Environ varenv tyenv _cryenv = environ in
 
           -- XXX it should not be necessary to do this munging
+          --
+          -- Note that we need to flatten the scopes we have here
+          -- (outside the typechecker) in order to have the union with
+          -- the rebindable env to work right.
           let squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)
               varenv' = Map.map squash $ ScopedMap.flatten varenv
-              tyenv' = ScopedMap.flatten tyenv
               rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)
               rbenv' = Map.map rbsquash rbenv
               varenv'' = Map.union varenv' rbenv'
+              varenv''' = ScopedMap.seed varenv''
           in
-          let (errs_or_results, warns) = checkSchemaPattern avail varenv'' tyenv' pat
+          let (errs_or_results, warns) = checkSchemaPattern avail varenv''' tyenv pat
               warns' = map convertTypeMsg warns
           in
           case errs_or_results of
@@ -274,16 +278,16 @@ readExpression opts fileName environ rbenv avail str = do
            -- XXX it should not be necessary to do this munging
            let squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
                varenv' = Map.map squash $ ScopedMap.flatten varenv
-               tyenv' = ScopedMap.flatten tyenv
                rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
                rbenv' = Map.map rbsquash rbenv
                varenv'' = Map.union varenv' rbenv'
+               varenv''' = ScopedMap.seed varenv''
            in
            -- XXX: also it shouldn't be necessary to do this wrappery
            let pos = getPos expr
                decl = Decl pos (PWild pos Nothing) Nothing expr
            in
-           let (errs_or_results, warns) = checkDecl avail varenv'' tyenv' decl
+           let (errs_or_results, warns) = checkDecl avail varenv''' tyenv decl
                warns' = map convertTypeMsg warns
            in
            case errs_or_results of
