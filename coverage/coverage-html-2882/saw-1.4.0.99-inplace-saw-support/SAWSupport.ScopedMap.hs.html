@@ -68,115 +68,138 @@ span.spaces    { background: white }
 <span class="lineno">   49 </span>    insert,
 <span class="lineno">   50 </span>    lookup,
 <span class="lineno">   51 </span>    filter,
-<span class="lineno">   52 </span>    scopedAssocs,
-<span class="lineno">   53 </span>    flatten,
-<span class="lineno">   54 </span>    allKeys,
-<span class="lineno">   55 </span>    allKeysSet
-<span class="lineno">   56 </span>  ) where
-<span class="lineno">   57 </span>
-<span class="lineno">   58 </span>import Prelude hiding (lookup, filter)
-<span class="lineno">   59 </span>
-<span class="lineno">   60 </span>import qualified Data.List.NonEmpty as N
-<span class="lineno">   61 </span>import Data.List.NonEmpty (NonEmpty( (:|) ))
-<span class="lineno">   62 </span>import Data.Foldable (toList)
-<span class="lineno">   63 </span>--import qualified Data.Set as Set
-<span class="lineno">   64 </span>import Data.Set (Set)
-<span class="lineno">   65 </span>import qualified Data.Map as Map
-<span class="lineno">   66 </span>import Data.Map (Map)
-<span class="lineno">   67 </span>
-<span class="lineno">   68 </span>import SAWSupport.Panic (panic)
-<span class="lineno">   69 </span>
-<span class="lineno">   70 </span>
-<span class="lineno">   71 </span>-- | The type of scoped maps.
-<span class="lineno">   72 </span>--
-<span class="lineno">   73 </span>--   The list of scopes is a `NonEmpty` to avoid unnecessary
-<span class="lineno">   74 </span>--   degenerate cases.
-<span class="lineno">   75 </span>newtype ScopedMap k v = ScopedMap (NonEmpty (Map k v))
-<span class="lineno">   76 </span>
-<span class="lineno">   77 </span>-- | Push a new scope.
-<span class="lineno">   78 </span>push :: Ord k =&gt; ScopedMap k v -&gt; ScopedMap k v
-<span class="lineno">   79 </span><span class="decl"><span class="istickedoff">push (ScopedMap scopes) =</span>
-<span class="lineno">   80 </span><span class="spaces">    </span><span class="istickedoff">ScopedMap $ N.cons Map.empty scopes</span></span>
-<span class="lineno">   81 </span>
-<span class="lineno">   82 </span>-- | Pop and discard the most recent scope.
-<span class="lineno">   83 </span>--
-<span class="lineno">   84 </span>--   Popping the last scope is an error and will panic.
-<span class="lineno">   85 </span>pop :: Ord k =&gt; ScopedMap k v -&gt; ScopedMap k v
-<span class="lineno">   86 </span><span class="decl"><span class="istickedoff">pop (ScopedMap (_ :| more)) = case more of</span>
-<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt;</span>
-<span class="lineno">   88 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;pop&quot; [&quot;Popping topmost scope&quot;]</span></span>
-<span class="lineno">   89 </span><span class="spaces">    </span><span class="istickedoff">s : more' -&gt;</span>
-<span class="lineno">   90 </span><span class="spaces">        </span><span class="istickedoff">ScopedMap (s :| more')</span></span>
-<span class="lineno">   91 </span>
-<span class="lineno">   92 </span>-- | An empty ScopedMap, with a single empty scope.
-<span class="lineno">   93 </span>empty :: Ord k =&gt; ScopedMap k v
-<span class="lineno">   94 </span><span class="decl"><span class="nottickedoff">empty =</span>
-<span class="lineno">   95 </span><span class="spaces">    </span><span class="nottickedoff">ScopedMap (Map.empty :| [])</span></span>
-<span class="lineno">   96 </span>
-<span class="lineno">   97 </span>-- | Initialize a ScopedMap from a Map, which becomes the current (and
-<span class="lineno">   98 </span>--   only) scope.
-<span class="lineno">   99 </span>seed :: Ord k =&gt; Map k v -&gt; ScopedMap k v
-<span class="lineno">  100 </span><span class="decl"><span class="istickedoff">seed m =</span>
-<span class="lineno">  101 </span><span class="spaces">    </span><span class="istickedoff">ScopedMap (m :| [])</span></span>
-<span class="lineno">  102 </span>
-<span class="lineno">  103 </span>-- | Insert into a ScopedMap. Always inserts in the innermost (most
-<span class="lineno">  104 </span>--   recent) scope.
-<span class="lineno">  105 </span>insert :: Ord k =&gt; k -&gt; v -&gt; ScopedMap k v -&gt; ScopedMap k v
-<span class="lineno">  106 </span><span class="decl"><span class="istickedoff">insert k v (ScopedMap (s :| more)) =</span>
-<span class="lineno">  107 </span><span class="spaces">    </span><span class="istickedoff">let s' = Map.insert k v s in</span>
-<span class="lineno">  108 </span><span class="spaces">    </span><span class="istickedoff">ScopedMap (s' :| more)</span></span>
-<span class="lineno">  109 </span>
-<span class="lineno">  110 </span>-- | Look up a key in a ScopedMap. Checks all the scopes with the most
-<span class="lineno">  111 </span>--   recent first.
-<span class="lineno">  112 </span>lookup :: Ord k =&gt; k -&gt; ScopedMap k v -&gt; Maybe v
-<span class="lineno">  113 </span><span class="decl"><span class="istickedoff">lookup k (ScopedMap (s0 :| more0)) =</span>
-<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">let visit s more = case Map.lookup k s of</span>
-<span class="lineno">  115 </span><span class="spaces">          </span><span class="istickedoff">Just result -&gt; Just result</span>
-<span class="lineno">  116 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; case more of</span>
-<span class="lineno">  117 </span><span class="spaces">              </span><span class="istickedoff">[] -&gt; Nothing</span>
-<span class="lineno">  118 </span><span class="spaces">              </span><span class="istickedoff">s' : more' -&gt; visit s' more'</span>
-<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff">visit s0 more0</span></span>
-<span class="lineno">  121 </span>
-<span class="lineno">  122 </span>-- | Drop entries that don't match a predicate.
-<span class="lineno">  123 </span>filter :: Ord k =&gt; (v -&gt; Bool) -&gt; ScopedMap k v -&gt; ScopedMap k v
-<span class="lineno">  124 </span><span class="decl"><span class="nottickedoff">filter keep (ScopedMap (s :| more)) =</span>
-<span class="lineno">  125 </span><span class="spaces">    </span><span class="nottickedoff">ScopedMap (Map.filter keep s :| map (Map.filter keep) more)</span></span>
-<span class="lineno">  126 </span>
-<span class="lineno">  127 </span>-- | Return Map.assocs for each scope, preserving the scope boundaries.
-<span class="lineno">  128 </span>--   The head of the returned list is the most recent scope.
-<span class="lineno">  129 </span>scopedAssocs :: Ord k =&gt; ScopedMap k v -&gt; [[(k, v)]]
-<span class="lineno">  130 </span><span class="decl"><span class="istickedoff">scopedAssocs (ScopedMap scopes) =</span>
-<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">map Map.assocs $ toList scopes</span></span>
-<span class="lineno">  132 </span>
-<span class="lineno">  133 </span>-- FUTURE: add scopedKeys, scopedKeysSet
-<span class="lineno">  134 </span>
-<span class="lineno">  135 </span>-- | Convert to a plain map by folding the scopes together. Duplicate
-<span class="lineno">  136 </span>--   bindings in more recent scopes take priority.
-<span class="lineno">  137 </span>flatten :: Ord k =&gt; ScopedMap k v -&gt; Map k v
-<span class="lineno">  138 </span><span class="decl"><span class="istickedoff">flatten (ScopedMap (s0 :| more0)) =</span>
-<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">let visit s more =</span>
-<span class="lineno">  140 </span><span class="spaces">          </span><span class="istickedoff">let result = case more of</span>
-<span class="lineno">  141 </span><span class="spaces">                </span><span class="istickedoff">[] -&gt; Map.empty</span>
-<span class="lineno">  142 </span><span class="spaces">                </span><span class="istickedoff">s' : more' -&gt; visit s' more'</span>
-<span class="lineno">  143 </span><span class="spaces">          </span><span class="istickedoff">in</span>
-<span class="lineno">  144 </span><span class="spaces">          </span><span class="istickedoff">-- Map.union gives its left argument priority given a</span>
-<span class="lineno">  145 </span><span class="spaces">          </span><span class="istickedoff">-- duplicate key.</span>
-<span class="lineno">  146 </span><span class="spaces">          </span><span class="istickedoff">Map.union s result</span>
-<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">visit s0 more0</span></span>
-<span class="lineno">  149 </span>
-<span class="lineno">  150 </span>--FUTURE: add allAssocs
-<span class="lineno">  151 </span>
-<span class="lineno">  152 </span>-- | Return all keys, ignoring scope.
-<span class="lineno">  153 </span>allKeys :: Ord k =&gt; ScopedMap k v -&gt; [k]
-<span class="lineno">  154 </span><span class="decl"><span class="nottickedoff">allKeys m =</span>
-<span class="lineno">  155 </span><span class="spaces">    </span><span class="nottickedoff">Map.keys $ flatten m</span></span>
-<span class="lineno">  156 </span>
-<span class="lineno">  157 </span>-- | Return all keys as a set, ignoring scope.
-<span class="lineno">  158 </span>allKeysSet :: Ord k =&gt; ScopedMap k v -&gt; Set k
-<span class="lineno">  159 </span><span class="decl"><span class="istickedoff">allKeysSet m =</span>
-<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">Map.keysSet $ flatten m</span></span>
+<span class="lineno">   52 </span>    map,
+<span class="lineno">   53 </span>    union,
+<span class="lineno">   54 </span>    scopedAssocs,
+<span class="lineno">   55 </span>    flatten,
+<span class="lineno">   56 </span>    allElems,
+<span class="lineno">   57 </span>    allKeys,
+<span class="lineno">   58 </span>    allKeysSet
+<span class="lineno">   59 </span>  ) where
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>import qualified Prelude as Prelude
+<span class="lineno">   62 </span>import Prelude hiding (lookup, filter, map)
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>import qualified Data.List.NonEmpty as N
+<span class="lineno">   65 </span>import Data.List.NonEmpty (NonEmpty( (:|) ))
+<span class="lineno">   66 </span>import Data.Foldable (toList)
+<span class="lineno">   67 </span>--import qualified Data.Set as Set
+<span class="lineno">   68 </span>import Data.Set (Set)
+<span class="lineno">   69 </span>import qualified Data.Map as Map
+<span class="lineno">   70 </span>import Data.Map (Map)
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>import SAWSupport.Panic (panic)
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>-- | The type of scoped maps.
+<span class="lineno">   76 </span>--
+<span class="lineno">   77 </span>--   The list of scopes is a `NonEmpty` to avoid unnecessary
+<span class="lineno">   78 </span>--   degenerate cases.
+<span class="lineno">   79 </span>newtype ScopedMap k v = ScopedMap (NonEmpty (Map k v))
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>-- | Push a new scope.
+<span class="lineno">   82 </span>push :: Ord k =&gt; ScopedMap k v -&gt; ScopedMap k v
+<span class="lineno">   83 </span><span class="decl"><span class="istickedoff">push (ScopedMap scopes) =</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="istickedoff">ScopedMap $ N.cons Map.empty scopes</span></span>
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>-- | Pop and discard the most recent scope.
+<span class="lineno">   87 </span>--
+<span class="lineno">   88 </span>--   Popping the last scope is an error and will panic.
+<span class="lineno">   89 </span>pop :: Ord k =&gt; ScopedMap k v -&gt; ScopedMap k v
+<span class="lineno">   90 </span><span class="decl"><span class="istickedoff">pop (ScopedMap (_ :| more)) = case more of</span>
+<span class="lineno">   91 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt;</span>
+<span class="lineno">   92 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;pop&quot; [&quot;Popping topmost scope&quot;]</span></span>
+<span class="lineno">   93 </span><span class="spaces">    </span><span class="istickedoff">s : more' -&gt;</span>
+<span class="lineno">   94 </span><span class="spaces">        </span><span class="istickedoff">ScopedMap (s :| more')</span></span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>-- | An empty ScopedMap, with a single empty scope.
+<span class="lineno">   97 </span>empty :: Ord k =&gt; ScopedMap k v
+<span class="lineno">   98 </span><span class="decl"><span class="nottickedoff">empty =</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="nottickedoff">ScopedMap (Map.empty :| [])</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>-- | Initialize a ScopedMap from a Map, which becomes the current (and
+<span class="lineno">  102 </span>--   only) scope.
+<span class="lineno">  103 </span>seed :: Ord k =&gt; Map k v -&gt; ScopedMap k v
+<span class="lineno">  104 </span><span class="decl"><span class="istickedoff">seed m =</span>
+<span class="lineno">  105 </span><span class="spaces">    </span><span class="istickedoff">ScopedMap (m :| [])</span></span>
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>-- | Insert into a ScopedMap. Always inserts in the innermost (most
+<span class="lineno">  108 </span>--   recent) scope.
+<span class="lineno">  109 </span>insert :: Ord k =&gt; k -&gt; v -&gt; ScopedMap k v -&gt; ScopedMap k v
+<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">insert k v (ScopedMap (s :| more)) =</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="istickedoff">let s' = Map.insert k v s in</span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="istickedoff">ScopedMap (s' :| more)</span></span>
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>-- | Look up a key in a ScopedMap. Checks all the scopes with the most
+<span class="lineno">  115 </span>--   recent first.
+<span class="lineno">  116 </span>lookup :: Ord k =&gt; k -&gt; ScopedMap k v -&gt; Maybe v
+<span class="lineno">  117 </span><span class="decl"><span class="istickedoff">lookup k (ScopedMap (s0 :| more0)) =</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">let visit s more = case Map.lookup k s of</span>
+<span class="lineno">  119 </span><span class="spaces">          </span><span class="istickedoff">Just result -&gt; Just result</span>
+<span class="lineno">  120 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; case more of</span>
+<span class="lineno">  121 </span><span class="spaces">              </span><span class="istickedoff">[] -&gt; Nothing</span>
+<span class="lineno">  122 </span><span class="spaces">              </span><span class="istickedoff">s' : more' -&gt; visit s' more'</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">visit s0 more0</span></span>
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>-- | Drop entries that don't match a predicate.
+<span class="lineno">  127 </span>filter :: Ord k =&gt; (v -&gt; Bool) -&gt; ScopedMap k v -&gt; ScopedMap k v
+<span class="lineno">  128 </span><span class="decl"><span class="nottickedoff">filter keep (ScopedMap (s :| more)) =</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="nottickedoff">ScopedMap (Map.filter keep s :| Prelude.map (Map.filter keep) more)</span></span>
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>-- | Call a function on each entry. Processes all entries, including
+<span class="lineno">  132 </span>--   hidden entries in outer scopes.
+<span class="lineno">  133 </span>map :: Ord k =&gt; (v -&gt; v') -&gt; ScopedMap k v -&gt; ScopedMap k v'
+<span class="lineno">  134 </span><span class="decl"><span class="nottickedoff">map f (ScopedMap (s :| more)) =</span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="nottickedoff">ScopedMap (Map.map f s :| Prelude.map (Map.map f) more)</span></span>
+<span class="lineno">  136 </span>
+<span class="lineno">  137 </span>-- | Union. Takes the union of all layers; this may result in inner
+<span class="lineno">  138 </span>--   entries from one side hiding outer entries in the other. Any
+<span class="lineno">  139 </span>--   overlaps in the same scope are handled as per Map.union; that is,
+<span class="lineno">  140 </span>--   the entry from the left-hand map is preferred.
+<span class="lineno">  141 </span>union :: Ord k =&gt; ScopedMap k v -&gt; ScopedMap k v -&gt; ScopedMap k v
+<span class="lineno">  142 </span><span class="decl"><span class="nottickedoff">union (ScopedMap (s1 :| more1)) (ScopedMap (s2 :| more2)) =</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="nottickedoff">ScopedMap (Map.union s1 s2 :| zipWith Map.union more1 more2)</span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>-- | Return Map.assocs for each scope, preserving the scope boundaries.
+<span class="lineno">  146 </span>--   The head of the returned list is the most recent scope.
+<span class="lineno">  147 </span>scopedAssocs :: Ord k =&gt; ScopedMap k v -&gt; [[(k, v)]]
+<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">scopedAssocs (ScopedMap scopes) =</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">Prelude.map Map.assocs $ toList scopes</span></span>
+<span class="lineno">  150 </span>
+<span class="lineno">  151 </span>-- FUTURE: add scopedKeys, scopedKeysSet
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>-- | Convert to a plain map by folding the scopes together. Duplicate
+<span class="lineno">  154 </span>--   bindings in more recent scopes take priority.
+<span class="lineno">  155 </span>flatten :: Ord k =&gt; ScopedMap k v -&gt; Map k v
+<span class="lineno">  156 </span><span class="decl"><span class="istickedoff">flatten (ScopedMap (s0 :| more0)) =</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff">let visit s more =</span>
+<span class="lineno">  158 </span><span class="spaces">          </span><span class="istickedoff">let result = case more of</span>
+<span class="lineno">  159 </span><span class="spaces">                </span><span class="istickedoff">[] -&gt; Map.empty</span>
+<span class="lineno">  160 </span><span class="spaces">                </span><span class="istickedoff">s' : more' -&gt; visit s' more'</span>
+<span class="lineno">  161 </span><span class="spaces">          </span><span class="istickedoff">in</span>
+<span class="lineno">  162 </span><span class="spaces">          </span><span class="istickedoff">-- Map.union gives its left argument priority given a</span>
+<span class="lineno">  163 </span><span class="spaces">          </span><span class="istickedoff">-- duplicate key.</span>
+<span class="lineno">  164 </span><span class="spaces">          </span><span class="istickedoff">Map.union s result</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  166 </span><span class="spaces">    </span><span class="istickedoff">visit s0 more0</span></span>
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>--FUTURE: add allAssocs
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>-- | Return all values, ignoring scope.
+<span class="lineno">  171 </span>allElems :: Ord k =&gt; ScopedMap k v -&gt; [v]
+<span class="lineno">  172 </span><span class="decl"><span class="istickedoff">allElems m =</span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">Map.elems $ flatten m</span></span>
+<span class="lineno">  174 </span>
+<span class="lineno">  175 </span>-- | Return all keys, ignoring scope.
+<span class="lineno">  176 </span>allKeys :: Ord k =&gt; ScopedMap k v -&gt; [k]
+<span class="lineno">  177 </span><span class="decl"><span class="nottickedoff">allKeys m =</span>
+<span class="lineno">  178 </span><span class="spaces">    </span><span class="nottickedoff">Map.keys $ flatten m</span></span>
+<span class="lineno">  179 </span>
+<span class="lineno">  180 </span>-- | Return all keys as a set, ignoring scope.
+<span class="lineno">  181 </span>allKeysSet :: Ord k =&gt; ScopedMap k v -&gt; Set k
+<span class="lineno">  182 </span><span class="decl"><span class="istickedoff">allKeysSet m =</span>
+<span class="lineno">  183 </span><span class="spaces">    </span><span class="istickedoff">Map.keysSet $ flatten m</span></span>
 
 </pre>
 </body>

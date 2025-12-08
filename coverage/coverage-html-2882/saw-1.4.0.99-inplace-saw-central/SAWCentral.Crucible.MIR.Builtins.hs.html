@@ -2143,327 +2143,329 @@ span.spaces    { background: white }
 <span class="lineno"> 2124 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno"> 2125 </span><span class="spaces">     </span><span class="istickedoff">pathSatSolver &lt;- gets rwPathSatSolver</span>
 <span class="lineno"> 2126 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- io $ newSAWCoreExprBuilder sc False</span>
-<span class="lineno"> 2127 </span><span class="spaces">     </span><span class="istickedoff">someBak@(SomeOnlineBackend bak) &lt;- io $ newSAWCoreBackend pathSatSolver sym</span>
-<span class="lineno"> 2128 </span><span class="spaces">     </span><span class="istickedoff">let cs     = rm ^. Mir.rmCS</span>
-<span class="lineno"> 2129 </span><span class="spaces">     </span><span class="istickedoff">let col    = cs ^. Mir.collection</span>
-<span class="lineno"> 2130 </span><span class="spaces">     </span><span class="istickedoff">let cfgMap = rm ^. Mir.rmCFGs</span>
-<span class="lineno"> 2131 </span><span class="spaces">     </span><span class="istickedoff">opts &lt;- getOptions</span>
-<span class="lineno"> 2132 </span><span class="spaces">     </span><span class="istickedoff">io $ do let cfg = W4.getConfiguration sym</span>
-<span class="lineno"> 2133 </span><span class="spaces">             </span><span class="istickedoff">verbSetting &lt;- W4.getOptionSetting W4.verbosity cfg</span>
-<span class="lineno"> 2134 </span><span class="spaces">             </span><span class="istickedoff">_ &lt;- W4.setOpt verbSetting $ toInteger $ simVerbose opts</span>
-<span class="lineno"> 2135 </span><span class="spaces">             </span><span class="istickedoff">return <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2136 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2137 </span><span class="spaces">     </span><span class="istickedoff">-- TODO! there's a lot of options setup we need to replicate</span>
-<span class="lineno"> 2138 </span><span class="spaces">     </span><span class="istickedoff">--  from SAWCentral.Crucible.LLVM.Builtins</span>
-<span class="lineno"> 2139 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2140 </span><span class="spaces">     </span><span class="istickedoff">-- There is quite a bit of faff below, all for the sake of translating</span>
-<span class="lineno"> 2141 </span><span class="spaces">     </span><span class="istickedoff">-- top-level static values. See Note [Translating MIR statics in SAW] for</span>
-<span class="lineno"> 2142 </span><span class="spaces">     </span><span class="istickedoff">-- a high-level description of what this code is doing.</span>
-<span class="lineno"> 2143 </span><span class="spaces">     </span><span class="istickedoff">Crucible.AnyCFG staticInitCfg &lt;-</span>
-<span class="lineno"> 2144 </span><span class="spaces">       </span><span class="istickedoff">withImplicitParams opts $ io $ Mir.transStatics cs <span class="nottickedoff">halloc</span></span>
-<span class="lineno"> 2145 </span><span class="spaces">     </span><span class="istickedoff">let staticInitHndl   = Crucible.cfgHandle staticInitCfg</span>
-<span class="lineno"> 2146 </span><span class="spaces">     </span><span class="istickedoff">let staticInitArgTys = Crucible.handleArgTypes staticInitHndl</span>
-<span class="lineno"> 2147 </span><span class="spaces">     </span><span class="istickedoff">let staticInitRetTy  = Crucible.handleReturnType staticInitHndl</span>
-<span class="lineno"> 2148 </span><span class="spaces">     </span><span class="istickedoff">Refl &lt;- case testEquality staticInitArgTys Ctx.Empty of</span>
-<span class="lineno"> 2149 </span><span class="spaces">       </span><span class="istickedoff">Just e -&gt;</span>
-<span class="lineno"> 2150 </span><span class="spaces">         </span><span class="istickedoff">pure e</span>
-<span class="lineno"> 2151 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2152 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">panic &quot;setupCrucibleContext&quot; [</span></span>
-<span class="lineno"> 2153 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;static initializer should not require arguments; found:&quot;,</span></span>
-<span class="lineno"> 2154 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;   &quot; &lt;&gt; Text.pack (show staticInitArgTys)</span></span>
-<span class="lineno"> 2155 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2156 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2157 </span><span class="spaces">     </span><span class="istickedoff">Refl &lt;- case testEquality staticInitRetTy Crucible.UnitRepr of</span>
-<span class="lineno"> 2158 </span><span class="spaces">       </span><span class="istickedoff">Just e -&gt;</span>
-<span class="lineno"> 2159 </span><span class="spaces">         </span><span class="istickedoff">pure e</span>
-<span class="lineno"> 2160 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2161 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">panic &quot;setupCrucibleContext&quot; [</span></span>
-<span class="lineno"> 2162 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;static initializer should return ():&quot;,</span></span>
-<span class="lineno"> 2163 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show staticInitRetTy)</span></span>
-<span class="lineno"> 2164 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2165 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2166 </span><span class="spaces">     </span><span class="istickedoff">let bindings = Crucible.fnBindingsFromList $</span>
-<span class="lineno"> 2167 </span><span class="spaces">                    </span><span class="istickedoff">map (\(Crucible.AnyCFG cfg) -&gt;</span>
-<span class="lineno"> 2168 </span><span class="spaces">                          </span><span class="istickedoff">Crucible.FnBinding</span>
-<span class="lineno"> 2169 </span><span class="spaces">                            </span><span class="istickedoff">(Crucible.cfgHandle cfg)</span>
-<span class="lineno"> 2170 </span><span class="spaces">                            </span><span class="istickedoff">(Crucible.UseCFG cfg (Crucible.postdomInfo cfg))) $</span>
-<span class="lineno"> 2171 </span><span class="spaces">                    </span><span class="istickedoff">Map.elems cfgMap</span>
-<span class="lineno"> 2172 </span><span class="spaces">     </span><span class="istickedoff">let simctx0 = Crucible.initSimContext bak</span>
-<span class="lineno"> 2173 </span><span class="spaces">                     </span><span class="istickedoff">intrinsics halloc stdout</span>
-<span class="lineno"> 2174 </span><span class="spaces">                     </span><span class="istickedoff">bindings Mir.mirExtImpl</span>
-<span class="lineno"> 2175 </span><span class="spaces">                     </span><span class="istickedoff">SAWCruciblePersonality</span>
-<span class="lineno"> 2176 </span><span class="spaces">     </span><span class="istickedoff">let globals0 = Crucible.emptyGlobals</span>
-<span class="lineno"> 2177 </span><span class="spaces">     </span><span class="istickedoff">let setupGlobals = Crucible.regValue &lt;$&gt; Crucible.callCFG staticInitCfg Crucible.emptyRegMap</span>
-<span class="lineno"> 2178 </span><span class="spaces">     </span><span class="istickedoff">-- Step (1) in Note [Translating MIR statics in SAW]</span>
-<span class="lineno"> 2179 </span><span class="spaces">     </span><span class="istickedoff">(simctx1, gp) &lt;- io $ runCrucible <span class="nottickedoff">opts</span> simctx0 globals0 [] Crucible.UnitRepr setupGlobals</span>
-<span class="lineno"> 2180 </span><span class="spaces">     </span><span class="istickedoff">let globalsAllStatics = gp ^. Crucible.gpGlobals</span>
-<span class="lineno"> 2181 </span><span class="spaces">     </span><span class="istickedoff">-- Step (2) in Note [Translating MIR statics in SAW]</span>
-<span class="lineno"> 2182 </span><span class="spaces">     </span><span class="istickedoff">let (globalsImmutStaticsOnly, staticInitializerPairs) =</span>
-<span class="lineno"> 2183 </span><span class="spaces">           </span><span class="istickedoff">mapAccumL</span>
-<span class="lineno"> 2184 </span><span class="spaces">             </span><span class="istickedoff">(\globals (staticDefId, Mir.StaticVar gv) -&gt;</span>
-<span class="lineno"> 2185 </span><span class="spaces">               </span><span class="istickedoff">let static =</span>
-<span class="lineno"> 2186 </span><span class="spaces">                     </span><span class="istickedoff">case Map.lookup staticDefId (col ^. Mir.statics) of</span>
-<span class="lineno"> 2187 </span><span class="spaces">                       </span><span class="istickedoff">Just static' -&gt;</span>
-<span class="lineno"> 2188 </span><span class="spaces">                         </span><span class="istickedoff">static'</span>
-<span class="lineno"> 2189 </span><span class="spaces">                       </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2190 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">panic &quot;setupCrucibleContext&quot; [</span></span>
-<span class="lineno"> 2191 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">&quot;staticDefId not in statics map: &quot; &lt;&gt;</span></span>
-<span class="lineno"> 2192 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show staticDefId)</span></span>
-<span class="lineno"> 2193 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2194 </span><span class="spaces">               </span><span class="istickedoff">in</span>
-<span class="lineno"> 2195 </span><span class="spaces">               </span><span class="istickedoff">case Crucible.lookupGlobal gv globalsAllStatics of</span>
-<span class="lineno"> 2196 </span><span class="spaces">                 </span><span class="istickedoff">Just rv -&gt;</span>
-<span class="lineno"> 2197 </span><span class="spaces">                   </span><span class="istickedoff">let pair = MapF.Pair gv (Crucible.RV rv) in</span>
-<span class="lineno"> 2198 </span><span class="spaces">                   </span><span class="istickedoff">if static ^. Mir.sMutable</span>
-<span class="lineno"> 2199 </span><span class="spaces">                     </span><span class="istickedoff">then (globals, pair)</span>
-<span class="lineno"> 2200 </span><span class="spaces">                     </span><span class="istickedoff">else (Crucible.insertGlobal gv rv globals, pair)</span>
-<span class="lineno"> 2201 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2202 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">panic &quot;setupCrucibleContext&quot; [</span></span>
-<span class="lineno"> 2203 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">&quot;Static GlobalVar not in SymGlobalState: &quot; &lt;&gt; Text.pack (show gv)</span></span>
-<span class="lineno"> 2204 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2205 </span><span class="spaces">             </span><span class="istickedoff">)</span>
-<span class="lineno"> 2206 </span><span class="spaces">             </span><span class="istickedoff">globals0</span>
-<span class="lineno"> 2207 </span><span class="spaces">             </span><span class="istickedoff">(cs ^. Mir.staticMap . to Map.toList)</span>
-<span class="lineno"> 2208 </span><span class="spaces">     </span><span class="istickedoff">let staticInitializerMap = MapF.fromList staticInitializerPairs</span>
-<span class="lineno"> 2209 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2210 </span><span class="spaces">     </span><span class="istickedoff">return MIRCrucibleContext { _mccRustModule = rm</span>
-<span class="lineno"> 2211 </span><span class="spaces">                               </span><span class="istickedoff">, _mccBackend = someBak</span>
-<span class="lineno"> 2212 </span><span class="spaces">                               </span><span class="istickedoff">, _mccSimContext = simctx1</span>
-<span class="lineno"> 2213 </span><span class="spaces">                               </span><span class="istickedoff">, _mccSymGlobalState = globalsImmutStaticsOnly</span>
-<span class="lineno"> 2214 </span><span class="spaces">                               </span><span class="istickedoff">, _mccStaticInitializerMap = staticInitializerMap</span>
-<span class="lineno"> 2215 </span><span class="spaces">                               </span><span class="istickedoff">, _mccUninterp = mempty</span>
-<span class="lineno"> 2216 </span><span class="spaces">                               </span><span class="istickedoff">}</span></span>
-<span class="lineno"> 2217 </span>
-<span class="lineno"> 2218 </span>-- | Create a result value of the appropriate type, suitable for use in an
-<span class="lineno"> 2219 </span>-- extracted function derived from @mir_extract@.
-<span class="lineno"> 2220 </span>setupResultTerm ::
-<span class="lineno"> 2221 </span>  SharedContext -&gt;
-<span class="lineno"> 2222 </span>  MIRCrucibleContext -&gt;
-<span class="lineno"> 2223 </span>  -- | The result's MIR type.
-<span class="lineno"> 2224 </span>  Mir.Ty -&gt;
-<span class="lineno"> 2225 </span>  -- | The result's corresponding Crucible type.
-<span class="lineno"> 2226 </span>  Crucible.TypeRepr tp -&gt;
-<span class="lineno"> 2227 </span>  Crucible.RegValue Sym tp -&gt;
-<span class="lineno"> 2228 </span>  IO Term
-<span class="lineno"> 2229 </span><span class="decl"><span class="istickedoff">setupResultTerm sc cc mty0 tpr0 val0 =</span>
-<span class="lineno"> 2230 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt; do</span>
-<span class="lineno"> 2231 </span><span class="spaces">    </span><span class="istickedoff">let sym = backendGetSym bak</span>
-<span class="lineno"> 2232 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">rm = cc ^. mccRustModule</span></span>
-<span class="lineno"> 2233 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">cs = rm ^. Mir.rmCS</span></span>
-<span class="lineno"> 2234 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">col = cs ^. Mir.collection</span></span>
-<span class="lineno"> 2235 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2236 </span><span class="spaces">    </span><span class="istickedoff">let unsupportedType :: forall a. Mir.Ty -&gt; IO a</span>
-<span class="lineno"> 2237 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unsupportedType ty =</span></span>
-<span class="lineno"> 2238 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail $ unwords</span></span>
-<span class="lineno"> 2239 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unsupported type for Crucible extraction:&quot;</span></span>
-<span class="lineno"> 2240 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, show (PP.pretty ty)</span></span>
-<span class="lineno"> 2241 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2242 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2243 </span><span class="spaces">    </span><span class="istickedoff">let go ::</span>
-<span class="lineno"> 2244 </span><span class="spaces">          </span><span class="istickedoff">forall tp'.</span>
-<span class="lineno"> 2245 </span><span class="spaces">          </span><span class="istickedoff">Mir.Ty -&gt;</span>
-<span class="lineno"> 2246 </span><span class="spaces">          </span><span class="istickedoff">Crucible.TypeRepr tp' -&gt;</span>
-<span class="lineno"> 2247 </span><span class="spaces">          </span><span class="istickedoff">Crucible.RegValue Sym tp' -&gt;</span>
-<span class="lineno"> 2248 </span><span class="spaces">          </span><span class="istickedoff">IO Term</span>
-<span class="lineno"> 2249 </span><span class="spaces">        </span><span class="istickedoff">go mty tpr val =</span>
-<span class="lineno"> 2250 </span><span class="spaces">          </span><span class="istickedoff">let shp = tyToShapeEq <span class="nottickedoff">col</span> mty tpr in</span>
-<span class="lineno"> 2251 </span><span class="spaces">          </span><span class="istickedoff">case shp of</span>
-<span class="lineno"> 2252 </span><span class="spaces">            </span><span class="istickedoff">UnitShape {} -&gt;</span>
-<span class="lineno"> 2253 </span><span class="spaces">              </span><span class="istickedoff">scUnitValue sc</span>
-<span class="lineno"> 2254 </span><span class="spaces">            </span><span class="istickedoff">TupleShape _ elems -&gt; do</span>
-<span class="lineno"> 2255 </span><span class="spaces">              </span><span class="istickedoff">tys &lt;-</span>
-<span class="lineno"> 2256 </span><span class="spaces">                </span><span class="istickedoff">case mty of</span>
-<span class="lineno"> 2257 </span><span class="spaces">                  </span><span class="istickedoff">Mir.TyTuple tys -&gt; pure tys</span>
-<span class="lineno"> 2258 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic</span></span>
-<span class="lineno"> 2259 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">&quot;setupResultTerm&quot;</span></span>
-<span class="lineno"> 2260 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">[ &quot;TupleShape with non-TyTuple type:&quot;</span></span>
-<span class="lineno"> 2261 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">, Text.pack $ show $ PP.pretty mty</span></span>
-<span class="lineno"> 2262 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2263 </span><span class="spaces">              </span><span class="istickedoff">terms &lt;- accessMirAggregate' <span class="nottickedoff">sym</span> elems tys val $</span>
-<span class="lineno"> 2264 </span><span class="spaces">                  </span><span class="istickedoff">\_off _sz shp' val' tval' -&gt; go tval' (shapeType shp') val'</span>
-<span class="lineno"> 2265 </span><span class="spaces">              </span><span class="istickedoff">scTupleReduced sc terms</span>
-<span class="lineno"> 2266 </span><span class="spaces">            </span><span class="istickedoff">PrimShape {} -&gt; do</span>
-<span class="lineno"> 2267 </span><span class="spaces">              </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
-<span class="lineno"> 2268 </span><span class="spaces">              </span><span class="istickedoff">toSC <span class="nottickedoff">sym</span> st val</span>
-<span class="lineno"> 2269 </span><span class="spaces">            </span><span class="istickedoff">ArrayShape _ _ eltSz eltShp len -&gt; do</span>
-<span class="lineno"> 2270 </span><span class="spaces">              </span><span class="istickedoff">eltTy &lt;-</span>
-<span class="lineno"> 2271 </span><span class="spaces">                </span><span class="istickedoff">case mty of</span>
-<span class="lineno"> 2272 </span><span class="spaces">                  </span><span class="istickedoff">Mir.TyArray eltTy _ -&gt; pure eltTy</span>
-<span class="lineno"> 2273 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic</span></span>
-<span class="lineno"> 2274 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">&quot;setupResultTerm&quot;</span></span>
-<span class="lineno"> 2275 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">[ &quot;ArrayShape with non-TyArray type:&quot;</span></span>
-<span class="lineno"> 2276 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">, Text.pack $ show $ PP.pretty mty</span></span>
-<span class="lineno"> 2277 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2278 </span><span class="spaces">              </span><span class="istickedoff">eltTypeTerm &lt;- shapeToTerm sc eltShp</span>
-<span class="lineno"> 2279 </span><span class="spaces">              </span><span class="istickedoff">typedElts &lt;- accessMirAggregateArray <span class="nottickedoff">sym</span> eltSz eltShp len val $</span>
-<span class="lineno"> 2280 </span><span class="spaces">                  </span><span class="istickedoff">\_off val' -&gt; go eltTy (shapeType eltShp) val'</span>
-<span class="lineno"> 2281 </span><span class="spaces">              </span><span class="istickedoff">scVectorReduced sc eltTypeTerm typedElts</span>
-<span class="lineno"> 2282 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2283 </span><span class="spaces">            </span><span class="istickedoff">StructShape {} -&gt;</span>
-<span class="lineno"> 2284 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unsupportedType mty</span></span>
-<span class="lineno"> 2285 </span><span class="spaces">            </span><span class="istickedoff">EnumShape {} -&gt;</span>
+<span class="lineno"> 2127 </span><span class="spaces">     </span><span class="istickedoff">timeout &lt;- gets rwCrucibleTimeout</span>
+<span class="lineno"> 2128 </span><span class="spaces">     </span><span class="istickedoff">someBak@(SomeOnlineBackend bak) &lt;- io $</span>
+<span class="lineno"> 2129 </span><span class="spaces">           </span><span class="istickedoff">newSAWCoreBackendWithTimeout pathSatSolver sym timeout</span>
+<span class="lineno"> 2130 </span><span class="spaces">     </span><span class="istickedoff">let cs     = rm ^. Mir.rmCS</span>
+<span class="lineno"> 2131 </span><span class="spaces">     </span><span class="istickedoff">let col    = cs ^. Mir.collection</span>
+<span class="lineno"> 2132 </span><span class="spaces">     </span><span class="istickedoff">let cfgMap = rm ^. Mir.rmCFGs</span>
+<span class="lineno"> 2133 </span><span class="spaces">     </span><span class="istickedoff">opts &lt;- getOptions</span>
+<span class="lineno"> 2134 </span><span class="spaces">     </span><span class="istickedoff">io $ do let cfg = W4.getConfiguration sym</span>
+<span class="lineno"> 2135 </span><span class="spaces">             </span><span class="istickedoff">verbSetting &lt;- W4.getOptionSetting W4.verbosity cfg</span>
+<span class="lineno"> 2136 </span><span class="spaces">             </span><span class="istickedoff">_ &lt;- W4.setOpt verbSetting $ toInteger $ simVerbose opts</span>
+<span class="lineno"> 2137 </span><span class="spaces">             </span><span class="istickedoff">return <span class="nottickedoff">()</span></span>
+<span class="lineno"> 2138 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2139 </span><span class="spaces">     </span><span class="istickedoff">-- TODO! there's a lot of options setup we need to replicate</span>
+<span class="lineno"> 2140 </span><span class="spaces">     </span><span class="istickedoff">--  from SAWCentral.Crucible.LLVM.Builtins</span>
+<span class="lineno"> 2141 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2142 </span><span class="spaces">     </span><span class="istickedoff">-- There is quite a bit of faff below, all for the sake of translating</span>
+<span class="lineno"> 2143 </span><span class="spaces">     </span><span class="istickedoff">-- top-level static values. See Note [Translating MIR statics in SAW] for</span>
+<span class="lineno"> 2144 </span><span class="spaces">     </span><span class="istickedoff">-- a high-level description of what this code is doing.</span>
+<span class="lineno"> 2145 </span><span class="spaces">     </span><span class="istickedoff">Crucible.AnyCFG staticInitCfg &lt;-</span>
+<span class="lineno"> 2146 </span><span class="spaces">       </span><span class="istickedoff">withImplicitParams opts $ io $ Mir.transStatics cs <span class="nottickedoff">halloc</span></span>
+<span class="lineno"> 2147 </span><span class="spaces">     </span><span class="istickedoff">let staticInitHndl   = Crucible.cfgHandle staticInitCfg</span>
+<span class="lineno"> 2148 </span><span class="spaces">     </span><span class="istickedoff">let staticInitArgTys = Crucible.handleArgTypes staticInitHndl</span>
+<span class="lineno"> 2149 </span><span class="spaces">     </span><span class="istickedoff">let staticInitRetTy  = Crucible.handleReturnType staticInitHndl</span>
+<span class="lineno"> 2150 </span><span class="spaces">     </span><span class="istickedoff">Refl &lt;- case testEquality staticInitArgTys Ctx.Empty of</span>
+<span class="lineno"> 2151 </span><span class="spaces">       </span><span class="istickedoff">Just e -&gt;</span>
+<span class="lineno"> 2152 </span><span class="spaces">         </span><span class="istickedoff">pure e</span>
+<span class="lineno"> 2153 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2154 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">panic &quot;setupCrucibleContext&quot; [</span></span>
+<span class="lineno"> 2155 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;static initializer should not require arguments; found:&quot;,</span></span>
+<span class="lineno"> 2156 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;   &quot; &lt;&gt; Text.pack (show staticInitArgTys)</span></span>
+<span class="lineno"> 2157 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2158 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2159 </span><span class="spaces">     </span><span class="istickedoff">Refl &lt;- case testEquality staticInitRetTy Crucible.UnitRepr of</span>
+<span class="lineno"> 2160 </span><span class="spaces">       </span><span class="istickedoff">Just e -&gt;</span>
+<span class="lineno"> 2161 </span><span class="spaces">         </span><span class="istickedoff">pure e</span>
+<span class="lineno"> 2162 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2163 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">panic &quot;setupCrucibleContext&quot; [</span></span>
+<span class="lineno"> 2164 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;static initializer should return ():&quot;,</span></span>
+<span class="lineno"> 2165 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show staticInitRetTy)</span></span>
+<span class="lineno"> 2166 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2167 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2168 </span><span class="spaces">     </span><span class="istickedoff">let bindings = Crucible.fnBindingsFromList $</span>
+<span class="lineno"> 2169 </span><span class="spaces">                    </span><span class="istickedoff">map (\(Crucible.AnyCFG cfg) -&gt;</span>
+<span class="lineno"> 2170 </span><span class="spaces">                          </span><span class="istickedoff">Crucible.FnBinding</span>
+<span class="lineno"> 2171 </span><span class="spaces">                            </span><span class="istickedoff">(Crucible.cfgHandle cfg)</span>
+<span class="lineno"> 2172 </span><span class="spaces">                            </span><span class="istickedoff">(Crucible.UseCFG cfg (Crucible.postdomInfo cfg))) $</span>
+<span class="lineno"> 2173 </span><span class="spaces">                    </span><span class="istickedoff">Map.elems cfgMap</span>
+<span class="lineno"> 2174 </span><span class="spaces">     </span><span class="istickedoff">let simctx0 = Crucible.initSimContext bak</span>
+<span class="lineno"> 2175 </span><span class="spaces">                     </span><span class="istickedoff">intrinsics halloc stdout</span>
+<span class="lineno"> 2176 </span><span class="spaces">                     </span><span class="istickedoff">bindings Mir.mirExtImpl</span>
+<span class="lineno"> 2177 </span><span class="spaces">                     </span><span class="istickedoff">SAWCruciblePersonality</span>
+<span class="lineno"> 2178 </span><span class="spaces">     </span><span class="istickedoff">let globals0 = Crucible.emptyGlobals</span>
+<span class="lineno"> 2179 </span><span class="spaces">     </span><span class="istickedoff">let setupGlobals = Crucible.regValue &lt;$&gt; Crucible.callCFG staticInitCfg Crucible.emptyRegMap</span>
+<span class="lineno"> 2180 </span><span class="spaces">     </span><span class="istickedoff">-- Step (1) in Note [Translating MIR statics in SAW]</span>
+<span class="lineno"> 2181 </span><span class="spaces">     </span><span class="istickedoff">(simctx1, gp) &lt;- io $ runCrucible <span class="nottickedoff">opts</span> simctx0 globals0 [] Crucible.UnitRepr setupGlobals</span>
+<span class="lineno"> 2182 </span><span class="spaces">     </span><span class="istickedoff">let globalsAllStatics = gp ^. Crucible.gpGlobals</span>
+<span class="lineno"> 2183 </span><span class="spaces">     </span><span class="istickedoff">-- Step (2) in Note [Translating MIR statics in SAW]</span>
+<span class="lineno"> 2184 </span><span class="spaces">     </span><span class="istickedoff">let (globalsImmutStaticsOnly, staticInitializerPairs) =</span>
+<span class="lineno"> 2185 </span><span class="spaces">           </span><span class="istickedoff">mapAccumL</span>
+<span class="lineno"> 2186 </span><span class="spaces">             </span><span class="istickedoff">(\globals (staticDefId, Mir.StaticVar gv) -&gt;</span>
+<span class="lineno"> 2187 </span><span class="spaces">               </span><span class="istickedoff">let static =</span>
+<span class="lineno"> 2188 </span><span class="spaces">                     </span><span class="istickedoff">case Map.lookup staticDefId (col ^. Mir.statics) of</span>
+<span class="lineno"> 2189 </span><span class="spaces">                       </span><span class="istickedoff">Just static' -&gt;</span>
+<span class="lineno"> 2190 </span><span class="spaces">                         </span><span class="istickedoff">static'</span>
+<span class="lineno"> 2191 </span><span class="spaces">                       </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2192 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">panic &quot;setupCrucibleContext&quot; [</span></span>
+<span class="lineno"> 2193 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">&quot;staticDefId not in statics map: &quot; &lt;&gt;</span></span>
+<span class="lineno"> 2194 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show staticDefId)</span></span>
+<span class="lineno"> 2195 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2196 </span><span class="spaces">               </span><span class="istickedoff">in</span>
+<span class="lineno"> 2197 </span><span class="spaces">               </span><span class="istickedoff">case Crucible.lookupGlobal gv globalsAllStatics of</span>
+<span class="lineno"> 2198 </span><span class="spaces">                 </span><span class="istickedoff">Just rv -&gt;</span>
+<span class="lineno"> 2199 </span><span class="spaces">                   </span><span class="istickedoff">let pair = MapF.Pair gv (Crucible.RV rv) in</span>
+<span class="lineno"> 2200 </span><span class="spaces">                   </span><span class="istickedoff">if static ^. Mir.sMutable</span>
+<span class="lineno"> 2201 </span><span class="spaces">                     </span><span class="istickedoff">then (globals, pair)</span>
+<span class="lineno"> 2202 </span><span class="spaces">                     </span><span class="istickedoff">else (Crucible.insertGlobal gv rv globals, pair)</span>
+<span class="lineno"> 2203 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2204 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">panic &quot;setupCrucibleContext&quot; [</span></span>
+<span class="lineno"> 2205 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">&quot;Static GlobalVar not in SymGlobalState: &quot; &lt;&gt; Text.pack (show gv)</span></span>
+<span class="lineno"> 2206 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2207 </span><span class="spaces">             </span><span class="istickedoff">)</span>
+<span class="lineno"> 2208 </span><span class="spaces">             </span><span class="istickedoff">globals0</span>
+<span class="lineno"> 2209 </span><span class="spaces">             </span><span class="istickedoff">(cs ^. Mir.staticMap . to Map.toList)</span>
+<span class="lineno"> 2210 </span><span class="spaces">     </span><span class="istickedoff">let staticInitializerMap = MapF.fromList staticInitializerPairs</span>
+<span class="lineno"> 2211 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2212 </span><span class="spaces">     </span><span class="istickedoff">return MIRCrucibleContext { _mccRustModule = rm</span>
+<span class="lineno"> 2213 </span><span class="spaces">                               </span><span class="istickedoff">, _mccBackend = someBak</span>
+<span class="lineno"> 2214 </span><span class="spaces">                               </span><span class="istickedoff">, _mccSimContext = simctx1</span>
+<span class="lineno"> 2215 </span><span class="spaces">                               </span><span class="istickedoff">, _mccSymGlobalState = globalsImmutStaticsOnly</span>
+<span class="lineno"> 2216 </span><span class="spaces">                               </span><span class="istickedoff">, _mccStaticInitializerMap = staticInitializerMap</span>
+<span class="lineno"> 2217 </span><span class="spaces">                               </span><span class="istickedoff">, _mccUninterp = mempty</span>
+<span class="lineno"> 2218 </span><span class="spaces">                               </span><span class="istickedoff">}</span></span>
+<span class="lineno"> 2219 </span>
+<span class="lineno"> 2220 </span>-- | Create a result value of the appropriate type, suitable for use in an
+<span class="lineno"> 2221 </span>-- extracted function derived from @mir_extract@.
+<span class="lineno"> 2222 </span>setupResultTerm ::
+<span class="lineno"> 2223 </span>  SharedContext -&gt;
+<span class="lineno"> 2224 </span>  MIRCrucibleContext -&gt;
+<span class="lineno"> 2225 </span>  -- | The result's MIR type.
+<span class="lineno"> 2226 </span>  Mir.Ty -&gt;
+<span class="lineno"> 2227 </span>  -- | The result's corresponding Crucible type.
+<span class="lineno"> 2228 </span>  Crucible.TypeRepr tp -&gt;
+<span class="lineno"> 2229 </span>  Crucible.RegValue Sym tp -&gt;
+<span class="lineno"> 2230 </span>  IO Term
+<span class="lineno"> 2231 </span><span class="decl"><span class="istickedoff">setupResultTerm sc cc mty0 tpr0 val0 =</span>
+<span class="lineno"> 2232 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt; do</span>
+<span class="lineno"> 2233 </span><span class="spaces">    </span><span class="istickedoff">let sym = backendGetSym bak</span>
+<span class="lineno"> 2234 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">rm = cc ^. mccRustModule</span></span>
+<span class="lineno"> 2235 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">cs = rm ^. Mir.rmCS</span></span>
+<span class="lineno"> 2236 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">col = cs ^. Mir.collection</span></span>
+<span class="lineno"> 2237 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2238 </span><span class="spaces">    </span><span class="istickedoff">let unsupportedType :: forall a. Mir.Ty -&gt; IO a</span>
+<span class="lineno"> 2239 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unsupportedType ty =</span></span>
+<span class="lineno"> 2240 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail $ unwords</span></span>
+<span class="lineno"> 2241 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unsupported type for Crucible extraction:&quot;</span></span>
+<span class="lineno"> 2242 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, show (PP.pretty ty)</span></span>
+<span class="lineno"> 2243 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2244 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2245 </span><span class="spaces">    </span><span class="istickedoff">let go ::</span>
+<span class="lineno"> 2246 </span><span class="spaces">          </span><span class="istickedoff">forall tp'.</span>
+<span class="lineno"> 2247 </span><span class="spaces">          </span><span class="istickedoff">Mir.Ty -&gt;</span>
+<span class="lineno"> 2248 </span><span class="spaces">          </span><span class="istickedoff">Crucible.TypeRepr tp' -&gt;</span>
+<span class="lineno"> 2249 </span><span class="spaces">          </span><span class="istickedoff">Crucible.RegValue Sym tp' -&gt;</span>
+<span class="lineno"> 2250 </span><span class="spaces">          </span><span class="istickedoff">IO Term</span>
+<span class="lineno"> 2251 </span><span class="spaces">        </span><span class="istickedoff">go mty tpr val =</span>
+<span class="lineno"> 2252 </span><span class="spaces">          </span><span class="istickedoff">let shp = tyToShapeEq <span class="nottickedoff">col</span> mty tpr in</span>
+<span class="lineno"> 2253 </span><span class="spaces">          </span><span class="istickedoff">case shp of</span>
+<span class="lineno"> 2254 </span><span class="spaces">            </span><span class="istickedoff">UnitShape {} -&gt;</span>
+<span class="lineno"> 2255 </span><span class="spaces">              </span><span class="istickedoff">scUnitValue sc</span>
+<span class="lineno"> 2256 </span><span class="spaces">            </span><span class="istickedoff">TupleShape _ elems -&gt; do</span>
+<span class="lineno"> 2257 </span><span class="spaces">              </span><span class="istickedoff">tys &lt;-</span>
+<span class="lineno"> 2258 </span><span class="spaces">                </span><span class="istickedoff">case mty of</span>
+<span class="lineno"> 2259 </span><span class="spaces">                  </span><span class="istickedoff">Mir.TyTuple tys -&gt; pure tys</span>
+<span class="lineno"> 2260 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic</span></span>
+<span class="lineno"> 2261 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">&quot;setupResultTerm&quot;</span></span>
+<span class="lineno"> 2262 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">[ &quot;TupleShape with non-TyTuple type:&quot;</span></span>
+<span class="lineno"> 2263 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">, Text.pack $ show $ PP.pretty mty</span></span>
+<span class="lineno"> 2264 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2265 </span><span class="spaces">              </span><span class="istickedoff">terms &lt;- accessMirAggregate' <span class="nottickedoff">sym</span> elems tys val $</span>
+<span class="lineno"> 2266 </span><span class="spaces">                  </span><span class="istickedoff">\_off _sz shp' val' tval' -&gt; go tval' (shapeType shp') val'</span>
+<span class="lineno"> 2267 </span><span class="spaces">              </span><span class="istickedoff">scTupleReduced sc terms</span>
+<span class="lineno"> 2268 </span><span class="spaces">            </span><span class="istickedoff">PrimShape {} -&gt; do</span>
+<span class="lineno"> 2269 </span><span class="spaces">              </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno"> 2270 </span><span class="spaces">              </span><span class="istickedoff">toSC <span class="nottickedoff">sym</span> st val</span>
+<span class="lineno"> 2271 </span><span class="spaces">            </span><span class="istickedoff">ArrayShape _ _ eltSz eltShp len -&gt; do</span>
+<span class="lineno"> 2272 </span><span class="spaces">              </span><span class="istickedoff">eltTy &lt;-</span>
+<span class="lineno"> 2273 </span><span class="spaces">                </span><span class="istickedoff">case mty of</span>
+<span class="lineno"> 2274 </span><span class="spaces">                  </span><span class="istickedoff">Mir.TyArray eltTy _ -&gt; pure eltTy</span>
+<span class="lineno"> 2275 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic</span></span>
+<span class="lineno"> 2276 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">&quot;setupResultTerm&quot;</span></span>
+<span class="lineno"> 2277 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">[ &quot;ArrayShape with non-TyArray type:&quot;</span></span>
+<span class="lineno"> 2278 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">, Text.pack $ show $ PP.pretty mty</span></span>
+<span class="lineno"> 2279 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2280 </span><span class="spaces">              </span><span class="istickedoff">eltTypeTerm &lt;- shapeToTerm sc eltShp</span>
+<span class="lineno"> 2281 </span><span class="spaces">              </span><span class="istickedoff">typedElts &lt;- accessMirAggregateArray <span class="nottickedoff">sym</span> eltSz eltShp len val $</span>
+<span class="lineno"> 2282 </span><span class="spaces">                  </span><span class="istickedoff">\_off val' -&gt; go eltTy (shapeType eltShp) val'</span>
+<span class="lineno"> 2283 </span><span class="spaces">              </span><span class="istickedoff">scVectorReduced sc eltTypeTerm typedElts</span>
+<span class="lineno"> 2284 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2285 </span><span class="spaces">            </span><span class="istickedoff">StructShape {} -&gt;</span>
 <span class="lineno"> 2286 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unsupportedType mty</span></span>
-<span class="lineno"> 2287 </span><span class="spaces">            </span><span class="istickedoff">TransparentShape {} -&gt;</span>
+<span class="lineno"> 2287 </span><span class="spaces">            </span><span class="istickedoff">EnumShape {} -&gt;</span>
 <span class="lineno"> 2288 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unsupportedType mty</span></span>
-<span class="lineno"> 2289 </span><span class="spaces">            </span><span class="istickedoff">RefShape {} -&gt;</span>
+<span class="lineno"> 2289 </span><span class="spaces">            </span><span class="istickedoff">TransparentShape {} -&gt;</span>
 <span class="lineno"> 2290 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unsupportedType mty</span></span>
-<span class="lineno"> 2291 </span><span class="spaces">            </span><span class="istickedoff">SliceShape {} -&gt;</span>
+<span class="lineno"> 2291 </span><span class="spaces">            </span><span class="istickedoff">RefShape {} -&gt;</span>
 <span class="lineno"> 2292 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unsupportedType mty</span></span>
-<span class="lineno"> 2293 </span><span class="spaces">            </span><span class="istickedoff">FnPtrShape {} -&gt;</span>
+<span class="lineno"> 2293 </span><span class="spaces">            </span><span class="istickedoff">SliceShape {} -&gt;</span>
 <span class="lineno"> 2294 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unsupportedType mty</span></span>
-<span class="lineno"> 2295 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2296 </span><span class="spaces">    </span><span class="istickedoff">go mty0 tpr0 val0</span></span>
-<span class="lineno"> 2297 </span>
-<span class="lineno"> 2298 </span>{-
-<span class="lineno"> 2299 </span>Note [Translating MIR statics in SAW]
-<span class="lineno"> 2300 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-<span class="lineno"> 2301 </span>Translating top-level static values in the SAW MIR backend requires some care.
-<span class="lineno"> 2302 </span>This is because we want to treat immutable and mutable static differently:
-<span class="lineno"> 2303 </span>
-<span class="lineno"> 2304 </span>* Immutable statics should be implicitly initialized in each specification
-<span class="lineno"> 2305 </span>  without any action required on the user's end.
-<span class="lineno"> 2306 </span>
-<span class="lineno"> 2307 </span>* Mutable statics should /not/ be initialized in a specification unless a user
-<span class="lineno"> 2308 </span>  explicitly declares it with `mir_points_to (mir_static ...) ...`. This is
-<span class="lineno"> 2309 </span>  because a mutable static's value can change over the course of a program, so
-<span class="lineno"> 2310 </span>  we require users to be precise about what the value should be before and after
-<span class="lineno"> 2311 </span>  invoking a function.
-<span class="lineno"> 2312 </span>
-<span class="lineno"> 2313 </span>This poses a challenge when translating static values in SAW. It is tempting to
-<span class="lineno"> 2314 </span>only translate the immutable statics and not the mutable statics (similarly to
-<span class="lineno"> 2315 </span>how the SAW LLVM backend handles translation), but this will not work in
-<span class="lineno"> 2316 </span>general. Consider this program:
-<span class="lineno"> 2317 </span>
-<span class="lineno"> 2318 </span>  static mut S1: u32 = 1;
-<span class="lineno"> 2319 </span>  static S2: u32 = unsafe { S1 };
-<span class="lineno"> 2320 </span>
-<span class="lineno"> 2321 </span>  pub fn f() {
-<span class="lineno"> 2322 </span>      ... S2 ...
-<span class="lineno"> 2323 </span>  }
-<span class="lineno"> 2324 </span>
-<span class="lineno"> 2325 </span>The initial value of S2 (an immutable static) depends on having first translated
-<span class="lineno"> 2326 </span>the initial value of S1 (a mutable static). If we do not translate mutable
-<span class="lineno"> 2327 </span>statics in SAW, the translation of S1 will not succeed.
-<span class="lineno"> 2328 </span>
-<span class="lineno"> 2329 </span>We solve this problem by doing the following:
+<span class="lineno"> 2295 </span><span class="spaces">            </span><span class="istickedoff">FnPtrShape {} -&gt;</span>
+<span class="lineno"> 2296 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unsupportedType mty</span></span>
+<span class="lineno"> 2297 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2298 </span><span class="spaces">    </span><span class="istickedoff">go mty0 tpr0 val0</span></span>
+<span class="lineno"> 2299 </span>
+<span class="lineno"> 2300 </span>{-
+<span class="lineno"> 2301 </span>Note [Translating MIR statics in SAW]
+<span class="lineno"> 2302 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="lineno"> 2303 </span>Translating top-level static values in the SAW MIR backend requires some care.
+<span class="lineno"> 2304 </span>This is because we want to treat immutable and mutable static differently:
+<span class="lineno"> 2305 </span>
+<span class="lineno"> 2306 </span>* Immutable statics should be implicitly initialized in each specification
+<span class="lineno"> 2307 </span>  without any action required on the user's end.
+<span class="lineno"> 2308 </span>
+<span class="lineno"> 2309 </span>* Mutable statics should /not/ be initialized in a specification unless a user
+<span class="lineno"> 2310 </span>  explicitly declares it with `mir_points_to (mir_static ...) ...`. This is
+<span class="lineno"> 2311 </span>  because a mutable static's value can change over the course of a program, so
+<span class="lineno"> 2312 </span>  we require users to be precise about what the value should be before and after
+<span class="lineno"> 2313 </span>  invoking a function.
+<span class="lineno"> 2314 </span>
+<span class="lineno"> 2315 </span>This poses a challenge when translating static values in SAW. It is tempting to
+<span class="lineno"> 2316 </span>only translate the immutable statics and not the mutable statics (similarly to
+<span class="lineno"> 2317 </span>how the SAW LLVM backend handles translation), but this will not work in
+<span class="lineno"> 2318 </span>general. Consider this program:
+<span class="lineno"> 2319 </span>
+<span class="lineno"> 2320 </span>  static mut S1: u32 = 1;
+<span class="lineno"> 2321 </span>  static S2: u32 = unsafe { S1 };
+<span class="lineno"> 2322 </span>
+<span class="lineno"> 2323 </span>  pub fn f() {
+<span class="lineno"> 2324 </span>      ... S2 ...
+<span class="lineno"> 2325 </span>  }
+<span class="lineno"> 2326 </span>
+<span class="lineno"> 2327 </span>The initial value of S2 (an immutable static) depends on having first translated
+<span class="lineno"> 2328 </span>the initial value of S1 (a mutable static). If we do not translate mutable
+<span class="lineno"> 2329 </span>statics in SAW, the translation of S1 will not succeed.
 <span class="lineno"> 2330 </span>
-<span class="lineno"> 2331 </span>1. Use Crucible to translate all top-level static values (both immutable and
-<span class="lineno"> 2332 </span>   mutable). This produces a SymGlobalState that contains every static's
-<span class="lineno"> 2333 </span>   initializer value.
-<span class="lineno"> 2334 </span>
-<span class="lineno"> 2335 </span>2. Consult the updated SymGlobalState to produce the following:
+<span class="lineno"> 2331 </span>We solve this problem by doing the following:
+<span class="lineno"> 2332 </span>
+<span class="lineno"> 2333 </span>1. Use Crucible to translate all top-level static values (both immutable and
+<span class="lineno"> 2334 </span>   mutable). This produces a SymGlobalState that contains every static's
+<span class="lineno"> 2335 </span>   initializer value.
 <span class="lineno"> 2336 </span>
-<span class="lineno"> 2337 </span>   (a) A subset of the SymGlobalState that only contains the initializer values
-<span class="lineno"> 2338 </span>       for the immutable statics. This will be used later to initialize the
-<span class="lineno"> 2339 </span>       Crucible state when translating the function being verified with
-<span class="lineno"> 2340 </span>       mir_verify.
-<span class="lineno"> 2341 </span>
-<span class="lineno"> 2342 </span>   (b) A MirStaticInitializerMap mapping all static variables (both immutable
-<span class="lineno"> 2343 </span>       and mutable) to their initializer values. This will be used later to
-<span class="lineno"> 2344 </span>       power the mir_static_initializer function.
-<span class="lineno"> 2345 </span>
-<span class="lineno"> 2346 </span>This is a bit clunky, but it's unclear how to do better without significantly
-<span class="lineno"> 2347 </span>changing how crucible-mir translates top-level static values.
-<span class="lineno"> 2348 </span>-}
-<span class="lineno"> 2349 </span>
-<span class="lineno"> 2350 </span>-- | Define several commonly used implicit parameters in @crucible-mir@ and
-<span class="lineno"> 2351 </span>-- call a continuation with these parameters.
-<span class="lineno"> 2352 </span>withImplicitParams ::
-<span class="lineno"> 2353 </span>  Options -&gt;
-<span class="lineno"> 2354 </span>  ( ( ?debug :: Int, ?customOps :: Mir.CustomOpMap
-<span class="lineno"> 2355 </span>    , ?assertFalseOnError :: Bool, ?printCrucible :: Bool
-<span class="lineno"> 2356 </span>    ) =&gt; r) -&gt;
-<span class="lineno"> 2357 </span>  r
-<span class="lineno"> 2358 </span><span class="decl"><span class="istickedoff">withImplicitParams opts k =</span>
-<span class="lineno"> 2359 </span><span class="spaces">  </span><span class="istickedoff">let ?debug = simVerbose opts in</span>
-<span class="lineno"> 2360 </span><span class="spaces">      </span><span class="istickedoff">-- For now, we use the same default settings for implicit parameters as in</span>
-<span class="lineno"> 2361 </span><span class="spaces">      </span><span class="istickedoff">-- crux-mir. We may want to add options later that allow configuring these.</span>
-<span class="lineno"> 2362 </span><span class="spaces">  </span><span class="istickedoff">let ?assertFalseOnError = True in</span>
-<span class="lineno"> 2363 </span><span class="spaces">  </span><span class="istickedoff">let ?customOps          = customOps in</span>
-<span class="lineno"> 2364 </span><span class="spaces">  </span><span class="istickedoff">let ?printCrucible      = False in</span>
-<span class="lineno"> 2365 </span><span class="spaces">  </span><span class="istickedoff">k</span></span>
-<span class="lineno"> 2366 </span>
-<span class="lineno"> 2367 </span>--------------------------------------------------------------------------------
-<span class="lineno"> 2368 </span>-- Errors
+<span class="lineno"> 2337 </span>2. Consult the updated SymGlobalState to produce the following:
+<span class="lineno"> 2338 </span>
+<span class="lineno"> 2339 </span>   (a) A subset of the SymGlobalState that only contains the initializer values
+<span class="lineno"> 2340 </span>       for the immutable statics. This will be used later to initialize the
+<span class="lineno"> 2341 </span>       Crucible state when translating the function being verified with
+<span class="lineno"> 2342 </span>       mir_verify.
+<span class="lineno"> 2343 </span>
+<span class="lineno"> 2344 </span>   (b) A MirStaticInitializerMap mapping all static variables (both immutable
+<span class="lineno"> 2345 </span>       and mutable) to their initializer values. This will be used later to
+<span class="lineno"> 2346 </span>       power the mir_static_initializer function.
+<span class="lineno"> 2347 </span>
+<span class="lineno"> 2348 </span>This is a bit clunky, but it's unclear how to do better without significantly
+<span class="lineno"> 2349 </span>changing how crucible-mir translates top-level static values.
+<span class="lineno"> 2350 </span>-}
+<span class="lineno"> 2351 </span>
+<span class="lineno"> 2352 </span>-- | Define several commonly used implicit parameters in @crucible-mir@ and
+<span class="lineno"> 2353 </span>-- call a continuation with these parameters.
+<span class="lineno"> 2354 </span>withImplicitParams ::
+<span class="lineno"> 2355 </span>  Options -&gt;
+<span class="lineno"> 2356 </span>  ( ( ?debug :: Int, ?customOps :: Mir.CustomOpMap
+<span class="lineno"> 2357 </span>    , ?assertFalseOnError :: Bool, ?printCrucible :: Bool
+<span class="lineno"> 2358 </span>    ) =&gt; r) -&gt;
+<span class="lineno"> 2359 </span>  r
+<span class="lineno"> 2360 </span><span class="decl"><span class="istickedoff">withImplicitParams opts k =</span>
+<span class="lineno"> 2361 </span><span class="spaces">  </span><span class="istickedoff">let ?debug = simVerbose opts in</span>
+<span class="lineno"> 2362 </span><span class="spaces">      </span><span class="istickedoff">-- For now, we use the same default settings for implicit parameters as in</span>
+<span class="lineno"> 2363 </span><span class="spaces">      </span><span class="istickedoff">-- crux-mir. We may want to add options later that allow configuring these.</span>
+<span class="lineno"> 2364 </span><span class="spaces">  </span><span class="istickedoff">let ?assertFalseOnError = True in</span>
+<span class="lineno"> 2365 </span><span class="spaces">  </span><span class="istickedoff">let ?customOps          = customOps in</span>
+<span class="lineno"> 2366 </span><span class="spaces">  </span><span class="istickedoff">let ?printCrucible      = False in</span>
+<span class="lineno"> 2367 </span><span class="spaces">  </span><span class="istickedoff">k</span></span>
+<span class="lineno"> 2368 </span>
 <span class="lineno"> 2369 </span>--------------------------------------------------------------------------------
-<span class="lineno"> 2370 </span>
-<span class="lineno"> 2371 </span>data MIRSetupError
-<span class="lineno"> 2372 </span>  = MIRFreshVarInvalidType Mir.Ty
-<span class="lineno"> 2373 </span>  | MIRFreshExpandedValueUnsupportedType Mir.Ty
-<span class="lineno"> 2374 </span>  | MIRArgTypeMismatch Int Mir.Ty Mir.Ty -- argument position, expected, found
-<span class="lineno"> 2375 </span>  | MIRArgNumberWrong Int Int -- number expected, number found
-<span class="lineno"> 2376 </span>  | MIRReturnUnexpected Mir.Ty -- found
-<span class="lineno"> 2377 </span>  | MIRReturnTypeMismatch Mir.Ty Mir.Ty -- expected, found
-<span class="lineno"> 2378 </span>  | MIREnumValueVariantNotFound Mir.DefId Text
-<span class="lineno"> 2379 </span>  | MIREnumValueNonEnum Mir.DefId String -- The String is either \&quot;struct\&quot; or \&quot;union\&quot;
-<span class="lineno"> 2380 </span>  | MIRVecOfContentsNotArray Mir.Ty
-<span class="lineno"> 2381 </span>  | MIRVecOfTypeMismatch
-<span class="lineno"> 2382 </span>      Mir.Ty -- ^ type passed as the second argument
-<span class="lineno"> 2383 </span>      Mir.Ty -- ^ element type of the contents argument
-<span class="lineno"> 2384 </span>  | MIRVecOfElemTyNotSized Mir.Ty
-<span class="lineno"> 2385 </span>  | MIRVecOfElemTyNoLayoutInfo Mir.Ty
-<span class="lineno"> 2386 </span>
-<span class="lineno"> 2387 </span>instance <span class="decl"><span class="nottickedoff">X.Exception MIRSetupError</span></span> where
-<span class="lineno"> 2388 </span>  <span class="decl"><span class="istickedoff">toException = topLevelExceptionToException</span></span>
-<span class="lineno"> 2389 </span>  <span class="decl"><span class="nottickedoff">fromException = topLevelExceptionFromException</span></span>
-<span class="lineno"> 2390 </span>
-<span class="lineno"> 2391 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show MIRSetupError</span></span></span></span> where
-<span class="lineno"> 2392 </span>  <span class="decl"><span class="istickedoff">show err =</span>
-<span class="lineno"> 2393 </span><span class="spaces">    </span><span class="istickedoff">case err of</span>
-<span class="lineno"> 2394 </span><span class="spaces">      </span><span class="istickedoff">MIRFreshVarInvalidType jty -&gt;</span>
-<span class="lineno"> 2395 </span><span class="spaces">        </span><span class="istickedoff">&quot;mir_fresh_var: Invalid type: &quot; ++ show jty</span>
-<span class="lineno"> 2396 </span><span class="spaces">      </span><span class="istickedoff">MIRFreshExpandedValueUnsupportedType ty -&gt;</span>
-<span class="lineno"> 2397 </span><span class="spaces">        </span><span class="istickedoff">&quot;mir_fresh_expanded_value: &quot; ++ show (PP.pretty ty) ++</span>
-<span class="lineno"> 2398 </span><span class="spaces">        </span><span class="istickedoff">&quot; not supported&quot;</span>
-<span class="lineno"> 2399 </span><span class="spaces">      </span><span class="istickedoff">MIRArgTypeMismatch i expected found -&gt;</span>
-<span class="lineno"> 2400 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
-<span class="lineno"> 2401 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;mir_execute_func: Argument type mismatch&quot;</span>
-<span class="lineno"> 2402 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Argument position: &quot; ++ show i</span>
-<span class="lineno"> 2403 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected type: &quot; ++ show (PP.pretty expected)</span>
-<span class="lineno"> 2404 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Given type:    &quot; ++ show (PP.pretty found)</span>
-<span class="lineno"> 2405 </span><span class="spaces">        </span><span class="istickedoff">]</span>
-<span class="lineno"> 2406 </span><span class="spaces">      </span><span class="istickedoff">MIRArgNumberWrong expected found -&gt;</span>
-<span class="lineno"> 2407 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
-<span class="lineno"> 2408 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;mir_execute_func: Wrong number of arguments&quot;</span></span>
-<span class="lineno"> 2409 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Expected: &quot; ++ show expected</span></span>
-<span class="lineno"> 2410 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Given:    &quot; ++ show found</span></span>
-<span class="lineno"> 2411 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2412 </span><span class="spaces">      </span><span class="istickedoff">MIRReturnUnexpected found -&gt;</span>
-<span class="lineno"> 2413 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
-<span class="lineno"> 2414 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;mir_return: Unexpected return value for void method&quot;</span></span>
-<span class="lineno"> 2415 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Given type: &quot; ++ show (PP.pretty found)</span></span>
-<span class="lineno"> 2416 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2417 </span><span class="spaces">      </span><span class="istickedoff">MIRReturnTypeMismatch expected found -&gt;</span>
-<span class="lineno"> 2418 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
-<span class="lineno"> 2419 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;mir_return: Return type mismatch&quot;</span>
-<span class="lineno"> 2420 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected type: &quot; ++ show (PP.pretty expected)</span>
-<span class="lineno"> 2421 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Given type:    &quot; ++ show (PP.pretty found)</span>
-<span class="lineno"> 2422 </span><span class="spaces">        </span><span class="istickedoff">]</span>
-<span class="lineno"> 2423 </span><span class="spaces">      </span><span class="istickedoff">MIREnumValueVariantNotFound adtNm variantNm -&gt;</span>
-<span class="lineno"> 2424 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
-<span class="lineno"> 2425 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;mir_enum_value: Could not find a variant named `&quot; ++ Text.unpack variantNm ++ &quot;`&quot;</span>
-<span class="lineno"> 2426 </span><span class="spaces">        </span><span class="istickedoff">, &quot;in the enum &quot; ++ show adtNm</span>
-<span class="lineno"> 2427 </span><span class="spaces">        </span><span class="istickedoff">]</span>
-<span class="lineno"> 2428 </span><span class="spaces">      </span><span class="istickedoff">MIREnumValueNonEnum adtNm what -&gt;</span>
-<span class="lineno"> 2429 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
-<span class="lineno"> 2430 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;mir_enum_value: Expected enum, received &quot; ++ what</span></span>
-<span class="lineno"> 2431 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, show adtNm</span></span>
-<span class="lineno"> 2432 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2433 </span><span class="spaces">      </span><span class="istickedoff">MIRVecOfContentsNotArray contentsTy -&gt;</span>
-<span class="lineno"> 2434 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;mir_vec_of: Expected array MIRValue as third argument, but got &quot;</span></span>
-<span class="lineno"> 2435 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">++ show (PP.pretty contentsTy)</span></span>
-<span class="lineno"> 2436 </span><span class="spaces">      </span><span class="istickedoff">MIRVecOfTypeMismatch passedElemTy contentsElemTy -&gt;</span>
-<span class="lineno"> 2437 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
-<span class="lineno"> 2438 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;mir_vec_of: Type mismatch between passed type and element type of contents array&quot;</span></span>
-<span class="lineno"> 2439 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Passed type: &quot; ++ show (PP.pretty passedElemTy)</span></span>
-<span class="lineno"> 2440 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Element type of contents array: &quot; ++ show (PP.pretty contentsElemTy)</span></span>
-<span class="lineno"> 2441 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2442 </span><span class="spaces">      </span><span class="istickedoff">MIRVecOfElemTyNotSized elemTy -&gt;</span>
-<span class="lineno"> 2443 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;mir_vec_of: Cannot construct Vec of unsized element type &quot;</span></span>
-<span class="lineno"> 2444 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">++ show (PP.pretty elemTy)</span></span>
-<span class="lineno"> 2445 </span><span class="spaces">      </span><span class="istickedoff">MIRVecOfElemTyNoLayoutInfo elemTy -&gt;</span>
-<span class="lineno"> 2446 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;mir_vec_of: No layout info for element type &quot;</span></span>
-<span class="lineno"> 2447 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">++ show (PP.pretty elemTy)</span></span></span>
+<span class="lineno"> 2370 </span>-- Errors
+<span class="lineno"> 2371 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 2372 </span>
+<span class="lineno"> 2373 </span>data MIRSetupError
+<span class="lineno"> 2374 </span>  = MIRFreshVarInvalidType Mir.Ty
+<span class="lineno"> 2375 </span>  | MIRFreshExpandedValueUnsupportedType Mir.Ty
+<span class="lineno"> 2376 </span>  | MIRArgTypeMismatch Int Mir.Ty Mir.Ty -- argument position, expected, found
+<span class="lineno"> 2377 </span>  | MIRArgNumberWrong Int Int -- number expected, number found
+<span class="lineno"> 2378 </span>  | MIRReturnUnexpected Mir.Ty -- found
+<span class="lineno"> 2379 </span>  | MIRReturnTypeMismatch Mir.Ty Mir.Ty -- expected, found
+<span class="lineno"> 2380 </span>  | MIREnumValueVariantNotFound Mir.DefId Text
+<span class="lineno"> 2381 </span>  | MIREnumValueNonEnum Mir.DefId String -- The String is either \&quot;struct\&quot; or \&quot;union\&quot;
+<span class="lineno"> 2382 </span>  | MIRVecOfContentsNotArray Mir.Ty
+<span class="lineno"> 2383 </span>  | MIRVecOfTypeMismatch
+<span class="lineno"> 2384 </span>      Mir.Ty -- ^ type passed as the second argument
+<span class="lineno"> 2385 </span>      Mir.Ty -- ^ element type of the contents argument
+<span class="lineno"> 2386 </span>  | MIRVecOfElemTyNotSized Mir.Ty
+<span class="lineno"> 2387 </span>  | MIRVecOfElemTyNoLayoutInfo Mir.Ty
+<span class="lineno"> 2388 </span>
+<span class="lineno"> 2389 </span>instance <span class="decl"><span class="nottickedoff">X.Exception MIRSetupError</span></span> where
+<span class="lineno"> 2390 </span>  <span class="decl"><span class="istickedoff">toException = topLevelExceptionToException</span></span>
+<span class="lineno"> 2391 </span>  <span class="decl"><span class="nottickedoff">fromException = topLevelExceptionFromException</span></span>
+<span class="lineno"> 2392 </span>
+<span class="lineno"> 2393 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show MIRSetupError</span></span></span></span> where
+<span class="lineno"> 2394 </span>  <span class="decl"><span class="istickedoff">show err =</span>
+<span class="lineno"> 2395 </span><span class="spaces">    </span><span class="istickedoff">case err of</span>
+<span class="lineno"> 2396 </span><span class="spaces">      </span><span class="istickedoff">MIRFreshVarInvalidType jty -&gt;</span>
+<span class="lineno"> 2397 </span><span class="spaces">        </span><span class="istickedoff">&quot;mir_fresh_var: Invalid type: &quot; ++ show jty</span>
+<span class="lineno"> 2398 </span><span class="spaces">      </span><span class="istickedoff">MIRFreshExpandedValueUnsupportedType ty -&gt;</span>
+<span class="lineno"> 2399 </span><span class="spaces">        </span><span class="istickedoff">&quot;mir_fresh_expanded_value: &quot; ++ show (PP.pretty ty) ++</span>
+<span class="lineno"> 2400 </span><span class="spaces">        </span><span class="istickedoff">&quot; not supported&quot;</span>
+<span class="lineno"> 2401 </span><span class="spaces">      </span><span class="istickedoff">MIRArgTypeMismatch i expected found -&gt;</span>
+<span class="lineno"> 2402 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
+<span class="lineno"> 2403 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;mir_execute_func: Argument type mismatch&quot;</span>
+<span class="lineno"> 2404 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Argument position: &quot; ++ show i</span>
+<span class="lineno"> 2405 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected type: &quot; ++ show (PP.pretty expected)</span>
+<span class="lineno"> 2406 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Given type:    &quot; ++ show (PP.pretty found)</span>
+<span class="lineno"> 2407 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno"> 2408 </span><span class="spaces">      </span><span class="istickedoff">MIRArgNumberWrong expected found -&gt;</span>
+<span class="lineno"> 2409 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
+<span class="lineno"> 2410 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;mir_execute_func: Wrong number of arguments&quot;</span></span>
+<span class="lineno"> 2411 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Expected: &quot; ++ show expected</span></span>
+<span class="lineno"> 2412 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Given:    &quot; ++ show found</span></span>
+<span class="lineno"> 2413 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2414 </span><span class="spaces">      </span><span class="istickedoff">MIRReturnUnexpected found -&gt;</span>
+<span class="lineno"> 2415 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
+<span class="lineno"> 2416 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;mir_return: Unexpected return value for void method&quot;</span></span>
+<span class="lineno"> 2417 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Given type: &quot; ++ show (PP.pretty found)</span></span>
+<span class="lineno"> 2418 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2419 </span><span class="spaces">      </span><span class="istickedoff">MIRReturnTypeMismatch expected found -&gt;</span>
+<span class="lineno"> 2420 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
+<span class="lineno"> 2421 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;mir_return: Return type mismatch&quot;</span>
+<span class="lineno"> 2422 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected type: &quot; ++ show (PP.pretty expected)</span>
+<span class="lineno"> 2423 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Given type:    &quot; ++ show (PP.pretty found)</span>
+<span class="lineno"> 2424 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno"> 2425 </span><span class="spaces">      </span><span class="istickedoff">MIREnumValueVariantNotFound adtNm variantNm -&gt;</span>
+<span class="lineno"> 2426 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
+<span class="lineno"> 2427 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;mir_enum_value: Could not find a variant named `&quot; ++ Text.unpack variantNm ++ &quot;`&quot;</span>
+<span class="lineno"> 2428 </span><span class="spaces">        </span><span class="istickedoff">, &quot;in the enum &quot; ++ show adtNm</span>
+<span class="lineno"> 2429 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno"> 2430 </span><span class="spaces">      </span><span class="istickedoff">MIREnumValueNonEnum adtNm what -&gt;</span>
+<span class="lineno"> 2431 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
+<span class="lineno"> 2432 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;mir_enum_value: Expected enum, received &quot; ++ what</span></span>
+<span class="lineno"> 2433 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, show adtNm</span></span>
+<span class="lineno"> 2434 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2435 </span><span class="spaces">      </span><span class="istickedoff">MIRVecOfContentsNotArray contentsTy -&gt;</span>
+<span class="lineno"> 2436 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;mir_vec_of: Expected array MIRValue as third argument, but got &quot;</span></span>
+<span class="lineno"> 2437 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">++ show (PP.pretty contentsTy)</span></span>
+<span class="lineno"> 2438 </span><span class="spaces">      </span><span class="istickedoff">MIRVecOfTypeMismatch passedElemTy contentsElemTy -&gt;</span>
+<span class="lineno"> 2439 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
+<span class="lineno"> 2440 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;mir_vec_of: Type mismatch between passed type and element type of contents array&quot;</span></span>
+<span class="lineno"> 2441 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Passed type: &quot; ++ show (PP.pretty passedElemTy)</span></span>
+<span class="lineno"> 2442 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Element type of contents array: &quot; ++ show (PP.pretty contentsElemTy)</span></span>
+<span class="lineno"> 2443 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2444 </span><span class="spaces">      </span><span class="istickedoff">MIRVecOfElemTyNotSized elemTy -&gt;</span>
+<span class="lineno"> 2445 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;mir_vec_of: Cannot construct Vec of unsized element type &quot;</span></span>
+<span class="lineno"> 2446 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">++ show (PP.pretty elemTy)</span></span>
+<span class="lineno"> 2447 </span><span class="spaces">      </span><span class="istickedoff">MIRVecOfElemTyNoLayoutInfo elemTy -&gt;</span>
+<span class="lineno"> 2448 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;mir_vec_of: No layout info for element type &quot;</span></span>
+<span class="lineno"> 2449 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">++ show (PP.pretty elemTy)</span></span></span>
 
 </pre>
 </body>

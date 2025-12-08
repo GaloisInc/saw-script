@@ -99,13 +99,13 @@ span.spaces    { background: white }
 <span class="lineno">   80 </span>  <span class="decl"><span class="nottickedoff">substituteTyVars avail tyenv = fmap (substituteTyVars avail tyenv)</span></span>
 <span class="lineno">   81 </span>
 <span class="lineno">   82 </span>instance (SubstituteTyVars a) =&gt; SubstituteTyVars [a] where
-<span class="lineno">   83 </span>  <span class="decl"><span class="istickedoff">substituteTyVars avail tyenv = map (substituteTyVars <span class="nottickedoff">avail</span> <span class="nottickedoff">tyenv</span>)</span></span>
+<span class="lineno">   83 </span>  <span class="decl"><span class="istickedoff">substituteTyVars avail tyenv = map (substituteTyVars avail tyenv)</span></span>
 <span class="lineno">   84 </span>
 <span class="lineno">   85 </span>instance SubstituteTyVars Type where
 <span class="lineno">   86 </span>  <span class="decl"><span class="istickedoff">substituteTyVars avail tyenv ty = case ty of</span>
-<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">TyCon pos tc ts     -&gt; TyCon pos tc (substituteTyVars <span class="nottickedoff">avail</span> <span class="nottickedoff">tyenv</span> ts)</span>
+<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">TyCon pos tc ts     -&gt; TyCon pos tc (substituteTyVars avail tyenv ts)</span>
 <span class="lineno">   88 </span><span class="spaces">    </span><span class="istickedoff">TyRecord pos fs     -&gt; TyRecord pos (fmap (substituteTyVars <span class="nottickedoff">avail</span> <span class="nottickedoff">tyenv</span>) fs)</span>
-<span class="lineno">   89 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar _ _      -&gt; <span class="nottickedoff">ty</span></span>
+<span class="lineno">   89 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar _ _      -&gt; ty</span>
 <span class="lineno">   90 </span><span class="spaces">    </span><span class="istickedoff">TyVar _ n           -&gt;</span>
 <span class="lineno">   91 </span><span class="spaces">        </span><span class="istickedoff">case ScopedMap.lookup n tyenv of</span>
 <span class="lineno">   92 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">ty</span></span>
@@ -116,7 +116,7 @@ span.spaces    { background: white }
 <span class="lineno">   97 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;Lifecycle setting: &quot; &lt;&gt; Text.pack (show lc)</span></span>
 <span class="lineno">   98 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">   99 </span><span class="spaces">                </span><span class="istickedoff">else case expansion of</span>
-<span class="lineno">  100 </span><span class="spaces">                    </span><span class="istickedoff">AbstractType _kind  -&gt; <span class="nottickedoff">ty</span></span>
+<span class="lineno">  100 </span><span class="spaces">                    </span><span class="istickedoff">AbstractType _kind  -&gt; ty</span>
 <span class="lineno">  101 </span><span class="spaces">                    </span><span class="istickedoff">ConcreteType ty' -&gt; ty'</span></span>
 <span class="lineno">  102 </span>
 <span class="lineno">  103 </span>--
@@ -154,7 +154,7 @@ span.spaces    { background: white }
 <span class="lineno">  135 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;Lifecycle setting: &quot; &lt;&gt; Text.pack (show lc)</span></span>
 <span class="lineno">  136 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  137 </span><span class="spaces">                </span><span class="istickedoff">else case expansion of</span>
-<span class="lineno">  138 </span><span class="spaces">                    </span><span class="istickedoff">AbstractType _kind -&gt; ty</span>
+<span class="lineno">  138 </span><span class="spaces">                    </span><span class="istickedoff">AbstractType _kind -&gt; <span class="nottickedoff">ty</span></span>
 <span class="lineno">  139 </span><span class="spaces">                    </span><span class="istickedoff">ConcreteType ty' -&gt; ty'</span></span>
 <span class="lineno">  140 </span>
 <span class="lineno">  141 </span>
