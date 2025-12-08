@@ -66,7 +66,7 @@ module SAWCore.OpenTerm (
   record, recordType, projRecord,
   global, variable,
   app, apply, applyGlobal,
-  applyPi, piArg, lambda, lambdas,
+  lambda, lambdas,
   piType, piMulti, arrow, mkLet, sawLet,
   bitvectorType, list, eitherType,
   ) where
@@ -75,12 +75,9 @@ import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
-
 import SAWCore.Name
 import SAWCore.Panic
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
 import qualified SAWCore.Term.Certified as SC
 import SAWCore.SCTypeCheck
@@ -270,25 +267,6 @@ apply = foldl app
 -- | Apply a named global to a list of zero or more arguments.
 applyGlobal :: Ident -> [OpenTerm] -> OpenTerm
 applyGlobal ident = apply (global ident)
-
--- | Compute the output type of applying a function of a given type to an
--- argument. That is, given @tp@ and @arg@, compute the type of applying any @f@
--- of type @tp@ to @arg@.
-applyPi :: OpenTerm -> OpenTerm -> OpenTerm
-applyPi (OpenTerm m_f) (OpenTerm m_arg) =
-  OpenTerm $
-  do f <- m_f
-     arg <- m_arg
-     applyPiTyped (NotFuncTypeInApp f arg) f arg
-
--- | Get the argument type of a function type, 'fail'ing if the input term is
--- not a function type
-piArg :: OpenTerm -> OpenTerm
-piArg (OpenTerm m) =
-  OpenTerm $ m >>= \case
-  (unwrapTermF -> Pi _ tp _) -> pure tp
-  t ->
-    fail ("piArg: not a pi type: " ++ ppTermPure PPS.defaultOpts t)
 
 -- | Build a lambda abstraction as an 'OpenTerm'
 lambda :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
