@@ -1,0 +1,107 @@
+/*
+
+This file is intended to test the error checking for ill-formed
+`MIRSetup` blocks. All setup blocks will be tested with
+`mir_unsafe_assume_spec`, in order to make sure that the errors are
+caught at the early phase when the setup block is processed, and that
+we do not rely on run-time errors during symbolic simulation to catch
+problems.
+
+This file is necessarily incomplete, and should be extended with new
+additional tests as we add new checks to the SAW/MIR code.
+
+Any tests listed as "KNOWN FALSE POSITIVE" represent known bugs in
+saw-script.
+
+*/
+
+
+enable_experimental;
+
+// Load the MIR module once.
+m <- mir_load_module "test.linked-mir.json";
+
+let check_fails name spec =
+  fails (mir_unsafe_assume_spec m name spec);
+
+let KNOWN_FALSE_POSITIVE name spec =
+  do {
+    print "KNOWN FALSE POSITIVE:";
+    fails (check_fails name spec);
+  };
+
+// -------------------------
+// Working spec for `id`
+// -------------------------
+print "Working spec for function 'id'";
+mir_verify m "test/2269dac2::id" [] false
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    mir_execute_func [mir_term x];
+    mir_return (mir_term x);
+  } z3;
+
+// -------------------------
+// mir_execute_func checks
+// -------------------------
+
+print "mir_execute_func missing";
+check_fails "test/2269dac2::id"
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    // No mir_execute_func here on purpose
+    mir_return (mir_term x);
+  };
+
+print "multiple use of mir_execute_func";
+check_fails "test/2269dac2::id"
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    mir_execute_func [mir_term x];
+    mir_execute_func [mir_term x];
+    mir_return (mir_term x);
+  };
+
+// -------------------------
+// mir_return checks (non-void)
+// -------------------------
+
+print "mir_return missing when one was expected";
+check_fails "test/2269dac2::id"
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    mir_execute_func [mir_term x];
+    // No mir_return here on purpose
+  };
+
+print "multiple use of mir_return";
+check_fails "test/2269dac2::id"
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    mir_execute_func [mir_term x];
+    mir_return (mir_term x);
+    mir_return (mir_term x);
+  };
+
+// -------------------------
+// mir_return checks (void)
+// -------------------------
+
+print "Working spec for function 'id_void'";
+mir_verify m "test/2269dac2::id_void" [] false
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    mir_execute_func [mir_term x];
+    // no mir_return here, because the function is void
+  } z3;
+
+print "mir_return when none was expected";
+check_fails "test/2269dac2::id_void"
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    mir_execute_func [mir_term x];
+    mir_return (mir_term x);
+  };
+
+print "DONE!";
+
