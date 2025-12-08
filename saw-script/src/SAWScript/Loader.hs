@@ -18,7 +18,9 @@ module SAWScript.Loader (
 import qualified Data.Text.IO as TextIO (readFile)
 import qualified Data.Text as Text
 import Data.Text (Text)
---import qualified Data.Set as Set
+import qualified Data.IORef as IORef
+import Data.IORef (IORef)
+import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 --import Data.Map (Map)
@@ -64,6 +66,29 @@ convertTypeMsg (pos, msg) =
 --   The LHS is the directory the current file was included from
 --   (starts as ".") and the RHS is the user's search path.
 type IncludePath = (FilePath, [FilePath])
+
+-- | Type shorthand for the set of includes already seen.
+--
+--   We pass it around as an IORef because it needs to accumulate
+--   as we go.
+type SeenSet = IORef (Set FilePath)
+
+-- | Construct an empty SeenSet.
+emptySeenSet :: IO SeenSet
+emptySeenSet = IORef.newIORef Set.empty
+
+-- | Check for membership in a SeenSet.
+seenSetMember :: FilePath -> SeenSet -> IO Bool
+seenSetMember x ref = do
+    set <- IORef.readIORef ref
+    pure $ Set.member x set
+
+-- | Insert into a SeenSet.
+seenSetInsert :: FilePath -> SeenSet -> IO ()
+seenSetInsert x ref = do
+    set <- IORef.readIORef ref
+    IORef.writeIORef ref (Set.insert x set)
+    pure ()
 
 -- | Wrap statements in a pushd/popd pair.
 --
@@ -156,9 +181,10 @@ dispatchMsgs opts result =
 --   returning the failure.
 --
 resolveIncludes ::
-    Int -> IncludePath -> Options -> Inc.Processor a -> WithMsgs a ->
+    Int -> SeenSet -> IncludePath -> Options -> Inc.Processor a ->
+    WithMsgs a ->
     IO (WithMsgs a)
-resolveIncludes depth incpath opts process result =
+resolveIncludes depth seen incpath opts process result =
     let printMsg vrb msg =
           Options.printOutLn opts vrb (Text.unpack msg)
     in
@@ -166,7 +192,7 @@ resolveIncludes depth incpath opts process result =
         Left errs ->
             pure $ Left errs
         Right (msgs, tree) -> do
-            result' <- process (includeFile depth incpath opts) tree
+            result' <- process (includeFile depth seen incpath opts) tree
             case result' of
                 Left errs -> do
                     mapM_ (printMsg Options.Warn) msgs
@@ -266,10 +292,11 @@ readExpression ::
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
     IO (Either [Text] (Schema, Expr))
 readExpression opts fileName environ rbenv avail str = do
+  seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
   let result = readAny fileName str parseExpression
-  result' <- resolveIncludes 0{-depth-} incpath opts Inc.processExpr result
+  result' <- resolveIncludes 0{-depth-} seen incpath opts Inc.processExpr result
   let result'' = case result' of
         Left errs -> Left errs
         Right (msgs, expr) ->
@@ -315,10 +342,11 @@ readExpression opts fileName environ rbenv avail str = do
 --   @include@.
 readREPLTextUnchecked :: Options -> FilePath -> Text -> IO (Either [Text] [Stmt])
 readREPLTextUnchecked opts fileName str = do
+  seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
   let result = readAny fileName str parseREPLText
-  result' <- resolveIncludes 0{-depth-} incpath opts Inc.processStmts result
+  result' <- resolveIncludes 0{-depth-} seen incpath opts Inc.processStmts result
   dispatchMsgs opts result'
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
@@ -352,16 +380,24 @@ locateFile (current, rawdirs) file = do
 
 -- | Load the 'Stmt's in a @.saw@ file.
 --   Doesn't run the typechecker (yet).
-includeFile :: Int -> IncludePath -> Options -> FilePath ->
+includeFile ::
+    Int -> SeenSet -> IncludePath -> Options -> FilePath -> Bool ->
     IO (Either [Text] [Stmt])
-includeFile depth incpath opts fname = do
+includeFile depth seen incpath opts fname once = do
   result <- locateFile incpath fname
   case result of
     Left errs -> return $ Left errs
-    Right fname' ->
+    Right fname' -> do
+      alreadySeen <- seenSetMember fname' seen 
       if depth > 128 then
           pure $ Left ["Maximum include depth exceeded"]
+      else if once && alreadySeen then do
+          -- include_once and we've already seen this file
+          Options.printOutLn opts Options.Info $ "Skipping already-included file " ++
+                                                 show fname'
+          pure $ Right []
       else do
+          seenSetInsert fname' seen
           let (_current, dirs) = incpath
               current' = takeDirectory fname'
               incpath' = (current', dirs)
@@ -370,7 +406,7 @@ includeFile depth incpath opts fname = do
           ftext <- TextIO.readFile fname'
 
           let result' = wrapDir current' $ readAny fname ftext parseModule
-          result'' <- resolveIncludes (depth + 1) incpath' opts Inc.processStmts result'
+          result'' <- resolveIncludes (depth + 1) seen incpath' opts Inc.processStmts result'
           dispatchMsgs opts result''
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
@@ -380,6 +416,9 @@ includeFile depth incpath opts fname = do
 --
 -- Doesn't run the typechecker (yet).
 findAndLoadFileUnchecked :: Options -> FilePath -> IO (Either [Text] [Stmt])
-findAndLoadFileUnchecked opts fp =
-  let incpath = (".", Options.importPath opts) in
-  includeFile 0{-depth-} incpath opts fp
+findAndLoadFileUnchecked opts fp = do
+  let depth = 0
+  seen <- emptySeenSet
+  let incpath = (".", Options.importPath opts)
+      once = False
+  includeFile depth seen incpath opts fp once

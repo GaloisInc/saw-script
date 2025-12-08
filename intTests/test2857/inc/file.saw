@@ -1,0 +1,2 @@
+// Something simple that will error if repeated
+typedef Foo = Int;
