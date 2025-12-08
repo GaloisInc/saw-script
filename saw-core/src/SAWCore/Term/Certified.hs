@@ -94,6 +94,7 @@ import Control.Exception
 import Control.Lens
 import Control.Monad (foldM, forM, forM_, join, unless, when)
 
+import Data.Bits
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldlM, foldrM)
 import Data.Hashable (Hashable(hash))
@@ -113,6 +114,9 @@ import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 import Text.URI
+
+import SAWSupport.IntRangeSet (IntRangeSet)
+import qualified SAWSupport.IntRangeSet as IntRangeSet
 
 import SAWCore.Cache
 import SAWCore.Module
@@ -239,6 +243,13 @@ insertTFM :: TermF Term -> Either Sort Term -> a -> TermFMap a -> TermFMap a
 insertTFM tf mty x tfm =
   tfm { hashMapTFM = HMap.insert (tf, mty) x (hashMapTFM tfm) }
 
+filterTFM :: (a -> Bool) -> TermFMap a -> TermFMap a
+filterTFM p tfm =
+  TermFMap
+  { appMapTFM = IntMap.map (IntMap.filter p) (appMapTFM tfm)
+  , hashMapTFM = HMap.filter p (hashMapTFM tfm)
+  }
+
 type AppCache = TermFMap Term
 
 type AppCacheRef = IORef AppCache
@@ -261,6 +272,8 @@ emptyAppCache = emptyTFM
 -- It exists only to save one map lookup when building terms: Without
 -- it we would first have to look up the Ident by URI in scURIEnv, and
 -- then do another lookup for hash-consing the Constant term.
+-- Invariant: All entries in 'scAppCache' must have 'TermIndex'es that
+-- are less than 'scNextTermIndex' and marked valid in 'scValidTerms'.
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scAppCache       :: AppCacheRef
@@ -268,19 +281,36 @@ data SharedContext = SharedContext
   , scURIEnv         :: IORef (Map URI VarIndex)
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scNextVarIndex   :: IORef VarIndex
+  , scNextTermIndex  :: IORef TermIndex
+  , scValidTerms     :: IORef IntRangeSet
   }
+
+-- | Internal function to get the next available 'TermIndex'. Not exported.
+scFreshTermIndex :: SharedContext -> IO VarIndex
+scFreshTermIndex sc = atomicModifyIORef' (scNextTermIndex sc) (\i -> (i + 1, i))
+
+scEnsureValidTerm :: SharedContext -> Term -> IO ()
+scEnsureValidTerm sc t =
+  do s <- readIORef (scValidTerms sc)
+     unless (IntRangeSet.member (termIndex t) s) $
+       fail $ unlines $
+       [ "Stale term encountered: index = " ++ show (termIndex t)
+       , "Valid indexes: " ++ show (IntRangeSet.toList s)
+       , showTerm t
+       ]
 
 -- | Internal function to make a 'Term' from a 'TermF' with a given
 -- variable typing context and type.
 -- Precondition: The 'Either' argument should never have 'Right'
 -- applied to a 'Sort'.
+-- Precondition: All subterms should have been checked with 'scEnsureValidTerm'.
 scMakeTerm :: SharedContext -> IntMap Term -> TermF Term -> Either Sort Term -> IO Term
 scMakeTerm sc vt tf mty =
   do s <- readIORef (scAppCache sc)
      case lookupTFM tf mty s of
        Just term -> pure term
        Nothing ->
-         do i <- getUniqueInt
+         do i <- scFreshTermIndex sc
             let term = STApp { stAppIndex = i
                              , stAppHash = hash tf
                              , stAppVarTypes = vt
@@ -298,6 +328,7 @@ data SharedContextCheckpoint =
   , sccNamingEnv :: DisplayNameEnv
   , sccURIEnv    :: Map URI VarIndex
   , sccGlobalEnv :: HashMap Ident Term
+  , sccTermIndex :: TermIndex
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
@@ -306,20 +337,37 @@ checkpointSharedContext sc =
      nenv <- readIORef (scDisplayNameEnv sc)
      uenv <- readIORef (scURIEnv sc)
      genv <- readIORef (scGlobalEnv sc)
+     i <- readIORef (scNextTermIndex sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
             , sccURIEnv = uenv
             , sccGlobalEnv = genv
+            , sccTermIndex = i
             }
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO SharedContext
 restoreSharedContext scc sc =
-  do writeIORef (scModuleMap sc) (sccModuleMap scc)
+  do -- Ensure that the checkpoint itself is not stale
+     let i = sccTermIndex scc
+     s <- readIORef (scValidTerms sc)
+     unless (IntRangeSet.member i s) $
+       fail $ unlines $
+       [ "Stale checkpoint encountered: index = " ++ show i
+       , "Valid indexes: " ++ show (IntRangeSet.toList s)
+       ]
+     -- Restore saved environments
+     writeIORef (scModuleMap sc) (sccModuleMap scc)
      writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
      writeIORef (scURIEnv sc) (sccURIEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
-     return sc
+     -- Mark 'TermIndex'es created since the checkpoint as invalid
+     j <- readIORef (scNextTermIndex sc)
+     modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
+     -- Filter stale terms from AppCache
+     modifyIORef' (scAppCache sc) (filterTFM (\t -> termIndex t < i))
+     -- scNextVarIndex and scNextTermIndex are left untouched
+     pure sc
 
 --------------------------------------------------------------------------------
 -- Fundamental term builders
@@ -367,7 +415,9 @@ scApply sc t1 t2 =
      case lookupAppTFM t1 t2 tfm of
        Just term -> pure term
        Nothing ->
-         do vt <- unifyVarTypes "scApply" (varTypes t1) (varTypes t2)
+         do scEnsureValidTerm sc t1
+            scEnsureValidTerm sc t2
+            vt <- unifyVarTypes "scApply" (varTypes t1) (varTypes t2)
             ty1 <- scTypeOf sc t1
             (x, ty1a, ty1b) <- ensurePi sc ty1
             ty2 <- scTypeOf sc t2
@@ -379,7 +429,7 @@ scApply sc t1 t2 =
             -- simpler types, so it should always terminate.
             ty <- scInstantiateBeta sc (IntMap.singleton (vnIndex x) t2) ty1b
             let mty = maybe (Right ty) Left (asSort ty)
-            i <- getUniqueInt
+            i <- scFreshTermIndex sc
             let tf = App t1 t2
             let term =
                   STApp
@@ -403,7 +453,9 @@ scLambda ::
   Term {- ^ The body -} ->
   IO Term
 scLambda sc x t body =
-  do ensureNotFreeInContext x body
+  do scEnsureValidTerm sc t
+     scEnsureValidTerm sc body
+     ensureNotFreeInContext x body
      _ <- unifyVarTypes "scLambda" (IntMap.singleton (vnIndex x) t) (varTypes body)
      vt <- unifyVarTypes "scLambda" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
      rty <- scTypeOf sc body
@@ -421,7 +473,9 @@ scPi ::
   Term {- ^ The body -} ->
   IO Term
 scPi sc x t body =
-  do ensureNotFreeInContext x body
+  do scEnsureValidTerm sc t
+     scEnsureValidTerm sc body
+     ensureNotFreeInContext x body
      _ <- unifyVarTypes "scPi" (IntMap.singleton (vnIndex x) t) (varTypes body)
      vt <- unifyVarTypes "scPi" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
      s1 <- either pure (ensureSort sc) (stAppType t)
@@ -438,7 +492,8 @@ scConst sc nm =
 -- | Create a named variable 'Term' from a 'VarName' and a type.
 scVariable :: SharedContext -> VarName -> Term -> IO Term
 scVariable sc x t =
-  do vt <- unifyVarTypes "scVariable" (IntMap.singleton (vnIndex x) t) (varTypes t)
+  do scEnsureValidTerm sc t
+     vt <- unifyVarTypes "scVariable" (IntMap.singleton (vnIndex x) t) (varTypes t)
      _s <- either pure (ensureSort sc) (stAppType t)
      let mty = maybe (Right t) Left (asSort t)
      scMakeTerm sc vt (Variable x t) mty
@@ -1360,9 +1415,11 @@ scStringType sc = scGlobalDef sc preludeStringIdent
 -- that type.
 scVector :: SharedContext -> Term -> [Term] -> IO Term
 scVector sc e xs =
-  do vt <- foldM (unifyVarTypes "scVector") (varTypes e) (map varTypes xs)
+  do scEnsureValidTerm sc e
+     vt <- foldM (unifyVarTypes "scVector") (varTypes e) (map varTypes xs)
      let check x =
-           do xty <- scTypeOf sc x
+           do scEnsureValidTerm sc x
+              xty <- scTypeOf sc x
               ok <- scSubtype sc xty e
               unless ok $ fail $ unlines $
                 ["Not a subtype", "expected: " ++ showTerm e, "got: " ++ showTerm xty]
@@ -1380,7 +1437,8 @@ scVecType sc n e = scGlobalApply sc preludeVecIdent [n, e]
 -- | Create a record term from a 'Map' from 'FieldName's to 'Term's.
 scRecord :: SharedContext -> Map FieldName Term -> IO Term
 scRecord sc (Map.toList -> fields) =
-  do vt <- foldM (unifyVarTypes "scRecord") IntMap.empty (map (varTypes . snd) fields)
+  do mapM_ (scEnsureValidTerm sc . snd) fields
+     vt <- foldM (unifyVarTypes "scRecord") IntMap.empty (map (varTypes . snd) fields)
      let tf = FTermF (RecordValue fields)
      field_tys <- traverse (traverse (scTypeOf sc)) fields
      ty <- scRecordType sc field_tys
@@ -1390,7 +1448,8 @@ scRecord sc (Map.toList -> fields) =
 -- a 'FieldName'.
 scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
 scRecordSelect sc t fname =
-  do let vt = varTypes t
+  do scEnsureValidTerm sc t
+     let vt = varTypes t
      let tf = FTermF (RecordProj t fname)
      field_tys <- ensureRecordType sc =<< scTypeOf sc t
      case Map.lookup fname field_tys of
@@ -1402,7 +1461,8 @@ scRecordSelect sc t fname =
 -- the given list is irrelevant, as record fields are not ordered.
 scRecordType :: SharedContext -> [(FieldName, Term)] -> IO Term
 scRecordType sc field_tys =
-  do vt <- foldM (unifyVarTypes "scRecordType") IntMap.empty (map (varTypes . snd) field_tys)
+  do mapM_ (scEnsureValidTerm sc . snd) field_tys
+     vt <- foldM (unifyVarTypes "scRecordType") IntMap.empty (map (varTypes . snd) field_tys)
      let tf = FTermF (RecordType field_tys)
      let field_sort (_, t) = either pure (ensureSort sc) (stAppType t)
      sorts <- traverse field_sort field_tys
@@ -1426,7 +1486,9 @@ scPairValue :: SharedContext
             -> Term -- ^ The right projection
             -> IO Term
 scPairValue sc t1 t2 =
-  do vt <- unifyVarTypes "scPairValue" (varTypes t1) (varTypes t2)
+  do scEnsureValidTerm sc t1
+     scEnsureValidTerm sc t2
+     vt <- unifyVarTypes "scPairValue" (varTypes t1) (varTypes t2)
      let tf = FTermF (PairValue t1 t2)
      ty1 <- scTypeOf sc t1
      ty2 <- scTypeOf sc t2
@@ -1440,7 +1502,9 @@ scPairType :: SharedContext
            -> Term -- ^ Right projection type
            -> IO Term
 scPairType sc t1 t2 =
-  do vt <- unifyVarTypes "scPairType" (varTypes t1) (varTypes t2)
+  do scEnsureValidTerm sc t1
+     scEnsureValidTerm sc t2
+     vt <- unifyVarTypes "scPairType" (varTypes t1) (varTypes t2)
      let tf = FTermF (PairType t1 t2)
      s1 <- either pure (ensureSort sc) (stAppType t1)
      s2 <- either pure (ensureSort sc) (stAppType t2)
@@ -1449,14 +1513,16 @@ scPairType sc t1 t2 =
 -- | Create a term giving the left projection of a 'Term' representing a pair.
 scPairLeft :: SharedContext -> Term -> IO Term
 scPairLeft sc t =
-  do (ty, _) <- ensurePairType sc =<< scTypeOf sc t
+  do scEnsureValidTerm sc t
+     (ty, _) <- ensurePairType sc =<< scTypeOf sc t
      let mty = maybe (Right ty) Left (asSort ty)
      scMakeTerm sc (varTypes t) (FTermF (PairLeft t)) mty
 
 -- | Create a term giving the right projection of a 'Term' representing a pair.
 scPairRight :: SharedContext -> Term -> IO Term
 scPairRight sc t =
-  do (_, ty) <- ensurePairType sc =<< scTypeOf sc t
+  do scEnsureValidTerm sc t
+     (_, ty) <- ensurePairType sc =<< scTypeOf sc t
      let mty = maybe (Right ty) Left (asSort ty)
      scMakeTerm sc (varTypes t) (FTermF (PairRight t)) mty
 
@@ -1573,23 +1639,35 @@ scGlobalApply sc i ts =
 
 
 ------------------------------------------------------------
+
 -- | The default instance of the SharedContext operations.
 mkSharedContext :: IO SharedContext
-mkSharedContext = do
-  vr <- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.
-  cr <- newIORef emptyAppCache
-  gr <- newIORef HMap.empty
-  mod_map_ref <- newIORef emptyModuleMap
-  dr <- newIORef emptyDisplayNameEnv
-  ur <- newIORef Map.empty
-  return SharedContext {
-             scModuleMap = mod_map_ref
-           , scAppCache = cr
-           , scNextVarIndex = vr
-           , scDisplayNameEnv = dr
-           , scURIEnv = ur
-           , scGlobalEnv = gr
-           }
+mkSharedContext =
+  do vr <- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.
+     cr <- newIORef emptyAppCache
+     gr <- newIORef HMap.empty
+     mr <- newIORef emptyModuleMap
+     dr <- newIORef emptyDisplayNameEnv
+     ur <- newIORef Map.empty
+     -- The top 16 bits of the TermIndex form a unique ID for this
+     -- particular SharedContext.
+     -- We expect that the low 48 bits will never overflow.
+     scid <- getUniqueInt
+     let i0 = scid `shiftL` 48
+     tr <- newIORef (i0 :: TermIndex)
+     let j0 = i0 + (1 `shiftL` 48 - 1)
+     ir <- newIORef (IntRangeSet.singleton (i0, j0))
+     pure $
+       SharedContext
+       { scModuleMap = mr
+       , scAppCache = cr
+       , scNextVarIndex = vr
+       , scDisplayNameEnv = dr
+       , scURIEnv = ur
+       , scGlobalEnv = gr
+       , scNextTermIndex = tr
+       , scValidTerms = ir
+       }
 
 -- | Instantiate some of the named variables in the term.
 -- The 'IntMap' is keyed by 'VarIndex'.
