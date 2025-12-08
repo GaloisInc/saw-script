@@ -81,8 +81,11 @@ module SAWCore.Term.Certified
   , scmFreshConstant
   , scmDefineConstant
   , scmOpaqueConstant
+  , DataTypeSpec(..)
+  , CtorSpec(..)
   , scmBeginDataType
   , scmCompleteDataType
+  , scmDefineDataType
   , scImportModule
   , scLoadModule
   , scmFreshName
@@ -140,6 +143,7 @@ import SAWCore.Module
   , insDefInMap
   , insInjectCodeInMap
   , insImportInMap
+  , insTypeDeclInMap
   , resolvedNameType
   , requireNameInMap
   , CtorArg(..)
@@ -820,6 +824,123 @@ scInjectCode ::
   IO ()
 scInjectCode sc mnm ns txt =
   modifyIORef' (scModuleMap sc) $ insInjectCodeInMap mnm ns txt
+
+--------------------------------------------------------------------------------
+-- Data Types
+
+data DataTypeSpec =
+  DataTypeSpec
+  { dtsNameInfo :: NameInfo
+    -- ^ The name of this data type
+  , dtsParams :: [(VarName, Term)]
+    -- ^ The context of parameters of this data type.
+    -- Earlier variable names in the list are in scope.
+  , dtsIndices :: [(VarName, Term)]
+    -- ^ The context of indices of this data type.
+    -- Earlier variable names and 'dtsParams' are in scope.
+  , dtsSort :: Sort
+    -- ^ The universe of this data type.
+  , dtsCtors :: [CtorSpec]
+    -- ^ The list of constructors of this data type.
+    -- Variables from 'dtsParams' are in scope.
+  , dtsMotiveName :: VarName
+    -- ^ Variable name to use for the motive parameter of the recursor.
+  , dtsArgName :: VarName
+    -- ^ Variable name to use for the data argument of the recursor.
+  }
+
+data CtorSpec =
+  CtorSpec
+  { cspecNameInfo :: NameInfo
+    -- ^ The name of this constructor
+  , cspecArgs :: [(VarName, CtorArg)]
+    -- ^ The argument types of this constructor.
+    -- ^ Earlier variables and 'dtsParams' are in scope.
+  , cspecIndices :: [Term]
+    -- ^ The indices of the result type of this constructor.
+    -- ^ Variables from 'dtsParams' and 'csArgs' are in scope.
+  }
+
+-- | Define a new data type with constructors in the global context.
+-- Return the type constructor and data constructors as 'Term's.
+-- Possible errors: Name already defined, mismatched parameters...
+-- Other errors: Indices not contained in data type sort.
+-- Other errors: Constructor argument not contained in data type sort.
+-- Other errors: Constructor index not contained in data type sort.
+-- Other errors: Type not closed.
+scmDefineDataType :: DataTypeSpec -> SCM (Term, [Term])
+scmDefineDataType dts =
+  do dName <- scmRegisterName (dtsNameInfo dts)
+     s <- scmSort (dtsSort dts)
+     dType <- scmPiList (dtsParams dts ++ dtsIndices dts) s
+     -- TODO: Enforce that dType is closed.
+     -- NOTE: We can't use 'scmConst' with 'dName' because we haven't yet
+     -- registered the name with its definition in the global context.
+     -- We need to use the internal function 'scmMakeTerm' instead.
+     let dSortOrType = maybe (Right dType) Left (asSort dType)
+     d <- scmMakeTerm IntMap.empty (Constant dName) dSortOrType
+     params <- scmVariables (dtsParams dts)
+     d_params <- scmApplyAll d params
+     let ctorArgType :: CtorArg -> SCM Term
+         ctorArgType (ConstArg tp) = pure tp
+         ctorArgType (RecursiveArg zs ixs) =
+           scmPiList zs =<< scmApplyAll d_params ixs
+     let ctorSpecType :: CtorSpec -> SCM Term
+         ctorSpecType cspec =
+           do d_params_ixs <- scmApplyAll d_params (cspecIndices cspec)
+              bs <- traverse (traverse ctorArgType) (cspecArgs cspec)
+              body <- scmPiList bs d_params_ixs
+              scmPiList (dtsParams dts) body
+     let makeCtor :: CtorSpec -> SCM Ctor
+         makeCtor cs =
+           do cName <- scmRegisterName (cspecNameInfo cs)
+              cType <- ctorSpecType cs
+              -- TODO: Enforce that cType is closed.
+              pure $
+                Ctor
+                { ctorName = cName
+                , ctorArgStruct =
+                  CtorArgStruct
+                  { ctorParams = dtsParams dts
+                  , ctorArgs = cspecArgs cs
+                  , ctorIndices = cspecIndices cs
+                  }
+                , ctorDataType = dName
+                , ctorType = cType
+                }
+     ctors <- traverse makeCtor (dtsCtors dts)
+     let dt =
+           DataType
+           { dtName = dName
+           , dtParams = dtsParams dts
+           , dtIndices = dtsIndices dts
+           , dtSort = dtsSort dts
+           , dtCtors = ctors
+           , dtType = dType
+           , dtMotiveName = dtsMotiveName dts
+           , dtArgName = dtsArgName dts
+           }
+     -- Register the data type in the ModuleMap.
+     sc <- scmSharedContext
+     liftIO $ modifyIORef' (scModuleMap sc) $ \mm ->
+       case insTypeDeclInMap dt mm of
+         -- This should never happen; duplicate names are detected by scRegisterName.
+         Left nm -> panic "scmDefineDataType" ["Duplicate name: " <> toAbsoluteName (nameInfo nm)]
+         Right mm' -> mm'
+     -- Register data type constant in scGlobalEnv if it has an Ident name.
+     case dtsNameInfo dts of
+       ImportedName{} -> pure ()
+       ModuleIdentifier i -> scmRegisterGlobal i d
+     -- Register constructors in scGlobalEnv if they have Ident names.
+     cs <-
+       forM ctors $ \ctor ->
+       do c <- scmConst (ctorName ctor)
+          case nameInfo (ctorName ctor) of
+            ImportedName{} -> pure ()
+            ModuleIdentifier i -> scmRegisterGlobal i c
+          pure c
+     -- Return Terms for data type and constructors.
+     pure (d, cs)
 
 --------------------------------------------------------------------------------
 -- Recursors

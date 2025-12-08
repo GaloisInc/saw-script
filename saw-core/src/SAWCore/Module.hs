@@ -64,6 +64,7 @@ module SAWCore.Module
   , insDefInMap
   , insInjectCodeInMap
   , insImportInMap
+  , insTypeDeclInMap
   ) where
 
 import Control.Monad (foldM)
@@ -342,6 +343,21 @@ completeDataType ident ctors mm0 =
     Nothing ->
       panic "completeDataType" ["datatype not found: " <> str]
 
+-- | Add a declaration for a datatype along with its constructors.
+-- Return 'Left' if there is a name clash with the data type name or
+-- any constructor name.
+insTypeDeclInMap :: DataType -> ModuleMap -> Either Name ModuleMap
+insTypeDeclInMap dt mm0 =
+  case lookupVarIndexInMap (nameIndex (dtName dt)) mm0 of
+    Just _ -> Left (dtName dt)
+    Nothing ->
+      do let mm1 =
+               case nameInfo (dtName dt) of
+                 ModuleIdentifier i ->
+                   insDeclInMap (identModule i) (TypeDecl dt) mm0
+                 ImportedName{} -> mm0
+         let rnames = ResolvedDataType dt : map ResolvedCtor (dtCtors dt)
+         foldM (flip insResolvedNameInMap) mm1 rnames
 
 -- | Get the resolved names that are local to a module
 localResolvedNames :: Module -> [ResolvedName]
