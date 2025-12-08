@@ -136,6 +136,9 @@ textToPrimitiveCellType = Map.fromList
   , ("$dff"         , CellTypeDff)
   , ("$ff"          , CellTypeFf)
   , ("$_BUF_"       , CellTypeBUF)
+  , ("$check"       , CellTypeCheck)
+  , ("$print"       , CellTypePrint)
+  , ("$scopeinfo"   , CellTypeScopeinfo)
   ]
 
 -- | Mapping from primitive cell types to textual representation
@@ -185,6 +188,9 @@ data CellType
   | CellTypeDff
   | CellTypeFf
   | CellTypeBUF
+  | CellTypeCheck
+  | CellTypePrint
+  | CellTypeScopeinfo
   | CellTypeUnsupportedPrimitive Text
   | CellTypeUserType Text
   deriving (Eq, Ord)
