@@ -390,6 +390,23 @@ does not provide a return value, SAW will reject the specification.
 Conversely, if the function’s return type is void/unit, a {llvm,jvm,mir}_return
 clause must not be present.
 
+When the specification should not constrain the function’s return value, introduce a fresh variable in the post-state and return it unchanged:
+
+:::{code-block} sawscript
+do {
+  ...
+  {llvm,jvm,mir}_execute_func <args>;
+  ...
+  ret <- {llvm,jvm,mir}_fresh_var "ret" <type>;
+  {llvm,jvm,mir}_return ({llvm,jvm,mir}_term ret);
+}
+:::
+
+This pattern asserts only that the function returns a value of the correct type, without placing any further requirements on what that value must be.
+
+
+
+
 ## A First Simple Example (Revisited)
 
 :::{warning}
