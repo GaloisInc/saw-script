@@ -351,33 +351,9 @@ typeCheckWHNF = liftTCM scWhnf
 -- types, i.e., that both have type Sort s for some s.
 checkSubtype :: Term -> Term -> TCM ()
 checkSubtype arg req_tp =
-  do arg_tp' <- liftTCM scWhnf =<< liftTCM scTypeOf arg
-     req_tp' <- liftTCM scWhnf req_tp
-     ok <- isSubtype arg_tp' req_tp'
-     if ok then return () else throwTCError $ SubtypeFailure arg req_tp
-
--- | Check if one type is a subtype of another, assuming both arguments are
--- types, i.e., that both have type Sort s for some s, and that they are both
--- already in WHNF
-isSubtype :: Term -> Term -> TCM Bool
-isSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi x2 a2 b2)
-  | x1 == x2 =
-    (&&) <$> areConvertible a1 a2 <*> isSubtype b1 b2
-  | otherwise =
-    do conv1 <- areConvertible a1 a2
-       var1 <- liftTCM scVariable x1 a1
-       let sub = IntMap.singleton (vnIndex x2) var1
-       b2' <- liftTCM scInstantiate sub b2
-       conv2 <- isSubtype b1 b2'
-       pure (conv1 && conv2)
-isSubtype (asSort -> Just s1) (asSort -> Just s2) | s1 <= s2 = return True
-isSubtype t1' t2' = areConvertible t1' t2'
-
--- | Check if two terms are "convertible for type-checking", meaning that they
--- are convertible up to the reductions performed by 'scWhnf'.
-areConvertible :: Term -> Term -> TCM Bool
-areConvertible t1 t2 = liftTCM scConvertibleEval scWhnf True t1 t2
-
+  do arg_tp <- liftTCM scTypeOf arg
+     ok <- liftTCM scSubtype arg_tp req_tp
+     unless ok $ throwTCError $ SubtypeFailure arg req_tp
 
 compileRecursor ::
   DataType ->
