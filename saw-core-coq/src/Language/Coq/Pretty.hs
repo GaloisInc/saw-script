@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
@@ -49,14 +50,14 @@ looseSepList s (d:l) = d <+> s <+> looseSepList s l
 
 commaSepList, starSepList, semiSepList :: [Doc ann] -> Doc ann
 commaSepList = tightSepList comma
-starSepList = looseSepList (text "*")
+starSepList = looseSepList "*"
 semiSepList = tightSepList semi
 
 period :: Doc ann
-period = text "."
+period = "."
 
 prettyIdent :: Ident -> Doc ann
-prettyIdent (Ident s) = text s
+prettyIdent (Ident s) = pretty s
 
 prettyNameType :: Ident -> Type -> Doc ann
 prettyNameType x ty = prettyIdent x <+> colon <+> prettyTerm PrecNone ty
@@ -71,13 +72,13 @@ prettyBinder b = case b of
 prettyPiBinder :: PiBinder -> Doc ann
 prettyPiBinder b = case b of
     PiBinder Nothing ty ->
-        prettyTerm PrecApp ty <+> text "->"
+        prettyTerm PrecApp ty <+> "->"
     PiBinder (Just x) ty ->
-        text "forall" <+> parens (prettyNameType x ty) <> comma
+        "forall" <+> parens (prettyNameType x ty) <> comma
     PiImplicitBinder Nothing ty ->
-        braces (prettyTerm PrecApp ty) <+> text "->"
+        braces (prettyTerm PrecApp ty) <+> "->"
     PiImplicitBinder (Just x) ty ->
-        text "forall" <+> braces (prettyNameType x ty) <> comma
+        "forall" <+> braces (prettyNameType x ty) <> comma
 
 prettyBinders :: [Binder] -> Doc ann
 prettyBinders bs = hsep $ map prettyBinder bs
@@ -88,9 +89,9 @@ prettyMaybeTy (Just ty) = colon <+> prettyTerm PrecNone ty
 
 prettySort :: Sort -> Doc ann
 prettySort s = case s of
-    Prop -> text "Prop"
-    Set -> text "Set"
-    Type -> text "Type"
+    Prop -> "Prop"
+    Set -> "Set"
+    Type -> "Type"
 
 prettyPiBinders :: [PiBinder] -> Doc ann
 prettyPiBinders bs = hsep $ map prettyPiBinder bs
@@ -110,25 +111,25 @@ prettyTerm p e =
   case e of
     Lambda bs t ->
       parensIf (p > PrecLambda) $
-      text "fun" <+> prettyBinders bs <+> text "=>" <+> prettyTerm PrecLambda t
+      "fun" <+> prettyBinders bs <+> "=>" <+> prettyTerm PrecLambda t
     Fix ident binders returnType body ->
       parensIf (p > PrecLambda) $
-      text "fix" <+> prettyIdent ident <+> prettyBinders binders <+> text ":"
-        <+> prettyTerm PrecNone returnType <+> text ":=" <+> prettyTerm PrecLambda body
+      "fix" <+> prettyIdent ident <+> prettyBinders binders <+> ":"
+        <+> prettyTerm PrecNone returnType <+> ":=" <+> prettyTerm PrecLambda body
     Pi bs t ->
       parensIf (p > PrecLambda) $
       prettyPiBinders bs <+> prettyTerm PrecLambda t
     Let x bs mty t body ->
       parensIf (p > PrecLambda) $
       fillSep
-      [ text "let" <+> prettyIdent x <+> prettyBinders bs <+> prettyMaybeTy mty <+>
-        text ":=" <+> prettyTerm PrecNone t <+> text "in"
+      [ "let" <+> prettyIdent x <+> prettyBinders bs <+> prettyMaybeTy mty <+>
+        ":=" <+> prettyTerm PrecNone t <+> "in"
       , prettyTerm PrecLambda body ]
     If c t f ->
       parensIf (p > PrecLambda) $
-      text "if" <+> prettyTerm PrecNone c <+>
-      text "then" <+> prettyTerm PrecNone t <+>
-      text "else" <+> prettyTerm PrecLambda f
+      "if" <+> prettyTerm PrecNone c <+>
+      "then" <+> prettyTerm PrecNone t <+>
+      "else" <+> prettyTerm PrecLambda f
     App f [] ->
       prettyTerm p f
     App f args ->
@@ -143,11 +144,11 @@ prettyTerm p e =
       string "@" <> prettyIdent x
     Ascription tm tp ->
       parensIf (p > PrecLambda)
-      (prettyTerm PrecApp tm <+> text ":" <+> prettyTerm PrecApp tp)
+      (prettyTerm PrecApp tm <+> ":" <+> prettyTerm PrecApp tp)
     NatLit i ->
       if i > 1000 then
         -- Explicitly convert from Z if an integer is too big
-        parensIf (p > PrecLambda) (text "Z.to_nat" <+> integer i <> text "%Z")
+        parensIf (p > PrecLambda) ("Z.to_nat" <+> integer i <> "%Z")
       else
         integer i
     ZLit i ->
@@ -161,50 +162,50 @@ prettyTerm p e =
     StringLit s ->
       dquotes (string $ escapeStringLit s)
     Scope term scope ->
-      prettyTerm PrecAtom term <> text "%" <> text scope
+      prettyTerm PrecAtom term <> "%" <> text scope
     Ltac s ->
-      text "ltac:" <> parens (string s)
+      "ltac:" <> parens (string s)
 
 prettyDecl :: Decl -> Doc ann
 prettyDecl decl = case decl of
   Axiom nm ty ->
     nest 2 (
-      hsep [text "Axiom", prettyIdent nm, text ":", prettyTerm PrecNone ty, period]
+      hsep ["Axiom", prettyIdent nm, ":", prettyTerm PrecNone ty, period]
     ) <> hardline
   Parameter nm ty ->
     nest 2 (
-     hsep [text "Parameter", prettyIdent nm, text ":", prettyTerm PrecNone ty, period]
+     hsep ["Parameter", prettyIdent nm, ":", prettyTerm PrecNone ty, period]
     ) <> hardline
   Variable nm ty ->
     nest 2 (
-      hsep [text "Variable", prettyIdent nm, text ":", prettyTerm PrecNone ty, period]
+      hsep ["Variable", prettyIdent nm, ":", prettyTerm PrecNone ty, period]
     ) <> hardline
   Comment s ->
-    text "(*" <+> text s <+> text "*)" <> hardline
+    "(*" <+> text s <+> "*)" <> hardline
   Definition nm bs mty body ->
     nest 2 (
       vsep
-      [ hsep ([text "Definition", prettyIdent nm] ++
+      [ hsep (["Definition", prettyIdent nm] ++
              map prettyBinder bs ++
-             [prettyMaybeTy mty, text ":="])
+             [prettyMaybeTy mty, ":="])
       , prettyTerm PrecNone body <> period
       ]
     ) <> hardline
   InductiveDecl ind -> prettyInductive ind
   Section nm ds ->
     vsep $ concat
-     [ [ hsep [text "Section", prettyIdent nm, period] ]
+     [ [ hsep ["Section", prettyIdent nm, period] ]
      , map (indent 2 . prettyDecl) ds
-     , [ hsep [text "End", prettyIdent nm, period] ]
+     , [ hsep ["End", prettyIdent nm, period] ]
      ]
   Snippet s -> text s
 
 prettyConstructor :: Constructor -> Doc ann
 prettyConstructor (Constructor {..}) =
   nest 2 $
-  hsep [ text "|"
+  hsep [ "|"
        , prettyIdent constructorName
-       , text ":"
+       , ":"
        , prettyTerm PrecNone constructorType
        ]
 
@@ -212,14 +213,14 @@ prettyInductive :: Inductive -> Doc ann
 prettyInductive (Inductive {..}) =
   (vsep
    ([ nest 2 $
-      hsep ([ text "Inductive"
+      hsep ([ "Inductive"
             , prettyIdent inductiveName
             ]
             ++ map prettyBinder inductiveParameters
-            ++ [ text ":" ]
+            ++ [ ":" ]
             ++ map prettyPiBinder inductiveIndices
             ++ [ prettySort inductiveSort ]
-            ++ [ text ":="]
+            ++ [ ":="]
            )
     ]
     <> map prettyConstructor inductiveConstructors
