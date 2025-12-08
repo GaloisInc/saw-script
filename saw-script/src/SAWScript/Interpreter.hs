@@ -3298,10 +3298,9 @@ primitives = Map.fromList $
   , prim "set_crucible_timeout" "Int -> TopLevel ()"
     (pureVal set_crucible_timeout)
     Experimental
-    -- XXX this is ignored by JVM/MIR verification; see #2803
-    [ "Set the timeout for the SMT solver during the LLVM and x86"
-    , "Crucible symbolic execution, in milliseconds. The default is"
-    , "10000 (10 seconds). Set it to 0 to disable the timeout."
+    [ "Set the timeout for the SMT solver during Crucible symbolic"
+    , "execution, in milliseconds. The default is 10000 (10 seconds)."
+    , "Set it to 0 to disable the timeout."
     , ""
     , "This setting is used for path-satisfiability checks and"
     , "satisfiability checks when applying overrides."
