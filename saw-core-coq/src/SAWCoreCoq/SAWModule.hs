@@ -196,11 +196,11 @@ translateDecl configuration modname mm decl =
   TypeDecl td -> do
     case runModuleTranslationMonad configuration modname mm (translateDataType td) of
       Left e -> error $ show e
-      Right (tdecl, _) -> Coq.ppDecl tdecl
+      Right (tdecl, _) -> Coq.prettyDecl tdecl
   DefDecl dd -> do
     case runModuleTranslationMonad configuration modname mm (translateDef dd) of
       Left e -> error $ show e
-      Right (tdecl, _) -> Coq.ppDecl tdecl
+      Right (tdecl, _) -> Coq.prettyDecl tdecl
   InjectCodeDecl ns txt
     | ns == "Coq" -> pretty txt
     | otherwise   -> mempty

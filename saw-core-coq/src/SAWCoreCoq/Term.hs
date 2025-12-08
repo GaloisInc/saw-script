@@ -748,7 +748,7 @@ translateTermToDocWith configuration r mm globalDecls localEnv f t tp_trm = do
   let decls = view topLevelDeclarations state
   return $
     vcat $
-    [ (vcat . intersperse hardline . map Coq.ppDecl . reverse) decls
+    [ (vcat . intersperse hardline . map Coq.prettyDecl . reverse) decls
     , if null decls then mempty else hardline
     , f term tp
     ]
@@ -764,4 +764,4 @@ translateDefDoc ::
   Either (TranslationError Term) (Doc ann)
 translateDefDoc configuration r mm globalDecls name =
   translateTermToDocWith configuration r mm globalDecls [name]
-  (\ t tp -> Coq.ppDecl $ mkDefinition name t tp)
+  (\ t tp -> Coq.prettyDecl $ mkDefinition name t tp)
