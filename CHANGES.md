@@ -1,5 +1,17 @@
 # next -- TBA
 
+* `mir_verify` now enforces correctness checks that match the existing
+  behavior of `llvm_verify` and `jvm_verify`:
+
+  1. A specification must include **exactly one** `mir_execute_func`
+     command. Omitted calls now produce a `MIRExecuteMissing` error,
+     and multiple calls continue to be rejected with
+     `SetupMultipleExecute`. 
+
+  2. For functions that return a value (i.e., functions whose return
+     type is not void), a `mir_return` specification is now required.
+     Missing return values produce a `MIRReturnMissing` error. 
+
 This release supports [version
 6](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#6) of
 `mir-json`'s schema.

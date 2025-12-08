@@ -853,10 +853,32 @@ mir_unsafe_assume_spec rm nm setup =
      let loc = SS.toW4Loc "_SAW_mir_unsafe_assume_spec" pos
      fn <- findFn rm nm
      let st0 = initialCrucibleSetupState cc fn loc
-     ms <- (view Setup.csMethodSpec) <$>
-             execStateT (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO) st0
+     ms <- execMIRSetup setup st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
      returnMIRProof ps
+
+
+execMIRSetup ::
+  MIRSetupM a ->
+  Setup.CrucibleSetupState MIR ->
+  TopLevel MethodSpec
+execMIRSetup setup st0 = do
+  st' <- execStateT (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO) st0
+
+  -- check for missing mir_execute_func
+  unless (st' ^. Setup.csPrePost == MS.PostState) $
+    X.throwM MIRExecuteMissing
+
+  -- check that mir_return value is present if return type is non-void
+  let mspec = st' ^. Setup.csMethodSpec
+  case mspec ^. MS.csRet of
+    Nothing -> pure ()
+    Just retTy ->
+      case mspec ^. MS.csRetValue of
+        Just _  -> pure ()
+        Nothing -> X.throwM (MIRReturnMissing retTy)
+
+  pure mspec
 
 mir_verify ::
   Mir.RustModule ->
@@ -892,10 +914,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
 
      -- execute commands of the method spec
      io $ W4.setCurrentProgramLoc sym loc
-     methodSpec <- view Setup.csMethodSpec <$>
-                     execStateT
-                       (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO)
-                     st0
+     methodSpec <- execMIRSetup setup st0
 
      printOutLnTop Info $
        unwords ["Verifying", show (methodSpec ^. MS.csMethod), "..."]
@@ -2375,6 +2394,7 @@ data MIRSetupError
   | MIRArgNumberWrong Int Int -- number expected, number found
   | MIRReturnUnexpected Mir.Ty -- found
   | MIRReturnTypeMismatch Mir.Ty Mir.Ty -- expected, found
+  | MIRReturnMissing Mir.Ty -- expected
   | MIREnumValueVariantNotFound Mir.DefId Text
   | MIREnumValueNonEnum Mir.DefId String -- The String is either \"struct\" or \"union\"
   | MIRVecOfContentsNotArray Mir.Ty
@@ -2383,6 +2403,7 @@ data MIRSetupError
       Mir.Ty -- ^ element type of the contents argument
   | MIRVecOfElemTyNotSized Mir.Ty
   | MIRVecOfElemTyNoLayoutInfo Mir.Ty
+  | MIRExecuteMissing
 
 instance X.Exception MIRSetupError where
   toException = topLevelExceptionToException
@@ -2420,6 +2441,11 @@ instance Show MIRSetupError where
         , "Expected type: " ++ show (PP.pretty expected)
         , "Given type:    " ++ show (PP.pretty found)
         ]
+      MIRReturnMissing expected ->
+        unlines
+        [ "mir_return: Missing return value specification"
+        , "Expected type: " ++ show (PP.pretty expected)
+        ]
       MIREnumValueVariantNotFound adtNm variantNm ->
         unlines
         [ "mir_enum_value: Could not find a variant named `" ++ Text.unpack variantNm ++ "`"
@@ -2445,3 +2471,5 @@ instance Show MIRSetupError where
       MIRVecOfElemTyNoLayoutInfo elemTy ->
         "mir_vec_of: No layout info for element type "
           ++ show (PP.pretty elemTy)
+      MIRExecuteMissing ->
+        "MIRSetup: Missing mir_execute_func specification"

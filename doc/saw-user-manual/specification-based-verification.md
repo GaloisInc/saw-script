@@ -144,6 +144,12 @@ initial state. Most of the commands available for state description will work
 either before or after `{llvm,jvm,mir}_execute_func`, though with slightly
 different meaning, as described below.
 
+:::{note}
+Every `{LLVM,JVM,MIR}Setup` block **must contain exactly one**
+`{llvm,jvm,mir}_execute_func` invocation. If it is omitted, SAW will reject
+the specification.
+:::
+
 ## Creating Fresh Variables
 
 In any case where you want to prove a property of a function for an entire
@@ -363,6 +369,10 @@ of the state elements already configured.
 - `jvm_execute_func : [JVMValue] -> JVMSetup ()`
 - `mir_execute_func : [MIRValue] -> MIRSetup ()`
 
+Every `{llvm,jvm,mir}_execute_func` specification block **must contain exactly
+one** execution command. SAW now rejects any specification that omits the
+corresponding `{llvm,jvm,mir}_execute_func`.
+
 ## Return Values
 
 To specify the value that should be returned by the function being
@@ -371,6 +381,14 @@ verified use the `{llvm,jvm,mir}_return` command.
 - `llvm_return : LLVMValue -> LLVMSetup ()`
 - `jvm_return : JVMValue -> JVMSetup ()`
 - `mir_return : MIRValue -> MIRSetup ()`
+
+For functions whose return type is non-void, SAW requires that the
+corresponding specification include exactly one `{llvm,jvm,mir}_return`
+in the post-state. If the function returns a non-void value and the spec
+does not provide a return value, SAW will reject the specification.
+
+Conversely, if the function’s return type is void/unit, a {llvm,jvm,mir}_return
+clause must not be present.
 
 ## A First Simple Example (Revisited)
 

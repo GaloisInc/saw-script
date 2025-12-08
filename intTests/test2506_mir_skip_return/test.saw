@@ -1,0 +1,11 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let bad_spec : MIRSetup () =
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    mir_execute_func [mir_term x];
+  };
+
+mir_verify m "test/3f761c92::id" [] false bad_spec z3;

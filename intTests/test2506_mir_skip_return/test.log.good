@@ -1,0 +1,5 @@
+Loading file "test.saw"
+mir_return: Missing return value specification
+Expected type: u32
+
+FAILED
