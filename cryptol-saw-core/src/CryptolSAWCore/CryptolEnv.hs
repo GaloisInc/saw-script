@@ -67,7 +67,7 @@ import CryptolSAWCore.Panic
 import SAWCore.Name (nameInfo)
 import SAWCore.Recognizer (asConstant)
 import SAWCore.SharedTerm (NameInfo, SharedContext, Term)
-import SAWCore.Term.Pretty (showTerm)
+import SAWCore.Term.Pretty (ppTermPureDefaults)
 
 import qualified CryptolSAWCore.Cryptol as C
 
@@ -809,7 +809,7 @@ updateFFITypes m eTermEnv' eFFITypes' =
             panic "updateFFITypes" [
                 "SAWCore term of Cryptol name is not Constant",
                 "Name: " <> Text.pack (show nm),
-                "Term: " <> Text.pack (showTerm tm)
+                "Term: " <> Text.pack (ppTermPureDefaults tm)
             ]
       Nothing ->
         panic "updateFFITypes" [

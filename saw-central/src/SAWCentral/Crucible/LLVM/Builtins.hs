@@ -167,7 +167,6 @@ import SAWCore.FiniteValue (ppFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
-import SAWCore.Term.Pretty (showTerm)
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -2376,10 +2375,13 @@ llvm_symbolic_alloc ro align_bytes sz =
               , "unexpected type of size term, expected [64], found"
               , Cryptol.pretty tp
               ]
-       _ -> throwCrucibleSetup loc $ unwords
+       _ -> do
+           opts <- lift $ lift $ gets rwPPOpts
+           sz' <- liftIO $ ppTerm sc opts sz
+           throwCrucibleSetup loc $ unwords
               [ "llvm_symbolic_alloc:"
               , "unexpected term, expected term of type [64], but got"
-              , showTerm sz
+              , sz'
               ]
 
      tags <- view Setup.croTags
@@ -2651,10 +2653,14 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
               , "unexpected type of size term, expected [64], found"
               , Cryptol.pretty ty
               ]
-       _ -> throwCrucibleSetup loc $ unwords
+       _ -> do
+           sc <- lift $ lift $ getSharedContext
+           opts <- lift $ lift $ gets rwPPOpts
+           sz' <- liftIO $ ppTerm sc opts (ttTerm sz)
+           throwCrucibleSetup loc $ unwords
               [ "llvm_points_to_array_prefix:"
               , "unexpected size term, expected term of type [64], but got"
-              , showTerm (ttTerm sz)
+              , sz'
               ]
 
      Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -> Crucible.withPtrWidth wptr $

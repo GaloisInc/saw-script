@@ -41,6 +41,7 @@ module SAWCentral.Crucible.LLVM.FFI
   ) where
 
 import           Control.Monad
+import           Control.Monad.State                  (gets)
 import           Control.Monad.Trans
 import           Data.Bits                            (finiteBitSize)
 import           Data.Foldable
@@ -80,7 +81,6 @@ import qualified SAWCore.OpenTerm as OT
 import           SAWCore.Prelude
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm as Term
-import           SAWCore.Term.Pretty (showTerm)
 import           CryptolSAWCore.TypedTerm
 
 -- | Commonly used things that need to be passed around.
@@ -179,9 +179,11 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
 
 -- | Report an error in generating setup for a foreign function.
 throwFFISetup :: Ctx => String -> LLVMCrucibleSetupM a
-throwFFISetup msg =
+throwFFISetup msg = do
+  opts <- llvmTopLevel $ gets rwPPOpts
+  tm' <- llvmTopLevel $ io $ ppTerm (sc ?ctx) opts (funTerm ?ctx)
   throwLLVMFun "llvm_ffi_setup" $
-    "Cannot generate FFI setup for " ++ showTerm (funTerm ?ctx) ++ ":\n" ++ msg
+    "Cannot generate FFI setup for " ++ tm' ++ ":\n" ++ msg
 
 -- | Given a list of type parameters and their actual values as terms, create a
 -- type environment binding them.
@@ -192,9 +194,12 @@ buildTypeEnv (param:params) (argTerm:argTerms) =
     Just [asNat -> Just n] ->
       bindTypeVar (Cry.TVBound param) (Left (Nat (toInteger n))) <$>
         buildTypeEnv params argTerms
-    _ ->
+    _ -> do
+      sc <- llvmTopLevel getSharedContext
+      opts <- llvmTopLevel $ gets rwPPOpts
+      argTerm' <- llvmTopLevel $ io $ ppTerm sc opts argTerm
       throwFFISetup $
-        "Not a numeric literal type argument: " ++ showTerm argTerm
+        "Not a numeric literal type argument: " ++ argTerm'
 buildTypeEnv params [] = throwFFISetup $
   "Foreign function not fully instantiated;\n"
   ++ "Missing type arguments for: " ++ intercalate ", " (map pretty params)

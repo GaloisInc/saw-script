@@ -109,7 +109,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 import           SAWCore.Name (VarName(..))
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
-import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
+import           SAWCore.Term.Pretty (prettyTermPure)
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 
 import qualified Cryptol.Utils.PP as Cryptol (pp)
@@ -327,8 +327,8 @@ ppOverrideFailureReason rsn = case rsn of
   BadTermMatch x y ->
     PP.vcat
     [ PP.pretty "terms do not match"
-    , PP.indent 2 (PP.unAnnotate (ppTerm PPS.defaultOpts x))
-    , PP.indent 2 (PP.unAnnotate (ppTerm PPS.defaultOpts y))
+    , PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts x))
+    , PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts y))
     ]
   BadPointerCast ->
     PP.pretty "bad pointer cast"
@@ -730,8 +730,8 @@ matchTerm sc md prepost real expect =
             let ppOpts = PPS.defaultOpts
             -- clamp the print depth to 20
             let ppOpts' = PPS.limitMaxDepth ppOpts 20
-                expect' = scPrettyTerm ppOpts' expect
-                real' = scPrettyTerm ppOpts' real
+            expect' <- liftIO $ SAWVerifier.ppTerm sc ppOpts' expect
+            real' <- liftIO $ SAWVerifier.ppTerm sc ppOpts' real
             let msg = unlines $
                   [ "Literal equality " ++ MS.stateCond prepost
                   , "Expected term: "

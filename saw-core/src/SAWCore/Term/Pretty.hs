@@ -14,15 +14,15 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.Term.Pretty
-  ( ppTerm
-  , ppTermInCtx
-  , showTerm
-  , scPrettyTerm
-  , ppTermWithNames
-  , showTermWithNames
+  ( prettyTermPure
+  , ppTermPure
+  , ppTermPureDefaults
+  , ppTermWithEnv
+  , prettyTermWithEnv
+  , prettyTermWithNameList
+  , prettyTermContainerWithEnv
   , scTermCount
   , shouldMemoizeTerm
-  , ppTermContainerWithNames
   ) where
 
 import Data.Char (intToDigit, isDigit)
@@ -639,14 +639,18 @@ prettyTermInBinder prec (VarName i basename) trm =
   withBoundVarM (VarName i nm) $ prettyTermWithMemoTable prec False trm
 
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
--- more than once at the same binding level
-ppTerm :: PPS.Opts -> Term -> PPS.Doc
-ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv
+--   more than once at the same binding level.
+--
+--   Does not integrate the current `DisplayNameEnv` from the
+--   `SharedContext`; use prettyTerm instead unless you really can't
+--   get the `SharedContext` and/or can't afford to be in `IO`.
+prettyTermPure :: PPS.Opts -> Term -> PPS.Doc
+prettyTermPure opts = prettyTermWithEnv opts emptyDisplayNameEnv
 
--- | Like 'ppTerm', but also supply a context of bound names, where
+-- | Like 'prettyTermPure', but also supply a context of bound names, where
 -- the earliest-bound variable is listed first in the context.
-ppTermInCtx :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
-ppTermInCtx opts ctx trm =
+prettyTermWithNameList :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
+prettyTermWithNameList opts ctx trm =
   runPPM opts emptyDisplayNameEnv $
   -- reserve names from ctx first, so that they get priority naming
   withVarNames ctx $
@@ -654,15 +658,25 @@ ppTermInCtx opts ctx trm =
   withVarNames (Set.toList (termVarNames trm) \\ ctx) $
   prettyTermWithMemoTable PrecTerm True trm
 
--- | Pretty-print a term and render it to a string, using the given options
-scPrettyTerm :: PPS.Opts -> Term -> String
-scPrettyTerm opts t =
-  PPS.render opts $ ppTerm opts t
+-- | Pretty-print a term and render it to a string, using the given options.
+--
+--   Does not integrate the current `DisplayNameEnv` from the
+--   `SharedContext`; use ppTerm instead unless you really can't get
+--   the `SharedContext` and/or can't afford to be in `IO`.
+ppTermPure :: PPS.Opts -> Term -> String
+ppTermPure opts t =
+  PPS.render opts $ prettyTermPure opts t
 
-
--- | Pretty-print a term and render it to a string
-showTerm :: Term -> String
-showTerm t = scPrettyTerm PPS.defaultOpts t
+-- | Pretty-print a term and render it to a string, using default options.
+--
+--   Does not integrate the current `DisplayNameEnv` from the
+--   `SharedContext`; use ppTerm instead unless you really can't get
+--   the `SharedContext` and/or can't afford to be in `IO`.
+--
+--   Even then, use `ppTermPure` unless you really don't have the
+--   prettyprinting options and can't get them.
+ppTermPureDefaults :: Term -> String
+ppTermPureDefaults t = ppTermPure PPS.defaultOpts t
 
 
 --------------------------------------------------------------------------------
@@ -671,22 +685,22 @@ showTerm t = scPrettyTerm PPS.defaultOpts t
 
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
 -- more than once at the same binding level
-ppTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> PPS.Doc
-ppTermWithNames opts ne trm =
+prettyTermWithEnv :: PPS.Opts -> DisplayNameEnv -> Term -> PPS.Doc
+prettyTermWithEnv opts ne trm =
   runPPM opts ne $
   withVarNames (Set.toList (termVarNames trm)) $
   prettyTermWithMemoTable PrecTerm True trm
 
-showTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> String
-showTermWithNames opts ne trm =
-  PPS.render opts $ ppTermWithNames opts ne trm
+ppTermWithEnv :: PPS.Opts -> DisplayNameEnv -> Term -> String
+ppTermWithEnv opts ne trm =
+  PPS.render opts $ prettyTermWithEnv opts ne trm
 
 
-ppTermContainerWithNames ::
+prettyTermContainerWithEnv ::
   (Traversable m) =>
   (m PPS.Doc -> PPS.Doc) ->
   PPS.Opts -> DisplayNameEnv -> m Term -> PPS.Doc
-ppTermContainerWithNames ppContainer opts ne trms =
+prettyTermContainerWithEnv prettyContainer opts ne trms =
   let min_occs = PPS.ppMinSharing opts
       global_p = True
       occPairs = IntMap.assocs $
@@ -697,4 +711,4 @@ ppTermContainerWithNames ppContainer opts ne trms =
    in runPPM opts ne $
       withVarNames (Set.toList (Fold.foldMap termVarNames trms)) $
       prettyLets global_p occPairs []
-        (ppContainer <$> traverse (prettyTerm' PrecTerm) trms)
+        (prettyContainer <$> traverse (prettyTerm' PrecTerm) trms)

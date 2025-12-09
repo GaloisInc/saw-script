@@ -669,10 +669,10 @@ showSimpset opts ss =
     ppRule r =
       PP.pretty '*' PP.<+>
       (PP.nest 2 $ PP.fillSep
-       [ ppTerm vars (lhsRewriteRule r)
-       , PP.pretty '=' PP.<+> ppTerm vars (rhsRewriteRule r) ])
+       [ ppTerm' vars (lhsRewriteRule r)
+       , PP.pretty '=' PP.<+> ppTerm' vars (rhsRewriteRule r) ])
       where vars = map fst (ctxtRewriteRule r)
-    ppTerm vars t = SAWCorePP.ppTermInCtx opts vars t
+    ppTerm' vars t = SAWCorePP.prettyTermWithNameList opts vars t
 
 -- XXX the precedence in here needs to be cleaned up
 showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
@@ -700,7 +700,7 @@ showsPrecValue opts nenv p v =
       let name' = PP.pretty name in
       shows $ PP.sep ["<<", "builtin", name', ">>"]
 
-    VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
+    VTerm t -> showString (SAWCorePP.ppTermWithEnv opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn _pos _chain v' ->
       showString "return " . showsPrecValue opts nenv (p + 1) v'

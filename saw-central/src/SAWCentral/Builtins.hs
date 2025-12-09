@@ -75,7 +75,6 @@ import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
 import SAWCore.Typechecker (tcInsertModule, inferCompleteTerm)
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import CryptolSAWCore.TypedTerm
 
 import SAWCore.Prim (rethrowEvalError)
@@ -393,7 +392,7 @@ show_term :: Term -> TopLevel Text
 show_term t =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
-     str <- liftIO $ scShowTerm sc opts t
+     str <- liftIO $ ppTerm sc opts t
      return $ Text.pack str
 
 print_term :: Term -> TopLevel ()
@@ -406,7 +405,7 @@ print_term_depth d t =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      let opts' = opts { PPS.ppMaxDepth = Just d }
-     output <- liftIO $ scShowTerm sc opts' t
+     output <- liftIO $ ppTerm sc opts' t
      printOutLnTop Info output
 
 goalSummary :: ProofGoal -> String
@@ -1218,7 +1217,10 @@ proveHelper nm script t f = do
                           ++ SV.showsProofResult opts res ""
   case res of
     ValidProof _stats thm ->
-      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm opts t)
+      do
+         sc <- getSharedContext
+         t' <- liftIO $ ppTerm sc opts t
+         printOutLnTop Debug $ "Valid: " ++ t'
          SV.returnTheoremProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
@@ -1234,8 +1236,8 @@ proveByBVInduction script t =
      opts <- getTopLevelPPOpts
      ty <- io $ scTypeOf sc (ttTerm t)
      io (checkInductionScheme sc opts [] ty) >>= \case
-       Nothing -> badTy opts ty
-       Just ([],_) -> badTy opts ty
+       Nothing -> badTy sc opts ty
+       Just ([],_) -> badTy sc opts ty
        Just (pis,w) ->
 
          -- This is a whole bunch of gross SAWCore manipulation to build a custom
@@ -1390,10 +1392,11 @@ proveByBVInduction script t =
                     _ -> return Nothing
              _ -> return Nothing
 
-  badTy opts ty =
+  badTy sc opts ty = do
+    ty' <- liftIO $ ppTerm sc opts ty
     fail $ unlines [ "Incorrect type for proof by induction!"
                    , "Run `:help prove_by_bv_induction` to see a description of what is expected."
-                   , show (ppTerm opts ty)
+                   , ty'
                    ]
 
 provePrintPrim ::
@@ -1562,7 +1565,8 @@ print_type t = do
   sc <- getSharedContext
   opts <- getTopLevelPPOpts
   ty <- io $ scTypeOf sc t
-  printOutLnTop Info (scPrettyTerm opts ty)
+  ty' <- io $ ppTerm sc opts ty
+  printOutLnTop Info ty'
 
 check_term :: TypedTerm -> TopLevel ()
 check_term tt = do
@@ -1577,13 +1581,15 @@ check_term tt = do
       TypedTermKind k -> io $ Cryptol.importKind sc k
       TypedTermOther ty' -> pure ty'
   convertible <- io $ scConvertible sc True ty expectedTy
-  unless convertible $
-    panic "check_term"
-    [ "Term's actual type does not match its attached type:"
-    , "Expected: " <> Text.pack (scPrettyTerm opts expectedTy)
-    , "Actual: " <> Text.pack (scPrettyTerm opts ty)
-    ]
-  printOutLnTop Info (scPrettyTerm opts ty)
+  ty' <- liftIO $ ppTerm sc opts ty
+  unless convertible $ do
+    expectedTy' <- liftIO $ ppTerm sc opts expectedTy
+    panic "check_term" [
+        "Term's actual type does not match its attached type:",
+        "Expected attached type: " <> Text.pack expectedTy',
+        "Actual type: " <> Text.pack ty'
+     ]
+  printOutLnTop Info ty'
 
 check_goal :: ProofScript ()
 check_goal =
