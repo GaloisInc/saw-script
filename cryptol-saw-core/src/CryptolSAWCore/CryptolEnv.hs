@@ -63,6 +63,10 @@ import System.Environment (lookupEnv)
 import System.Environment.Executable (splitExecutablePath)
 import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
+import qualified Prettyprinter as PP
+
+import qualified SAWSupport.Pretty as PPS
+
 import CryptolSAWCore.Panic
 import SAWCore.Name (nameInfo)
 import SAWCore.Recognizer (asConstant)
@@ -534,9 +538,10 @@ showExtCryptolModule =
               , s
               ]
     ECM_CryptolModule cm  ->
-      unlines  [ "Internal module:"
-               , showCryptolModule cm
-               ]
+      PPS.render PPS.defaultOpts $ PP.vsep [
+          "Internal module:",
+          prettyCryptolModule cm
+      ]
 
 -- | loadCryptolModule - load a cryptol module and return the
 -- `ExtCryptolModule`.  The contents of the module are not directly
@@ -559,7 +564,10 @@ loadExtCryptolModule ::
 loadExtCryptolModule sc env path =
   do
   (m, env') <- loadAndTranslateModule sc env (Left path)
-  let s = "Public interface:\n" ++ showCryptolModule (mkCryptolModule m env')
+  let s = PPS.render PPS.defaultOpts $ PP.vsep [
+              "Public interface",
+              prettyCryptolModule (mkCryptolModule m env')
+          ]
           -- How to show, need to compute this here, because the show function
           -- (of course) has no access to the state.
           --
@@ -567,6 +575,9 @@ loadExtCryptolModule sc env path =
           -- extractable, we should show the whole thing with public,
           -- private, typesyns, constructors, submodules.
           -- See Issue #2700
+          --
+          -- FUTURE: there's no remaining barrier to giving
+          -- prettyCryptolModule access to whatever state it wants.
   return (ECM_LoadedModule (locatedUnknown (T.mName m)) s, env')
 
 
