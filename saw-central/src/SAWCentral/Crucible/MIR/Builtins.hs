@@ -699,11 +699,13 @@ mir_return retVal =
      valTy <- typeOfSetupValue cc env nameEnv retVal
      case mspec ^. MS.csRet of
        Nothing ->
-         X.throwM (MIRReturnUnexpected valTy)
+         unless (checkCompatibleTys (Mir.TyTuple []) valTy) $
+           X.throwM (MIRReturnUnexpected valTy)
        Just retTy ->
          unless (checkCompatibleTys retTy valTy) $
-         X.throwM (MIRReturnTypeMismatch retTy valTy)
+           X.throwM (MIRReturnTypeMismatch retTy valTy)
      Setup.crucible_return retVal
+
 
 mir_assert :: TypedTerm -> MIRSetupM ()
 mir_assert term = MIRSetupM $ do
@@ -857,23 +859,28 @@ mir_unsafe_assume_spec rm nm setup =
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
      returnMIRProof ps
 
-
 execMIRSetup ::
   MIRSetupM a ->
   Setup.CrucibleSetupState MIR ->
   TopLevel MethodSpec
 execMIRSetup setup st0 = do
-  st' <- execStateT (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO) st0
+  st' <- execStateT
+           (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO)
+           st0
 
-  -- check for missing mir_execute_func
+  -- Exactly one mir_execute_func is required
   unless (st' ^. Setup.csPrePost == MS.PostState) $
     X.throwM MIRExecuteMissing
 
-  -- check that mir_return value is present if return type is non-void
   let mspec = st' ^. Setup.csMethodSpec
+
+  -- mir_return is required unless the return type is ()
   case mspec ^. MS.csRet of
-    Nothing -> pure ()
+    Nothing ->
+      pure ()
+
     Just retTy ->
+      -- non-unit return types: mir_return is required
       case mspec ^. MS.csRetValue of
         Just _  -> pure ()
         Nothing -> X.throwM (MIRReturnMissing retTy)
@@ -1573,17 +1580,42 @@ verifyPoststate cc mspec env0 globals ret mdMap =
          return (Crucible.simErrorReasonMsg err, md, obligation)
 
     matchResult opts sc =
-      case (ret, mspec ^. MS.csRetValue) of
-        (Just r, Just expect) ->
-            let md = MS.ConditionMetadata
-                     { MS.conditionLoc = mspec ^. MS.csLoc
-                     , MS.conditionTags = mempty
-                     , MS.conditionType = "return value matching"
-                     , MS.conditionContext = ""
-                     } in
-            matchArg opts sc cc mspec MS.PostState md r expect
-        (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected mir_return specification"
-        _ -> return ()
+      case (mspec ^. MS.csRet, ret, mspec ^. MS.csRetValue) of
+        -- Non-unit return: both execution and spec have a value, so match them.
+        (Just _, Just r, Just expect) ->
+          let md = MS.ConditionMetadata
+                   { MS.conditionLoc = mspec ^. MS.csLoc
+                   , MS.conditionTags = mempty
+                   , MS.conditionType = "return value matching"
+                   , MS.conditionContext = ""
+                   }
+          in
+          matchArg opts sc cc mspec MS.PostState md r expect
+
+        -- Unit-returning function: mir_return is optional.
+        -- No MIR return value exists, so there is nothing to match.
+        (Nothing, Nothing, Nothing) -> pure ()  -- implicit unit, no mir_return
+        (Nothing, Nothing, Just _)  -> pure ()  -- explicit mir_return (), already type-checked
+
+        -- Non-unit function: spec says there *should* be a return, but
+        -- symbolic execution didn’t produce one.
+        (Just _, Nothing, Just _) ->
+          fail "verifyPoststate (MIR): missing return value from execution for non-unit function"
+
+        -- Non-unit function: method has a return type, but the spec never
+        -- called mir_return.
+        (Just _, Nothing, Nothing) ->
+          fail "verifyPoststate (MIR): missing mir_return specification for non-unit function"
+
+        -- Execution produced a value for a non-unit function, but spec
+        -- didn’t have mir_return. This “shouldn’t happen”, but treat it
+        -- as a hard error rather than silently ignoring it.
+        (Just _, Just _, Nothing) ->
+          fail "verifyPoststate (MIR): non-unit function without mir_return (internal inconsistency)"
+
+        -- Unit-returning function produced a MIRVal – also “shouldn’t happen”.
+        (Nothing, Just _, _) ->
+          fail "verifyPoststate (MIR): unit-returning function produced a return value (internal inconsistency)"
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
@@ -1611,9 +1643,6 @@ verifyPrestate ::
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals0 =
   do let sym = cc^.mccSym
-     let tyenv = MS.csAllocations mspec
-     let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
-
      let prestateLoc = W4.mkProgramLoc "_SAW_MIR_verifyPrestate" W4.InternalPos
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
@@ -1628,23 +1657,7 @@ verifyPrestate cc mspec globals0 =
        setupPrestateConditions mspec cc env globals2 (mspec ^. MS.csPreState . MS.csConditions)
      args <- resolveArguments cc mspec env
 
-     -- Check the type of the return setup value
-     let methodStr = show (mspec ^. MS.csMethod)
-     case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
-       (Just _, Nothing) ->
-            fail $ unlines
-              [ "Return value specified, but method " ++ methodStr ++
-                " has void return type"
-              ]
-       (Just sv, Just retTy) ->
-         do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
-            unless (checkCompatibleTys retTy retTy') $
-              fail $ unlines
-              [ "Incompatible types for return value when verifying " ++ methodStr
-              , "Expected: " ++ show retTy
-              , "but given value of type: " ++ show retTy'
-              ]
-       (Nothing, _) -> return ()
+
 
      return (args, cs, env, globals3)
 
@@ -2143,7 +2156,9 @@ setupCrucibleContext rm =
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
      sym <- io $ newSAWCoreExprBuilder sc False
-     someBak@(SomeOnlineBackend bak) <- io $ newSAWCoreBackend pathSatSolver sym
+     timeout <- gets rwCrucibleTimeout
+     someBak@(SomeOnlineBackend bak) <- io $
+           newSAWCoreBackendWithTimeout pathSatSolver sym timeout
      let cs     = rm ^. Mir.rmCS
      let col    = cs ^. Mir.collection
      let cfgMap = rm ^. Mir.rmCFGs

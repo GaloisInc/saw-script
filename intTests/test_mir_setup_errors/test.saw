@@ -15,7 +15,6 @@ saw-script.
 
 */
 
-
 enable_experimental;
 
 // Load the MIR module once.
@@ -31,10 +30,10 @@ let KNOWN_FALSE_POSITIVE name spec =
   };
 
 // -------------------------
-// Working spec for `id`
+// Working spec for `id` (u32 -> u32)
 // -------------------------
 print "Working spec for function 'id'";
-mir_verify m "test/2269dac2::id" [] false
+mir_verify m "test::id" [] false
   do {
     x <- mir_fresh_var "x" mir_u32;
     mir_execute_func [mir_term x];
@@ -46,7 +45,7 @@ mir_verify m "test/2269dac2::id" [] false
 // -------------------------
 
 print "mir_execute_func missing";
-check_fails "test/2269dac2::id"
+check_fails "test::id"
   do {
     x <- mir_fresh_var "x" mir_u32;
     // No mir_execute_func here on purpose
@@ -54,7 +53,7 @@ check_fails "test/2269dac2::id"
   };
 
 print "multiple use of mir_execute_func";
-check_fails "test/2269dac2::id"
+check_fails "test::id"
   do {
     x <- mir_fresh_var "x" mir_u32;
     mir_execute_func [mir_term x];
@@ -63,11 +62,11 @@ check_fails "test/2269dac2::id"
   };
 
 // -------------------------
-// mir_return checks (non-void)
+// mir_return checks (non-unit return type)
 // -------------------------
 
 print "mir_return missing when one was expected";
-check_fails "test/2269dac2::id"
+check_fails "test::id"
   do {
     x <- mir_fresh_var "x" mir_u32;
     mir_execute_func [mir_term x];
@@ -75,7 +74,7 @@ check_fails "test/2269dac2::id"
   };
 
 print "multiple use of mir_return";
-check_fails "test/2269dac2::id"
+check_fails "test::id"
   do {
     x <- mir_fresh_var "x" mir_u32;
     mir_execute_func [mir_term x];
@@ -83,25 +82,43 @@ check_fails "test/2269dac2::id"
     mir_return (mir_term x);
   };
 
-// -------------------------
-// mir_return checks (void)
-// -------------------------
-
-print "Working spec for function 'id_void'";
-mir_verify m "test/2269dac2::id_void" [] false
+print "mir_return with wrong type for non-unit return";
+check_fails "test::id"
   do {
     x <- mir_fresh_var "x" mir_u32;
     mir_execute_func [mir_term x];
-    // no mir_return here, because the function is void
+    // Returning unit () where u32 is expected
+    mir_return (mir_term {{ () }});
+  };
+
+// -------------------------
+// mir_return checks (unit / () return type)
+// -------------------------
+
+print "Working spec for function 'id_void' (implicit unit return)";
+mir_verify m "test::id_void" [] false
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    mir_execute_func [mir_term x];
+    // No mir_return here; function returns ()
   } z3;
 
-print "mir_return when none was expected";
-check_fails "test/2269dac2::id_void"
+print "Working spec for function 'id_void' (explicit unit return)";
+mir_verify m "test::id_void" [] false
   do {
     x <- mir_fresh_var "x" mir_u32;
     mir_execute_func [mir_term x];
+    // Optional mir_return, but value must have unit type ()
+    mir_return (mir_term {{ () }});
+  } z3;
+
+print "mir_return with non-unit value for unit-returning function";
+check_fails "test::id_void"
+  do {
+    x <- mir_fresh_var "x" mir_u32;
+    mir_execute_func [mir_term x];
+    // Returning a u32 where () is expected
     mir_return (mir_term x);
   };
 
 print "DONE!";
-

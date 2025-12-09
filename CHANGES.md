@@ -3,14 +3,12 @@
 * `mir_verify` now enforces correctness checks that match the existing
   behavior of `llvm_verify` and `jvm_verify`:
 
-  1. A specification must include **exactly one** `mir_execute_func`
-     command. Omitted calls now produce a `MIRExecuteMissing` error,
-     and multiple calls continue to be rejected with
-     `SetupMultipleExecute`. 
+  1. Omitting a call to mir_execute_func or calling mir_execute_func multiple
+     times will cause SAW to raise an error.
 
-  2. For functions that return a value (i.e., functions whose return
-     type is not void), a `mir_return` specification is now required.
-     Missing return values produce a `MIRReturnMissing` error. 
+  2. For functions that return a value other than `()`, a `mir_return`
+     specification is now required.  Omitting the return specification will
+     cause SAW to raise an error.
 
 This release supports [version
 6](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#6) of

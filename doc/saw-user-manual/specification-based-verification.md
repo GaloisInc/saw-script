@@ -382,13 +382,17 @@ verified use the `{llvm,jvm,mir}_return` command.
 - `jvm_return : JVMValue -> JVMSetup ()`
 - `mir_return : MIRValue -> MIRSetup ()`
 
-For functions whose return type is non-void, SAW requires that the
-corresponding specification include exactly one `{llvm,jvm,mir}_return`
-in the post-state. If the function returns a non-void value and the spec
-does not provide a return value, SAW will reject the specification.
+The rules for `{llvm,jvm,mir}_return` depend on the backend and the function’s
+declared return type, as summarized below:
 
-Conversely, if the function’s return type is void/unit, a {llvm,jvm,mir}_return
-clause must not be present.
+| Backend | Function return type | Is `{…}_return` required? | Is `{…}_return` allowed?  |
+|--------|----------------------|----------------------------|---------------------------|
+| LLVM   | non-void             | Yes                        | Yes                       |
+| LLVM   | void                 | No                         | No                        |
+| JVM    | non-void             | Yes                        | Yes                       |
+| JVM    | void                 | No                         | No                        |
+| MIR    | non-`() `            | Yes                        | Yes                       |
+| MIR    | `()`                 | No                         | Yes                       |
 
 When the specification should not constrain the function’s return value, introduce a fresh variable in the post-state and return it unchanged:
 
@@ -403,9 +407,6 @@ do {
 :::
 
 This pattern asserts only that the function returns a value of the correct type, without placing any further requirements on what that value must be.
-
-
-
 
 ## A First Simple Example (Revisited)
 
