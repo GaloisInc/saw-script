@@ -7,18 +7,35 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 
-module CryptolSAWCore.TypedTerm
- -- prettyTypedTerm,
- -- prettyTypedTermType,
- -- prettyTypedTermPure,
- -- prettyTypedTermTypePure,
- -- prettyTypedVariable,
- where
+module CryptolSAWCore.TypedTerm (
+    TypedTerm(..),
+    TypedTermType(..),
+
+    prettyTypedTerm,
+    prettyTypedTermType,
+    prettyTypedTermPure,
+    prettyTypedTermTypePure,
+    prettyTypedVariable,
+
+    ttTypeAsTerm,
+    ttTermLens,
+    ttIsMono,
+    mkTypedTerm,
+    applyTypedTerms,
+    typedTermOfFirstOrderValue,
+
+    TypedVariable(..),
+    asTypedVariable,
+    typedTermOfVariable,
+    abstractTypedVars,
+
+    CryptolModule(..),
+    prettyCryptolModule
+  ) where
 
 import Control.Monad (foldM)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Text (Text)
 
 import qualified Prettyprinter as PP
 
@@ -127,12 +144,6 @@ mkTypedTerm sc trm = do
         Just (Right t) -> TypedTermSchema (C.tMono t)
   return (TypedTerm ttt trm)
 
--- | Apply a function-typed 'TypedTerm' to an argument.
---   This operation fails if the type of the argument does
---   not match the function.
-applyTypedTerm :: SharedContext -> TypedTerm -> TypedTerm -> IO TypedTerm
-applyTypedTerm sc x y = applyTypedTerms sc x [y]
-
 -- | Apply a 'TypedTerm' to a list of arguments. This operation fails
 -- if the first 'TypedTerm' does not have a function type of
 -- sufficient arity, or if the types of the arguments do not match
@@ -151,36 +162,6 @@ applyTypedTerms sc (TypedTerm _ fn) args =
            Just (Left k)  -> TypedTermKind k
            Just (Right t) -> TypedTermSchema (C.tMono t)
      return (TypedTerm ttt trm)
-
-
--- | Create an abstract defined constant with the specified name and body.
-defineTypedTerm :: SharedContext -> Text -> TypedTerm -> IO TypedTerm
-defineTypedTerm sc name (TypedTerm schema t) =
-  do ty <- scTypeOf sc t
-     TypedTerm schema <$> scFreshConstant sc name t ty
-
--- | Make a tuple value from a list of 'TypedTerm's. This operation
--- fails if any 'TypedTerm' in the list has a polymorphic type.
-tupleTypedTerm :: SharedContext -> [TypedTerm] -> IO TypedTerm
-tupleTypedTerm sc tts =
-  case traverse (ttIsMono . ttType) tts of
-    Nothing -> fail "tupleTypedTerm: invalid polymorphic term"
-    Just ctys ->
-      TypedTerm (TypedTermSchema (C.tMono (C.tTuple ctys))) <$>
-        scTuple sc (map ttTerm tts)
-
--- | Given a 'TypedTerm' with a tuple type, return a list of its
--- projected components. This operation fails if the 'TypedTerm' does
--- not have a tuple type.
-destTupleTypedTerm :: SharedContext -> TypedTerm -> IO [TypedTerm]
-destTupleTypedTerm sc (TypedTerm tp t) =
-  case C.tIsTuple =<< ttIsMono tp of
-    Nothing -> fail "asTupleTypedTerm: not a tuple type"
-    Just ctys ->
-      do let len = length ctys
-         let idxs = take len [1 ..]
-         ts <- traverse (\i -> scTupleSelector sc t i len) idxs
-         pure $ zipWith TypedTerm (map (TypedTermSchema . C.tMono) ctys) ts
 
 -- First order types and values ------------------------------------------------
 
