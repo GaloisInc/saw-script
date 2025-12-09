@@ -7,39 +7,33 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.Term.CtxTerm
-  ( mkCtorArgStruct
+  ( mkCtorSpec
   ) where
 
 import Control.Monad
+import qualified Data.IntMap as IntMap
 
-import SAWCore.Module (CtorArg(..), CtorArgStruct(..))
+import SAWCore.Module (CtorArg(..))
 import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
-import SAWCore.Term.Functor
+import SAWCore.Term.Certified (CtorSpec(..))
 
 -- | Test if a 'Term' is an application of a specific datatype with the
 -- supplied context of parameters and indices
-ctxAsDataTypeApp :: Name -> [param] ->
-                    [index] -> Term ->
-                    Maybe ([Term], [Term])
+ctxAsDataTypeApp ::
+  VarName -> [param] -> [index] -> Term -> Maybe ([Term], [Term])
 ctxAsDataTypeApp d params ixs t =
   do let (f, args) = asApplyAll t
-     d' <- asConstant f
+     (d', _) <- asVariable f
      guard (d == d')
      guard (length args == length params + length ixs)
      let (params', ixs') = splitAt (length params) args
      pure (params', ixs')
 
 -- | Test whether a specific datatype occurs in a term.
-usesDataType :: Name -> Term -> Bool
-usesDataType d t =
-  case unwrapTermF t of
-    Constant d'
-      | d' == d -> True
-    FTermF (Recursor (recursorDataType -> d'))
-      | d' == d -> True
-    tf -> any (usesDataType d) tf
+usesDataType :: VarName -> Term -> Bool
+usesDataType d t = IntMap.member (vnIndex d) (varTypes t)
 
 -- | Check that a type is a valid application of datatype @d@ for use in
 -- specific ways in the type of a constructor for @d@. This requires that this
@@ -50,7 +44,7 @@ usesDataType d t =
 -- where the @pi@ are the distinct bound variables bound in the @params@
 -- context, given as argument, and that the @xj@ have no occurrences of @d@. If
 -- the given type is of this form, return the @xj@.
-asCtorDTApp :: Name -> [(VarName, Term)] -> [index] -> Term -> Maybe [Term]
+asCtorDTApp :: VarName -> [(VarName, Term)] -> [index] -> Term -> Maybe [Term]
 asCtorDTApp d params dt_ixs (ctxAsDataTypeApp d params dt_ixs ->
                                        Just (param_vars, ixs))
   | isVarList (map fst params) param_vars && not (any (usesDataType d) ixs)
@@ -68,7 +62,7 @@ asCtorDTApp _ _ _ _ = Nothing
 
 -- | Check that an argument for a constructor has one of the allowed forms
 asCtorArg ::
-  Name ->
+  VarName ->
   [(VarName, Term)] ->
   [index] ->
   Term ->
@@ -88,7 +82,7 @@ asCtorArg d params dt_ixs tp =
 -- | Check that a constructor type is a pi-abstraction that takes as input an
 -- argument of one of the allowed forms described by 'CtorArg'
 asPiCtorArg ::
-  Name ->
+  VarName ->
   [(VarName, Term)] ->
   [index] ->
   Term ->
@@ -103,7 +97,7 @@ asPiCtorArg d params dt_ixs t =
 
 -- | Helper function for 'mkCtorArgStruct'
 mkCtorArgsIxs ::
-  Name ->
+  VarName ->
   [(VarName, Term)] ->
   [index] ->
   Term ->
@@ -122,15 +116,16 @@ mkCtorArgsIxs d params dt_ixs ty =
 -- also a prospective type of a constructor for that datatype, where the
 -- constructor type is allowed to have the parameters but not the indices free.
 -- Test that the constructor type is an allowed type for a constructor of this
--- datatype, and, if so, build a 'CtorArgStruct' for it.
-mkCtorArgStruct ::
-  Name ->
+-- datatype, and, if so, build a 'CtorSpec' for it.
+mkCtorSpec ::
+  NameInfo ->
+  VarName ->
   [(VarName, Term)] ->
   [(VarName, Term)] ->
   Term ->
-  Maybe CtorArgStruct
-mkCtorArgStruct d params dt_ixs ctor_tp =
+  Maybe CtorSpec
+mkCtorSpec nmi d params dt_ixs ctor_tp =
   case mkCtorArgsIxs d params dt_ixs ctor_tp of
     Nothing -> Nothing
     Just (args, ctor_ixs) ->
-      Just (CtorArgStruct params args ctor_ixs)
+      Just (CtorSpec nmi args ctor_ixs)

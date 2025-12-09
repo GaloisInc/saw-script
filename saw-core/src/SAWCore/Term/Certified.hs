@@ -56,6 +56,7 @@ module SAWCore.Term.Certified
   , scmRecordType
   , scmRecordValue
   , scmRecordSelect
+  , scmSort
   , scmSortWithFlags
   , scmNat
   , scmVector

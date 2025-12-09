@@ -452,17 +452,18 @@ processDataDecl (PosPair p nm) param_ctx dt_tp c_decls =
          " in that of the datatype")
     else return ()
 
-  -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
-  mnm <- getModuleName
-  let dtIdent = mkIdent mnm nm
-  pn <- liftSCM $ SC.scmBeginDataType dtIdent dtParams dtIndices dtSort
+  -- Step 4: Declare d as a free variable, so we can typecheck the constructors
+  dtType <- liftSCM $ SC.scmPiList (dtParams ++ dtIndices) =<< SC.scmSort dtSort
+  dtVarName <- liftSCM $ SC.scmFreshVarName nm
 
   -- Step 5: typecheck the constructors, and build Ctors for them
   typed_ctors <-
+    withVar nm dtVarName dtType $
     mapM (\(Un.Ctor (PosPair p' c) ctx body) ->
            (c,) <$> typeInferCompleteUTerm (Un.Pi p' ctx body)) c_decls
-  sc <- askSharedContext
+  mnm <- getModuleName
   ctors <-
+    withVar nm dtVarName dtType $
     forM typed_ctors $ \(c, typed_tp) ->
     -- Check that the universe level of the type of each constructor
     do case termSortOrType typed_tp of
@@ -479,14 +480,26 @@ processDataDecl (PosPair p nm) param_ctx dt_tp c_decls =
                    "Type of that type: " <> Text.pack (ppTermPureDefaults ty)
                ]
        let tp = typed_tp
-       let result = mkCtorArgStruct pn dtParams dtIndices tp
+       let nmi = ModuleIdentifier (mkIdent mnm c)
+       let result = mkCtorSpec nmi dtVarName dtParams dtIndices tp
        case result of
-         Just arg_struct ->
-           liftIO $ scBuildCtor sc pn (mkIdent mnm c) arg_struct
+         Just spec -> pure spec
          Nothing -> err ("Malformed type form constructor: " ++ show c)
 
-  -- Step 6: complete the datatype with the given ctors
-  liftSCM $ SC.scmCompleteDataType dtIdent ctors
+  -- Step 6: Declare the datatype with the given ctors
+  motiveName <- liftSCM $ SC.scmFreshVarName "p"
+  argName <- liftSCM $ SC.scmFreshVarName "arg"
+  let dts =
+        SC.DataTypeSpec
+        { SC.dtsNameInfo = ModuleIdentifier (mkIdent mnm nm)
+        , SC.dtsParams = dtParams
+        , SC.dtsIndices = dtIndices
+        , SC.dtsSort = dtSort
+        , SC.dtsCtors = ctors
+        , SC.dtsMotiveName = motiveName
+        , SC.dtsArgName = argName
+        }
+  void $ liftSCM $ SC.scmDefineDataType dts
 
 
 -- | Typecheck a module and, on success, insert it into the current context
