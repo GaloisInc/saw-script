@@ -11,6 +11,41 @@ License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
+
+Guidance for folks wishing to print SAWCore terms:
+
+If you have the `SharedContext` and can afford to run in `IO`, use
+`ppTerm`, or `prettyTerm` if you want a `Doc`. These functions are
+found in `SAWCore.Term.Certified` (rather than here) so they can get
+the printing environment from the `SharedContext`, and should be
+imported from `SAWCore.SharedTerm`.
+
+If you do not have the `SharedContext`, or are trying to print from
+pure code and changing this is infeasible, use the pure versions
+defined herein: `ppTermPure` or `prettyTermPure` for a `Doc`.
+
+If you do not have the prettyprinting options value either, there is
+`ppTermPureDefaults`, which uses the default prettyprinting options.
+Use of this should be minimized, because if we're going to give the
+user control over printing we should actually honor their settings.
+This function may be removed in the long run.
+
+(Referencing SAWSupport.Pretty's defaultOpts value explicitly instead
+is probably preferred, because that makes it clear to passersby that
+it isn't really right.)
+
+The following additional functions allow explicit manipulation of the
+name context used by the SAWCore term prettyprinting logic, and should
+therefore only be used from code where that makes sense:
+
+- `ppTermWithNames` (formerly @showTermWithNames@) takes an explicit
+  `DisplayNameEnv`.
+- `prettyTermWithEnv` (formerly @ppTermWithNames@) is the `Doc` version.
+- `prettyTermWithNameList` (formerly @ppTermInCtx@) takes a list of
+  `VarName` to prepare a `DisplayNameEnv`.
+- `prettyTermContainerWithEnv` (formerly @ppTermContainerWithNames@)
+  takes an explicit `DisplayNameEnv` and prints a `Traversable` full of
+  terms.
 -}
 
 module SAWCore.Term.Pretty
