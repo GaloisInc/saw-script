@@ -1542,7 +1542,7 @@ assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr t
     err <- LO.matchPointsToValue opts sc cc ms MS.PostState md cond ptr tptval
     case err of
       Just msg -> do
-        doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
+        doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
         O.failure loc (O.BadPointerLoad (Right doc) msg)
       Nothing -> pure ()
 assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do
@@ -1557,7 +1557,7 @@ assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md t
     err <- LO.matchPointsToBitfieldValue opts sc cc ms MS.PostState md ptr bfIndex tptval
     case err of
       Just msg -> do
-        doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
+        doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
         O.failure loc (O.BadPointerLoad (Right doc) msg)
       Nothing -> pure ()
 

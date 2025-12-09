@@ -195,7 +195,7 @@ prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms
                  ProvedTheorem{}   -> "Theorem:"
                  TestedTheorem n   -> "Theorem (randomly tested on" <+> viaShow n <+> "samples):"
                  AdmittedTheorem{} -> "Axiom:"
-             , code (indent 2 (ppProp ppOpts nenv (thmProp t)))
+             , code (indent 2 (prettyProp ppOpts nenv (thmProp t)))
              , ""
              ]
       prettySolvers ss =

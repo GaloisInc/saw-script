@@ -721,7 +721,7 @@ showsPrecValue opts nenv p v =
     VProofScript {} -> showString "<<proof script>>"
     VTheorem thm ->
       showString "Theorem " .
-      showParen True (showString (prettyProp opts nenv (thmProp thm)))
+      showParen True (showString (ppProp opts nenv (thmProp thm)))
     VBisimTheorem _ -> showString "<<Bisimulation theorem>>"
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
@@ -767,10 +767,9 @@ evaluateTerm sc t =
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =
   C.runEval mempty . exportValueWithSchema schema =<< evaluateTerm sc trm
-evaluateTypedTerm _sc (TypedTerm tp _) =
-  fail $ unlines [ "Could not evaluate term with type"
-                 , show (ppTypedTermType tp)
-                 ]
+evaluateTypedTerm sc (TypedTerm tp _) = do
+  tp' <- prettyTypedTermType sc PPS.defaultOpts tp
+  fail $ unlines [ "Could not evaluate term with type", show tp' ]
 
 
 -- TopLevel Monad --------------------------------------------------------------

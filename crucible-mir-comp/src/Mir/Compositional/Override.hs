@@ -261,7 +261,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
             let var = SAW.vnIndex $ SAW.tvName tv
             when (not $ IntMap.member var termSub) $ do
                 error $ "argument matching failed to produce a binding for " ++
-                    show (SAW.ppTypedVariable tv)
+                    show (SAW.prettyTypedVariable tv)
 
         -- All pre-state allocs must be bound.
         allocSub <- use MS.setupValueSub
@@ -448,7 +448,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go (FnPtrShape _ _ _) _ _ =
         error "Function pointers not currently supported in overrides"
     go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
-        show (MS.ppSetupValue sv) ++ " for " ++ show (shapeType shp)
+        show (MS.prettySetupValue sv) ++ " for " ++ show (shapeType shp)
 
     goFields :: forall ctx0. Assignment FieldShape ctx0 -> Assignment (RegValue' sym) ctx0 ->
         [MS.SetupValue MIR] -> MirOverrideMatcher sym ()
@@ -581,7 +581,7 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
     go (FnPtrShape _ _ _) _ =
         error "Function pointers not currently supported in overrides"
     go shp sv = error $ "setupToReg: type error: bad SetupValue for " ++ show (shapeType shp) ++
-        ": " ++ show (MS.ppSetupValue sv)
+        ": " ++ show (MS.prettySetupValue sv)
 
     goFields :: forall ctx0. Assignment FieldShape ctx0 -> [MS.SetupValue MIR] ->
         IO (Assignment (RegValue' sym) ctx0)
@@ -663,4 +663,4 @@ setupVarAllocIndex :: Applicative m => MS.SetupValue MIR -> m MS.AllocIndex
 setupVarAllocIndex (MS.SetupVar idx) = pure idx
 setupVarAllocIndex val =
   error $ "setupVarAllocIndex: Expected SetupVar, received: "
-       ++ show (MS.ppSetupValue val)
+       ++ show (MS.prettySetupValue val)

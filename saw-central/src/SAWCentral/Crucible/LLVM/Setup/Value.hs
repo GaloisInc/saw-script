@@ -55,7 +55,7 @@ module SAWCentral.Crucible.LLVM.Setup.Value
   , LLVMPointsToValue(..)
     -- * AllocGlobal
   , LLVMAllocGlobal(..)
-  , ppAllocGlobal
+  , prettyAllocGlobal
     -- * ResolvedState
   , LLVMResolvedState(..)
   , ResolvedPath
@@ -292,13 +292,13 @@ type instance Setup.AllocGlobal (LLVM arch) = LLVMAllocGlobal arch
 
 data LLVMAllocGlobal arch = LLVMAllocGlobal ProgramLoc L.Symbol
 
-ppAllocGlobal :: LLVMAllocGlobal arch -> PPL.Doc ann
-ppAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =
+prettyAllocGlobal :: LLVMAllocGlobal arch -> PPL.Doc ann
+prettyAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =
   PPL.pretty "allocate global"
   PPL.<+> PPL.pretty name
 
 instance PPL.Pretty (LLVMAllocGlobal arch) where
-  pretty = ppAllocGlobal
+  pretty = prettyAllocGlobal
 
 --------------------------------------------------------------------------------
 -- *** ResolvedState

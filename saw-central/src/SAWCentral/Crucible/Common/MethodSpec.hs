@@ -28,7 +28,7 @@ Grow\", and is prevalent across the Crucible codebase.
 
 module SAWCentral.Crucible.Common.MethodSpec
   ( AllocIndex(..)
-  , ppAllocIndex
+  , prettyAllocIndex
   , nextAllocIndex
 
   , PrePost(..)
@@ -58,7 +58,7 @@ module SAWCentral.Crucible.Common.MethodSpec
   , SetupValue(..)
   , SetupValueHas
 
-  , ppSetupValue
+  , prettySetupValue
 
   , setupToTypedTerm
   , setupToTerm
@@ -189,10 +189,10 @@ instance IsExt MIR where
 --   are implementation details and won't be familiar to users.
 --   Consider using 'resolveSetupValue' and printing the language-specific value
 --   (e.g., an 'LLVMVal') with @PP.pretty@ instead.
-ppSetupValue :: forall ext ann. IsExt ext => SetupValue ext -> PP.Doc ann
-ppSetupValue setupval = case setupval of
-  SetupTerm tm   -> ppTypedTerm tm
-  SetupVar i     -> ppAllocIndex i
+prettySetupValue :: forall ext ann. IsExt ext => SetupValue ext -> PP.Doc ann
+prettySetupValue setupval = case setupval of
+  SetupTerm tm   -> prettyTypedTermPure tm
+  SetupVar i     -> prettyAllocIndex i
   SetupNull _    -> "NULL"
   SetupStruct x vs ->
     case (ext, x) of
@@ -226,7 +226,7 @@ ppSetupValue setupval = case setupval of
         absurd empty
       (MIRExt, slice) ->
         ppMirSetupSlice slice
-  SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
+  SetupArray _ vs  -> PP.brackets (commaList (map prettySetupValue vs))
   SetupElem x v i  ->
     case (ext, x) of
       (LLVMExt, ()) ->
@@ -243,9 +243,9 @@ ppSetupValue setupval = case setupval of
             ppv PP.<> ".offset" PP.<> PP.parens (PP.pretty i)
     where
       ppv :: PP.Doc ann
-      ppv = PP.parens (ppSetupValue v)
-  SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." <> f)
-  SetupUnion _ v u -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." <> u)
+      ppv = PP.parens (prettySetupValue v)
+  SetupField _ v f -> PP.parens (prettySetupValue v) PP.<> PP.pretty ("." <> f)
+  SetupUnion _ v u -> PP.parens (prettySetupValue v) PP.<> PP.pretty ("." <> u)
   SetupCast x v ->
     case (ext, x) of
       (LLVMExt, tp) ->
@@ -264,7 +264,7 @@ ppSetupValue setupval = case setupval of
         absurd empty
       (MIRExt, ()) ->
         "mux" <>
-        PP.parens (ppTypedTerm c <> PP.comma PP.<+> ppSetupValue t <> PP.comma PP.<+> ppSetupValue f)
+        PP.parens (prettyTypedTermPure c <> PP.comma PP.<+> prettySetupValue t <> PP.comma PP.<+> prettySetupValue f)
   where
     ext :: SAWExt ext
     ext = sawExt @ext
@@ -282,10 +282,10 @@ ppSetupValue setupval = case setupval of
       | otherwise = ppSetupStructDefault vs
 
     ppSetupStructDefault :: forall ext'. IsExt ext' => [SetupValue ext'] -> PP.Doc ann
-    ppSetupStructDefault vs = PP.braces (commaList (map ppSetupValue vs))
+    ppSetupStructDefault vs = PP.braces (commaList (map prettySetupValue vs))
 
     ppSetupTuple :: [SetupValue MIR] -> PP.Doc ann
-    ppSetupTuple vs = PP.parens (commaList (map ppSetupValue vs))
+    ppSetupTuple vs = PP.parens (commaList (map prettySetupValue vs))
 
     ppMirSetupEnum :: MirSetupEnum -> PP.Doc ann
     ppMirSetupEnum (MirSetupEnumVariant _defId variantName _varIdx fields) =
@@ -297,13 +297,13 @@ ppSetupValue setupval = case setupval of
     ppMirSetupSlice (MirSetupSliceRaw ref len) =
       "SliceRaw" <> ppSetupTuple [ref, len]
     ppMirSetupSlice (MirSetupSlice _ arr) =
-      ppSetupValue arr <> "[..]"
+      prettySetupValue arr <> "[..]"
     ppMirSetupSlice (MirSetupSliceRange _ arr start end) =
-      ppSetupValue arr <> "[" <> PP.pretty start <>
+      prettySetupValue arr <> "[" <> PP.pretty start <>
       ".." <> PP.pretty end <> "]"
 
     ppCast :: Show ty => SetupValue ext -> ty -> PP.Doc ann
-    ppCast v ty = PP.parens (ppSetupValue v) PP.<> PP.pretty (" AS " ++ show ty)
+    ppCast v ty = PP.parens (prettySetupValue v) PP.<> PP.pretty (" AS " ++ show ty)
 
 setupToTypedTerm ::
   Options {-^ Printing options -} ->

@@ -437,7 +437,7 @@ typeOfSetupValue cc env nameEnv val =
         tp -> throwError $ unlines
                 [ "typeOfSetupValue: expected monomorphic term"
                 , "instead got:"
-                , show (ppTypedTermType tp)
+                , show (prettyTypedTermTypePure tp)
                 ]
 
     SetupStruct packed vs ->
@@ -733,7 +733,7 @@ resolveTypedTerm cc tm =
     tp -> fail $ unlines
             [ "resolveSetupVal: expected monomorphic term"
             , "instead got term with type"
-            , show (ppTypedTermType tp)
+            , show (prettyTypedTermTypePure tp)
             ]
 
 resolveSAWPred ::

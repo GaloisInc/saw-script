@@ -89,6 +89,8 @@ import qualified Data.Text as Text
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.PP as C
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.Name
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
@@ -137,7 +139,7 @@ proveAll script ts = do
   sc <- getSharedContext
   pos <- getPosition
   forM_ (zip [0..] ts) $ \(n, t) -> do
-    io $ checkBooleanSchema (ttType t)
+    io $ checkBooleanSchema sc (ttType t)
     prop <- io $ predicateToProp sc Universal (ttTerm t)
     let goal = ProofGoal
               { goalNum  = n
@@ -281,8 +283,11 @@ openConstantApp constant t = do
     lambdaOrFail tt =
       case asLambda (ttTerm tt) of
         Just lambda -> return lambda
-        Nothing ->
-          fail $ "Error: Expected a lambda term, got " ++ show (ppTypedTerm tt)
+        Nothing -> do
+          sc <- getSharedContext
+          opts <- State.gets rwPPOpts
+          tt' <- io $ PPS.render opts <$> prettyTypedTerm sc opts tt
+          fail $ "Error: Expected a lambda term, got " ++ tt'
 
 -- Traverses 'term' and extracts the application of 'constant' within it.  Fails
 -- if 'constant' cannot be found within 'term'.
@@ -298,8 +303,9 @@ extractApp constant term =
         sc <- getSharedContext
         opts <- State.gets rwPPOpts
         term' <- io $ ppTerm sc opts term
+        constant' <- io $ PPS.render opts <$> prettyTypedTerm sc opts constant
         fail $ unlines [ "Error: Failed to locate constant in term."
-                              , "  Constant: " ++ show (ppTypedTerm constant)
+                              , "  Constant: " ++ constant'
                               , "  Term: " ++ term' ]
   where
     go :: (IntSet, Maybe (TermF Term))
@@ -607,8 +613,11 @@ proveBisimulation script bthms srel orel lhs rhs = do
             , "RHS output type: " ++ C.pretty o2 ]
 
           return (s1, s2, o1)
-        _ -> fail $ "Error: Unexpected output relation type: "
-                 ++ show (ppTypedTermType (ttType orel))
+        _ -> do
+            sc <- getSharedContext
+            opts <- State.gets rwPPOpts
+            orel' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType orel)
+            fail $ "Error: Unexpected output relation type: " ++ orel'
 
     -- Check that 'lhsStateType' and 'rhsStateType' match the extracted types
     -- from 'typecheckOutputRelation'.  Invokes 'fail' if the types do not
@@ -635,8 +644,11 @@ proveBisimulation script bthms srel orel lhs rhs = do
             [ "Error: RHS of state relation and output relations have incompatible state types:"
             , "  State relation RHS state type: " ++ C.pretty s2
             , "  Output relation RHS state type: " ++ C.pretty rhsStateType ]
-        _ -> fail $ "Error: Unexpected state relation type: "
-                 ++ show (ppTypedTermType (ttType srel))
+        _ -> do
+            sc <- getSharedContext
+            opts <- State.gets rwPPOpts
+            srel' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType srel)
+            fail $ "Error: Unexpected state relation type: " ++ srel'
 
     -- Typecheck bisimulation term. The expected type for a bisimulation term
     -- is:
@@ -677,12 +689,16 @@ proveBisimulation script bthms srel orel lhs rhs = do
             , "  Actual: " ++ C.pretty o ]
 
           return (name, i)
-        _ ->
-          let stStr = C.pretty stateType in
-          fail $ unlines
-          [ "Error: Unexpected bisimulation term type."
-          , "  Expected: (" ++ stStr ++ ", inputType) -> (" ++ stStr ++ ", outputType)"
-          , "  Actual: " ++ show (ppTypedTermType (ttType side)) ]
+        _ -> do
+          sc <- getSharedContext
+          opts <- State.gets rwPPOpts
+          let stStr = C.pretty stateType
+          side' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType side)
+          fail $ unlines [
+              "Error: Unexpected bisimulation term type.",
+              "  Expected: (" ++ stStr ++ ", inputType) -> (" ++ stStr ++ ", outputType)",
+              "  Actual: " ++ side'
+           ]
 
 -- | Replace the invocation of a specific 'Constant' with a 'Variable'.  The
 -- function returns the resulting 'Term' and updates a 'ReplaceState' to hold
