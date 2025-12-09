@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {- |
 Module      : CryptolSAWCore.TypedTerm
 Description : SAW-Core terms paired with Cryptol types.
@@ -23,7 +24,7 @@ import qualified Prettyprinter as PP
 
 import Cryptol.ModuleSystem.Name (nameIdent)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.Utils.PP as C (pretty, ppPrec)
+import qualified Cryptol.Utils.PP as C (pp, ppPrec)
 import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
@@ -68,7 +69,7 @@ prettyTypedTerm :: SharedContext -> PPS.Opts -> TypedTerm -> IO (PP.Doc ann)
 prettyTypedTerm sc opts (TypedTerm tp tm) = do
   tm' <- prettyTerm sc opts tm
   tp' <- prettyTypedTermType sc opts tp
-  pure $ PP.unAnnotate tm' PP.<+> PP.pretty ":" PP.<+> tp'
+  pure $ PP.unAnnotate tm' PP.<+> ":" PP.<+> tp'
 
 prettyTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO (PP.Doc ann)
 prettyTypedTermType _sc _opts (TypedTermSchema sch) =
@@ -82,7 +83,7 @@ prettyTypedTermType sc opts (TypedTermOther tp) = do
 prettyTypedTermPure :: TypedTerm -> PP.Doc ann
 prettyTypedTermPure (TypedTerm tp tm) =
   PP.unAnnotate (prettyTermPure PPS.defaultOpts tm)
-  PP.<+> PP.pretty ":" PP.<+>
+  PP.<+> ":" PP.<+>
   prettyTypedTermTypePure tp
 
 prettyTypedTermTypePure :: TypedTermType -> PP.Doc ann
@@ -96,7 +97,7 @@ prettyTypedTermTypePure (TypedTermOther tp) =
 prettyTypedVariable :: TypedVariable -> PP.Doc ann
 prettyTypedVariable (TypedVariable ctp vn _tp) =
   PP.unAnnotate (PP.pretty (vnName vn))
-  PP.<+> PP.pretty ":" PP.<+>
+  PP.<+> ":" PP.<+>
   PP.viaShow (C.ppPrec 0 ctp)
 
 
@@ -260,17 +261,30 @@ data CryptolModule =
     (Map C.Name C.TySyn)    -- type synonyms
     (Map C.Name TypedTerm)  -- symbols (mapping to SawCore things).
 
-showCryptolModule :: CryptolModule -> String
-showCryptolModule (CryptolModule sm tm) =
-  unlines $
-    (if Map.null sm then [] else
-       "Type Synonyms" : "=============" : map showTSyn (Map.elems sm) ++ [""]) ++
-    "Symbols" : "=======" : concatMap showBinding (Map.assocs tm)
-  where
-    showTSyn (C.TySyn name params _props rhs _doc) =
-      "    " ++ unwords (C.pretty (nameIdent name) : map C.pretty params) ++ " = " ++ C.pretty rhs
+-- Note: Cryptol's prettyprinter isn't directly compatible with SAW's.
+--
+-- Also note that its naming conventions are opposite ours; it uses
+-- "pp" to make Docs and "pretty" to make Strings.
+--
+prettyCryptolModule :: CryptolModule -> PP.Doc ann
+prettyCryptolModule (CryptolModule sm tm) =
+  let cpp item = PP.viaShow $ C.pp item
+      prettyTSyn (C.TySyn name params _props rhs _doc) =
+        let name' = cpp (nameIdent name)
+            params' = map cpp params
+            rhs' = cpp rhs
+        in
+        PP.indent 4 $ PP.hsep (name' : params') PP.<+> "=" PP.<+> rhs'
 
-    showBinding (name, TypedTerm (TypedTermSchema schema) _) =
-      ["    " ++ C.pretty (nameIdent name) ++ " : " ++ C.pretty schema]
-    showBinding _ =
-      []
+      prettyBinding (name, TypedTerm (TypedTermSchema schema) _) =
+        [PP.indent 4 $ cpp (nameIdent name) PP.<+> ":" PP.<+> cpp schema]
+      prettyBinding _ =
+        []
+      synonyms =
+        if Map.null sm then []
+        else
+            "Type Synonyms" : "=============" : map prettyTSyn (Map.elems sm) ++ [""]
+      symbols =
+        "Symbols" : "=======" : concatMap prettyBinding (Map.assocs tm)
+  in
+  PP.vsep $ synonyms ++ symbols
