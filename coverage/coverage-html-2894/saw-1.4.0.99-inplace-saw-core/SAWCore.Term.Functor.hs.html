@@ -1,0 +1,339 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# OPTIONS_GHC -fno-warn-orphans #-}
+<span class="lineno">    2 </span>{-# LANGUAGE DeriveGeneric #-}
+<span class="lineno">    3 </span>{-# LANGUAGE DeriveLift #-}
+<span class="lineno">    4 </span>{-# LANGUAGE DeriveTraversable #-}
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>{- |
+<span class="lineno">    7 </span>Module      : SAWCore.Term.Functor
+<span class="lineno">    8 </span>Copyright   : Galois, Inc. 2012-2025
+<span class="lineno">    9 </span>License     : BSD3
+<span class="lineno">   10 </span>Maintainer  : huffman@galois.com
+<span class="lineno">   11 </span>Stability   : experimental
+<span class="lineno">   12 </span>Portability : non-portable (language extensions)
+<span class="lineno">   13 </span>-}
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>module SAWCore.Term.Functor
+<span class="lineno">   16 </span>  ( -- * Data types and definitions
+<span class="lineno">   17 </span>    FieldName
+<span class="lineno">   18 </span>  , LocalName
+<span class="lineno">   19 </span>  , VarIndex
+<span class="lineno">   20 </span>    -- * Terms and associated operations
+<span class="lineno">   21 </span>  , TermF(..)
+<span class="lineno">   22 </span>  , FlatTermF(..)
+<span class="lineno">   23 </span>  , CompiledRecursor(..)
+<span class="lineno">   24 </span>  , zipWithFlatTermF
+<span class="lineno">   25 </span>  , alistAllFields
+<span class="lineno">   26 </span>    -- * Sorts
+<span class="lineno">   27 </span>  , Sort(..), mkSort, propSort, sortOf, maxSort
+<span class="lineno">   28 </span>  , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
+<span class="lineno">   29 </span>    -- * Sets of free variables
+<span class="lineno">   30 </span>  , freesTermF
+<span class="lineno">   31 </span>  ) where
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>import qualified Data.Foldable as Foldable (foldl')
+<span class="lineno">   34 </span>import Data.Hashable
+<span class="lineno">   35 </span>import Data.IntSet (IntSet)
+<span class="lineno">   36 </span>import qualified Data.IntSet as IntSet
+<span class="lineno">   37 </span>import Data.Text (Text)
+<span class="lineno">   38 </span>import Data.Vector (Vector)
+<span class="lineno">   39 </span>import qualified Data.Vector as V
+<span class="lineno">   40 </span>import GHC.Generics (Generic)
+<span class="lineno">   41 </span>import Numeric.Natural
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>import qualified Language.Haskell.TH.Syntax as TH
+<span class="lineno">   44 </span>import Instances.TH.Lift () -- for instance TH.Lift Text
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>import SAWCore.Name
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>type FieldName = Text
+<span class="lineno">   49 </span>type LocalName = Text
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>instance <span class="decl"><span class="nottickedoff">Hashable a =&gt; Hashable (Vector a)</span></span> where
+<span class="lineno">   52 </span>    <span class="decl"><span class="istickedoff">hashWithSalt x v = hashWithSalt x (V.toList v)</span></span>
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>-- Sorts -----------------------------------------------------------------------
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>-- | The sorts, also known as universes, which can either be a predicative
+<span class="lineno">   58 </span>-- universe with level i or the impredicative universe Prop.
+<span class="lineno">   59 </span>data Sort
+<span class="lineno">   60 </span>  = TypeSort Natural
+<span class="lineno">   61 </span>  | PropSort
+<span class="lineno">   62 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>-- Prop is the lowest sort
+<span class="lineno">   65 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Ord Sort</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">   66 </span>  <span class="decl"><span class="istickedoff">PropSort &lt;= _ = True</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">(TypeSort _) &lt;= PropSort = <span class="nottickedoff">False</span></span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="istickedoff">(TypeSort i) &lt;= (TypeSort j) = i &lt;= j</span></span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable Sort</span></span></span></span> -- automatically derived
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show Sort</span></span></span></span> where
+<span class="lineno">   73 </span>  <span class="decl"><span class="istickedoff">showsPrec p (TypeSort i) = showParen (p &gt;= 10) (showString &quot;sort &quot; . shows i)</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff">showsPrec _ PropSort = <span class="nottickedoff">showString &quot;Prop&quot;</span></span></span>
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>-- | Create sort @Type i@ for the given natural number @i@.
+<span class="lineno">   77 </span>mkSort :: Natural -&gt; Sort
+<span class="lineno">   78 </span><span class="decl"><span class="istickedoff">mkSort i = TypeSort i</span></span>
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>-- | Wrapper around 'PropSort', for export
+<span class="lineno">   81 </span>propSort :: Sort
+<span class="lineno">   82 </span><span class="decl"><span class="istickedoff">propSort = PropSort</span></span>
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>-- | Returns sort of the given sort.
+<span class="lineno">   85 </span>sortOf :: Sort -&gt; Sort
+<span class="lineno">   86 </span><span class="decl"><span class="istickedoff">sortOf (TypeSort i) = TypeSort (i + 1)</span>
+<span class="lineno">   87 </span><span class="spaces"></span><span class="istickedoff">sortOf PropSort = TypeSort 0</span></span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>-- | Get the maximum sort in a list, returning Prop for the empty list
+<span class="lineno">   90 </span>maxSort :: [Sort] -&gt; Sort
+<span class="lineno">   91 </span><span class="decl"><span class="istickedoff">maxSort [] = propSort</span>
+<span class="lineno">   92 </span><span class="spaces"></span><span class="istickedoff">maxSort ss = maximum ss</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>-- | This type represents a set of advisory flags for 'Sort's that are mostly
+<span class="lineno">   95 </span>-- ignored, but are used in the Coq export process to indicate where various
+<span class="lineno">   96 </span>-- typeclass instances are necessary in function definitions. In the concrete
+<span class="lineno">   97 </span>-- syntax &quot;isort&quot;, &quot;qsort&quot;, etc. is used to indicate cases where these flags
+<span class="lineno">   98 </span>-- are set. Note in particular that these flags do not affect typechecking,
+<span class="lineno">   99 </span>-- so missing or overeager &quot;isort&quot;/&quot;qsort&quot; annotations will only be detected
+<span class="lineno">  100 </span>-- via the Coq export.
+<span class="lineno">  101 </span>--
+<span class="lineno">  102 </span>-- * If 'flagInhabited' is 'True', an implicit @Inhabited@ typeclass argument
+<span class="lineno">  103 </span>--   will be added during Coq translation. In the concrete syntax, an &quot;i&quot; is
+<span class="lineno">  104 </span>--   prepended to the sort (e.g. &quot;isort&quot;).
+<span class="lineno">  105 </span>-- * If 'flagQuantType' is 'True', an implicit @QuantType@ typeclass argument
+<span class="lineno">  106 </span>--   will be added during Coq translation. In the concrete syntax, an &quot;q&quot; is
+<span class="lineno">  107 </span>--   prepended to the sort (e.g. &quot;qsort&quot;, &quot;qisort&quot;).
+<span class="lineno">  108 </span>data SortFlags = SortFlags { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">flagInhabited</span></span></span> :: Bool
+<span class="lineno">  109 </span>                           , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">flagQuantType</span></span></span> :: Bool }
+<span class="lineno">  110 </span>    deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
+<span class="lineno">  111 </span>
+<span class="lineno">  112 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable SortFlags</span></span></span></span> -- automatically derived
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show SortFlags</span></span></span></span> where
+<span class="lineno">  115 </span>  <span class="decl"><span class="istickedoff">showsPrec _ (SortFlags i q) = showString $</span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="istickedoff">concatMap (\(b,s) -&gt; if b then s else &quot;&quot;)</span>
+<span class="lineno">  117 </span><span class="spaces">              </span><span class="istickedoff">[(q,<span class="nottickedoff">&quot;q&quot;</span>), (i,&quot;i&quot;)]</span></span>
+<span class="lineno">  118 </span>
+<span class="lineno">  119 </span>-- | The 'SortFlags' object with no flags set
+<span class="lineno">  120 </span>noFlags :: SortFlags
+<span class="lineno">  121 </span><span class="decl"><span class="istickedoff">noFlags = SortFlags False False</span></span>
+<span class="lineno">  122 </span>
+<span class="lineno">  123 </span>-- | Apply a binary operation to corresponding flags of two 'SortFlags'
+<span class="lineno">  124 </span>sortFlagsLift2 :: (Bool -&gt; Bool -&gt; Bool) -&gt; SortFlags -&gt; SortFlags -&gt; SortFlags
+<span class="lineno">  125 </span><span class="decl"><span class="istickedoff">sortFlagsLift2 f (SortFlags i1 q1) (SortFlags i2 q2) = SortFlags <span class="nottickedoff">(f i1 i2)</span> <span class="nottickedoff">(f q1 q2)</span></span></span>
+<span class="lineno">  126 </span>
+<span class="lineno">  127 </span>-- | Convert a 'SortFlags' to a list of 'Bool's, indicating which flags are set
+<span class="lineno">  128 </span>sortFlagsToList :: SortFlags -&gt; [Bool]
+<span class="lineno">  129 </span><span class="decl"><span class="istickedoff">sortFlagsToList (SortFlags i q) = [i, q]</span></span>
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>-- | Build a 'SortFlags' from a list of 'Bool's indicating which flags are set
+<span class="lineno">  132 </span>sortFlagsFromList :: [Bool] -&gt; SortFlags
+<span class="lineno">  133 </span><span class="decl"><span class="nottickedoff">sortFlagsFromList bs = SortFlags (isSet 0) (isSet 1)</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="nottickedoff">where isSet i = i &lt; length bs &amp;&amp; bs !! i</span></span>
+<span class="lineno">  135 </span>
+<span class="lineno">  136 </span>
+<span class="lineno">  137 </span>-- Flat Terms ------------------------------------------------------------------
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>-- | The &quot;flat terms&quot;, which are the built-in atomic constructs of SAW core.
+<span class="lineno">  140 </span>--
+<span class="lineno">  141 </span>-- NB: If you add constructors to FlatTermF, make sure you update
+<span class="lineno">  142 </span>--     zipWithFlatTermF!
+<span class="lineno">  143 </span>data FlatTermF e
+<span class="lineno">  144 </span>    -- Tuples are represented as nested pairs, grouped to the right,
+<span class="lineno">  145 </span>    -- terminated with unit at the end.
+<span class="lineno">  146 </span>  = UnitValue
+<span class="lineno">  147 </span>  | UnitType
+<span class="lineno">  148 </span>  | PairValue e e
+<span class="lineno">  149 </span>  | PairType e e
+<span class="lineno">  150 </span>  | PairLeft e
+<span class="lineno">  151 </span>  | PairRight e
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>    -- | A recursor, which is specified by a 'CompiledRecursor'
+<span class="lineno">  154 </span>    -- comprising the datatype name, elimination sort, and other data
+<span class="lineno">  155 </span>    -- about the recursor.
+<span class="lineno">  156 </span>  | Recursor CompiledRecursor
+<span class="lineno">  157 </span>
+<span class="lineno">  158 </span>    -- | Non-dependent record types, i.e., N-ary tuple types with named
+<span class="lineno">  159 </span>    -- fields. These are considered equal up to reordering of fields. Actual
+<span class="lineno">  160 </span>    -- tuple types are represented with field names @&quot;1&quot;@, @&quot;2&quot;@, etc.
+<span class="lineno">  161 </span>  | RecordType ![(FieldName, e)]
+<span class="lineno">  162 </span>    -- | Non-dependent records, i.e., N-ary tuples with named fields. These are
+<span class="lineno">  163 </span>    -- considered equal up to reordering of fields. Actual tuples are
+<span class="lineno">  164 </span>    -- represented with field names @&quot;1&quot;@, @&quot;2&quot;@, etc.
+<span class="lineno">  165 </span>  | RecordValue ![(FieldName, e)]
+<span class="lineno">  166 </span>    -- | Non-dependent record projection
+<span class="lineno">  167 </span>  | RecordProj e !FieldName
+<span class="lineno">  168 </span>
+<span class="lineno">  169 </span>    -- | Sorts, aka universes, are the types of types; i.e., an object is a
+<span class="lineno">  170 </span>    -- &quot;type&quot; iff it has type @Sort s@ for some s. See 'SortFlags' for an
+<span class="lineno">  171 </span>    -- explanation of the extra argument.
+<span class="lineno">  172 </span>  | Sort !Sort !SortFlags
+<span class="lineno">  173 </span>
+<span class="lineno">  174 </span>    -- Primitive builtin values
+<span class="lineno">  175 </span>    -- | Array value includes type of elements followed by elements.
+<span class="lineno">  176 </span>  | ArrayValue e (Vector e)
+<span class="lineno">  177 </span>    -- | String literal
+<span class="lineno">  178 </span>  | StringLit !Text
+<span class="lineno">  179 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable e =&gt; Hashable (FlatTermF e)</span></span></span></span> -- automatically derived
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>-- | A 'CompiledRecursor' comprises the datatype name and elimination
+<span class="lineno">  184 </span>-- sort of a recursor, along with some other data derived from details
+<span class="lineno">  185 </span>-- of the datatype definition.
+<span class="lineno">  186 </span>data CompiledRecursor =
+<span class="lineno">  187 </span>  CompiledRecursor
+<span class="lineno">  188 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorDataType</span></span></span>  :: Name
+<span class="lineno">  189 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorSort</span></span></span>      :: Sort
+<span class="lineno">  190 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorNumParams</span></span></span> :: Int
+<span class="lineno">  191 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorNumIxs</span></span></span>    :: Int
+<span class="lineno">  192 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorCtorOrder</span></span></span> :: [Name]
+<span class="lineno">  193 </span>  }
+<span class="lineno">  194 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  195 </span>
+<span class="lineno">  196 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable CompiledRecursor</span></span></span></span> -- automatically derived
+<span class="lineno">  197 </span>
+<span class="lineno">  198 </span>-- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
+<span class="lineno">  199 </span>-- precisely the given field names and no more. If so, return the values
+<span class="lineno">  200 </span>-- associated with those field names, in the order given in the input, and
+<span class="lineno">  201 </span>-- otherwise return 'Nothing'
+<span class="lineno">  202 </span>alistAllFields :: Eq k =&gt; [k] -&gt; [(k, a)] -&gt; Maybe [a]
+<span class="lineno">  203 </span><span class="decl"><span class="istickedoff">alistAllFields [] [] = Just <span class="nottickedoff">[]</span></span>
+<span class="lineno">  204 </span><span class="spaces"></span><span class="istickedoff">alistAllFields (fld:flds) alist</span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">| Just val &lt;- lookup fld alist =</span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff">(val :) &lt;$&gt; alistAllFields flds (deleteField fld alist)</span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">deleteField _ [] = <span class="nottickedoff">error &quot;deleteField&quot;</span></span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">deleteField f ((f',_):rest) | f == f' = rest</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">deleteField f (x:rest) = x : deleteField f rest</span>
+<span class="lineno">  211 </span><span class="spaces"></span><span class="istickedoff">alistAllFields _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  212 </span>
+<span class="lineno">  213 </span>zipName :: Name -&gt; Name -&gt; Maybe Name
+<span class="lineno">  214 </span><span class="decl"><span class="istickedoff">zipName x y</span>
+<span class="lineno">  215 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">x == y</span> = <span class="nottickedoff">Just x</span></span>
+<span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
+<span class="lineno">  217 </span>
+<span class="lineno">  218 </span>zipRec :: CompiledRecursor -&gt; CompiledRecursor -&gt; Maybe CompiledRecursor
+<span class="lineno">  219 </span><span class="decl"><span class="istickedoff">zipRec (CompiledRecursor d1 s1 ps1 n1 ord1) (CompiledRecursor d2 s2 _ n2 ord2)</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">| n1 == n2 &amp;&amp; s1 == s2</span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">= do d &lt;- zipName d1 d2</span>
+<span class="lineno">  222 </span><span class="spaces">       </span><span class="istickedoff">ord &lt;- <span class="nottickedoff">sequence (zipWith zipName ord1 ord2)</span></span>
+<span class="lineno">  223 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">pure $ CompiledRecursor</span></span>
+<span class="lineno">  224 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">d</span></span>
+<span class="lineno">  225 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">s1</span></span>
+<span class="lineno">  226 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ps1</span></span>
+<span class="lineno">  227 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">n1</span></span>
+<span class="lineno">  228 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ord</span></span>
+<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>-- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
+<span class="lineno">  232 </span>-- pointwise to immediate subterms, if the two 'FlatTermF's are the same
+<span class="lineno">  233 </span>-- constructor; otherwise, return 'Nothing' if they use different constructors
+<span class="lineno">  234 </span>zipWithFlatTermF :: (x -&gt; y -&gt; z) -&gt; FlatTermF x -&gt; FlatTermF y -&gt;
+<span class="lineno">  235 </span>                    Maybe (FlatTermF z)
+<span class="lineno">  236 </span><span class="decl"><span class="istickedoff">zipWithFlatTermF f = go</span>
+<span class="lineno">  237 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">go UnitValue UnitValue = <span class="nottickedoff">Just UnitValue</span></span>
+<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">go UnitType UnitType = Just UnitType</span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))</span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))</span>
+<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">go (PairLeft x) (PairLeft y) = <span class="nottickedoff">Just (PairLeft (f x y))</span></span>
+<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">go (PairRight x) (PairRight y) = <span class="nottickedoff">Just (PairLeft (f x y))</span></span>
+<span class="lineno">  244 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">go (Recursor rec1) (Recursor rec2) =</span>
+<span class="lineno">  246 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Recursor</span> &lt;$&gt; zipRec rec1 rec2</span>
+<span class="lineno">  247 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  248 </span><span class="spaces">    </span><span class="istickedoff">go (RecordType elems1) (RecordType elems2)</span>
+<span class="lineno">  249 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- alistAllFields (map fst elems1) elems2 =</span>
+<span class="lineno">  250 </span><span class="spaces">        </span><span class="istickedoff">Just $ RecordType $ zipWith (\(fld,x) y -&gt; (<span class="nottickedoff">fld</span>, f x y)) elems1 vals2</span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="istickedoff">go (RecordValue elems1) (RecordValue elems2)</span>
+<span class="lineno">  252 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- <span class="nottickedoff">alistAllFields (map fst elems1) elems2</span> =</span>
+<span class="lineno">  253 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just $ RecordValue $ zipWith (\(fld,x) y -&gt; (fld, f x y)) elems1 vals2</span></span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">go (RecordProj e1 fld1) (RecordProj e2 fld2)</span>
+<span class="lineno">  255 </span><span class="spaces">      </span><span class="istickedoff">| fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1</span>
+<span class="lineno">  256 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (sortFlagsLift2 <span class="nottickedoff">(&amp;&amp;)</span> hx hy))</span>
+<span class="lineno">  258 </span><span class="spaces">         </span><span class="istickedoff">-- /\ NB, it's not entirely clear how the flags should be propagated</span>
+<span class="lineno">  259 </span><span class="spaces">    </span><span class="istickedoff">go (StringLit s) (StringLit t) | <span class="nottickedoff">s == t</span> = <span class="nottickedoff">Just (StringLit s)</span></span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">go (ArrayValue tx vx) (ArrayValue ty vy)</span>
+<span class="lineno">  261 </span><span class="spaces">      </span><span class="istickedoff">| V.length vx == V.length vy</span>
+<span class="lineno">  262 </span><span class="spaces">      </span><span class="istickedoff">= Just $ ArrayValue (f tx ty) (V.zipWith <span class="nottickedoff">f</span> vx vy)</span>
+<span class="lineno">  263 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff">go UnitValue      _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  265 </span><span class="spaces">    </span><span class="istickedoff">go UnitType       _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  266 </span><span class="spaces">    </span><span class="istickedoff">go PairValue{}    _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">go PairType{}     _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">go PairLeft{}     _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">go PairRight{}    _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">go Recursor{}     _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">go RecordType{}   _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">go RecordValue{}  _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">go RecordProj{}   _ = Nothing</span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">go Sort{}         _ = Nothing</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">go ArrayValue{}   _ = Nothing</span>
+<span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff">go StringLit{}    _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  277 </span>
+<span class="lineno">  278 </span>
+<span class="lineno">  279 </span>-- Term Functor ----------------------------------------------------------------
+<span class="lineno">  280 </span>
+<span class="lineno">  281 </span>-- | A \&quot;knot-tying\&quot; structure for representing terms and term-like things.
+<span class="lineno">  282 </span>-- Often, this appears in context as the type \&quot;'TermF' 'Term'\&quot;, in which case
+<span class="lineno">  283 </span>-- it represents a full 'Term' AST. The \&quot;F\&quot; stands for 'Functor', or
+<span class="lineno">  284 </span>-- occasionally for \&quot;Former\&quot;.
+<span class="lineno">  285 </span>data TermF e
+<span class="lineno">  286 </span>    = FTermF !(FlatTermF e)
+<span class="lineno">  287 </span>      -- ^ The atomic, or builtin, term constructs
+<span class="lineno">  288 </span>    | App !e !e
+<span class="lineno">  289 </span>      -- ^ Applications of functions
+<span class="lineno">  290 </span>    | Lambda !VarName !e !e
+<span class="lineno">  291 </span>      -- ^ Function abstractions
+<span class="lineno">  292 </span>    | Pi !VarName !e !e
+<span class="lineno">  293 </span>      -- ^ The type of a (possibly) dependent function
+<span class="lineno">  294 </span>    | Constant !Name
+<span class="lineno">  295 </span>      -- ^ A global constant identified by its name.
+<span class="lineno">  296 </span>    | Variable !VarName !e
+<span class="lineno">  297 </span>      -- ^ A named variable with a type.
+<span class="lineno">  298 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Hashable e =&gt; Hashable (TermF e)</span></span></span></span> -- automatically derived
+<span class="lineno">  301 </span>
+<span class="lineno">  302 </span>
+<span class="lineno">  303 </span>-- Free Named Variables --------------------------------------------------------
+<span class="lineno">  304 </span>
+<span class="lineno">  305 </span>-- | Compute an 'IntSet' containing the 'VarIndex' of the free
+<span class="lineno">  306 </span>-- variables of a term, given the free variables for its immediate
+<span class="lineno">  307 </span>-- subterms.
+<span class="lineno">  308 </span>freesTermF :: TermF IntSet -&gt; IntSet
+<span class="lineno">  309 </span><span class="decl"><span class="istickedoff">freesTermF tf =</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' IntSet.union IntSet.empty ftf</span>
+<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">App l r -&gt; IntSet.union l r</span>
+<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm tp rhs -&gt; <span class="nottickedoff">IntSet.union tp (IntSet.delete (vnIndex nm) rhs)</span></span>
+<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">Pi nm lhs rhs -&gt; IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)</span>
+<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; <span class="nottickedoff">IntSet.empty</span></span>
+<span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp -&gt; IntSet.insert (vnIndex nm) tp</span></span>
+
+</pre>
+</body>
+</html>
