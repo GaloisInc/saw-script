@@ -24,7 +24,7 @@ module, plus additional functionality) instead.
 
 module SAWCentral.Crucible.Common.Setup.Value
   ( AllocIndex(..)
-  , ppAllocIndex
+  , prettyAllocIndex
   , nextAllocIndex
 
   , CrucibleContext
@@ -75,8 +75,8 @@ import           CryptolSAWCore.TypedTerm
 newtype AllocIndex = AllocIndex Int
   deriving (Eq, Ord, Show)
 
-ppAllocIndex :: AllocIndex -> PP.Doc ann
-ppAllocIndex i = PP.pretty '@' <> PP.viaShow i
+prettyAllocIndex :: AllocIndex -> PP.Doc ann
+prettyAllocIndex i = PP.pretty '@' <> PP.viaShow i
 
 nextAllocIndex :: AllocIndex -> AllocIndex
 nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)

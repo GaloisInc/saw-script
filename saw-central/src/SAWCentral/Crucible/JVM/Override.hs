@@ -208,7 +208,7 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
                   fail $ show $
                   PP.vcat
                   [ "All overrides failed during structural matching:"
-                  , PP.vcat (map (\x -> "*" <> PP.indent 2 (ppOverrideFailure x)) e)
+                  , PP.vcat (map (\x -> "*" <> PP.indent 2 (prettyOverrideFailure x)) e)
                   ]
                 (_, ss) -> liftIO $
                   forM ss $ \(cs,st) ->

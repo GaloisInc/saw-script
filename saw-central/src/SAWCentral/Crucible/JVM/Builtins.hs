@@ -593,7 +593,7 @@ setupPrestateConditions mspec cc env = aux []
         TypedTerm tp _ ->
           fail $ unlines
             [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (ppTypedTermType tp)
+            , show (prettyTypedTermTypePure tp)
             ]
 
 --------------------------------------------------------------------------------
@@ -983,7 +983,7 @@ instance Show JVMSetupError where
       JVMFieldNonReference ptr fname ->
         unlines
         [ "jvm_field_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        , "Left-hand side: " ++ show (MS.prettySetupValue ptr)
         , "Field name: " ++ Text.unpack fname
         ]
       JVMFieldMultiple _ptr fid ->
@@ -1015,7 +1015,7 @@ instance Show JVMSetupError where
       JVMElemNonReference ptr idx ->
         unlines
         [ "jvm_elem_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        , "Left-hand side: " ++ show (MS.prettySetupValue ptr)
         , "Index: " ++ show idx
         ]
       JVMElemNonArray jty ->
@@ -1040,7 +1040,7 @@ instance Show JVMSetupError where
       JVMArrayNonReference ptr ->
         unlines
         [ "jvm_array_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        , "Left-hand side: " ++ show (MS.prettySetupValue ptr)
         ]
       JVMArrayTypeMismatch len ty schema ->
         unlines
@@ -1089,7 +1089,7 @@ instance Show JVMSetupError where
       JVMNonValueType tp ->
         unlines
         [ "Expected term with value type, but got"
-        , show (ppTypedTermType tp)
+        , show (prettyTypedTermTypePure tp)
         ]
 
 -- | Returns Cryptol type of actual type if it is an array or

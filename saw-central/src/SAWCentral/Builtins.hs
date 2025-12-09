@@ -57,7 +57,7 @@ import qualified CryptolSAWCore.Simpset as Cryptol
 import qualified SAWSupport.PanicSupport as PanicSupport
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText, render)
 
 -- saw-core
 import qualified SAWCore.Parser.AST as Un
@@ -151,10 +151,13 @@ definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
      ty <- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema
      t <- io $ scFreshConstant sc name rhs ty
      return $ TypedTerm (TypedTermSchema schema) t
-definePrim _name (TypedTerm tp _) =
+definePrim _name (TypedTerm tp _) = do
+  sc <- getSharedContext
+  opts <- gets rwPPOpts
+  tp' <- liftIO $ prettyTypedTermType sc opts tp
   fail $ unlines
     [ "Expected term with Cryptol schema type, but got"
-    , show (ppTypedTermType tp)
+    , PPS.render opts tp'
     ]
 
 readBytes :: Text -> TopLevel TypedTerm
@@ -426,7 +429,7 @@ write_goal fp =
      sc <- getSharedContext
      liftIO $ do
        nenv <- scGetNamingEnv sc
-       let output = prettySequent opts nenv (goalSequent goal)
+       let output = ppSequent opts nenv (goalSequent goal)
        writeFile fp (unlines [goalSummary goal, output])
 
 print_goal :: ProofScript ()
@@ -435,7 +438,7 @@ print_goal =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      nenv <- io (scGetNamingEnv sc)
-     let output = prettySequent opts nenv (goalSequent goal)
+     let output = ppSequent opts nenv (goalSequent goal)
      printOutLnTop Info (unlines [goalSummary goal, output])
 
 -- | Print the current goal that a proof script is attempting to prove, without
@@ -454,7 +457,7 @@ print_goal_inline noInline =
           PPS.Hash _ -> warnIncremental >> pure opts
       sc <- getSharedContext
       nenv <- io (scGetNamingEnv sc)
-      let output = prettySequent opts' nenv (goalSequent goal)
+      let output = ppSequent opts' nenv (goalSequent goal)
       printOutLnTop Info (unlines [goalSummary goal, output])
   where
     warnIncremental =
@@ -498,7 +501,7 @@ print_goal_depth n =
      sc <- getSharedContext
      let opts' = opts { PPS.ppMaxDepth = Just n }
      nenv <- io (scGetNamingEnv sc)
-     let output = prettySequent opts' nenv (goalSequent goal)
+     let output = ppSequent opts' nenv (goalSequent goal)
      printOutLnTop Info (unlines [goalSummary goal, output])
 
 printGoalConsts :: ProofScript ()
@@ -698,9 +701,13 @@ term_type :: TypedTerm -> TopLevel C.Schema
 term_type tt =
   case ttType tt of
     TypedTermSchema sch -> pure sch
-    tp -> fail $ unlines
+    tp -> do
+        sc <- getSharedContext
+        opts <- gets rwPPOpts
+        tp' <- liftIO $ prettyTypedTermType sc opts tp
+        fail $ unlines
             [ "Term does not have a Cryptol type"
-            , show (ppTypedTermType tp)
+            , PPS.render opts tp'
             ]
 
 goal_eval :: [Text] -> ProofScript ()
@@ -1171,8 +1178,8 @@ provePrim ::
   TypedTerm ->
   TopLevel ProofResult
 provePrim script t = do
-  io $ checkBooleanSchema (ttType t)
   sc <- getSharedContext
+  io $ checkBooleanSchema sc (ttType t)
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   pos <- SV.getPosition
   let goal = ProofGoal
@@ -1419,9 +1426,9 @@ satPrim ::
   ProofScript () ->
   TypedTerm ->
   TopLevel SV.SatResult
-satPrim script t =
-  do io $ checkBooleanSchema (ttType t)
+satPrim script t = do
      sc <- getSharedContext
+     io $ checkBooleanSchema sc (ttType t)
      prop <- io $ predicateToProp sc Existential (ttTerm t)
      pos <- SV.getPosition
      let goal = ProofGoal

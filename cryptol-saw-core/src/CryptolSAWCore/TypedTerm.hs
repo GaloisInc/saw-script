@@ -7,9 +7,11 @@ Stability   : provisional
 -}
 
 module CryptolSAWCore.TypedTerm
- -- ppTypedTerm,
- -- ppTypedTermType,
- -- ppTypedVariable,
+ -- prettyTypedTerm,
+ -- prettyTypedTermType,
+ -- prettyTypedTermPure,
+ -- prettyTypedTermTypePure,
+ -- prettyTypedVariable,
  where
 
 import Control.Monad (foldM)
@@ -25,7 +27,7 @@ import qualified Cryptol.Utils.PP as C (pretty, ppPrec)
 import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
+import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts)
 
 import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
 import SAWCore.FiniteValue
@@ -58,22 +60,41 @@ data TypedTermType
  deriving Show
 
 
-ppTypedTerm :: TypedTerm -> PP.Doc ann
-ppTypedTerm (TypedTerm tp tm) =
+-- It is not ideal to have two copies of these but it's not that
+-- helpful to try to share. In the long run the pure ones should
+-- probably go away as they produce worse output.
+
+prettyTypedTerm :: SharedContext -> PPS.Opts -> TypedTerm -> IO (PP.Doc ann)
+prettyTypedTerm sc opts (TypedTerm tp tm) = do
+  tm' <- prettyTerm sc opts tm
+  tp' <- prettyTypedTermType sc opts tp
+  pure $ PP.unAnnotate tm' PP.<+> PP.pretty ":" PP.<+> tp'
+
+prettyTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO (PP.Doc ann)
+prettyTypedTermType _sc _opts (TypedTermSchema sch) =
+  pure $ PP.viaShow (C.ppPrec 0 sch)
+prettyTypedTermType _sc _opts (TypedTermKind k) =
+  pure $ PP.viaShow (C.ppPrec 0 k)
+prettyTypedTermType sc opts (TypedTermOther tp) = do
+  tp' <- prettyTerm sc opts tp
+  pure $ PP.unAnnotate tp'
+
+prettyTypedTermPure :: TypedTerm -> PP.Doc ann
+prettyTypedTermPure (TypedTerm tp tm) =
   PP.unAnnotate (prettyTermPure PPS.defaultOpts tm)
   PP.<+> PP.pretty ":" PP.<+>
-  ppTypedTermType tp
+  prettyTypedTermTypePure tp
 
-ppTypedTermType :: TypedTermType -> PP.Doc ann
-ppTypedTermType (TypedTermSchema sch) =
+prettyTypedTermTypePure :: TypedTermType -> PP.Doc ann
+prettyTypedTermTypePure (TypedTermSchema sch) =
   PP.viaShow (C.ppPrec 0 sch)
-ppTypedTermType (TypedTermKind k) =
+prettyTypedTermTypePure (TypedTermKind k) =
   PP.viaShow (C.ppPrec 0 k)
-ppTypedTermType (TypedTermOther tp) =
+prettyTypedTermTypePure (TypedTermOther tp) =
   PP.unAnnotate (prettyTermPure PPS.defaultOpts tp)
 
-ppTypedVariable :: TypedVariable -> PP.Doc ann
-ppTypedVariable (TypedVariable ctp vn _tp) =
+prettyTypedVariable :: TypedVariable -> PP.Doc ann
+prettyTypedVariable (TypedVariable ctp vn _tp) =
   PP.unAnnotate (PP.pretty (vnName vn))
   PP.<+> PP.pretty ":" PP.<+>
   PP.viaShow (C.ppPrec 0 ctp)

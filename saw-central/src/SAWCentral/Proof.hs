@@ -514,12 +514,12 @@ normalizeProp sc opaqueSet (Prop tm) =
      termToProp sc tm'
 
 -- | Pretty print the given proposition as a string.
-prettyProp :: PPS.Opts -> DisplayNameEnv -> Prop -> String
-prettyProp opts nenv p = PPS.render opts (ppProp opts nenv p)
+ppProp :: PPS.Opts -> DisplayNameEnv -> Prop -> String
+ppProp opts nenv p = PPS.render opts (prettyProp opts nenv p)
 
 -- | Pretty print the given proposition as a @PPS.Doc@.
-ppProp :: PPS.Opts -> DisplayNameEnv -> Prop -> PPS.Doc
-ppProp opts nenv (Prop tm) = prettyTermWithEnv opts nenv tm
+prettyProp :: PPS.Opts -> DisplayNameEnv -> Prop -> PPS.Doc
+prettyProp opts nenv (Prop tm) = prettyTermWithEnv opts nenv tm
 
 -- TODO, I'd like to add metadata here
 type SequentBranch = Prop
@@ -686,21 +686,21 @@ sequentToProp sc sqt =
         Prop <$> scFun sc (unProp h) (unProp g')
 
 -- | Pretty print the given proposition as a string.
-prettySequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> String
-prettySequent opts nenv sqt = PPS.render opts (ppSequent opts nenv sqt)
+ppSequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> String
+ppSequent opts nenv sqt = PPS.render opts (prettySequent opts nenv sqt)
 
 -- | Pretty print the given proposition as a @PPS.Doc@.
-ppSequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> PPS.Doc
-ppSequent opts nenv sqt =
+prettySequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> PPS.Doc
+prettySequent opts nenv sqt =
   prettyTermContainerWithEnv
-    (ppRawSequent sqt)
+    (prettyRawSequent sqt)
     opts
     nenv
     (fmap unProp (sequentToRawSequent sqt))
 
-ppRawSequent :: Sequent -> RawSequent PPS.Doc -> PPS.Doc
-ppRawSequent _sqt (RawSequent [] [g]) = g
-ppRawSequent sqt (RawSequent hs gs)  =
+prettyRawSequent :: Sequent -> RawSequent PPS.Doc -> PPS.Doc
+prettyRawSequent _sqt (RawSequent [] [g]) = g
+prettyRawSequent sqt (RawSequent hs gs)  =
   align (vcat (map ppHyp (zip [0..] hs) ++ turnstile ++ map ppConcl (zip [0..] gs)))
  where
   turnstile  = [ pretty (take 40 (repeat '=')) ]
@@ -1594,8 +1594,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
                [ "Solver proof does not prove the required sequent"
-               , prettySequent PPS.defaultOpts nenv sqt
-               , prettySequent PPS.defaultOpts nenv sqt'
+               , ppSequent PPS.defaultOpts nenv sqt
+               , ppSequent PPS.defaultOpts nenv sqt'
                ]
            return (mempty, ProvedTheorem stats)
 
@@ -1604,8 +1604,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
            unless ok $ fail $ unlines
                [ "Admitted proof does not match the required sequent " ++ show pos
                , Text.unpack msg
-               , prettySequent PPS.defaultOpts nenv sqt
-               , prettySequent PPS.defaultOpts nenv sqt'
+               , ppSequent PPS.defaultOpts nenv sqt
+               , ppSequent PPS.defaultOpts nenv sqt'
                ]
            return (mempty, AdmittedTheorem msg)
 
@@ -1613,8 +1613,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
                [ "Quickcheck evidence does not match the required sequent"
-               , prettySequent PPS.defaultOpts nenv sqt
-               , prettySequent PPS.defaultOpts nenv sqt'
+               , ppSequent PPS.defaultOpts nenv sqt
+               , ppSequent PPS.defaultOpts nenv sqt'
                ]
            return (mempty, TestedTheorem n)
 
@@ -1622,7 +1622,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         splitSequent sc sqt >>= \case
           Nothing -> fail $ unlines
                        [ "Split evidence does not apply"
-                       , prettySequent PPS.defaultOpts nenv sqt
+                       , ppSequent PPS.defaultOpts nenv sqt
                        ]
           Just (sqt1,sqt2) ->
             do d1 <- check nenv e1 sqt1
@@ -1648,11 +1648,11 @@ checkEvidence sc what4PushMuxOps = \e p -> do
 
               _ -> fail $ unlines $
                     [ "Not enough hypotheses in apply hypothesis: " ++ show n
-                    , prettySequent PPS.defaultOpts nenv sqt
+                    , ppSequent PPS.defaultOpts nenv sqt
                     ]
           _ -> fail $ unlines $
                     [ "Apply hypothesis evidence requires a conclusion-focused sequent."
-                    , prettySequent PPS.defaultOpts nenv sqt
+                    , ppSequent PPS.defaultOpts nenv sqt
                     ]
 
       ApplyEvidence thm es ->
@@ -1671,7 +1671,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                return (Set.insert (thmNonce thm) d, sy)
           _ -> fail $ unlines $
                     [ "Apply evidence requires a conclusion-focused sequent"
-                    , prettySequent PPS.defaultOpts nenv sqt
+                    , ppSequent PPS.defaultOpts nenv sqt
                     ]
 
       UnfoldEvidence vars e' ->
@@ -1704,8 +1704,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         do ok <- convertibleSequents sc sqt sqt'
            unless ok $ fail $ unlines
              [ "Converted sequent does not match goal"
-             , prettySequent PPS.defaultOpts nenv sqt
-             , prettySequent PPS.defaultOpts nenv sqt'
+             , ppSequent PPS.defaultOpts nenv sqt
+             , ppSequent PPS.defaultOpts nenv sqt'
              ]
            check nenv e' sqt'
 
@@ -1713,8 +1713,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         do ok <- normalizeSequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
              [ "Normalized sequent does not subsume goal"
-             , prettySequent PPS.defaultOpts nenv sqt
-             , prettySequent PPS.defaultOpts nenv sqt'
+             , ppSequent PPS.defaultOpts nenv sqt
+             , ppSequent PPS.defaultOpts nenv sqt'
              ]
            check nenv e' sqt'
 
@@ -1722,8 +1722,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
              [ "Sequent does not subsume goal"
-             , prettySequent PPS.defaultOpts nenv sqt
-             , prettySequent PPS.defaultOpts nenv sqt'
+             , ppSequent PPS.defaultOpts nenv sqt
+             , ppSequent PPS.defaultOpts nenv sqt'
              ]
            check nenv e' sqt'
 
@@ -1731,7 +1731,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         do ok <- sequentIsAxiom sc sqt
            unless ok $ fail $ unlines
              [ "Sequent is not an instance of the sequent calculus axiom"
-             , prettySequent PPS.defaultOpts nenv sqt
+             , ppSequent PPS.defaultOpts nenv sqt
              ]
            return (mempty, ProvedTheorem mempty)
 
