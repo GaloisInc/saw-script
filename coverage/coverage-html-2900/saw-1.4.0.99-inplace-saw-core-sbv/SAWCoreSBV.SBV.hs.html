@@ -715,7 +715,7 @@ span.spaces    { background: white }
 <span class="lineno">  696 </span><span class="decl"><span class="istickedoff">mkUninterpreted k args nm =</span>
 <span class="lineno">  697 </span><span class="spaces">  </span><span class="istickedoff">svUninterpreted k nm'</span>
 <span class="lineno">  698 </span><span class="spaces"></span><span class="istickedoff">#if MIN_VERSION_sbv(10,3,0)</span>
-<span class="lineno">  699 </span><span class="spaces">                  </span><span class="istickedoff">(UINone <span class="nottickedoff">True</span>)</span>
+<span class="lineno">  699 </span><span class="spaces">                  </span><span class="istickedoff">(UINone True)</span>
 <span class="lineno">  700 </span><span class="spaces"></span><span class="istickedoff">#elif MIN_VERSION_sbv(10,0,0)</span>
 <span class="lineno">  701 </span><span class="spaces">                  </span><span class="istickedoff">UINone</span>
 <span class="lineno">  702 </span><span class="spaces"></span><span class="istickedoff">#else</span>
@@ -800,9 +800,9 @@ span.spaces    { background: white }
 <span class="lineno">  781 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n FOTBit -&gt;</span>
 <span class="lineno">  782 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (WordLabel s, vWord &lt;$&gt; existsSWord s (fromIntegral n))</span>
 <span class="lineno">  783 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n tp -&gt;</span>
-<span class="lineno">  784 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let f i = newVars (nm ++ &quot;.&quot; ++ show i) tp</span></span>
-<span class="lineno">  785 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(labels, vals) &lt;- V.unzip &lt;$&gt; V.generateM (fromIntegral n) f</span></span>
-<span class="lineno">  786 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (VecLabel tp labels, VVector &lt;$&gt; traverse (fmap ready) vals)</span></span>
+<span class="lineno">  784 </span><span class="spaces">      </span><span class="istickedoff">do let f i = newVars (nm ++ &quot;.&quot; ++ show i) tp</span>
+<span class="lineno">  785 </span><span class="spaces">         </span><span class="istickedoff">(labels, vals) &lt;- V.unzip &lt;$&gt; V.generateM (fromIntegral n) f</span>
+<span class="lineno">  786 </span><span class="spaces">         </span><span class="istickedoff">pure (<span class="nottickedoff">VecLabel tp labels</span>, VVector &lt;$&gt; traverse (fmap ready) vals)</span>
 <span class="lineno">  787 </span><span class="spaces">    </span><span class="istickedoff">FOTArray{} -&gt;</span>
 <span class="lineno">  788 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail &quot;FOTArray unimplemented for backend&quot;</span></span>
 <span class="lineno">  789 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt;</span>
