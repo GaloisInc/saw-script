@@ -150,7 +150,7 @@ Extraneous calls and conversions take space interfere with fitting the
 message in and with the readability of the error path code, and all of
 this serves to discourage writing complete and clear error messages
 that print all the relevant information.
-The extra width needed for to call `render` on a `Doc` is not small
+The extra width needed to call `render` on a `Doc` is not small
 since `render` needs to be passed the prettyprinting options;
 therefore we should in general provide a text-based interface as well
 as the `Doc` one.
