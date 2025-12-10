@@ -387,11 +387,11 @@ declared return type, as summarized below:
 
 | Backend | Function return type | Is `{…}_return` required? | Is `{…}_return` allowed?  |
 |--------|----------------------|----------------------------|---------------------------|
-| LLVM   | non-void             | Yes                        | Yes                       |
-| LLVM   | void                 | No                         | No                        |
-| JVM    | non-void             | Yes                        | Yes                       |
-| JVM    | void                 | No                         | No                        |
-| MIR    | non-`() `            | Yes                        | Yes                       |
+| LLVM   | non-`void`           | Yes                        | Yes                       |
+| LLVM   | `void`               | No                         | No                        |
+| JVM    | non-`void`           | Yes                        | Yes                       |
+| JVM    | `void`               | No                         | No                        |
+| MIR    | non-`()`             | Yes                        | Yes                       |
 | MIR    | `()`                 | No                         | Yes                       |
 
 When the specification should not constrain the function’s return value, introduce a fresh variable in the post-state and return it unchanged:
