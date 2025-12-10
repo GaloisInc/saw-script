@@ -192,7 +192,7 @@ There are alternate entry points not in `IO` that use a default
 (empty) environment, but these produce degraded output and in
 user-facing prints that's a bug.
 (For example, see
-[https://github.com/GaloisInc/saw-script/issues/2802](issue #2802).)
+[issue #2802](https://github.com/GaloisInc/saw-script/issues/2802).)
 Consequently, we should avoid using these and, in the long run,
 ideally we'd remove them.
 
@@ -348,7 +348,7 @@ Otherwise, write at least a dump instance.
 Writing prettyprinter code is ... not necessarily tedious but somewhat
 involved.
 One tends to need to open the 
-[https://hackage.haskell.org/package/prettyprinter/docs/Prettyprinter.html](prettyprinter library docs)
+[prettyprinter library docs](https://hackage.haskell.org/package/prettyprinter/docs/Prettyprinter.html)
 and dig around.
 Also, since one doesn't do it very often this process generally needs
 to be repeated every time the issue comes up, which increases the
