@@ -70,6 +70,8 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
+import qualified SAWSupport.Pretty as PPS
+
 import CryptolSAWCore.CryptolEnv
 import SAWCore.FiniteValue
 import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
@@ -78,7 +80,6 @@ import SAWCore.Prelude
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import CryptolSAWCore.TypedTerm
-import SAWCore.Term.Pretty (showTerm)
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -731,7 +732,9 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        inner_func <-
          case maybe_fix_body of
            Just f -> pure f
-           Nothing -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
+           Nothing -> do
+               func' <- ppTerm sc PPS.defaultOpts (ttTerm func)
+               fail $ "not Prelude.fix: " ++ func'
        func_body <- betaNormalize sc
          =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
 
@@ -813,7 +816,9 @@ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
        inner_func <-
          case maybe_fix_body of
            Just f -> pure f
-           Nothing -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
+           Nothing -> do
+               func' <- ppTerm sc PPS.defaultOpts (ttTerm func)
+               fail $ "not Prelude.fix: " ++ func'
        func_body <- betaNormalize sc
          =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ [explicit_parameters_tuple]))
 
@@ -893,9 +898,11 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
        when (phase == SimpleInvariant.InitialInvariant) $
          do printFn "Loop invariant implicit parameters!"
             forM_ implicit_params' $ \x ->
-                do printFn (showTerm x)
+                do x' <- ppTerm sc PPS.defaultOpts x
+                   printFn x'
                    tp <- scTypeOf sc x
-                   printFn (showTerm tp)
+                   tp' <- ppTerm sc PPS.defaultOpts tp
+                   printFn tp'
 
        -- actually apply the arguments to the given term
        inv <- scApplyAll sc (ttTerm func) (implicit_params' ++ [initial_tuple, current_tuple])
@@ -903,10 +910,11 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
        -- check that the produced term is type-correct
        tp <- scTypeOf sc inv
        ok <- scConvertible sc True tp =<< scBoolType sc
-       unless ok $
+       unless ok $ do
+         -- TODO, get ppOpts from the right place
+         tp' <- ppTerm sc PPS.defaultOpts tp
          fail $ unlines [ "Loop invariant must return a boolean value, but got:"
-                        , showTerm tp
-                           -- TODO, get ppOpts from the right place
+                        , tp'
                         ]
        b <- bindSAWTerm sym sawst W4.BaseBoolRepr inv
 
@@ -1534,7 +1542,7 @@ assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr t
     err <- LO.matchPointsToValue opts sc cc ms MS.PostState md cond ptr tptval
     case err of
       Just msg -> do
-        doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
+        doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
         O.failure loc (O.BadPointerLoad (Right doc) msg)
       Nothing -> pure ()
 assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do
@@ -1549,7 +1557,7 @@ assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md t
     err <- LO.matchPointsToBitfieldValue opts sc cc ms MS.PostState md ptr bfIndex tptval
     case err of
       Just msg -> do
-        doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
+        doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
         O.failure loc (O.BadPointerLoad (Right doc) msg)
       Nothing -> pure ()
 

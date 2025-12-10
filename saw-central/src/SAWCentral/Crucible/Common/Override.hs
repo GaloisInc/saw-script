@@ -37,9 +37,9 @@ module SAWCentral.Crucible.Common.Override
   , oeConditionalPred
   --
   , OverrideFailureReason(..)
-  , ppOverrideFailureReason
+  , prettyOverrideFailureReason
   , OverrideFailure(..)
-  , ppOverrideFailure
+  , prettyOverrideFailure
   --
   , OverrideMatcher
   , OverrideMatcher'(..)
@@ -109,7 +109,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 import           SAWCore.Name (VarName(..))
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
-import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
+import           SAWCore.Term.Pretty (prettyTermPure)
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 
 import qualified Cryptol.Utils.PP as Cryptol (pp)
@@ -302,18 +302,18 @@ data OverrideFailureReason ext
 instance ( PP.Pretty (ExtType ext)
          , PP.Pretty (MS.PointsTo ext)
          ) => PP.Pretty (OverrideFailureReason ext) where
-  pretty = ppOverrideFailureReason
+  pretty = prettyOverrideFailureReason
 
 instance ( PP.Pretty (ExtType ext)
          , PP.Pretty (MS.PointsTo ext)
          ) => Show (OverrideFailureReason ext) where
   show = show . PP.pretty
 
-ppOverrideFailureReason ::
+prettyOverrideFailureReason ::
   ( PP.Pretty (ExtType ext)
   , PP.Pretty (MS.PointsTo ext)
   ) => OverrideFailureReason ext -> PP.Doc ann
-ppOverrideFailureReason rsn = case rsn of
+prettyOverrideFailureReason rsn = case rsn of
   AmbiguousPointsTos pts ->
     PP.vcat
     [ PP.pretty "LHS of points-to assertion(s) not reachable via points-tos from inputs/outputs:"
@@ -322,13 +322,13 @@ ppOverrideFailureReason rsn = case rsn of
   AmbiguousVars vs ->
     PP.vcat
     [ PP.pretty "Fresh variable(s) not reachable via points-tos from function inputs/outputs:"
-    , PP.indent 2 $ PP.vcat (map ppTypedVariable vs)
+    , PP.indent 2 $ PP.vcat (map prettyTypedVariable vs)
     ]
   BadTermMatch x y ->
     PP.vcat
     [ PP.pretty "terms do not match"
-    , PP.indent 2 (PP.unAnnotate (ppTerm PPS.defaultOpts x))
-    , PP.indent 2 (PP.unAnnotate (ppTerm PPS.defaultOpts y))
+    , PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts x))
+    , PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts y))
     ]
   BadPointerCast ->
     PP.pretty "bad pointer cast"
@@ -368,19 +368,19 @@ ppOverrideFailureReason rsn = case rsn of
 
 data OverrideFailure ext = OF W4.ProgramLoc (OverrideFailureReason ext)
 
-ppOverrideFailure :: ( PP.Pretty (ExtType ext)
-                     , PP.Pretty (MS.PointsTo ext)
-                     ) => OverrideFailure ext -> PP.Doc ann
-ppOverrideFailure (OF loc rsn) =
+prettyOverrideFailure :: ( PP.Pretty (ExtType ext)
+                         , PP.Pretty (MS.PointsTo ext)
+                         ) => OverrideFailure ext -> PP.Doc ann
+prettyOverrideFailure (OF loc rsn) =
   PP.vcat
   [ PP.pretty "at" PP.<+> PP.viaShow (W4.plSourceLoc loc) -- TODO: fix when what4 switches to prettyprinter
-  , ppOverrideFailureReason rsn
+  , prettyOverrideFailureReason rsn
   ]
 
 instance ( PP.Pretty (ExtType ext)
          , PP.Pretty (MS.PointsTo ext)
          ) => PP.Pretty (OverrideFailure ext) where
-  pretty = ppOverrideFailure
+  pretty = prettyOverrideFailure
 
 instance ( PP.Pretty (ExtType ext)
          , PP.Pretty (MS.PointsTo ext)
@@ -671,11 +671,13 @@ learnGhost sc md prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =
        , "- Actual:   " ++ show (Cryptol.pp sch)
        ]
      instantiateExtMatchTerm sc md prepost tm tmEx
-learnGhost _sc _md _prepost _var (TypedTerm tp _)
-  = fail $ unlines
+learnGhost sc _md _prepost _var (TypedTerm tp _)
+  = do
+    tp' <- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp
+    fail $ unlines
       [ "Ghost variable expected value has improper type"
       , "expected Cryptol schema type, but got"
-      , show (ppTypedTermType tp)
+      , show tp'
       ]
 
 executeGhost ::
@@ -688,11 +690,12 @@ executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =
   do s <- OM (use termSub)
      tm' <- liftIO (scInstantiate sc s tm)
      writeGlobal var (sch,tm')
-executeGhost _sc _md _var (TypedTerm tp _) =
+executeGhost sc _md _var (TypedTerm tp _) = do
+  tp' <- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp
   fail $ unlines
     [ "executeGhost: improper value type"
     , "expected Cryptol schema type, but got"
-    , show (ppTypedTermType tp)
+    , show tp'
     ]
 
 -- | NOTE: The two 'Term' arguments must have the same type.
@@ -730,8 +733,8 @@ matchTerm sc md prepost real expect =
             let ppOpts = PPS.defaultOpts
             -- clamp the print depth to 20
             let ppOpts' = PPS.limitMaxDepth ppOpts 20
-                expect' = scPrettyTerm ppOpts' expect
-                real' = scPrettyTerm ppOpts' real
+            expect' <- liftIO $ SAWVerifier.ppTerm sc ppOpts' expect
+            real' <- liftIO $ SAWVerifier.ppTerm sc ppOpts' real
             let msg = unlines $
                   [ "Literal equality " ++ MS.stateCond prepost
                   , "Expected term: "

@@ -159,12 +159,8 @@ data Opts = Opts {
     -- | Whether to print in color; default is false.
     ppColor :: Bool,
 
-    -- | Whether to show the names of local variables. Default is
-    --   true. If set to false, prints the deBruijn indexes instead.
-    ppShowLocalNames :: Bool,
-
-    -- | Maximum depth to recurse into terms. If not set, no limit.
-    --   Default is unset.
+    -- | Maximum depth to recurse into SAWCore terms. If not set, no
+    --   limit. Default is unset.
     ppMaxDepth :: Maybe Int,
 
     -- | The numeric identifiers, as seen in the 'memoFresh' field of
@@ -207,7 +203,6 @@ defaultOpts = Opts {
     ppUseAscii = False,
     ppBase = 10,
     ppColor = False,
-    ppShowLocalNames = True,
     ppMaxDepth = Nothing,
     ppNoInlineMemoFresh = mempty,
     ppMemoStyle = Incremental,

@@ -11,7 +11,7 @@
 -- | Turns 'SetupValue's back into 'MIRVal's.
 module SAWCentral.Crucible.MIR.ResolveSetupValue
   ( MIRVal(..)
-  , ppMIRVal
+  , prettyMIRVal
   , resolveSetupVal
   , typeOfSetupValue
   , lookupAllocIndex
@@ -117,12 +117,12 @@ data MIRVal where
   MIRVal :: TypeShape tp -> RegValue Sym tp -> MIRVal
 
 -- | Pretty-print a 'MIRVal'.
-ppMIRVal ::
+prettyMIRVal ::
   forall ann.
   Sym ->
   MIRVal ->
   PP.Doc ann
-ppMIRVal sym (MIRVal shp val) =
+prettyMIRVal sym (MIRVal shp val) =
   case shp of
     UnitShape _ ->
       PP.pretty val
@@ -140,7 +140,7 @@ ppMIRVal sym (MIRVal shp val) =
            Nothing ->
              "<symbolic enum>"
     TransparentShape _ shp' ->
-      ppMIRVal sym $ MIRVal shp' val
+      prettyMIRVal sym $ MIRVal shp' val
     RefShape _ _ _ _  ->
       "<reference>"
     SliceShape _ _ _ _ ->
@@ -194,10 +194,10 @@ ppMIRVal sym (MIRVal shp val) =
     prettyField fldShp val' =
       case fldShp of
         OptField shp' ->
-          ppMIRVal sym $ MIRVal shp' $
+          prettyMIRVal sym $ MIRVal shp' $
           readMaybeType sym "field" (shapeType shp') val'
         ReqField shp' ->
-          ppMIRVal sym $ MIRVal shp' val'
+          prettyMIRVal sym $ MIRVal shp' val'
 
     prettyAggregate ::
       [AgElemShape] ->
@@ -232,7 +232,7 @@ ppMIRVal sym (MIRVal shp val) =
       case IntMap.lookup (fromIntegral off) m of
         Just (Mir.MirAggregateEntry _sz tpr rv)
           | Just Refl <- W4.testEquality tpr (shapeType shp') ->
-              ppMIRVal sym $ MIRVal shp' $
+              prettyMIRVal sym $ MIRVal shp' $
               readMaybeType sym "elem" tpr rv
           | otherwise -> "<type mismatch>"
         Nothing -> "<unset>"
@@ -315,7 +315,7 @@ instance Show MIRTypeOfError where
   show (MIRInvalidTypedTerm tp) =
     unlines
     [ "Expected typed term with Cryptol-representable type, but got"
-    , show (ppTypedTermType tp)
+    , show (prettyTypedTermTypePure tp)
     ]
   show (MIRInvalidIdentifier errMsg) =
     errMsg
@@ -1007,7 +1007,7 @@ resolveTypedTerm mcc tm =
     tp -> fail $ unlines
             [ "resolveTypedTerm: expected monomorphic term"
             , "but got a term of type"
-            , show (ppTypedTermType tp)
+            , show (prettyTypedTermTypePure tp)
             ]
 
 resolveSAWPred ::

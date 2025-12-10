@@ -17,7 +17,6 @@ module SAWCore.SharedTerm
   , Ident, mkIdent
   , VarIndex
   , NameInfo(..)
-  , ppName
     -- * Shared terms
   , Term -- exported as abstract
   , unwrapTermF
@@ -33,7 +32,8 @@ module SAWCore.SharedTerm
   , scRegisterName
   , scResolveName
   , scResolveNameByURI
-  , scShowTerm
+  , ppTerm
+  , prettyTerm
   , DuplicateNameException(..)
     -- * SharedContext interface for building shared terms
   , SharedContext -- abstract type
@@ -268,7 +268,7 @@ import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 import Text.URI
 
-import qualified SAWSupport.Pretty as PPS (Opts)
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Panic (panic)
 import SAWCore.Cache
@@ -296,7 +296,6 @@ import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Certified
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty
 
 --------------------------------------------------------------------------------
 
@@ -310,11 +309,6 @@ scResolveName :: SharedContext -> Text -> IO [VarIndex]
 scResolveName sc nm =
   do env <- scGetNamingEnv sc
      pure (resolveDisplayName env nm)
-
-scShowTerm :: SharedContext -> PPS.Opts -> Term -> IO String
-scShowTerm sc opts t =
-  do env <- scGetNamingEnv sc
-     pure (showTermWithNames opts env t)
 
 -- | Create a fresh variable with the given identifier (which may be "_") and type.
 scFreshVariable :: SharedContext -> Text -> Term -> IO Term
@@ -575,8 +569,9 @@ reducePi sc t arg = do
   case asPi t' of
     Just (vn, _, body) ->
       scInstantiateBeta sc (IntMap.singleton (vnIndex vn) arg) body
-    _ ->
-      fail $ unlines ["reducePi: not a Pi term", showTerm t']
+    _ -> do
+      t'' <- ppTerm sc PPS.defaultOpts t'
+      fail $ unlines ["reducePi: not a Pi term", t'']
 
 
 -- | Look up the type of a global constant, primitive, data type, or

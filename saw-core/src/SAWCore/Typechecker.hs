@@ -44,7 +44,7 @@ import SAWCore.Name
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
-import SAWCore.Term.Pretty (showTerm)
+import SAWCore.Term.Pretty (ppTermPureDefaults)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import qualified SAWCore.Term.Certified as SC
@@ -329,7 +329,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
              throwTCError $
              DeclError nm ("More variables " ++ show (map Un.termVarLocalName vars) ++
                            " than length of function type:\n" ++
-                           showTerm typed_tp)
+                           ppTermPureDefaults typed_tp)
 
      -- Step 3: type-check the body of the definition in the context of its
      -- variables, and build a function that takes in those variables
@@ -428,8 +428,8 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
            Right ty ->
                panic "processDecls" [
                    "Type of the type of constructor is not a sort!",
-                   "Constructor type: " <> Text.pack (showTerm typed_tp),
-                   "Type of that type: " <> Text.pack (showTerm ty)
+                   "Constructor type: " <> Text.pack (ppTermPureDefaults typed_tp),
+                   "Type of that type: " <> Text.pack (ppTermPureDefaults ty)
                ]
        let tp = typed_tp
        let result = mkCtorArgStruct pn dtParams dtIndices tp

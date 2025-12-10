@@ -1,5 +1,7 @@
 module SAWCentral.Prover.Util where
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue
 import CryptolSAWCore.TypedTerm
@@ -17,11 +19,12 @@ checkBooleanType ty
 
 -- | Make sure that this schema is monomorphic, and either boolean,
 -- or something that returns a boolean.
-checkBooleanSchema :: TypedTermType -> IO ()
-checkBooleanSchema (TypedTermSchema (C.Forall [] [] t)) = checkBooleanType t
-checkBooleanSchema (TypedTermSchema s) = fail ("Invalid polymorphic type: " ++ pretty s)
-checkBooleanSchema tp =
-  fail ("Expected boolean type, but got " ++ show (ppTypedTermType tp))
+checkBooleanSchema :: SharedContext -> TypedTermType -> IO ()
+checkBooleanSchema _ (TypedTermSchema (C.Forall [] [] t)) = checkBooleanType t
+checkBooleanSchema _ (TypedTermSchema s) = fail ("Invalid polymorphic type: " ++ pretty s)
+checkBooleanSchema sc tp = do
+  tp' <- prettyTypedTermType sc PPS.defaultOpts tp
+  fail ("Expected boolean type, but got " ++ show tp')
 
 bindAllExts :: SharedContext -> Term -> IO Term
 bindAllExts sc body = scLambdaList sc (getAllVars body) body

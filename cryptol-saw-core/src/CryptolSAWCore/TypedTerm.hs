@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {- |
 Module      : CryptolSAWCore.TypedTerm
 Description : SAW-Core terms paired with Cryptol types.
@@ -6,33 +7,52 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 
-module CryptolSAWCore.TypedTerm
- -- ppTypedTerm,
- -- ppTypedTermType,
- -- ppTypedVariable,
- where
+module CryptolSAWCore.TypedTerm (
+    TypedTerm(..),
+    TypedTermType(..),
+
+    prettyTypedTerm,
+    prettyTypedTermType,
+    prettyTypedTermPure,
+    prettyTypedTermTypePure,
+    prettyTypedVariable,
+
+    ttTypeAsTerm,
+    ttTermLens,
+    ttIsMono,
+    mkTypedTerm,
+    applyTypedTerms,
+    typedTermOfFirstOrderValue,
+
+    TypedVariable(..),
+    asTypedVariable,
+    typedTermOfVariable,
+    abstractTypedVars,
+
+    CryptolModule(..),
+    prettyCryptolModule
+  ) where
 
 import Control.Monad (foldM)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Text (Text)
 
 import qualified Prettyprinter as PP
 
 import Cryptol.ModuleSystem.Name (nameIdent)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.Utils.PP as C (pretty, ppPrec)
+import qualified Cryptol.Utils.PP as C (pp, ppPrec)
 import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
+import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts)
 
 import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
 import SAWCore.FiniteValue
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer (asVariable)
 import SAWCore.SharedTerm
-import SAWCore.Term.Pretty (ppTerm)
+import SAWCore.Term.Pretty (prettyTermPure)
 
 -- Typed terms -----------------------------------------------------------------
 
@@ -58,24 +78,43 @@ data TypedTermType
  deriving Show
 
 
-ppTypedTerm :: TypedTerm -> PP.Doc ann
-ppTypedTerm (TypedTerm tp tm) =
-  PP.unAnnotate (ppTerm PPS.defaultOpts tm)
-  PP.<+> PP.pretty ":" PP.<+>
-  ppTypedTermType tp
+-- It is not ideal to have two copies of these but it's not that
+-- helpful to try to share. In the long run the pure ones should
+-- probably go away as they produce worse output.
 
-ppTypedTermType :: TypedTermType -> PP.Doc ann
-ppTypedTermType (TypedTermSchema sch) =
+prettyTypedTerm :: SharedContext -> PPS.Opts -> TypedTerm -> IO (PP.Doc ann)
+prettyTypedTerm sc opts (TypedTerm tp tm) = do
+  tm' <- prettyTerm sc opts tm
+  tp' <- prettyTypedTermType sc opts tp
+  pure $ PP.unAnnotate tm' PP.<+> ":" PP.<+> tp'
+
+prettyTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO (PP.Doc ann)
+prettyTypedTermType _sc _opts (TypedTermSchema sch) =
+  pure $ PP.viaShow (C.ppPrec 0 sch)
+prettyTypedTermType _sc _opts (TypedTermKind k) =
+  pure $ PP.viaShow (C.ppPrec 0 k)
+prettyTypedTermType sc opts (TypedTermOther tp) = do
+  tp' <- prettyTerm sc opts tp
+  pure $ PP.unAnnotate tp'
+
+prettyTypedTermPure :: TypedTerm -> PP.Doc ann
+prettyTypedTermPure (TypedTerm tp tm) =
+  PP.unAnnotate (prettyTermPure PPS.defaultOpts tm)
+  PP.<+> ":" PP.<+>
+  prettyTypedTermTypePure tp
+
+prettyTypedTermTypePure :: TypedTermType -> PP.Doc ann
+prettyTypedTermTypePure (TypedTermSchema sch) =
   PP.viaShow (C.ppPrec 0 sch)
-ppTypedTermType (TypedTermKind k) =
+prettyTypedTermTypePure (TypedTermKind k) =
   PP.viaShow (C.ppPrec 0 k)
-ppTypedTermType (TypedTermOther tp) =
-  PP.unAnnotate (ppTerm PPS.defaultOpts tp)
+prettyTypedTermTypePure (TypedTermOther tp) =
+  PP.unAnnotate (prettyTermPure PPS.defaultOpts tp)
 
-ppTypedVariable :: TypedVariable -> PP.Doc ann
-ppTypedVariable (TypedVariable ctp vn _tp) =
+prettyTypedVariable :: TypedVariable -> PP.Doc ann
+prettyTypedVariable (TypedVariable ctp vn _tp) =
   PP.unAnnotate (PP.pretty (vnName vn))
-  PP.<+> PP.pretty ":" PP.<+>
+  PP.<+> ":" PP.<+>
   PP.viaShow (C.ppPrec 0 ctp)
 
 
@@ -105,12 +144,6 @@ mkTypedTerm sc trm = do
         Just (Right t) -> TypedTermSchema (C.tMono t)
   return (TypedTerm ttt trm)
 
--- | Apply a function-typed 'TypedTerm' to an argument.
---   This operation fails if the type of the argument does
---   not match the function.
-applyTypedTerm :: SharedContext -> TypedTerm -> TypedTerm -> IO TypedTerm
-applyTypedTerm sc x y = applyTypedTerms sc x [y]
-
 -- | Apply a 'TypedTerm' to a list of arguments. This operation fails
 -- if the first 'TypedTerm' does not have a function type of
 -- sufficient arity, or if the types of the arguments do not match
@@ -129,36 +162,6 @@ applyTypedTerms sc (TypedTerm _ fn) args =
            Just (Left k)  -> TypedTermKind k
            Just (Right t) -> TypedTermSchema (C.tMono t)
      return (TypedTerm ttt trm)
-
-
--- | Create an abstract defined constant with the specified name and body.
-defineTypedTerm :: SharedContext -> Text -> TypedTerm -> IO TypedTerm
-defineTypedTerm sc name (TypedTerm schema t) =
-  do ty <- scTypeOf sc t
-     TypedTerm schema <$> scFreshConstant sc name t ty
-
--- | Make a tuple value from a list of 'TypedTerm's. This operation
--- fails if any 'TypedTerm' in the list has a polymorphic type.
-tupleTypedTerm :: SharedContext -> [TypedTerm] -> IO TypedTerm
-tupleTypedTerm sc tts =
-  case traverse (ttIsMono . ttType) tts of
-    Nothing -> fail "tupleTypedTerm: invalid polymorphic term"
-    Just ctys ->
-      TypedTerm (TypedTermSchema (C.tMono (C.tTuple ctys))) <$>
-        scTuple sc (map ttTerm tts)
-
--- | Given a 'TypedTerm' with a tuple type, return a list of its
--- projected components. This operation fails if the 'TypedTerm' does
--- not have a tuple type.
-destTupleTypedTerm :: SharedContext -> TypedTerm -> IO [TypedTerm]
-destTupleTypedTerm sc (TypedTerm tp t) =
-  case C.tIsTuple =<< ttIsMono tp of
-    Nothing -> fail "asTupleTypedTerm: not a tuple type"
-    Just ctys ->
-      do let len = length ctys
-         let idxs = take len [1 ..]
-         ts <- traverse (\i -> scTupleSelector sc t i len) idxs
-         pure $ zipWith TypedTerm (map (TypedTermSchema . C.tMono) ctys) ts
 
 -- First order types and values ------------------------------------------------
 
@@ -239,17 +242,30 @@ data CryptolModule =
     (Map C.Name C.TySyn)    -- type synonyms
     (Map C.Name TypedTerm)  -- symbols (mapping to SawCore things).
 
-showCryptolModule :: CryptolModule -> String
-showCryptolModule (CryptolModule sm tm) =
-  unlines $
-    (if Map.null sm then [] else
-       "Type Synonyms" : "=============" : map showTSyn (Map.elems sm) ++ [""]) ++
-    "Symbols" : "=======" : concatMap showBinding (Map.assocs tm)
-  where
-    showTSyn (C.TySyn name params _props rhs _doc) =
-      "    " ++ unwords (C.pretty (nameIdent name) : map C.pretty params) ++ " = " ++ C.pretty rhs
+-- Note: Cryptol's prettyprinter isn't directly compatible with SAW's.
+--
+-- Also note that its naming conventions are opposite ours; it uses
+-- "pp" to make Docs and "pretty" to make Strings.
+--
+prettyCryptolModule :: CryptolModule -> PP.Doc ann
+prettyCryptolModule (CryptolModule sm tm) =
+  let cpp item = PP.viaShow $ C.pp item
+      prettyTSyn (C.TySyn name params _props rhs _doc) =
+        let name' = cpp (nameIdent name)
+            params' = map cpp params
+            rhs' = cpp rhs
+        in
+        PP.indent 4 $ PP.hsep (name' : params') PP.<+> "=" PP.<+> rhs'
 
-    showBinding (name, TypedTerm (TypedTermSchema schema) _) =
-      ["    " ++ C.pretty (nameIdent name) ++ " : " ++ C.pretty schema]
-    showBinding _ =
-      []
+      prettyBinding (name, TypedTerm (TypedTermSchema schema) _) =
+        [PP.indent 4 $ cpp (nameIdent name) PP.<+> ":" PP.<+> cpp schema]
+      prettyBinding _ =
+        []
+      synonyms =
+        if Map.null sm then []
+        else
+            "Type Synonyms" : "=============" : map prettyTSyn (Map.elems sm) ++ [""]
+      symbols =
+        "Symbols" : "=======" : concatMap prettyBinding (Map.assocs tm)
+  in
+  PP.vsep $ synonyms ++ symbols

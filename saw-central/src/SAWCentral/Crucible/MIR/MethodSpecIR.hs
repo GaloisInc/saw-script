@@ -113,14 +113,14 @@ mccSym = to (\mcc -> mccWithBackend mcc backendGetSym)
 
 instance PP.Pretty MirPointsTo where
     pretty (MirPointsTo _md ref tar) = PP.parens $
-        MS.ppSetupValue ref PP.<+>
+        MS.prettySetupValue ref PP.<+>
           case tar of
             CrucibleMirCompPointsToTarget svs ->
-              "->" PP.<+> PP.list (map MS.ppSetupValue svs)
+              "->" PP.<+> PP.list (map MS.prettySetupValue svs)
             MirPointsToSingleTarget sv ->
-              "->" PP.<+> MS.ppSetupValue sv
+              "->" PP.<+> MS.prettySetupValue sv
             MirPointsToMultiTarget svArr ->
-              "->*" PP.<+> MS.ppSetupValue svArr
+              "->*" PP.<+> MS.prettySetupValue svArr
 
 mutIso :: Iso' M.Mutability Bool
 mutIso =

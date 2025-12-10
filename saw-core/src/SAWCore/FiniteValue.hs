@@ -34,7 +34,6 @@ import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts)
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty
 
 -- | Finite types that can be encoded as bits for a SAT/SMT solver.
 data FiniteType
@@ -335,14 +334,17 @@ asFiniteType sc t = do
       -> FTTuple <$> traverse (asFiniteType sc) ts
     (R.asRecordType -> Just tm)
       -> FTRec <$> traverse (asFiniteType sc) tm
-    _ -> fail $ "asFiniteType: unsupported argument type: " ++ scPrettyTerm PPS.defaultOpts t'
+    _ -> do
+        t'' <- ppTerm sc PPS.defaultOpts t'
+        fail $ "asFiniteType: unsupported argument type: " ++ t''
 
 asFirstOrderType :: SharedContext -> Term -> IO FirstOrderType
 asFirstOrderType sc t = maybe err pure =<< runMaybeT (asFirstOrderTypeMaybe sc t)
   where
     err =
       do t' <- scWhnf sc t
-         fail ("asFirstOrderType: unsupported argument type: " ++ scPrettyTerm PPS.defaultOpts t')
+         t'' <- ppTerm sc PPS.defaultOpts t'
+         fail $ "asFirstOrderType: unsupported argument type: " ++ t''
 
 asFirstOrderTypeMaybe :: SharedContext -> Term -> MaybeT IO FirstOrderType
 asFirstOrderTypeMaybe sc t =

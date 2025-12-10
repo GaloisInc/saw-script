@@ -89,10 +89,11 @@ import qualified Data.Text as Text
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.PP as C
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.Name
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty (showTerm)
 import SAWCore.Recognizer
 
 import CryptolSAWCore.TypedTerm
@@ -138,7 +139,7 @@ proveAll script ts = do
   sc <- getSharedContext
   pos <- getPosition
   forM_ (zip [0..] ts) $ \(n, t) -> do
-    io $ checkBooleanSchema (ttType t)
+    io $ checkBooleanSchema sc (ttType t)
     prop <- io $ predicateToProp sc Universal (ttTerm t)
     let goal = ProofGoal
               { goalNum  = n
@@ -248,7 +249,9 @@ stateFromApp app = do
     App _ arg -> io $ scFlatTermF sc $ PairLeft arg
     _ -> do
       term <- io $ scTermF sc app
-      fail $ "Error: " ++ showTerm term ++ " is not an App"
+      opts <- State.gets rwPPOpts
+      term' <- io $ ppTerm sc opts term
+      fail $ "Error: " ++ term' ++ " is not an App"
 
 -- | Given a term containing the application of a 'Constant', locate this
 -- application and replace its argument with a 'Variable'.  Returns the inserted
@@ -280,8 +283,11 @@ openConstantApp constant t = do
     lambdaOrFail tt =
       case asLambda (ttTerm tt) of
         Just lambda -> return lambda
-        Nothing ->
-          fail $ "Error: Expected a lambda term, got " ++ show (ppTypedTerm tt)
+        Nothing -> do
+          sc <- getSharedContext
+          opts <- State.gets rwPPOpts
+          tt' <- io $ PPS.render opts <$> prettyTypedTerm sc opts tt
+          fail $ "Error: Expected a lambda term, got " ++ tt'
 
 -- Traverses 'term' and extracts the application of 'constant' within it.  Fails
 -- if 'constant' cannot be found within 'term'.
@@ -293,9 +299,14 @@ extractApp :: TypedTerm
 extractApp constant term =
   case snd $ go (IntSet.empty, Nothing) term of
     Just app -> return app
-    Nothing -> fail $ unlines [ "Error: Failed to locate constant in term."
-                              , "  Constant: " ++ show (ppTypedTerm constant)
-                              , "  Term: " ++ showTerm term ]
+    Nothing -> do
+        sc <- getSharedContext
+        opts <- State.gets rwPPOpts
+        term' <- io $ ppTerm sc opts term
+        constant' <- io $ PPS.render opts <$> prettyTypedTerm sc opts constant
+        fail $ unlines [ "Error: Failed to locate constant in term."
+                              , "  Constant: " ++ constant'
+                              , "  Term: " ++ term' ]
   where
     go :: (IntSet, Maybe (TermF Term))
        -> Term
@@ -602,8 +613,11 @@ proveBisimulation script bthms srel orel lhs rhs = do
             , "RHS output type: " ++ C.pretty o2 ]
 
           return (s1, s2, o1)
-        _ -> fail $ "Error: Unexpected output relation type: "
-                 ++ show (ppTypedTermType (ttType orel))
+        _ -> do
+            sc <- getSharedContext
+            opts <- State.gets rwPPOpts
+            orel' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType orel)
+            fail $ "Error: Unexpected output relation type: " ++ orel'
 
     -- Check that 'lhsStateType' and 'rhsStateType' match the extracted types
     -- from 'typecheckOutputRelation'.  Invokes 'fail' if the types do not
@@ -630,8 +644,11 @@ proveBisimulation script bthms srel orel lhs rhs = do
             [ "Error: RHS of state relation and output relations have incompatible state types:"
             , "  State relation RHS state type: " ++ C.pretty s2
             , "  Output relation RHS state type: " ++ C.pretty rhsStateType ]
-        _ -> fail $ "Error: Unexpected state relation type: "
-                 ++ show (ppTypedTermType (ttType srel))
+        _ -> do
+            sc <- getSharedContext
+            opts <- State.gets rwPPOpts
+            srel' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType srel)
+            fail $ "Error: Unexpected state relation type: " ++ srel'
 
     -- Typecheck bisimulation term. The expected type for a bisimulation term
     -- is:
@@ -672,12 +689,16 @@ proveBisimulation script bthms srel orel lhs rhs = do
             , "  Actual: " ++ C.pretty o ]
 
           return (name, i)
-        _ ->
-          let stStr = C.pretty stateType in
-          fail $ unlines
-          [ "Error: Unexpected bisimulation term type."
-          , "  Expected: (" ++ stStr ++ ", inputType) -> (" ++ stStr ++ ", outputType)"
-          , "  Actual: " ++ show (ppTypedTermType (ttType side)) ]
+        _ -> do
+          sc <- getSharedContext
+          opts <- State.gets rwPPOpts
+          let stStr = C.pretty stateType
+          side' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType side)
+          fail $ unlines [
+              "Error: Unexpected bisimulation term type.",
+              "  Expected: (" ++ stStr ++ ", inputType) -> (" ++ stStr ++ ", outputType)",
+              "  Actual: " ++ side'
+           ]
 
 -- | Replace the invocation of a specific 'Constant' with a 'Variable'.  The
 -- function returns the resulting 'Term' and updates a 'ReplaceState' to hold
@@ -747,8 +768,11 @@ replaceConstantTerm constant constantRetType term =
 
 -- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
 constantName :: TermF Term -> TopLevel Text.Text
-constantName (Constant e) = return $ toShortName $ nameInfo e
+constantName (Constant e) =
+  return $ toShortName $ nameInfo e
 constantName tf = do
   sc <- getSharedContext
+  opts <- State.gets rwPPOpts
   term <- io $ scTermF sc tf
-  fail $ "Error: Expected a constant, but got: " ++ showTerm term
+  term' <- io $ ppTerm sc opts term
+  fail $ "Error: Expected a constant, but got: " ++ term'

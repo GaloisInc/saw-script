@@ -42,7 +42,7 @@ module SAWCentral.Crucible.LLVM.Override
   , doAllocSymInit
 
   , diffMemTypes
-  , ppPointsToAsLLVMVal
+  , prettyPointsToAsLLVMVal
 
   , enableSMTArrayMemoryModel
   ) where
@@ -111,10 +111,11 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.BitVector.Sized as BV
 
+import qualified SAWSupport.Pretty as PPS
+
 import           SAWCore.Name (VarName(..))
 import           SAWCore.SharedTerm
 import           SAWCore.Recognizer
-import           SAWCore.Term.Pretty (showTerm)
 import           CryptolSAWCore.TypedTerm
 import           SAWCoreWhat4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 
@@ -136,18 +137,18 @@ type instance Pointer' (LLVM arch) Sym = LLVMPtr (Crucible.ArchWidth arch)
 ------------------------------------------------------------------------
 -- Translating SAW values to Crucible values for good error messages
 
-ppLLVMVal ::
+prettyLLVMVal ::
   LLVMCrucibleContext arch ->
   LLVMVal ->
   OverrideMatcher (LLVM arch) w (PP.Doc ann)
-ppLLVMVal cc val = do
+prettyLLVMVal cc val = do
   sym <- Ov.getSymInterface
   mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))
   -- TODO: remove viaShow when crucible switches to prettyprinter
   pure $ PP.viaShow $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) val
 
 -- | Resolve a 'SetupValue' into a 'LLVMVal' and pretty-print it
-ppSetupValueAsLLVMVal ::
+prettySetupValueAsLLVMVal ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options              {- ^ output/verbosity options -} ->
   LLVMCrucibleContext arch ->
@@ -155,9 +156,9 @@ ppSetupValueAsLLVMVal ::
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   SetupValue (LLVM arch) ->
   OverrideMatcher (LLVM arch) w (PP.Doc ann)
-ppSetupValueAsLLVMVal opts cc sc spec setupval = do
+prettySetupValueAsLLVMVal opts cc sc spec setupval = do
   (_memTy, llvmval) <- resolveSetupValueLLVM opts cc sc spec setupval
-  ppLLVMVal cc llvmval
+  prettyLLVMVal cc llvmval
 
 -- | Try to translate the spec\'s 'SetupValue' into an 'LLVMVal', pretty-print
 --   the 'LLVMVal'.
@@ -177,13 +178,13 @@ mkStructuralMismatch _opts cc _sc spec llvmval setupval memTy =
       maybeMsgTy = either (const Nothing) Just $ runExcept (typeOfSetupValue cc tyEnv nameEnv setupval)
   in pure $ StructuralMismatch
               (PP.pretty llvmval)
-              (MS.ppSetupValue setupval)
+              (MS.prettySetupValue setupval)
               maybeMsgTy
               memTy
 
--- | Instead of using 'ppPointsTo', which prints 'SetupValue', translate
+-- | Instead of using 'prettyPointsTo', which prints 'SetupValue', translate
 --   expressions to 'LLVMVal'.
-ppPointsToAsLLVMVal ::
+prettyPointsToAsLLVMVal ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options              {- ^ output/verbosity options -} ->
   LLVMCrucibleContext arch ->
@@ -191,18 +192,24 @@ ppPointsToAsLLVMVal ::
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   PointsTo (LLVM arch) ->
   OverrideMatcher (LLVM arch) w (PP.Doc ann)
-ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo md cond ptr val) = do
-  pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec ptr
+prettyPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo md cond ptr val) = do
+  pretty1 <- prettySetupValueAsLLVMVal opts cc sc spec ptr
   let pretty2 = PP.pretty val
+  cond' <- case cond of
+      Nothing ->
+          pure PP.emptyDoc
+      Just tt -> do
+          tt' <- liftIO $ prettyTypedTerm sc PPS.defaultOpts tt
+          pure $ "Condition:" PP.<+> tt'
   pure $ PP.vcat [ "Pointer:" PP.<+> pretty1
                  , "Pointee:" PP.<+> pretty2
-                 , maybe PP.emptyDoc (\tt -> "Condition:" PP.<+> ppTypedTerm tt) cond
+                 , cond'
                  , "Assertion made at:" PP.<+>
                    PP.pretty (W4.plSourceLoc (MS.conditionLoc md))
                  ]
-ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsToBitfield md ptr fieldName val) = do
-  pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec ptr
-  let pretty2 = MS.ppSetupValue val
+prettyPointsToAsLLVMVal opts cc sc spec (LLVMPointsToBitfield md ptr fieldName val) = do
+  pretty1 <- prettySetupValueAsLLVMVal opts cc sc spec ptr
+  let pretty2 = MS.prettySetupValue val
   pure $ PP.vcat [ "Pointer (bitfield):" PP.<+> pretty1 <> PP.pretty ("." ++ fieldName)
                  , "Pointee:" PP.<+> pretty2
                  , "Assertion made at:" PP.<+>
@@ -222,16 +229,16 @@ notEqual ::
   Crucible.LLVMVal Sym {- ^ the value from the simulator -} ->
   OverrideMatcher (LLVM arch) w Crucible.SimError
 notEqual cond opts loc cc sc spec expected actual = do
-  prettyLLVMVal      <- ppLLVMVal cc actual
-  prettySetupLLVMVal <- ppSetupValueAsLLVMVal opts cc sc spec expected
+  lv'actual    <- prettyLLVMVal cc actual
+  slv'actual   <- prettySetupValueAsLLVMVal opts cc sc spec expected
   let msg = unlines
         [ "Equality " ++ MS.stateCond cond
         , "Expected value (as a SAW value): "
-        , show (MS.ppSetupValue expected)
+        , show (MS.prettySetupValue expected)
         , "Expected value (as a Crucible value): "
-        , show prettySetupLLVMVal
+        , show slv'actual
         , "Actual value: "
-        , show prettyLLVMVal
+        , show lv'actual
         ]
   pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
@@ -342,7 +349,7 @@ methodSpecHandler opts sc cc mdMap css h =
             [ MS.ppMethodSpec methodSpec
             , "Arguments:"
             , bullets '-' prettyArgs
-            , ppOverrideFailure failureReason
+            , prettyOverrideFailure failureReason
             ]
     in
       case partitionEithers (toList prestates) of
@@ -754,10 +761,11 @@ enforcePointerValidity sc cc ss =
               Crucible.isAllocatedAlignedPointer sym w alignment mut ptr (Just psz') mem
             let ploc = MS.conditionLoc allocMd
 
+            pszStr <- liftIO $ ppTerm sc PPS.defaultOpts psz
             let msg =
                   "Pointer not valid:"
                   ++ "\n  base = " ++ show (Crucible.ppPtr ptr)
-                  ++ "\n  size = " ++ showTerm psz
+                  ++ "\n  size = " ++ pszStr
                   ++ "\n  required alignment = " ++ show (Crucible.fromAlignment alignment) ++ "-byte"
                   ++ "\n  required mutability = " ++ show mut
             addAssert c allocMd $ Crucible.SimError ploc $
@@ -770,7 +778,7 @@ enforcePointerValidity sc cc ss =
                      let msg' = PP.vcat $ map (PP.pretty . unwords)
                            [ [ "Memory region not initialized:" ]
                            , [ "  pointer =", show (Crucible.ppPtr ptr) ]
-                           , [ "  size =", showTerm psz ]
+                           , [ "  size =", pszStr ]
                            ]
                      case maybeOk of
                        Just ok ->
@@ -844,7 +852,7 @@ enforceDisjointness sc cc loc globals extras ss =
               pure (g, ptr)
      globals' <- traverse resolveAllocGlobal globals
      sequence_
-       [ enforceDisjointAllocGlobal sym loc p q
+       [ enforceDisjointAllocGlobal sc sym loc p q
        | p <- mems
        , q <- globals'
        ]
@@ -885,23 +893,26 @@ enforceDisjointAllocSpec sc cc sym loc
               , MS.conditionType = "memory disjointness"
               , MS.conditionContext = ""
               }
+     pszStr <- liftIO $ ppTerm sc PPS.defaultOpts psz
+     qszStr <- liftIO $ ppTerm sc PPS.defaultOpts qsz
      let msg =
            "Memory regions not disjoint:"
-           ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ showTerm psz ++ ")"
+           ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ pszStr ++ ")"
            ++ "\n  from " ++ ppProgramLoc (MS.conditionLoc pMd)
            ++ "\n  and "
-           ++ "\n  (base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ showTerm qsz ++ ")"
+           ++ "\n  (base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ qszStr ++ ")"
            ++ "\n  from " ++ ppProgramLoc (MS.conditionLoc qMd)
      addAssert c md $ Crucible.SimError loc $
        Crucible.AssertFailureSimError msg ""
 
 -- | Assert that an LLVM allocation is disjoint from a global region.
 enforceDisjointAllocGlobal ::
+  SharedContext ->
   Sym -> W4.ProgramLoc ->
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   (LLVMAllocGlobal arch, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointAllocGlobal sym loc
+enforceDisjointAllocGlobal sc sym loc
   (LLVMAllocSpec _pmut _pty _palign psz pMd pfresh _p_sym_init, p)
   (LLVMAllocGlobal qloc (L.Symbol qname), q)
   | pfresh =
@@ -910,9 +921,10 @@ enforceDisjointAllocGlobal sym loc
   do let Crucible.LLVMPointer pblk _ = p
      let Crucible.LLVMPointer qblk _ = q
      c <- liftIO $ W4.notPred sym =<< W4.natEq sym pblk qblk
+     pszStr <- liftIO $ ppTerm sc PPS.defaultOpts psz
      let msg =
            "Memory regions not disjoint:"
-           ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ showTerm psz ++ ")"
+           ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ pszStr ++ ")"
            ++ "\n  from " ++ ppProgramLoc (MS.conditionLoc pMd)
            ++ "\n  and "
            ++ "\n  global " ++ show qname ++ " (base=" ++ show (Crucible.ppPtr q) ++ ")"
@@ -975,7 +987,7 @@ matchPointsTos opts sc cc spec prepost = go False []
            do err <- learnPointsTo opts sc cc spec prepost c
               case err of
                 Just msg -> do
-                  doc <- ppPointsToAsLLVMVal opts cc sc spec c
+                  doc <- prettyPointsToAsLLVMVal opts cc sc spec c
                   failure (llvmPointsToProgramLoc c) (BadPointerLoad (Right doc) msg)
                 Nothing  -> go True delayed cs
          else
@@ -1445,10 +1457,12 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
        SymbolicSizeValue expected_arr_tm expected_sz_tm ->
          do maybe_allocation_array <- liftIO $
               Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr (Crucible.memImplHeap mem)
-            let errMsg = PP.vcat $ map (PP.pretty . unwords)
+            errMsg <- do
+                tm' <- liftIO $ prettyTypedTerm sc PPS.defaultOpts expected_sz_tm
+                pure $ PP.vcat $ map (PP.pretty . unwords)
                   [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
                   , [ "in the ", MS.stateCond prepost, "of an override" ]
-                  , [ "Tried to read an array prefix of size:", show (ppTypedTerm expected_sz_tm) ]
+                  , [ "Tried to read an array prefix of size:", show tm' ]
                   ]
             case maybe_allocation_array of
               Just (ok, arr, sz)
@@ -2238,7 +2252,7 @@ storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val =
         _ -> fail $ unlines
                [ "llvm_points_to_bitfield: Both the bitfield and RHS value must be bitvectors"
                , "Bitfield value: " ++ show (Crucible.ppTermExpr bfVal)
-               , "RHS value: " ++ show (MS.ppSetupValue val)
+               , "RHS value: " ++ show (MS.prettySetupValue val)
                ]
 
 

@@ -155,7 +155,6 @@ import SAWCore.FiniteValue (ppFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer ((:*:)(..), asTupleType, asVecType)
 import SAWCore.SharedTerm
-import SAWCore.Term.Pretty (ppTerm)
 import SAWCoreWhat4.ReturnTrip
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 import qualified CryptolSAWCore.CryptolEnv as CryEnv
@@ -1424,7 +1423,7 @@ setupPrestateConditions mspec cc env = aux []
         TypedTerm tp _ ->
           fail $ unlines
             [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (ppTypedTermType tp)
+            , show (prettyTypedTermTypePure tp)
             ]
 
 verifyObligations ::
@@ -2014,11 +2013,12 @@ setupArg sc cc ecRef mty0 tp0 =
     let -- Panic if we encounter an unsupported type that should have been
         -- caught earlier by typeShapeToSAWTypes.
         impossibleType :: forall a. Term -> IO a
-        impossibleType ty =
+        impossibleType ty = do
+          ty' <- ppTerm sc PPS.defaultOpts ty
           panic
             "setupArg"
             [ "Type that should have been rejected by typeShapeToSAWTypes:"
-            , Text.pack $ show $ ppTerm PPS.defaultOpts ty
+            , Text.pack ty'
             ]
 
     let -- Convert a fresh SAWCore term to a MIR-related Crucible.RegValue,
@@ -2041,11 +2041,12 @@ setupArg sc cc ecRef mty0 tp0 =
               eltScTps <-
                 case asTupleType scTp of
                   Just eltScTps -> pure eltScTps
-                  Nothing ->
+                  Nothing -> do
+                    scTp' <- ppTerm sc PPS.defaultOpts scTp
                     panic
                       "setupArg"
                       [ "TupleShape with non-tuple type:"
-                      , Text.pack $ show $ ppTerm PPS.defaultOpts scTp
+                      , Text.pack $ scTp'
                       ]
               let tupleSz = length elems
               buildMirAggregate sym elems (zip [0..] eltScTps) $
@@ -2059,11 +2060,12 @@ setupArg sc cc ecRef mty0 tp0 =
               (arraySz :*: eltScTp) <-
                 case asVecType scTp of
                   Just nt -> pure nt
-                  Nothing ->
+                  Nothing -> do
+                    scTp' <- ppTerm sc PPS.defaultOpts scTp
                     panic
                       "setupArg"
                       [ "ArrayShape with non-Vec type:"
-                      , Text.pack $ show $ ppTerm PPS.defaultOpts scTp
+                      , Text.pack scTp'
                       ]
               arraySzTerm <- scNat sc arraySz
               generateMirAggregateArray sym eltSz eltShp len $

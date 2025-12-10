@@ -167,7 +167,6 @@ import SAWCore.FiniteValue (ppFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
-import SAWCore.Term.Pretty (showTerm)
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -229,7 +228,7 @@ displayVerifExceptionOpts opts (DeclNotFound (L.Symbol nm) nms) =
        then [ "Run SAW with --sim-verbose=3 to see all function names" ]
        else "Available function names:" : map (("  " ++) . show . Crucible.ppSymbol) nms
 displayVerifExceptionOpts _ (SetupError e) =
-  "Error during simulation setup: " ++ show (ppSetupError e)
+  "Error during simulation setup: " ++ show (prettySetupError e)
 
 show_cfg :: SAW_CFG -> Text
 show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = Text.pack $ show cfg
@@ -568,7 +567,7 @@ withMethodSpec pathSat lm nm setup action =
                     case defOrDecl of
                       Left def -> initialCrucibleSetupState cc def setupLoc parent
                       Right decl -> initialCrucibleSetupStateDecl cc decl setupLoc parent
-              st0 <- either (throwTopLevel . show . ppSetupError) return est0
+              st0 <- either (throwTopLevel . show . prettySetupError) return est0
 
               -- execute commands of the method spec
               io $ W4.setCurrentProgramLoc sym setupLoc
@@ -1141,7 +1140,7 @@ setupPrestateConditions mspec cc mem env = aux []
         TypedTerm tp _ ->
           fail $ unlines
             [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (ppTypedTermType tp)
+            , show (prettyTypedTermTypePure tp)
             ]
 
 --------------------------------------------------------------------------------
@@ -2376,10 +2375,13 @@ llvm_symbolic_alloc ro align_bytes sz =
               , "unexpected type of size term, expected [64], found"
               , Cryptol.pretty tp
               ]
-       _ -> throwCrucibleSetup loc $ unwords
+       _ -> do
+           opts <- lift $ lift $ gets rwPPOpts
+           sz' <- liftIO $ ppTerm sc opts sz
+           throwCrucibleSetup loc $ unwords
               [ "llvm_symbolic_alloc:"
               , "unexpected term, expected term of type [64], but got"
-              , showTerm sz
+              , sz'
               ]
 
      tags <- view Setup.croTags
@@ -2651,10 +2653,14 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
               , "unexpected type of size term, expected [64], found"
               , Cryptol.pretty ty
               ]
-       _ -> throwCrucibleSetup loc $ unwords
+       _ -> do
+           sc <- lift $ lift $ getSharedContext
+           opts <- lift $ lift $ gets rwPPOpts
+           sz' <- liftIO $ ppTerm sc opts (ttTerm sz)
+           throwCrucibleSetup loc $ unwords
               [ "llvm_points_to_array_prefix:"
               , "unexpected size term, expected term of type [64], but got"
-              , showTerm (ttTerm sz)
+              , sz'
               ]
 
      Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -> Crucible.withPtrWidth wptr $
