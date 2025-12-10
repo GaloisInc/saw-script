@@ -7,7 +7,7 @@
      times will cause SAW to raise an error.
 
   2. For functions that return a value other than `()`, a `mir_return`
-     specification is now required.  Omitting the return specification will
+     statement is now required.  Omitting the return statement will
      cause SAW to raise an error.
 
 This release supports [version
