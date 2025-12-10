@@ -3,7 +3,7 @@
 * `mir_verify` now enforces correctness checks that match the existing
   behavior of `llvm_verify` and `jvm_verify`:
 
-  1. Omitting a call to mir_execute_func or calling mir_execute_func multiple
+  1. Omitting a call to `mir_execute_func` or calling `mir_execute_func` multiple
      times will cause SAW to raise an error.
 
   2. For functions that return a value other than `()`, a `mir_return`
