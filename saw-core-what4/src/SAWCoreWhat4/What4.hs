@@ -994,7 +994,7 @@ parseUninterpreted ::
 parseUninterpreted sym ref app@(UnintApp nm args tys) ty =
   do
     un <- MapF.traverseWithKey mkUnint (countUninterpreted 1 MapF.empty ty)
-    evalStateT (parseUninterpreted' sym ref app ty) un)
+    evalStateT (parseUninterpreted' sym ref app ty) un
   where
   mkUnint :: BaseTypeRepr tc -> UnintCount tc -> IO (Arr sym tc)
   mkUnint ret (UnintCount n)
