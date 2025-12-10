@@ -1,0 +1,4 @@
+let {{ f (acc: [8]) (x: [8]) = 3*x }};
+
+prove_print (unint_bitwuzla ["f"])
+           {{ \xs -> (foldl f 0 xs == f (f (f 0 a) b) c where [a,b,c] = xs) }};
