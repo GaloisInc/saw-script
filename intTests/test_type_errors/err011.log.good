@@ -1,5 +1,5 @@
- Loading file "err011.saw"
- err011.saw:11:11-11:14: Type mismatch.
+Loading file "err011.saw"
+err011.saw:11:11-11:14: Type mismatch.
     Mismatch of types.
     err011.saw:11:1-11:14: The type TopLevel arises from this type annotation
     <type of llvm_assert>:1:9-1:18: The type LLVMSetup arises from this type annotation

@@ -1,0 +1,6 @@
+enable_experimental;
+
+adder_yosys <- yosys_import "adder_yosys.json";
+adder_tabby <- yosys_import "adder_tabby.json";
+
+prove_print z3 {{ adder_yosys.add4 === adder_tabby.add4 }};

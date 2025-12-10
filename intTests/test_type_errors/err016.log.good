@@ -1,5 +1,5 @@
- Loading file "err016.saw"
- err016.saw:5:9-5:12: Type mismatch.
+Loading file "err016.saw"
+err016.saw:5:9-5:12: Type mismatch.
     Term is not a function. (Maybe a function is applied to too many arguments?)
     err016.saw:5:9-5:12: The type t.0 -> t.1 arises from the context of the term
     err016.saw:5:11-5:12: The type Int arises from the type of this term

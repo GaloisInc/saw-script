@@ -60,8 +60,8 @@ yosysImport params = do
     [] -> do
       imp <- tl $ do
         sc <- getSharedContext
-        ir <- loadYosysIR $ yosysImportPath params
-        YosysImport <$> yosysIRToTypedTerms sc ir
+        ir <- liftIO $ loadYosysIR $ yosysImportPath params
+        liftIO $ YosysImport <$> yosysIRToTypedTerms sc ir
       setServerVal (yosysImportServerName params) imp
       ok
 

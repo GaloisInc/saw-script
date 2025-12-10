@@ -1,14 +1,14 @@
- Loading file "test.saw"
- Assume override assign
- Verifying zero...
- Simulating zero...
- Registering overrides for `assign`
-   variant `Symbol "assign"`
- Matching 1 overrides of assign...
- Branching on 1 override variants of assign...
- Applied override! assign
- Checking proof obligations zero...
- Subgoal failed: zero test.saw:52:4: error: in ghost_value
+Loading file "test.saw"
+Assume override assign
+Verifying zero...
+Simulating zero...
+Registering overrides for `assign`
+  variant `Symbol "assign"`
+Matching 1 overrides of assign...
+Branching on 1 override variants of assign...
+Applied override! assign
+Checking proof obligations zero...
+Subgoal failed: zero test.saw:52:4: error: in ghost_value
 Literal equality postcondition
 Expected term: 
 zero::table
@@ -18,12 +18,12 @@ let { x@1 = Cryptol.seq (Cryptol.TCNum 8) Prelude.Bool
  in Cryptol.ecArrayUpdate x@1 x@1 zero::table zero::k
       (Prelude.bvNat 8 0)
 
- SolverStats {solverStatsSolvers = fromList ["W4 ->z3"], solverStatsGoalSize = N}
- ----------Counterexample----------
-   zero::table: [1 := 1, <default> := 0]
-   zero::k: 1
- ----------------------------------
- Stack trace:
+SolverStats {solverStatsSolvers = fromList ["W4 ->z3"], solverStatsGoalSize = N}
+----------Counterexample----------
+  zero::table: [1 := 1, <default> := 0]
+  zero::k: 1
+----------------------------------
+Stack trace:
    (builtin) in w4
    test.saw:60:49-60:51 in (callback)
    (builtin) in llvm_verify

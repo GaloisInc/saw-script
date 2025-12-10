@@ -63,8 +63,6 @@ module SAWCore.Conversion
   , runConversion
   , conversionPat
     -- ** Prelude conversions
-  , tupleConversion
-  , recordConversion
   , natConversions
   , vecConversions
   , bvConversions
@@ -86,21 +84,19 @@ import Control.Monad (guard, liftM2, (>=>), (<=<))
 import Data.Bits
 import qualified Data.Text as Text
 import Data.Map (Map)
-import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
 import SAWCore.Name
 import SAWCore.OpenTerm (OpenTerm)
 import qualified SAWCore.OpenTerm as OT
-import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
 import SAWCore.Recognizer ((:*:)(..))
 import SAWCore.Prim
 import qualified SAWCore.Recognizer as R
+import SAWCore.SharedTerm (Term, unwrapTermF)
 import qualified SAWCore.TermNet as Net
 import SAWCore.Term.Functor
-import SAWCore.Term.Raw
 
 -- | A hack to allow storage of conversions in a term net.
 instance Eq Conversion where
@@ -430,24 +426,6 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 ----------------------------------------------------------------------
 -- Conversions for Prelude operations
 
--- | Conversion for selector on a tuple
-tupleConversion :: Conversion
-tupleConversion = Conversion False $ thenMatcher (asTupleSelector asAnyTupleValue) action
-  where
-    action (ts, i)
-      | i > length ts =
-          panic "SAWCore.tupleConversion" [
-              "index " <> Text.pack (show i) <> " out of bounds; limit is " <>
-                  Text.pack (show $ length ts)
-          ]
-      | otherwise =
-          Just (OT.term (ts !! (i - 1)))
-
--- | Conversion for selector on a record
-recordConversion :: Conversion
-recordConversion = Conversion False $ thenMatcher (asRecordSelector asAnyRecordValue) action
-  where action (m, i) = fmap OT.term (Map.lookup i m)
-
 -- | Conversions for operations on Nat literals
 natConversions :: [Conversion]
 natConversions = [ succ_NatLit, addNat_NatLit, subNat_NatLit
@@ -493,15 +471,18 @@ vecConversions :: [Conversion]
 vecConversions = [at_VecLit, atWithDefault_VecLit, append_VecLit]
 
 at_VecLit :: Conversion
-at_VecLit = globalConv "Prelude.at"
-    (Prim.at :: Int -> Term -> Prim.Vec Term Term -> Int -> Term)
+at_VecLit =
+  globalConv "Prelude.at"
+    (Prim.at :: () -> () -> Prim.Vec Term Term -> Int -> Maybe Term)
 
 atWithDefault_VecLit :: Conversion
-atWithDefault_VecLit = globalConv "Prelude.atWithDefault"
-    (Prim.atWithDefault :: Int -> Term -> Term -> Prim.Vec Term Term -> Int -> Term)
+atWithDefault_VecLit =
+  globalConv "Prelude.atWithDefault"
+    (Prim.atWithDefault :: () -> () -> Term -> Prim.Vec Term Term -> Int -> Term)
 
 append_VecLit :: Conversion
-append_VecLit = globalConv "Prelude.append"
+append_VecLit =
+  globalConv "Prelude.append"
     (Prim.append :: Int -> Int -> Term -> Prim.Vec Term Term -> Prim.Vec Term Term -> Prim.Vec Term Term)
 
 
@@ -567,9 +548,9 @@ atWithDefault_bvNat :: Conversion
 atWithDefault_bvNat =
   Conversion False $
   (\(_ :*: n :*: a :*: d :*: x :*: i) ->
-    if fromIntegral i < width x then OT.bool (Prim.at_bv n a x i) else OT.term d) <$>
+    maybe (OT.term d) OT.bool (Prim.at_bv n a x i)) <$>
   (asGlobalDef "Prelude.atWithDefault" <:>
-   defaultMatcher <:> defaultMatcher <:> asAny <:> asBvNatLit <:> asAnyNatLit)
+   defaultMatcher <:> defaultMatcher <:> asAny <:> asBvNatLit <:> defaultMatcher)
 
 take_bvNat :: Conversion
 take_bvNat = globalConv "Prelude.take" Prim.take_bv

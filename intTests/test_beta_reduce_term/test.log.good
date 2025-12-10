@@ -1,15 +1,15 @@
- Loading file "test.saw"
- \(u1233 : isort 0) -> \(x : u1233) -> x
- True
- 12
- \(u1233 : isort 0) ->
+Loading file "test.saw"
+\(u1233 : isort 0) -> \(x : u1233) -> x
+True
+12
+\(u1233 : isort 0) ->
   \(x : (u1233 -> u1233)) -> \(x1 : u1233) -> x (x (x (x x1)))
- True
- 24
- \(u1235 : isort 0) ->
+True
+24
+\(u1235 : isort 0) ->
   \(x : (u1235 -> u1235)) ->
     \(x1 : u1235) ->
       x (x (x (x (x (x (x (x (x (x (x (x (x (x (x (x x1)))))))))))))))
- True
- 65544
- True
+True
+65544
+True

@@ -1,5 +1,5 @@
- Loading file "leak03.saw"
- this should fail
+Loading file "leak03.saw"
+this should fail
 == Anticipated failure message ==
 Stack trace:
    (builtin) in (callback)
@@ -14,7 +14,7 @@ Cryptol error:
 [error] at leak03.saw:8:54--8:59
     Value not in scope: quack
 
- this should also fail
+this should also fail
 == Anticipated failure message ==
 Stack trace:
    (builtin) in bar

@@ -1,5 +1,5 @@
- Loading file "test0.saw"
- Stack trace:
+Loading file "test0.saw"
+Stack trace:
    (builtin) (at top level)
 test0.saw:1:2-1:4: Invalid character escape in string
 

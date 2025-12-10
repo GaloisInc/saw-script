@@ -1,5 +1,5 @@
- Loading file "err001.saw"
- err001.saw:1:23-1:24: Type mismatch.
+Loading file "err001.saw"
+err001.saw:1:23-1:24: Type mismatch.
     Mismatch of type constructors. Expected: String but got Int
     err001.saw:1:14-1:20: The type String arises from this type annotation
     err001.saw:1:23-1:24: The type Int arises from the type of this term

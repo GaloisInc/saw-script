@@ -78,7 +78,6 @@ import SAWCore.Prelude
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import CryptolSAWCore.TypedTerm
-import SAWCore.SCTypeCheck (scTypeCheck)
 import SAWCore.Term.Pretty (showTerm)
 
 import SAWCoreWhat4.ReturnTrip
@@ -902,20 +901,13 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
        inv <- scApplyAll sc (ttTerm func) (implicit_params' ++ [initial_tuple, current_tuple])
 
        -- check that the produced term is type-correct
-       res <- scTypeCheck sc inv
-       case res of
-         Left _tcErr ->
-           do tpType <- scTypeOf sc initial_tuple
-              fail $ unlines [ "Loop invariant has incorrect type! State tuple has type:"
-                             , showTerm tpType
-                             ]
-         Right tp ->
-           do ok <- scConvertible sc True tp =<< scBoolType sc
-              unless ok $
-                fail $ unlines [ "Loop invariant must return a boolean value, but got:"
-                               , showTerm tp
-                                  -- TODO, get ppOpts from the right place
-                               ]
+       tp <- scTypeOf sc inv
+       ok <- scConvertible sc True tp =<< scBoolType sc
+       unless ok $
+         fail $ unlines [ "Loop invariant must return a boolean value, but got:"
+                        , showTerm tp
+                           -- TODO, get ppOpts from the right place
+                        ]
        b <- bindSAWTerm sym sawst W4.BaseBoolRepr inv
 
        -- Add goal metadata for the initial and inductive invariants

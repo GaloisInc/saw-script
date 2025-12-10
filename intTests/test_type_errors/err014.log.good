@@ -1,5 +1,5 @@
- Loading file "err014.saw"
- err014.saw:12:15-12:18: Type mismatch.
+Loading file "err014.saw"
+err014.saw:12:15-12:18: Type mismatch.
     Record field names mismatch.
     err014.saw:8:13-8:24: The type {a : Int} arises from this type annotation
     err014.saw:10:25-10:34: The type {b : Int} arises from the type of this term

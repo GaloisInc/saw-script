@@ -1,5 +1,5 @@
- Loading file "undefined1.saw"
- Stack trace:
+Loading file "undefined1.saw"
+Stack trace:
    (builtin) (at top level)
 Not a monomorphic type: t.0
 

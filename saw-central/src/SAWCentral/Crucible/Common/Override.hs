@@ -110,7 +110,6 @@ import           SAWCore.Name (VarName(..))
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
-import           SAWCore.Term.Raw (unwrapTermF)
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 
 import qualified Cryptol.Utils.PP as Cryptol (pp)

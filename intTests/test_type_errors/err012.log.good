@@ -1,8 +1,8 @@
- Loading file "err012.saw"
- err012.saw:12:2-12:17: Warning: Monadic bind with the wrong monad; found LLVMSetup but expected TopLevel
- err012.saw:12:2-12:17: Warning: This creates the action but does not execute it; if you meant to do that, prefix the expression with return
- err012.saw:12:2-12:17: Warning: This will become an error in a future release of SAW
- err012.saw:12:14-12:17: Type mismatch.
+Loading file "err012.saw"
+err012.saw:12:2-12:17: Warning: Monadic bind with the wrong monad; found LLVMSetup but expected TopLevel
+err012.saw:12:2-12:17: Warning: This creates the action but does not execute it; if you meant to do that, prefix the expression with return
+err012.saw:12:2-12:17: Warning: This will become an error in a future release of SAW
+err012.saw:12:14-12:17: Type mismatch.
     Mismatch of type constructors. Expected: Int but got <Block>
     err012.saw:12:6-12:9: The type Int arises from this type annotation
     err012.saw:12:2-12:17: The type LLVMSetup Int arises from this type annotation

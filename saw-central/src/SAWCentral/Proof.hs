@@ -158,7 +158,6 @@ import SAWCore.SATQuery
 import SAWCore.Name (DisplayNameEnv, Name(..), VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import SAWCore.Term.Raw
 import SAWCore.FiniteValue (FirstOrderValue)
 import SAWCore.Term.Pretty
   (ppTermWithNames, ppTermContainerWithNames, showTerm, scPrettyTerm)
@@ -869,7 +868,7 @@ checkSequent sc ppOpts (HypFocusedSequent (FB hs1 h hs2) gs) =
 --   mistake has allowed us to build an ill-typed Prop.
 checkProp :: SharedContext -> PPS.Opts -> Prop -> IO ()
 checkProp sc ppOpts (Prop t) =
-  do ty <- TC.scTypeCheckError sc t
+  do ty <- scTypeOf sc t
      case asSort ty of
         Just s | s == propSort -> return ()
         _ -> fail $ unlines ["Term is not a prop!", scPrettyTerm ppOpts t, scPrettyTerm ppOpts ty]
@@ -1223,9 +1222,7 @@ specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc
  where
   loop p [] = return (Prop p)
   loop p (t:ts) =
-    do t' <- TC.typeInferComplete t
-       p_typed <- TC.typeInferComplete p
-       p' <- TC.applyPiTyped (TC.NotFuncTypeInApp p_typed t') p t'
+    do p' <- TC.applyPiTyped (TC.NotFuncTypeInApp p t) p t
        loop p' ts
 
 -- | Admit the given theorem without evidence.
@@ -1358,11 +1355,8 @@ propsSubset sc ps1 ps2 =
   -- convertibility check.
   and <$> sequence [ if idSubset (unProp x) then pure True else propsElem sc x ps2 | x <- ps1 ]
   where
-    ps2Ids = foldr (\x idents -> case (unProp x) of
-                                   STApp{ stAppIndex = ident } -> Set.insert ident idents
-                   )
-                   Set.empty ps2
-    idSubset STApp{ stAppIndex = ident } = Set.member ident ps2Ids
+    ps2Ids = foldr (\x ids -> Set.insert (termIndex (unProp x)) ids) Set.empty ps2
+    idSubset t = Set.member (termIndex t) ps2Ids
 
 -- exists y in ps where x == y
 propsElem :: SharedContext -> Prop -> [Prop] -> IO Bool
@@ -1383,11 +1377,9 @@ sequentIsAxiom sc sqt =
 --   of the first sequent is sufficient to prove the second
 sequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
 sequentSubsumes sc sqt1 sqt2 =
-  do let RawSequent hs1 gs1 = sequentToRawSequent sqt1
-     let RawSequent hs2 gs2 = sequentToRawSequent sqt2
-     hypsOK  <- propsSubset sc hs1 hs2
-     conclOK <- propsSubset sc gs1 gs2
-     return (hypsOK && conclOK)
+  do let s1 = sequentToRawSequent sqt1
+     let s2 = sequentToRawSequent sqt2
+     rawSequentSubsumes sc s1 s2
 
 -- | Test if the first given sequent subsumes the
 --   second given sequent. This is a shallow syntactic
@@ -1395,10 +1387,17 @@ sequentSubsumes sc sqt1 sqt2 =
 --   of the first sequent is sufficient to prove the second
 normalizeSequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
 normalizeSequentSubsumes sc sqt1 sqt2 =
-  do RawSequent hs1 gs1 <- normalizeRawSequent sc (sequentToRawSequent sqt1)
-     RawSequent hs2 gs2 <- normalizeRawSequent sc (sequentToRawSequent sqt2)
-     hypsOK  <- propsSubset sc hs1 hs2
-     conclOK <- propsSubset sc gs1 gs2
+  do s1 <- normalizeRawSequent sc (sequentToRawSequent sqt1)
+     s2 <- normalizeRawSequent sc (sequentToRawSequent sqt2)
+     rawSequentSubsumes sc s1 s2
+
+-- | Tests that the first raw sequent subsumes the second.
+-- This is a shallow syntactic check that is sufficient to show that a proof
+-- of the first sequent is sufficient to prove the second
+rawSequentSubsumes :: SharedContext -> RawSequent Prop -> RawSequent Prop -> IO Bool
+rawSequentSubsumes sc (RawSequent hs1 gs1) (RawSequent hs2 gs2) =
+  do hypsOK  <- propsSubset sc hs1 hs2 -- assumes no *more*
+     conclOK <- propsSubset sc gs2 gs1 -- proves no *less*
      return (hypsOK && conclOK)
 
 -- | Computes a "normalized" sequent. This applies the reversible
@@ -1474,17 +1473,16 @@ normalizeConcl sc p =
            _ -> return (RawSequent [] [p])
 
 normalizeHypBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
-normalizeHypBool sc b =
-  do body <- scWhnf sc b
-     case () of
-       _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
-         -> Just <$> normalizeConclBoolCommit sc p1
+normalizeHypBool sc b
+  -- Don't evaluate to WHNF. That would unfold Prelude.not and Prelude.and
+  | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) b
+  = Just <$> normalizeConclBoolCommit sc p1
 
-         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.and" <@> return <@> return) body
-         -> Just <$> (joinSequent <$> normalizeHypBoolCommit sc p1 <*> normalizeHypBoolCommit sc p2)
+  | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.and" <@> return <@> return) b
+  = Just <$> (joinSequent <$> normalizeHypBoolCommit sc p1 <*> normalizeHypBoolCommit sc p2)
 
-         | otherwise
-         -> return Nothing
+  | otherwise
+  = return Nothing
 
 normalizeHypBoolCommit :: SharedContext -> Term -> IO (RawSequent Prop)
 normalizeHypBoolCommit sc b =
@@ -1494,17 +1492,19 @@ normalizeHypBoolCommit sc b =
                    return (RawSequent [p] [])
 
 normalizeConclBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
-normalizeConclBool sc b =
-  do body <- scWhnf sc b
-     case () of
-       _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
-         -> Just <$> normalizeHypBoolCommit sc p1
+normalizeConclBool sc b
+  -- Don't evaluate to WHNF. That would unfold Prelude.not, Prelude.or and Prelude.implies
+  | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) b
+  = Just <$> normalizeHypBoolCommit sc p1
 
-         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.or" <@> return <@> return) body
-         -> Just <$> (joinSequent <$> normalizeConclBoolCommit sc p1 <*> normalizeConclBoolCommit sc p2)
+  | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.or" <@> return <@> return) b
+  = Just <$> (joinSequent <$> normalizeConclBoolCommit sc p1 <*> normalizeConclBoolCommit sc p2)
 
-         | otherwise
-         -> return Nothing
+  | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.implies" <@> return <@> return) b
+  = Just <$> (joinSequent <$> normalizeHypBoolCommit sc p1 <*> normalizeConclBoolCommit sc p2)
+
+  | otherwise
+  = return Nothing
 
 normalizeConclBoolCommit :: SharedContext -> Term -> IO (RawSequent Prop)
 normalizeConclBoolCommit sc b =
@@ -1542,8 +1542,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
     -- Check a theorem applied to a term. This explicitly instantiates
     -- a Pi binder with the given term.
     checkApply nenv mkSqt (Prop p) (Left tm:es) =
-      do let m = do tm' <- TC.typeInferComplete tm
-                    p_typed <- TC.typeInferComplete p
+      do let m = do tm' <- pure tm
+                    p_typed <- pure p
                     let err = TC.NotFuncTypeInApp p_typed tm'
                     TC.applyPiTyped err p tm'
          res <- TC.runTCM m sc
@@ -1560,7 +1560,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
       ProofTerm tm ->
         case sequentState sqt of
           ConclFocus (Prop ptm) _ ->
-            do ty <- TC.scTypeCheckError sc tm
+            do ty <- scTypeOf sc tm
                ok <- scConvertible sc True ptm ty
                unless ok $ fail $ unlines
                    [ "Proof term does not prove the required proposition"
@@ -2229,7 +2229,7 @@ tacticTrivial sc = Tactic \goal ->
         Left err -> fail err
         Right pf ->
            do let gp = unProp g
-              ty <- liftIO $ TC.scTypeCheckError sc pf
+              ty <- liftIO $ scTypeOf sc pf
               ok <- liftIO $ scConvertible sc True gp ty
               unless ok $ fail $ unlines
                 [ "The trivial tactic cannot prove this equality"
@@ -2245,7 +2245,7 @@ tacticExact sc tm = Tactic \goal ->
     HypFocus _ _ -> fail "tactic exact: cannot apply exact in a hypothesis"
     ConclFocus g _ ->
       do let gp = unProp g
-         ty <- liftIO $ TC.scTypeCheckError sc tm
+         ty <- liftIO $ scTypeOf sc tm
          ok <- liftIO $ scConvertible sc True gp ty
          unless ok $ fail $ unlines
              [ "Proof term does not prove the required proposition"

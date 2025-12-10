@@ -1,0 +1,5 @@
+// A regression test for #2846. This ensures that SAW can load a JSON file
+// produced using Yosys's -compat-int flag.
+
+enable_experimental;
+m <- yosys_import "test.json";

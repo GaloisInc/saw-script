@@ -1,8 +1,8 @@
-From Coq Require Import Classes.Morphisms.
-From Coq Require Import Lia.
-From Coq Require Import ZArith.BinInt.
-From Coq Require Import ZifyBool.
-From Coq Require Import ZifyClasses.
+From Stdlib Require Import Classes.Morphisms.
+From Stdlib Require Import Lia.
+From Stdlib Require Import ZArith.BinInt.
+From Stdlib Require Import ZifyBool.
+From Stdlib Require Import ZifyClasses.
 
 From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.

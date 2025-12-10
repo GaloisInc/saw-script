@@ -1,5 +1,5 @@
- Loading file "test11.saw"
- test11.saw:6:8-6:9: Warning: Redeclaration of x
- test11.saw:3:16-3:17: Warning: Previous declaration was here
- 3
- b
+Loading file "test11.saw"
+test11.saw:6:8-6:9: Warning: Redeclaration of x
+test11.saw:3:16-3:17: Warning: Previous declaration was here
+3
+b

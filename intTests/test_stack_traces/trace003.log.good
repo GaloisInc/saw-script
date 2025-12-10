@@ -1,7 +1,7 @@
- Loading file "trace003.saw"
- 
- ------------------------------------------------------------
- just proof_stack
+Loading file "trace003.saw"
+
+------------------------------------------------------------
+just proof_stack
 Stack trace:
    (builtin) in proof_stack
    trace003.saw:18:20-18:31 in (callback)
@@ -19,9 +19,9 @@ Stack trace:
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
- 
- ------------------------------------------------------------
- proof_stack via let
+
+------------------------------------------------------------
+proof_stack via let
 Stack trace:
    (builtin) in proof_stack
    trace003.saw:25:10-25:21 in pf
@@ -40,9 +40,9 @@ Stack trace:
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
- 
- ------------------------------------------------------------
- do-block
+
+------------------------------------------------------------
+do-block
 Stack trace:
    (builtin) in proof_stack
    trace003.saw:32:19-32:30 in (callback)
@@ -55,9 +55,9 @@ Stack trace:
    (builtin) in prove_print
    trace003.saw:33:1-33:49 (at top level)
 
- 
- ------------------------------------------------------------
- action
+
+------------------------------------------------------------
+action
 Stack trace:
    (builtin) in proof_stack
    trace003.saw:39:19-39:30 in prove1
@@ -72,9 +72,9 @@ Stack trace:
    (builtin) in prove_print
    trace003.saw:42:1-42:30 (at top level)
 
- 
- ------------------------------------------------------------
- function
+
+------------------------------------------------------------
+function
 Stack trace:
    (builtin) in proof_stack
    trace003.saw:48:22-48:33 in prove3
@@ -89,4 +89,4 @@ Stack trace:
    (builtin) in prove_print
    trace003.saw:51:1-51:35 (at top level)
 
- 
+

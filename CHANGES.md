@@ -1,14 +1,28 @@
 # next -- TBA
 
 This release supports [version
-5](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#5) of
+6](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#6) of
 `mir-json`'s schema.
 
 ## Changes
 
+* SAW no longer timestamps (some of) its output by default.
+  If you want the timestamps back, pass the -T option on the command
+  line.
+  For more effective timing (e.g. for benchmarking) use the `time` or
+  `with_time` SAWScript builtins, or time the whole run of the
+  executable with external tools, as needed.
+
 * The REPL no longer gratuitously rejects multiple statements
   separated by semicolons on a single line.
   It also no longer chokes on lines that contain only comments.
+
+* SAWScript files can now be included with `include_once` as well as
+  plain `include`.
+  An `include_once` will do nothing if the same file has already been
+  included.
+  The concept of "same" used is the same pathname -- the check does
+  not chase symbolic links or consult OS-level file identity markers.
 
 * The `include` functionality in SAWScript is now syntax rather than
   a builtin function.
@@ -249,6 +263,8 @@ This release supports [version
 * Add a `mir_vec : MIRModule -> MIRType -> MIRType` function, which provides a
   convenient shorthand for constructing the `Vec<T>` type (for some type `T`).
 
+* Support verifying Rust code up to version 1.91.
+
 ## Bug Fixes
 
 * Under some combinations of circumstances you would sometimes get
@@ -279,6 +295,12 @@ This release supports [version
 
 * Fix a bug that would cause SAW to crash when verifying a `mir_return`
   statement returning a `Vec` that was allocated in a postcondition.
+
+* Fix a bug that would cause `yosys_import` to fail to parse JSON files
+  produced using Yosys's `-compat-int` flag.
+
+* `yosys_import` now parses JSON files containing debugging-related cells
+  (e.g., `$scopeinfo`) instead of failing with a parse error.
 
 # Version 1.4 -- 2025-11-18
 

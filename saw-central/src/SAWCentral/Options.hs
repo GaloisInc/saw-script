@@ -22,6 +22,7 @@ data Options = Options
   , jarList          :: [FilePath]
   , javaBinDirs      :: [FilePath]
   , verbLevel        :: Verbosity
+  , timestamping     :: TimestampSetting
   , simVerbose       :: Int
   , detectVacuity    :: Bool
   , extraChecks      :: Bool
@@ -36,6 +37,12 @@ data Options = Options
   , summaryFile      :: Maybe FilePath
   , summaryFormat    :: SummaryFormat
   } deriving (Show)
+
+-- | Type for tracking whether we're printing timestamps on messages.
+--   (Use this instead of just Bool to avoid confusion, since this
+--   module is exposed to essentially the entire SAW tree.)
+data TimestampSetting = NotTimestamping | Timestamping
+  deriving (Eq, Show)
 
 -- | Verbosity is currently a linear setting (vs a mask or tree).  Any given
 -- level includes the outputs of all lower levels.
@@ -60,8 +67,9 @@ defaultOptions
     , jarList = []
     , javaBinDirs = []
     , verbLevel = Info
+    , timestamping = NotTimestamping
     , printShowPos = False
-    , printOutFn = printOutWith Info
+    , printOutFn = printOutWith Info NotTimestamping
     , simVerbose = 1
     , detectVacuity = False
     , extraChecks = False
@@ -75,12 +83,15 @@ defaultOptions
     , summaryFormat = Pretty
     }
 
-printOutWith :: Verbosity -> Verbosity -> String -> IO ()
-printOutWith setting level msg
-    | setting >= level = do
-      t <- formatTime defaultTimeLocale "%T.%3q" <$> getCurrentTime
-      putStr $ "[" ++ t ++ "] " ++ msg
-    | otherwise        = return ()
+printOutWith :: Verbosity -> TimestampSetting -> Verbosity -> String -> IO ()
+printOutWith setting ts level msg
+    | setting >= level, ts == Timestamping = do
+          t <- formatTime defaultTimeLocale "%T.%3q" <$> getCurrentTime
+          putStr $ "[" ++ t ++ "] " ++ msg
+    | setting >= level, ts == NotTimestamping = 
+          putStr msg
+    | otherwise =
+          return ()
 
 printOutLn :: Options -> Verbosity -> String -> IO ()
 printOutLn o v s = printOutFn o v (s ++ "\n")

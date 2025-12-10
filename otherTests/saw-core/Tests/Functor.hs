@@ -51,7 +51,8 @@ shared ix t = STApp {
     stAppIndex = ix,
     stAppHash = hash t,
     stAppVarTypes = mempty,
-    stAppTermF = t
+    stAppTermF = t,
+    stAppType = Left PropSort
  }
 
 -- | Some variable names

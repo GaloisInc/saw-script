@@ -857,7 +857,8 @@ setupCrucibleContext jclass =
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
      sym <- io $ newSAWCoreExprBuilder sc False
-     bak <- io $ newSAWCoreBackend pathSatSolver sym
+     timeout <- gets rwCrucibleTimeout
+     bak <- io $ newSAWCoreBackendWithTimeout pathSatSolver sym timeout
      opts <- getOptions
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
 

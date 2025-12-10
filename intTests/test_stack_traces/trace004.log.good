@@ -1,7 +1,7 @@
- Loading file "trace004.saw"
- 
- ------------------------------------------------------------
- just llvm_stack
+Loading file "trace004.saw"
+
+------------------------------------------------------------
+just llvm_stack
 Stack trace:
    (builtin) in llvm_stack
    trace004.saw:15:39-15:49 in (callback)
@@ -18,9 +18,9 @@ Stack trace:
    trace004.saw:15:1-15:52 (at top level)
 Missing llvm_execute_func specification when verifying foo
 
- 
- ------------------------------------------------------------
- llvm_stack via let
+
+------------------------------------------------------------
+llvm_stack via let
 Stack trace:
    (builtin) in llvm_stack
    trace004.saw:22:13-22:23 in spec0
@@ -38,32 +38,32 @@ Stack trace:
    trace004.saw:23:1-23:47 (at top level)
 Missing llvm_execute_func specification when verifying foo
 
- 
- ------------------------------------------------------------
- do-block
+
+------------------------------------------------------------
+do-block
 Stack trace:
    (builtin) in llvm_stack
    trace004.saw:29:38-29:48 in (callback)
    (builtin) in llvm_verify
    trace004.saw:29:1-29:77 (at top level)
 
- Verifying foo...
- Simulating foo...
- Checking proof obligations foo...
- Proof succeeded! foo
+Verifying foo...
+Simulating foo...
+Checking proof obligations foo...
+Proof succeeded! foo
 Stack trace:
    (builtin) in llvm_stack
    trace004.saw:30:60-30:70 in (callback)
    (builtin) in llvm_verify
    trace004.saw:30:1-30:77 (at top level)
 
- Verifying foo...
- Simulating foo...
- Checking proof obligations foo...
- Proof succeeded! foo
- 
- ------------------------------------------------------------
- action
+Verifying foo...
+Simulating foo...
+Checking proof obligations foo...
+Proof succeeded! foo
+
+------------------------------------------------------------
+action
 Stack trace:
    (builtin) in llvm_stack
    trace004.saw:36:18-36:28 in spec1
@@ -71,10 +71,10 @@ Stack trace:
    (builtin) in llvm_verify
    trace004.saw:38:1-38:40 (at top level)
 
- Verifying foo...
- Simulating foo...
- Checking proof obligations foo...
- Proof succeeded! foo
+Verifying foo...
+Simulating foo...
+Checking proof obligations foo...
+Proof succeeded! foo
 Stack trace:
    (builtin) in llvm_stack
    trace004.saw:37:40-37:50 in spec2
@@ -82,13 +82,13 @@ Stack trace:
    (builtin) in llvm_verify
    trace004.saw:39:1-39:40 (at top level)
 
- Verifying foo...
- Simulating foo...
- Checking proof obligations foo...
- Proof succeeded! foo
- 
- ------------------------------------------------------------
- function
+Verifying foo...
+Simulating foo...
+Checking proof obligations foo...
+Proof succeeded! foo
+
+------------------------------------------------------------
+function
 Stack trace:
    (builtin) in llvm_stack
    trace004.saw:45:21-45:31 in spec3
@@ -96,10 +96,10 @@ Stack trace:
    (builtin) in llvm_verify
    trace004.saw:47:1-47:45 (at top level)
 
- Verifying foo...
- Simulating foo...
- Checking proof obligations foo...
- Proof succeeded! foo
+Verifying foo...
+Simulating foo...
+Checking proof obligations foo...
+Proof succeeded! foo
 Stack trace:
    (builtin) in llvm_stack
    trace004.saw:46:43-46:53 in spec4
@@ -107,8 +107,8 @@ Stack trace:
    (builtin) in llvm_verify
    trace004.saw:48:1-48:45 (at top level)
 
- Verifying foo...
- Simulating foo...
- Checking proof obligations foo...
- Proof succeeded! foo
- 
+Verifying foo...
+Simulating foo...
+Checking proof obligations foo...
+Proof succeeded! foo
+

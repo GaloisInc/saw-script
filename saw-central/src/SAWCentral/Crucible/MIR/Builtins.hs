@@ -2124,7 +2124,9 @@ setupCrucibleContext rm =
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
      sym <- io $ newSAWCoreExprBuilder sc False
-     someBak@(SomeOnlineBackend bak) <- io $ newSAWCoreBackend pathSatSolver sym
+     timeout <- gets rwCrucibleTimeout
+     someBak@(SomeOnlineBackend bak) <- io $
+           newSAWCoreBackendWithTimeout pathSatSolver sym timeout
      let cs     = rm ^. Mir.rmCS
      let col    = cs ^. Mir.collection
      let cfgMap = rm ^. Mir.rmCFGs
@@ -2275,10 +2277,10 @@ setupResultTerm sc cc mty0 tpr0 val0 =
                          [ "ArrayShape with non-TyArray type:"
                          , Text.pack $ show $ PP.pretty mty
                          ]
-              shpTypeTerm <- shapeToTerm sc shp
+              eltTypeTerm <- shapeToTerm sc eltShp
               typedElts <- accessMirAggregateArray sym eltSz eltShp len val $
                   \_off val' -> go eltTy (shapeType eltShp) val'
-              scVectorReduced sc shpTypeTerm typedElts
+              scVectorReduced sc eltTypeTerm typedElts
 
             StructShape {} ->
               unsupportedType mty

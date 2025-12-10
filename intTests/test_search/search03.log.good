@@ -1,5 +1,5 @@
- --------------------------------
- -- ProofScript
+--------------------------------
+-- ProofScript
 abc : ProofScript ()
 admit : String -> ProofScript ()
 assume_unsat : ProofScript ()
@@ -84,8 +84,8 @@ write_goal : String -> ProofScript ()
 yices : ProofScript ()
 z3 : ProofScript ()
 46 more matches tagged experimental; use enable_experimental to see them
- --------------------------------
- -- (ProofScript)
+--------------------------------
+-- (ProofScript)
 abc : ProofScript ()
 admit : String -> ProofScript ()
 assume_unsat : ProofScript ()
@@ -170,19 +170,19 @@ write_goal : String -> ProofScript ()
 yices : ProofScript ()
 z3 : ProofScript ()
 46 more matches tagged experimental; use enable_experimental to see them
- --------------------------------
- -- ProofScript Int
+--------------------------------
+-- ProofScript Int
 goal_num : ProofScript Int
 print_goal_depth : Int -> ProofScript ()
 print_goal_inline : [Int] -> ProofScript ()
 quickcheck : Int -> ProofScript ()
 simplify_local : [Int] -> Simpset -> ProofScript ()
 17 more matches tagged experimental; use enable_experimental to see them
- --------------------------------
- -- (ProofScript Int)
+--------------------------------
+-- (ProofScript Int)
 goal_num : ProofScript Int
- --------------------------------
- -- ProofScript Int String
+--------------------------------
+-- ProofScript Int String
 No matches.
 The following experimental matches require enable_experimental:
 crucible_llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
@@ -190,11 +190,11 @@ llvm_verify_fixpoint_chc_x86 : LLVMModule -> String -> String -> [(String, Int)]
 llvm_verify_fixpoint_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
 llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
 llvm_verify_x86_with_invariant : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Int, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
- --------------------------------
- -- (ProofScript Int) String
+--------------------------------
+-- (ProofScript Int) String
 No matches.
- --------------------------------
- -- Int String ProofScript
+--------------------------------
+-- Int String ProofScript
 No matches.
 The following experimental matches require enable_experimental:
 crucible_llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)

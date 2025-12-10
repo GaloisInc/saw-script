@@ -1,0 +1,7 @@
+// A regression test for #2890. This ensures that SAW can load a JSON file
+// that contains $scopeinfo cells, which are debugging-only cells produced by
+// Yosys's `flatten` pass.
+
+enable_experimental;
+m <- yosys_import "test.json";
+prove_print w4 {{ m.add4 === \inp -> { res = inp.a + inp.b } }};

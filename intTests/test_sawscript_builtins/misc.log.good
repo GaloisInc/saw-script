@@ -1,6 +1,6 @@
- Loading file "misc.saw"
- 1
- misc.saw
+Loading file "misc.saw"
+1
+misc.saw
 == Anticipated failure message ==
 Stack trace:
    (builtin) in get_opt
@@ -9,7 +9,7 @@ Stack trace:
    misc.saw:9:1-9:42 (at top level)
 nth: index too large
 
- fnord
+fnord
 == Anticipated failure message ==
 Stack trace:
    (builtin) in get_env
@@ -18,19 +18,19 @@ Stack trace:
    misc.saw:12:1-12:50 (at top level)
 Environment variable not found: SAW_MISSING_ENV
 
- (false,"false")
- ("0","0")
- ("()","()")
- ("(1, 2, 3)","(1,2,3)")
- ("[1, 2, 3]","[1,2,3]")
- ("\"abc\"","\"abc\"")
- ("{{ 1 }}","\\(u1217 : isort 0) ->\n  \\(_P : PLiteral u1217) -> ecNumber (TCNum 1) u1217 _P")
- ("{| 2 |}","2")
- ("{| [8] |}","[8]")
- ("f","\\ () -> ()")
- ("do { return 0; }","do {\n   (return 0);\n}")
- ("(record)","{x=3,y=\"abc\"}")
- ("\\x -> 3","\\ (x : t.7) -> 3")
- ("return 3","return 3")
- ("(TopLevel)","<<TopLevel>>")
- ("(ProofScript)","<<proof script>>")
+(false,"false")
+("0","0")
+("()","()")
+("(1, 2, 3)","(1,2,3)")
+("[1, 2, 3]","[1,2,3]")
+("\"abc\"","\"abc\"")
+("{{ 1 }}","\\(u1217 : isort 0) ->\n  \\(_P : PLiteral u1217) -> ecNumber (TCNum 1) u1217 _P")
+("{| 2 |}","2")
+("{| [8] |}","[8]")
+("f","\\ () -> ()")
+("do { return 0; }","do {\n   (return 0);\n}")
+("(record)","{x=3,y=\"abc\"}")
+("\\x -> 3","\\ (x : t.7) -> 3")
+("return 3","return 3")
+("(TopLevel)","<<TopLevel>>")
+("(ProofScript)","<<proof script>>")

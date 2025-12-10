@@ -15,6 +15,7 @@ module SAWCentral.Builtins where
 
 import Control.Lens (view)
 import Control.Monad (foldM, unless)
+import Control.Monad.Catch (throwM)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (asks)
@@ -53,6 +54,7 @@ import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
 
 -- saw-support
+import qualified SAWSupport.PanicSupport as PanicSupport
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText)
@@ -762,21 +764,6 @@ build_congruence sc tm =
        scGeneralizeTerms sc allVars finalEq
 
 
-filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
-filterCryTerms sc = loop
-  where
-  loop [] = pure []
-  loop (x:xs) =
-    do tp <- Cryptol.scCryptolType sc =<< scTypeOf sc x
-       case tp of
-         Just (Right cty) ->
-           do let x' = TypedTerm (TypedTermSchema (C.tMono cty)) x
-              xs' <- loop xs
-              pure (x':xs')
-
-         _ -> loop xs
-
-
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
   execTactic $ tacticChange $ \goal ->
@@ -1247,7 +1234,7 @@ proveByBVInduction ::
 proveByBVInduction script t =
   do sc <- getSharedContext
      opts <- getTopLevelPPOpts
-     ty <- io $ scTypeCheckError sc (ttTerm t)
+     ty <- io $ scTypeOf sc (ttTerm t)
      io (checkInductionScheme sc opts [] ty) >>= \case
        Nothing -> badTy opts ty
        Just ([],_) -> badTy opts ty
@@ -1278,10 +1265,7 @@ proveByBVInduction script t =
             -- The result type of the theorem.
             --
             --   (x : Vec w Bool) -> p x
-            thmResult <- io $
-                do t3   <- scPiList sc pis tbody
-                   _    <- scTypeCheckError sc t3 -- sanity check
-                   return t3
+            thmResult <- io $ scPiList sc pis tbody
 
             -- The type of the main hypothesis to the induction scheme. This is what
             -- the user will ultimately be asked to prove. Note that this includes
@@ -1367,10 +1351,7 @@ proveByBVInduction script t =
                    trefl  <- scGlobalApply sc "Prelude.IsLeNat_base" [tsz']
                    indHypArg <- scApplyBeta sc indHypProof varH
                    ind    <- scGlobalApply sc "Prelude.Nat_complete_induction" ([indMotive,indHypArg,tsz'] ++ vars ++ [trefl])
-                   ind''  <- scAbstractTerms sc (varH : vars) ind
-
-                   _tp    <- scTypeCheckError sc ind'' -- sanity check
-                   return ind''
+                   scAbstractTerms sc (varH : vars) ind
 
             indAppTT <- io $ mkTypedTerm sc indApp
 
@@ -1594,7 +1575,7 @@ check_term tt = do
   opts <- getTopLevelPPOpts
   cenv <- SV.getCryptolEnv
   let t = ttTerm tt
-  ty <- io $ scTypeCheckError sc t
+  ty <- io $ scTypeOf sc t
   expectedTy <-
     case ttType tt of
       TypedTermSchema schema -> io $ importSchemaCEnv sc cenv schema
@@ -1670,7 +1651,6 @@ generalize_term vars tt =
   do tvs <- traverse checkVar vars
      sc <- getSharedContext
      tm <- io $ scPiList sc (map (\tv -> (tvName tv, tvType tv)) tvs) (ttTerm tt)
-     _tp <- io $ scTypeCheckError sc tm -- sanity check the term
      io $ mkTypedTerm sc tm
 
   where
@@ -1746,8 +1726,13 @@ failsPrim m = do
   x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
     Left (ex :: Ex.SomeException) ->
-      do liftIO $ TextIO.putStrLn "== Anticipated failure message =="
-         liftIO $ print ex
+      case Ex.fromException ex of
+          Just (e :: PanicSupport.PanicException) ->
+              -- Avoid trapping panics
+              throwM e
+          Nothing -> do
+              liftIO $ TextIO.putStrLn "== Anticipated failure message =="
+              liftIO $ print ex
     Right _ ->
       do liftIO $ fail "Expected failure, but succeeded instead!"
 

@@ -1,8 +1,8 @@
- Loading file "jvm.saw"
+Loading file "jvm.saw"
 registering standard overrides
 registering user-provided overrides
 registering assumptions
- Stack trace:
+Stack trace:
    (builtin) in jvm_verify
    jvm.saw:16:1-16:42 (at top level)
 Symbolic execution failed.

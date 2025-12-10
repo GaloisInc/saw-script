@@ -1,3 +1,3 @@
- Loading file "err004.saw"
- err004.saw:2:13-2:24: Unbound type variable Nonexistent
+Loading file "err004.saw"
+err004.saw:2:13-2:24: Unbound type variable Nonexistent
 FAILED

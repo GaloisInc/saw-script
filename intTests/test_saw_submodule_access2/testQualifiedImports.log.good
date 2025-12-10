@@ -1,7 +1,7 @@
- Loading file "testQualifiedImports.saw"
- 2114
- 12114
- 14229
+Loading file "testQualifiedImports.saw"
+2114
+12114
+14229
 == Anticipated failure message ==
 Stack trace:
    (builtin) in (callback)
@@ -38,4 +38,4 @@ Cryptol error:
 [error] at testQualifiedImports.saw:15:22--15:35
     Value not in scope: NOTINSCOPEVar
 
- done
+done

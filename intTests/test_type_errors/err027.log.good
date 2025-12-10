@@ -1,5 +1,5 @@
- Loading file "err027.saw"
- Stack trace:
+Loading file "err027.saw"
+Stack trace:
    (builtin) (at top level)
 Parse error at err027.saw:7:10-7:11: Unexpected `]'
 

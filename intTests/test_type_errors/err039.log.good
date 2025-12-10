@@ -1,5 +1,5 @@
- Loading file "err039.saw"
- err039.saw:7:10-7:25: Type mismatch.
+Loading file "err039.saw"
+err039.saw:7:10-7:25: Type mismatch.
     Term is not a function. (Maybe a function is applied to too many arguments?)
     err039.saw:7:10-7:25: The type t.0 -> t.1 arises from the context of the term
     <type of concat>:1:19-1:22: The type [Int] arises from this type annotation

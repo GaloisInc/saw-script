@@ -1,3 +1,3 @@
- Loading file "err020.saw"
- err020.saw:3:20-3:33: Record lookup on non-record value of type Int
+Loading file "err020.saw"
+err020.saw:3:20-3:33: Record lookup on non-record value of type Int
 FAILED

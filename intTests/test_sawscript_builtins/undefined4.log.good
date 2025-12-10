@@ -1,6 +1,6 @@
- Loading file "undefined4.saw"
- not dead yet
- interpret: undefined
+Loading file "undefined4.saw"
+not dead yet
+interpret: undefined
 CallStack (from HasCallStack):
   error, called at saw-script/src/SAWScript/Interpreter.hs
 FAILED

@@ -1,5 +1,5 @@
- Loading file "leak05.saw"
- should be unbound
+Loading file "leak05.saw"
+should be unbound
 == Anticipated failure message ==
 Stack trace:
    (builtin) in (callback)
@@ -14,4 +14,4 @@ Cryptol error:
 [error] at leak05.saw:11:39--11:40
     Type not in scope: x
 
- (exit)
+(exit)

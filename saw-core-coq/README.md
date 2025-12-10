@@ -17,27 +17,38 @@ support libraries must be compiled by Coq in order to use them.
 ## Installing Dependencies
 
 To compile the Coq support libraries, Coq must be installed, as must the
-following Coq library:
+following library:
 
-* [bits](https://github.com/coq-community/bits)
+* [coq-bits](https://github.com/coq-community/bits)
 
-The recommended way to install Coq and these dependencies is using opam. This
-can be done with the following steps, which will not only install opam, Coq, and
+The recommended way to install Coq and these dependencies is using `opam`. This
+can be done with the following steps, which will not only install `opam`, Coq, and
 the above mentioned Coq libraries, but will make sure to install the proper
-version of Coq needed for those libraries:
+version of Coq needed for those libraries.
 
+To install `opam` and Coq:
 ```
 sh <(curl -sL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)
 opam init
-opam repo add coq-released https://coq.inria.fr/opam/released
-opam install -y coq-bits
+opam pin add rocq-prover 9.0.0
+opam install rocq-core=9.1.0 rocq-stdlib=9.0.0
+opam repo add rocq-released https://rocq-prover.org/opam/released
+```
+
+Installing the required version of `coq-bits` (linked above) also requires
+installing the `coq` package, which includes compatibility shims to support the
+Coq to Rocq transition (e.g. the `coqc` and `coq_makefile` executables):
+```
+opam install coq=9.1.0
+opam pin coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
 ```
 
 If you run into any issue that is probably due to the version mismatch between the `ocamlc`
 and the `ocaml` base system installed on your machine and it can be fixed as explained
 [here](https://github.com/ocaml/opam/issues/3708).
 
-Currently, the Coq support libraries for `saw-core-coq` requires Coq 8.15.
+Currently, the Coq support libraries for `saw-core-coq` require `rocq-core`
+version `9.1.0` and `rocq-stdlib` version `9.0.0`.
 
 ## Building the and Using the Coq Support Libraries
 

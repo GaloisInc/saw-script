@@ -1,10 +1,10 @@
- Loading file "lists.saw"
- null:
- (true,true)
- (false,false)
- nth:
- (1,1)
- (4,4)
+Loading file "lists.saw"
+null:
+(true,true)
+(false,false)
+nth:
+(1,1)
+(4,4)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in nth
@@ -21,9 +21,9 @@ Stack trace:
    lists.saw:12:1-12:33 (at top level)
 nth: index too large
 
- head:
- (1,1)
- (3,3)
+head:
+(1,1)
+(3,3)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in head
@@ -32,9 +32,9 @@ Stack trace:
    lists.saw:18:1-18:32 (at top level)
 head: empty list
 
- tail:
- ([],[])
- ([4,5],[4,5])
+tail:
+([],[])
+([4,5],[4,5])
 == Anticipated failure message ==
 Stack trace:
    (builtin) in tail
@@ -43,39 +43,39 @@ Stack trace:
    lists.saw:24:1-24:32 (at top level)
 tail: empty list
 
- length
- (0,0)
- (1,1)
- (5,5)
- concat:
- ([],[])
- ([1],[1])
- ([1],[1])
- ([2,1],[2,1])
- ([2,4,6,8,1,2,3],[2,4,6,8,1,2,3])
- str_concat:
- ("","")
- ("a","a")
- ("a","a")
- ("ba","ba")
- ("defgabc","defgabc")
- ("","")
- ("abc","abc")
- *** for (empty) ***
- *** for (one) ***
- 1
- *** for (two) ***
- 1
- 2
- *** end for ***
- **** map ****
- []
- [2,3]
- **** foldl ****
- zero
- zeroalpha
- zeroalphabeta
- **** foldr ****
- zero
- alphazero
- alphabetazero
+length
+(0,0)
+(1,1)
+(5,5)
+concat:
+([],[])
+([1],[1])
+([1],[1])
+([2,1],[2,1])
+([2,4,6,8,1,2,3],[2,4,6,8,1,2,3])
+str_concat:
+("","")
+("a","a")
+("a","a")
+("ba","ba")
+("defgabc","defgabc")
+("","")
+("abc","abc")
+*** for (empty) ***
+*** for (one) ***
+1
+*** for (two) ***
+1
+2
+*** end for ***
+**** map ****
+[]
+[2,3]
+**** foldl ****
+zero
+zeroalpha
+zeroalphabeta
+**** foldr ****
+zero
+alphazero
+alphabetazero

@@ -1,11 +1,11 @@
-From Coq Require Import Numbers.Cyclic.ZModulo.ZModulo.
-From Coq Require Import ZArith.BinInt.
-From Coq Require Import ZArith.Zdiv.
-From Coq Require Import NArith.NArith.
-From Coq Require Import Lists.List.
-From Coq Require        Numbers.NatInt.NZLog.
-From Coq Require Import Strings.String.
-From Coq Require Export Logic.Eqdep.
+From Stdlib Require Import ZArith.BinInt.
+From Stdlib Require Import ZArith.Zdiv.
+From Stdlib Require Import NArith.NArith.
+From Stdlib Require Import Lists.List.
+From Stdlib Require        Numbers.NatInt.NZLog.
+From Stdlib Require Import Strings.String.
+From Stdlib Require Export Logic.Eqdep.
+From Stdlib Require Import Arith.PeanoNat.
 
 
 (***
@@ -102,7 +102,7 @@ Definition or     := orb.
 (** DEPRECATED: Use [xorb] instead. *)
 Definition xor    := xorb.
 
-Definition boolEq := Coq.Bool.Bool.eqb.
+Definition boolEq := Stdlib.Bool.Bool.eqb.
 
 Global Instance Inhabited_Unit : Inhabited UnitType :=
   MkInhabited UnitType tt.
@@ -207,8 +207,10 @@ Global Instance Inhabited_Nat : Inhabited Nat :=
 Global Instance Inhabited_nat : Inhabited nat :=
   MkInhabited nat 0%nat.
 
-Global Hint Resolve (0%nat : nat) : inh.
-Global Hint Resolve (0%nat : Nat) : inh.
+Definition inh_nat_witness : nat := 0%nat.
+Definition inh_Nat_witness : Nat := 0%nat.
+Global Hint Resolve inh_nat_witness : inh.
+Global Hint Resolve inh_Nat_witness : inh.
 
 Definition IsLeNat := @le.
 Definition IsLeNat_base (n:nat) : IsLeNat n n := le_n n.
@@ -351,8 +353,10 @@ Global Instance Inhabited_Intger : Inhabited Integer :=
 Global Instance Inhabited_Z : Inhabited Z :=
   MkInhabited Z 0%Z.
 
-Global Hint Resolve (0%Z : Z) : inh.
-Global Hint Resolve (0%Z : Integer) : inh.
+Definition inh_Z_witness : Z := 0%Z.
+Definition inh_Integer_witness : Integer := 0%Z.
+Global Hint Resolve inh_Z_witness : inh.
+Global Hint Resolve inh_Integer_witness : inh.
 
 
 (***
@@ -362,18 +366,17 @@ Global Hint Resolve (0%Z : Integer) : inh.
 (* NOTE: the following will be nonsense for values of n <= 1 *)
 Definition IntMod (n : nat) := Z.
 Definition toIntMod (n : nat) : Integer -> IntMod n := fun i => Z.modulo i (Z.of_nat n).
-Definition fromIntMod (n : nat) : (IntMod n) -> Integer := ZModulo.to_Z (Pos.of_nat n).
-Local Notation "[| a |]_ n" := (to_Z (Pos.of_nat n) a) (at level 0, a at level 99).
+Definition fromIntMod (n : nat) : (IntMod n) -> Integer := fun i => Z.modulo i (Z.of_nat n).
 Definition intModEq (n : nat) (a : IntMod n) (b : IntMod n) : bool
-  := Z.eqb [| a |]_n [| b |]_n.
+  := Z.eqb (fromIntMod n a) (fromIntMod n b).
 Definition intModAdd : forall (n : nat), (IntMod n) -> (IntMod n) -> IntMod n
-  := fun _ => ZModulo.add.
+  := fun _ => Z.add.
 Definition intModSub : forall (n : nat), (IntMod n) -> (IntMod n) -> IntMod n
-  := fun _ => ZModulo.sub.
+  := fun _ => Z.sub.
 Definition intModMul : forall (n : nat), (IntMod n) -> (IntMod n) -> IntMod n
-  := fun _ => ZModulo.mul.
+  := fun _ => Z.mul.
 Definition intModNeg : forall (n : nat), (IntMod n) -> IntMod n
-  := fun _ => ZModulo.opp.
+  := fun _ => Z.opp.
 
 Global Instance Inhabited_IntMod (n:nat) : Inhabited (IntMod n) :=
   MkInhabited (IntMod n) 0%Z.

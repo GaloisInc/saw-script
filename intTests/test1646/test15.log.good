@@ -1,5 +1,5 @@
- <stdin>:1:5-1:6: Warning: Redeclaration of y
- <stdin>:1:16-1:17: Warning: Previous declaration was here
+<stdin>:1:5-1:6: Warning: Redeclaration of y
+<stdin>:1:16-1:17: Warning: Previous declaration was here
 x : rebindable Int
 y : rebindable Int
 

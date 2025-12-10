@@ -1,5 +1,5 @@
- Loading file "unify006.saw"
- unify006.saw:7:22-7:23: Type mismatch.
+Loading file "unify006.saw"
+unify006.saw:7:22-7:23: Type mismatch.
     Mismatch of type constructors. Expected: Bool but got Int
     unify006.saw:7:22-7:23: The type Bool arises from the context of the term
     unify006.saw:7:12-7:15: The type Int arises from this type annotation

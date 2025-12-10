@@ -343,15 +343,6 @@ cmpPathConcretely sym (Mir.Variant_RefPath discrTp1 ctx1 p1 idx1) (Mir.Variant_R
 cmpPathConcretely _ (Mir.Variant_RefPath _ _ _ _) _ = PC.LTF
 cmpPathConcretely _ _ (Mir.Variant_RefPath _ _ _ _) = PC.GTF
 
--- Index_RefPath
-cmpPathConcretely sym (Mir.Index_RefPath tpr1 p1 i1) (Mir.Index_RefPath tpr2 p2 i2) =
-  PC.compareF tpr1 tpr2 <<>>
-  cmpPathConcretely sym p1 p2 <<>>
-  cmpSymBVConcretely sym i1 i2 <<>>
-  PC.EQF
-cmpPathConcretely _ (Mir.Index_RefPath _ _ _) _ = PC.LTF
-cmpPathConcretely _ _ (Mir.Index_RefPath _ _ _) = PC.GTF
-
 -- Just_RefPath
 cmpPathConcretely sym (Mir.Just_RefPath tpr1 p1) (Mir.Just_RefPath tpr2 p2) =
   PC.compareF tpr1 tpr2 <<>>
@@ -360,21 +351,23 @@ cmpPathConcretely sym (Mir.Just_RefPath tpr1 p1) (Mir.Just_RefPath tpr2 p2) =
 cmpPathConcretely _ (Mir.Just_RefPath _ _) _ = PC.LTF
 cmpPathConcretely _ _ (Mir.Just_RefPath _ _) = PC.GTF
 
--- VectorAsMirVector_RefPath
-cmpPathConcretely sym (Mir.VectorAsMirVector_RefPath tpr1 p1) (Mir.VectorAsMirVector_RefPath tpr2 p2) =
+-- VectorIndex_RefPath
+cmpPathConcretely sym (Mir.VectorIndex_RefPath tpr1 p1 i1) (Mir.VectorIndex_RefPath tpr2 p2 i2) =
   PC.compareF tpr1 tpr2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
+  cmpSymBVConcretely sym i1 i2 <<>>
   PC.EQF
-cmpPathConcretely _ (Mir.VectorAsMirVector_RefPath _ _) _ = PC.LTF
-cmpPathConcretely _ _ (Mir.VectorAsMirVector_RefPath _ _) = PC.GTF
+cmpPathConcretely _ (Mir.VectorIndex_RefPath _ _ _) _ = PC.LTF
+cmpPathConcretely _ _ (Mir.VectorIndex_RefPath _ _ _) = PC.GTF
 
--- ArrayAsMirVector_RefPath
-cmpPathConcretely sym (Mir.ArrayAsMirVector_RefPath tpr1 p1) (Mir.ArrayAsMirVector_RefPath tpr2 p2) =
-  PC.compareF tpr1 tpr2 <<>>
+-- ArrayIndex_RefPath
+cmpPathConcretely sym (Mir.ArrayIndex_RefPath btpr1 p1 i1) (Mir.ArrayIndex_RefPath btpr2 p2 i2) =
+  PC.compareF btpr1 btpr2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
+  cmpSymBVConcretely sym i1 i2 <<>>
   PC.EQF
-cmpPathConcretely _ (Mir.ArrayAsMirVector_RefPath _ _) _ = PC.LTF
-cmpPathConcretely _ _ (Mir.ArrayAsMirVector_RefPath _ _) = PC.GTF
+cmpPathConcretely _ (Mir.ArrayIndex_RefPath _ _ _) _ = PC.LTF
+cmpPathConcretely _ _ (Mir.ArrayIndex_RefPath _ _ _) = PC.GTF
 
 -- AgElem_RefPath
 cmpPathConcretely sym (Mir.AgElem_RefPath off1 sz1 tpr1 p1) (Mir.AgElem_RefPath off2 sz2 tpr2 p2) =

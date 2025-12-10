@@ -1,8 +1,8 @@
- Loading file "err001.saw"
- Verifying foo...
- Simulating foo...
- Checking proof obligations foo...
- Subgoal failed: foo err001.saw:13:1: error: in _SAW_LLVM_withMethodSpec
+Loading file "err001.saw"
+Verifying foo...
+Simulating foo...
+Checking proof obligations foo...
+Subgoal failed: foo err001.saw:13:1: error: in _SAW_LLVM_withMethodSpec
 Literal equality postcondition
 Expected term: 
 let { x@1 = Cryptol.TCNum 32
@@ -14,11 +14,11 @@ let { x@1 = Cryptol.TCNum 32
 Actual term:
 Prelude.bvMul 32 (Prelude.bvNat 32 2) x
 
- SolverStats {solverStatsSolvers = fromList ["SBV->Z3"], solverStatsGoalSize = N}
- ----------Counterexample----------
-   x: NNN
- ----------------------------------
- Stack trace:
+SolverStats {solverStatsSolvers = fromList ["SBV->Z3"], solverStatsGoalSize = N}
+----------Counterexample----------
+  x: NNN
+----------------------------------
+Stack trace:
    (builtin) in z3
    err001.saw:13:38-13:40 in (callback)
    (builtin) in llvm_verify

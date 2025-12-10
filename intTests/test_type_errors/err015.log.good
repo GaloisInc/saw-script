@@ -1,5 +1,5 @@
- Loading file "err015.saw"
- Type errors:
+Loading file "err015.saw"
+Type errors:
   err015.saw:65:14-65:15: Type mismatch.
     Record field names mismatch.
     err015.saw:18:15-22:2: The type {amethyst : Int, moonstone : Int, obsidian : Int} arises from this type annotation

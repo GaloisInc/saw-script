@@ -1,9 +1,9 @@
- Loading file "test13.saw"
- test13.saw:7:8-7:9: Warning: Redeclaration of x
- test13.saw:4:16-4:17: Warning: Previous declaration was here
- 3
- test13.saw:12:5-12:6: Warning: Redeclaration of x
- test13.saw:4:16-4:17: Warning: Previous declaration was here
- b
- test13.saw:15:16-15:17: Cannot rebind x: Previous binding was not tagged 'rebindable'
+Loading file "test13.saw"
+test13.saw:7:8-7:9: Warning: Redeclaration of x
+test13.saw:4:16-4:17: Warning: Previous declaration was here
+3
+test13.saw:12:5-12:6: Warning: Redeclaration of x
+test13.saw:4:16-4:17: Warning: Previous declaration was here
+b
+test13.saw:15:16-15:17: Cannot rebind x: Previous binding was not tagged 'rebindable'
 FAILED
