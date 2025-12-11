@@ -56,9 +56,9 @@ span.spaces    { background: white }
 <span class="lineno">   37 </span>  , oeConditionalPred
 <span class="lineno">   38 </span>  --
 <span class="lineno">   39 </span>  , OverrideFailureReason(..)
-<span class="lineno">   40 </span>  , ppOverrideFailureReason
+<span class="lineno">   40 </span>  , prettyOverrideFailureReason
 <span class="lineno">   41 </span>  , OverrideFailure(..)
-<span class="lineno">   42 </span>  , ppOverrideFailure
+<span class="lineno">   42 </span>  , prettyOverrideFailure
 <span class="lineno">   43 </span>  --
 <span class="lineno">   44 </span>  , OverrideMatcher
 <span class="lineno">   45 </span>  , OverrideMatcher'(..)
@@ -128,7 +128,7 @@ span.spaces    { background: white }
 <span class="lineno">  109 </span>import           SAWCore.Name (VarName(..))
 <span class="lineno">  110 </span>import           SAWCore.Prelude as SAWVerifier (scEq)
 <span class="lineno">  111 </span>import           SAWCore.SharedTerm as SAWVerifier
-<span class="lineno">  112 </span>import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
+<span class="lineno">  112 </span>import           SAWCore.Term.Pretty (prettyTermPure)
 <span class="lineno">  113 </span>import           CryptolSAWCore.TypedTerm as SAWVerifier
 <span class="lineno">  114 </span>
 <span class="lineno">  115 </span>import qualified Cryptol.Utils.PP as Cryptol (pp)
@@ -321,18 +321,18 @@ span.spaces    { background: white }
 <span class="lineno">  302 </span>instance <span class="decl"><span class="nottickedoff">( PP.Pretty (ExtType ext)</span>
 <span class="lineno">  303 </span><span class="spaces">         </span><span class="nottickedoff">, PP.Pretty (MS.PointsTo ext)</span>
 <span class="lineno">  304 </span><span class="spaces">         </span><span class="nottickedoff">) =&gt; PP.Pretty (OverrideFailureReason ext)</span></span> where
-<span class="lineno">  305 </span>  <span class="decl"><span class="nottickedoff">pretty = ppOverrideFailureReason</span></span>
+<span class="lineno">  305 </span>  <span class="decl"><span class="nottickedoff">pretty = prettyOverrideFailureReason</span></span>
 <span class="lineno">  306 </span>
 <span class="lineno">  307 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">( PP.Pretty (ExtType ext)</span>
 <span class="lineno">  308 </span><span class="spaces">         </span><span class="nottickedoff">, PP.Pretty (MS.PointsTo ext)</span>
 <span class="lineno">  309 </span><span class="spaces">         </span><span class="nottickedoff">) =&gt; Show (OverrideFailureReason ext)</span></span></span></span> where
 <span class="lineno">  310 </span>  <span class="decl"><span class="nottickedoff">show = show . PP.pretty</span></span>
 <span class="lineno">  311 </span>
-<span class="lineno">  312 </span>ppOverrideFailureReason ::
+<span class="lineno">  312 </span>prettyOverrideFailureReason ::
 <span class="lineno">  313 </span>  ( PP.Pretty (ExtType ext)
 <span class="lineno">  314 </span>  , PP.Pretty (MS.PointsTo ext)
 <span class="lineno">  315 </span>  ) =&gt; OverrideFailureReason ext -&gt; PP.Doc ann
-<span class="lineno">  316 </span><span class="decl"><span class="istickedoff">ppOverrideFailureReason rsn = case rsn of</span>
+<span class="lineno">  316 </span><span class="decl"><span class="istickedoff">prettyOverrideFailureReason rsn = case rsn of</span>
 <span class="lineno">  317 </span><span class="spaces">  </span><span class="istickedoff">AmbiguousPointsTos pts -&gt;</span>
 <span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">PP.vcat</span></span>
 <span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ PP.pretty &quot;LHS of points-to assertion(s) not reachable via points-tos from inputs/outputs:&quot;</span></span>
@@ -341,13 +341,13 @@ span.spaces    { background: white }
 <span class="lineno">  322 </span><span class="spaces">  </span><span class="istickedoff">AmbiguousVars vs -&gt;</span>
 <span class="lineno">  323 </span><span class="spaces">    </span><span class="istickedoff">PP.vcat</span>
 <span class="lineno">  324 </span><span class="spaces">    </span><span class="istickedoff">[ PP.pretty &quot;Fresh variable(s) not reachable via points-tos from function inputs/outputs:&quot;</span>
-<span class="lineno">  325 </span><span class="spaces">    </span><span class="istickedoff">, PP.indent 2 $ PP.vcat (map ppTypedVariable vs)</span>
+<span class="lineno">  325 </span><span class="spaces">    </span><span class="istickedoff">, PP.indent 2 $ PP.vcat (map prettyTypedVariable vs)</span>
 <span class="lineno">  326 </span><span class="spaces">    </span><span class="istickedoff">]</span>
 <span class="lineno">  327 </span><span class="spaces">  </span><span class="istickedoff">BadTermMatch x y -&gt;</span>
 <span class="lineno">  328 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">PP.vcat</span></span>
 <span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ PP.pretty &quot;terms do not match&quot;</span></span>
-<span class="lineno">  330 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.indent 2 (PP.unAnnotate (ppTerm PPS.defaultOpts x))</span></span>
-<span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.indent 2 (PP.unAnnotate (ppTerm PPS.defaultOpts y))</span></span>
+<span class="lineno">  330 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts x))</span></span>
+<span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts y))</span></span>
 <span class="lineno">  332 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">BadPointerCast -&gt;</span>
 <span class="lineno">  334 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">PP.pretty &quot;bad pointer cast&quot;</span></span>
@@ -387,19 +387,19 @@ span.spaces    { background: white }
 <span class="lineno">  368 </span>
 <span class="lineno">  369 </span>data OverrideFailure ext = OF W4.ProgramLoc (OverrideFailureReason ext)
 <span class="lineno">  370 </span>
-<span class="lineno">  371 </span>ppOverrideFailure :: ( PP.Pretty (ExtType ext)
-<span class="lineno">  372 </span>                     , PP.Pretty (MS.PointsTo ext)
-<span class="lineno">  373 </span>                     ) =&gt; OverrideFailure ext -&gt; PP.Doc ann
-<span class="lineno">  374 </span><span class="decl"><span class="istickedoff">ppOverrideFailure (OF loc rsn) =</span>
+<span class="lineno">  371 </span>prettyOverrideFailure :: ( PP.Pretty (ExtType ext)
+<span class="lineno">  372 </span>                         , PP.Pretty (MS.PointsTo ext)
+<span class="lineno">  373 </span>                         ) =&gt; OverrideFailure ext -&gt; PP.Doc ann
+<span class="lineno">  374 </span><span class="decl"><span class="istickedoff">prettyOverrideFailure (OF loc rsn) =</span>
 <span class="lineno">  375 </span><span class="spaces">  </span><span class="istickedoff">PP.vcat</span>
 <span class="lineno">  376 </span><span class="spaces">  </span><span class="istickedoff">[ PP.pretty &quot;at&quot; PP.&lt;+&gt; PP.viaShow (W4.plSourceLoc loc) -- TODO: fix when what4 switches to prettyprinter</span>
-<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">, ppOverrideFailureReason rsn</span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">, prettyOverrideFailureReason rsn</span>
 <span class="lineno">  378 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
 <span class="lineno">  379 </span>
 <span class="lineno">  380 </span>instance <span class="decl"><span class="nottickedoff">( PP.Pretty (ExtType ext)</span>
 <span class="lineno">  381 </span><span class="spaces">         </span><span class="nottickedoff">, PP.Pretty (MS.PointsTo ext)</span>
 <span class="lineno">  382 </span><span class="spaces">         </span><span class="nottickedoff">) =&gt; PP.Pretty (OverrideFailure ext)</span></span> where
-<span class="lineno">  383 </span>  <span class="decl"><span class="nottickedoff">pretty = ppOverrideFailure</span></span>
+<span class="lineno">  383 </span>  <span class="decl"><span class="nottickedoff">pretty = prettyOverrideFailure</span></span>
 <span class="lineno">  384 </span>
 <span class="lineno">  385 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">( PP.Pretty (ExtType ext)</span>
 <span class="lineno">  386 </span><span class="spaces">         </span><span class="nottickedoff">, PP.Pretty (MS.PointsTo ext)</span>
@@ -690,94 +690,97 @@ span.spaces    { background: white }
 <span class="lineno">  671 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;- Actual:   &quot; ++ show (Cryptol.pp sch)</span></span>
 <span class="lineno">  672 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  673 </span><span class="spaces">     </span><span class="istickedoff">instantiateExtMatchTerm sc md prepost tm tmEx</span>
-<span class="lineno">  674 </span><span class="spaces"></span><span class="istickedoff">learnGhost _sc _md _prepost _var (TypedTerm tp _)</span>
-<span class="lineno">  675 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">fail $ unlines</span></span>
-<span class="lineno">  676 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Ghost variable expected value has improper type&quot;</span></span>
-<span class="lineno">  677 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
-<span class="lineno">  678 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, show (ppTypedTermType tp)</span></span>
-<span class="lineno">  679 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
-<span class="lineno">  680 </span>
-<span class="lineno">  681 </span>executeGhost ::
-<span class="lineno">  682 </span>  SharedContext -&gt;
-<span class="lineno">  683 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno">  684 </span>  MS.GhostGlobal -&gt;
-<span class="lineno">  685 </span>  TypedTerm -&gt;
-<span class="lineno">  686 </span>  OverrideMatcher ext RW ()
-<span class="lineno">  687 </span><span class="decl"><span class="istickedoff">executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =</span>
-<span class="lineno">  688 </span><span class="spaces">  </span><span class="istickedoff">do s &lt;- OM (use termSub)</span>
-<span class="lineno">  689 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- liftIO (scInstantiate sc s tm)</span>
-<span class="lineno">  690 </span><span class="spaces">     </span><span class="istickedoff">writeGlobal var (sch,tm')</span>
-<span class="lineno">  691 </span><span class="spaces"></span><span class="istickedoff">executeGhost _sc _md _var (TypedTerm tp _) =</span>
-<span class="lineno">  692 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
-<span class="lineno">  693 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;executeGhost: improper value type&quot;</span></span>
-<span class="lineno">  694 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
-<span class="lineno">  695 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, show (ppTypedTermType tp)</span></span>
-<span class="lineno">  696 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
-<span class="lineno">  697 </span>
-<span class="lineno">  698 </span>-- | NOTE: The two 'Term' arguments must have the same type.
-<span class="lineno">  699 </span>instantiateExtMatchTerm ::
-<span class="lineno">  700 </span>  SharedContext   {- ^ context for constructing SAW terms    -} -&gt;
-<span class="lineno">  701 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno">  702 </span>  PrePost                                                       -&gt;
-<span class="lineno">  703 </span>  Term            {- ^ exported concrete term                -} -&gt;
-<span class="lineno">  704 </span>  Term            {- ^ expected specification term           -} -&gt;
-<span class="lineno">  705 </span>  OverrideMatcher ext md ()
-<span class="lineno">  706 </span><span class="decl"><span class="istickedoff">instantiateExtMatchTerm sc md prepost actual expected = do</span>
-<span class="lineno">  707 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- OM (use termSub)</span>
-<span class="lineno">  708 </span><span class="spaces">  </span><span class="istickedoff">matchTerm sc md prepost actual =&lt;&lt; liftIO (scInstantiate sc sub expected)</span></span>
-<span class="lineno">  709 </span>
-<span class="lineno">  710 </span>matchTerm ::
-<span class="lineno">  711 </span>  SharedContext   {- ^ context for constructing SAW terms    -} -&gt;
-<span class="lineno">  712 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno">  713 </span>  PrePost                                                       -&gt;
-<span class="lineno">  714 </span>  Term            {- ^ exported concrete term                -} -&gt;
-<span class="lineno">  715 </span>  Term            {- ^ expected specification term           -} -&gt;
-<span class="lineno">  716 </span>  OverrideMatcher ext md ()
-<span class="lineno">  717 </span>
-<span class="lineno">  718 </span><span class="decl"><span class="istickedoff">matchTerm _ _ _ real expect | real == expect = return <span class="nottickedoff">()</span></span>
-<span class="lineno">  719 </span><span class="spaces"></span><span class="istickedoff">matchTerm sc md prepost real expect =</span>
-<span class="lineno">  720 </span><span class="spaces">  </span><span class="istickedoff">do let loc = MS.conditionLoc md</span>
-<span class="lineno">  721 </span><span class="spaces">     </span><span class="istickedoff">free &lt;- OM (use osFree)</span>
-<span class="lineno">  722 </span><span class="spaces">     </span><span class="istickedoff">case unwrapTermF expect of</span>
-<span class="lineno">  723 </span><span class="spaces">       </span><span class="istickedoff">Variable vn _tp</span>
-<span class="lineno">  724 </span><span class="spaces">         </span><span class="istickedoff">| Set.member (vnIndex vn) free -&gt;</span>
-<span class="lineno">  725 </span><span class="spaces">         </span><span class="istickedoff">do assignTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">md</span> <span class="nottickedoff">prepost</span> (vnIndex vn) real</span>
-<span class="lineno">  726 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  727 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  728 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- liftIO $ scEq sc real expect</span>
-<span class="lineno">  729 </span><span class="spaces">            </span><span class="istickedoff">-- XXX get the user's ppOpts setting from somewhere</span>
-<span class="lineno">  730 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts = PPS.defaultOpts</span>
-<span class="lineno">  731 </span><span class="spaces">            </span><span class="istickedoff">-- clamp the print depth to 20</span>
-<span class="lineno">  732 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts' = PPS.limitMaxDepth ppOpts 20</span>
-<span class="lineno">  733 </span><span class="spaces">                </span><span class="istickedoff">expect' = scPrettyTerm ppOpts' expect</span>
-<span class="lineno">  734 </span><span class="spaces">                </span><span class="istickedoff">real' = scPrettyTerm ppOpts' real</span>
-<span class="lineno">  735 </span><span class="spaces">            </span><span class="istickedoff">let msg = unlines $</span>
-<span class="lineno">  736 </span><span class="spaces">                  </span><span class="istickedoff">[ &quot;Literal equality &quot; ++ MS.stateCond prepost</span>
-<span class="lineno">  737 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Expected term: &quot;</span>
-<span class="lineno">  738 </span><span class="spaces">                  </span><span class="istickedoff">, expect'</span>
-<span class="lineno">  739 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Actual term:&quot;</span>
-<span class="lineno">  740 </span><span class="spaces">                  </span><span class="istickedoff">, real'</span>
-<span class="lineno">  741 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
-<span class="lineno">  742 </span><span class="spaces">            </span><span class="istickedoff">addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span></span>
-<span class="lineno">  743 </span>
-<span class="lineno">  744 </span>assignTerm ::
-<span class="lineno">  745 </span>  SharedContext      {- ^ context for constructing SAW terms    -} -&gt;
-<span class="lineno">  746 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno">  747 </span>  PrePost                                                          -&gt;
-<span class="lineno">  748 </span>  VarIndex {- ^ external constant index -} -&gt;
-<span class="lineno">  749 </span>  Term     {- ^ value                   -} -&gt;
-<span class="lineno">  750 </span>  OverrideMatcher ext md ()
-<span class="lineno">  751 </span>
-<span class="lineno">  752 </span><span class="decl"><span class="istickedoff">assignTerm sc md prepost var val =</span>
-<span class="lineno">  753 </span><span class="spaces">  </span><span class="istickedoff">do mb &lt;- OM (use (termSub . at var))</span>
-<span class="lineno">  754 </span><span class="spaces">     </span><span class="istickedoff">case mb of</span>
-<span class="lineno">  755 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; OM (termSub . at var ?= val)</span>
-<span class="lineno">  756 </span><span class="spaces">       </span><span class="istickedoff">Just old -&gt;</span>
-<span class="lineno">  757 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">matchTerm sc md prepost val old</span></span></span>
-<span class="lineno">  758 </span>
-<span class="lineno">  759 </span>--          do t &lt;- liftIO $ scEq sc old val
-<span class="lineno">  760 </span>--             p &lt;- liftIO $ resolveSAWPred cc t
-<span class="lineno">  761 </span>--             addAssert p (Crucible.AssertFailureSimError (&quot;literal equality &quot; ++ MS.stateCond prepost))
+<span class="lineno">  674 </span><span class="spaces"></span><span class="istickedoff">learnGhost sc _md _prepost _var (TypedTerm tp _)</span>
+<span class="lineno">  675 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do</span></span>
+<span class="lineno">  676 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp</span></span>
+<span class="lineno">  677 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno">  678 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Ghost variable expected value has improper type&quot;</span></span>
+<span class="lineno">  679 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
+<span class="lineno">  680 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, show tp'</span></span>
+<span class="lineno">  681 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  682 </span>
+<span class="lineno">  683 </span>executeGhost ::
+<span class="lineno">  684 </span>  SharedContext -&gt;
+<span class="lineno">  685 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno">  686 </span>  MS.GhostGlobal -&gt;
+<span class="lineno">  687 </span>  TypedTerm -&gt;
+<span class="lineno">  688 </span>  OverrideMatcher ext RW ()
+<span class="lineno">  689 </span><span class="decl"><span class="istickedoff">executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =</span>
+<span class="lineno">  690 </span><span class="spaces">  </span><span class="istickedoff">do s &lt;- OM (use termSub)</span>
+<span class="lineno">  691 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- liftIO (scInstantiate sc s tm)</span>
+<span class="lineno">  692 </span><span class="spaces">     </span><span class="istickedoff">writeGlobal var (sch,tm')</span>
+<span class="lineno">  693 </span><span class="spaces"></span><span class="istickedoff">executeGhost sc _md _var (TypedTerm tp _) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  694 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp</span></span>
+<span class="lineno">  695 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno">  696 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;executeGhost: improper value type&quot;</span></span>
+<span class="lineno">  697 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
+<span class="lineno">  698 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, show tp'</span></span>
+<span class="lineno">  699 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  700 </span>
+<span class="lineno">  701 </span>-- | NOTE: The two 'Term' arguments must have the same type.
+<span class="lineno">  702 </span>instantiateExtMatchTerm ::
+<span class="lineno">  703 </span>  SharedContext   {- ^ context for constructing SAW terms    -} -&gt;
+<span class="lineno">  704 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno">  705 </span>  PrePost                                                       -&gt;
+<span class="lineno">  706 </span>  Term            {- ^ exported concrete term                -} -&gt;
+<span class="lineno">  707 </span>  Term            {- ^ expected specification term           -} -&gt;
+<span class="lineno">  708 </span>  OverrideMatcher ext md ()
+<span class="lineno">  709 </span><span class="decl"><span class="istickedoff">instantiateExtMatchTerm sc md prepost actual expected = do</span>
+<span class="lineno">  710 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- OM (use termSub)</span>
+<span class="lineno">  711 </span><span class="spaces">  </span><span class="istickedoff">matchTerm sc md prepost actual =&lt;&lt; liftIO (scInstantiate sc sub expected)</span></span>
+<span class="lineno">  712 </span>
+<span class="lineno">  713 </span>matchTerm ::
+<span class="lineno">  714 </span>  SharedContext   {- ^ context for constructing SAW terms    -} -&gt;
+<span class="lineno">  715 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno">  716 </span>  PrePost                                                       -&gt;
+<span class="lineno">  717 </span>  Term            {- ^ exported concrete term                -} -&gt;
+<span class="lineno">  718 </span>  Term            {- ^ expected specification term           -} -&gt;
+<span class="lineno">  719 </span>  OverrideMatcher ext md ()
+<span class="lineno">  720 </span>
+<span class="lineno">  721 </span><span class="decl"><span class="istickedoff">matchTerm _ _ _ real expect | real == expect = return <span class="nottickedoff">()</span></span>
+<span class="lineno">  722 </span><span class="spaces"></span><span class="istickedoff">matchTerm sc md prepost real expect =</span>
+<span class="lineno">  723 </span><span class="spaces">  </span><span class="istickedoff">do let loc = MS.conditionLoc md</span>
+<span class="lineno">  724 </span><span class="spaces">     </span><span class="istickedoff">free &lt;- OM (use osFree)</span>
+<span class="lineno">  725 </span><span class="spaces">     </span><span class="istickedoff">case unwrapTermF expect of</span>
+<span class="lineno">  726 </span><span class="spaces">       </span><span class="istickedoff">Variable vn _tp</span>
+<span class="lineno">  727 </span><span class="spaces">         </span><span class="istickedoff">| Set.member (vnIndex vn) free -&gt;</span>
+<span class="lineno">  728 </span><span class="spaces">         </span><span class="istickedoff">do assignTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">md</span> <span class="nottickedoff">prepost</span> (vnIndex vn) real</span>
+<span class="lineno">  729 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  730 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  731 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- liftIO $ scEq sc real expect</span>
+<span class="lineno">  732 </span><span class="spaces">            </span><span class="istickedoff">-- XXX get the user's ppOpts setting from somewhere</span>
+<span class="lineno">  733 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts = PPS.defaultOpts</span>
+<span class="lineno">  734 </span><span class="spaces">            </span><span class="istickedoff">-- clamp the print depth to 20</span>
+<span class="lineno">  735 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts' = PPS.limitMaxDepth ppOpts 20</span>
+<span class="lineno">  736 </span><span class="spaces">            </span><span class="istickedoff">expect' &lt;- liftIO $ SAWVerifier.ppTerm sc ppOpts' expect</span>
+<span class="lineno">  737 </span><span class="spaces">            </span><span class="istickedoff">real' &lt;- liftIO $ SAWVerifier.ppTerm sc ppOpts' real</span>
+<span class="lineno">  738 </span><span class="spaces">            </span><span class="istickedoff">let msg = unlines $</span>
+<span class="lineno">  739 </span><span class="spaces">                  </span><span class="istickedoff">[ &quot;Literal equality &quot; ++ MS.stateCond prepost</span>
+<span class="lineno">  740 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Expected term: &quot;</span>
+<span class="lineno">  741 </span><span class="spaces">                  </span><span class="istickedoff">, expect'</span>
+<span class="lineno">  742 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Actual term:&quot;</span>
+<span class="lineno">  743 </span><span class="spaces">                  </span><span class="istickedoff">, real'</span>
+<span class="lineno">  744 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
+<span class="lineno">  745 </span><span class="spaces">            </span><span class="istickedoff">addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span></span>
+<span class="lineno">  746 </span>
+<span class="lineno">  747 </span>assignTerm ::
+<span class="lineno">  748 </span>  SharedContext      {- ^ context for constructing SAW terms    -} -&gt;
+<span class="lineno">  749 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno">  750 </span>  PrePost                                                          -&gt;
+<span class="lineno">  751 </span>  VarIndex {- ^ external constant index -} -&gt;
+<span class="lineno">  752 </span>  Term     {- ^ value                   -} -&gt;
+<span class="lineno">  753 </span>  OverrideMatcher ext md ()
+<span class="lineno">  754 </span>
+<span class="lineno">  755 </span><span class="decl"><span class="istickedoff">assignTerm sc md prepost var val =</span>
+<span class="lineno">  756 </span><span class="spaces">  </span><span class="istickedoff">do mb &lt;- OM (use (termSub . at var))</span>
+<span class="lineno">  757 </span><span class="spaces">     </span><span class="istickedoff">case mb of</span>
+<span class="lineno">  758 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; OM (termSub . at var ?= val)</span>
+<span class="lineno">  759 </span><span class="spaces">       </span><span class="istickedoff">Just old -&gt;</span>
+<span class="lineno">  760 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">matchTerm sc md prepost val old</span></span></span>
+<span class="lineno">  761 </span>
+<span class="lineno">  762 </span>--          do t &lt;- liftIO $ scEq sc old val
+<span class="lineno">  763 </span>--             p &lt;- liftIO $ resolveSAWPred cc t
+<span class="lineno">  764 </span>--             addAssert p (Crucible.AssertFailureSimError (&quot;literal equality &quot; ++ MS.stateCond prepost))
 
 </pre>
 </body>

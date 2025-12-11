@@ -817,12 +817,12 @@ span.spaces    { background: white }
 <span class="lineno">  798 </span><span class="spaces">           </span><span class="istickedoff">)</span>
 <span class="lineno">  799 </span><span class="spaces">         </span><span class="istickedoff">| (precond, cs, st) &lt;- branches'</span>
 <span class="lineno">  800 </span><span class="spaces">         </span><span class="istickedoff">] ++</span>
-<span class="lineno">  801 </span><span class="spaces">         </span><span class="istickedoff">[ let e prettyArgs symFalse unsat = show $ PP.vcat $ concat</span>
+<span class="lineno">  801 </span><span class="spaces">         </span><span class="istickedoff">[ let e args' symFalse unsat = show $ PP.vcat $ concat</span>
 <span class="lineno">  802 </span><span class="spaces">                 </span><span class="istickedoff">[ [ PP.pretty $</span>
 <span class="lineno">  803 </span><span class="spaces">                     </span><span class="istickedoff">&quot;No override specification applies for &quot; ++ fnName ++ &quot;.&quot;</span>
 <span class="lineno">  804 </span><span class="spaces">                   </span><span class="istickedoff">]</span>
 <span class="lineno">  805 </span><span class="spaces">                 </span><span class="istickedoff">, [ &quot;Arguments:&quot;</span>
-<span class="lineno">  806 </span><span class="spaces">                   </span><span class="istickedoff">, bullets '-' prettyArgs</span>
+<span class="lineno">  806 </span><span class="spaces">                   </span><span class="istickedoff">, bullets '-' args'</span>
 <span class="lineno">  807 </span><span class="spaces">                   </span><span class="istickedoff">]</span>
 <span class="lineno">  808 </span><span class="spaces">                 </span><span class="istickedoff">, if | not (null false) -&gt;</span>
 <span class="lineno">  809 </span><span class="spaces">                        </span><span class="istickedoff">[ PP.vcat</span>
@@ -887,8 +887,8 @@ span.spaces    { background: white }
 <span class="lineno">  868 </span><span class="spaces">                        </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  869 </span><span class="spaces">                        </span><span class="istickedoff">ps -&gt; Just <span class="nottickedoff">(owp, ps)</span>)</span>
 <span class="lineno">  870 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  871 </span><span class="spaces">                  </span><span class="istickedoff">prettyArgs &lt;-</span>
-<span class="lineno">  872 </span><span class="spaces">                    </span><span class="istickedoff">ppArgs <span class="nottickedoff">sym</span> <span class="nottickedoff">cc</span> (NE.head css) (Crucible.RegMap args)</span>
+<span class="lineno">  871 </span><span class="spaces">                  </span><span class="istickedoff">args' &lt;-</span>
+<span class="lineno">  872 </span><span class="spaces">                    </span><span class="istickedoff">prettyArgs <span class="nottickedoff">sym</span> <span class="nottickedoff">cc</span> (NE.head css) (Crucible.RegMap args)</span>
 <span class="lineno">  873 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  874 </span><span class="spaces">                  </span><span class="istickedoff">unsat &lt;-</span>
 <span class="lineno">  875 </span><span class="spaces">                    </span><span class="istickedoff">filterM</span>
@@ -896,7 +896,7 @@ span.spaces    { background: white }
 <span class="lineno">  877 </span><span class="spaces">                      </span><span class="istickedoff">branches</span>
 <span class="lineno">  878 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  879 </span><span class="spaces">                  </span><span class="istickedoff">Crucible.addFailedAssertion bak</span>
-<span class="lineno">  880 </span><span class="spaces">                    </span><span class="istickedoff">(Crucible.GenericSimError (e prettyArgs symFalse unsat))</span>
+<span class="lineno">  880 </span><span class="spaces">                    </span><span class="istickedoff">(Crucible.GenericSimError (e args' symFalse unsat))</span>
 <span class="lineno">  881 </span><span class="spaces">              </span><span class="istickedoff">, Just (W4.plSourceLoc call_loc)</span>
 <span class="lineno">  882 </span><span class="spaces">              </span><span class="istickedoff">)</span>
 <span class="lineno">  883 </span><span class="spaces">         </span><span class="istickedoff">]))</span>
@@ -1743,13 +1743,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1724 </span><span class="spaces">  </span><span class="istickedoff">-- various overrides.</span>
 <span class="lineno"> 1725 </span><span class="spaces">  </span><span class="istickedoff">branches &lt;-</span>
 <span class="lineno"> 1726 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">prettyError methodSpec failureReason = do</span></span>
-<span class="lineno"> 1727 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">prettyArgs &lt;- liftIO $ ppArgs sym cc methodSpec (Crucible.RegMap args)</span></span>
+<span class="lineno"> 1727 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">args' &lt;- liftIO $ prettyArgs sym cc methodSpec (Crucible.RegMap args)</span></span>
 <span class="lineno"> 1728 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">pure $</span></span>
 <span class="lineno"> 1729 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">PP.vcat</span></span>
 <span class="lineno"> 1730 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[ MS.ppMethodSpec methodSpec</span></span>
 <span class="lineno"> 1731 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, &quot;Arguments:&quot;</span></span>
-<span class="lineno"> 1732 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, bullets '-' prettyArgs</span></span>
-<span class="lineno"> 1733 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, ppOverrideFailure failureReason</span></span>
+<span class="lineno"> 1732 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, bullets '-' args'</span></span>
+<span class="lineno"> 1733 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, prettyOverrideFailure failureReason</span></span>
 <span class="lineno"> 1734 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 1735 </span><span class="spaces">    </span><span class="istickedoff">in</span>
 <span class="lineno"> 1736 </span><span class="spaces">      </span><span class="istickedoff">case partitionEithers (F.toList prestates) of</span>
@@ -1846,8 +1846,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1827 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">sym = cc^.mccSym</span></span>
 <span class="lineno"> 1828 </span><span class="spaces">  </span><span class="istickedoff">setupTy &lt;- typeOfSetupValueMIR <span class="nottickedoff">cc</span> <span class="nottickedoff">spec</span> setupval</span>
 <span class="lineno"> 1829 </span><span class="spaces">  </span><span class="istickedoff">pure $ <span class="nottickedoff">StructuralMismatch</span></span>
-<span class="lineno"> 1830 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(ppMIRVal sym mirVal)</span></span>
-<span class="lineno"> 1831 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(MS.ppSetupValue setupval)</span></span>
+<span class="lineno"> 1830 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(prettyMIRVal sym mirVal)</span></span>
+<span class="lineno"> 1831 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(MS.prettySetupValue setupval)</span></span>
 <span class="lineno"> 1832 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(Just setupTy)</span></span>
 <span class="lineno"> 1833 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(shapeMirTy shp)</span></span></span>
 <span class="lineno"> 1834 </span>
@@ -1864,47 +1864,47 @@ span.spaces    { background: white }
 <span class="lineno"> 1845 </span>  OverrideMatcher MIR w Crucible.SimError
 <span class="lineno"> 1846 </span><span class="decl"><span class="istickedoff">notEqual cond opts loc cc sc spec expected actual = do</span>
 <span class="lineno"> 1847 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
-<span class="lineno"> 1848 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">prettyMIRVal = ppMIRVal sym actual</span></span>
-<span class="lineno"> 1849 </span><span class="spaces">  </span><span class="istickedoff">prettySetupMIRVal &lt;- ppSetupValueAsMIRVal <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> expected</span>
+<span class="lineno"> 1848 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">mv'actual = prettyMIRVal sym actual</span></span>
+<span class="lineno"> 1849 </span><span class="spaces">  </span><span class="istickedoff">smv'actual &lt;- prettySetupValueAsMIRVal <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> expected</span>
 <span class="lineno"> 1850 </span><span class="spaces">  </span><span class="istickedoff">let msg = unlines</span>
 <span class="lineno"> 1851 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;Equality &quot; ++ <span class="nottickedoff">MS.stateCond cond</span></span>
 <span class="lineno"> 1852 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">&quot;Expected value (as a SAW value): &quot;</span></span>
-<span class="lineno"> 1853 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">show (MS.ppSetupValue expected)</span></span>
+<span class="lineno"> 1853 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">show (MS.prettySetupValue expected)</span></span>
 <span class="lineno"> 1854 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">&quot;Expected value (as a Crucible value): &quot;</span></span>
-<span class="lineno"> 1855 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">show prettySetupMIRVal</span></span>
+<span class="lineno"> 1855 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">show smv'actual</span></span>
 <span class="lineno"> 1856 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">&quot;Actual value: &quot;</span></span>
-<span class="lineno"> 1857 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">show prettyMIRVal</span></span>
+<span class="lineno"> 1857 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">show mv'actual</span></span>
 <span class="lineno"> 1858 </span><span class="spaces">        </span><span class="istickedoff">]</span>
 <span class="lineno"> 1859 </span><span class="spaces">  </span><span class="istickedoff">pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span></span>
 <span class="lineno"> 1860 </span>
 <span class="lineno"> 1861 </span>-- | Pretty-print the arguments passed to an override
-<span class="lineno"> 1862 </span>ppArgs ::
+<span class="lineno"> 1862 </span>prettyArgs ::
 <span class="lineno"> 1863 </span>  forall args ann.
 <span class="lineno"> 1864 </span>  Sym -&gt;
 <span class="lineno"> 1865 </span>  MIRCrucibleContext          {- ^ context for interacting with Crucible        -} -&gt;
 <span class="lineno"> 1866 </span>  MS.CrucibleMethodSpecIR MIR {- ^ specification for current function override  -} -&gt;
 <span class="lineno"> 1867 </span>  Crucible.RegMap Sym args    {- ^ arguments from the simulator                 -} -&gt;
 <span class="lineno"> 1868 </span>  IO [PP.Doc ann]
-<span class="lineno"> 1869 </span><span class="decl"><span class="istickedoff">ppArgs sym cc cs (Crucible.RegMap args) = do</span>
+<span class="lineno"> 1869 </span><span class="decl"><span class="istickedoff">prettyArgs sym cc cs (Crucible.RegMap args) = do</span>
 <span class="lineno"> 1870 </span><span class="spaces">  </span><span class="istickedoff">let expectedArgTypes = map fst (Map.elems (cs ^. MS.csArgBindings))</span>
 <span class="lineno"> 1871 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection</span></span>
 <span class="lineno"> 1872 </span><span class="spaces">  </span><span class="istickedoff">let aux memTy (Crucible.AnyValue tyrep val) =</span>
 <span class="lineno"> 1873 </span><span class="spaces">        </span><span class="istickedoff">MIRVal (tyToShapeEq <span class="nottickedoff">col</span> memTy tyrep) val</span>
 <span class="lineno"> 1874 </span><span class="spaces">  </span><span class="istickedoff">let vals = zipWith aux expectedArgTypes (assignmentToList args)</span>
-<span class="lineno"> 1875 </span><span class="spaces">  </span><span class="istickedoff">pure $ map (ppMIRVal <span class="nottickedoff">sym</span>) vals</span></span>
+<span class="lineno"> 1875 </span><span class="spaces">  </span><span class="istickedoff">pure $ map (prettyMIRVal <span class="nottickedoff">sym</span>) vals</span></span>
 <span class="lineno"> 1876 </span>
 <span class="lineno"> 1877 </span>-- | Resolve a 'SetupValue' into a 'MIRVal' and pretty-print it
-<span class="lineno"> 1878 </span>ppSetupValueAsMIRVal ::
+<span class="lineno"> 1878 </span>prettySetupValueAsMIRVal ::
 <span class="lineno"> 1879 </span>  Options              {- ^ output/verbosity options -} -&gt;
 <span class="lineno"> 1880 </span>  MIRCrucibleContext -&gt;
 <span class="lineno"> 1881 </span>  SharedContext {- ^ context for constructing SAW terms -} -&gt;
 <span class="lineno"> 1882 </span>  MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} -&gt;
 <span class="lineno"> 1883 </span>  SetupValue -&gt;
 <span class="lineno"> 1884 </span>  OverrideMatcher MIR w (PP.Doc ann)
-<span class="lineno"> 1885 </span><span class="decl"><span class="istickedoff">ppSetupValueAsMIRVal opts cc sc spec setupval = do</span>
+<span class="lineno"> 1885 </span><span class="decl"><span class="istickedoff">prettySetupValueAsMIRVal opts cc sc spec setupval = do</span>
 <span class="lineno"> 1886 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
 <span class="lineno"> 1887 </span><span class="spaces">  </span><span class="istickedoff">mirVal &lt;- resolveSetupValueMIR <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> setupval</span>
-<span class="lineno"> 1888 </span><span class="spaces">  </span><span class="istickedoff">pure $ <span class="nottickedoff">ppMIRVal sym mirVal</span></span></span>
+<span class="lineno"> 1888 </span><span class="spaces">  </span><span class="istickedoff">pure $ <span class="nottickedoff">prettyMIRVal sym mirVal</span></span></span>
 <span class="lineno"> 1889 </span>
 <span class="lineno"> 1890 </span>resolveSetupValueMIR ::
 <span class="lineno"> 1891 </span>  Options              -&gt;

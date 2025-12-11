@@ -43,7 +43,7 @@ span.spaces    { background: white }
 <span class="lineno">   24 </span>
 <span class="lineno">   25 </span>module SAWCentral.Crucible.Common.Setup.Value
 <span class="lineno">   26 </span>  ( AllocIndex(..)
-<span class="lineno">   27 </span>  , ppAllocIndex
+<span class="lineno">   27 </span>  , prettyAllocIndex
 <span class="lineno">   28 </span>  , nextAllocIndex
 <span class="lineno">   29 </span>
 <span class="lineno">   30 </span>  , CrucibleContext
@@ -94,8 +94,8 @@ span.spaces    { background: white }
 <span class="lineno">   75 </span>newtype AllocIndex = AllocIndex Int
 <span class="lineno">   76 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">   77 </span>
-<span class="lineno">   78 </span>ppAllocIndex :: AllocIndex -&gt; PP.Doc ann
-<span class="lineno">   79 </span><span class="decl"><span class="nottickedoff">ppAllocIndex i = PP.pretty '@' &lt;&gt; PP.viaShow i</span></span>
+<span class="lineno">   78 </span>prettyAllocIndex :: AllocIndex -&gt; PP.Doc ann
+<span class="lineno">   79 </span><span class="decl"><span class="nottickedoff">prettyAllocIndex i = PP.pretty '@' &lt;&gt; PP.viaShow i</span></span>
 <span class="lineno">   80 </span>
 <span class="lineno">   81 </span>nextAllocIndex :: AllocIndex -&gt; AllocIndex
 <span class="lineno">   82 </span><span class="decl"><span class="istickedoff">nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)</span></span>

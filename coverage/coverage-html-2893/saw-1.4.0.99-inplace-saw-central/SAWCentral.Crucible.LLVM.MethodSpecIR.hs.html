@@ -77,15 +77,15 @@ span.spaces    { background: white }
 <span class="lineno">   58 </span>  , LLVMPointsTo(..)
 <span class="lineno">   59 </span>  , LLVMPointsToValue(..)
 <span class="lineno">   60 </span>  , llvmPointsToProgramLoc
-<span class="lineno">   61 </span>  , ppPointsTo
+<span class="lineno">   61 </span>  , prettyPointsTo
 <span class="lineno">   62 </span>    -- * AllocGlobal
 <span class="lineno">   63 </span>  , LLVMAllocGlobal(..)
-<span class="lineno">   64 </span>  , ppAllocGlobal
+<span class="lineno">   64 </span>  , prettyAllocGlobal
 <span class="lineno">   65 </span>    -- * Intrinsics
 <span class="lineno">   66 </span>  , intrinsics
 <span class="lineno">   67 </span>    -- * Initial CrucibleSetupMethodSpec
 <span class="lineno">   68 </span>  , SetupError(..)
-<span class="lineno">   69 </span>  , ppSetupError
+<span class="lineno">   69 </span>  , prettySetupError
 <span class="lineno">   70 </span>  , resolveArgs
 <span class="lineno">   71 </span>  , resolveRetTy
 <span class="lineno">   72 </span>  , initialDefCrucibleMethodSpecIR
@@ -209,25 +209,25 @@ span.spaces    { background: white }
 <span class="lineno">  190 </span><span class="decl"><span class="nottickedoff">llvmPointsToProgramLoc (LLVMPointsTo md _ _ _) = MS.conditionLoc md</span>
 <span class="lineno">  191 </span><span class="spaces"></span><span class="nottickedoff">llvmPointsToProgramLoc (LLVMPointsToBitfield md _ _ _) = MS.conditionLoc md</span></span>
 <span class="lineno">  192 </span>
-<span class="lineno">  193 </span>ppPointsTo :: LLVMPointsTo arch -&gt; PPL.Doc ann
-<span class="lineno">  194 </span><span class="decl"><span class="nottickedoff">ppPointsTo (LLVMPointsTo _md cond ptr val) =</span>
-<span class="lineno">  195 </span><span class="spaces">  </span><span class="nottickedoff">MS.ppSetupValue ptr</span>
+<span class="lineno">  193 </span>prettyPointsTo :: LLVMPointsTo arch -&gt; PPL.Doc ann
+<span class="lineno">  194 </span><span class="decl"><span class="nottickedoff">prettyPointsTo (LLVMPointsTo _md cond ptr val) =</span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="nottickedoff">MS.prettySetupValue ptr</span>
 <span class="lineno">  196 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to&quot;</span>
 <span class="lineno">  197 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty val</span>
-<span class="lineno">  198 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; maybe PPL.emptyDoc (\tt -&gt; PPL.pretty &quot;if&quot; PPL.&lt;+&gt; ppTypedTerm tt) cond</span>
-<span class="lineno">  199 </span><span class="spaces"></span><span class="nottickedoff">ppPointsTo (LLVMPointsToBitfield _md ptr fieldName val) =</span>
-<span class="lineno">  200 </span><span class="spaces">  </span><span class="nottickedoff">MS.ppSetupValue ptr &lt;&gt; PPL.pretty (&quot;.&quot; ++ fieldName)</span>
+<span class="lineno">  198 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; maybe PPL.emptyDoc (\tt -&gt; PPL.pretty &quot;if&quot; PPL.&lt;+&gt; prettyTypedTermPure tt) cond</span>
+<span class="lineno">  199 </span><span class="spaces"></span><span class="nottickedoff">prettyPointsTo (LLVMPointsToBitfield _md ptr fieldName val) =</span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="nottickedoff">MS.prettySetupValue ptr &lt;&gt; PPL.pretty (&quot;.&quot; ++ fieldName)</span>
 <span class="lineno">  201 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to (bitfield)&quot;</span>
-<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; MS.ppSetupValue val</span></span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; MS.prettySetupValue val</span></span>
 <span class="lineno">  203 </span>
 <span class="lineno">  204 </span>instance <span class="decl"><span class="nottickedoff">PPL.Pretty (LLVMPointsTo arch)</span></span> where
-<span class="lineno">  205 </span>  <span class="decl"><span class="nottickedoff">pretty = ppPointsTo</span></span>
+<span class="lineno">  205 </span>  <span class="decl"><span class="nottickedoff">pretty = prettyPointsTo</span></span>
 <span class="lineno">  206 </span>
 <span class="lineno">  207 </span>instance <span class="decl"><span class="nottickedoff">PPL.Pretty (LLVMPointsToValue arch)</span></span> where
 <span class="lineno">  208 </span>  <span class="decl"><span class="nottickedoff">pretty = \case</span>
-<span class="lineno">  209 </span><span class="spaces">    </span><span class="nottickedoff">ConcreteSizeValue val -&gt; MS.ppSetupValue val</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="nottickedoff">ConcreteSizeValue val -&gt; MS.prettySetupValue val</span>
 <span class="lineno">  210 </span><span class="spaces">    </span><span class="nottickedoff">SymbolicSizeValue arr sz -&gt;</span>
-<span class="lineno">  211 </span><span class="spaces">      </span><span class="nottickedoff">ppTypedTerm arr PPL.&lt;+&gt; PPL.pretty &quot;[&quot; PPL.&lt;+&gt; ppTypedTerm sz PPL.&lt;+&gt; PPL.pretty &quot;]&quot;</span></span>
+<span class="lineno">  211 </span><span class="spaces">      </span><span class="nottickedoff">prettyTypedTermPure arr PPL.&lt;+&gt; PPL.pretty &quot;[&quot; PPL.&lt;+&gt; prettyTypedTermPure sz PPL.&lt;+&gt; PPL.pretty &quot;]&quot;</span></span>
 <span class="lineno">  212 </span>
 <span class="lineno">  213 </span>--------------------------------------------------------------------------------
 <span class="lineno">  214 </span>-- ** SAW LLVM intrinsics
@@ -248,12 +248,12 @@ span.spaces    { background: white }
 <span class="lineno">  229 </span>  = InvalidReturnType L.Type
 <span class="lineno">  230 </span>  | InvalidArgTypes [L.Type]
 <span class="lineno">  231 </span>
-<span class="lineno">  232 </span>ppSetupError :: SetupError -&gt; PPL.Doc ann
-<span class="lineno">  233 </span><span class="decl"><span class="nottickedoff">ppSetupError (InvalidReturnType t) =</span>
+<span class="lineno">  232 </span>prettySetupError :: SetupError -&gt; PPL.Doc ann
+<span class="lineno">  233 </span><span class="decl"><span class="nottickedoff">prettySetupError (InvalidReturnType t) =</span>
 <span class="lineno">  234 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;Can't lift return type&quot; PPL.&lt;+&gt;</span>
 <span class="lineno">  235 </span><span class="spaces">  </span><span class="nottickedoff">PPL.viaShow (Crucible.LLVM.ppType t) PPL.&lt;+&gt;</span>
 <span class="lineno">  236 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;to a Crucible type.&quot;</span>
-<span class="lineno">  237 </span><span class="spaces"></span><span class="nottickedoff">ppSetupError (InvalidArgTypes ts) =</span>
+<span class="lineno">  237 </span><span class="spaces"></span><span class="nottickedoff">prettySetupError (InvalidArgTypes ts) =</span>
 <span class="lineno">  238 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;Can't lift argument types &quot; PPL.&lt;+&gt;</span>
 <span class="lineno">  239 </span><span class="spaces">  </span><span class="nottickedoff">PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.viaShow . Crucible.LLVM.ppType) ts) PPL.&lt;+&gt;</span>
 <span class="lineno">  240 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;to Crucible types.&quot;</span></span>

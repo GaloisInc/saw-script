@@ -47,7 +47,7 @@ span.spaces    { background: white }
 <span class="lineno">   28 </span>
 <span class="lineno">   29 </span>module SAWCentral.Crucible.Common.MethodSpec
 <span class="lineno">   30 </span>  ( AllocIndex(..)
-<span class="lineno">   31 </span>  , ppAllocIndex
+<span class="lineno">   31 </span>  , prettyAllocIndex
 <span class="lineno">   32 </span>  , nextAllocIndex
 <span class="lineno">   33 </span>
 <span class="lineno">   34 </span>  , PrePost(..)
@@ -77,7 +77,7 @@ span.spaces    { background: white }
 <span class="lineno">   58 </span>  , SetupValue(..)
 <span class="lineno">   59 </span>  , SetupValueHas
 <span class="lineno">   60 </span>
-<span class="lineno">   61 </span>  , ppSetupValue
+<span class="lineno">   61 </span>  , prettySetupValue
 <span class="lineno">   62 </span>
 <span class="lineno">   63 </span>  , setupToTypedTerm
 <span class="lineno">   64 </span>  , setupToTerm
@@ -208,10 +208,10 @@ span.spaces    { background: white }
 <span class="lineno">  189 </span>--   are implementation details and won't be familiar to users.
 <span class="lineno">  190 </span>--   Consider using 'resolveSetupValue' and printing the language-specific value
 <span class="lineno">  191 </span>--   (e.g., an 'LLVMVal') with @PP.pretty@ instead.
-<span class="lineno">  192 </span>ppSetupValue :: forall ext ann. IsExt ext =&gt; SetupValue ext -&gt; PP.Doc ann
-<span class="lineno">  193 </span><span class="decl"><span class="istickedoff">ppSetupValue setupval = case setupval of</span>
-<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">SetupTerm tm   -&gt; ppTypedTerm tm</span>
-<span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">SetupVar i     -&gt; <span class="nottickedoff">ppAllocIndex i</span></span>
+<span class="lineno">  192 </span>prettySetupValue :: forall ext ann. IsExt ext =&gt; SetupValue ext -&gt; PP.Doc ann
+<span class="lineno">  193 </span><span class="decl"><span class="istickedoff">prettySetupValue setupval = case setupval of</span>
+<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">SetupTerm tm   -&gt; prettyTypedTermPure tm</span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">SetupVar i     -&gt; <span class="nottickedoff">prettyAllocIndex i</span></span>
 <span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">SetupNull _    -&gt; &quot;NULL&quot;</span>
 <span class="lineno">  197 </span><span class="spaces">  </span><span class="istickedoff">SetupStruct x vs -&gt;</span>
 <span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case (ext, x) of</span></span>
@@ -245,7 +245,7 @@ span.spaces    { background: white }
 <span class="lineno">  226 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
 <span class="lineno">  227 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(MIRExt, slice) -&gt;</span></span>
 <span class="lineno">  228 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupSlice slice</span></span>
-<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">SetupArray _ vs  -&gt; <span class="nottickedoff">PP.brackets (commaList (map ppSetupValue vs))</span></span>
+<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">SetupArray _ vs  -&gt; <span class="nottickedoff">PP.brackets (commaList (map prettySetupValue vs))</span></span>
 <span class="lineno">  230 </span><span class="spaces">  </span><span class="istickedoff">SetupElem x v i  -&gt;</span>
 <span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case (ext, x) of</span></span>
 <span class="lineno">  232 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(LLVMExt, ()) -&gt;</span></span>
@@ -262,9 +262,9 @@ span.spaces    { background: white }
 <span class="lineno">  243 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ppv PP.&lt;&gt; &quot;.offset&quot; PP.&lt;&gt; PP.parens (PP.pretty i)</span></span>
 <span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">where</span>
 <span class="lineno">  245 </span><span class="spaces">      </span><span class="istickedoff">ppv :: PP.Doc ann</span>
-<span class="lineno">  246 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppv = PP.parens (ppSetupValue v)</span></span>
-<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">SetupField _ v f -&gt; <span class="nottickedoff">PP.parens (ppSetupValue v) PP.&lt;&gt; PP.pretty (&quot;.&quot; &lt;&gt; f)</span></span>
-<span class="lineno">  248 </span><span class="spaces">  </span><span class="istickedoff">SetupUnion _ v u -&gt; <span class="nottickedoff">PP.parens (ppSetupValue v) PP.&lt;&gt; PP.pretty (&quot;.&quot; &lt;&gt; u)</span></span>
+<span class="lineno">  246 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppv = PP.parens (prettySetupValue v)</span></span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">SetupField _ v f -&gt; <span class="nottickedoff">PP.parens (prettySetupValue v) PP.&lt;&gt; PP.pretty (&quot;.&quot; &lt;&gt; f)</span></span>
+<span class="lineno">  248 </span><span class="spaces">  </span><span class="istickedoff">SetupUnion _ v u -&gt; <span class="nottickedoff">PP.parens (prettySetupValue v) PP.&lt;&gt; PP.pretty (&quot;.&quot; &lt;&gt; u)</span></span>
 <span class="lineno">  249 </span><span class="spaces">  </span><span class="istickedoff">SetupCast x v -&gt;</span>
 <span class="lineno">  250 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case (ext, x) of</span></span>
 <span class="lineno">  251 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(LLVMExt, tp) -&gt;</span></span>
@@ -283,7 +283,7 @@ span.spaces    { background: white }
 <span class="lineno">  264 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
 <span class="lineno">  265 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(MIRExt, ()) -&gt;</span></span>
 <span class="lineno">  266 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;mux&quot; &lt;&gt;</span></span>
-<span class="lineno">  267 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.parens (ppTypedTerm c &lt;&gt; PP.comma PP.&lt;+&gt; ppSetupValue t &lt;&gt; PP.comma PP.&lt;+&gt; ppSetupValue f)</span></span>
+<span class="lineno">  267 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.parens (prettyTypedTermPure c &lt;&gt; PP.comma PP.&lt;+&gt; prettySetupValue t &lt;&gt; PP.comma PP.&lt;+&gt; prettySetupValue f)</span></span>
 <span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">ext :: SAWExt ext</span>
 <span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ext = sawExt @ext</span></span>
@@ -301,10 +301,10 @@ span.spaces    { background: white }
 <span class="lineno">  282 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">| otherwise = ppSetupStructDefault vs</span></span>
 <span class="lineno">  283 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">ppSetupStructDefault :: forall ext'. IsExt ext' =&gt; [SetupValue ext'] -&gt; PP.Doc ann</span>
-<span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppSetupStructDefault vs = PP.braces (commaList (map ppSetupValue vs))</span></span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppSetupStructDefault vs = PP.braces (commaList (map prettySetupValue vs))</span></span>
 <span class="lineno">  286 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">ppSetupTuple :: [SetupValue MIR] -&gt; PP.Doc ann</span>
-<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppSetupTuple vs = PP.parens (commaList (map ppSetupValue vs))</span></span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppSetupTuple vs = PP.parens (commaList (map prettySetupValue vs))</span></span>
 <span class="lineno">  289 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  290 </span><span class="spaces">    </span><span class="istickedoff">ppMirSetupEnum :: MirSetupEnum -&gt; PP.Doc ann</span>
 <span class="lineno">  291 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupEnum (MirSetupEnumVariant _defId variantName _varIdx fields) =</span></span>
@@ -316,13 +316,13 @@ span.spaces    { background: white }
 <span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupSlice (MirSetupSliceRaw ref len) =</span></span>
 <span class="lineno">  298 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;SliceRaw&quot; &lt;&gt; ppSetupTuple [ref, len]</span></span>
 <span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupSlice (MirSetupSlice _ arr) =</span></span>
-<span class="lineno">  300 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppSetupValue arr &lt;&gt; &quot;[..]&quot;</span></span>
+<span class="lineno">  300 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettySetupValue arr &lt;&gt; &quot;[..]&quot;</span></span>
 <span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupSlice (MirSetupSliceRange _ arr start end) =</span></span>
-<span class="lineno">  302 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppSetupValue arr &lt;&gt; &quot;[&quot; &lt;&gt; PP.pretty start &lt;&gt;</span></span>
+<span class="lineno">  302 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettySetupValue arr &lt;&gt; &quot;[&quot; &lt;&gt; PP.pretty start &lt;&gt;</span></span>
 <span class="lineno">  303 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;..&quot; &lt;&gt; PP.pretty end &lt;&gt; &quot;]&quot;</span></span>
 <span class="lineno">  304 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  305 </span><span class="spaces">    </span><span class="istickedoff">ppCast :: Show ty =&gt; SetupValue ext -&gt; ty -&gt; PP.Doc ann</span>
-<span class="lineno">  306 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppCast v ty = PP.parens (ppSetupValue v) PP.&lt;&gt; PP.pretty (&quot; AS &quot; ++ show ty)</span></span></span>
+<span class="lineno">  306 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppCast v ty = PP.parens (prettySetupValue v) PP.&lt;&gt; PP.pretty (&quot; AS &quot; ++ show ty)</span></span></span>
 <span class="lineno">  307 </span>
 <span class="lineno">  308 </span>setupToTypedTerm ::
 <span class="lineno">  309 </span>  Options {-^ Printing options -} -&gt;

@@ -74,7 +74,7 @@ span.spaces    { background: white }
 <span class="lineno">   55 </span>  , LLVMPointsToValue(..)
 <span class="lineno">   56 </span>    -- * AllocGlobal
 <span class="lineno">   57 </span>  , LLVMAllocGlobal(..)
-<span class="lineno">   58 </span>  , ppAllocGlobal
+<span class="lineno">   58 </span>  , prettyAllocGlobal
 <span class="lineno">   59 </span>    -- * ResolvedState
 <span class="lineno">   60 </span>  , LLVMResolvedState(..)
 <span class="lineno">   61 </span>  , ResolvedPath
@@ -311,13 +311,13 @@ span.spaces    { background: white }
 <span class="lineno">  292 </span>
 <span class="lineno">  293 </span>data LLVMAllocGlobal arch = LLVMAllocGlobal ProgramLoc L.Symbol
 <span class="lineno">  294 </span>
-<span class="lineno">  295 </span>ppAllocGlobal :: LLVMAllocGlobal arch -&gt; PPL.Doc ann
-<span class="lineno">  296 </span><span class="decl"><span class="nottickedoff">ppAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =</span>
+<span class="lineno">  295 </span>prettyAllocGlobal :: LLVMAllocGlobal arch -&gt; PPL.Doc ann
+<span class="lineno">  296 </span><span class="decl"><span class="nottickedoff">prettyAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =</span>
 <span class="lineno">  297 </span><span class="spaces">  </span><span class="nottickedoff">PPL.pretty &quot;allocate global&quot;</span>
 <span class="lineno">  298 </span><span class="spaces">  </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty name</span></span>
 <span class="lineno">  299 </span>
 <span class="lineno">  300 </span>instance <span class="decl"><span class="nottickedoff">PPL.Pretty (LLVMAllocGlobal arch)</span></span> where
-<span class="lineno">  301 </span>  <span class="decl"><span class="nottickedoff">pretty = ppAllocGlobal</span></span>
+<span class="lineno">  301 </span>  <span class="decl"><span class="nottickedoff">pretty = prettyAllocGlobal</span></span>
 <span class="lineno">  302 </span>
 <span class="lineno">  303 </span>--------------------------------------------------------------------------------
 <span class="lineno">  304 </span>-- *** ResolvedState

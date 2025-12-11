@@ -77,7 +77,7 @@ span.spaces    { background: white }
 <span class="lineno">   58 </span>-- jvm-parser
 <span class="lineno">   59 </span>import qualified Language.JVM.Parser as J
 <span class="lineno">   60 </span>
-<span class="lineno">   61 </span>import CryptolSAWCore.TypedTerm (ppTypedTerm)
+<span class="lineno">   61 </span>import CryptolSAWCore.TypedTerm (prettyTypedTermPure)
 <span class="lineno">   62 </span>
 <span class="lineno">   63 </span>import           SAWCentral.Crucible.Common
 <span class="lineno">   64 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -134,21 +134,21 @@ span.spaces    { background: white }
 <span class="lineno">  115 </span><span class="decl"><span class="nottickedoff">ppPointsTo =</span>
 <span class="lineno">  116 </span><span class="spaces">  </span><span class="nottickedoff">\case</span>
 <span class="lineno">  117 </span><span class="spaces">    </span><span class="nottickedoff">JVMPointsToField _loc ptr fid val -&gt;</span>
-<span class="lineno">  118 </span><span class="spaces">      </span><span class="nottickedoff">MS.ppAllocIndex ptr &lt;&gt; PPL.pretty &quot;.&quot; &lt;&gt; PPL.pretty (J.fieldIdName fid)</span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="nottickedoff">MS.prettyAllocIndex ptr &lt;&gt; PPL.pretty &quot;.&quot; &lt;&gt; PPL.pretty (J.fieldIdName fid)</span>
 <span class="lineno">  119 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to&quot;</span>
-<span class="lineno">  120 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; opt MS.ppSetupValue val</span>
+<span class="lineno">  120 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; opt MS.prettySetupValue val</span>
 <span class="lineno">  121 </span><span class="spaces">    </span><span class="nottickedoff">JVMPointsToStatic _loc fid val -&gt;</span>
 <span class="lineno">  122 </span><span class="spaces">      </span><span class="nottickedoff">PPL.pretty (J.unClassName (J.fieldIdClass fid)) &lt;&gt; PPL.pretty &quot;.&quot; &lt;&gt; PPL.pretty (J.fieldIdName fid)</span>
 <span class="lineno">  123 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to&quot;</span>
-<span class="lineno">  124 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; opt MS.ppSetupValue val</span>
+<span class="lineno">  124 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; opt MS.prettySetupValue val</span>
 <span class="lineno">  125 </span><span class="spaces">    </span><span class="nottickedoff">JVMPointsToElem _loc ptr idx val -&gt;</span>
-<span class="lineno">  126 </span><span class="spaces">      </span><span class="nottickedoff">MS.ppAllocIndex ptr &lt;&gt; PPL.pretty &quot;[&quot; &lt;&gt; PPL.pretty idx &lt;&gt; PPL.pretty &quot;]&quot;</span>
+<span class="lineno">  126 </span><span class="spaces">      </span><span class="nottickedoff">MS.prettyAllocIndex ptr &lt;&gt; PPL.pretty &quot;[&quot; &lt;&gt; PPL.pretty idx &lt;&gt; PPL.pretty &quot;]&quot;</span>
 <span class="lineno">  127 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to&quot;</span>
-<span class="lineno">  128 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; opt MS.ppSetupValue val</span>
+<span class="lineno">  128 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; opt MS.prettySetupValue val</span>
 <span class="lineno">  129 </span><span class="spaces">    </span><span class="nottickedoff">JVMPointsToArray _loc ptr val -&gt;</span>
-<span class="lineno">  130 </span><span class="spaces">      </span><span class="nottickedoff">MS.ppAllocIndex ptr</span>
+<span class="lineno">  130 </span><span class="spaces">      </span><span class="nottickedoff">MS.prettyAllocIndex ptr</span>
 <span class="lineno">  131 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; PPL.pretty &quot;points to&quot;</span>
-<span class="lineno">  132 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; opt ppTypedTerm val</span>
+<span class="lineno">  132 </span><span class="spaces">      </span><span class="nottickedoff">PPL.&lt;+&gt; opt prettyTypedTermPure val</span>
 <span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
 <span class="lineno">  134 </span><span class="spaces">    </span><span class="nottickedoff">opt = maybe (PPL.pretty &quot;&lt;unspecified&gt;&quot;)</span></span>
 <span class="lineno">  135 </span>

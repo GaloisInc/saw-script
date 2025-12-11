@@ -767,7 +767,7 @@ span.spaces    { background: white }
 <span class="lineno">  748 </span><span class="spaces">  </span><span class="istickedoff">let decls = view topLevelDeclarations state</span>
 <span class="lineno">  749 </span><span class="spaces">  </span><span class="istickedoff">return $</span>
 <span class="lineno">  750 </span><span class="spaces">    </span><span class="istickedoff">vcat $</span>
-<span class="lineno">  751 </span><span class="spaces">    </span><span class="istickedoff">[ (vcat . intersperse <span class="nottickedoff">hardline</span> . map <span class="nottickedoff">Coq.ppDecl</span> . reverse) decls</span>
+<span class="lineno">  751 </span><span class="spaces">    </span><span class="istickedoff">[ (vcat . intersperse <span class="nottickedoff">hardline</span> . map <span class="nottickedoff">Coq.prettyDecl</span> . reverse) decls</span>
 <span class="lineno">  752 </span><span class="spaces">    </span><span class="istickedoff">, if <span class="tickonlytrue">null decls</span> then mempty else <span class="nottickedoff">hardline</span></span>
 <span class="lineno">  753 </span><span class="spaces">    </span><span class="istickedoff">, f term tp</span>
 <span class="lineno">  754 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
@@ -783,7 +783,7 @@ span.spaces    { background: white }
 <span class="lineno">  764 </span>  Either (TranslationError Term) (Doc ann)
 <span class="lineno">  765 </span><span class="decl"><span class="istickedoff">translateDefDoc configuration r mm globalDecls name =</span>
 <span class="lineno">  766 </span><span class="spaces">  </span><span class="istickedoff">translateTermToDocWith <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> [name]</span>
-<span class="lineno">  767 </span><span class="spaces">  </span><span class="istickedoff">(\ t tp -&gt; Coq.ppDecl $ mkDefinition name t tp)</span></span>
+<span class="lineno">  767 </span><span class="spaces">  </span><span class="istickedoff">(\ t tp -&gt; Coq.prettyDecl $ mkDefinition name t tp)</span></span>
 
 </pre>
 </body>

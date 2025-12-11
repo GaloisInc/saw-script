@@ -227,7 +227,7 @@ span.spaces    { background: white }
 <span class="lineno">  208 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">fail $ show $</span></span>
 <span class="lineno">  209 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">PP.vcat</span></span>
 <span class="lineno">  210 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[ &quot;All overrides failed during structural matching:&quot;</span></span>
-<span class="lineno">  211 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, PP.vcat (map (\x -&gt; &quot;*&quot; &lt;&gt; PP.indent 2 (ppOverrideFailure x)) e)</span></span>
+<span class="lineno">  211 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, PP.vcat (map (\x -&gt; &quot;*&quot; &lt;&gt; PP.indent 2 (prettyOverrideFailure x)) e)</span></span>
 <span class="lineno">  212 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  213 </span><span class="spaces">                </span><span class="istickedoff">(_, ss) -&gt; liftIO $</span>
 <span class="lineno">  214 </span><span class="spaces">                  </span><span class="istickedoff">forM ss $ \(cs,st) -&gt;</span>
