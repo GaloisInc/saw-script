@@ -25,7 +25,7 @@ import Text.URI
 
 import SAWCore.Name
 import SAWCore.Term.Functor
-import SAWCore.Term.Certified
+import SAWCore.SharedTerm
 
 --------------------------------------------------------------------------------
 -- External text format
@@ -245,7 +245,7 @@ scReadExternal sc input =
                                   t2 <- readIdx e2
                                   lift $ scPi sc x t1 t2
         ["Constant", i]     -> do nm <- readName i
-                                  lift $ scConstant sc nm
+                                  lift $ scConst sc nm
         ["Unit"]            -> lift $ scUnitValue sc
         ["UnitT"]           -> lift $ scUnitType sc
         ["Pair", e1, e2]    -> do t1 <- readIdx e1
@@ -271,7 +271,7 @@ scReadExternal sc input =
                                   lift $ scRecordValue sc ts
         ["RecordProj", e, prj]
                             -> do t <- readIdx e
-                                  lift $ scRecordProj sc t (Text.pack prj)
+                                  lift $ scRecordSelect sc t (Text.pack prj)
         ("Prop" : h)        -> do flags <- sortFlagsFromList <$> mapM readM h
                                   lift $ scSortWithFlags sc propSort flags
         ("Sort" : s : h)    -> do s' <- mkSort <$> readM s
