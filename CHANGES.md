@@ -6,6 +6,8 @@ This release supports [version
 
 ## Changes
 
+* MIR verification is no longer tagged experimental.
+
 * SAW no longer timestamps (some of) its output by default.
   If you want the timestamps back, pass the -T option on the command
   line.
