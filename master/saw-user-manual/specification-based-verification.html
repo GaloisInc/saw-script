@@ -294,6 +294,12 @@ final state, and specifies the arguments to the function in terms of the
 initial state. Most of the commands available for state description will work
 either before or after <code class="docutils literal notranslate"><span class="pre">{llvm,jvm,mir}_execute_func</span></code>, though with slightly
 different meaning, as described below.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Every <code class="docutils literal notranslate"><span class="pre">{LLVM,JVM,MIR}Setup</span></code> block <strong>must contain exactly one</strong>
+<code class="docutils literal notranslate"><span class="pre">{llvm,jvm,mir}_execute_func</span></code> invocation. If it is omitted, SAW will reject
+the specification.</p>
+</div>
 </section>
 <section id="creating-fresh-variables">
 <h2>Creating Fresh Variables<a class="headerlink" href="#creating-fresh-variables" title="Link to this heading"></a></h2>
@@ -509,6 +515,9 @@ of the state elements already configured.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_execute_func</span> <span class="pre">:</span> <span class="pre">[JVMValue]</span> <span class="pre">-&gt;</span> <span class="pre">JVMSetup</span> <span class="pre">()</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_execute_func</span> <span class="pre">:</span> <span class="pre">[MIRValue]</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">()</span></code></p></li>
 </ul>
+<p>Every <code class="docutils literal notranslate"><span class="pre">{llvm,jvm,mir}_execute_func</span></code> specification block <strong>must contain exactly
+one</strong> execution command. SAW now rejects any specification that omits the
+corresponding <code class="docutils literal notranslate"><span class="pre">{llvm,jvm,mir}_execute_func</span></code>.</p>
 </section>
 <section id="return-values">
 <h2>Return Values<a class="headerlink" href="#return-values" title="Link to this heading"></a></h2>
@@ -519,6 +528,60 @@ verified use the <code class="docutils literal notranslate"><span class="pre">{l
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_return</span> <span class="pre">:</span> <span class="pre">JVMValue</span> <span class="pre">-&gt;</span> <span class="pre">JVMSetup</span> <span class="pre">()</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_return</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">()</span></code></p></li>
 </ul>
+<p>The rules for <code class="docutils literal notranslate"><span class="pre">{llvm,jvm,mir}_return</span></code> depend on the backend and the function’s
+declared return type, as summarized below:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Backend</p></th>
+<th class="head"><p>Function return type</p></th>
+<th class="head"><p>Is <code class="docutils literal notranslate"><span class="pre">{…}_return</span></code> required?</p></th>
+<th class="head"><p>Is <code class="docutils literal notranslate"><span class="pre">{…}_return</span></code> allowed?</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>LLVM</p></td>
+<td><p>non-<code class="docutils literal notranslate"><span class="pre">void</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-odd"><td><p>LLVM</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">void</span></code></p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p>JVM</p></td>
+<td><p>non-<code class="docutils literal notranslate"><span class="pre">void</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-odd"><td><p>JVM</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">void</span></code></p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p>MIR</p></td>
+<td><p>non-<code class="docutils literal notranslate"><span class="pre">()</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-odd"><td><p>MIR</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">()</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+</tr>
+</tbody>
+</table>
+<p>When the specification should not constrain the function’s return value, introduce a fresh variable in the post-state and return it unchanged:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="p">...</span>
+<span class="w">  </span><span class="p">{</span><span class="n">llvm</span><span class="p">,</span><span class="n">jvm</span><span class="p">,</span><span class="n">mir</span><span class="p">}</span><span class="n">_execute_func</span><span class="w"> </span><span class="o">&lt;</span><span class="n">args</span><span class="o">&gt;</span><span class="p">;</span>
+<span class="w">  </span><span class="p">...</span>
+<span class="w">  </span><span class="n">ret</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="p">{</span><span class="n">llvm</span><span class="p">,</span><span class="n">jvm</span><span class="p">,</span><span class="n">mir</span><span class="p">}</span><span class="n">_fresh_var</span><span class="w"> </span><span class="s2">&quot;ret&quot;</span><span class="w"> </span><span class="o">&lt;</span><span class="n">type</span><span class="o">&gt;</span><span class="p">;</span>
+<span class="w">  </span><span class="p">{</span><span class="n">llvm</span><span class="p">,</span><span class="n">jvm</span><span class="p">,</span><span class="n">mir</span><span class="p">}</span><span class="n">_return</span><span class="w"> </span><span class="p">({</span><span class="n">llvm</span><span class="p">,</span><span class="n">jvm</span><span class="p">,</span><span class="n">mir</span><span class="p">}</span><span class="n">_term</span><span class="w"> </span><span class="n">ret</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>This pattern asserts only that the function returns a value of the correct type, without placing any further requirements on what that value must be.</p>
 </section>
 <section id="a-first-simple-example-revisited">
 <h2>A First Simple Example (Revisited)<a class="headerlink" href="#a-first-simple-example-revisited" title="Link to this heading"></a></h2>

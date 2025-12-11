@@ -144,6 +144,12 @@ initial state. Most of the commands available for state description will work
 either before or after `{llvm,jvm,mir}_execute_func`, though with slightly
 different meaning, as described below.
 
+:::{note}
+Every `{LLVM,JVM,MIR}Setup` block **must contain exactly one**
+`{llvm,jvm,mir}_execute_func` invocation. If it is omitted, SAW will reject
+the specification.
+:::
+
 ## Creating Fresh Variables
 
 In any case where you want to prove a property of a function for an entire
@@ -363,6 +369,10 @@ of the state elements already configured.
 - `jvm_execute_func : [JVMValue] -> JVMSetup ()`
 - `mir_execute_func : [MIRValue] -> MIRSetup ()`
 
+Every `{llvm,jvm,mir}_execute_func` specification block **must contain exactly
+one** execution command. SAW now rejects any specification that omits the
+corresponding `{llvm,jvm,mir}_execute_func`.
+
 ## Return Values
 
 To specify the value that should be returned by the function being
@@ -371,6 +381,32 @@ verified use the `{llvm,jvm,mir}_return` command.
 - `llvm_return : LLVMValue -> LLVMSetup ()`
 - `jvm_return : JVMValue -> JVMSetup ()`
 - `mir_return : MIRValue -> MIRSetup ()`
+
+The rules for `{llvm,jvm,mir}_return` depend on the backend and the function’s
+declared return type, as summarized below:
+
+| Backend | Function return type | Is `{…}_return` required? | Is `{…}_return` allowed?  |
+|--------|----------------------|----------------------------|---------------------------|
+| LLVM   | non-`void`           | Yes                        | Yes                       |
+| LLVM   | `void`               | No                         | No                        |
+| JVM    | non-`void`           | Yes                        | Yes                       |
+| JVM    | `void`               | No                         | No                        |
+| MIR    | non-`()`             | Yes                        | Yes                       |
+| MIR    | `()`                 | No                         | Yes                       |
+
+When the specification should not constrain the function’s return value, introduce a fresh variable in the post-state and return it unchanged:
+
+:::{code-block} sawscript
+do {
+  ...
+  {llvm,jvm,mir}_execute_func <args>;
+  ...
+  ret <- {llvm,jvm,mir}_fresh_var "ret" <type>;
+  {llvm,jvm,mir}_return ({llvm,jvm,mir}_term ret);
+}
+:::
+
+This pattern asserts only that the function returns a value of the correct type, without placing any further requirements on what that value must be.
 
 ## A First Simple Example (Revisited)
 
