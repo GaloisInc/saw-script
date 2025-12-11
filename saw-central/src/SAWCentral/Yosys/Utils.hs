@@ -138,11 +138,6 @@ reverseTopSort =
   reverse . Graph.topSort
 #endif
 
--- | Check that a SAWCore term is well-typed, throwing an exception otherwise.
--- XXX: delete
-validateTerm :: SC.SharedContext -> Text -> SC.Term -> IO SC.Term
-validateTerm _sc _msg t = pure t
-
 -- | Check that a SAWCore term is well-typed and has a specific type
 validateTermAtType :: SC.SharedContext -> Text -> SC.Term -> SC.Term -> IO ()
 validateTermAtType sc msg trm tp =

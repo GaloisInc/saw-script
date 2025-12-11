@@ -99,7 +99,6 @@ convertYosysIR sc ir =
        (\env v ->
           do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
              cm <- convertModule sc env m
-             _ <- validateTerm sc ("translating the combinational circuit \"" <> nm <> "\"") $ cm ^. convertedModuleTerm
              n <- Nonce.freshNonce Nonce.globalNonceGenerator
              let frag = Text.pack . show $ Nonce.indexValue n
              let uri = URI.URI
@@ -169,9 +168,7 @@ yosys_import :: FilePath -> TopLevel SC.TypedTerm
 yosys_import path =
   do sc <- getSharedContext
      ir <- liftIO $ loadYosysIR path
-     tt <- liftIO $ yosysIRToRecordTerm sc ir
-     _ <- liftIO $ validateTerm sc "translating combinational circuits" $ SC.ttTerm tt
-     pure tt
+     liftIO $ yosysIRToRecordTerm sc ir
 
 -- | Proves equality between a combinational HDL module and a
 -- specification. Note that terms derived from HDL modules are first
@@ -225,9 +222,7 @@ yosys_extract_sequential ::
   TopLevel SC.TypedTerm
 yosys_extract_sequential s n =
   do sc <- getSharedContext
-     tt <- liftIO $ composeYosysSequential sc s n
-     _ <- liftIO $ validateTerm sc "composing a sequential term" $ SC.ttTerm tt
-     pure tt
+     liftIO $ composeYosysSequential sc s n
 
 -- | Like `yosys_extract_sequential`, but the resulting term has an
 -- additional parameter to specify the initial state.
@@ -237,9 +232,7 @@ yosys_extract_sequential_with_state ::
   TopLevel SC.TypedTerm
 yosys_extract_sequential_with_state s n =
   do sc <- getSharedContext
-     tt <- liftIO $ composeYosysSequentialWithState sc s n
-     _ <- liftIO $ validateTerm sc "composing a sequential term with state" $ SC.ttTerm tt
-     pure tt
+     liftIO $ composeYosysSequentialWithState sc s n
 
 -- | Extracts a term from the given sequential module. This term has
 -- explicit fields for the state of the circuit in the input and

@@ -109,15 +109,7 @@ primCellToTerm ::
   IO (Maybe SC.Term)
 primCellToTerm sc c args =
   do mm <- primCellToMap sc c args
-     mt <- traverse (cryptolRecord sc) mm
-     traverse (validateTerm sc typeCheckMsg) mt
-  where
-    typeCheckMsg :: Text
-    typeCheckMsg = mconcat
-      [ "translating a cell with type \""
-      , Text.pack $ show $ c ^. cellType
-      , "\""
-      ]
+     traverse (cryptolRecord sc) mm
 
 primCellToMap ::
   forall b.
