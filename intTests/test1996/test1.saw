@@ -1,0 +1,4 @@
+import "M.cry" as M;
+
+print {| M::T |};
+print {| M::U |};

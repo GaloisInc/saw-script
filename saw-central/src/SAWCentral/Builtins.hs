@@ -76,7 +76,6 @@ import SAWCore.SharedTerm
 import SAWCore.Typechecker (tcInsertModule, inferCompleteTerm)
 import SAWCore.Term.Functor
 import qualified SAWCore.TermNet as Net
-
 import CryptolSAWCore.TypedTerm
 
 import SAWCore.Prim (rethrowEvalError)

@@ -1,0 +1,4 @@
+M <- cryptol_load "M.cry";
+
+print {| M::T |};
+print {| M::U |};

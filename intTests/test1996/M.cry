@@ -1,0 +1,3 @@
+module M where
+newtype T = { x : Bit }
+type U = T
