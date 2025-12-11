@@ -1,5 +1,15 @@
 # next -- TBA
 
+* `mir_verify` now enforces correctness checks that match the existing
+  behavior of `llvm_verify` and `jvm_verify`:
+
+  1. Omitting a call to `mir_execute_func` or calling `mir_execute_func` multiple
+     times will cause SAW to raise an error.
+
+  2. For functions that return a value other than `()`, a `mir_return`
+     statement is now required.  Omitting the return statement will
+     cause SAW to raise an error.
+
 This release supports [version
 7](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#7) of
 `mir-json`'s schema.

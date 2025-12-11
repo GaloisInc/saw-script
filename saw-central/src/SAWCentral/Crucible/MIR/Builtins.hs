@@ -698,11 +698,13 @@ mir_return retVal =
      valTy <- typeOfSetupValue cc env nameEnv retVal
      case mspec ^. MS.csRet of
        Nothing ->
-         X.throwM (MIRReturnUnexpected valTy)
+         unless (checkCompatibleTys (Mir.TyTuple []) valTy) $
+           X.throwM (MIRReturnUnexpected valTy)
        Just retTy ->
          unless (checkCompatibleTys retTy valTy) $
-         X.throwM (MIRReturnTypeMismatch retTy valTy)
+           X.throwM (MIRReturnTypeMismatch retTy valTy)
      Setup.crucible_return retVal
+
 
 mir_assert :: TypedTerm -> MIRSetupM ()
 mir_assert term = MIRSetupM $ do
@@ -852,10 +854,37 @@ mir_unsafe_assume_spec rm nm setup =
      let loc = SS.toW4Loc "_SAW_mir_unsafe_assume_spec" pos
      fn <- findFn rm nm
      let st0 = initialCrucibleSetupState cc fn loc
-     ms <- (view Setup.csMethodSpec) <$>
-             execStateT (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO) st0
+     ms <- execMIRSetup setup st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
      returnMIRProof ps
+
+execMIRSetup ::
+  MIRSetupM a ->
+  Setup.CrucibleSetupState MIR ->
+  TopLevel MethodSpec
+execMIRSetup setup st0 = do
+  st' <- execStateT
+           (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO)
+           st0
+
+  -- Exactly one mir_execute_func is required
+  unless (st' ^. Setup.csPrePost == MS.PostState) $
+    X.throwM MIRExecuteMissing
+
+  let mspec = st' ^. Setup.csMethodSpec
+
+  -- mir_return is required unless the return type is ()
+  case mspec ^. MS.csRet of
+    Nothing ->
+      pure ()
+
+    Just retTy ->
+      -- non-unit return types: mir_return is required
+      case mspec ^. MS.csRetValue of
+        Just _  -> pure ()
+        Nothing -> X.throwM (MIRReturnMissing retTy)
+
+  pure mspec
 
 mir_verify ::
   Mir.RustModule ->
@@ -891,10 +920,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
 
      -- execute commands of the method spec
      io $ W4.setCurrentProgramLoc sym loc
-     methodSpec <- view Setup.csMethodSpec <$>
-                     execStateT
-                       (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO)
-                     st0
+     methodSpec <- execMIRSetup setup st0
 
      printOutLnTop Info $
        unwords ["Verifying", show (methodSpec ^. MS.csMethod), "..."]
@@ -1553,17 +1579,45 @@ verifyPoststate cc mspec env0 globals ret mdMap =
          return (Crucible.simErrorReasonMsg err, md, obligation)
 
     matchResult opts sc =
-      case (ret, mspec ^. MS.csRetValue) of
-        (Just r, Just expect) ->
-            let md = MS.ConditionMetadata
-                     { MS.conditionLoc = mspec ^. MS.csLoc
-                     , MS.conditionTags = mempty
-                     , MS.conditionType = "return value matching"
-                     , MS.conditionContext = ""
-                     } in
-            matchArg opts sc cc mspec MS.PostState md r expect
-        (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected mir_return specification"
-        _ -> return ()
+      case (mspec ^. MS.csRet, ret, mspec ^. MS.csRetValue) of
+
+        -- Non-unit function:
+        --
+        -- mir_return has *already* checked that the user-specified SetupValue
+        -- has the correct *type* for the function’s return.
+        --
+        -- What mir_return does NOT check is whether the *actual* value produced
+        -- by symbolic execution matches what the spec requested.
+        --
+        -- This branch enforces that semantic obligation: it compares the
+        -- symbolic execution result `r` (a MIRVal) against the spec’s expected
+        -- value `expect` using matchArg, generating the equality constraints
+        -- needed in the post-state.
+        (Just _, Just r, Just expect) ->
+          let md = MS.ConditionMetadata
+                   { MS.conditionLoc     = mspec ^. MS.csLoc
+                   , MS.conditionTags    = mempty
+                   , MS.conditionType    = "return value matching"
+                   , MS.conditionContext = ""
+                   }
+          in
+          matchArg opts sc cc mspec MS.PostState md r expect
+
+        -- Unit-returning function:
+        --
+        -- There is no post-state obligation about the return value itself,
+        -- because unit-returning functions do not produce a meaningful MIR
+        -- return value. ret = Nothing always.
+        --
+        -- This branch exists solely to prevent valid unit cases (implicit or
+        -- explicit mir_return ()) from falling into the failure case below.
+        (Nothing, Nothing, _) ->
+          pure ()
+
+        -- Any other combination indicates a broken invariant in execMIRSetup
+        -- or verifySimulate and should not occur for well-formed specs.
+        _ ->
+          panic "verifyPoststate (MIR)" ["inconsistent return/type information"]
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
@@ -1591,9 +1645,6 @@ verifyPrestate ::
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals0 =
   do let sym = cc^.mccSym
-     let tyenv = MS.csAllocations mspec
-     let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
-
      let prestateLoc = W4.mkProgramLoc "_SAW_MIR_verifyPrestate" W4.InternalPos
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
@@ -1608,23 +1659,7 @@ verifyPrestate cc mspec globals0 =
        setupPrestateConditions mspec cc env globals2 (mspec ^. MS.csPreState . MS.csConditions)
      args <- resolveArguments cc mspec env
 
-     -- Check the type of the return setup value
-     let methodStr = show (mspec ^. MS.csMethod)
-     case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
-       (Just _, Nothing) ->
-            fail $ unlines
-              [ "Return value specified, but method " ++ methodStr ++
-                " has void return type"
-              ]
-       (Just sv, Just retTy) ->
-         do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
-            unless (checkCompatibleTys retTy retTy') $
-              fail $ unlines
-              [ "Incompatible types for return value when verifying " ++ methodStr
-              , "Expected: " ++ show retTy
-              , "but given value of type: " ++ show retTy'
-              ]
-       (Nothing, _) -> return ()
+
 
      return (args, cs, env, globals3)
 
@@ -2381,6 +2416,7 @@ data MIRSetupError
   | MIRArgNumberWrong Int Int -- number expected, number found
   | MIRReturnUnexpected Mir.Ty -- found
   | MIRReturnTypeMismatch Mir.Ty Mir.Ty -- expected, found
+  | MIRReturnMissing Mir.Ty -- expected
   | MIREnumValueVariantNotFound Mir.DefId Text
   | MIREnumValueNonEnum Mir.DefId String -- The String is either \"struct\" or \"union\"
   | MIRVecOfContentsNotArray Mir.Ty
@@ -2389,6 +2425,7 @@ data MIRSetupError
       Mir.Ty -- ^ element type of the contents argument
   | MIRVecOfElemTyNotSized Mir.Ty
   | MIRVecOfElemTyNoLayoutInfo Mir.Ty
+  | MIRExecuteMissing
 
 instance X.Exception MIRSetupError where
   toException = topLevelExceptionToException
@@ -2426,6 +2463,11 @@ instance Show MIRSetupError where
         , "Expected type: " ++ show (PP.pretty expected)
         , "Given type:    " ++ show (PP.pretty found)
         ]
+      MIRReturnMissing expected ->
+        unlines
+        [ "mir_return: Missing return value specification"
+        , "Expected type: " ++ show (PP.pretty expected)
+        ]
       MIREnumValueVariantNotFound adtNm variantNm ->
         unlines
         [ "mir_enum_value: Could not find a variant named `" ++ Text.unpack variantNm ++ "`"
@@ -2451,3 +2493,5 @@ instance Show MIRSetupError where
       MIRVecOfElemTyNoLayoutInfo elemTy ->
         "mir_vec_of: No layout info for element type "
           ++ show (PP.pretty elemTy)
+      MIRExecuteMissing ->
+        "MIRSetup: Missing mir_execute_func specification"
