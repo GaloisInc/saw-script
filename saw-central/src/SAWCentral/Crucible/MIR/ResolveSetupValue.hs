@@ -1436,6 +1436,8 @@ data TyView
   | TyViewForeign
   | TyViewLifetime
   | TyViewConst !Mir.ConstVal
+  | TyViewCoroutine
+  | TyViewCoroutineClosure [TyView]
   | TyViewErased
   | TyViewInterned Mir.TyName
   deriving Eq
@@ -1499,6 +1501,8 @@ tyView Mir.TyNever = TyViewNever
 tyView Mir.TyForeign = TyViewForeign
 tyView Mir.TyLifetime = TyViewLifetime
 tyView (Mir.TyConst c) = TyViewConst c
+tyView Mir.TyCoroutine = TyViewCoroutine
+tyView (Mir.TyCoroutineClosure tys) = TyViewCoroutineClosure (map tyView tys)
 tyView Mir.TyErased = TyViewErased
 tyView (Mir.TyInterned nm) = TyViewInterned nm
 
