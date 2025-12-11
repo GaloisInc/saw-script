@@ -1618,7 +1618,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
         -- Any other combination indicates a broken invariant in execMIRSetup
         -- or verifySimulate and should not occur for well-formed specs.
         _ ->
-          fail "verifyPoststate (MIR): inconsistent return/type information (internal error)"
+          panic "verifyPoststate (MIR)" ["inconsistent return/type information"]
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
