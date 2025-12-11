@@ -956,19 +956,20 @@ mkSymFn sym ref nm args ret =
 
 Our strategy is to generate a separate uninterpreted function for each
 base type that is mentioned in the result of the original uninterpreted
-function.  This function returns an *array* of values, and the actual results
-of the original function are obtained by selecting elements of this array.
+function.  If we need more than one value of a type, then we return an
+*array* of values, and the actual results of the original function are
+obtained by selecting elements of this array.
 
 For example, consider a function `f: [16] -> ([4][8],Bool)`. 
 A call `f x` will be translated like this:
 
-  f_bv8:  [16] -> Array Int [8]  // Uninterpreted
-  f_bool: [16] -> Array Int Bool  // Uninterpreted
+  f_bv8:  [16] -> Array [2] [8]   // Uninterpreted
+  f_bool: [16] -> Bool            // Uninterpreted
   w8s   = f_bv8 x                 // This has some auto-generated name
   bools = f_bool x                // This has some auto-generated name
   
 Value for `f x`:
-  ([ w8s ! 0, w8s ! 1, w8s ! 2, w8s ! 3 ], bools ! 0)
+  ([ w8s ! 0, w8s ! 1, w8s ! 2, w8s ! 3 ], bools)
 -}
 
 
@@ -980,7 +981,8 @@ newtype UnintCount (tc :: BaseType) = UnintCount Natural
 type UnintState sym = MapF BaseTypeRepr (Arr sym)
 
 -- | Uninterpreted function results for a particular base type.
-data Arr sym tc = Arr [SymExpr sym tc]
+-- The lenght of the lists should match the `UnintCount tc` for the type.
+newtype Arr sym tc = Arr [SymExpr sym tc]
 
 -- | Generate a call to an uninterpreted function.
 parseUninterpreted ::
@@ -1008,25 +1010,21 @@ parseUninterpreted sym ref app@(UnintApp nm args tys) ty =
             pure (Arr [el])
         Right LeqProof ->
           do
-            fn   <- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton (BaseBVRepr w) )ret)
+            fn   <- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton (BaseBVRepr w)) ret)
             arr  <- W.applySymFn sym fn args
             els <- forM [ 0 .. lim ] $ \i ->
               do
                 ind <- W.bvLit sym w (BV.mkBV w (fromIntegral i))
                 W.arrayLookup sym arr (Ctx.singleton ind)
             pure (Arr els)
-    | otherwise = panic "parseUnitnerpreted" ["`someNat` returned `Nothing` for `Natural`"]
+    | otherwise = panic "parseUninterpreted" ["`someNat` returned `Nothing` for `Natural`"]
 
   -- | Compute the number of bits required to represent the given integer.
   width :: Natural -> Natural
-  width x = go' 0 x
+  width x = go 0 x
     where
       go s 0 = s
       go s n = let s' = s + 1 in s' `seq` go s' (n `shiftR` 1)
-
-      go' s n
-        | n < bit 32 = go s n
-        | otherwise  = let s' = s + 32 in s' `seq` go' s' (n `shiftR` 32)
 
   -- Type suffixes for uninterpreted functions of each base type.
   suff :: BaseTypeRepr a -> String
