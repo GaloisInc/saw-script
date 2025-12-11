@@ -68,6 +68,7 @@ import Numeric.Natural
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Cache
+import SAWCore.Change
 import SAWCore.Conversion
   (Conversion(..)
   , termPat
@@ -689,29 +690,36 @@ data Convertibility = AllRules | ConvertibleRulesOnly
 --   and returned in the result set.
 rewriteSharedTerm :: forall a. Ord a => SharedContext -> Simpset a -> Term -> IO (Set a, Term)
 rewriteSharedTerm sc ss t0 =
+    commitChangeT $
     do cache <- newCache
        let ?cache = cache
-       setRef <- newIORef mempty
+       setRef <- lift$ newIORef mempty
        let ?annSet = setRef
        t <- rewriteAll AllRules t0
-       anns <- readIORef setRef
+       anns <- lift $ readIORef setRef
        pure (anns, t)
 
   where
 
-    rewriteAll :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) => Convertibility -> Term  -> IO Term
+    rewriteAll :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) => Convertibility -> Term -> ChangeT IO Term
     rewriteAll convertibleFlag t =
-        useCache ?cache (termIndex t)
-        (rewriteTermF convertibleFlag (unwrapTermF t) >>= scTermF sc >>= rewriteTop convertibleFlag)
+        useCache ?cache (termIndex t) $
+        do
+          let tf = unwrapTermF t
+          ctf' <- lift $ runChangeT $ rewriteTermF convertibleFlag tf
+          t' <- case ctf' of
+                  Original _ -> pure t
+                  Modified tf' -> lift $ scTermF sc tf'
+          rewriteTop convertibleFlag t'
 
-    rewriteTermF :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
-                    Convertibility -> TermF Term -> IO (TermF Term)
+    rewriteTermF :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) =>
+                    Convertibility -> TermF Term -> ChangeT IO (TermF Term)
     rewriteTermF convertibleFlag tf =
         case tf of
           FTermF ftf -> FTermF <$> rewriteFTermF convertibleFlag ftf
           App e1 e2 ->
-              do t1 <- scTypeOf sc e1
-                 t1' <- scWhnf sc t1
+              do t1 <- lift $ scTypeOf sc e1
+                 t1' <- lift $ scWhnf sc t1
                  case unwrapTermF t1' of
                    -- If type of e1 is not a dependent type, we can use any rule to rewrite e2
                    -- otherwise, we only rewrite using convertible rules
@@ -721,21 +729,21 @@ rewriteSharedTerm sc ss t0 =
                          App <$> rewriteAll convertibleFlag e1 <*> rewriteAll convertibleFlag e2
                    _ -> App <$> rewriteAll convertibleFlag e1 <*> rewriteAll ConvertibleRulesOnly e2
           Lambda x t1 t2 ->
-            do var <- scVariable sc x t1 -- we don't rewrite t1 which represents types
-               t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
+            do var <- lift $ scVariable sc x t1 -- we don't rewrite t1 which represents types
+               t2' <- lift $ scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
                t2'' <- rewriteAll convertibleFlag t2'
                pure (Lambda x t1 t2'')
           Constant{}     -> return tf
           Variable{}     -> return tf
           Pi x t1 t2 ->
             do t1' <- rewriteAll convertibleFlag t1
-               var <- scVariable sc x t1'
-               t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
+               var <- lift $ scVariable sc x t1'
+               t2' <- lift $ scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
                t2'' <- rewriteAll convertibleFlag t2'
                pure (Pi x t1' t2'')
 
-    rewriteFTermF :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
-                     Convertibility -> FlatTermF Term -> IO (FlatTermF Term)
+    rewriteFTermF :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) =>
+                     Convertibility -> FlatTermF Term -> ChangeT IO (FlatTermF Term)
     rewriteFTermF convertibleFlag ftf =
         case ftf of
           UnitValue        -> return ftf
@@ -764,24 +772,24 @@ rewriteSharedTerm sc ss t0 =
     filterRules convertibleFlag (Right (Conversion convConvFlag _)) =
       filterRulesFlag convertibleFlag convConvFlag
 
-    rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) => Convertibility -> Term -> IO Term
+    rewriteTop :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) => Convertibility -> Term -> ChangeT IO Term
     rewriteTop convertibleFlag t =
-      do mt <- reduceSharedTerm sc t
+      do mt <- lift $ reduceSharedTerm sc t
          case mt of
            Nothing -> let filteredRules = filter (filterRules convertibleFlag) (Net.match_term ss (termPat t)) in
               apply convertibleFlag filteredRules t
            Just t' -> rewriteAll convertibleFlag t'
 
-    recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> IO ()
+    recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> ChangeT IO ()
     recordAnn Nothing  = return ()
-    recordAnn (Just a) = modifyIORef' ?annSet (Set.insert a)
+    recordAnn (Just a) = lift $ modifyIORef' ?annSet (Set.insert a)
 
-    apply :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
-             Convertibility -> [Either (RewriteRule a) Conversion] -> Term -> IO Term
+    apply :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) =>
+             Convertibility -> [Either (RewriteRule a) Conversion] -> Term -> ChangeT IO Term
     apply _ [] t = return t
     apply convertibleFlag (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do
       -- if rewrite rule
-      result <- scMatch sc ctxt lhs t
+      result <- lift $ scMatch sc ctxt lhs t
       case result of
         Nothing -> apply convertibleFlag rules t
         Just inst
@@ -789,35 +797,35 @@ rewriteSharedTerm sc ss t0 =
             -- This should never happen because we avoid inserting
             -- reflexive rules into simp sets in the first place.
             do
-               lhs' <- ppTerm sc PPS.defaultOpts lhs
-               putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
+               lhs' <- lift $ ppTerm sc PPS.defaultOpts lhs
+               lift $ putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
                           "(THE IMPOSSIBLE HAPPENED!): " ++ lhs'
                apply convertibleFlag rules t
           | IntMap.keysSet inst /= IntSet.fromList (map (vnIndex . fst) ctxt) ->
             do
-               lhs' <- ppTerm sc PPS.defaultOpts lhs
-               putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
+               lhs' <- lift $ ppTerm sc PPS.defaultOpts lhs
+               lift $ putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
                  ++ lhs'
                apply convertibleFlag rules t
           | permutative ->
             do
-              t' <- scInstantiate sc inst rhs
+              t' <- lift $ scInstantiate sc inst rhs
               case termWeightLt t' t of
-                True -> recordAnn annotation >> rewriteAll convertibleFlag t' -- keep the result only if it is "smaller"
+                True -> taint $ recordAnn annotation >> rewriteAll convertibleFlag t' -- keep the result only if it is "smaller"
                 False -> apply convertibleFlag rules t
           | shallow ->
             -- do not to further rewriting to the result of a "shallow" rule
             do recordAnn annotation
-               scInstantiate sc inst rhs
+               taint $ lift $ scInstantiate sc inst rhs
           | otherwise ->
             do recordAnn annotation
-               rewriteAll convertibleFlag =<< scInstantiate sc inst rhs
+               taint $ rewriteAll convertibleFlag =<< lift (scInstantiate sc inst rhs)
     -- instead of syntactic rhs, has a bit of code that rewrites lhs (Term -> Maybe Term)
     apply convertibleFlag (Right conv : rules) t =
         do 
           case runConversion conv t of
              Nothing -> apply convertibleFlag rules t
-             Just tb -> rewriteAll convertibleFlag =<< OT.complete sc tb
+             Just tb -> taint $ rewriteAll convertibleFlag =<< lift (OT.complete sc tb)
 
 
 -- FIXME: is there some way to have sensable term replacement in the presence of loose variables
