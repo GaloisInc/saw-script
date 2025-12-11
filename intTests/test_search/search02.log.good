@@ -16,6 +16,16 @@ lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
 llvm_array : Int -> LLVMType -> LLVMType
 llvm_pointer : LLVMType -> LLVMType
+mir_array : Int -> MIRType -> MIRType
+mir_mux_values : Term -> MIRValue -> MIRValue -> MIRValue
+mir_raw_ptr_const : MIRType -> MIRType
+mir_raw_ptr_mut : MIRType -> MIRType
+mir_ref : MIRType -> MIRType
+mir_ref_mut : MIRType -> MIRType
+mir_slice : MIRType -> MIRType
+mir_slice_value : MIRValue -> MIRValue
+mir_str_slice_value : MIRValue -> MIRValue
+mir_vec : MIRModule -> MIRType -> MIRType
 rewrite : Simpset -> Term -> Term
 str_concat : String -> String -> String
 tail : {a} [a] -> [a]
@@ -23,7 +33,7 @@ term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
 time : {a} TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
-20 more matches tagged experimental; use enable_experimental to see them
+10 more matches tagged experimental; use enable_experimental to see them
 2 more matches tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- {a} (a -> String)
