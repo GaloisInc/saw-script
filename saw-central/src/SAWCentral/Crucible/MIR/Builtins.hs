@@ -1581,41 +1581,44 @@ verifyPoststate cc mspec env0 globals ret mdMap =
 
     matchResult opts sc =
       case (mspec ^. MS.csRet, ret, mspec ^. MS.csRetValue) of
-        -- Non-unit return: both execution and spec have a value, so match them.
+
+        -- Non-unit function:
+        --
+        -- mir_return has *already* checked that the user-specified SetupValue
+        -- has the correct *type* for the function’s return.
+        --
+        -- What mir_return does NOT check is whether the *actual* value produced
+        -- by symbolic execution matches what the spec requested.
+        --
+        -- This branch enforces that semantic obligation: it compares the
+        -- symbolic execution result `r` (a MIRVal) against the spec’s expected
+        -- value `expect` using matchArg, generating the equality constraints
+        -- needed in the post-state.
         (Just _, Just r, Just expect) ->
           let md = MS.ConditionMetadata
-                   { MS.conditionLoc = mspec ^. MS.csLoc
-                   , MS.conditionTags = mempty
-                   , MS.conditionType = "return value matching"
+                   { MS.conditionLoc     = mspec ^. MS.csLoc
+                   , MS.conditionTags    = mempty
+                   , MS.conditionType    = "return value matching"
                    , MS.conditionContext = ""
                    }
           in
           matchArg opts sc cc mspec MS.PostState md r expect
 
-        -- Unit-returning function: mir_return is optional.
-        -- No MIR return value exists, so there is nothing to match.
-        (Nothing, Nothing, Nothing) -> pure ()  -- implicit unit, no mir_return
-        (Nothing, Nothing, Just _)  -> pure ()  -- explicit mir_return (), already type-checked
+        -- Unit-returning function:
+        --
+        -- There is no post-state obligation about the return value itself,
+        -- because unit-returning functions do not produce a meaningful MIR
+        -- return value. ret = Nothing always.
+        --
+        -- This branch exists solely to prevent valid unit cases (implicit or
+        -- explicit mir_return ()) from falling into the failure case below.
+        (Nothing, Nothing, _) ->
+          pure ()
 
-        -- Non-unit function: spec says there *should* be a return, but
-        -- symbolic execution didn’t produce one.
-        (Just _, Nothing, Just _) ->
-          fail "verifyPoststate (MIR): missing return value from execution for non-unit function"
-
-        -- Non-unit function: method has a return type, but the spec never
-        -- called mir_return.
-        (Just _, Nothing, Nothing) ->
-          fail "verifyPoststate (MIR): missing mir_return specification for non-unit function"
-
-        -- Execution produced a value for a non-unit function, but spec
-        -- didn’t have mir_return. This “shouldn’t happen”, but treat it
-        -- as a hard error rather than silently ignoring it.
-        (Just _, Just _, Nothing) ->
-          fail "verifyPoststate (MIR): non-unit function without mir_return (internal inconsistency)"
-
-        -- Unit-returning function produced a MIRVal – also “shouldn’t happen”.
-        (Nothing, Just _, _) ->
-          fail "verifyPoststate (MIR): unit-returning function produced a return value (internal inconsistency)"
+        -- Any other combination indicates a broken invariant in execMIRSetup
+        -- or verifySimulate and should not occur for well-formed specs.
+        _ ->
+          fail "verifyPoststate (MIR): inconsistent return/type information (internal error)"
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
