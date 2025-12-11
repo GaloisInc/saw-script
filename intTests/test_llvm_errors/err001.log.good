@@ -5,14 +5,13 @@ Checking proof obligations foo...
 Subgoal failed: foo err001.saw:13:1: error: in _SAW_LLVM_withMethodSpec
 Literal equality postcondition
 Expected term: 
-let { x@1 = Cryptol.TCNum 32
-      x@2 = Cryptol.seq x@1 Prelude.Bool
+let { x@1 = TCNum 32
+      x@2 = seq x@1 Bool
     }
- in Cryptol.ecMul x@2 (Cryptol.PRingSeqBool x@1) x
-      (Cryptol.ecNumber (Cryptol.TCNum 3) x@2
-         (Cryptol.PLiteralSeqBool x@1))
+ in ecMul x@2 (PRingSeqBool x@1) x
+      (ecNumber (TCNum 3) x@2 (PLiteralSeqBool x@1))
 Actual term:
-Prelude.bvMul 32 (Prelude.bvNat 32 2) x
+bvMul 32 (bvNat 32 2) x
 
 SolverStats {solverStatsSolvers = fromList ["SBV->Z3"], solverStatsGoalSize = N}
 ----------Counterexample----------

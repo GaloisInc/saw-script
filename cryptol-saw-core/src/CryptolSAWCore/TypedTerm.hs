@@ -32,7 +32,7 @@ import SAWCore.FiniteValue
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer (asVariable)
 import SAWCore.SharedTerm
-import SAWCore.Term.Pretty (ppTerm)
+import SAWCore.Term.Pretty (prettyTermPure)
 
 -- Typed terms -----------------------------------------------------------------
 
@@ -60,7 +60,7 @@ data TypedTermType
 
 ppTypedTerm :: TypedTerm -> PP.Doc ann
 ppTypedTerm (TypedTerm tp tm) =
-  PP.unAnnotate (ppTerm PPS.defaultOpts tm)
+  PP.unAnnotate (prettyTermPure PPS.defaultOpts tm)
   PP.<+> PP.pretty ":" PP.<+>
   ppTypedTermType tp
 
@@ -70,7 +70,7 @@ ppTypedTermType (TypedTermSchema sch) =
 ppTypedTermType (TypedTermKind k) =
   PP.viaShow (C.ppPrec 0 k)
 ppTypedTermType (TypedTermOther tp) =
-  PP.unAnnotate (ppTerm PPS.defaultOpts tp)
+  PP.unAnnotate (prettyTermPure PPS.defaultOpts tp)
 
 ppTypedVariable :: TypedVariable -> PP.Doc ann
 ppTypedVariable (TypedVariable ctp vn _tp) =

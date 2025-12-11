@@ -39,7 +39,6 @@ import SAWCore.SharedTerm
 import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
-import SAWCore.Term.Pretty (scPrettyTerm)
 
 import qualified Data.AIG as AIG
 
@@ -521,9 +520,9 @@ asFiniteType sc t =
   scGetModuleMap sc >>= \modmap ->
   case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty Map.empty t) of
     Just ft -> return ft
-    Nothing ->
-      fail $ "SAWCoreAIG.BitBlast.bitBlastTerm: invalid AIG type: " ++
-             scPrettyTerm PPS.defaultOpts t
+    Nothing -> do
+      t' <- ppTerm sc PPS.defaultOpts t
+      fail $ "SAWCoreAIG.BitBlast.bitBlastTerm: invalid AIG type: " ++ t'
 
 processVar ::
   (VarName, FirstOrderType) ->

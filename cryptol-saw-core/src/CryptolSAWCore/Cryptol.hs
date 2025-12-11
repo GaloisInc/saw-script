@@ -83,6 +83,9 @@ import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import qualified Cryptol.Utils.PP as PP
 import Cryptol.Utils.PP (pretty, pp)
 
+-- saw-support
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
+
 -- saw-core
 import qualified SAWCore.Simulator.Concrete as SC
 import qualified SAWCore.Simulator.Value as SC
@@ -91,7 +94,6 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName, Name(..))
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
-import SAWCore.Term.Pretty (showTerm)
 
 -- local modules:
 import CryptolSAWCore.Panic
@@ -1956,11 +1958,13 @@ assertSAWCoreTypeChecks sc _ident term mType =
            -- N.B. currently unreachable to reduce run-time impact:
            do
            eq <- scConvertible sc True ty1 ty2
-           unless eq $
+           unless eq $ do
+             ty1' <- ppTerm sc PPS.defaultOpts ty1
+             ty2' <- ppTerm sc PPS.defaultOpts ty2
              panic "assertSAWCoreTypeChecks" [
-                 "Expected type " <> Text.pack (showTerm ty1),
-                 "does not match the inferred type " <> Text.pack (showTerm ty2)
-             ]
+                 "Expected type " <> Text.pack ty1',
+                 "does not match the inferred type " <> Text.pack ty2'
+              ]
 
 
 -- | When possible, convert back from a SAWCore type to a Cryptol Type, or Kind.

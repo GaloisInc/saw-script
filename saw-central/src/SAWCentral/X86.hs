@@ -125,10 +125,12 @@ import Data.Macaw.X86.Symbolic
   )
 import Data.Macaw.X86.Crucible(SymFuns(..))
 
+-- saw-support
+import qualified SAWSupport.Pretty as PPS
 
 -- Saw Core
-import SAWCore.SharedTerm(Term, mkSharedContext, SharedContext, scImplies)
-import SAWCore.Term.Pretty(showTerm)
+import SAWCore.SharedTerm(Term, mkSharedContext, SharedContext, scImplies, ppTerm)
+import SAWCore.Term.Pretty (ppTermPureDefaults)
 import SAWCore.Recognizer(asBool)
 
 import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
@@ -597,7 +599,9 @@ gGoal sc g0 = boolToProp sc [] =<< go (gAssumes g)
             _shT (gShows g)
 
 
-  _shT t = putStrLn ("  " ++ showTerm t)
+  _shT t = do
+      t' <- ppTerm sc PPS.defaultOpts t
+      putStrLn ("  " ++ t')
 
   skip a = case asBool a of
              Just True -> Nothing
@@ -637,8 +641,8 @@ getGoals (SomeBackend bak) mdMap =
 
 instance Show Goal where
   showsPrec _ g = showString "Goal { gAssumes = "
-                . showList (map (show . showTerm) (gAssumes g))
-                . showString ", gShows = " . shows (showTerm (gShows g))
+                . showList (map (show . ppTermPureDefaults) (gAssumes g))
+                . showString ", gShows = " . shows (ppTermPureDefaults (gShows g))
                 . showString ", gLoc = " . shows (gLoc g)
                 . showString ", gMessage = " . shows (show (gMessage g))
                 . showString " }"

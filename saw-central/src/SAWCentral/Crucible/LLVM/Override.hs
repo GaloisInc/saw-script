@@ -111,10 +111,11 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.BitVector.Sized as BV
 
+import qualified SAWSupport.Pretty as PPS
+
 import           SAWCore.Name (VarName(..))
 import           SAWCore.SharedTerm
 import           SAWCore.Recognizer
-import           SAWCore.Term.Pretty (showTerm)
 import           CryptolSAWCore.TypedTerm
 import           SAWCoreWhat4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 
@@ -754,10 +755,11 @@ enforcePointerValidity sc cc ss =
               Crucible.isAllocatedAlignedPointer sym w alignment mut ptr (Just psz') mem
             let ploc = MS.conditionLoc allocMd
 
+            pszStr <- liftIO $ ppTerm sc PPS.defaultOpts psz
             let msg =
                   "Pointer not valid:"
                   ++ "\n  base = " ++ show (Crucible.ppPtr ptr)
-                  ++ "\n  size = " ++ showTerm psz
+                  ++ "\n  size = " ++ pszStr
                   ++ "\n  required alignment = " ++ show (Crucible.fromAlignment alignment) ++ "-byte"
                   ++ "\n  required mutability = " ++ show mut
             addAssert c allocMd $ Crucible.SimError ploc $
@@ -770,7 +772,7 @@ enforcePointerValidity sc cc ss =
                      let msg' = PP.vcat $ map (PP.pretty . unwords)
                            [ [ "Memory region not initialized:" ]
                            , [ "  pointer =", show (Crucible.ppPtr ptr) ]
-                           , [ "  size =", showTerm psz ]
+                           , [ "  size =", pszStr ]
                            ]
                      case maybeOk of
                        Just ok ->
@@ -844,7 +846,7 @@ enforceDisjointness sc cc loc globals extras ss =
               pure (g, ptr)
      globals' <- traverse resolveAllocGlobal globals
      sequence_
-       [ enforceDisjointAllocGlobal sym loc p q
+       [ enforceDisjointAllocGlobal sc sym loc p q
        | p <- mems
        , q <- globals'
        ]
@@ -885,23 +887,26 @@ enforceDisjointAllocSpec sc cc sym loc
               , MS.conditionType = "memory disjointness"
               , MS.conditionContext = ""
               }
+     pszStr <- liftIO $ ppTerm sc PPS.defaultOpts psz
+     qszStr <- liftIO $ ppTerm sc PPS.defaultOpts qsz
      let msg =
            "Memory regions not disjoint:"
-           ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ showTerm psz ++ ")"
+           ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ pszStr ++ ")"
            ++ "\n  from " ++ ppProgramLoc (MS.conditionLoc pMd)
            ++ "\n  and "
-           ++ "\n  (base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ showTerm qsz ++ ")"
+           ++ "\n  (base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ qszStr ++ ")"
            ++ "\n  from " ++ ppProgramLoc (MS.conditionLoc qMd)
      addAssert c md $ Crucible.SimError loc $
        Crucible.AssertFailureSimError msg ""
 
 -- | Assert that an LLVM allocation is disjoint from a global region.
 enforceDisjointAllocGlobal ::
+  SharedContext ->
   Sym -> W4.ProgramLoc ->
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   (LLVMAllocGlobal arch, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointAllocGlobal sym loc
+enforceDisjointAllocGlobal sc sym loc
   (LLVMAllocSpec _pmut _pty _palign psz pMd pfresh _p_sym_init, p)
   (LLVMAllocGlobal qloc (L.Symbol qname), q)
   | pfresh =
@@ -910,9 +915,10 @@ enforceDisjointAllocGlobal sym loc
   do let Crucible.LLVMPointer pblk _ = p
      let Crucible.LLVMPointer qblk _ = q
      c <- liftIO $ W4.notPred sym =<< W4.natEq sym pblk qblk
+     pszStr <- liftIO $ ppTerm sc PPS.defaultOpts psz
      let msg =
            "Memory regions not disjoint:"
-           ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ showTerm psz ++ ")"
+           ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ pszStr ++ ")"
            ++ "\n  from " ++ ppProgramLoc (MS.conditionLoc pMd)
            ++ "\n  and "
            ++ "\n  global " ++ show qname ++ " (base=" ++ show (Crucible.ppPtr q) ++ ")"

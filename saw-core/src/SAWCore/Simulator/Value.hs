@@ -199,7 +199,7 @@ instance Show (Extra l) => Show (TValue l) where
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
 
-      VTyTerm _ tm   -> showString "TyTerm (" . (\x -> showTerm tm ++ x) . showString ")"
+      VTyTerm _ tm   -> showString "TyTerm (" . (\x -> ppTermPureDefaults tm ++ x) . showString ")"
 
 data Nil = Nil
 

@@ -92,7 +92,6 @@ import qualified Cryptol.Utils.PP as C
 import SAWCore.Name
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty (showTerm)
 import SAWCore.Recognizer
 
 import CryptolSAWCore.TypedTerm
@@ -248,7 +247,9 @@ stateFromApp app = do
     App _ arg -> io $ scFlatTermF sc $ PairLeft arg
     _ -> do
       term <- io $ scTermF sc app
-      fail $ "Error: " ++ showTerm term ++ " is not an App"
+      opts <- State.gets rwPPOpts
+      term' <- io $ ppTerm sc opts term
+      fail $ "Error: " ++ term' ++ " is not an App"
 
 -- | Given a term containing the application of a 'Constant', locate this
 -- application and replace its argument with a 'Variable'.  Returns the inserted
@@ -293,9 +294,13 @@ extractApp :: TypedTerm
 extractApp constant term =
   case snd $ go (IntSet.empty, Nothing) term of
     Just app -> return app
-    Nothing -> fail $ unlines [ "Error: Failed to locate constant in term."
+    Nothing -> do
+        sc <- getSharedContext
+        opts <- State.gets rwPPOpts
+        term' <- io $ ppTerm sc opts term
+        fail $ unlines [ "Error: Failed to locate constant in term."
                               , "  Constant: " ++ show (ppTypedTerm constant)
-                              , "  Term: " ++ showTerm term ]
+                              , "  Term: " ++ term' ]
   where
     go :: (IntSet, Maybe (TermF Term))
        -> Term
@@ -747,8 +752,11 @@ replaceConstantTerm constant constantRetType term =
 
 -- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
 constantName :: TermF Term -> TopLevel Text.Text
-constantName (Constant e) = return $ toShortName $ nameInfo e
+constantName (Constant e) =
+  return $ toShortName $ nameInfo e
 constantName tf = do
   sc <- getSharedContext
+  opts <- State.gets rwPPOpts
   term <- io $ scTermF sc tf
-  fail $ "Error: Expected a constant, but got: " ++ showTerm term
+  term' <- io $ ppTerm sc opts term
+  fail $ "Error: Expected a constant, but got: " ++ term'

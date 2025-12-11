@@ -86,6 +86,10 @@ module SAWCore.Term.Certified
   , SharedContextCheckpoint
   , checkpointSharedContext
   , restoreSharedContext
+    -- * Prettyprinting hooks (re-exported from SharedTerm; get them from
+    -- there unless you need to be here for some reason)
+  , prettyTerm
+  , ppTerm
   ) where
 
 import Control.Applicative
@@ -117,6 +121,7 @@ import Text.URI
 
 import SAWSupport.IntRangeSet (IntRangeSet)
 import qualified SAWSupport.IntRangeSet as IntRangeSet
+import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Cache
 import SAWCore.Module
@@ -168,6 +173,36 @@ scRecordValue sc fields = scRecord sc (Map.fromList fields)
 -- possible errors: not a record type, field name not found
 scRecordProj :: SharedContext -> Term -> FieldName -> IO Term
 scRecordProj sc t fname = scRecordSelect sc t fname
+
+
+----------------------------------------------------------------------
+-- Printing
+
+-- Ideally these would be able to live in Pretty.hs, but they can't
+-- because they need the `SharedContext`. They used to live in
+-- SharedTerm.hs, but we would like to use them from inside here for
+-- error reporting.
+
+-- | The preferred printing mechanism for `Term`, if you want a `Doc`.
+--
+--   Note that there are two naming conventions in conflict here: the
+--   convention that things using the `SharedContext` and in `IO`
+--   should be named `sc`, and the convention that the preferred way
+--   to prettyprint an object of type @Foo@ to a `Doc` should be
+--   called @prettyFoo@. For the time being at least we've concluded
+--   that the latter is more important.
+prettyTerm :: SharedContext -> PPS.Opts -> Term -> IO PPS.Doc
+prettyTerm sc opts t =
+  do env <- scGetNamingEnv sc
+     pure (prettyTermWithEnv opts env t)
+
+-- | The preferred printing mechanism for `Term`, if you want text.
+--
+--   The same naming considerations as `prettyTerm` apply.
+ppTerm :: SharedContext -> PPS.Opts -> Term -> IO String
+ppTerm sc opts t =
+  PPS.render opts <$> prettyTerm sc opts t
+
 
 ----------------------------------------------------------------------
 -- TermFMaps
@@ -292,12 +327,14 @@ scFreshTermIndex sc = atomicModifyIORef' (scNextTermIndex sc) (\i -> (i + 1, i))
 scEnsureValidTerm :: SharedContext -> Term -> IO ()
 scEnsureValidTerm sc t =
   do s <- readIORef (scValidTerms sc)
-     unless (IntRangeSet.member (termIndex t) s) $
-       fail $ unlines $
-       [ "Stale term encountered: index = " ++ show (termIndex t)
-       , "Valid indexes: " ++ show (IntRangeSet.toList s)
-       , showTerm t
-       ]
+     unless (IntRangeSet.member (termIndex t) s) $ do
+       -- XXX: we should probably have the prettyprinting options in the SharedContext
+       t' <- ppTerm sc PPS.defaultOpts t
+       fail $ unlines $ [
+           "Stale term encountered: index = " ++ show (termIndex t),
+           "Valid indexes: " ++ show (IntRangeSet.toList s),
+           t'
+        ]
 
 -- | Internal function to make a 'Term' from a 'TermF' with a given
 -- variable typing context and type.
@@ -417,13 +454,20 @@ scApply sc t1 t2 =
        Nothing ->
          do scEnsureValidTerm sc t1
             scEnsureValidTerm sc t2
-            vt <- unifyVarTypes "scApply" (varTypes t1) (varTypes t2)
+            vt <- unifyVarTypes "scApply" sc (varTypes t1) (varTypes t2)
             ty1 <- scTypeOf sc t1
             (x, ty1a, ty1b) <- ensurePi sc ty1
             ty2 <- scTypeOf sc t2
             ok <- scSubtype sc ty2 ty1a
-            unless ok $ fail $ unlines $
-              ["Not a subtype", "expected: " ++ showTerm ty1a, "got: " ++ showTerm ty2]
+            unless ok $ do
+              -- XXX we should probably have the prettyprint options in the SharedContext
+              ty1a' <- ppTerm sc PPS.defaultOpts ty1a
+              ty2' <- ppTerm sc PPS.defaultOpts ty2
+              fail $ unlines $ [
+                  "Not a subtype",
+                  "expected: " ++ ty1a',
+                  "got: " ++ ty2'
+               ]
             -- Computing the result type with scInstantiateBeta may
             -- lead to other calls to scApply, but these should be at
             -- simpler types, so it should always terminate.
@@ -456,8 +500,8 @@ scLambda sc x t body =
   do scEnsureValidTerm sc t
      scEnsureValidTerm sc body
      ensureNotFreeInContext x body
-     _ <- unifyVarTypes "scLambda" (IntMap.singleton (vnIndex x) t) (varTypes body)
-     vt <- unifyVarTypes "scLambda" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
+     _ <- unifyVarTypes "scLambda" sc (IntMap.singleton (vnIndex x) t) (varTypes body)
+     vt <- unifyVarTypes "scLambda" sc (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
      rty <- scTypeOf sc body
      ty <- scPi sc x t rty
      scMakeTerm sc vt (Lambda x t body) (Right ty)
@@ -476,8 +520,8 @@ scPi sc x t body =
   do scEnsureValidTerm sc t
      scEnsureValidTerm sc body
      ensureNotFreeInContext x body
-     _ <- unifyVarTypes "scPi" (IntMap.singleton (vnIndex x) t) (varTypes body)
-     vt <- unifyVarTypes "scPi" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
+     _ <- unifyVarTypes "scPi" sc (IntMap.singleton (vnIndex x) t) (varTypes body)
+     vt <- unifyVarTypes "scPi" sc (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
      s1 <- either pure (ensureSort sc) (stAppType t)
      s2 <- either pure (ensureSort sc) (stAppType body)
      scMakeTerm sc vt (Pi x t body) (Left (piSort s1 s2))
@@ -493,7 +537,7 @@ scConst sc nm =
 scVariable :: SharedContext -> VarName -> Term -> IO Term
 scVariable sc x t =
   do scEnsureValidTerm sc t
-     vt <- unifyVarTypes "scVariable" (IntMap.singleton (vnIndex x) t) (varTypes t)
+     vt <- unifyVarTypes "scVariable" sc (IntMap.singleton (vnIndex x) t) (varTypes t)
      _s <- either pure (ensureSort sc) (stAppType t)
      let mty = maybe (Right t) Left (asSort t)
      scMakeTerm sc vt (Variable x t) mty
@@ -508,14 +552,18 @@ ensureNotFreeInContext x body =
 
 -- | Two typing contexts are unifiable if they agree perfectly on all
 -- entries where they overlap.
-unifyVarTypes :: String -> IntMap Term -> IntMap Term -> IO (IntMap Term)
-unifyVarTypes msg ctx1 ctx2 =
+unifyVarTypes :: String -> SharedContext -> IntMap Term -> IntMap Term -> IO (IntMap Term)
+unifyVarTypes msg sc ctx1 ctx2 =
   do let check i t1 t2 =
-           unless (t1 == t2) $
-           fail $ unlines [msg ++ ": variable typing context mismatch",
-                           "VarIndex: " ++ show i,
-                           "t1: " ++ showTerm t1,
-                           "t2: " ++ showTerm t2]
+           unless (t1 == t2) $ do
+               t1' <- ppTerm sc PPS.defaultOpts t1
+               t2' <- ppTerm sc PPS.defaultOpts t2
+               fail $ unlines [
+                   msg ++ ": variable typing context mismatch",
+                   "VarIndex: " ++ show i,
+                   "t1: " ++ t1',
+                   "t2: " ++ t2'
+                ]
      sequence_ (IntMap.intersectionWithKey check ctx1 ctx2)
      pure (IntMap.union ctx1 ctx2)
 
@@ -527,8 +575,9 @@ ensureRecognizer s sc f trm =
       do trm' <- scWhnf sc trm
          case f trm' of
            Just a -> pure a
-           Nothing ->
-             fail $ "ensureRecognizer: Expected " ++ s ++ ", found: " ++ showTerm trm'
+           Nothing -> do
+             trm'' <- ppTerm sc PPS.defaultOpts trm'
+             fail $ "ensureRecognizer: Expected " ++ s ++ ", found: " ++ trm''
 
 ensureSort :: SharedContext -> Term -> IO Sort
 ensureSort sc tp = ensureRecognizer "Sort" sc asSort tp
@@ -1416,13 +1465,19 @@ scStringType sc = scGlobalDef sc preludeStringIdent
 scVector :: SharedContext -> Term -> [Term] -> IO Term
 scVector sc e xs =
   do scEnsureValidTerm sc e
-     vt <- foldM (unifyVarTypes "scVector") (varTypes e) (map varTypes xs)
+     vt <- foldM (unifyVarTypes "scVector" sc) (varTypes e) (map varTypes xs)
      let check x =
            do scEnsureValidTerm sc x
               xty <- scTypeOf sc x
               ok <- scSubtype sc xty e
-              unless ok $ fail $ unlines $
-                ["Not a subtype", "expected: " ++ showTerm e, "got: " ++ showTerm xty]
+              unless ok $ do
+                  e' <- ppTerm sc PPS.defaultOpts e
+                  xty' <- ppTerm sc PPS.defaultOpts xty
+                  fail $ unlines [
+                      "Not a subtype",
+                      "expected: " ++ e',
+                      "got: " ++ xty'
+                   ]
      mapM_ check xs
      n <- scNat sc (fromIntegral (length xs))
      let tf = FTermF (ArrayValue e (V.fromList xs))
@@ -1438,7 +1493,7 @@ scVecType sc n e = scGlobalApply sc preludeVecIdent [n, e]
 scRecord :: SharedContext -> Map FieldName Term -> IO Term
 scRecord sc (Map.toList -> fields) =
   do mapM_ (scEnsureValidTerm sc . snd) fields
-     vt <- foldM (unifyVarTypes "scRecord") IntMap.empty (map (varTypes . snd) fields)
+     vt <- foldM (unifyVarTypes "scRecord" sc) IntMap.empty (map (varTypes . snd) fields)
      let tf = FTermF (RecordValue fields)
      field_tys <- traverse (traverse (scTypeOf sc)) fields
      ty <- scRecordType sc field_tys
@@ -1462,7 +1517,7 @@ scRecordSelect sc t fname =
 scRecordType :: SharedContext -> [(FieldName, Term)] -> IO Term
 scRecordType sc field_tys =
   do mapM_ (scEnsureValidTerm sc . snd) field_tys
-     vt <- foldM (unifyVarTypes "scRecordType") IntMap.empty (map (varTypes . snd) field_tys)
+     vt <- foldM (unifyVarTypes "scRecordType" sc) IntMap.empty (map (varTypes . snd) field_tys)
      let tf = FTermF (RecordType field_tys)
      let field_sort (_, t) = either pure (ensureSort sc) (stAppType t)
      sorts <- traverse field_sort field_tys
@@ -1488,7 +1543,7 @@ scPairValue :: SharedContext
 scPairValue sc t1 t2 =
   do scEnsureValidTerm sc t1
      scEnsureValidTerm sc t2
-     vt <- unifyVarTypes "scPairValue" (varTypes t1) (varTypes t2)
+     vt <- unifyVarTypes "scPairValue" sc (varTypes t1) (varTypes t2)
      let tf = FTermF (PairValue t1 t2)
      ty1 <- scTypeOf sc t1
      ty2 <- scTypeOf sc t2
@@ -1504,7 +1559,7 @@ scPairType :: SharedContext
 scPairType sc t1 t2 =
   do scEnsureValidTerm sc t1
      scEnsureValidTerm sc t2
-     vt <- unifyVarTypes "scPairType" (varTypes t1) (varTypes t2)
+     vt <- unifyVarTypes "scPairType" sc (varTypes t1) (varTypes t2)
      let tf = FTermF (PairType t1 t2)
      s1 <- either pure (ensureSort sc) (stAppType t1)
      s2 <- either pure (ensureSort sc) (stAppType t2)
@@ -1584,13 +1639,15 @@ scFreshConstant ::
   Term {- ^ The type -} ->
   IO Term
 scFreshConstant sc name rhs ty =
-  do unless (closedTerm rhs) $
-       fail $ unlines
-       [ "scFreshConstant: term contains free variables"
-       , "name: " ++ Text.unpack name
-       , "ty: " ++ showTerm ty
-       , "rhs: " ++ showTerm rhs
-       ]
+  do unless (closedTerm rhs) $ do
+       ty' <- ppTerm sc PPS.defaultOpts ty
+       rhs' <- ppTerm sc PPS.defaultOpts rhs
+       fail $ unlines [
+           "scFreshConstant: term contains free variables",
+           "name: " ++ Text.unpack name,
+           "ty: " ++ ty',
+           "rhs: " ++ rhs'
+        ]
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
 
@@ -1605,13 +1662,15 @@ scDefineConstant ::
   Term {- ^ The type -} ->
   IO Term
 scDefineConstant sc nmi rhs ty =
-  do unless (closedTerm rhs) $
-       fail $ unlines
-       [ "scDefineConstant: term contains free variables"
-       , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
-       , "ty: " ++ showTerm ty
-       , "rhs: " ++ showTerm rhs
-       ]
+  do unless (closedTerm rhs) $ do
+       ty' <- ppTerm sc PPS.defaultOpts ty
+       rhs' <- ppTerm sc PPS.defaultOpts rhs
+       fail $ unlines [
+           "scDefineConstant: term contains free variables",
+           "nmi: " ++ Text.unpack (toAbsoluteName nmi),
+           "ty: " ++ ty',
+           "rhs: " ++ rhs'
+        ]
      nm <- scRegisterName sc nmi
      scDeclareDef sc nm NoQualifier ty (Just rhs)
 

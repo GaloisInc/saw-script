@@ -89,7 +89,6 @@ import SAWCore.Panic (panic)
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty (scPrettyTerm)
 import qualified SAWCore.TermNet as Net
 import SAWCore.Prelude.Constants
 
@@ -266,8 +265,8 @@ scMatch sc ctxt pat term =
     match _ x y s
       | closedTerm x && termIndex x == termIndex y = pure s
     match locals x y s@(MatchState m cs) =
-      -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm PPS.defaultOpts x) >>
-      -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm PPS.defaultOpts y) >>
+      -- (lift $ putStrLn $ "matching (lhs): " ++ ppTermPure PPS.defaultOpts x) >>
+      -- (lift $ putStrLn $ "matching (rhs): " ++ ppTermPure PPS.defaultOpts y) >>
       case asVarPat locals x of
         -- If the lhs pattern is of the form (?u b1..bk) where ?u is a
         -- unification variable and b1..bk are all locally bound
@@ -789,12 +788,16 @@ rewriteSharedTerm sc ss t0 =
           | lhs == rhs ->
             -- This should never happen because we avoid inserting
             -- reflexive rules into simp sets in the first place.
-            do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
-                          "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm PPS.defaultOpts lhs
+            do
+               lhs' <- ppTerm sc PPS.defaultOpts lhs
+               putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
+                          "(THE IMPOSSIBLE HAPPENED!): " ++ lhs'
                apply convertibleFlag rules t
           | IntMap.keysSet inst /= IntSet.fromList (map (vnIndex . fst) ctxt) ->
-            do putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
-                 ++ scPrettyTerm PPS.defaultOpts lhs
+            do
+               lhs' <- ppTerm sc PPS.defaultOpts lhs
+               putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
+                 ++ lhs'
                apply convertibleFlag rules t
           | permutative ->
             do

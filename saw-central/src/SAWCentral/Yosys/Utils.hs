@@ -30,10 +30,11 @@ import Numeric.Natural (Natural)
 
 import Text.Encoding.Z (zEncodeString)
 
+import qualified SAWSupport.Pretty as PPS
+
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
 import qualified SAWCore.SCTypeCheck as SC.TC
-import qualified SAWCore.Term.Pretty as SC (showTerm)
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
@@ -180,11 +181,13 @@ cryptolRecordSelect ::
 cryptolRecordSelect sc fields r nm =
   case List.elemIndex nm ord of
     Just i -> SC.scTupleSelector sc r (i + 1) (length ord)
-    Nothing -> throwIO $ YosysError $ mconcat
+    Nothing -> do
+     r' <- SC.ppTerm sc PPS.defaultOpts r
+     throwIO $ YosysError $ mconcat
       [ "Could not build record selector term for field name \""
       , nm
       , "\" on record term: "
-      , Text.pack $ SC.showTerm r
+      , Text.pack $ r'
       , "\nFields are: "
       , Text.pack . show $ Map.keys fields
       ]

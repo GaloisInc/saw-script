@@ -17,12 +17,13 @@ module SAWCore.Prelude
 
 import qualified Data.Map as Map
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.ParserUtils
 import SAWCore.Prelude.Constants
 import SAWCore.Prelude.Module (preludeModule)
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue
-import SAWCore.Term.Pretty (showTerm)
 
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue)
@@ -40,7 +41,9 @@ scEq sc x y = do
   mmap <- scGetModuleMap sc
   case asFirstOrderTypeValue (evalSharedTerm mmap mempty mempty xty) of
     Just fot -> scDecEq sc fot (Just (x,y))
-    Nothing  -> fail ("scEq: expected first order type, but got: " ++ showTerm xty)
+    Nothing  -> do
+        xty' <- ppTerm sc PPS.defaultOpts xty
+        fail $ "scEq: expected first order type, but got: " ++ xty'
 
 -- | Given a first-order type, return the decidable equality
 --   operation on that type.  If arguments are provided, they
