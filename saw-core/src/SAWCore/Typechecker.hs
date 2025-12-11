@@ -324,11 +324,15 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
   atPos p $ throwTCError $ DeclError nm "Dangling definition without a type"
 
-processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
+processDecls (Un.DataDecl nm param_ctx dt_tp c_decls : rest) =
+  do processDataDecl nm param_ctx dt_tp c_decls
+     processDecls rest
+
+-- | Type-check a data type declaration and insert it into the current module.
+processDataDecl :: PosPair Text -> Un.UTermCtx -> Un.UTerm -> [Un.CtorDecl] -> CheckM ()
+processDataDecl (PosPair p nm) param_ctx dt_tp c_decls =
   let param_ctx' = map (\(x, t) -> (Un.termVarLocalName x, t)) param_ctx in
-  -- This top line makes sure that we process the rest of the decls after the
-  -- main body of the code below, which processes just the current data decl
-  (>> processDecls rest) $ atPos p $
+  atPos p $
   -- Step 1: type-check the parameters
   typeInferCompleteInCtx param_ctx' $ \params -> do
   let dtParams = map (\(_, v, t, _) -> (v, t)) params
