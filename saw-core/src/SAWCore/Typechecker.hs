@@ -104,13 +104,6 @@ inferTermF x = lift $ TC.inferTermF x
 inferFlatTermF :: FlatTermF Term -> CheckM SC.Term
 inferFlatTermF x = lift $ TC.inferFlatTermF x
 
--- | Build a multi-arity application of 'SC.Term's
-inferApplyAll :: SC.Term -> [SC.Term] -> CheckM SC.Term
-inferApplyAll t [] = return t
-inferApplyAll t (arg:args) =
-  do app1 <- inferTermF (App t arg)
-     inferApplyAll app1 args
-
 -- | Resolve a name.
 inferResolveName :: Text -> CheckM SC.Term
 inferResolveName n =
@@ -126,22 +119,6 @@ inferResolveName n =
             inferTermF (Constant c)
        (Nothing, Nothing) ->
          throwTCError $ UnboundName n
-
--- | Match an untyped term as a name applied to 0 or more arguments
-matchAppliedName :: Un.UTerm -> Maybe (Text, [Un.UTerm])
-matchAppliedName (Un.Name (PosPair _ n)) = Just (n, [])
-matchAppliedName (Un.App f arg) =
-  do (n, args) <- matchAppliedName f
-     return (n, args++[arg])
-matchAppliedName _ = Nothing
-
--- | Match an untyped term as a recursor applied to 0 or more arguments
-matchAppliedRecursor :: Un.UTerm -> Maybe (Text, Sort, [Un.UTerm])
-matchAppliedRecursor (Un.Recursor (PosPair _ n) s) = Just (n, s, [])
-matchAppliedRecursor (Un.App f arg) =
-  do (n, s, args) <- matchAppliedRecursor f
-     return (n, s, args++[arg])
-matchAppliedRecursor _ = Nothing
 
 -- | The debugging level
 debugLevel :: Int
@@ -166,34 +143,23 @@ typeInferCompleteUTerm t =
 typeInferCompleteTerm :: Un.UTerm -> CheckM SC.Term
 
 -- Names
-typeInferCompleteTerm (matchAppliedName -> Just (n, args)) =
-  do t <- inferResolveName n
-     ts <- traverse typeInferCompleteUTerm args
-     inferApplyAll t ts
 typeInferCompleteTerm (Un.Name (PosPair _ n)) =
-  -- NOTE: this is actually covered by the previous case, but we put it here
-  -- so GHC doesn't complain about coverage
   inferResolveName n
 
 -- Sorts
 typeInferCompleteTerm (Un.Sort _ srt h) =
   inferFlatTermF (Sort srt h)
 
--- Recursors (must come before applications)
-typeInferCompleteTerm (matchAppliedRecursor -> Just (str, s, args)) =
+-- Recursors
+typeInferCompleteTerm (Un.Recursor (PosPair _ str) s) =
   do mnm <- getModuleName
      mm <- lift $ TC.liftTCM scGetModuleMap
      let dt_ident = mkIdent mnm str
      dt <- case findDataTypeInMap dt_ident mm of
        Just d -> return d
        Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
-     typed_args <- mapM typeInferCompleteUTerm args
      crec <- lift $ TC.compileRecursor dt s
-     r <- inferFlatTermF (Recursor crec)
-     inferApplyAll r typed_args
-
-typeInferCompleteTerm (Un.Recursor _ _) =
-  error "typeInferComplete: found a bare Recursor, which should never happen!"
+     inferFlatTermF (Recursor crec)
 
 -- Applications, lambdas, and pis
 typeInferCompleteTerm (Un.App f arg) =
