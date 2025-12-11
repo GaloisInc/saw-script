@@ -83,7 +83,7 @@ span.spaces    { background: white }
 <span class="lineno">   64 </span>import SAWCore.SharedTerm
 <span class="lineno">   65 </span>import SAWCore.Term.Certified (scRecordValue)
 <span class="lineno">   66 </span>import SAWCore.Term.Functor
-<span class="lineno">   67 </span>import SAWCore.Term.Pretty (scPrettyTermInCtx)
+<span class="lineno">   67 </span>import SAWCore.Term.Pretty (ppTermPure)
 <span class="lineno">   68 </span>
 <span class="lineno">   69 </span>-- | The 'ReaderT' environment for a type-checking computation.
 <span class="lineno">   70 </span>type TCEnv = SharedContext
@@ -226,7 +226,7 @@ span.spaces    { background: white }
 <span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">indent prefix s = init (unlines (map (prefix ++) (lines s)))</span>
 <span class="lineno">  208 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">ishow :: Term -&gt; String</span>
-<span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">ishow tm = indent &quot;  &quot; $ scPrettyTermInCtx PPS.defaultOpts [] tm</span>
+<span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">ishow tm = indent &quot;  &quot; $ ppTermPure PPS.defaultOpts tm</span>
 <span class="lineno">  211 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  212 </span><span class="spaces">  </span><span class="istickedoff">tyshow :: Term -&gt; String</span>
 <span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">tyshow t =</span>
@@ -234,7 +234,7 @@ span.spaces    { background: white }
 <span class="lineno">  215 </span><span class="spaces">      </span><span class="istickedoff">Left s -&gt;</span>
 <span class="lineno">  216 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">indent &quot;  &quot; $ show s</span></span>
 <span class="lineno">  217 </span><span class="spaces">      </span><span class="istickedoff">Right tm -&gt;</span>
-<span class="lineno">  218 </span><span class="spaces">        </span><span class="istickedoff">indent &quot;  &quot; $ scPrettyTermInCtx PPS.defaultOpts [] tm</span>
+<span class="lineno">  218 </span><span class="spaces">        </span><span class="istickedoff">indent &quot;  &quot; $ ppTermPure PPS.defaultOpts tm</span>
 <span class="lineno">  219 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">sortSuffix :: Sort -&gt; String</span>
 <span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">sortSuffix s =</span>

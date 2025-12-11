@@ -30,7 +30,7 @@ span.spaces    { background: white }
 <span class="lineno">   11 </span>-- | Turns 'SetupValue's back into 'MIRVal's.
 <span class="lineno">   12 </span>module SAWCentral.Crucible.MIR.ResolveSetupValue
 <span class="lineno">   13 </span>  ( MIRVal(..)
-<span class="lineno">   14 </span>  , ppMIRVal
+<span class="lineno">   14 </span>  , prettyMIRVal
 <span class="lineno">   15 </span>  , resolveSetupVal
 <span class="lineno">   16 </span>  , typeOfSetupValue
 <span class="lineno">   17 </span>  , lookupAllocIndex
@@ -136,12 +136,12 @@ span.spaces    { background: white }
 <span class="lineno">  117 </span>  MIRVal :: TypeShape tp -&gt; RegValue Sym tp -&gt; MIRVal
 <span class="lineno">  118 </span>
 <span class="lineno">  119 </span>-- | Pretty-print a 'MIRVal'.
-<span class="lineno">  120 </span>ppMIRVal ::
+<span class="lineno">  120 </span>prettyMIRVal ::
 <span class="lineno">  121 </span>  forall ann.
 <span class="lineno">  122 </span>  Sym -&gt;
 <span class="lineno">  123 </span>  MIRVal -&gt;
 <span class="lineno">  124 </span>  PP.Doc ann
-<span class="lineno">  125 </span><span class="decl"><span class="istickedoff">ppMIRVal sym (MIRVal shp val) =</span>
+<span class="lineno">  125 </span><span class="decl"><span class="istickedoff">prettyMIRVal sym (MIRVal shp val) =</span>
 <span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">case shp of</span>
 <span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff">UnitShape _ -&gt;</span>
 <span class="lineno">  128 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">PP.pretty val</span></span>
@@ -159,7 +159,7 @@ span.spaces    { background: white }
 <span class="lineno">  140 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
 <span class="lineno">  141 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;&lt;symbolic enum&gt;&quot;</span></span>
 <span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">TransparentShape _ shp' -&gt;</span>
-<span class="lineno">  143 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppMIRVal sym $ MIRVal shp' val</span></span>
+<span class="lineno">  143 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettyMIRVal sym $ MIRVal shp' val</span></span>
 <span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">RefShape _ _ _ _  -&gt;</span>
 <span class="lineno">  145 </span><span class="spaces">      </span><span class="istickedoff">&quot;&lt;reference&gt;&quot;</span>
 <span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">SliceShape _ _ _ _ -&gt;</span>
@@ -213,10 +213,10 @@ span.spaces    { background: white }
 <span class="lineno">  194 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">prettyField fldShp val' =</span></span>
 <span class="lineno">  195 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case fldShp of</span></span>
 <span class="lineno">  196 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">OptField shp' -&gt;</span></span>
-<span class="lineno">  197 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">ppMIRVal sym $ MIRVal shp' $</span></span>
+<span class="lineno">  197 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">prettyMIRVal sym $ MIRVal shp' $</span></span>
 <span class="lineno">  198 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">readMaybeType sym &quot;field&quot; (shapeType shp') val'</span></span>
 <span class="lineno">  199 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ReqField shp' -&gt;</span></span>
-<span class="lineno">  200 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">ppMIRVal sym $ MIRVal shp' val'</span></span>
+<span class="lineno">  200 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">prettyMIRVal sym $ MIRVal shp' val'</span></span>
 <span class="lineno">  201 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  202 </span><span class="spaces">    </span><span class="istickedoff">prettyAggregate ::</span>
 <span class="lineno">  203 </span><span class="spaces">      </span><span class="istickedoff">[AgElemShape] -&gt;</span>
@@ -251,7 +251,7 @@ span.spaces    { background: white }
 <span class="lineno">  232 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case IntMap.lookup (fromIntegral off) m of</span></span>
 <span class="lineno">  233 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just (Mir.MirAggregateEntry _sz tpr rv)</span></span>
 <span class="lineno">  234 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| Just Refl &lt;- W4.testEquality tpr (shapeType shp') -&gt;</span></span>
-<span class="lineno">  235 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ppMIRVal sym $ MIRVal shp' $</span></span>
+<span class="lineno">  235 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">prettyMIRVal sym $ MIRVal shp' $</span></span>
 <span class="lineno">  236 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">readMaybeType sym &quot;elem&quot; tpr rv</span></span>
 <span class="lineno">  237 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| otherwise -&gt; &quot;&lt;type mismatch&gt;&quot;</span></span>
 <span class="lineno">  238 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; &quot;&lt;unset&gt;&quot;</span></span></span>
@@ -334,7 +334,7 @@ span.spaces    { background: white }
 <span class="lineno">  315 </span><span class="spaces">  </span><span class="istickedoff">show (MIRInvalidTypedTerm tp) =</span>
 <span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
 <span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Expected typed term with Cryptol-representable type, but got&quot;</span></span>
-<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, show (ppTypedTermType tp)</span></span>
+<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, show (prettyTypedTermTypePure tp)</span></span>
 <span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  320 </span><span class="spaces">  </span><span class="istickedoff">show (MIRInvalidIdentifier errMsg) =</span>
 <span class="lineno">  321 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">errMsg</span></span>
@@ -1026,7 +1026,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1007 </span><span class="spaces">    </span><span class="istickedoff">tp -&gt; <span class="nottickedoff">fail $ unlines</span></span>
 <span class="lineno"> 1008 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[ &quot;resolveTypedTerm: expected monomorphic term&quot;</span></span>
 <span class="lineno"> 1009 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, &quot;but got a term of type&quot;</span></span>
-<span class="lineno"> 1010 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, show (ppTypedTermType tp)</span></span>
+<span class="lineno"> 1010 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, show (prettyTypedTermTypePure tp)</span></span>
 <span class="lineno"> 1011 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 <span class="lineno"> 1012 </span>
 <span class="lineno"> 1013 </span>resolveSAWPred ::

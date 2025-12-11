@@ -121,7 +121,7 @@ span.spaces    { background: white }
 <span class="lineno">  102 </span>  IO (Either (TranslationError Term) (Doc ann))
 <span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc env nm configuration globalDecls m = do</span>
 <span class="lineno">  104 </span><span class="spaces">  </span><span class="nottickedoff">translated &lt;- CMT.translateCryptolModule sc env configuration globalDecls m</span>
-<span class="lineno">  105 </span><span class="spaces">  </span><span class="nottickedoff">return $ Coq.ppDecl . Coq.Section (escapeIdent nm) &lt;$&gt; translated</span></span>
+<span class="lineno">  105 </span><span class="spaces">  </span><span class="nottickedoff">return $ Coq.prettyDecl . Coq.Section (escapeIdent nm) &lt;$&gt; translated</span></span>
 <span class="lineno">  106 </span>
 <span class="lineno">  107 </span>-- | Extract out the 'String' name of a declaration in a SAW core module
 <span class="lineno">  108 </span>moduleDeclName :: ModuleDecl -&gt; Maybe String

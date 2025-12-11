@@ -47,7 +47,7 @@ span.spaces    { background: white }
 <span class="lineno">   28 </span>
 <span class="lineno">   29 </span>import SAWCore.SharedTerm
 <span class="lineno">   30 </span>-- import SAWCore.Term.CtxTerm
-<span class="lineno">   31 </span>import SAWCore.Term.Pretty (showTerm)
+<span class="lineno">   31 </span>import SAWCore.Term.Pretty (ppTermPureDefaults)
 <span class="lineno">   32 </span>-- import qualified SAWCore.UntypedAST as Un
 <span class="lineno">   33 </span>
 <span class="lineno">   34 </span>data TranslationError a
@@ -59,7 +59,7 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>  | CannotCreateDefaultValue a
 <span class="lineno">   41 </span>
 <span class="lineno">   42 </span>instance {-# OVERLAPPING #-} <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (TranslationError Term)</span></span></span></span> where
-<span class="lineno">   43 </span>  <span class="decl"><span class="nottickedoff">show = showError showTerm</span></span>
+<span class="lineno">   43 </span>  <span class="decl"><span class="nottickedoff">show = showError ppTermPureDefaults</span></span>
 <span class="lineno">   44 </span>
 <span class="lineno">   45 </span>instance {-# OVERLAPPABLE #-} <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show a =&gt; Show (TranslationError a)</span></span></span></span> where
 <span class="lineno">   46 </span>  <span class="decl"><span class="nottickedoff">show = showError show</span></span>

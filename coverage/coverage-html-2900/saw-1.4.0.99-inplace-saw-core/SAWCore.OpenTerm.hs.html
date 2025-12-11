@@ -307,78 +307,77 @@ span.spaces    { background: white }
 <span class="lineno">  288 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $ m &gt;&gt;= \case</span>
 <span class="lineno">  289 </span><span class="spaces">  </span><span class="nottickedoff">(unwrapTermF -&gt; Pi _ tp _) -&gt; pure tp</span>
 <span class="lineno">  290 </span><span class="spaces">  </span><span class="nottickedoff">t -&gt;</span>
-<span class="lineno">  291 </span><span class="spaces">    </span><span class="nottickedoff">fail (&quot;piArg: not a pi type: &quot; ++</span>
-<span class="lineno">  292 </span><span class="spaces">          </span><span class="nottickedoff">scPrettyTermInCtx PPS.defaultOpts [] t)</span></span>
-<span class="lineno">  293 </span>
-<span class="lineno">  294 </span>-- | Build a lambda abstraction as an 'OpenTerm'
-<span class="lineno">  295 </span>lambda :: LocalName -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
-<span class="lineno">  296 </span><span class="decl"><span class="istickedoff">lambda x (OpenTerm tpM) body_f = OpenTerm $</span>
-<span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">do tp &lt;- tpM</span>
-<span class="lineno">  298 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftTCM scFreshVarName x</span>
-<span class="lineno">  299 </span><span class="spaces">     </span><span class="istickedoff">var &lt;- inferTermF $ Variable vn tp</span>
-<span class="lineno">  300 </span><span class="spaces">     </span><span class="istickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
-<span class="lineno">  301 </span><span class="spaces">     </span><span class="istickedoff">inferTermF $ Lambda vn tp body</span></span>
-<span class="lineno">  302 </span>
-<span class="lineno">  303 </span>-- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
-<span class="lineno">  304 </span>lambdas :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
-<span class="lineno">  305 </span>                       OpenTerm
-<span class="lineno">  306 </span><span class="decl"><span class="nottickedoff">lambdas xs_tps body_f =</span>
-<span class="lineno">  307 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(x,tp) rest_f xs -&gt;</span>
-<span class="lineno">  308 </span><span class="spaces">          </span><span class="nottickedoff">lambda x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []</span></span>
-<span class="lineno">  309 </span>
-<span class="lineno">  310 </span>-- | Build a Pi abstraction as an 'OpenTerm'
-<span class="lineno">  311 </span>piType :: LocalName -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
-<span class="lineno">  312 </span><span class="decl"><span class="nottickedoff">piType x (OpenTerm tpM) body_f = OpenTerm $</span>
-<span class="lineno">  313 </span><span class="spaces">  </span><span class="nottickedoff">do tp &lt;- tpM</span>
-<span class="lineno">  314 </span><span class="spaces">     </span><span class="nottickedoff">nm &lt;- liftTCM scFreshVarName x</span>
-<span class="lineno">  315 </span><span class="spaces">     </span><span class="nottickedoff">var &lt;- inferTermF $ Variable nm tp</span>
-<span class="lineno">  316 </span><span class="spaces">     </span><span class="nottickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
-<span class="lineno">  317 </span><span class="spaces">     </span><span class="nottickedoff">inferTermF $ Pi nm tp body</span></span>
-<span class="lineno">  318 </span>
-<span class="lineno">  319 </span>-- | Build a non-dependent function type.
-<span class="lineno">  320 </span>arrow :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  321 </span><span class="decl"><span class="nottickedoff">arrow t1 t2 =</span>
-<span class="lineno">  322 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $</span>
-<span class="lineno">  323 </span><span class="spaces">  </span><span class="nottickedoff">do t1' &lt;- unOpenTerm t1</span>
-<span class="lineno">  324 </span><span class="spaces">     </span><span class="nottickedoff">t2' &lt;- unOpenTerm t2</span>
-<span class="lineno">  325 </span><span class="spaces">     </span><span class="nottickedoff">inferTermF $ Pi wildcardVarName t1' t2'</span></span>
-<span class="lineno">  326 </span>
-<span class="lineno">  327 </span>-- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
-<span class="lineno">  328 </span>piMulti :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
-<span class="lineno">  329 </span>                   OpenTerm
-<span class="lineno">  330 </span><span class="decl"><span class="nottickedoff">piMulti xs_tps body_f =</span>
-<span class="lineno">  331 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(x,tp) rest_f xs -&gt;</span>
-<span class="lineno">  332 </span><span class="spaces">          </span><span class="nottickedoff">piType x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []</span></span>
-<span class="lineno">  333 </span>
-<span class="lineno">  334 </span>-- | Build a let expression as an 'OpenTerm'. This is equivalent to
-<span class="lineno">  335 </span>-- &gt; 'apply' ('lambda' x tp body) rhs
-<span class="lineno">  336 </span>mkLet ::
-<span class="lineno">  337 </span>  LocalName -&gt; OpenTerm -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
-<span class="lineno">  338 </span><span class="decl"><span class="nottickedoff">mkLet x tp rhs body_f = app (lambda x tp body_f) rhs</span></span>
-<span class="lineno">  339 </span>
-<span class="lineno">  340 </span>-- | Build a let expression as an 'OpenTerm'. This is equivalent to
-<span class="lineno">  341 </span>-- &gt; 'apply' ('lambda' x tp body) rhs
-<span class="lineno">  342 </span>sawLet ::
-<span class="lineno">  343 </span>  LocalName -&gt; OpenTerm -&gt; OpenTerm -&gt; OpenTerm -&gt;
-<span class="lineno">  344 </span>  (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
-<span class="lineno">  345 </span><span class="decl"><span class="nottickedoff">sawLet x tp tp_ret rhs body_f =</span>
-<span class="lineno">  346 </span><span class="spaces">  </span><span class="nottickedoff">apply (global &quot;Prelude.sawLet&quot;)</span>
-<span class="lineno">  347 </span><span class="spaces">  </span><span class="nottickedoff">[tp, tp_ret, rhs, lambda x tp body_f]</span></span>
-<span class="lineno">  348 </span>
-<span class="lineno">  349 </span>-- | Build a bitvector type with the given length
-<span class="lineno">  350 </span>bitvectorType :: OpenTerm -&gt; OpenTerm
-<span class="lineno">  351 </span><span class="decl"><span class="nottickedoff">bitvectorType w =</span>
-<span class="lineno">  352 </span><span class="spaces">  </span><span class="nottickedoff">applyGlobal &quot;Prelude.Vec&quot; [w, global &quot;Prelude.Bool&quot;]</span></span>
-<span class="lineno">  353 </span>
-<span class="lineno">  354 </span>-- | Build a SAW core term for a list with the given element type
-<span class="lineno">  355 </span>list :: OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm
-<span class="lineno">  356 </span><span class="decl"><span class="nottickedoff">list tp elems =</span>
-<span class="lineno">  357 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\x l -&gt; applyGlobal &quot;Prelude.Cons&quot; [tp, x, l])</span>
-<span class="lineno">  358 </span><span class="spaces">  </span><span class="nottickedoff">(applyGlobal &quot;Prelude.Nil&quot; [tp]) elems</span></span>
-<span class="lineno">  359 </span>
-<span class="lineno">  360 </span>-- | Build the type @Either a b@ from types @a@ and @b@
-<span class="lineno">  361 </span>eitherType :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
-<span class="lineno">  362 </span><span class="decl"><span class="nottickedoff">eitherType a b = applyGlobal &quot;Prelude.Either&quot; [a, b]</span></span>
+<span class="lineno">  291 </span><span class="spaces">    </span><span class="nottickedoff">fail (&quot;piArg: not a pi type: &quot; ++ ppTermPure PPS.defaultOpts t)</span></span>
+<span class="lineno">  292 </span>
+<span class="lineno">  293 </span>-- | Build a lambda abstraction as an 'OpenTerm'
+<span class="lineno">  294 </span>lambda :: LocalName -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
+<span class="lineno">  295 </span><span class="decl"><span class="istickedoff">lambda x (OpenTerm tpM) body_f = OpenTerm $</span>
+<span class="lineno">  296 </span><span class="spaces">  </span><span class="istickedoff">do tp &lt;- tpM</span>
+<span class="lineno">  297 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftTCM scFreshVarName x</span>
+<span class="lineno">  298 </span><span class="spaces">     </span><span class="istickedoff">var &lt;- inferTermF $ Variable vn tp</span>
+<span class="lineno">  299 </span><span class="spaces">     </span><span class="istickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
+<span class="lineno">  300 </span><span class="spaces">     </span><span class="istickedoff">inferTermF $ Lambda vn tp body</span></span>
+<span class="lineno">  301 </span>
+<span class="lineno">  302 </span>-- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
+<span class="lineno">  303 </span>lambdas :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
+<span class="lineno">  304 </span>                       OpenTerm
+<span class="lineno">  305 </span><span class="decl"><span class="nottickedoff">lambdas xs_tps body_f =</span>
+<span class="lineno">  306 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(x,tp) rest_f xs -&gt;</span>
+<span class="lineno">  307 </span><span class="spaces">          </span><span class="nottickedoff">lambda x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []</span></span>
+<span class="lineno">  308 </span>
+<span class="lineno">  309 </span>-- | Build a Pi abstraction as an 'OpenTerm'
+<span class="lineno">  310 </span>piType :: LocalName -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
+<span class="lineno">  311 </span><span class="decl"><span class="nottickedoff">piType x (OpenTerm tpM) body_f = OpenTerm $</span>
+<span class="lineno">  312 </span><span class="spaces">  </span><span class="nottickedoff">do tp &lt;- tpM</span>
+<span class="lineno">  313 </span><span class="spaces">     </span><span class="nottickedoff">nm &lt;- liftTCM scFreshVarName x</span>
+<span class="lineno">  314 </span><span class="spaces">     </span><span class="nottickedoff">var &lt;- inferTermF $ Variable nm tp</span>
+<span class="lineno">  315 </span><span class="spaces">     </span><span class="nottickedoff">body &lt;- unOpenTerm (body_f (OpenTerm (pure var)))</span>
+<span class="lineno">  316 </span><span class="spaces">     </span><span class="nottickedoff">inferTermF $ Pi nm tp body</span></span>
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>-- | Build a non-dependent function type.
+<span class="lineno">  319 </span>arrow :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  320 </span><span class="decl"><span class="nottickedoff">arrow t1 t2 =</span>
+<span class="lineno">  321 </span><span class="spaces">  </span><span class="nottickedoff">OpenTerm $</span>
+<span class="lineno">  322 </span><span class="spaces">  </span><span class="nottickedoff">do t1' &lt;- unOpenTerm t1</span>
+<span class="lineno">  323 </span><span class="spaces">     </span><span class="nottickedoff">t2' &lt;- unOpenTerm t2</span>
+<span class="lineno">  324 </span><span class="spaces">     </span><span class="nottickedoff">inferTermF $ Pi wildcardVarName t1' t2'</span></span>
+<span class="lineno">  325 </span>
+<span class="lineno">  326 </span>-- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
+<span class="lineno">  327 </span>piMulti :: [(LocalName, OpenTerm)] -&gt; ([OpenTerm] -&gt; OpenTerm) -&gt;
+<span class="lineno">  328 </span>                   OpenTerm
+<span class="lineno">  329 </span><span class="decl"><span class="nottickedoff">piMulti xs_tps body_f =</span>
+<span class="lineno">  330 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(x,tp) rest_f xs -&gt;</span>
+<span class="lineno">  331 </span><span class="spaces">          </span><span class="nottickedoff">piType x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []</span></span>
+<span class="lineno">  332 </span>
+<span class="lineno">  333 </span>-- | Build a let expression as an 'OpenTerm'. This is equivalent to
+<span class="lineno">  334 </span>-- &gt; 'apply' ('lambda' x tp body) rhs
+<span class="lineno">  335 </span>mkLet ::
+<span class="lineno">  336 </span>  LocalName -&gt; OpenTerm -&gt; OpenTerm -&gt; (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
+<span class="lineno">  337 </span><span class="decl"><span class="nottickedoff">mkLet x tp rhs body_f = app (lambda x tp body_f) rhs</span></span>
+<span class="lineno">  338 </span>
+<span class="lineno">  339 </span>-- | Build a let expression as an 'OpenTerm'. This is equivalent to
+<span class="lineno">  340 </span>-- &gt; 'apply' ('lambda' x tp body) rhs
+<span class="lineno">  341 </span>sawLet ::
+<span class="lineno">  342 </span>  LocalName -&gt; OpenTerm -&gt; OpenTerm -&gt; OpenTerm -&gt;
+<span class="lineno">  343 </span>  (OpenTerm -&gt; OpenTerm) -&gt; OpenTerm
+<span class="lineno">  344 </span><span class="decl"><span class="nottickedoff">sawLet x tp tp_ret rhs body_f =</span>
+<span class="lineno">  345 </span><span class="spaces">  </span><span class="nottickedoff">apply (global &quot;Prelude.sawLet&quot;)</span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="nottickedoff">[tp, tp_ret, rhs, lambda x tp body_f]</span></span>
+<span class="lineno">  347 </span>
+<span class="lineno">  348 </span>-- | Build a bitvector type with the given length
+<span class="lineno">  349 </span>bitvectorType :: OpenTerm -&gt; OpenTerm
+<span class="lineno">  350 </span><span class="decl"><span class="nottickedoff">bitvectorType w =</span>
+<span class="lineno">  351 </span><span class="spaces">  </span><span class="nottickedoff">applyGlobal &quot;Prelude.Vec&quot; [w, global &quot;Prelude.Bool&quot;]</span></span>
+<span class="lineno">  352 </span>
+<span class="lineno">  353 </span>-- | Build a SAW core term for a list with the given element type
+<span class="lineno">  354 </span>list :: OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm
+<span class="lineno">  355 </span><span class="decl"><span class="nottickedoff">list tp elems =</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\x l -&gt; applyGlobal &quot;Prelude.Cons&quot; [tp, x, l])</span>
+<span class="lineno">  357 </span><span class="spaces">  </span><span class="nottickedoff">(applyGlobal &quot;Prelude.Nil&quot; [tp]) elems</span></span>
+<span class="lineno">  358 </span>
+<span class="lineno">  359 </span>-- | Build the type @Either a b@ from types @a@ and @b@
+<span class="lineno">  360 </span>eitherType :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
+<span class="lineno">  361 </span><span class="decl"><span class="nottickedoff">eitherType a b = applyGlobal &quot;Prelude.Either&quot; [a, b]</span></span>
 
 </pre>
 </body>

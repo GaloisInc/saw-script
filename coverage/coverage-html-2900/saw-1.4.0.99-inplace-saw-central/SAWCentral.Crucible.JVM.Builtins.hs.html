@@ -612,7 +612,7 @@ span.spaces    { background: white }
 <span class="lineno">  593 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">TypedTerm tp _ -&gt;</span></span>
 <span class="lineno">  594 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
 <span class="lineno">  595 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Setup term for global variable expected to have Cryptol schema type, but got&quot;</span></span>
-<span class="lineno">  596 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, show (ppTypedTermType tp)</span></span>
+<span class="lineno">  596 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, show (prettyTypedTermTypePure tp)</span></span>
 <span class="lineno">  597 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 <span class="lineno">  598 </span>
 <span class="lineno">  599 </span>--------------------------------------------------------------------------------
@@ -1002,7 +1002,7 @@ span.spaces    { background: white }
 <span class="lineno">  983 </span><span class="spaces">      </span><span class="istickedoff">JVMFieldNonReference ptr fname -&gt;</span>
 <span class="lineno">  984 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
 <span class="lineno">  985 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;jvm_field_is: Left-hand side is not a valid object reference&quot;</span>
-<span class="lineno">  986 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Left-hand side: &quot; ++ show (MS.ppSetupValue ptr)</span>
+<span class="lineno">  986 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Left-hand side: &quot; ++ show (MS.prettySetupValue ptr)</span>
 <span class="lineno">  987 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Field name: &quot; ++ Text.unpack fname</span>
 <span class="lineno">  988 </span><span class="spaces">        </span><span class="istickedoff">]</span>
 <span class="lineno">  989 </span><span class="spaces">      </span><span class="istickedoff">JVMFieldMultiple _ptr fid -&gt;</span>
@@ -1034,7 +1034,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1015 </span><span class="spaces">      </span><span class="istickedoff">JVMElemNonReference ptr idx -&gt;</span>
 <span class="lineno"> 1016 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
 <span class="lineno"> 1017 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;jvm_elem_is: Left-hand side is not a valid object reference&quot;</span>
-<span class="lineno"> 1018 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Left-hand side: &quot; ++ show (MS.ppSetupValue ptr)</span>
+<span class="lineno"> 1018 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Left-hand side: &quot; ++ show (MS.prettySetupValue ptr)</span>
 <span class="lineno"> 1019 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Index: &quot; ++ show idx</span>
 <span class="lineno"> 1020 </span><span class="spaces">        </span><span class="istickedoff">]</span>
 <span class="lineno"> 1021 </span><span class="spaces">      </span><span class="istickedoff">JVMElemNonArray jty -&gt;</span>
@@ -1059,7 +1059,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1040 </span><span class="spaces">      </span><span class="istickedoff">JVMArrayNonReference ptr -&gt;</span>
 <span class="lineno"> 1041 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
 <span class="lineno"> 1042 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;jvm_array_is: Left-hand side is not a valid object reference&quot;</span>
-<span class="lineno"> 1043 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Left-hand side: &quot; ++ show (MS.ppSetupValue ptr)</span>
+<span class="lineno"> 1043 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Left-hand side: &quot; ++ show (MS.prettySetupValue ptr)</span>
 <span class="lineno"> 1044 </span><span class="spaces">        </span><span class="istickedoff">]</span>
 <span class="lineno"> 1045 </span><span class="spaces">      </span><span class="istickedoff">JVMArrayTypeMismatch len ty schema -&gt;</span>
 <span class="lineno"> 1046 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
@@ -1108,7 +1108,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1089 </span><span class="spaces">      </span><span class="istickedoff">JVMNonValueType tp -&gt;</span>
 <span class="lineno"> 1090 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
 <span class="lineno"> 1091 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Expected term with value type, but got&quot;</span></span>
-<span class="lineno"> 1092 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, show (ppTypedTermType tp)</span></span>
+<span class="lineno"> 1092 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, show (prettyTypedTermTypePure tp)</span></span>
 <span class="lineno"> 1093 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 <span class="lineno"> 1094 </span>
 <span class="lineno"> 1095 </span>-- | Returns Cryptol type of actual type if it is an array or

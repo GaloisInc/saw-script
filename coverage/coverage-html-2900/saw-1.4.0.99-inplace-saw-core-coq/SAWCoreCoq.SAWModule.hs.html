@@ -215,11 +215,11 @@ span.spaces    { background: white }
 <span class="lineno">  196 </span><span class="spaces">  </span><span class="nottickedoff">TypeDecl td -&gt; do</span>
 <span class="lineno">  197 </span><span class="spaces">    </span><span class="nottickedoff">case runModuleTranslationMonad configuration modname mm (translateDataType td) of</span>
 <span class="lineno">  198 </span><span class="spaces">      </span><span class="nottickedoff">Left e -&gt; error $ show e</span>
-<span class="lineno">  199 </span><span class="spaces">      </span><span class="nottickedoff">Right (tdecl, _) -&gt; Coq.ppDecl tdecl</span>
+<span class="lineno">  199 </span><span class="spaces">      </span><span class="nottickedoff">Right (tdecl, _) -&gt; Coq.prettyDecl tdecl</span>
 <span class="lineno">  200 </span><span class="spaces">  </span><span class="nottickedoff">DefDecl dd -&gt; do</span>
 <span class="lineno">  201 </span><span class="spaces">    </span><span class="nottickedoff">case runModuleTranslationMonad configuration modname mm (translateDef dd) of</span>
 <span class="lineno">  202 </span><span class="spaces">      </span><span class="nottickedoff">Left e -&gt; error $ show e</span>
-<span class="lineno">  203 </span><span class="spaces">      </span><span class="nottickedoff">Right (tdecl, _) -&gt; Coq.ppDecl tdecl</span>
+<span class="lineno">  203 </span><span class="spaces">      </span><span class="nottickedoff">Right (tdecl, _) -&gt; Coq.prettyDecl tdecl</span>
 <span class="lineno">  204 </span><span class="spaces">  </span><span class="nottickedoff">InjectCodeDecl ns txt</span>
 <span class="lineno">  205 </span><span class="spaces">    </span><span class="nottickedoff">| ns == &quot;Coq&quot; -&gt; pretty txt</span>
 <span class="lineno">  206 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise   -&gt; mempty</span></span>
