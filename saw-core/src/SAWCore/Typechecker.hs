@@ -235,7 +235,6 @@ typeInferCompleteTerm (Un.NatLit _ i) =
   lift $ TC.liftTCM SC.scNat i
 typeInferCompleteTerm (Un.StringLit _ str) =
   inferFlatTermF (StringLit str)
-typeInferCompleteTerm (Un.VecLit _ []) = throwTCError EmptyVectorLit
 typeInferCompleteTerm (Un.VecLit _ ts) =
   do typed_ts <- mapM typeInferCompleteUTerm ts
      typed_tp <-
@@ -243,7 +242,6 @@ typeInferCompleteTerm (Un.VecLit _ ts) =
          (t1:_) -> lift $ TC.liftTCM SC.scTypeOf t1
          [] -> throwTCError $ EmptyVectorLit
      inferFlatTermF $ ArrayValue typed_tp $ V.fromList typed_ts
-typeInferCompleteTerm (Un.BVLit _ []) = throwTCError EmptyVectorLit
 typeInferCompleteTerm (Un.BVLit _ bits) =
   do tp <- lift $ TC.liftTCM scBoolType
      bit_tms <- lift $ mapM (TC.liftTCM scBool) bits
