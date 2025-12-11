@@ -34,7 +34,6 @@ import qualified SAWSupport.Pretty as PPS
 
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
-import qualified SAWCore.SCTypeCheck as SC.TC
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
@@ -137,18 +136,6 @@ reverseTopSort =
 #else
   reverse . Graph.topSort
 #endif
-
--- | Check that a SAWCore term is well-typed and has a specific type
-validateTermAtType :: SC.SharedContext -> Text -> SC.Term -> SC.Term -> IO ()
-validateTermAtType sc msg trm tp =
-  do let check = SC.TC.checkSubtype trm tp
-     result <- SC.TC.runTCM check sc
-     case result of
-       Right _ -> pure ()
-       Left err ->
-         throwIO $
-         YosysErrorTypeError msg $
-         Text.pack $ unlines $ SC.TC.prettyTCError err
 
 -- | Produce a SAWCore tuple type corresponding to a Cryptol record type with the given fields.
 cryptolRecordType ::
