@@ -3870,7 +3870,7 @@ primitives = Map.fromList $
     ]
 
   , prim "mergesimpsets"       "Simpset -> Simpset -> Simpset"
-    (funVal2 mergesimpsets)
+    (pureVal mergesimpsets)
     Current
     [ "Merge two simplification sets into one." ]
 
