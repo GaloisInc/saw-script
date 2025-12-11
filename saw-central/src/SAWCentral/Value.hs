@@ -669,10 +669,10 @@ showSimpset opts ss =
     ppRule r =
       PP.pretty '*' PP.<+>
       (PP.nest 2 $ PP.fillSep
-       [ ppTerm vars (lhsRewriteRule r)
-       , PP.pretty '=' PP.<+> ppTerm vars (rhsRewriteRule r) ])
+       [ ppTerm' vars (lhsRewriteRule r)
+       , PP.pretty '=' PP.<+> ppTerm' vars (rhsRewriteRule r) ])
       where vars = map fst (ctxtRewriteRule r)
-    ppTerm vars t = SAWCorePP.ppTermInCtx opts vars t
+    ppTerm' vars t = SAWCorePP.prettyTermWithNameList opts vars t
 
 -- XXX the precedence in here needs to be cleaned up
 showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
@@ -700,7 +700,7 @@ showsPrecValue opts nenv p v =
       let name' = PP.pretty name in
       shows $ PP.sep ["<<", "builtin", name', ">>"]
 
-    VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
+    VTerm t -> showString (SAWCorePP.ppTermWithEnv opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn _pos _chain v' ->
       showString "return " . showsPrecValue opts nenv (p + 1) v'
@@ -721,7 +721,7 @@ showsPrecValue opts nenv p v =
     VProofScript {} -> showString "<<proof script>>"
     VTheorem thm ->
       showString "Theorem " .
-      showParen True (showString (prettyProp opts nenv (thmProp thm)))
+      showParen True (showString (ppProp opts nenv (thmProp thm)))
     VBisimTheorem _ -> showString "<<Bisimulation theorem>>"
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
@@ -767,10 +767,9 @@ evaluateTerm sc t =
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =
   C.runEval mempty . exportValueWithSchema schema =<< evaluateTerm sc trm
-evaluateTypedTerm _sc (TypedTerm tp _) =
-  fail $ unlines [ "Could not evaluate term with type"
-                 , show (ppTypedTermType tp)
-                 ]
+evaluateTypedTerm sc (TypedTerm tp _) = do
+  tp' <- prettyTypedTermType sc PPS.defaultOpts tp
+  fail $ unlines [ "Could not evaluate term with type", show tp' ]
 
 
 -- TopLevel Monad --------------------------------------------------------------

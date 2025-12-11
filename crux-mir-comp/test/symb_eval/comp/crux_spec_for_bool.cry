@@ -1,0 +1,7 @@
+module test::symb_eval::comp::crux_spec_for_bool where
+
+foo : Bool -> Bool
+foo x = x
+
+goo : Bool -> Bool
+goo x = foo x

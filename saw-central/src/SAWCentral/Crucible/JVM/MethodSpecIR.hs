@@ -58,7 +58,7 @@ import qualified Lang.JVM.Codebase as CB
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
-import CryptolSAWCore.TypedTerm (ppTypedTerm)
+import CryptolSAWCore.TypedTerm (prettyTypedTermPure)
 
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -115,21 +115,21 @@ ppPointsTo :: JVMPointsTo -> PPL.Doc ann
 ppPointsTo =
   \case
     JVMPointsToField _loc ptr fid val ->
-      MS.ppAllocIndex ptr <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
+      MS.prettyAllocIndex ptr <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
       PPL.<+> PPL.pretty "points to"
-      PPL.<+> opt MS.ppSetupValue val
+      PPL.<+> opt MS.prettySetupValue val
     JVMPointsToStatic _loc fid val ->
       PPL.pretty (J.unClassName (J.fieldIdClass fid)) <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
       PPL.<+> PPL.pretty "points to"
-      PPL.<+> opt MS.ppSetupValue val
+      PPL.<+> opt MS.prettySetupValue val
     JVMPointsToElem _loc ptr idx val ->
-      MS.ppAllocIndex ptr <> PPL.pretty "[" <> PPL.pretty idx <> PPL.pretty "]"
+      MS.prettyAllocIndex ptr <> PPL.pretty "[" <> PPL.pretty idx <> PPL.pretty "]"
       PPL.<+> PPL.pretty "points to"
-      PPL.<+> opt MS.ppSetupValue val
+      PPL.<+> opt MS.prettySetupValue val
     JVMPointsToArray _loc ptr val ->
-      MS.ppAllocIndex ptr
+      MS.prettyAllocIndex ptr
       PPL.<+> PPL.pretty "points to"
-      PPL.<+> opt ppTypedTerm val
+      PPL.<+> opt prettyTypedTermPure val
   where
     opt = maybe (PPL.pretty "<unspecified>")
 

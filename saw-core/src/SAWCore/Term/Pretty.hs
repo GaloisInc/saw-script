@@ -11,20 +11,53 @@ License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
+
+Guidance for folks wishing to print SAWCore terms:
+
+If you have the `SharedContext` and can afford to run in `IO`, use
+`ppTerm`, or `prettyTerm` if you want a `Doc`. These functions are
+found in `SAWCore.Term.Certified` (rather than here) so they can get
+the printing environment from the `SharedContext`, and should be
+imported from `SAWCore.SharedTerm`.
+
+If you do not have the `SharedContext`, or are trying to print from
+pure code and changing this is infeasible, use the pure versions
+defined herein: `ppTermPure` or `prettyTermPure` for a `Doc`.
+
+If you do not have the prettyprinting options value either, there is
+`ppTermPureDefaults`, which uses the default prettyprinting options.
+Use of this should be minimized, because if we're going to give the
+user control over printing we should actually honor their settings.
+This function may be removed in the long run.
+
+(Referencing SAWSupport.Pretty's defaultOpts value explicitly instead
+is probably preferred, because that makes it clear to passersby that
+it isn't really right.)
+
+The following additional functions allow explicit manipulation of the
+name context used by the SAWCore term prettyprinting logic, and should
+therefore only be used from code where that makes sense:
+
+- `ppTermWithNames` (formerly @showTermWithNames@) takes an explicit
+  `DisplayNameEnv`.
+- `prettyTermWithEnv` (formerly @ppTermWithNames@) is the `Doc` version.
+- `prettyTermWithNameList` (formerly @ppTermInCtx@) takes a list of
+  `VarName` to prepare a `DisplayNameEnv`.
+- `prettyTermContainerWithEnv` (formerly @ppTermContainerWithNames@)
+  takes an explicit `DisplayNameEnv` and prints a `Traversable` full of
+  terms.
 -}
 
 module SAWCore.Term.Pretty
-  ( ppTerm
-  , ppTermInCtx
-  , showTerm
-  , scPrettyTerm
-  , scPrettyTermInCtx
-  , ppTermWithNames
-  , showTermWithNames
+  ( prettyTermPure
+  , ppTermPure
+  , ppTermPureDefaults
+  , ppTermWithEnv
+  , prettyTermWithEnv
+  , prettyTermWithNameList
+  , prettyTermContainerWithEnv
   , scTermCount
   , shouldMemoizeTerm
-  , ppName
-  , ppTermContainerWithNames
   ) where
 
 import Data.Char (intToDigit, isDigit)
@@ -84,14 +117,14 @@ precContains x y = x <= y
 -- precedence (listed first) contains (as in 'precContains') the required
 -- precedence (listed second) for printing the given document.
 --
--- Stated differently: @ppParensPrec p1 p2 d@ means we are pretty-printing in a
+-- Stated differently: @prettyParensPrec p1 p2 d@ means we are pretty-printing in a
 -- term context that requires precedence @p1@, but @d@ was pretty-printed at
 -- precedence level @p2@. If @p1@ does not contain @p2@ (e.g., if @p1@ is
 -- 'PrecArg', meaning we are pretty-printing the argument of an application, and
 -- @p2@ is 'PrecLambda', meaning the construct we are pretty-printing is a
 -- lambda or pi abstraction) then add parentheses.
-ppParensPrec :: Prec -> Prec -> PPS.Doc -> PPS.Doc
-ppParensPrec p1 p2 d
+prettyParensPrec :: Prec -> Prec -> PPS.Doc -> PPS.Doc
+prettyParensPrec p1 p2 d
   | precContains p1 p2 = d
   | otherwise = parens $ align d
 
@@ -331,12 +364,12 @@ withMemoVar global_p termIdx termHash f =
 --------------------------------------------------------------------------------
 
 -- | Pretty-print an identifier
-ppIdent :: Ident -> PPS.Doc
-ppIdent = viaShow
+prettyIdent :: Ident -> PPS.Doc
+prettyIdent = viaShow
 
 -- | Pretty-print a memoization variable, according to 'ppMemoStyle'
-ppMemoVar :: MemoVar -> PPM PPS.Doc
-ppMemoVar MemoVar{..} = asks (PPS.ppMemoStyle . ppOpts) >>= \case
+prettyMemoVar :: MemoVar -> PPM PPS.Doc
+prettyMemoVar MemoVar{..} = asks (PPS.ppMemoStyle . ppOpts) >>= \case
   PPS.Incremental ->
     pure ("x@" <> pretty memoFresh)
   PPS.Hash prefixLen ->
@@ -347,13 +380,13 @@ ppMemoVar MemoVar{..} = asks (PPS.ppMemoStyle . ppOpts) >>= \case
     hashStr = showHex (abs memoHash) ""
 
 -- | Pretty-print an application to 0 or more arguments at the given precedence
-ppAppList :: Prec -> PPS.Doc -> [PPS.Doc] -> PPS.Doc
-ppAppList _ f [] = f
-ppAppList p f args = ppParensPrec p PrecApp $ group $ hang 2 $ vsep (f : args)
+prettyAppList :: Prec -> PPS.Doc -> [PPS.Doc] -> PPS.Doc
+prettyAppList _ f [] = f
+prettyAppList p f args = prettyParensPrec p PrecApp $ group $ hang 2 $ vsep (f : args)
 
 -- | Pretty-print "let x = t ... x' = t' in body"
-ppLetBlock :: [(MemoVar, PPS.Doc)] -> PPS.Doc -> PPM PPS.Doc
-ppLetBlock defs body =
+prettyLetBlock :: [(MemoVar, PPS.Doc)] -> PPS.Doc -> PPM PPS.Doc
+prettyLetBlock defs body =
   do
     lets <- align . vcat <$> mapM ppEqn defs
     pure $
@@ -365,17 +398,17 @@ ppLetBlock defs body =
   where
     ppEqn (var,d) =
       do
-        mv <- ppMemoVar var
+        mv <- prettyMemoVar var
         pure $ mv <+> pretty '=' <+> d
 
 
 -- | Pretty-print pairs as "(x, y)"
-ppPair :: Prec -> PPS.Doc -> PPS.Doc -> PPS.Doc
-ppPair prec x y = ppParensPrec prec PrecCommas (group (vcat [x <> pretty ',', y]))
+prettyPair :: Prec -> PPS.Doc -> PPS.Doc -> PPS.Doc
+prettyPair prec x y = prettyParensPrec prec PrecCommas (group (vcat [x <> pretty ',', y]))
 
 -- | Pretty-print pair types as "x * y"
-ppPairType :: Prec -> PPS.Doc -> PPS.Doc -> PPS.Doc
-ppPairType prec x y = ppParensPrec prec PrecProd (x <+> pretty '*' <+> y)
+prettyPairType :: Prec -> PPS.Doc -> PPS.Doc -> PPS.Doc
+prettyPairType prec x y = prettyParensPrec prec PrecProd (x <+> pretty '*' <+> y)
 
 -- | Pretty-print records (if the flag is 'False') or record types (if the flag
 -- is 'True'), where the latter are preceded by the string @#@, either as:
@@ -384,8 +417,8 @@ ppPairType prec x y = ppParensPrec prec PrecProd (x <+> pretty '*' <+> y)
 --
 -- * @{ fld1 op val1, ..., fldn op valn }@ otherwise, where @op@ is @::@ for
 --   types and @=@ for values.
-ppRecord :: Bool -> [(FieldName, PPS.Doc)] -> PPS.Doc
-ppRecord type_p alist =
+prettyRecord :: Bool -> [(FieldName, PPS.Doc)] -> PPS.Doc
+prettyRecord type_p alist =
   (if type_p then (pretty '#' <>) else id) $
   encloseSep lbrace rbrace comma $ map ppField alist
   where
@@ -393,24 +426,24 @@ ppRecord type_p alist =
     op_str = if type_p then ":" else "="
 
 -- | Pretty-print a projection / selector "x.f"
-ppProj :: FieldName -> PPS.Doc -> PPS.Doc
-ppProj sel doc = doc <> pretty '.' <> pretty sel
+prettyProj :: FieldName -> PPS.Doc -> PPS.Doc
+prettyProj sel doc = doc <> pretty '.' <> pretty sel
 
 -- | Pretty-print an array value @[v1, ..., vn]@
-ppArrayValue :: [PPS.Doc] -> PPS.Doc
-ppArrayValue = list
+prettyArrayvalue :: [PPS.Doc] -> PPS.Doc
+prettyArrayvalue = list
 
 -- | Pretty-print a lambda abstraction as @\(x :: tp) -> body@, where the
 -- variable name to use for @x@ is bundled with @body@
-ppLambda :: PPS.Doc -> (LocalName, PPS.Doc) -> PPS.Doc
-ppLambda tp (name, body) =
+prettyLambda :: PPS.Doc -> (LocalName, PPS.Doc) -> PPS.Doc
+prettyLambda tp (name, body) =
   group $ hang 2 $
   vsep ["\\" <> parens (prettyTypeConstraint (pretty name) tp) <+> "->", body]
 
 -- | Pretty-print a pi abstraction as @(x :: tp) -> body@, or as @tp -> body@ if
 -- @x == "_"@
-ppPi :: PPS.Doc -> (LocalName, PPS.Doc) -> PPS.Doc
-ppPi tp (name, body) = vsep [lhs, "->" <+> body]
+prettyPi :: PPS.Doc -> (LocalName, PPS.Doc) -> PPS.Doc
+prettyPi tp (name, body) = vsep [lhs, "->" <+> body]
   where
     lhs = if name == "_" then tp else parens (prettyTypeConstraint (pretty name) tp)
 
@@ -420,18 +453,18 @@ ppPi tp (name, body) = vsep [lhs, "->" <+> body]
 --------------------------------------------------------------------------------
 
 -- | Pretty-print a built-in atomic construct
-ppFlatTermF :: Prec -> FlatTermF Term -> PPM PPS.Doc
-ppFlatTermF prec tf =
+prettyFlatTermF :: Prec -> FlatTermF Term -> PPM PPS.Doc
+prettyFlatTermF prec tf =
   case tf of
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
-    PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
-    PairType x y  -> ppPairType prec <$> ppTerm' PrecApp x <*> ppTerm' PrecProd y
-    PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
-    PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
+    PairValue x y -> prettyPair prec <$> prettyTerm' PrecTerm x <*> prettyTerm' PrecCommas y
+    PairType x y  -> prettyPairType prec <$> prettyTerm' PrecApp x <*> prettyTerm' PrecProd y
+    PairLeft t    -> prettyProj "1" <$> prettyTerm' PrecArg t
+    PairRight t   -> prettyProj "2" <$> prettyTerm' PrecArg t
 
     Recursor (CompiledRecursor d s _params _nixs _ctorOrder) ->
-      do nm <- ppBestName d
+      do nm <- prettyBestName d
          let suffix =
                case s of
                  TypeSort 0 -> "#rec"
@@ -441,10 +474,10 @@ ppFlatTermF prec tf =
            annotate PPS.RecursorStyle (nm <> suffix)
 
     RecordType alist ->
-      ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
+      prettyRecord True <$> mapM (\(fld,t) -> (fld,) <$> prettyTerm' PrecTerm t) alist
     RecordValue alist ->
-      ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
-    RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
+      prettyRecord False <$> mapM (\(fld,t) -> (fld,) <$> prettyTerm' PrecTerm t) alist
+    RecordProj e fld -> prettyProj fld <$> prettyTerm' PrecArg e
     Sort s h -> return (viaShow h <> viaShow s)
     ArrayValue (asBoolType -> Just _) args
       | Just bits <- mapM asBool $ V.toList args ->
@@ -453,7 +486,7 @@ ppFlatTermF prec tf =
         else
           return $ pretty ("0b" ++ map (\b -> if b then '1' else '0') bits)
     ArrayValue _ args   ->
-      ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
+      prettyArrayvalue <$> mapM (prettyTerm' PrecTerm) (V.toList args)
     StringLit s -> return $ viaShow s
 
 -- | Pretty-print a big endian list of bit values as a hexadecimal number
@@ -471,48 +504,48 @@ ppBitsToHex bits =
   where bits' = Text.pack (show bits)
 
 -- | Pretty-print a 'VarName' according to the current 'VarNaming'.
-ppVarName :: VarName -> PPM PPS.Doc
-ppVarName vn =
+prettyVarName :: VarName -> PPM PPS.Doc
+prettyVarName vn =
   do naming <- asks ppNaming
      pure $ pretty (lookupVarName naming vn)
 
 -- | Pretty-print a 'Name', using the best unambiguous alias from the
 -- naming environment.
-ppBestName :: Name -> PPM PPS.Doc
-ppBestName nm =
+prettyBestName :: Name -> PPM PPS.Doc
+prettyBestName nm =
   do ne <- asks ppNamingEnv
      case bestDisplayName ne (nameIndex nm) of
        Just alias -> pure $ pretty alias
-       Nothing -> pure $ ppName (nameInfo nm)
+       Nothing -> pure $ prettyName (nameInfo nm)
 
-ppName :: NameInfo -> PPS.Doc
-ppName (ModuleIdentifier i) = ppIdent i
-ppName (ImportedName absName _) = pretty (render absName)
+prettyName :: NameInfo -> PPS.Doc
+prettyName (ModuleIdentifier i) = prettyIdent i
+prettyName (ImportedName absName _) = pretty (render absName)
 
 -- | Pretty-print a non-shared term
-ppTermF :: Prec -> TermF Term -> PPM PPS.Doc
-ppTermF prec (FTermF ftf) = ppFlatTermF prec ftf
-ppTermF prec (App e1 e2) =
-  ppAppList prec <$> ppTerm' PrecApp e1 <*> mapM (ppTerm' PrecArg) [e2]
-ppTermF prec (Lambda x tp body) =
-  ppParensPrec prec PrecLambda <$>
-  (ppLambda <$> ppTerm' PrecApp tp <*> ppTermInBinder PrecLambda x body)
-ppTermF prec (Pi x tp body) =
-  ppParensPrec prec PrecLambda <$>
-  (ppPi <$> ppTerm' PrecApp tp <*>
-   ppTermInBinder PrecLambda x body)
-ppTermF _ (Constant nm) = annotate PPS.ConstantStyle <$> ppBestName nm
-ppTermF _ (Variable vn _tp) = annotate PPS.VariableStyle <$> ppVarName vn
+prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc
+prettyTermF prec (FTermF ftf) = prettyFlatTermF prec ftf
+prettyTermF prec (App e1 e2) =
+  prettyAppList prec <$> prettyTerm' PrecApp e1 <*> mapM (prettyTerm' PrecArg) [e2]
+prettyTermF prec (Lambda x tp body) =
+  prettyParensPrec prec PrecLambda <$>
+  (prettyLambda <$> prettyTerm' PrecApp tp <*> prettyTermInBinder PrecLambda x body)
+prettyTermF prec (Pi x tp body) =
+  prettyParensPrec prec PrecLambda <$>
+  (prettyPi <$> prettyTerm' PrecApp tp <*>
+   prettyTermInBinder PrecLambda x body)
+prettyTermF _ (Constant nm) = annotate PPS.ConstantStyle <$> prettyBestName nm
+prettyTermF _ (Variable vn _tp) = annotate PPS.VariableStyle <$> prettyVarName vn
 
 -- | Internal function to recursively pretty-print a term
-ppTerm' :: Prec -> Term -> PPM PPS.Doc
-ppTerm' prec = atNextDepthM "..." . ppTerm'' where
-  ppTerm'' (asNat -> Just n) = prettyNat <$> asks ppOpts <*> pure (toInteger n)
-  ppTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
+prettyTerm' :: Prec -> Term -> PPM PPS.Doc
+prettyTerm' prec = atNextDepthM "..." . prettyTerm'' where
+  prettyTerm'' (asNat -> Just n) = prettyNat <$> asks ppOpts <*> pure (toInteger n)
+  prettyTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
     do maybe_memo_var <- memoLookupM idx
        case maybe_memo_var of
-         Just memo_var -> ppMemoVar memo_var
-         Nothing -> ppTermF prec tf
+         Just memo_var -> prettyMemoVar memo_var
+         Nothing -> prettyTermF prec tf
 
 
 --------------------------------------------------------------------------------
@@ -584,11 +617,11 @@ shouldMemoizeTerm t =
 -- table to memoize the printing. Also print the table itself as a sequence of
 -- let-bindings for the entries in the memoization table. If the flag is true,
 -- compute a global table, otherwise compute a local table.
-ppTermWithMemoTable :: Prec -> Bool -> Term -> PPM PPS.Doc
-ppTermWithMemoTable prec global_p trm = do
+prettyTermWithMemoTable :: Prec -> Bool -> Term -> PPM PPS.Doc
+prettyTermWithMemoTable prec global_p trm = do
      min_occs <- PPS.ppMinSharing <$> ppOpts <$> ask
      let occPairs = IntMap.assocs $ filterOccurenceMap min_occs global_p $ scTermCount global_p trm
-     ppLets global_p occPairs [] (ppTerm' prec trm)
+     prettyLets global_p occPairs [] (prettyTerm' prec trm)
 
 -- Filter an occurrence map, filtering out terms that only occur
 -- once, that are "too small" to memoize, and, for the global table, terms
@@ -606,26 +639,26 @@ filterOccurenceMap min_occs global_p =
 -- pretty-printing of these terms is reverse-accumulated in the second
 -- list. Finally, print the given base document in the context of let-bindings
 -- for the bound terms.
-ppLets :: Bool -> [(TermIndex, (Term, Int))] -> [(MemoVar, PPS.Doc)] -> PPM PPS.Doc -> PPM PPS.Doc
+prettyLets :: Bool -> [(TermIndex, (Term, Int))] -> [(MemoVar, PPS.Doc)] -> PPM PPS.Doc -> PPM PPS.Doc
 
 -- Special case: don't print let-binding if there are no bound vars
-ppLets _ [] [] baseDoc = baseDoc
+prettyLets _ [] [] baseDoc = baseDoc
 
 -- When we have run out of (idx,term) pairs, pretty-print a let binding for
 -- all the accumulated bindings around the term
-ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) =<< baseDoc
+prettyLets _ [] bindings baseDoc = prettyLetBlock (reverse bindings) =<< baseDoc
 
 -- To add an (idx,term) pair, first check if idx is already bound, and, if
 -- not, add a new MemoVar bind it to idx
-ppLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
+prettyLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
   do isBound <- isJust <$> memoLookupM termIdx
-     if isBound then ppLets global_p idxs bindings baseDoc else
-       do termDoc <- ppTerm' PrecTerm term
+     if isBound then prettyLets global_p idxs bindings baseDoc else
+       do termDoc <- prettyTerm' PrecTerm term
           withMemoVar global_p termIdx (hash term) $ \memoVarM ->
             let bindings' = case memoVarM of
                   Just memoVar -> (memoVar, termDoc):bindings
                   Nothing -> bindings
-            in  ppLets global_p idxs bindings' baseDoc
+            in  prettyLets global_p idxs bindings' baseDoc
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
 -- returning both the result of pretty-printing and the fresh name actually used
@@ -634,49 +667,51 @@ ppLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
 --
 -- Also, pretty-print let-bindings around the term for all subterms that occur
 -- more than once at the same binding level.
-ppTermInBinder :: Prec -> VarName -> Term -> PPM (LocalName, PPS.Doc)
-ppTermInBinder prec (VarName i basename) trm =
+prettyTermInBinder :: Prec -> VarName -> Term -> PPM (LocalName, PPS.Doc)
+prettyTermInBinder prec (VarName i basename) trm =
   let nm = if basename == "_" && IntSet.member i (freeVars trm) then "_x"
            else basename in
-  withBoundVarM (VarName i nm) $ ppTermWithMemoTable prec False trm
+  withBoundVarM (VarName i nm) $ prettyTermWithMemoTable prec False trm
 
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
--- more than once at the same binding level
-ppTerm :: PPS.Opts -> Term -> PPS.Doc
-ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv
+--   more than once at the same binding level.
+--
+--   Does not integrate the current `DisplayNameEnv` from the
+--   `SharedContext`; use prettyTerm instead unless you really can't
+--   get the `SharedContext` and/or can't afford to be in `IO`.
+prettyTermPure :: PPS.Opts -> Term -> PPS.Doc
+prettyTermPure opts = prettyTermWithEnv opts emptyDisplayNameEnv
 
--- | Like 'ppTerm', but also supply a context of bound names, where
+-- | Like 'prettyTermPure', but also supply a context of bound names, where
 -- the earliest-bound variable is listed first in the context.
-ppTermInCtx :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
-ppTermInCtx opts ctx trm =
+prettyTermWithNameList :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
+prettyTermWithNameList opts ctx trm =
   runPPM opts emptyDisplayNameEnv $
   -- reserve names from ctx first, so that they get priority naming
   withVarNames ctx $
   -- reserve other free variables next, so they are disambiguated
   withVarNames (Set.toList (termVarNames trm) \\ ctx) $
-  ppTermWithMemoTable PrecTerm True trm
+  prettyTermWithMemoTable PrecTerm True trm
 
--- | Pretty-print a term and render it to a string, using the given options
-scPrettyTerm :: PPS.Opts -> Term -> String
-scPrettyTerm opts t =
-  PPS.render opts $ ppTerm opts t
+-- | Pretty-print a term and render it to a string, using the given options.
+--
+--   Does not integrate the current `DisplayNameEnv` from the
+--   `SharedContext`; use ppTerm instead unless you really can't get
+--   the `SharedContext` and/or can't afford to be in `IO`.
+ppTermPure :: PPS.Opts -> Term -> String
+ppTermPure opts t =
+  PPS.render opts $ prettyTermPure opts t
 
--- | Like 'scPrettyTerm', but also supply a context of bound names,
--- where the earliest-bound variable is listed first in the context.
-scPrettyTermInCtx :: PPS.Opts -> [VarName] -> Term -> String
-scPrettyTermInCtx opts ctx trm =
-  PPS.render opts $
-  runPPM opts emptyDisplayNameEnv $
-  -- reserve names from ctx first, so that they get priority naming
-  withVarNames ctx $
-  -- reserve other free variables next, so they are disambiguated
-  withVarNames (Set.toList (termVarNames trm) \\ ctx) $
-  ppTermWithMemoTable PrecTerm False trm
-
-
--- | Pretty-print a term and render it to a string
-showTerm :: Term -> String
-showTerm t = scPrettyTerm PPS.defaultOpts t
+-- | Pretty-print a term and render it to a string, using default options.
+--
+--   Does not integrate the current `DisplayNameEnv` from the
+--   `SharedContext`; use ppTerm instead unless you really can't get
+--   the `SharedContext` and/or can't afford to be in `IO`.
+--
+--   Even then, use `ppTermPure` unless you really don't have the
+--   prettyprinting options and can't get them.
+ppTermPureDefaults :: Term -> String
+ppTermPureDefaults t = ppTermPure PPS.defaultOpts t
 
 
 --------------------------------------------------------------------------------
@@ -685,22 +720,22 @@ showTerm t = scPrettyTerm PPS.defaultOpts t
 
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
 -- more than once at the same binding level
-ppTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> PPS.Doc
-ppTermWithNames opts ne trm =
+prettyTermWithEnv :: PPS.Opts -> DisplayNameEnv -> Term -> PPS.Doc
+prettyTermWithEnv opts ne trm =
   runPPM opts ne $
   withVarNames (Set.toList (termVarNames trm)) $
-  ppTermWithMemoTable PrecTerm True trm
+  prettyTermWithMemoTable PrecTerm True trm
 
-showTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> String
-showTermWithNames opts ne trm =
-  PPS.render opts $ ppTermWithNames opts ne trm
+ppTermWithEnv :: PPS.Opts -> DisplayNameEnv -> Term -> String
+ppTermWithEnv opts ne trm =
+  PPS.render opts $ prettyTermWithEnv opts ne trm
 
 
-ppTermContainerWithNames ::
+prettyTermContainerWithEnv ::
   (Traversable m) =>
   (m PPS.Doc -> PPS.Doc) ->
   PPS.Opts -> DisplayNameEnv -> m Term -> PPS.Doc
-ppTermContainerWithNames ppContainer opts ne trms =
+prettyTermContainerWithEnv prettyContainer opts ne trms =
   let min_occs = PPS.ppMinSharing opts
       global_p = True
       occPairs = IntMap.assocs $
@@ -710,5 +745,5 @@ ppTermContainerWithNames ppContainer opts ne trms =
                    trms
    in runPPM opts ne $
       withVarNames (Set.toList (Fold.foldMap termVarNames trms)) $
-      ppLets global_p occPairs []
-        (ppContainer <$> traverse (ppTerm' PrecTerm) trms)
+      prettyLets global_p occPairs []
+        (prettyContainer <$> traverse (prettyTerm' PrecTerm) trms)

@@ -33,7 +33,6 @@ import Data.Parameterized.Some
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import qualified Data.Vector as V
 import GHC.Stack (HasCallStack)
 
 import qualified What4.Expr.Builder as W4
@@ -47,10 +46,8 @@ import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
 import qualified SAWCore.Name as SAW
-import qualified SAWCore.Prelude as SAW
 import qualified SAWCore.Recognizer as SAW
 import qualified SAWCore.SharedTerm as SAW
-import qualified CryptolSAWCore.Prelude as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -74,6 +71,7 @@ type MirOverrideMatcher sym a = forall p rorw rtp args ret.
 data MethodSpec = MethodSpec
     { _msCollectionState :: CollectionState
     , _msSpec :: MIRMethodSpec
+    , _msSharedContext :: SAW.SharedContext
     }
 
 makeLenses ''MethodSpec
@@ -89,8 +87,8 @@ printSpec ::
     (IsSymInterface sym, sym ~ MirSym t fs) =>
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
-printSpec ms = do
-    let str = show $ MS.ppMethodSpec (ms ^. msSpec)
+printSpec ms = ovrWithBackend $ \bak ->
+ do let str = show $ MS.ppMethodSpec (ms ^. msSpec)
     let pre = ms ^. msSpec . MS.csPreState
     let post = ms ^. msSpec . MS.csPostState
     -- The formatting here is not very readable, but it includes most of the
@@ -112,12 +110,20 @@ printSpec ms = do
     len <- liftIO $ W4.bvLit sym knownRepr (BV.mkBV knownRepr $ fromIntegral $ BS.length bytes)
 
     let w8 = knownNat @8
+    let byteRepr = BVRepr w8
     byteVals <- forM (BS.unpack bytes) $ \b -> do
         liftIO $ W4.bvLit sym w8 (BV.mkBV w8 $ fromIntegral b)
 
-    let vec = MirVector_Vector $ V.fromList byteVals
-    let vecRef = newConstMirRef sym (MirVectorRepr (BVRepr w8)) vec
-    ptr <- subindexMirRefSim (BVRepr w8) vecRef =<<
+    szSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat
+                    $ toInteger @Int $ BS.length bytes
+    ag <- liftIO $ mirAggregate_uninitIO bak szSym
+    -- TODO: hardcoded size=1
+    ag' <-
+      liftIO $ foldM
+        (\ag' (i, byteVal) -> mirAggregate_setIO bak i 1 byteRepr byteVal ag')
+        ag (zip [0..] byteVals)
+    let agRef = newConstMirRef sym MirAggregateRepr ag'
+    ptr <- subindexMirRefSim byteRepr agRef =<<
         liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
     return $ Empty :> RV ptr :> RV len
 
@@ -130,6 +136,7 @@ enable ::
     OverrideSim (p sym) sym MIR rtp args ret ()
 enable ms = do
     let funcName = ms ^. msSpec . MS.csMethod
+    let sc = ms ^. msSharedContext
     MirHandle _name _sig mh <- case myCS ^? handleMap . ix funcName of
         Just x -> return x
         Nothing -> error $ "MethodSpec has bad method name " ++
@@ -137,7 +144,7 @@ enable ms = do
 
     -- TODO: handle multiple specs for the same function
     bindFnHandle mh $ UseOverride $ mkOverride' (handleName mh) (handleReturnType mh) $
-        runSpec myCS mh (ms ^. msSpec)
+        runSpec sc myCS mh (ms ^. msSpec)
   where
     myCS = ms ^. msCollectionState
 
@@ -145,9 +152,10 @@ enable ms = do
 -- variables for its outputs, and assert its postconditions.
 runSpec :: forall sym p t fs args ret rtp.
     (IsSymInterface sym, sym ~ MirSym t fs) =>
+    SAW.SharedContext ->
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
-runSpec myCS mh ms = ovrWithBackend $ \bak ->
+runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
  do let col = myCS ^. collection
     sym <- getSymInterface
     RegMap argVals <- getOverrideArgs
@@ -156,10 +164,6 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     loc <- liftIO $ W4.getCurrentProgramLoc sym
     let freeVars = Set.fromList $
             ms ^.. MS.csPreState . MS.csFreshVars . each . to SAW.tvName . to SAW.vnIndex
-
-    sc <- liftIO $ SAW.mkSharedContext
-    liftIO $ SAW.scLoadPreludeModule sc
-    liftIO $ SAW.scLoadCryptolModule sc
 
     -- `eval` converts `W4.Expr`s to `SAW.Term`s.  We take what4 exprs from the
     -- context (e.g., in the actual arguments passed to the override) and
@@ -257,7 +261,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
             let var = SAW.vnIndex $ SAW.tvName tv
             when (not $ IntMap.member var termSub) $ do
                 error $ "argument matching failed to produce a binding for " ++
-                    show (SAW.ppTypedVariable tv)
+                    show (SAW.prettyTypedVariable tv)
 
         -- All pre-state allocs must be bound.
         allocSub <- use MS.setupValueSub
@@ -444,7 +448,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go (FnPtrShape _ _ _) _ _ =
         error "Function pointers not currently supported in overrides"
     go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
-        show (MS.ppSetupValue sv) ++ " for " ++ show (shapeType shp)
+        show (MS.prettySetupValue sv) ++ " for " ++ show (shapeType shp)
 
     goFields :: forall ctx0. Assignment FieldShape ctx0 -> Assignment (RegValue' sym) ctx0 ->
         [MS.SetupValue MIR] -> MirOverrideMatcher sym ()
@@ -577,7 +581,7 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
     go (FnPtrShape _ _ _) _ =
         error "Function pointers not currently supported in overrides"
     go shp sv = error $ "setupToReg: type error: bad SetupValue for " ++ show (shapeType shp) ++
-        ": " ++ show (MS.ppSetupValue sv)
+        ": " ++ show (MS.prettySetupValue sv)
 
     goFields :: forall ctx0. Assignment FieldShape ctx0 -> [MS.SetupValue MIR] ->
         IO (Assignment (RegValue' sym) ctx0)
@@ -659,4 +663,4 @@ setupVarAllocIndex :: Applicative m => MS.SetupValue MIR -> m MS.AllocIndex
 setupVarAllocIndex (MS.SetupVar idx) = pure idx
 setupVarAllocIndex val =
   error $ "setupVarAllocIndex: Expected SetupVar, received: "
-       ++ show (MS.ppSetupValue val)
+       ++ show (MS.prettySetupValue val)

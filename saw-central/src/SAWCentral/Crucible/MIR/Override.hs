@@ -343,15 +343,6 @@ cmpPathConcretely sym (Mir.Variant_RefPath discrTp1 ctx1 p1 idx1) (Mir.Variant_R
 cmpPathConcretely _ (Mir.Variant_RefPath _ _ _ _) _ = PC.LTF
 cmpPathConcretely _ _ (Mir.Variant_RefPath _ _ _ _) = PC.GTF
 
--- Index_RefPath
-cmpPathConcretely sym (Mir.Index_RefPath tpr1 p1 i1) (Mir.Index_RefPath tpr2 p2 i2) =
-  PC.compareF tpr1 tpr2 <<>>
-  cmpPathConcretely sym p1 p2 <<>>
-  cmpSymBVConcretely sym i1 i2 <<>>
-  PC.EQF
-cmpPathConcretely _ (Mir.Index_RefPath _ _ _) _ = PC.LTF
-cmpPathConcretely _ _ (Mir.Index_RefPath _ _ _) = PC.GTF
-
 -- Just_RefPath
 cmpPathConcretely sym (Mir.Just_RefPath tpr1 p1) (Mir.Just_RefPath tpr2 p2) =
   PC.compareF tpr1 tpr2 <<>>
@@ -360,21 +351,23 @@ cmpPathConcretely sym (Mir.Just_RefPath tpr1 p1) (Mir.Just_RefPath tpr2 p2) =
 cmpPathConcretely _ (Mir.Just_RefPath _ _) _ = PC.LTF
 cmpPathConcretely _ _ (Mir.Just_RefPath _ _) = PC.GTF
 
--- VectorAsMirVector_RefPath
-cmpPathConcretely sym (Mir.VectorAsMirVector_RefPath tpr1 p1) (Mir.VectorAsMirVector_RefPath tpr2 p2) =
+-- VectorIndex_RefPath
+cmpPathConcretely sym (Mir.VectorIndex_RefPath tpr1 p1 i1) (Mir.VectorIndex_RefPath tpr2 p2 i2) =
   PC.compareF tpr1 tpr2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
+  cmpSymBVConcretely sym i1 i2 <<>>
   PC.EQF
-cmpPathConcretely _ (Mir.VectorAsMirVector_RefPath _ _) _ = PC.LTF
-cmpPathConcretely _ _ (Mir.VectorAsMirVector_RefPath _ _) = PC.GTF
+cmpPathConcretely _ (Mir.VectorIndex_RefPath _ _ _) _ = PC.LTF
+cmpPathConcretely _ _ (Mir.VectorIndex_RefPath _ _ _) = PC.GTF
 
--- ArrayAsMirVector_RefPath
-cmpPathConcretely sym (Mir.ArrayAsMirVector_RefPath tpr1 p1) (Mir.ArrayAsMirVector_RefPath tpr2 p2) =
-  PC.compareF tpr1 tpr2 <<>>
+-- ArrayIndex_RefPath
+cmpPathConcretely sym (Mir.ArrayIndex_RefPath btpr1 p1 i1) (Mir.ArrayIndex_RefPath btpr2 p2 i2) =
+  PC.compareF btpr1 btpr2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
+  cmpSymBVConcretely sym i1 i2 <<>>
   PC.EQF
-cmpPathConcretely _ (Mir.ArrayAsMirVector_RefPath _ _) _ = PC.LTF
-cmpPathConcretely _ _ (Mir.ArrayAsMirVector_RefPath _ _) = PC.GTF
+cmpPathConcretely _ (Mir.ArrayIndex_RefPath _ _ _) _ = PC.LTF
+cmpPathConcretely _ _ (Mir.ArrayIndex_RefPath _ _ _) = PC.GTF
 
 -- AgElem_RefPath
 cmpPathConcretely sym (Mir.AgElem_RefPath off1 sz1 tpr1 p1) (Mir.AgElem_RefPath off2 sz2 tpr2 p2) =
@@ -805,12 +798,12 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
            )
          | (precond, cs, st) <- branches'
          ] ++
-         [ let e prettyArgs symFalse unsat = show $ PP.vcat $ concat
+         [ let e args' symFalse unsat = show $ PP.vcat $ concat
                  [ [ PP.pretty $
                      "No override specification applies for " ++ fnName ++ "."
                    ]
                  , [ "Arguments:"
-                   , bullets '-' prettyArgs
+                   , bullets '-' args'
                    ]
                  , if | not (null false) ->
                         [ PP.vcat
@@ -875,8 +868,8 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                         [] -> Nothing
                         ps -> Just (owp, ps))
 
-                  prettyArgs <-
-                    ppArgs sym cc (NE.head css) (Crucible.RegMap args)
+                  args' <-
+                    prettyArgs sym cc (NE.head css) (Crucible.RegMap args)
 
                   unsat <-
                     filterM
@@ -884,7 +877,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                       branches
 
                   Crucible.addFailedAssertion bak
-                    (Crucible.GenericSimError (e prettyArgs symFalse unsat))
+                    (Crucible.GenericSimError (e args' symFalse unsat))
               , Just (W4.plSourceLoc call_loc)
               )
          ]))
@@ -1731,13 +1724,13 @@ methodSpecHandler opts sc cc mdMap css h =
   -- various overrides.
   branches <-
     let prettyError methodSpec failureReason = do
-          prettyArgs <- liftIO $ ppArgs sym cc methodSpec (Crucible.RegMap args)
+          args' <- liftIO $ prettyArgs sym cc methodSpec (Crucible.RegMap args)
           pure $
             PP.vcat
             [ MS.ppMethodSpec methodSpec
             , "Arguments:"
-            , bullets '-' prettyArgs
-            , ppOverrideFailure failureReason
+            , bullets '-' args'
+            , prettyOverrideFailure failureReason
             ]
     in
       case partitionEithers (F.toList prestates) of
@@ -1834,8 +1827,8 @@ mkStructuralMismatch _opts cc _sc spec mirVal@(MIRVal shp _) setupval = do
   let sym = cc^.mccSym
   setupTy <- typeOfSetupValueMIR cc spec setupval
   pure $ StructuralMismatch
-            (ppMIRVal sym mirVal)
-            (MS.ppSetupValue setupval)
+            (prettyMIRVal sym mirVal)
+            (MS.prettySetupValue setupval)
             (Just setupTy)
             (shapeMirTy shp)
 
@@ -1852,47 +1845,47 @@ notEqual ::
   OverrideMatcher MIR w Crucible.SimError
 notEqual cond opts loc cc sc spec expected actual = do
   sym <- Ov.getSymInterface
-  let prettyMIRVal = ppMIRVal sym actual
-  prettySetupMIRVal <- ppSetupValueAsMIRVal opts cc sc spec expected
+  let mv'actual = prettyMIRVal sym actual
+  smv'actual <- prettySetupValueAsMIRVal opts cc sc spec expected
   let msg = unlines
         [ "Equality " ++ MS.stateCond cond
         , "Expected value (as a SAW value): "
-        , show (MS.ppSetupValue expected)
+        , show (MS.prettySetupValue expected)
         , "Expected value (as a Crucible value): "
-        , show prettySetupMIRVal
+        , show smv'actual
         , "Actual value: "
-        , show prettyMIRVal
+        , show mv'actual
         ]
   pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
 -- | Pretty-print the arguments passed to an override
-ppArgs ::
+prettyArgs ::
   forall args ann.
   Sym ->
   MIRCrucibleContext          {- ^ context for interacting with Crucible        -} ->
   MS.CrucibleMethodSpecIR MIR {- ^ specification for current function override  -} ->
   Crucible.RegMap Sym args    {- ^ arguments from the simulator                 -} ->
   IO [PP.Doc ann]
-ppArgs sym cc cs (Crucible.RegMap args) = do
+prettyArgs sym cc cs (Crucible.RegMap args) = do
   let expectedArgTypes = map fst (Map.elems (cs ^. MS.csArgBindings))
   let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
   let aux memTy (Crucible.AnyValue tyrep val) =
         MIRVal (tyToShapeEq col memTy tyrep) val
   let vals = zipWith aux expectedArgTypes (assignmentToList args)
-  pure $ map (ppMIRVal sym) vals
+  pure $ map (prettyMIRVal sym) vals
 
 -- | Resolve a 'SetupValue' into a 'MIRVal' and pretty-print it
-ppSetupValueAsMIRVal ::
+prettySetupValueAsMIRVal ::
   Options              {- ^ output/verbosity options -} ->
   MIRCrucibleContext ->
   SharedContext {- ^ context for constructing SAW terms -} ->
   MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} ->
   SetupValue ->
   OverrideMatcher MIR w (PP.Doc ann)
-ppSetupValueAsMIRVal opts cc sc spec setupval = do
+prettySetupValueAsMIRVal opts cc sc spec setupval = do
   sym <- Ov.getSymInterface
   mirVal <- resolveSetupValueMIR opts cc sc spec setupval
-  pure $ ppMIRVal sym mirVal
+  pure $ prettyMIRVal sym mirVal
 
 resolveSetupValueMIR ::
   Options              ->

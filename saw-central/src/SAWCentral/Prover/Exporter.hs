@@ -221,11 +221,15 @@ writeSAIGInferLatches tt = do
        AIG.writeAigerWithLatches file aig numLatches
   where
     die :: String -> TopLevel a
-    die why = throwTopLevel $
+    die why = do
+     sc <- getSharedContext
+     opts <- gets rwPPOpts
+     tt' <- io $ prettyTypedTermType sc opts (ttType tt)
+     throwTopLevel $
       "writeSAIGInferLatches: " ++ why ++ ":\n" ++
       "term must have type of the form '(i, s) -> (o, s)',\n" ++
       "where 'i', 's', and 'o' are all fixed-width types,\n" ++
-      "but type of term is:\n" ++ (show . ppTypedTermType . ttType $ tt)
+      "but type of term is:\n" ++ show tt'
 
     -- Decompose type as '(i, s) -> (o, s)' and return 's'.
     getStateType :: SharedContext -> Term -> TopLevel FiniteType
@@ -264,14 +268,15 @@ writeCNF f satq =
 
 write_cnf :: FilePath -> TypedTerm -> TopLevel ()
 write_cnf f (TypedTerm schema t) = do
-  io $ checkBooleanSchema schema
   sc <- getSharedContext
+  io $ checkBooleanSchema sc schema
   satq <- io (predicateToSATQuery sc mempty t)
   writeCNF f satq
 
 write_cnf_external :: FilePath -> TypedTerm -> TopLevel ()
 write_cnf_external f (TypedTerm schema t) = do
-  io $ checkBooleanSchema schema
+  sc <- getSharedContext
+  io $ checkBooleanSchema sc schema
   writeCNFviaVerilog f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
@@ -281,7 +286,7 @@ write_cnf_external f (TypedTerm schema t) = do
 write_smtlib2 :: FilePath -> TypedTerm -> TopLevel ()
 write_smtlib2 f (TypedTerm schema t) = do
   sc <- getSharedContext
-  io $ checkBooleanSchema schema
+  io $ checkBooleanSchema sc schema
   satq <- io $ predicateToSATQuery sc mempty t
   writeSMTLib2 f satq
 
@@ -292,7 +297,7 @@ write_smtlib2 f (TypedTerm schema t) = do
 write_smtlib2_w4 :: FilePath -> TypedTerm -> TopLevel ()
 write_smtlib2_w4 f (TypedTerm schema t) = do
   sc <- getSharedContext
-  io $ checkBooleanSchema schema
+  io $ checkBooleanSchema sc schema
   satq <- io $ predicateToSATQuery sc mempty t
   writeSMTLib2What4 f satq
 

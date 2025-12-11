@@ -62,7 +62,7 @@ import qualified Mir.Generator as MIR (RustModule)
 import qualified Mir.Mir as MIR
 
 import qualified SAWSupport.ScopedMap as ScopedMap
---import SAWSupport.ScopedMap (ScopedMap)
+import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts, pShow, pShowText)
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
@@ -859,7 +859,7 @@ interpretDoStmt stmt =
             setCryptolEnv ce'
       SS.StmtImport _ _ ->
           fail "block-level import unimplemented"
-      SS.StmtInclude pos _file ->
+      SS.StmtInclude pos _file _once ->
           panic "interpretDoStmt" [
               "Leftover unresolved include statement",
               "Position: " <> Text.pack (show pos)
@@ -1008,15 +1008,15 @@ interpretTopStmt printBinds stmt = do
       -- XXX this is not the right way to do this
       --    - shouldn't have to flatten the environments
       --    - shouldn't be typechecking one statement at a time regardless
-      Environ varenv tyenv _cryenvs <- liftTopLevel $ gets rwEnviron
+      Environ varenv0 tyenv _cryenvs <- liftTopLevel $ gets rwEnviron
       rbenv <- liftTopLevel $ gets rwRebindables
-      let varenv' = Map.map (\(pos, lc, ty, _v, _doc) -> (pos, lc, SS.ReadOnlyVar, ty)) $ ScopedMap.flatten varenv
+      let varenv1 = Map.map (\(pos, lc, ty, _v, _doc) -> (pos, lc, SS.ReadOnlyVar, ty)) $ ScopedMap.flatten varenv0
           rbenv' = Map.map (\(pos, ty, _v) -> (pos, SS.Current, SS.RebindableVar, ty)) rbenv
           -- If anything appears in both, favor the real environment
-          varenv'' = Map.union varenv' rbenv'
+          varenv2 = Map.union varenv1 rbenv'
+          varenv3 = ScopedMap.seed varenv2
 
-      let tyenv' = ScopedMap.flatten tyenv
-      processTypeCheck $ checkStmt avail varenv'' tyenv' ctx stmt
+      processTypeCheck $ checkStmt avail varenv3 tyenv ctx stmt
 
   case stmt' of
 
@@ -1051,7 +1051,7 @@ interpretTopStmt printBinds stmt = do
          setCryptolEnv cenv'
          --showCryptolEnv
 
-    SS.StmtInclude pos _file ->
+    SS.StmtInclude pos _file _once ->
       panic "interpretTopStmt" [
           "Leftover unresolved include statement",
           "Position: " <> Text.pack (show pos)
@@ -1188,10 +1188,8 @@ interpretMain = do
       return ()
     Just (Current, tyFound, v) -> case tyFound of
         SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) ->
-            -- XXX shouldn't have to do this
-            let tyenv' = ScopedMap.flatten tyenv in
             -- It looks like a monadic value, so check more carefully.
-            case typesMatch avail tyenv' tyFound tyExpected of
+            case typesMatch avail tyenv tyFound tyExpected of
               False ->
                   -- While we accept any TopLevel a, don't encourage people
                   -- to do that.
@@ -2630,8 +2628,9 @@ primTypes = foldl doadd Map.empty
         -- floating around in the builtins handling (not just here)
         -- and they should all be simplified away.
         tyenv' = Map.map (\pt -> (primTypeLife pt, primTypeType pt)) tyenv
+        tyenv'' = ScopedMap.seed tyenv'
 
-        ty = case Loader.readSchemaPure fakeFileName lc tyenv' tystr of
+        ty = case Loader.readSchemaPure fakeFileName lc tyenv'' tystr of
             SS.Forall [] ty' ->
                 ty'
             _ ->
@@ -3299,10 +3298,9 @@ primitives = Map.fromList $
   , prim "set_crucible_timeout" "Int -> TopLevel ()"
     (pureVal set_crucible_timeout)
     Experimental
-    -- XXX this is ignored by JVM/MIR verification; see #2803
-    [ "Set the timeout for the SMT solver during the LLVM and x86"
-    , "Crucible symbolic execution, in milliseconds. The default is"
-    , "10000 (10 seconds). Set it to 0 to disable the timeout."
+    [ "Set the timeout for the SMT solver during Crucible symbolic"
+    , "execution, in milliseconds. The default is 10000 (10 seconds)."
+    , "Set it to 0 to disable the timeout."
     , ""
     , "This setting is used for path-satisfiability checks and"
     , "satisfiability checks when applying overrides."
@@ -7231,8 +7229,8 @@ primitives = Map.fromList $
 -- change going forward we should consider simplifying so primTypes
 -- uses the same type as the interpreter environment this function
 -- seeds, instead of its own.
-primNamedTypeEnv :: Map SS.Name (PrimitiveLifecycle, SS.NamedType)
-primNamedTypeEnv = fmap extract primTypes
+primNamedTypeEnv :: ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType)
+primNamedTypeEnv = ScopedMap.seed $ fmap extract primTypes
    where extract pt = (primTypeLife pt, primTypeType pt)
 
 -- | Initial value environment for the interpreter.
@@ -7284,7 +7282,7 @@ primEnviron opts bic cryenvs =
     -- scope) and, because the builtin layer is readonly, might be
     -- marginally more efficient as the user's globals are added.
 
-    let tyenv = ScopedMap.push $ ScopedMap.seed primNamedTypeEnv
+    let tyenv = ScopedMap.push primNamedTypeEnv
         varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
     in
     Environ varenv tyenv cryenvs

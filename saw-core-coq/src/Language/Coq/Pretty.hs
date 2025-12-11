@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
@@ -33,12 +34,33 @@ string = pretty
 integer :: Integer -> Doc ann
 integer = pretty
 
--- TODO: import SAWCore pretty-printer?
+-- FUTURE: Move these to SAWSupport.Pretty
+
+-- | Like hsep, but behaves usefully for lists that might be empty:
+--   returns the empty doc like hsep for empty lists, but for
+--   non-empty lists prepends horizontal space. The result can then
+--   be inserted like this: x <> result <+> y, and will produce
+--   either "x y" or "x result y" but not "x  y", which is what
+--   happens if you do x <+> hsep ... <+> y.
+--
+--   This baloney arises because d1 <+> emptyDoc <+> d2 prints two
+--   spaces instead of one, which I'd describe as a bug. If you
+--   _really_ want to accumulate multiple spaces by concatenating
+--   empty docs, which seems against the concept of prettyprinting
+--   layout anyway, there can be another way to do that, like the
+--   latex "phantom" object.
+hsep' :: [Doc ann] -> Doc ann
+hsep' docs = case docs of
+    [] -> emptyDoc
+    _ : _ -> emptyDoc <+> hsep docs
+
+-- This version glues the separator to the end of each element.
 tightSepList :: Doc ann -> [Doc ann] -> Doc ann
 tightSepList _ [] = mempty
 tightSepList _ [d] = d
 tightSepList s (d:l) = d <> s <+> tightSepList s l
 
+-- This version issues space before the separator.
 looseSepList :: Doc ann -> [Doc ann] -> Doc ann
 looseSepList _ [] = mempty
 looseSepList _ [d] = d
@@ -46,43 +68,51 @@ looseSepList s (d:l) = d <+> s <+> looseSepList s l
 
 commaSepList, starSepList, semiSepList :: [Doc ann] -> Doc ann
 commaSepList = tightSepList comma
-starSepList = looseSepList (text "*")
+starSepList = looseSepList "*"
 semiSepList = tightSepList semi
 
 period :: Doc ann
-period = text "."
+period = "."
 
-ppIdent :: Ident -> Doc ann
-ppIdent (Ident s) = text s
+prettyIdent :: Ident -> Doc ann
+prettyIdent (Ident s) = pretty s
 
-ppBinder :: Binder -> Doc ann
-ppBinder (Binder x Nothing)  = ppIdent x
-ppBinder (Binder x (Just t)) = parens (ppIdent x <+> colon <+> ppTerm PrecNone t)
-ppBinder (ImplicitBinder x Nothing)  = braces (ppIdent x)
-ppBinder (ImplicitBinder x (Just t)) = braces (ppIdent x <+> colon <+> ppTerm PrecNone t)
+prettyNameType :: Ident -> Type -> Doc ann
+prettyNameType x ty = prettyIdent x <+> colon <+> prettyTerm PrecNone ty
 
-ppPiBinder :: PiBinder -> Doc ann
-ppPiBinder (PiBinder Nothing t)  = ppTerm PrecApp t <+> text "->"
-ppPiBinder (PiBinder (Just x) t) =
-  text "forall" <+> parens (ppIdent x <+> colon <+> ppTerm PrecNone t) <> comma
-ppPiBinder (PiImplicitBinder Nothing t)  = braces (ppTerm PrecApp t) <+> text "->"
-ppPiBinder (PiImplicitBinder (Just x) t) =
-  text "forall" <+> braces (ppIdent x <+> colon <+> ppTerm PrecNone t) <> comma
+prettyBinder :: Binder -> Doc ann
+prettyBinder b = case b of
+    Binder x Nothing -> prettyIdent x
+    Binder x (Just ty) -> parens $ prettyNameType x ty
+    ImplicitBinder x Nothing -> braces $ prettyIdent x
+    ImplicitBinder x (Just ty) -> braces $ prettyNameType x ty
 
-ppBinders :: [Binder] -> Doc ann
-ppBinders = hsep . map ppBinder
+prettyPiBinder :: PiBinder -> Doc ann
+prettyPiBinder b = case b of
+    PiBinder Nothing ty ->
+        prettyTerm PrecApp ty <+> "->"
+    PiBinder (Just x) ty ->
+        "forall" <+> parens (prettyNameType x ty) <> comma
+    PiImplicitBinder Nothing ty ->
+        braces (prettyTerm PrecApp ty) <+> "->"
+    PiImplicitBinder (Just x) ty ->
+        "forall" <+> braces (prettyNameType x ty) <> comma
 
-ppMaybeTy :: Maybe Type -> Doc ann
-ppMaybeTy Nothing = mempty
-ppMaybeTy (Just ty) = colon <+> ppTerm PrecNone ty
+prettyBinders :: [Binder] -> Doc ann
+prettyBinders bs = hsep $ map prettyBinder bs
 
-ppSort :: Sort -> Doc ann
-ppSort Prop = text "Prop"
-ppSort Set = text "Set"
-ppSort Type = text "Type"
+prettyMaybeTy :: Maybe Type -> Doc ann
+prettyMaybeTy Nothing = mempty
+prettyMaybeTy (Just ty) = colon <+> prettyTerm PrecNone ty
 
-ppPi :: [PiBinder] -> Doc ann
-ppPi bs = hsep (map ppPiBinder bs)
+prettySort :: Sort -> Doc ann
+prettySort s = case s of
+    Prop -> "Prop"
+    Set -> "Set"
+    Type -> "Type"
+
+prettyPiBinders :: [PiBinder] -> Doc ann
+prettyPiBinders bs = hsep $ map prettyPiBinder bs
 
 data Prec
   = PrecNone
@@ -94,123 +124,152 @@ data Prec
 parensIf :: Bool -> Doc ann -> Doc ann
 parensIf p d = if p then parens d else d
 
-ppTerm :: Prec -> Term -> Doc ann
-ppTerm p e =
+prettyTerm :: Prec -> Term -> Doc ann
+prettyTerm p e =
   case e of
     Lambda bs t ->
-      parensIf (p > PrecLambda) $
-      text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm PrecLambda t
+      let bs' = prettyBinders bs
+          t' = prettyTerm PrecLambda t
+      in
+      parensIf (p > PrecLambda) $ "fun" <+> bs' <+> "=>" <+> t'
     Fix ident binders returnType body ->
+      let ident' = prettyIdent ident
+          binders' = prettyBinders binders
+          returnType' = prettyTerm PrecNone returnType
+          body' = prettyTerm PrecLambda body
+      in
       parensIf (p > PrecLambda) $
-      text "fix" <+> ppIdent ident <+> ppBinders binders <+> text ":"
-        <+> ppTerm PrecNone returnType <+> text ":=" <+> ppTerm PrecLambda body
+          "fix" <+> ident' <+> binders' <+> ":" <+> returnType' <+> ":=" <+> body'
     Pi bs t ->
-      parensIf (p > PrecLambda) $
-      ppPi bs <+> ppTerm PrecLambda t
+      let bs' = prettyPiBinders bs
+          t' = prettyTerm PrecLambda t
+      in
+      parensIf (p > PrecLambda) $ bs' <+> t'
     Let x bs mty t body ->
-      parensIf (p > PrecLambda) $
-      fillSep
-      [ text "let" <+> ppIdent x <+> ppBinders bs <+> ppMaybeTy mty <+>
-        text ":=" <+> ppTerm PrecNone t <+> text "in"
-      , ppTerm PrecLambda body ]
+      let x' = prettyIdent x
+          bs' = prettyBinders bs
+          mty' = prettyMaybeTy mty
+          t' = prettyTerm PrecNone t
+          body' = prettyTerm PrecLambda body
+      in
+      parensIf (p > PrecLambda) $ fillSep [
+          "let" <+> x' <+> bs' <+> mty' <+> ":=" <+> t' <+> "in",
+          body'
+      ]
     If c t f ->
+      let c' = prettyTerm PrecNone c
+          t' = prettyTerm PrecNone t
+          f' = prettyTerm PrecLambda f
+      in
       parensIf (p > PrecLambda) $
-      text "if" <+> ppTerm PrecNone c <+>
-      text "then" <+> ppTerm PrecNone t <+>
-      text "else" <+> ppTerm PrecLambda f
+          "if" <+> c' <+> "then" <+> t' <+> "else" <+> f'
     App f [] ->
-      ppTerm p f
+      prettyTerm p f
     App f args ->
-      parensIf (p > PrecApp) $
-      hsep (ppTerm PrecApp f : map (ppTerm PrecAtom) args)
+      let f' = prettyTerm PrecApp f
+          args' = map (prettyTerm PrecAtom) args
+      in
+      parensIf (p > PrecApp) $ hsep (f' : args')
     Sort s ->
-      ppSort s
-    Var x -> ppIdent x
+      prettySort s
+    Var x ->
+      prettyIdent x
     ExplVar x ->
-      parensIf (p > PrecApp) $
-      string "@" <> ppIdent x
+      let x' = prettyIdent x in
+      parensIf (p > PrecApp) $ "@" <> x'
     Ascription tm tp ->
-      parensIf (p > PrecLambda)
-      (ppTerm PrecApp tm <+> text ":" <+> ppTerm PrecApp tp)
+      let tm' = prettyTerm PrecApp tm
+          tp' = prettyTerm PrecApp tp
+      in
+      parensIf (p > PrecLambda) $ tm' <+> ":" <+> tp'
     NatLit i ->
       if i > 1000 then
         -- Explicitly convert from Z if an integer is too big
-        parensIf (p > PrecLambda) (text "Z.to_nat" <+> integer i <> text "%Z")
+        parensIf (p > PrecLambda) ("Z.to_nat" <+> integer i <> "%Z")
       else
         integer i
     ZLit i ->
-      -- we use hex unless our integer is a positive or negitive digit
-      if abs i > 9  then let ui = toInteger (fromInteger i :: Word64)
-                          in text ("0x" ++ showHex ui [] ++ "%Z")
-      else if i < 0 then text ("(" ++ show i ++ ")%Z")
-                    else text (show i ++ "%Z")
+      -- we use hex unless our integer is a positive or negative digit
+      -- XXX: this cannot possibly work as intended for negative values
+      if abs i > 9 then
+          let ui = toInteger (fromInteger i :: Word64)
+              ui' = showHex ui []
+          in
+          text ("0x" ++ ui' ++ "%Z")
+      else if i < 0 then
+          text ("(" ++ show i ++ ")%Z")
+      else
+          text (show i ++ "%Z")
     List ts ->
-      brackets (semiSepList (map (ppTerm PrecNone) ts))
+      let ts' = map (prettyTerm PrecNone) ts in
+      brackets $ semiSepList ts'
     StringLit s ->
       dquotes (string $ escapeStringLit s)
     Scope term scope ->
-      ppTerm PrecAtom term <> text "%" <> text scope
+      let term' = prettyTerm PrecAtom term
+          scope' = text scope
+      in
+      term' <> "%" <> scope'
     Ltac s ->
-      text "ltac:" <> parens (string s)
+      "ltac:" <> parens (string s)
 
-ppDecl :: Decl -> Doc ann
-ppDecl decl = case decl of
-  Axiom nm ty ->
-    nest 2 (
-      hsep [text "Axiom", ppIdent nm, text ":", ppTerm PrecNone ty, period]
-    ) <> hardline
-  Parameter nm ty ->
-    nest 2 (
-     hsep [text "Parameter", ppIdent nm, text ":", ppTerm PrecNone ty, period]
-    ) <> hardline
-  Variable nm ty ->
-    nest 2 (
-      hsep [text "Variable", ppIdent nm, text ":", ppTerm PrecNone ty, period]
-    ) <> hardline
+prettyBasicDecl :: Doc ann -> Ident -> Type -> Doc ann
+prettyBasicDecl what nm ty =
+  let nm' = prettyIdent nm
+      ty' = prettyTerm PrecNone ty
+  in
+  nest 2 (what <+> nm' <+> ":" <+> ty' <+> period) <> hardline
+
+prettyDecl :: Decl -> Doc ann
+prettyDecl decl = case decl of
+  Axiom nm ty -> prettyBasicDecl "Axiom" nm ty
+  Parameter nm ty -> prettyBasicDecl "Parameter" nm ty
+  Variable nm ty -> prettyBasicDecl "Variable" nm ty
   Comment s ->
-    text "(*" <+> text s <+> text "*)" <> hardline
+    "(*" <+> text s <+> "*)" <> hardline
   Definition nm bs mty body ->
+    let nm' = prettyIdent nm
+        bs' = hsep' $ map prettyBinder bs
+        mty' = prettyMaybeTy mty
+        body' = prettyTerm PrecNone body
+    in
     nest 2 (
-      vsep
-      [ hsep ([text "Definition", ppIdent nm] ++
-             map ppBinder bs ++
-             [ppMaybeTy mty, text ":="])
-      , ppTerm PrecNone body <> period
+      vsep [
+          "Definition" <+> nm' <> bs' <+> mty' <+> ":=",
+          body' <> period
       ]
     ) <> hardline
-  InductiveDecl ind -> ppInductive ind
+  InductiveDecl ind ->
+    prettyInductive ind
   Section nm ds ->
-    vsep $ concat
-     [ [ hsep [text "Section", ppIdent nm, period] ]
-     , map (indent 2 . ppDecl) ds
-     , [ hsep [text "End", ppIdent nm, period] ]
-     ]
-  Snippet s -> text s
+    let nm' = prettyIdent nm
+        ds' = map (indent 2 . prettyDecl) ds
+        header = "Section" <+> nm' <+> period
+        footer = "End" <+> nm' <+> period
+    in
+    -- XXX vsep issues soft newlines and there should be a hard newline
+    -- after the head and after the foot. (Note that every other Decl
+    -- always ends in a hard newline, so ds' is ok.)
+    -- (XXX: Does `vsep` on top of `hardline` generate two lines?)
+    vsep $ [header] ++ ds' ++ [footer]
+  Snippet s ->
+    text s
 
-ppConstructor :: Constructor -> Doc ann
-ppConstructor (Constructor {..}) =
-  nest 2 $
-  hsep [ text "|"
-       , ppIdent constructorName
-       , text ":"
-       , ppTerm PrecNone constructorType
-       ]
+prettyConstructor :: Constructor -> Doc ann
+prettyConstructor (Constructor {..}) =
+  let name' = prettyIdent constructorName
+      ty' = prettyTerm PrecNone constructorType
+  in
+  nest 2 $ "|" <+> name' <+> ":" <+> ty'
 
-ppInductive :: Inductive -> Doc ann
-ppInductive (Inductive {..}) =
-  (vsep
-   ([ nest 2 $
-      hsep ([ text "Inductive"
-            , ppIdent inductiveName
-            ]
-            ++ map ppBinder inductiveParameters
-            ++ [ text ":" ]
-            ++ map ppPiBinder inductiveIndices
-            ++ [ ppSort inductiveSort ]
-            ++ [ text ":="]
-           )
-    ]
-    <> map ppConstructor inductiveConstructors
-    <> [ period ]
-   )
-  ) <> hardline
+prettyInductive :: Inductive -> Doc ann
+prettyInductive (Inductive {..}) =
+  let name' = prettyIdent inductiveName
+      params' = hsep' $ map prettyBinder inductiveParameters
+      indices' = hsep' $ map prettyPiBinder inductiveIndices
+      sort' = prettySort inductiveSort
+      ctors' = map prettyConstructor inductiveConstructors
+      header = "Inductive" <+> name' <> params' <+> ":" <> indices' <+> sort' <+> ":="
+  in
+  vsep ([nest 2 header] ++ ctors' ++ [period]) <> hardline
+

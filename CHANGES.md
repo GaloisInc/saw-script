@@ -11,7 +11,7 @@
      cause SAW to raise an error.
 
 This release supports [version
-6](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#6) of
+7](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#7) of
 `mir-json`'s schema.
 
 ## Changes
@@ -26,6 +26,13 @@ This release supports [version
 * The REPL no longer gratuitously rejects multiple statements
   separated by semicolons on a single line.
   It also no longer chokes on lines that contain only comments.
+
+* SAWScript files can now be included with `include_once` as well as
+  plain `include`.
+  An `include_once` will do nothing if the same file has already been
+  included.
+  The concept of "same" used is the same pathname -- the check does
+  not chase symbolic links or consult OS-level file identity markers.
 
 * The `include` functionality in SAWScript is now syntax rather than
   a builtin function.
@@ -301,6 +308,9 @@ This release supports [version
 
 * Fix a bug that would cause `yosys_import` to fail to parse JSON files
   produced using Yosys's `-compat-int` flag.
+
+* `yosys_import` now parses JSON files containing debugging-related cells
+  (e.g., `$scopeinfo`) instead of failing with a parse error.
 
 # Version 1.4 -- 2025-11-18
 

@@ -85,6 +85,7 @@ library saw-support
 
   hs-source-dirs: saw-support/src
   exposed-modules:
+    SAWSupport.IntRangeSet
     SAWSupport.PanicSupport
     SAWSupport.Pretty
     SAWSupport.ScopedMap

@@ -16,6 +16,7 @@ import           Data.Parameterized.NatRepr
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 
+import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.SharedTerm
 import qualified SAWCore.Prim as Prim
@@ -33,7 +34,7 @@ import SAWCore.Rewriter (Simpset, rewriteSharedTerm)
 import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
 
 import Cryptol.TypeCheck.Type (tIsBit, tIsSeq, tIsNum)
-import CryptolSAWCore.TypedTerm (mkTypedTerm, ttType, ttIsMono, ppTypedTermType)
+import CryptolSAWCore.TypedTerm (mkTypedTerm, ttType, ttIsMono, prettyTypedTermType)
 import qualified Cryptol.Utils.PP as PP
 
 
@@ -106,7 +107,9 @@ resolveTerm sym unint bt rr tm =
             , tIsBit el, Just i <- tIsNum n, W4.BaseBVRepr w <- bt
             , intValue w == i -> pure ()
             | otherwise -> typeError (show (PP.pp ty)) :: IO ()
-          Nothing -> typeError (show (ppTypedTermType schema))
+          Nothing -> do
+            schema' <- prettyTypedTermType sc PPS.defaultOpts schema
+            typeError (show schema')
 
   typeError :: String -> IO a
   typeError t = fail $ unlines [

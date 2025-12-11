@@ -102,7 +102,7 @@ translateCryptolModule ::
   IO (Either (TranslationError Term) (Doc ann))
 translateCryptolModule sc env nm configuration globalDecls m = do
   translated <- CMT.translateCryptolModule sc env configuration globalDecls m
-  return $ Coq.ppDecl . Coq.Section (escapeIdent nm) <$> translated
+  return $ Coq.prettyDecl . Coq.Section (escapeIdent nm) <$> translated
 
 -- | Extract out the 'String' name of a declaration in a SAW core module
 moduleDeclName :: ModuleDecl -> Maybe String

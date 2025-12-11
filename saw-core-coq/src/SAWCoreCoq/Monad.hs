@@ -28,7 +28,7 @@ import Prelude hiding (fail)
 
 import SAWCore.SharedTerm
 -- import SAWCore.Term.CtxTerm
-import SAWCore.Term.Pretty (showTerm)
+import SAWCore.Term.Pretty (ppTermPureDefaults)
 -- import qualified SAWCore.UntypedAST as Un
 
 data TranslationError a
@@ -40,7 +40,7 @@ data TranslationError a
   | CannotCreateDefaultValue a
 
 instance {-# OVERLAPPING #-} Show (TranslationError Term) where
-  show = showError showTerm
+  show = showError ppTermPureDefaults
 
 instance {-# OVERLAPPABLE #-} Show a => Show (TranslationError a) where
   show = showError show
