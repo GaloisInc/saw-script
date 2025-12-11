@@ -40,8 +40,7 @@ mod verification {
     pub fn g_equiv() {
         uninterp("foo");
 
-        override_(f, cry::foo);
-        //f_equiv_spec().enable();
+        f_equiv_spec().enable();
 
         let x = bool::symbolic("x");
         let expected = cry::goo(x);
