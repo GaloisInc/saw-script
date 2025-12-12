@@ -160,7 +160,9 @@ typeInferCompleteTerm uterm =
          inferFlatTermF (Recursor crec)
 
     Un.App f arg ->
-      do f' <- typeInferCompleteUTerm f
+      -- Only call typeInferCompleteUTerm on the function arguments, to
+      -- avoid adding too many 'atPos' and 'withErrorUTerm' annotations.
+      do f' <- typeInferCompleteTerm f
          arg' <- typeInferCompleteUTerm arg
          inferTermF (App f' arg')
 
