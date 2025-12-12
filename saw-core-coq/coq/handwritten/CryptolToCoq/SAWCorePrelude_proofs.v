@@ -6,14 +6,14 @@ From Stdlib Require Import String.
 From Stdlib Require Import Vectors.Vector.
 #[local] Set Warnings "stdlib-vector".
 
-From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import SAWCoreScaffolding.
-From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-
 From mathcomp Require Import eqtype.
 From mathcomp Require Import ssrbool.
 From mathcomp Require Import ssreflect.
 From mathcomp Require Import ssrnat.
+
+From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToCoq Require Import SAWCoreScaffolding.
+From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 
 Import ProperNotations.
 Import SAWCorePrelude.
