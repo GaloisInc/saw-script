@@ -31,9 +31,12 @@ From Stdlib Require Import Strings.String.
 From Stdlib Require Import Vectors.Vector.
 #[local] Set Warnings "stdlib-vector".
 From Stdlib Require Import Bool.Bool.
-From Stdlib Require Import BinNums.
 From Stdlib Require Import ZifyClasses.
 
+From Stdlib Require Import ZArith.BinIntDef.
+From Stdlib Require Import PArith.BinPos.
+
+#[local] Undelimit Scope N_scope.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 
 From mathcomp Require Import ssreflect.
@@ -41,9 +44,6 @@ From mathcomp Require Import ssrnat.
 From mathcomp Require Import ssrbool.
 From mathcomp Require Import fintype.
 From mathcomp Require Import tuple.
-
-From Stdlib Require Export ZArith.BinIntDef.
-From Stdlib Require Export PArith.BinPos.
 
 Import VectorNotations.
 
