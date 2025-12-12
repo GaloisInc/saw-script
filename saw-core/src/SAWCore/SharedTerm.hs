@@ -1910,12 +1910,14 @@ scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a,
 
 ------------------------------------------------------------
 
+-- useCache :: C m => Cache m k a -> k -> m a -> m a
+
 useChangeCache :: C m => Cache m k (Change v) -> k -> ChangeT m v -> ChangeT m v
-useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)
+useChangeCache c k a = changeT $ useCache c k (runChangeT a)
 
 -- | Performs an action when a value has been modified, and otherwise
 -- returns a pure value.
-whenModified :: (Functor m, Monad m) => b -> (a -> m b) -> ChangeT m a -> ChangeT m b
+whenModified :: (Monad m) => b -> (a -> m b) -> ChangeT m a -> ChangeT m b
 whenModified b f m = preserveChangeT b (fmap f m)
 
 -- | Can this term be evaluated to a constant?

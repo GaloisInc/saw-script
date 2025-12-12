@@ -50,6 +50,7 @@ module SAWCore.Rewriter
 import Control.Monad (MonadPlus(..), (>=>), guard)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
+import qualified Control.Monad.Writer as Writer
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
@@ -60,6 +61,7 @@ import qualified Data.List as List
 import Data.List.Extra (nubOrd)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Monoid (Any(..))
 import Data.Ref (C)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -687,8 +689,8 @@ reduceSharedTerm _ _ = pure Nothing
 
 data Convertibility = AllRules | ConvertibleRulesOnly
 
-useChangeCache :: C m => Cache m k (Change v) -> k -> ChangeT m v -> ChangeT m v
-useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)
+useChangeCache :: C m => Cache m k (v, Any) -> k -> ChangeT m v -> ChangeT m v
+useChangeCache c k a = Writer.WriterT $ useCache c k (Writer.runWriterT a)
 
 -- | Performs an action when a value has been modified, and otherwise
 -- returns a pure value.
@@ -710,7 +712,7 @@ rewriteSharedTerm sc ss t0 =
   where
 
     rewriteAll ::
-      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      (?cache :: Cache IO TermIndex (Term, Any), ?annSet :: IORef (Set a)) =>
       Convertibility -> Term -> ChangeT IO Term
     rewriteAll convertibleFlag t =
         useChangeCache ?cache (termIndex t) $
@@ -719,7 +721,7 @@ rewriteSharedTerm sc ss t0 =
            rewriteTop convertibleFlag t'
 
     rewriteTermF ::
-      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      (?cache :: Cache IO TermIndex (Term, Any), ?annSet :: IORef (Set a)) =>
       Convertibility -> TermF Term -> ChangeT IO (TermF Term)
     rewriteTermF convertibleFlag tf =
         case tf of
@@ -750,7 +752,7 @@ rewriteSharedTerm sc ss t0 =
                pure (Pi x t1' t2'')
 
     rewriteFTermF ::
-      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      (?cache :: Cache IO TermIndex (Term, Any), ?annSet :: IORef (Set a)) =>
       Convertibility -> FlatTermF Term -> ChangeT IO (FlatTermF Term)
     rewriteFTermF convertibleFlag ftf =
         case ftf of
@@ -781,7 +783,7 @@ rewriteSharedTerm sc ss t0 =
       filterRulesFlag convertibleFlag convConvFlag
 
     rewriteTop ::
-      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      (?cache :: Cache IO TermIndex (Term, Any), ?annSet :: IORef (Set a)) =>
       Convertibility -> Term -> ChangeT IO Term
     rewriteTop convertibleFlag t =
       do mt <- lift $ reduceSharedTerm sc t
@@ -795,7 +797,7 @@ rewriteSharedTerm sc ss t0 =
     recordAnn (Just a) = lift $ modifyIORef' ?annSet (Set.insert a)
 
     apply ::
-      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      (?cache :: Cache IO TermIndex (Term, Any), ?annSet :: IORef (Set a)) =>
       Convertibility -> [Either (RewriteRule a) Conversion] -> Term -> ChangeT IO Term
     apply _ [] t = return t
     apply convertibleFlag (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do
