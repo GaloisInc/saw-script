@@ -1,6 +1,25 @@
-From Bits Require Import operations.
-From Bits Require Import spec.
+From Bits Require spec operations.
 #[export] Set Bullet Behavior "Strict Subproofs". (* Bits sets this to "None". *)
+(* We explicitly re-define local aliases for the parts of Bits we actually use
+   to avoid importing ambiguous coercions.
+*)
+Notation BITS := spec.BITS (only parsing).
+Notation nilB := (tuple.nil_tuple bool) (only parsing).
+Definition joinlsb {n} := @spec.joinlsb n.
+Definition splitlsb {n} := @spec.splitlsb n.
+Definition fromZ {n} := @spec.fromZ n.
+Definition toPosZ {n} := @spec.toPosZ n.
+Definition toZ {n} := @spec.toZ n.
+Definition thead {n} {T} := @tuple.thead T n.
+Definition behead_tuple {n} {T} := @tuple.behead_tuple T n.
+Definition addB {n} (p1 p2 : BITS n) := snd (operations.adcB false p1 p2).
+Definition subB {n} (p1 p2 : BITS n) := snd (operations.sbbB false p1 p2).
+Definition mulB {n} := @operations.mulB n.
+Definition ltB {n} := @operations.ltB n.
+Definition leB {n} := @operations.leB n.
+Definition sarB {n} := @operations.sarB n.
+Definition shlBn {n} := @operations.shlBn n.
+Definition shrBn {n} := @operations.shrBn n.
 
 From Stdlib Require Import FunctionalExtensionality.
 From Stdlib Require Import Lists.List.
