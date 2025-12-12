@@ -3,7 +3,9 @@ Loading file "test_tuples.saw"
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -28,7 +30,9 @@ Definition TestTuple_Pair : prod (CryptolPrimitivesForSAWCore.seq (CryptolPrimit
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -53,7 +57,9 @@ Definition TestTuple_Triple : let var__0   := CryptolPrimitivesForSAWCore.seq (C
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -79,7 +85,9 @@ Definition TestTuple_Fourple : prod (CryptolPrimitivesForSAWCore.seq (CryptolPri
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -105,7 +113,9 @@ Definition TestTuple_Nested : let var__0   := CryptolPrimitivesForSAWCore.seq (C
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -130,7 +140,9 @@ Definition TestTuple_Fst : Init.Datatypes.bool :=
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -155,7 +167,9 @@ Definition TestTuple_Snd : Init.Datatypes.bool :=
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
