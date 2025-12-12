@@ -295,50 +295,50 @@ Definition not_or : forall (x : Init.Datatypes.bool), forall (y : Init.Datatypes
   fun (x : Init.Datatypes.bool) (y : Init.Datatypes.bool) => let var__0   := Init.Datatypes.negb Init.Datatypes.true in
   let var__1   := Init.Datatypes.negb Init.Datatypes.false in
   let var__2   := Init.Datatypes.negb y in
-  let var__3   := Init.Datatypes.orb Init.Datatypes.true y in
-  let var__4   := Init.Datatypes.negb var__3 in
-  let var__5   := Init.Datatypes.andb var__0 var__2 in
-  let var__6   := Init.Datatypes.andb Init.Datatypes.false var__2 in
+  let var__3   := Init.Datatypes.andb var__0 var__2 in
+  let var__4   := Init.Datatypes.orb Init.Datatypes.true y in
+  let var__5   := Init.Datatypes.negb var__4 in
+  let var__6   := Init.Datatypes.andb var__1 var__2 in
   let var__7   := Init.Datatypes.orb Init.Datatypes.false y in
-  let var__8   := Init.Datatypes.andb var__1 var__2 in
-  SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (Init.Datatypes.negb (Init.Datatypes.orb b y)) (Init.Datatypes.andb (Init.Datatypes.negb b) var__2)) x (trans Init.Datatypes.bool var__4 Init.Datatypes.false var__5 (trans Init.Datatypes.bool var__4 var__0 Init.Datatypes.false (eq_cong Init.Datatypes.bool var__3 Init.Datatypes.true (or_True1 y) Init.Datatypes.bool Init.Datatypes.negb) not_True) (trans Init.Datatypes.bool Init.Datatypes.false var__6 var__5 (sym Init.Datatypes.bool var__6 Init.Datatypes.false (and_False1 var__2)) (eq_cong Init.Datatypes.bool Init.Datatypes.false var__0 (sym Init.Datatypes.bool var__0 Init.Datatypes.false not_True) Init.Datatypes.bool (fun (z : Init.Datatypes.bool) => Init.Datatypes.andb z var__2)))) (trans Init.Datatypes.bool (Init.Datatypes.negb var__7) var__2 var__8 (eq_cong Init.Datatypes.bool var__7 y (or_False1 y) Init.Datatypes.bool Init.Datatypes.negb) (sym Init.Datatypes.bool var__8 var__2 (trans Init.Datatypes.bool var__8 (Init.Datatypes.andb Init.Datatypes.true var__2) var__2 (eq_cong Init.Datatypes.bool var__1 Init.Datatypes.true not_False Init.Datatypes.bool (fun (z : Init.Datatypes.bool) => Init.Datatypes.andb z var__2)) (and_True1 var__2)))).
+  let var__8   := Init.Datatypes.andb Init.Datatypes.false var__2 in
+  SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (Init.Datatypes.negb (Init.Datatypes.orb b y)) (Init.Datatypes.andb (Init.Datatypes.negb b) var__2)) x (trans Init.Datatypes.bool var__5 Init.Datatypes.false var__3 (trans Init.Datatypes.bool var__5 var__0 Init.Datatypes.false (eq_cong Init.Datatypes.bool var__4 Init.Datatypes.true (or_True1 y) Init.Datatypes.bool Init.Datatypes.negb) not_True) (trans Init.Datatypes.bool Init.Datatypes.false var__8 var__3 (sym Init.Datatypes.bool var__8 Init.Datatypes.false (and_False1 var__2)) (eq_cong Init.Datatypes.bool Init.Datatypes.false var__0 (sym Init.Datatypes.bool var__0 Init.Datatypes.false not_True) Init.Datatypes.bool (fun (z : Init.Datatypes.bool) => Init.Datatypes.andb z var__2)))) (trans Init.Datatypes.bool (Init.Datatypes.negb var__7) var__2 var__6 (eq_cong Init.Datatypes.bool var__7 y (or_False1 y) Init.Datatypes.bool Init.Datatypes.negb) (sym Init.Datatypes.bool var__6 var__2 (trans Init.Datatypes.bool var__6 (Init.Datatypes.andb Init.Datatypes.true var__2) var__2 (eq_cong Init.Datatypes.bool var__1 Init.Datatypes.true not_False Init.Datatypes.bool (fun (z : Init.Datatypes.bool) => Init.Datatypes.andb z var__2)) (and_True1 var__2)))).
 
 Definition not_and : forall (x : Init.Datatypes.bool), forall (y : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (Init.Datatypes.negb (Init.Datatypes.andb x y)) (Init.Datatypes.orb (Init.Datatypes.negb x) (Init.Datatypes.negb y)) :=
   fun (x : Init.Datatypes.bool) (y : Init.Datatypes.bool) => let var__0   := Init.Datatypes.negb Init.Datatypes.true in
   let var__1   := Init.Datatypes.negb Init.Datatypes.false in
   let var__2   := Init.Datatypes.negb y in
-  let var__3   := Init.Datatypes.andb Init.Datatypes.true y in
-  let var__4   := Init.Datatypes.orb var__0 var__2 in
-  let var__5   := Init.Datatypes.andb Init.Datatypes.false y in
-  let var__6   := Init.Datatypes.negb var__5 in
-  let var__7   := Init.Datatypes.orb var__1 var__2 in
+  let var__3   := Init.Datatypes.orb var__0 var__2 in
+  let var__4   := Init.Datatypes.andb Init.Datatypes.true y in
+  let var__5   := Init.Datatypes.orb var__1 var__2 in
+  let var__6   := Init.Datatypes.andb Init.Datatypes.false y in
+  let var__7   := Init.Datatypes.negb var__6 in
   let var__8   := Init.Datatypes.orb Init.Datatypes.true var__2 in
-  SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (Init.Datatypes.negb (Init.Datatypes.andb b y)) (Init.Datatypes.orb (Init.Datatypes.negb b) var__2)) x (trans Init.Datatypes.bool (Init.Datatypes.negb var__3) var__2 var__4 (eq_cong Init.Datatypes.bool var__3 y (and_True1 y) Init.Datatypes.bool Init.Datatypes.negb) (sym Init.Datatypes.bool var__4 var__2 (trans Init.Datatypes.bool var__4 (Init.Datatypes.orb Init.Datatypes.false var__2) var__2 (eq_cong Init.Datatypes.bool var__0 Init.Datatypes.false not_True Init.Datatypes.bool (fun (z : Init.Datatypes.bool) => Init.Datatypes.orb z var__2)) (or_False1 var__2)))) (trans Init.Datatypes.bool var__6 Init.Datatypes.true var__7 (trans Init.Datatypes.bool var__6 var__1 Init.Datatypes.true (eq_cong Init.Datatypes.bool var__5 Init.Datatypes.false (and_False1 y) Init.Datatypes.bool Init.Datatypes.negb) not_False) (trans Init.Datatypes.bool Init.Datatypes.true var__8 var__7 (sym Init.Datatypes.bool var__8 Init.Datatypes.true (or_True1 var__2)) (eq_cong Init.Datatypes.bool Init.Datatypes.true var__1 (sym Init.Datatypes.bool var__1 Init.Datatypes.true not_False) Init.Datatypes.bool (fun (z : Init.Datatypes.bool) => Init.Datatypes.orb z var__2)))).
+  SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (Init.Datatypes.negb (Init.Datatypes.andb b y)) (Init.Datatypes.orb (Init.Datatypes.negb b) var__2)) x (trans Init.Datatypes.bool (Init.Datatypes.negb var__4) var__2 var__3 (eq_cong Init.Datatypes.bool var__4 y (and_True1 y) Init.Datatypes.bool Init.Datatypes.negb) (sym Init.Datatypes.bool var__3 var__2 (trans Init.Datatypes.bool var__3 (Init.Datatypes.orb Init.Datatypes.false var__2) var__2 (eq_cong Init.Datatypes.bool var__0 Init.Datatypes.false not_True Init.Datatypes.bool (fun (z : Init.Datatypes.bool) => Init.Datatypes.orb z var__2)) (or_False1 var__2)))) (trans Init.Datatypes.bool var__7 Init.Datatypes.true var__5 (trans Init.Datatypes.bool var__7 var__1 Init.Datatypes.true (eq_cong Init.Datatypes.bool var__6 Init.Datatypes.false (and_False1 y) Init.Datatypes.bool Init.Datatypes.negb) not_False) (trans Init.Datatypes.bool Init.Datatypes.true var__8 var__5 (sym Init.Datatypes.bool var__8 Init.Datatypes.true (or_True1 var__2)) (eq_cong Init.Datatypes.bool Init.Datatypes.true var__1 (sym Init.Datatypes.bool var__1 Init.Datatypes.true not_False) Init.Datatypes.bool (fun (z : Init.Datatypes.bool) => Init.Datatypes.orb z var__2)))).
 
 Definition ite_not : forall (a : Type), forall (b : Init.Datatypes.bool), forall (x : a), forall (y : a), @Init.Logic.eq a (if Init.Datatypes.negb b then x else y) (if b then y else x) :=
   fun (a : Type) (b : Init.Datatypes.bool) (x : a) (y : a) => let var__0   := Init.Datatypes.negb Init.Datatypes.true in
   let var__1   := Init.Datatypes.negb Init.Datatypes.false in
-  let var__2   := if var__0 then x else y in
-  let var__3   := if Init.Datatypes.true then y else x in
-  let var__4   := if var__1 then x else y in
-  let var__5   := if Init.Datatypes.false then y else x in
-  SAWCoreScaffolding.iteDep (fun (b' : Init.Datatypes.bool) => @Init.Logic.eq a (if Init.Datatypes.negb b' then x else y) (if b' then y else x)) b (trans a var__2 y var__3 (trans a var__2 (if Init.Datatypes.false then x else y) y (eq_cong Init.Datatypes.bool var__0 Init.Datatypes.false not_True a (fun (z : Init.Datatypes.bool) => if z then x else y)) (ite_false a x y)) (sym a var__3 y (ite_true a y x))) (trans a var__4 x var__5 (trans a var__4 (if Init.Datatypes.true then x else y) x (eq_cong Init.Datatypes.bool var__1 Init.Datatypes.true not_False a (fun (z : Init.Datatypes.bool) => if z then x else y)) (ite_true a x y)) (sym a var__5 x (ite_false a y x))).
+  let var__2   := if Init.Datatypes.true then y else x in
+  let var__3   := if var__0 then x else y in
+  let var__4   := if Init.Datatypes.false then y else x in
+  let var__5   := if var__1 then x else y in
+  SAWCoreScaffolding.iteDep (fun (b' : Init.Datatypes.bool) => @Init.Logic.eq a (if Init.Datatypes.negb b' then x else y) (if b' then y else x)) b (trans a var__3 y var__2 (trans a var__3 (if Init.Datatypes.false then x else y) y (eq_cong Init.Datatypes.bool var__0 Init.Datatypes.false not_True a (fun (z : Init.Datatypes.bool) => if z then x else y)) (ite_false a x y)) (sym a var__2 y (ite_true a y x))) (trans a var__5 x var__4 (trans a var__5 (if Init.Datatypes.true then x else y) x (eq_cong Init.Datatypes.bool var__1 Init.Datatypes.true not_False a (fun (z : Init.Datatypes.bool) => if z then x else y)) (ite_true a x y)) (sym a var__4 x (ite_false a y x))).
 
 Definition ite_nest1 : forall (a : Type), forall (b : Init.Datatypes.bool), forall (x : a), forall (y : a), forall (z : a), @Init.Logic.eq a (if b then if b then x else y else z) (if b then x else z) :=
-  fun (a : Type) (b : Init.Datatypes.bool) (x : a) (y : a) (z : a) => let var__0   := if Init.Datatypes.true then x else y in
-  let var__1   := if Init.Datatypes.true then var__0 else z in
-  let var__2   := if Init.Datatypes.true then x else z in
-  let var__3   := if Init.Datatypes.false then x else y in
-  let var__4   := if Init.Datatypes.false then x else z in
-  SAWCoreScaffolding.iteDep (fun (b' : Init.Datatypes.bool) => @Init.Logic.eq a (if b' then if b' then x else y else z) (if b' then x else z)) b (trans a var__1 x var__2 (trans a var__1 var__0 x (ite_true a var__0 z) (ite_true a x y)) (sym a var__2 x (ite_true a x z))) (trans a (if Init.Datatypes.false then var__3 else z) z var__4 (ite_false a var__3 z) (sym a var__4 z (ite_false a x z))).
+  fun (a : Type) (b : Init.Datatypes.bool) (x : a) (y : a) (z : a) => let var__0   := if Init.Datatypes.true then x else z in
+  let var__1   := if Init.Datatypes.true then x else y in
+  let var__2   := if Init.Datatypes.true then var__1 else z in
+  let var__3   := if Init.Datatypes.false then x else z in
+  let var__4   := if Init.Datatypes.false then x else y in
+  SAWCoreScaffolding.iteDep (fun (b' : Init.Datatypes.bool) => @Init.Logic.eq a (if b' then if b' then x else y else z) (if b' then x else z)) b (trans a var__2 x var__0 (trans a var__2 var__1 x (ite_true a var__1 z) (ite_true a x y)) (sym a var__0 x (ite_true a x z))) (trans a (if Init.Datatypes.false then var__4 else z) z var__3 (ite_false a var__4 z) (sym a var__3 z (ite_false a x z))).
 
 Definition ite_nest2 : forall (a : Type), forall (b : Init.Datatypes.bool), forall (x : a), forall (y : a), forall (z : a), @Init.Logic.eq a (if b then x else if b then y else z) (if b then x else z) :=
-  fun (a : Type) (b : Init.Datatypes.bool) (x : a) (y : a) (z : a) => let var__0   := if Init.Datatypes.true then y else z in
-  let var__1   := if Init.Datatypes.true then x else z in
-  let var__2   := if Init.Datatypes.false then y else z in
-  let var__3   := if Init.Datatypes.false then x else var__2 in
-  let var__4   := if Init.Datatypes.false then x else z in
-  SAWCoreScaffolding.iteDep (fun (b' : Init.Datatypes.bool) => @Init.Logic.eq a (if b' then x else if b' then y else z) (if b' then x else z)) b (trans a (if Init.Datatypes.true then x else var__0) x var__1 (ite_true a x var__0) (sym a var__1 x (ite_true a x z))) (trans a var__3 z var__4 (trans a var__3 var__2 z (ite_false a x var__2) (ite_false a y z)) (sym a var__4 z (ite_false a x z))).
+  fun (a : Type) (b : Init.Datatypes.bool) (x : a) (y : a) (z : a) => let var__0   := if Init.Datatypes.true then x else z in
+  let var__1   := if Init.Datatypes.true then y else z in
+  let var__2   := if Init.Datatypes.false then x else z in
+  let var__3   := if Init.Datatypes.false then y else z in
+  let var__4   := if Init.Datatypes.false then x else var__3 in
+  SAWCoreScaffolding.iteDep (fun (b' : Init.Datatypes.bool) => @Init.Logic.eq a (if b' then x else if b' then y else z) (if b' then x else z)) b (trans a (if Init.Datatypes.true then x else var__1) x var__0 (ite_true a x var__1) (sym a var__0 x (ite_true a x z))) (trans a var__4 z var__2 (trans a var__4 var__3 z (ite_false a x var__3) (ite_false a y z)) (sym a var__2 z (ite_false a x z))).
 
 (* "Prelude.ite_bit" was skipped *)
 
