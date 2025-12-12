@@ -1,5 +1,6 @@
 From Bits Require Import operations.
 From Bits Require Import spec.
+#[export] Set Bullet Behavior "Strict Subproofs". (* Bits sets this to "None". *)
 
 From Stdlib Require Import FunctionalExtensionality.
 From Stdlib Require Import Lists.List.
