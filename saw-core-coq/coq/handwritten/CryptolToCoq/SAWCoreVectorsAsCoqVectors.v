@@ -8,7 +8,9 @@ From Stdlib Require        Numbers.NatInt.NZLog.
 From Stdlib Require Import Peano_dec.
 From Stdlib Require Import PeanoNat.
 From Stdlib Require Import Strings.String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From Stdlib Require Import Bool.Bool.
 From Stdlib Require Import BinNums.
 From Stdlib Require Import ZifyClasses.

@@ -4,7 +4,9 @@
 
 From Stdlib Require Import Program.Basics.
 From Stdlib Require        Program.Equality.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From Stdlib Require Import Logic.Eqdep.
 From Stdlib Require Import Classes.RelationClasses.
 From Stdlib Require Import Classes.Morphisms.

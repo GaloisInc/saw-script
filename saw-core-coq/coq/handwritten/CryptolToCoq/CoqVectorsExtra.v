@@ -1,7 +1,9 @@
 (* This file contains definitions that seemed missing from Stdlib.Vectors.Vector *)
 
 From Stdlib         Require Import PeanoNat.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib.Vectors Require Vector.
+#[local] Set Warnings "stdlib-vector".
 
 Fixpoint zip {a b : Type} {n : nat} (xs : Vector.t a n) (ys : Vector.t b n) : Vector.t (a * b) n.
   refine (

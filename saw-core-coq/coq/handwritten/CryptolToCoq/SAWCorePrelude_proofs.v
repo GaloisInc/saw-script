@@ -2,7 +2,9 @@ From Stdlib Require Import Init.Nat.
 From Stdlib Require Import Lists.List.
 From Stdlib Require Import Morphisms.
 From Stdlib Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.
