@@ -3,7 +3,9 @@ Loading file "test_cryptol_module_simple.saw"
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.

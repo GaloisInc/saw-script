@@ -2,16 +2,20 @@ From Stdlib Require Import Init.Nat.
 From Stdlib Require Import Lists.List.
 From Stdlib Require Import Morphisms.
 From Stdlib Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib Require Import Vectors.Vector.
-
-From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import SAWCoreScaffolding.
-From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+#[local] Set Warnings "stdlib-vector".
 
 From mathcomp Require Import eqtype.
 From mathcomp Require Import ssrbool.
 From mathcomp Require Import ssreflect.
+#[local] Set Warnings "-notation-overridden".
 From mathcomp Require Import ssrnat.
+#[local] Set Warnings "notation-overridden".
+
+From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToCoq Require Import SAWCoreScaffolding.
+From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 
 Import ProperNotations.
 Import SAWCorePrelude.

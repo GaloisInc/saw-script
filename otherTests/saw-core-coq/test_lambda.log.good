@@ -3,7 +3,9 @@ Loading file "test_lambda.saw"
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -29,7 +31,9 @@ Definition TestLambda_App : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesFo
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -55,7 +59,9 @@ Definition TestLambda_TwoArgs : CryptolPrimitivesForSAWCore.seq (CryptolPrimitiv
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -80,7 +86,9 @@ Definition TestLambda_Partial : forall (y : CryptolPrimitivesForSAWCore.seq (Cry
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
@@ -108,7 +116,9 @@ Definition TestLambda_Nested : CryptolPrimitivesForSAWCore.seq (CryptolPrimitive
 (** Mandatory imports from saw-core-coq *)
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib       Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import VectorNotations.
