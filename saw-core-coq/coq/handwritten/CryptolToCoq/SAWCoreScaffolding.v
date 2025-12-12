@@ -397,8 +397,8 @@ Variant RecordTypeNil : Type :=
 Variant RecordTypeCons (str:string) (tp:Type) (rest_tp:Type) : Type :=
   RecordCons (x:tp) (rest:rest_tp) : RecordTypeCons str tp rest_tp.
 
-Arguments RecordTypeCons str%string_scope tp rest_tp.
-Arguments RecordCons str%string_scope {tp rest_tp} x rest.
+Arguments RecordTypeCons str%_string_scope tp rest_tp.
+Arguments RecordCons str%_string_scope {tp rest_tp} x rest.
 
 Global Instance Inhabited_RecordNil : Inhabited RecordTypeNil :=
     MkInhabited RecordTypeNil RecordNil.
@@ -455,7 +455,7 @@ Definition RecordProj {rtp} (r:rtp) str `{irf:IsRecordField str rtp} :
   getRecordFieldType rtp str :=
   getRecordField str r.
 
-Arguments RecordProj {_} r str%string {_}.
+Arguments RecordProj {_} r str%_string {_}.
 
 
 (* Some tests *)
