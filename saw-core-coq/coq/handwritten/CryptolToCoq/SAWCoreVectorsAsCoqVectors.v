@@ -40,7 +40,9 @@ From Stdlib Require Import PArith.BinPos.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 
 From mathcomp Require Import ssreflect.
+#[local] Set Warnings "-notation-overridden".
 From mathcomp Require Import ssrnat.
+#[local] Set Warnings "notation-overridden".
 From mathcomp Require Import ssrbool.
 From mathcomp Require Import fintype.
 From mathcomp Require Import tuple.
