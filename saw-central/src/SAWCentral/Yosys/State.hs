@@ -178,7 +178,6 @@ convertModuleInline sc m =
      -- construct result
      t <- SC.scAbstractTerms sc [domainRecord] outputRecord
      -- ty <- SC.scFun sc domainRecordType codomainRecordType
-     _ <- validateTerm sc "translating a sequential circuit" t
      let cty = C.tFun domainCryptolRecordType codomainCryptolRecordType
      pure YosysSequential
        { _yosysSequentialTerm = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t

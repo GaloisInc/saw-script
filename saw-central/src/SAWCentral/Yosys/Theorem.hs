@@ -72,10 +72,7 @@ theoremProp sc thm =
               SC.scImplies sc pcr equality
      func <- SC.scAbstractTerms sc [r] res
      let cty = C.tFun (thm ^. theoremInputCryptolType) C.tBit
-     SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty)
-       <$> validateTerm sc
-       ("constructing a proposition while verifying " <> URI.render (thm ^. theoremURI))
-       func
+     pure (SC.TypedTerm (SC.TypedTermSchema (C.tMono cty)) func)
 
 -- | Construct a SAWCore proposition for the given theorem.
 -- In pseudo-Cryptol, this looks like {{ \r -> if precond r then body r else module r }}
@@ -93,10 +90,7 @@ theoremReplacement sc thm =
                thenCase <- SC.scApply sc (thm ^. theoremBody) r
                elseCase <- SC.scApply sc (thm ^. theoremModule) r
                SC.scIte sc (thm ^. theoremOutputType) precond thenCase elseCase
-     ft <- SC.scAbstractTerms sc [r] body
-     validateTerm sc
-       ("constructing an override replacement for " <> URI.render (thm ^. theoremURI))
-       ft
+     SC.scAbstractTerms sc [r] body
 
 -- | Given a SAWCore term corresponding to an HDL module, a specification, and a precondition:
 -- Construct a theorem summarizing the relationship between the module and the specification.
@@ -187,7 +181,4 @@ applyOverride sc thm t = do
           | idx == tidx -> theoremReplacement sc thm
           | otherwise -> pure s
         _ -> SC.scTermF sc =<< traverse go (SC.unwrapTermF s)
-  ft <- go unfolded
-  validateTerm sc
-    ("applying an override for " <> URI.render (thm ^. theoremURI))
-    ft
+  go unfolded
