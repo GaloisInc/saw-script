@@ -9,7 +9,9 @@ From Stdlib Require Import Vectors.Vector.
 From mathcomp Require Import eqtype.
 From mathcomp Require Import ssrbool.
 From mathcomp Require Import ssreflect.
+#[local] Set Warnings "-notation-overridden".
 From mathcomp Require Import ssrnat.
+#[local] Set Warnings "notation-overridden".
 
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.
