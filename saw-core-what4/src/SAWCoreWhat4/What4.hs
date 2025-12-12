@@ -981,7 +981,7 @@ newtype UnintCount (tc :: BaseType) = UnintCount Natural
 type UnintState sym = MapF BaseTypeRepr (Arr sym)
 
 -- | Uninterpreted function results for a particular base type.
--- The lenght of the lists should match the `UnintCount tc` for the type.
+-- The length of the lists should match the @UnintCount tc@ for the type.
 newtype Arr sym tc = Arr [SymExpr sym tc]
 
 -- | Generate a call to an uninterpreted function.
