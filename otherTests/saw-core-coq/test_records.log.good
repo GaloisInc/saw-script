@@ -376,7 +376,7 @@ Definition TestRec_NestedField1 : Init.Datatypes.bool :=
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
   let var__3   := prod var__1 var__1 in
   let var__4   := CryptolPrimitivesForSAWCore.PEqSeqBool var__0 in
-  let var__5   := (fun (u1219 : Type) {Inh_u1219 : SAWCoreScaffolding.Inhabited u1219} (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) => let var__6   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
+  let var__5   := (fun (u1219 : Type) (Inh_u1219 : SAWCoreScaffolding.Inhabited u1219) (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) => let var__6   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__7   := CryptolPrimitivesForSAWCore.seq var__6 Init.Datatypes.bool in
   let var__8   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__6 in
   pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) var__7 var__8) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) var__7 var__8)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))) u1219 _P)) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in
@@ -411,7 +411,7 @@ Definition TestRec_NestedField2 : Init.Datatypes.bool :=
   let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
   let var__3   := prod var__1 var__1 in
   let var__4   := CryptolPrimitivesForSAWCore.PEqSeqBool var__0 in
-  let var__5   := (fun (u1219 : Type) {Inh_u1219 : SAWCoreScaffolding.Inhabited u1219} (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) => let var__6   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
+  let var__5   := (fun (u1219 : Type) (Inh_u1219 : SAWCoreScaffolding.Inhabited u1219) (_P : CryptolPrimitivesForSAWCore.PLiteral u1219) => let var__6   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__7   := CryptolPrimitivesForSAWCore.seq var__6 Init.Datatypes.bool in
   let var__8   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__6 in
   pair (pair (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) var__7 var__8) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) var__7 var__8)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))) u1219 _P)) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger in

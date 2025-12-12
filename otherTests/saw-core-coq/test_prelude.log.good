@@ -616,21 +616,21 @@ Definition atWithDefault' : forall (n : Init.Datatypes.nat), forall (a : Type), 
 (* "Prelude.atWithDefault" was skipped *)
 
 Definition sawAt : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_2 : Init.Datatypes.nat), a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (v : SAWCoreVectorsAsCoqVectors.Vec n a) (i : Init.Datatypes.nat) => SAWCoreVectorsAsCoqVectors.atWithDefault n a (SAWCoreScaffolding.error a "at: index out of bounds"%string) v i.
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsCoqVectors.Vec n a) (i : Init.Datatypes.nat) => SAWCoreVectorsAsCoqVectors.atWithDefault n a (SAWCoreScaffolding.error a "at: index out of bounds"%string) v i.
 
 (* "Prelude.EmptyVec" was skipped *)
 
 Definition ConsVec : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : a), forall (n : Init.Datatypes.nat), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec n a), SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a :=
-  fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (x : a) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.gen (SAWCoreScaffolding.Succ n) a (Nat_cases a x (fun (i : Init.Datatypes.nat) (a' : a) => SAWCorePrelude.sawAt n a v i)).
+  fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (x : a) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.gen (SAWCoreScaffolding.Succ n) a (Nat_cases a x (fun (i : Init.Datatypes.nat) (a' : a) => SAWCorePrelude.sawAt n a v i)).
 
 Definition upd : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_2 : Init.Datatypes.nat), forall (_3 : a), SAWCoreVectorsAsCoqVectors.Vec n a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (v : SAWCoreVectorsAsCoqVectors.Vec n a) (j : Init.Datatypes.nat) (x : a) => SAWCoreVectorsAsCoqVectors.gen n a (fun (i : Init.Datatypes.nat) => if SAWCoreScaffolding.equalNat i j then x else SAWCorePrelude.sawAt n a v i).
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsCoqVectors.Vec n a) (j : Init.Datatypes.nat) (x : a) => SAWCoreVectorsAsCoqVectors.gen n a (fun (i : Init.Datatypes.nat) => if SAWCoreScaffolding.equalNat i j then x else SAWCorePrelude.sawAt n a v i).
 
 Definition map : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (b : Type), forall (_1 : forall (_1 : a), b), forall (n : Init.Datatypes.nat), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec n a), SAWCoreVectorsAsCoqVectors.Vec n b :=
-  fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (b : Type) (f : forall (_1 : a), b) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.gen n b (fun (i : Init.Datatypes.nat) => f (SAWCorePrelude.sawAt n a v i)).
+  fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (b : Type) (f : forall (_1 : a), b) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.gen n b (fun (i : Init.Datatypes.nat) => f (SAWCorePrelude.sawAt n a v i)).
 
 Definition zipWith : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (b : Type), forall {Inh_b : SAWCoreScaffolding.Inhabited b}, forall (c : Type), forall (_1 : forall (_1 : a), forall (_2 : b), c), forall (n : Init.Datatypes.nat), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_3 : SAWCoreVectorsAsCoqVectors.Vec n b), SAWCoreVectorsAsCoqVectors.Vec n c :=
-  fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (b : Type) {Inh_b : SAWCoreScaffolding.Inhabited b} (c : Type) (f : forall (_1 : a), forall (_2 : b), c) (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsCoqVectors.Vec n a) (y : SAWCoreVectorsAsCoqVectors.Vec n b) => SAWCoreVectorsAsCoqVectors.gen n c (fun (i : Init.Datatypes.nat) => f (SAWCorePrelude.sawAt n a x i) (SAWCorePrelude.sawAt n b y i)).
+  fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (b : Type) (Inh_b : SAWCoreScaffolding.Inhabited b) (c : Type) (f : forall (_1 : a), forall (_2 : b), c) (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsCoqVectors.Vec n a) (y : SAWCoreVectorsAsCoqVectors.Vec n b) => SAWCoreVectorsAsCoqVectors.gen n c (fun (i : Init.Datatypes.nat) => f (SAWCorePrelude.sawAt n a x i) (SAWCorePrelude.sawAt n b y i)).
 
 Definition replicate : forall (n : Init.Datatypes.nat), forall (a : Type), forall (_1 : a), SAWCoreVectorsAsCoqVectors.Vec n a :=
   fun (n : Init.Datatypes.nat) (a : Type) (x : a) => SAWCoreVectorsAsCoqVectors.gen n a (fun (_1 : Init.Datatypes.nat) => x).
@@ -674,18 +674,18 @@ Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
 (* "Prelude.foldl_cons" was skipped *)
 
 Definition reverse : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsCoqVectors.Vec n a), SAWCoreVectorsAsCoqVectors.Vec n a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (xs : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.gen n a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt n a xs (SAWCoreScaffolding.subNat (SAWCoreScaffolding.subNat n (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) i)).
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.gen n a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt n a xs (SAWCoreScaffolding.subNat (SAWCoreScaffolding.subNat n (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) i)).
 
 Definition transpose : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a)), SAWCoreVectorsAsCoqVectors.Vec n (SAWCoreVectorsAsCoqVectors.Vec m a) :=
-  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (xss : SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a)) => SAWCoreVectorsAsCoqVectors.gen n (SAWCoreVectorsAsCoqVectors.Vec m a) (fun (j : Init.Datatypes.nat) => SAWCoreVectorsAsCoqVectors.gen m a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt n a (SAWCorePrelude.sawAt m (SAWCoreVectorsAsCoqVectors.Vec n a) xss i) j)).
+  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (xss : SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a)) => SAWCoreVectorsAsCoqVectors.gen n (SAWCoreVectorsAsCoqVectors.Vec m a) (fun (j : Init.Datatypes.nat) => SAWCoreVectorsAsCoqVectors.gen m a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt n a (SAWCorePrelude.sawAt m (SAWCoreVectorsAsCoqVectors.Vec n a) xss i) j)).
 
 Definition vecEq : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_3 : SAWCoreVectorsAsCoqVectors.Vec n a), Init.Datatypes.bool :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (eqFn : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool) (x : SAWCoreVectorsAsCoqVectors.Vec n a) (y : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.foldr Init.Datatypes.bool Init.Datatypes.bool n Init.Datatypes.andb Init.Datatypes.true (zipWith a a Init.Datatypes.bool eqFn n x y).
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (eqFn : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool) (x : SAWCoreVectorsAsCoqVectors.Vec n a) (y : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.foldr Init.Datatypes.bool Init.Datatypes.bool n Init.Datatypes.andb Init.Datatypes.true (zipWith a a Init.Datatypes.bool eqFn n x y).
 
 Axiom vecEq_refl : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (eqFn : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool), forall (_1 : forall (x : a), @Init.Logic.eq Init.Datatypes.bool (eqFn x x) Init.Datatypes.true), forall (x : SAWCoreVectorsAsCoqVectors.Vec n a), @Init.Logic.eq Init.Datatypes.bool (vecEq n a eqFn x x) Init.Datatypes.true .
 
 Definition take : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat m n) a), SAWCoreVectorsAsCoqVectors.Vec m a :=
-  fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat m n) a) => SAWCoreVectorsAsCoqVectors.gen m a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt (SAWCoreScaffolding.addNat m n) a v i).
+  fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat m n) a) => SAWCoreVectorsAsCoqVectors.gen m a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt (SAWCoreScaffolding.addNat m n) a v i).
 
 Definition vecCong : forall (a : Type), forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (_1 : @Init.Logic.eq Init.Datatypes.nat m n), @Init.Logic.eq Type (SAWCoreVectorsAsCoqVectors.Vec m a) (SAWCoreVectorsAsCoqVectors.Vec n a) :=
   fun (a : Type) (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (eq : @Init.Logic.eq Init.Datatypes.nat m n) => eq_cong Init.Datatypes.nat m n eq Type (fun (i : Init.Datatypes.nat) => SAWCoreVectorsAsCoqVectors.Vec i a).
@@ -695,21 +695,21 @@ Definition vecCong : forall (a : Type), forall (m : Init.Datatypes.nat), forall 
 (* "Prelude.take0" was skipped *)
 
 Definition drop : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat m n) a), SAWCoreVectorsAsCoqVectors.Vec n a :=
-  fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat m n) a) => SAWCoreVectorsAsCoqVectors.gen n a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt (SAWCoreScaffolding.addNat m n) a v (SAWCoreScaffolding.addNat m i)).
+  fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat m n) a) => SAWCoreVectorsAsCoqVectors.gen n a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt (SAWCoreScaffolding.addNat m n) a v (SAWCoreScaffolding.addNat m i)).
 
 (* "Prelude.drop0" was skipped *)
 
 Definition slice : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (o : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat (SAWCoreScaffolding.addNat m n) o) a), SAWCoreVectorsAsCoqVectors.Vec n a :=
-  fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (o : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat (SAWCoreScaffolding.addNat m n) o) a) => drop a m n (take a (SAWCoreScaffolding.addNat m n) o v).
+  fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (o : Init.Datatypes.nat) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat (SAWCoreScaffolding.addNat m n) o) a) => drop a m n (take a (SAWCoreScaffolding.addNat m n) o v).
 
 Definition join : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a)), SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.mulNat m n) a :=
-  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (v : SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a)) => SAWCoreVectorsAsCoqVectors.gen (SAWCoreScaffolding.mulNat m n) a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt n a (SAWCorePrelude.sawAt m (SAWCoreVectorsAsCoqVectors.Vec n a) v (divNat i n)) (modNat i n)).
+  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a)) => SAWCoreVectorsAsCoqVectors.gen (SAWCoreScaffolding.mulNat m n) a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt n a (SAWCorePrelude.sawAt m (SAWCoreVectorsAsCoqVectors.Vec n a) v (divNat i n)) (modNat i n)).
 
 Definition split : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.mulNat m n) a), SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a) :=
-  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.mulNat m n) a) => SAWCoreVectorsAsCoqVectors.gen m (SAWCoreVectorsAsCoqVectors.Vec n a) (fun (i : Init.Datatypes.nat) => SAWCoreVectorsAsCoqVectors.gen n a (fun (j : Init.Datatypes.nat) => SAWCorePrelude.sawAt (SAWCoreScaffolding.mulNat m n) a v (SAWCoreScaffolding.addNat (SAWCoreScaffolding.mulNat i n) j))).
+  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.mulNat m n) a) => SAWCoreVectorsAsCoqVectors.gen m (SAWCoreVectorsAsCoqVectors.Vec n a) (fun (i : Init.Datatypes.nat) => SAWCoreVectorsAsCoqVectors.gen n a (fun (j : Init.Datatypes.nat) => SAWCorePrelude.sawAt (SAWCoreScaffolding.mulNat m n) a v (SAWCoreScaffolding.addNat (SAWCoreScaffolding.mulNat i n) j))).
 
 Definition append : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsCoqVectors.Vec m a), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec n a), SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.addNat m n) a :=
-  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (x : SAWCoreVectorsAsCoqVectors.Vec m a) (y : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.gen (SAWCoreScaffolding.addNat m n) a (fun (i : Init.Datatypes.nat) => if SAWCoreScaffolding.ltNat i m then SAWCorePrelude.sawAt m a x i else SAWCorePrelude.sawAt n a y (SAWCoreScaffolding.subNat i m)).
+  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (x : SAWCoreVectorsAsCoqVectors.Vec m a) (y : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.gen (SAWCoreScaffolding.addNat m n) a (fun (i : Init.Datatypes.nat) => if SAWCoreScaffolding.ltNat i m then SAWCorePrelude.sawAt m a x i else SAWCorePrelude.sawAt n a y (SAWCoreScaffolding.subNat i m)).
 
 (* "Prelude.rotateL" was skipped *)
 
@@ -720,10 +720,10 @@ Definition append : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.
 (* "Prelude.shiftR" was skipped *)
 
 Definition joinLittleEndian : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a)), SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.mulNat m n) a :=
-  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (v : SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a)) => join m n a (reverse m (SAWCoreVectorsAsCoqVectors.Vec n a) v).
+  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a)) => join m n a (reverse m (SAWCoreVectorsAsCoqVectors.Vec n a) v).
 
 Definition splitLittleEndian : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.mulNat m n) a), SAWCoreVectorsAsCoqVectors.Vec m (SAWCoreVectorsAsCoqVectors.Vec n a) :=
-  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.mulNat m n) a) => reverse m (SAWCoreVectorsAsCoqVectors.Vec n a) (split m n a v).
+  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.mulNat m n) a) => reverse m (SAWCoreVectorsAsCoqVectors.Vec n a) (split m n a v).
 
 (* "Prelude.appendString" was skipped *)
 
@@ -744,25 +744,25 @@ Definition lsb : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsC
 Axiom bvNat_bvToNat : forall (n : Init.Datatypes.nat), forall (x : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool), @Init.Logic.eq (SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool) (SAWCoreVectorsAsCoqVectors.bvNat n (SAWCoreVectorsAsCoqVectors.bvToNat n x)) x .
 
 Definition bvAt : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (w : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool), a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCorePrelude.sawAt n a xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCorePrelude.sawAt n a xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
 Definition bvUpd : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (w : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool), forall (_3 : a), SAWCoreVectorsAsCoqVectors.Vec n a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) (y : a) => upd n a xs (SAWCoreVectorsAsCoqVectors.bvToNat w i) y.
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) (y : a) => upd n a xs (SAWCoreVectorsAsCoqVectors.bvToNat w i) y.
 
 Definition bvRotateL : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (w : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool), SAWCoreVectorsAsCoqVectors.Vec n a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCoreVectorsAsCoqVectors.rotateL n a xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCoreVectorsAsCoqVectors.rotateL n a xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
 Definition bvRotateR : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (w : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool), SAWCoreVectorsAsCoqVectors.Vec n a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCoreVectorsAsCoqVectors.rotateR n a xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCoreVectorsAsCoqVectors.rotateR n a xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
 Definition bvShiftL : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (w : Init.Datatypes.nat), forall (_1 : a), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_3 : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool), SAWCoreVectorsAsCoqVectors.Vec n a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (w : Init.Datatypes.nat) (z : a) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCoreVectorsAsCoqVectors.shiftL n a z xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (w : Init.Datatypes.nat) (z : a) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCoreVectorsAsCoqVectors.shiftL n a z xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
 Definition bvShiftR : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (w : Init.Datatypes.nat), forall (_1 : a), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec n a), forall (_3 : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool), SAWCoreVectorsAsCoqVectors.Vec n a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (w : Init.Datatypes.nat) (z : a) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCoreVectorsAsCoqVectors.shiftR n a z xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (w : Init.Datatypes.nat) (z : a) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => SAWCoreVectorsAsCoqVectors.shiftR n a z xs (SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
 Definition bvSShiftR : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (w : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool), SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a :=
-  fun (n : Init.Datatypes.nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => let var__0   := SAWCoreScaffolding.Succ n in
+  fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a) (i : SAWCoreVectorsAsCoqVectors.Vec w Init.Datatypes.bool) => let var__0   := SAWCoreScaffolding.Succ n in
   bvShiftR var__0 a w (SAWCorePrelude.sawAt var__0 a xs SAWCoreScaffolding.Zero) xs i.
 
 (* "Prelude.bvAdd" was skipped *)
@@ -935,7 +935,7 @@ Definition streamAppend : forall (a : Type), forall (n : Init.Datatypes.nat), fo
   fun (a : Type) (n : Init.Datatypes.nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (ys : Stream a) => MkStream a (fun (i : Init.Datatypes.nat) => SAWCoreVectorsAsCoqVectors.atWithDefault n a (streamGet a ys (SAWCoreScaffolding.subNat i n)) xs i).
 
 Definition streamJoin : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (n : Init.Datatypes.nat), forall (_1 : Stream (SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a)), Stream a :=
-  fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (n : Init.Datatypes.nat) (s : Stream (SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a)) => MkStream a (fun (i : Init.Datatypes.nat) => let var__0   := SAWCoreScaffolding.Succ n in
+  fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (n : Init.Datatypes.nat) (s : Stream (SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a)) => MkStream a (fun (i : Init.Datatypes.nat) => let var__0   := SAWCoreScaffolding.Succ n in
   SAWCorePrelude.sawAt var__0 a (streamGet (SAWCoreVectorsAsCoqVectors.Vec var__0 a) s (divNat i var__0)) (modNat i var__0)).
 
 Definition streamSplit : forall (a : Type), forall (n : Init.Datatypes.nat), forall (_1 : Stream a), Stream (SAWCoreVectorsAsCoqVectors.Vec n a) :=
