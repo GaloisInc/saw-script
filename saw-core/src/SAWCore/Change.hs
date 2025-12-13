@@ -22,6 +22,7 @@ module SAWCore.Change
 import qualified Control.Applicative as App (liftA2)
 import Control.Monad (liftM)
 import Control.Monad.Trans
+import Data.Ref (C(..), newLifted)
 
 ----------------------------------------------------------------------
 -- Monads for tracking whether values have changed
@@ -123,6 +124,9 @@ instance Monad m => ChangeMonad (ChangeT m) where
   preserve x (ChangeT m) = ChangeT (liftM (preserve x) m)
   taint (ChangeT m) = ChangeT (liftM taint m)
   modified x = ChangeT (return (modified x))
+
+instance C m => C (ChangeT m) where
+  new = newLifted
 
 commitChangeT :: Monad m => ChangeT m a -> m a
 commitChangeT (ChangeT m) = liftM commitChange m
