@@ -16,6 +16,7 @@ lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
 llvm_array : Int -> LLVMType -> LLVMType
 llvm_pointer : LLVMType -> LLVMType
+mergesimpsets : Simpset -> Simpset -> Simpset
 rewrite : Simpset -> Term -> Term
 str_concat : String -> String -> String
 tail : {a} [a] -> [a]

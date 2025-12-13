@@ -221,6 +221,7 @@ llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMS
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 load_aig : String -> TopLevel AIG
 mathsat : ProofScript ()
+mergesimpsets : Simpset -> Simpset -> Simpset
 mir_unint : [String] -> MIRSetup ()
 nat_to_term : Int -> Term
 nth : {a} [a] -> Int -> a
