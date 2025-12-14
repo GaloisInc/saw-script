@@ -72,7 +72,6 @@ visitRegValueExprs _sym tpr_ v_ f = go tpr_ v_
     go :: forall tp'. TypeRepr tp' -> RegValue sym tp' -> m ()
     go tpr v | AsBaseType _btpr <- asBaseType tpr = f v
     go AnyRepr (AnyValue tpr' v') = go tpr' v'
-    go UnitRepr () = return ()
     go (MaybeRepr _tpr) W4.Unassigned = return ()
     go (MaybeRepr tpr') (W4.PE p v') = f p >> go tpr' v'
     go (VectorRepr tpr') vec = mapM_ (go tpr') vec
@@ -156,7 +155,6 @@ termToReg sym varMap term shp0 = do
   where
     go :: forall tp'. TypeShape tp' -> SValue sym -> IO (RegValue sym tp')
     go shp sv = case (shp, sv) of
-        (UnitShape _, SAW.VUnit) -> return ()
         (PrimShape _ BaseBoolRepr, SAW.VBool b) -> return b
         (PrimShape _ (BaseBVRepr w), SAW.VWord (W4.DBV e))
           | Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> return e
@@ -167,6 +165,7 @@ termToReg sym varMap term shp0 = do
                 _ -> fail $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
                     ", but simulator returned a vector containing " ++ show x
             buildBitVector w bits
+        (TupleShape _ [], SAW.VUnit) -> mirAggregate_zstIO
         (TupleShape _ elems, _) -> do
             svs <- reverse <$> tupleToListRev (length elems) [] sv
             buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
@@ -399,7 +398,6 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
         RegValue sym tp ->
         m SAW.Term
     go shp rv = case (shp, rv) of
-        (UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
         (PrimShape _ _, expr) -> exprToTerm sym w4VarMapRef expr
         (TupleShape _ elems, ag) -> do
             terms <- accessMirAggregate sym elems ag $ \_off _sz shp' rv' -> go shp' rv'

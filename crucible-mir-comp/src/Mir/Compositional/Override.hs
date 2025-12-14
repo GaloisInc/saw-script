@@ -336,8 +336,13 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
     let termSub = os ^. MS.termSub
     retVal <- case ms ^. MS.csRetValue of
         Just sv -> liftIO $ setupToReg sym termSub w4VarMap allocMap retShp sv
-        Nothing -> case testEquality retTpr UnitRepr of
-            Just Refl -> return ()
+        Nothing ->
+          -- We know that the returned value is (), so assert that the type
+          -- representation is MirAggregateRepr (which is how all tuples are
+          -- represented in crucible-mir), then a zero-sized type aggregate
+          -- (which is the same size as () in crucible-mir).
+          case testEquality retTpr MirAggregateRepr of
+            Just Refl -> mirAggregate_zstSim
             Nothing -> error $ "no return value, but return type is " ++ show retTpr
 
     -- For every post-state PointsTo, write the RHS value into the LHS pointer.
@@ -393,7 +398,6 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
-    go (UnitShape _) () (MS.SetupTuple () []) = return ()
     go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
         loc <- use MS.osLocation
         exprTerm <- liftIO $ eval expr
@@ -548,7 +552,6 @@ setupToReg :: forall sym t fs tp0.
 setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
   where
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
-    go (UnitShape _) (MS.SetupTuple _ []) = return ()
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
         let sc = mirSharedContext (sym ^. W4.userState)
         term <- liftIO $ SAW.scInstantiate sc termSub $ SAW.ttTerm tt

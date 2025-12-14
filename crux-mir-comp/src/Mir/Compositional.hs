@@ -107,10 +107,11 @@ compositionalOverrides _symOnline cs name cfg
 
   | ["crucible", "method_spec", "raw", "clobber_globals"] == explodedName
   , Empty <- cfgArgTypes cfg
-  , UnitRepr <- cfgReturnType cfg
+  , MirAggregateRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
-    mkOverride' "method_spec_clobber_globals" UnitRepr $ do
+    mkOverride' "method_spec_clobber_globals" MirAggregateRepr $ do
         clobberGlobalsOverride cs
+        mirAggregate_zstSim
 
 
   | ["crucible", "method_spec", "raw", "spec_pretty_print"] == explodedName
@@ -123,11 +124,12 @@ compositionalOverrides _symOnline cs name cfg
 
   | ["crucible", "method_spec", "raw", "spec_enable"] == explodedName
   , Empty :> MethodSpecRepr <- cfgArgTypes cfg
-  , UnitRepr <- cfgReturnType cfg
+  , MirAggregateRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
-    mkOverride' "method_spec_spec_enable" UnitRepr $ do
+    mkOverride' "method_spec_spec_enable" MirAggregateRepr $ do
         RegMap (Empty :> RegEntry _tpr (MethodSpec ms _)) <- getOverrideArgs
         msEnable ms
+        mirAggregate_zstSim
 
 
   | otherwise = Nothing

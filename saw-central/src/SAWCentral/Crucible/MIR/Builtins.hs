@@ -444,8 +444,6 @@ constructExpandedSetupValue cc sc = go
           CrucibleSetup MIR SetupValue
     go pfx shp =
       case shp of
-        UnitShape _ ->
-          pure $ MS.SetupTuple () []
         PrimShape ty _ -> do
           fv <- freshPrimVariable pfx ty
           pure $ MS.SetupTerm fv
@@ -2005,9 +2003,6 @@ setupArg sc cc ecRef mty0 tp0 =
           IO (Cryptol.Type, Term)
         typeShapeToSAWTypes shp =
           case shp of
-            UnitShape {} -> do
-              scTp <- scUnitType sc
-              pure (Cryptol.tTuple [], scTp)
             TupleShape _ elems -> do
               (eltCtys, eltScTps) <-
                 mapAndUnzipM
@@ -2070,8 +2065,6 @@ setupArg sc cc ecRef mty0 tp0 =
           IO (Crucible.RegValue Sym tp')
         termToMirRegValue shp scTp t =
           case shp of
-            UnitShape {} -> do
-              pure ()
             TupleShape _ elems -> do
               eltScTps <-
                 case asTupleType scTp of
@@ -2290,8 +2283,6 @@ setupResultTerm sc cc mty0 tpr0 val0 =
         go mty tpr val =
           let shp = tyToShapeEq col mty tpr in
           case shp of
-            UnitShape {} ->
-              scUnitValue sc
             TupleShape _ elems -> do
               tys <-
                 case mty of
