@@ -784,7 +784,8 @@ scDeclareDef sc nm q ty body =
 -- | Declare a SAW core primitive of the specified type.
 scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc ident q def_tp =
-  do let nmi = ModuleIdentifier ident
+  do _ <- either pure (ensureSort sc) (stAppType def_tp)
+     let nmi = ModuleIdentifier ident
      nm <- scRegisterName sc nmi
      _ <- scDeclareDef sc nm q def_tp Nothing
      pure ()
@@ -1718,7 +1719,8 @@ scOpaqueConstant ::
   Term {- ^ type of the constant -} ->
   IO Term
 scOpaqueConstant sc nmi ty =
-  do nm <- scRegisterName sc nmi
+  do _ <- either pure (ensureSort sc) (stAppType ty)
+     nm <- scRegisterName sc nmi
      scDeclareDef sc nm NoQualifier ty Nothing
 
 -- | Create a function application term from a global identifier and a list of
