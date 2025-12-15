@@ -39,7 +39,7 @@ module CryptolSAWCore.Cryptol
 
   ) where
 
-import Control.Monad (foldM, forM, zipWithM, join, when, unless)
+import Control.Monad (foldM, forM, zipWithM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -82,9 +82,6 @@ import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import qualified Cryptol.Utils.PP as PP
 import Cryptol.Utils.PP (pretty, pp)
-
--- saw-support
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 -- saw-core
 import qualified SAWCore.Simulator.Concrete as SC
@@ -1939,37 +1936,6 @@ importMatches sc env (C.Let decl : matches) =
 --------------------------------------------------------------------------------
 -- Utilities:
 
--- | assertSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) @term@.
---     if @mType == Just type'@ then ensure the following
---         term :: type'
---
---   This code is used for sanity checks during code generation, like assert.
---
---   FIXME: Currently we have made parts of this function un-reachable to
---     reduce the run-time impact of this check.  A better, long-term,
---     project-wide solution would be desirable: how to dial up run-time checks for
---     [integration] tests, but dial down run-time checks for general use.
---
-assertSAWCoreTypeChecks :: Show i => SharedContext -> i -> Term -> Maybe Term -> IO ()
-assertSAWCoreTypeChecks sc _ident term mType =
-  do ty1 <- scTypeOf sc term
-     case mType of
-       Nothing  ->
-         pure ()
-       Just ty2 ->
-         when False $
-           -- N.B. currently unreachable to reduce run-time impact:
-           do
-           eq <- scConvertible sc True ty1 ty2
-           unless eq $ do
-             ty1' <- ppTerm sc PPS.defaultOpts ty1
-             ty2' <- ppTerm sc PPS.defaultOpts ty2
-             panic "assertSAWCoreTypeChecks" [
-                 "Expected type " <> Text.pack ty1',
-                 "does not match the inferred type " <> Text.pack ty2'
-              ]
-
-
 -- | When possible, convert back from a SAWCore type to a Cryptol Type, or Kind.
 scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
@@ -2399,8 +2365,6 @@ genCodeForEnum sc env nt ctors =
   case_rhs' <- scAscribe sc case_rhs case_type
   _ <- scDefineConstant sc (ModuleIdentifier case_ident) case_rhs'
 
-  assertSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
-
   -------------------------------------------------------------
   -- There's a bit of 'tedium' in creating the constructors, let's look at our
   -- running example, the SAWCore constructors we want are these:
@@ -2490,7 +2454,6 @@ genCodeForEnum sc env nt ctors =
                       =<< scAbstractTerms sc argVars
                       =<< scNthInjection ctorNumber
                       =<< scTuple sc argVars
-        assertSAWCoreTypeChecks sc (C.nameIdent ctorName) ctorBody Nothing
         return (ctorName, ctorBody)
 
   return defn_eachCtor
