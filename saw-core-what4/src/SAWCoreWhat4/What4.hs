@@ -64,11 +64,12 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import qualified Data.BitVector.Sized as BV
 
 import Data.Traversable as T
 import qualified Control.Exception as X
 import Control.Monad ((<=<), foldM, unless)
-import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
+import Control.Monad.State as ST (MonadState(..), get, put, StateT(..), evalStateT, modify)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Numeric.Natural (Natural)
 
@@ -955,29 +956,33 @@ mkSymFn sym ref nm args ret =
 
 Our strategy is to generate a separate uninterpreted function for each
 base type that is mentioned in the result of the original uninterpreted
-function.  This function returns an *array* of values, and the actual results
-of the original function are obtained by selecting elements of this array.
+function.  If we need more than one value of a type, then we return an
+*array* of values, and the actual results of the original function are
+obtained by selecting elements of this array.
 
 For example, consider a function `f: [16] -> ([4][8],Bool)`. 
 A call `f x` will be translated like this:
 
-  f_bv8:  [16] -> Array Int [8]  // Uninterpreted
-  f_bool: [16] -> Array Int Bool  // Uninterpreted
+  f_bv8:  [16] -> Array [2] [8]   // Uninterpreted
+  f_bool: [16] -> Bool            // Uninterpreted
   w8s   = f_bv8 x                 // This has some auto-generated name
   bools = f_bool x                // This has some auto-generated name
   
 Value for `f x`:
-  ([ w8s ! 0, w8s ! 1, w8s ! 2, w8s ! 3 ], bools ! 0)
+  ([ w8s ! 0, w8s ! 1, w8s ! 2, w8s ! 3 ], bools)
 -}
 
--- | This is the state we use to generate uninterpreted values.
+
+
+-- | Track how many uninterpreted results we need for each base type.
+newtype UnintCount (tc :: BaseType) = UnintCount Natural
+
+-- | Uninterpreted function results for each base type.
 type UnintState sym = MapF BaseTypeRepr (Arr sym)
 
--- | For each base type we track the name of the array to project from and
--- the next index.
-data Arr sym tc = Arr
-  (SymExpr sym (BaseArrayType (Ctx.EmptyCtx Ctx.::> BaseIntegerType) tc))
-  !Integer
+-- | Uninterpreted function results for a particular base type.
+-- The length of the lists should match the @UnintCount tc@ for the type.
+newtype Arr sym tc = Arr [SymExpr sym tc]
 
 -- | Generate a call to an uninterpreted function.
 parseUninterpreted ::
@@ -988,9 +993,101 @@ parseUninterpreted ::
   UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} ->
   TValue (What4 sym)          {- ^ Type of the function's result -} ->
   IO (SValue sym)             {- ^ The symbolic value for the call to the uninterpreted function -}
-parseUninterpreted sym ref app ty =
-  evalStateT (parseUninterpreted' sym ref app ty) MapF.empty
- 
+parseUninterpreted sym ref app@(UnintApp nm args tys) ty =
+  do
+    un <- MapF.traverseWithKey mkUnint (countUninterpreted 1 MapF.empty ty)
+    evalStateT (parseUninterpreted' sym ref app ty) un
+  where
+  mkUnint :: BaseTypeRepr tc -> UnintCount tc -> IO (Arr sym tc)
+  mkUnint ret (UnintCount n)
+    | let lim = n - 1
+    , Just (Some w) <- someNat (width lim) =
+      case isZeroOrGT1 w of
+        Left Refl ->
+          do
+            fn <- mkSymFn sym ref (nm ++ suff ret) tys ret
+            el <- W.applySymFn sym fn args
+            pure (Arr [el])
+        Right LeqProof ->
+          do
+            fn   <- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton (BaseBVRepr w)) ret)
+            arr  <- W.applySymFn sym fn args
+            els <- forM [ 0 .. lim ] $ \i ->
+              do
+                ind <- W.bvLit sym w (BV.mkBV w (fromIntegral i))
+                W.arrayLookup sym arr (Ctx.singleton ind)
+            pure (Arr els)
+    | otherwise = panic "parseUninterpreted" ["`someNat` returned `Nothing` for `Natural`"]
+
+  -- | Compute the number of bits required to represent the given integer.
+  width :: Natural -> Natural
+  width x = go 0 x
+    where
+      go s 0 = s
+      go s n = let s' = s + 1 in s' `seq` go s' (n `shiftR` 1)
+
+  -- Type suffixes for uninterpreted functions of each base type.
+  suff :: BaseTypeRepr a -> String
+  suff t =
+    case t of
+      BaseBoolRepr -> "_bool"
+      BaseIntegerRepr -> "_int"
+      BaseRealRepr -> "_real"
+      BaseComplexRepr -> "_complex"
+      BaseBVRepr w -> "_bv" ++ show w
+      BaseFloatRepr (FloatingPointPrecisionRepr x y) -> "_float_" ++ show x ++ "_" ++ show y
+      BaseStringRepr w -> "_str" ++ strw
+        where strw = case w of
+                       Char8Repr -> "8"
+                       Char16Repr -> "16"
+                       UnicodeRepr -> "U"
+      BaseArrayRepr i e -> "_fun" ++ suff_asgn i ++ "_to" ++ suff e
+      BaseStructRepr flds -> "_struct" ++ suff_asgn flds ++ "_end"
+
+  suff_asgn i = intercalate "_and" (V.toList (Ctx.toVector i suff))
+
+
+
+-- | Count how many uninterpreted symbols we need to represent a value
+-- of the given type.  Note that this function should match exactly what
+-- is needed by `parseUninterpreted'`.
+countUninterpreted ::
+  IsSymExprBuilder sym =>
+  Natural -> MapF BaseTypeRepr UnintCount -> TValue (What4 sym) -> MapF BaseTypeRepr UnintCount
+countUninterpreted scale count ty =
+  case ty of
+    VPiType {}      -> count 
+    VBoolType       -> add BaseBoolRepr
+    VIntType        -> add BaseIntegerRepr
+    VIntModType {}  -> add BaseIntegerRepr
+    VVecType n VBoolType ->
+      case somePosNat n of
+        Just (Some (PosNat w)) -> add (BaseBVRepr w)
+        _                      -> count
+
+    VVecType n et -> if n == 0 then count else countUninterpreted (n * scale) count et
+      
+    VArrayType ity ety
+      | Just (Some idx_repr) <- valueAsBaseType ity
+      , Just (Some elm_repr) <- valueAsBaseType ety
+      -> add (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
+
+    VUnitType -> count
+
+    VPairType ty1 ty2 -> countUninterpreted scale (countUninterpreted scale count ty1) ty2
+
+    VRecordType elem_tps ->
+      foldl (\ct (_,t) -> countUninterpreted scale ct t) count elem_tps
+
+    _ -> count
+  where
+  add :: BaseTypeRepr tc -> MapF BaseTypeRepr UnintCount
+  add bt =
+    MapF.insertWith
+      (\(UnintCount x) (UnintCount y) -> UnintCount (x + y))
+      bt (UnintCount scale) count
+    
+-- Note that this doesn't really use IO, except for the `fail`.
 parseUninterpreted' ::
   forall sym.
   (IsSymExprBuilder sym) =>
@@ -1009,17 +1106,17 @@ parseUninterpreted' sym ref app ty =
               parseUninterpreted sym ref app' t2
 
     VBoolType
-      -> VBool <$> mkUninterpreted sym ref app BaseBoolRepr
+      -> VBool <$> mkUninterpreted BaseBoolRepr
 
     VIntType
-      -> VInt  <$> mkUninterpreted sym ref app BaseIntegerRepr
+      -> VInt  <$> mkUninterpreted BaseIntegerRepr
 
     VIntModType n
-      -> VIntMod n <$> mkUninterpreted sym ref app BaseIntegerRepr
+      -> VIntMod n <$> mkUninterpreted BaseIntegerRepr
 
     VVecType n VBoolType ->
       case somePosNat n of
-        Just (Some (PosNat w)) -> VWord . DBV <$> mkUninterpreted sym ref app (BaseBVRepr w)
+        Just (Some (PosNat w)) -> VWord . DBV <$> mkUninterpreted (BaseBVRepr w)
         _                      -> pure (VWord ZBV)
 
     VVecType n et ->
@@ -1029,7 +1126,7 @@ parseUninterpreted' sym ref app ty =
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
       -> (VArray . SArray) <$>
-          mkUninterpreted sym ref app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
+          mkUninterpreted (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
     VUnitType
       -> return VUnit
@@ -1046,54 +1143,15 @@ parseUninterpreted' sym ref app ty =
                  parseUninterpreted' sym ref app tp) elem_tps)
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
-
-
-mkUninterpreted ::
-  forall sym t. (IsSymExprBuilder sym) =>
-  sym -> IORef (SymFnCache sym) ->
-  UnintApp (SymExpr sym) ->
-  BaseTypeRepr t ->
-  StateT (UnintState sym) IO (SymExpr sym t)
-mkUninterpreted sym ref (UnintApp nm args tys) ret =
-  do
-    arrs <- get
-    Arr arr i <-
-      case MapF.lookup ret arrs of
-        Just a -> pure a
-        Nothing ->
-          lift $
-            do 
-              let suff_asgn i = intercalate "_and" (V.toList (Ctx.toVector i suff))
-
-                  suff :: BaseTypeRepr a -> String
-                  suff t =
-                    case t of
-                      BaseBoolRepr -> "_bool"
-                      BaseIntegerRepr -> "_int"
-                      BaseRealRepr -> "_real"
-                      BaseComplexRepr -> "_complex"
-                      BaseBVRepr w -> "_bv" ++ show w
-                      BaseFloatRepr (FloatingPointPrecisionRepr x y) -> "_float_" ++ show x ++ "_" ++ show y
-                      BaseStringRepr w -> "_str" ++ strw
-                        where strw = case w of
-                                       Char8Repr -> "8"
-                                       Char16Repr -> "16"
-                                       UnicodeRepr -> "U"
-                      BaseArrayRepr i e -> "_fun" ++ suff_asgn i ++ "_to" ++ suff e
-                      BaseStructRepr flds -> "_struct" ++ suff_asgn flds ++ "_end"
-                        
-              fn <- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton BaseIntegerRepr) ret)
-              a  <- W.applySymFn sym fn args
-              pure (Arr a 0)
-    let arr1 :: Arr sym t
-        !arr1 = Arr arr (i + 1)
-    put (MapF.insert ret arr1 arrs)
-    lift $
-      do
-        ind <- W.intLit sym i
-        W.arrayLookup sym arr (Ctx.singleton ind)
-
-
+  where
+  mkUninterpreted :: BaseTypeRepr t -> StateT (UnintState sym) IO (SymExpr sym t)
+  mkUninterpreted tyr =
+    do mp <- get
+       case MapF.lookup tyr mp of
+         Just (Arr (x : xs)) -> put (MapF.insert tyr (Arr xs) mp) >> pure x
+         _ -> panic "mkUninterpreted" ["Not enough uninterpreted results"]
+           
+  
 
 -- | A value of type @UnintApp f@ represents an uninterpreted function
 -- with the given 'String' name, applied to a list of argument values
