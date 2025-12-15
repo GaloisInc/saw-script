@@ -298,12 +298,12 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
           lift $ TC.checkSubtype typed_body req_body_tp
           let vts = map (\(_, v, t) -> (v, t)) ctx
           result <- lift $ TC.liftTCM scLambdaList vts typed_body
-          pure result
+          lift $ TC.liftTCM SC.scAscribe result def_tp
 
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
      let nmi = ModuleIdentifier (mkIdent mnm nm)
-     void $ lift $ TC.liftTCM scDefineConstant nmi def_tm def_tp) >>
+     void $ lift $ TC.liftTCM scDefineConstant nmi def_tm) >>
   processDecls rest
 
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =

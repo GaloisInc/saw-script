@@ -1656,18 +1656,20 @@ scPiList _ [] rhs = return rhs
 scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 
 -- | Define a global constant with the specified base name (as
--- 'Text'), body, and type.
+-- 'Text') and body.
 -- The term for the body must not have any free variables.
 -- A globally-unique name with the specified base name will be created
 -- using 'scFreshName'.
+-- The type of the body determines the type of the constant; to
+-- specify a different formulation of the type, use 'scAscribe'.
 scFreshConstant ::
   SharedContext ->
   Text {- ^ The base name -} ->
   Term {- ^ The body -} ->
-  Term {- ^ The type -} ->
   IO Term
-scFreshConstant sc name rhs ty =
-  do unless (closedTerm rhs) $ do
+scFreshConstant sc name rhs =
+  do ty <- scTypeOf sc rhs
+     unless (closedTerm rhs) $ do
        ty' <- ppTerm sc PPS.defaultOpts ty
        rhs' <- ppTerm sc PPS.defaultOpts rhs
        fail $ unlines [
@@ -1679,18 +1681,20 @@ scFreshConstant sc name rhs ty =
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
 
--- | Define a global constant with the specified name (as 'NameInfo'),
--- body, and type.
+-- | Define a global constant with the specified name (as 'NameInfo')
+-- and body.
 -- The URI in the given 'NameInfo' must be globally unique.
 -- The term for the body must not have any free variables.
+-- The type of the body determines the type of the constant; to
+-- specify a different formulation of the type, use 'scAscribe'.
 scDefineConstant ::
   SharedContext ->
   NameInfo {- ^ The name -} ->
   Term {- ^ The body -} ->
-  Term {- ^ The type -} ->
   IO Term
-scDefineConstant sc nmi rhs ty =
-  do unless (closedTerm rhs) $ do
+scDefineConstant sc nmi rhs =
+  do ty <- scTypeOf sc rhs
+     unless (closedTerm rhs) $ do
        ty' <- ppTerm sc PPS.defaultOpts ty
        rhs' <- ppTerm sc PPS.defaultOpts rhs
        fail $ unlines [
