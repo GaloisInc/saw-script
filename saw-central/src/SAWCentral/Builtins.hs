@@ -149,7 +149,8 @@ definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
   do sc <- getSharedContext
      ty <- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema
-     t <- io $ scFreshConstant sc name rhs ty
+     rhs' <- io $ scAscribe sc rhs ty
+     t <- io $ scFreshConstant sc name rhs'
      return $ TypedTerm (TypedTermSchema schema) t
 definePrim _name (TypedTerm tp _) = do
   sc <- getSharedContext

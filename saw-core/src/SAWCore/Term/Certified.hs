@@ -22,6 +22,7 @@ module SAWCore.Term.Certified
   , termSortOrType
   , alphaEquiv
     -- * Building certified terms
+  , scAscribe
   , scTermF
   , scFlatTermF
   , scApply
@@ -409,6 +410,33 @@ restoreSharedContext scc sc =
 --------------------------------------------------------------------------------
 -- Fundamental term builders
 
+-- | Build a variant of a 'Term' with a specific type.
+-- The first term's type must be a subtype of the second term.
+scAscribe :: SharedContext -> Term -> Term -> IO Term
+scAscribe sc t0 ty =
+  do let mty = maybe (Right ty) Left (asSort ty)
+     ty0 <- scTypeOf sc t0
+     ok <- scSubtype sc ty0 ty
+     unless ok $
+       do ty0' <- ppTerm sc PPS.defaultOpts ty0
+          ty' <- ppTerm sc PPS.defaultOpts ty
+          fail $ unlines $
+            [ "Not a subtype"
+            , "expected: " ++ ty'
+            , "got: " ++ ty0'
+            ]
+     let tf = unwrapTermF t0
+     let fallback = scMakeTerm sc (varTypes t0) tf mty
+     tfm <- readIORef (scAppCache sc)
+     case tf of
+       App f arg ->
+         case lookupAppTFM f arg tfm of
+           Just t' ->
+             if fmap termIndex mty == fmap termIndex (termSortOrType t')
+             then pure t' else fallback
+           Nothing -> fallback
+       _ -> fallback
+
 -- | Build a new 'Term' value from the given 'TermF'.
 -- Reuse a 'Term' from the cache if an identical one already exists.
 scTermF :: SharedContext -> TermF Term -> IO Term
@@ -756,7 +784,8 @@ scDeclareDef sc nm q ty body =
 -- | Declare a SAW core primitive of the specified type.
 scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc ident q def_tp =
-  do let nmi = ModuleIdentifier ident
+  do _ <- either pure (ensureSort sc) (stAppType def_tp)
+     let nmi = ModuleIdentifier ident
      nm <- scRegisterName sc nmi
      _ <- scDeclareDef sc nm q def_tp Nothing
      pure ()
@@ -1628,18 +1657,20 @@ scPiList _ [] rhs = return rhs
 scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 
 -- | Define a global constant with the specified base name (as
--- 'Text'), body, and type.
+-- 'Text') and body.
 -- The term for the body must not have any free variables.
 -- A globally-unique name with the specified base name will be created
 -- using 'scFreshName'.
+-- The type of the body determines the type of the constant; to
+-- specify a different formulation of the type, use 'scAscribe'.
 scFreshConstant ::
   SharedContext ->
   Text {- ^ The base name -} ->
   Term {- ^ The body -} ->
-  Term {- ^ The type -} ->
   IO Term
-scFreshConstant sc name rhs ty =
-  do unless (closedTerm rhs) $ do
+scFreshConstant sc name rhs =
+  do ty <- scTypeOf sc rhs
+     unless (closedTerm rhs) $ do
        ty' <- ppTerm sc PPS.defaultOpts ty
        rhs' <- ppTerm sc PPS.defaultOpts rhs
        fail $ unlines [
@@ -1651,18 +1682,20 @@ scFreshConstant sc name rhs ty =
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
 
--- | Define a global constant with the specified name (as 'NameInfo'),
--- body, and type.
+-- | Define a global constant with the specified name (as 'NameInfo')
+-- and body.
 -- The URI in the given 'NameInfo' must be globally unique.
 -- The term for the body must not have any free variables.
+-- The type of the body determines the type of the constant; to
+-- specify a different formulation of the type, use 'scAscribe'.
 scDefineConstant ::
   SharedContext ->
   NameInfo {- ^ The name -} ->
   Term {- ^ The body -} ->
-  Term {- ^ The type -} ->
   IO Term
-scDefineConstant sc nmi rhs ty =
-  do unless (closedTerm rhs) $ do
+scDefineConstant sc nmi rhs =
+  do ty <- scTypeOf sc rhs
+     unless (closedTerm rhs) $ do
        ty' <- ppTerm sc PPS.defaultOpts ty
        rhs' <- ppTerm sc PPS.defaultOpts rhs
        fail $ unlines [
@@ -1686,7 +1719,8 @@ scOpaqueConstant ::
   Term {- ^ type of the constant -} ->
   IO Term
 scOpaqueConstant sc nmi ty =
-  do nm <- scRegisterName sc nmi
+  do _ <- either pure (ensureSort sc) (stAppType ty)
+     nm <- scRegisterName sc nmi
      scDeclareDef sc nm NoQualifier ty Nothing
 
 -- | Create a function application term from a global identifier and a list of

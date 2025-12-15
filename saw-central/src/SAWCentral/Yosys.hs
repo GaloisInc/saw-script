@@ -109,7 +109,8 @@ convertYosysIR sc ir =
                    , URI.uriFragment = URI.mkFragment frag
                    }
              let ni = SC.ImportedName uri [nm]
-             tc <- SC.scDefineConstant sc ni (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
+             body <- SC.scAscribe sc (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
+             tc <- SC.scDefineConstant sc ni body
              let cm' = cm { _convertedModuleTerm = tc }
              pure $ Map.insert nm cm' env
        )

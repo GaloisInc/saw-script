@@ -440,7 +440,6 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
 
           extracted_func_const <-
             io $ scDefineConstant shared_context nmi extracted_func
-            =<< scTypeOf shared_context extracted_func
           input_terms <- io $ scVariables shared_context input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
           applied_extracted_func_selectors <-
