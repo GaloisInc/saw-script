@@ -315,7 +315,7 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
       "Unsatisfied size parameter constraints:" :
       [ "  " ++ show (pp b) | b <- bad ]
 
-    let 
+    let
       getNormArg ::
         forall ty. CryFunArg ty -> RegEntry sym ty ->
         OverrideSim (p sym) sym MIR rtp args r (Const SAW.Term ty)
@@ -416,7 +416,7 @@ data CryFunTArg t where
 data CryFunArg t = CryFunArg (CryTermAdaptor Cry.Type) (TypeShape t)
 
 data SplitAssign f ctx where
-  SplitAssign :: Assignment f a -> Assignment f b -> SplitAssign f (a <+> b) 
+  SplitAssign :: Assignment f a -> Assignment f b -> SplitAssign f (a <+> b)
 
 -- | Split an assignment into two parts.  The @Int@ is the length of
 -- of the *right* component
@@ -429,7 +429,7 @@ splitAssign n asgn
       Ctx.AssignExtend more a <- pure (Ctx.viewAssign asgn)
       SplitAssign left right  <- splitAssign (n-1) more
       pure (SplitAssign left (right Ctx.:> a))
-      
+
 
 
 -- | Check if the Rust type matches the Cryptol override.
@@ -448,7 +448,7 @@ typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Fo
       "Cryptol type:",
       "  " ++ show (pp sch),
       "Unsupported parameters:"
-      ] ++ 
+      ] ++
       (let
          ns = Cry.addTNames Cry.defaultPPCfg sizePs Cry.emptyNameMap
        in
@@ -459,9 +459,9 @@ typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Fo
     case cryArgs normArgNum [] ty0 of
       Left as ->
         Left $ unlines [
-          "Too many Rust arguments:", 
+          "Too many Rust arguments:",
           "  Expected: " ++ show (length as),
-          "  Provided: " ++ show normArgNum ++ 
+          "  Provided: " ++ show normArgNum ++
              (case tpArgNum of
                 0 -> ""
                 1 -> " (and 1 size argument)"
@@ -474,7 +474,7 @@ typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Fo
         ]
       Right (as,b) ->
         CryFunArgs <$> go (reverse sizePs) tpShps normArgNum as normArgShps b
-  
+
   | otherwise =
     Left $ unlines [
       "Not enough size arguments:",
@@ -497,7 +497,7 @@ typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Fo
       | n < 0  = Left args
       | n == 0 = Right (args,ty)
       | Just (a,b) <- Cry.tIsFun ty = cryArgs (n-1) (a : args) b
-      | otherwise = Left args   
+      | otherwise = Left args
 
     go ::
       forall tpNum normNum.
@@ -521,7 +521,7 @@ typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Fo
                        rest <- go tps tpArgs (argNum - 1) normsR' normArgs' retTy
                        pure (addCryFunArg rest (CryFunArg ada tyShp))
                 _ -> error "Bug: assignment/type mismatch for normal arguments"
-        
+
         Ctx.AssignExtend tpArgs' tpShp ->
           case (tpShp, tps) of
             (PrimShape _ (BaseBVRepr _), tp : tps') ->
@@ -532,8 +532,8 @@ typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Fo
               "Invalid size argument:",
               "  Expected: an unsigned numeric type",
               "  Actual: " ++ M.fmt (shapeMirTy tpShp)
-              ] 
-    
+              ]
+
     goOne :: forall tp. Bool -> String -> TypeShape tp -> Cry.Type -> Either String (CryTermAdaptor Cry.Type)
     goOne isArg desc shp ty = case (shp, ty) of
         (_, Cry.TUser _ _ ty') -> goOne isArg desc shp ty'
