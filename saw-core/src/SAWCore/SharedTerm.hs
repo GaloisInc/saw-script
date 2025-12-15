@@ -44,6 +44,7 @@ module SAWCore.SharedTerm
   , restoreSharedContext
   , scGetNamingEnv
     -- ** Low-level generic term constructors
+  , scAscribe
   , scTermF
   , scFlatTermF
     -- ** Implicit versions of functions.

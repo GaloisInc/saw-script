@@ -22,6 +22,7 @@ module SAWCore.Term.Certified
   , termSortOrType
   , alphaEquiv
     -- * Building certified terms
+  , scAscribe
   , scTermF
   , scFlatTermF
   , scApply
@@ -408,6 +409,33 @@ restoreSharedContext scc sc =
 
 --------------------------------------------------------------------------------
 -- Fundamental term builders
+
+-- | Build a variant of a 'Term' with a specific type.
+-- The first term's type must be a subtype of the second term.
+scAscribe :: SharedContext -> Term -> Term -> IO Term
+scAscribe sc t0 ty =
+  do let mty = maybe (Right ty) Left (asSort ty)
+     ty0 <- scTypeOf sc t0
+     ok <- scSubtype sc ty0 ty
+     unless ok $
+       do ty0' <- ppTerm sc PPS.defaultOpts ty0
+          ty' <- ppTerm sc PPS.defaultOpts ty
+          fail $ unlines $
+            [ "Not a subtype"
+            , "expected: " ++ ty'
+            , "got: " ++ ty0'
+            ]
+     let tf = unwrapTermF t0
+     let fallback = scMakeTerm sc (varTypes t0) tf mty
+     tfm <- readIORef (scAppCache sc)
+     case tf of
+       App f arg ->
+         case lookupAppTFM f arg tfm of
+           Just t' ->
+             if fmap termIndex mty == fmap termIndex (termSortOrType t')
+             then pure t' else fallback
+           Nothing -> fallback
+       _ -> fallback
 
 -- | Build a new 'Term' value from the given 'TermF'.
 -- Reuse a 'Term' from the cache if an identical one already exists.
