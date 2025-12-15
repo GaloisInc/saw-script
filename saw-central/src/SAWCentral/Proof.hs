@@ -1559,14 +1559,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
     -- Check a theorem applied to a term. This explicitly instantiates
     -- a Pi binder with the given term.
     checkApply nenv mkSqt (Prop p) (Left tm:es) =
-      do let m = do tm' <- pure tm
-                    p_typed <- pure p
-                    let err = TC.NotFuncTypeInApp p_typed tm'
-                    TC.applyPiTyped err p tm'
-         res <- TC.runTCM m sc
-         case res of
-           Left msg -> fail (unlines (TC.prettyTCError msg))
-           Right p' -> checkApply nenv mkSqt (Prop p') es
+      do p' <- reducePi sc p tm
+         checkApply nenv mkSqt (Prop p') es
 
     check ::
       DisplayNameEnv ->
