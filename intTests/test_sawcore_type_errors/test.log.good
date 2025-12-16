@@ -41,7 +41,10 @@ Stack trace:
 While typechecking term:
   \ (x : True) -> x
 .:1:0:
-Not a sort
+Type of term is not a sort
+For term:
+  Prelude.True
+With type:
   Prelude.Bool
 
 Not a sort (pi)
@@ -56,7 +59,10 @@ Stack trace:
 While typechecking term:
   (x : True) -> Bool
 .:1:11:
-Not a sort
+Type of term is not a sort
+For term:
+  Prelude.True
+With type:
   Prelude.Bool
 
 Not a sort (pi)
@@ -71,7 +77,10 @@ Stack trace:
 While typechecking term:
   (x : Bool) -> False
 .:1:11:
-Not a sort
+Type of term is not a sort
+For term:
+  Prelude.False
+With type:
   Prelude.Bool
 
 Not a sort (pair type)
@@ -86,7 +95,10 @@ Stack trace:
 While typechecking term:
   True * Nat
 .:1:2:
-Not a sort
+Type of term is not a sort
+For term:
+  Prelude.True
+With type:
   Prelude.Bool
 
 Not a sort (pair type)
@@ -101,7 +113,10 @@ Stack trace:
 While typechecking term:
   Bool * 5
 .:1:2:
-Not a sort
+Type of term is not a sort
+For term:
+  5
+With type:
   Prelude.Nat
 
 Not a sort (record type)
@@ -116,7 +131,10 @@ Stack trace:
 While typechecking term:
   #{foo : Bool, bar : False}
 .:1:0:
-Not a sort
+Type of term is not a sort
+For term:
+  Prelude.False
+With type:
   Prelude.Bool
 
 Disallowed propositional elimination
@@ -131,9 +149,11 @@ Stack trace:
 While typechecking term:
   IsLeNat#rec
 .:1:0:
-Malformed recursor
-  Prelude.IsLeNat#rec
-Disallowed propositional elimination
+Invalid recursor with disallowed propositional elimination
+Data type:
+  Prelude.IsLeNat
+Elimination sort:
+  sort 0
 
 Function application with non-function type
 == Anticipated failure message ==
@@ -167,7 +187,10 @@ Stack trace:
 While typechecking term:
   True.1
 .:1:0:
-Tuple field projection with non-tuple type
+Tuple field projection with non-tuple
+For term:
+  Prelude.True
+With type:
   Prelude.Bool
 
 Record field projection with non-record type
@@ -182,10 +205,11 @@ Stack trace:
 While typechecking term:
   False.foo
 .:1:0:
-Record field projection with non-record type
-  Prelude.Bool
-In term:
+Record field projection with non-record
+For term:
   Prelude.False
+With type:
+  Prelude.Bool
 
 Bad record field for type
 == Anticipated failure message ==
@@ -199,7 +223,10 @@ Stack trace:
 While typechecking term:
   {a = True, b = False}.c
 .:1:0:
-Bad record field ("c") for type
+No such record field: "c"
+For term:
+  {a = Prelude.True,b = Prelude.False}
+With type:
   #{a : Prelude.Bool,b : Prelude.Bool}
 
 Inferred type not a subtype of expected type
@@ -214,11 +241,12 @@ Stack trace:
 While typechecking term:
   (\ (x : Bool) -> implies x False) 5
 .:1:1:
-Inferred type
-  Prelude.Nat
-Not a subtype of expected type
+Argument type not subtype of expected type
+Expected:
   Prelude.Bool
-For term
+Actual:
+  Prelude.Nat
+For term:
   5
 
 Empty vector literal

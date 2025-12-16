@@ -1,3 +1,7 @@
 Loading file "test03.saw"
-Attempted to register the following name twice: cryptol:x#4785
+Stack trace:
+   (builtin) (at top level)
+Attempt to register name with duplicate URI
+  cryptol:x#4785
+
 FAILED
