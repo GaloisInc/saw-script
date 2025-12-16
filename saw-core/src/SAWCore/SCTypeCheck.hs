@@ -59,7 +59,6 @@ import SAWCore.Parser.AST (UTerm, prettyUTerm)
 import SAWCore.Parser.Position
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
-import SAWCore.Term.Certified (scRecordValue)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTermPure)
 

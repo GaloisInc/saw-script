@@ -120,6 +120,7 @@ module SAWCore.SharedTerm
   , scTupleReduced
     -- *** Records
   , scRecord
+  , scRecordValue
   , scRecordSelect
   , scRecordType
     -- *** Vectors
