@@ -520,294 +520,285 @@ span.spaces    { background: white }
 <span class="lineno">  501 </span>-- | Combine a term-level Binder with a type-level PiBinder, taking the name
 <span class="lineno">  502 </span>-- and type from the Binder but the implicit/explicit status from the PiBinder.
 <span class="lineno">  503 </span>combineBinders :: Coq.Binder -&gt; Coq.PiBinder -&gt; Coq.Binder
-<span class="lineno">  504 </span><span class="decl"><span class="istickedoff">combineBinders (Coq.Binder n mty)         Coq.PiImplicitBinder {} = <span class="nottickedoff">Coq.ImplicitBinder n mty</span></span>
-<span class="lineno">  505 </span><span class="spaces"></span><span class="istickedoff">combineBinders (Coq.ImplicitBinder n mty) Coq.PiImplicitBinder {} = <span class="nottickedoff">Coq.ImplicitBinder n mty</span></span>
-<span class="lineno">  506 </span><span class="spaces"></span><span class="istickedoff">combineBinders (Coq.Binder n mty)         Coq.PiBinder {}         = Coq.Binder n mty</span>
-<span class="lineno">  507 </span><span class="spaces"></span><span class="istickedoff">combineBinders (Coq.ImplicitBinder n mty) Coq.PiBinder {}         = <span class="nottickedoff">Coq.Binder n mty</span></span></span>
+<span class="lineno">  504 </span><span class="decl"><span class="istickedoff">combineBinders (Coq.Binder _ n mty) (Coq.PiBinder impl _ _) = Coq.Binder impl n mty</span></span>
+<span class="lineno">  505 </span>
+<span class="lineno">  506 </span>mkLet :: (Coq.Ident, Coq.Term) -&gt; Coq.Term -&gt; Coq.Term
+<span class="lineno">  507 </span><span class="decl"><span class="istickedoff">mkLet (name, rhs) body = Coq.Let name [] Nothing rhs body</span></span>
 <span class="lineno">  508 </span>
-<span class="lineno">  509 </span>mkLet :: (Coq.Ident, Coq.Term) -&gt; Coq.Term -&gt; Coq.Term
-<span class="lineno">  510 </span><span class="decl"><span class="istickedoff">mkLet (name, rhs) body = Coq.Let name [] Nothing rhs body</span></span>
-<span class="lineno">  511 </span>
-<span class="lineno">  512 </span>-- | The result of translating a SAW core variable binding to Coq, including the
-<span class="lineno">  513 </span>-- Coq identifier for the variable, the Coq translation of its type, and 0 or
-<span class="lineno">  514 </span>-- more implicit Coq arguments that apply to the variable
-<span class="lineno">  515 </span>data BindTrans = BindTrans { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bindTransIdent</span></span></span> :: Coq.Ident,
-<span class="lineno">  516 </span>                             <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bindTransType</span></span></span> :: Coq.Type,
-<span class="lineno">  517 </span>                             <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bindTransImps</span></span></span> :: [(Coq.Ident,Coq.Type)] }
-<span class="lineno">  518 </span>
-<span class="lineno">  519 </span>-- | Convert a 'BindTrans' to a list of Coq term-level binders
-<span class="lineno">  520 </span>bindTransToBinder :: Bool -&gt; BindTrans -&gt; [Coq.Binder]
-<span class="lineno">  521 </span><span class="decl"><span class="istickedoff">bindTransToBinder useImplicits (BindTrans {..}) =</span>
-<span class="lineno">  522 </span><span class="spaces">  </span><span class="istickedoff">Coq.Binder bindTransIdent (Just bindTransType) :</span>
-<span class="lineno">  523 </span><span class="spaces">  </span><span class="istickedoff">map <span class="nottickedoff">(\(n,ty) -&gt; if useImplicits</span></span>
-<span class="lineno">  524 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">then Coq.ImplicitBinder n (Just ty)</span></span>
-<span class="lineno">  525 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">else Coq.Binder n (Just ty))</span> bindTransImps</span></span>
-<span class="lineno">  526 </span>
-<span class="lineno">  527 </span>-- | Convert a 'BindTrans' to a list of Coq type-level pi-abstraction binders.
-<span class="lineno">  528 </span>bindTransToPiBinder :: Bool -&gt; BindTrans -&gt; [Coq.PiBinder]
-<span class="lineno">  529 </span><span class="decl"><span class="istickedoff">bindTransToPiBinder useImplicits (BindTrans { .. }) =</span>
-<span class="lineno">  530 </span><span class="spaces">  </span><span class="istickedoff">case bindTransImps of</span>
-<span class="lineno">  531 </span><span class="spaces">    </span><span class="istickedoff">[] | <span class="tickonlyfalse">bindTransIdent == &quot;_&quot;</span> -&gt; <span class="nottickedoff">[Coq.PiBinder Nothing bindTransType]</span></span>
-<span class="lineno">  532 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt; [Coq.PiBinder <span class="nottickedoff">(Just bindTransIdent)</span> <span class="nottickedoff">bindTransType</span>]</span>
-<span class="lineno">  533 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  534 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Coq.PiBinder (Just bindTransIdent) bindTransType :</span></span>
-<span class="lineno">  535 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">map (\(n,ty) -&gt; if useImplicits</span></span>
-<span class="lineno">  536 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">then Coq.PiImplicitBinder (Just n) ty</span></span>
-<span class="lineno">  537 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">else Coq.PiBinder (Just n) ty) bindTransImps</span></span></span>
-<span class="lineno">  538 </span>
-<span class="lineno">  539 </span>-- | Given a 'VarName' and its type (as a 'Term'), translate the 'VarName'
-<span class="lineno">  540 </span>-- to a Coq identifier, translate the type to a Coq term, and generate zero or
-<span class="lineno">  541 </span>-- more additional 'Ident's and 'Type's representing additonal implicit
-<span class="lineno">  542 </span>-- typeclass arguments, added if the given type is @isort@, etc. Pass all of
-<span class="lineno">  543 </span>-- this information to the supplied computation, in which the SAW core variable
-<span class="lineno">  544 </span>-- is bound to its Coq identifier.
-<span class="lineno">  545 </span>translateBinder :: TermTranslationMonad m =&gt; VarName -&gt; Term -&gt;
-<span class="lineno">  546 </span>                   (BindTrans -&gt; m a) -&gt; m a
-<span class="lineno">  547 </span><span class="decl"><span class="istickedoff">translateBinder vn ty@(asPiList -&gt; (args, pi_body)) f =</span>
-<span class="lineno">  548 </span><span class="spaces">  </span><span class="istickedoff">do ty' &lt;- translateTerm ty</span>
-<span class="lineno">  549 </span><span class="spaces">     </span><span class="istickedoff">let mb_sort = asSortWithFlags pi_body</span>
-<span class="lineno">  550 </span><span class="spaces">         </span><span class="istickedoff">flagValues = sortFlagsToList $ maybe noFlags <span class="nottickedoff">snd</span> mb_sort</span>
-<span class="lineno">  551 </span><span class="spaces">         </span><span class="istickedoff">flagLocalNames = [<span class="nottickedoff">(&quot;Inh&quot;, &quot;SAWCoreScaffolding.Inhabited&quot;)</span>,</span>
-<span class="lineno">  552 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">(&quot;QT&quot;, &quot;QuantType&quot;)</span>]</span>
-<span class="lineno">  553 </span><span class="spaces">     </span><span class="istickedoff">withSAWVar vn $ \n' -&gt;</span>
-<span class="lineno">  554 </span><span class="spaces">       </span><span class="istickedoff">helper <span class="nottickedoff">n'</span> (zip flagValues flagLocalNames) (\imps -&gt;</span>
-<span class="lineno">  555 </span><span class="spaces">                                                   </span><span class="istickedoff">f $ BindTrans n' ty' imps)</span>
-<span class="lineno">  556 </span><span class="spaces">       </span><span class="istickedoff">where</span>
-<span class="lineno">  557 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">n = vnName vn</span></span>
-<span class="lineno">  558 </span><span class="spaces">         </span><span class="istickedoff">helper _ [] g = g []</span>
-<span class="lineno">  559 </span><span class="spaces">         </span><span class="istickedoff">helper n' ((True,(prefix,tc)):rest) g =</span>
-<span class="lineno">  560 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">do nhty &lt;- translateImplicitHyp (Coq.Var tc) args (Coq.Var n')</span></span>
-<span class="lineno">  561 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">withFreshIdent (prefix &lt;&gt; &quot;_&quot; &lt;&gt; n) $ \nh -&gt;</span></span>
-<span class="lineno">  562 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">helper n' rest (g . ((nh,nhty) :))</span></span>
-<span class="lineno">  563 </span><span class="spaces">         </span><span class="istickedoff">helper n' ((False,_):rest) g = helper <span class="nottickedoff">n'</span> rest g</span></span>
-<span class="lineno">  564 </span>
-<span class="lineno">  565 </span>-- | Call 'translateBinder' on a list of SAW core bindings
-<span class="lineno">  566 </span>translateBinders :: TermTranslationMonad m =&gt; [(VarName,Term)] -&gt;
-<span class="lineno">  567 </span>                    ([BindTrans] -&gt; m a) -&gt; m a
-<span class="lineno">  568 </span><span class="decl"><span class="istickedoff">translateBinders [] f = f []</span>
-<span class="lineno">  569 </span><span class="spaces"></span><span class="istickedoff">translateBinders ((n,ty):ns_tys) f =</span>
-<span class="lineno">  570 </span><span class="spaces">  </span><span class="istickedoff">translateBinder n ty $ \bnd -&gt;</span>
-<span class="lineno">  571 </span><span class="spaces">  </span><span class="istickedoff">translateBinders ns_tys $ \bnds -&gt; f (bnd : bnds)</span></span>
-<span class="lineno">  572 </span>
-<span class="lineno">  573 </span>-- | Given a typeclass (as a Coq term), a list of 'LocalName's and their
-<span class="lineno">  574 </span>-- corresponding types (as 'Term's), and a type-level function with argument
-<span class="lineno">  575 </span>-- types given by the prior list, return a 'Pi' of the given arguments, inside
-<span class="lineno">  576 </span>-- of which is an 'App' of the typeclass to the fully-applied type-level
-<span class="lineno">  577 </span>-- function
-<span class="lineno">  578 </span>translateImplicitHyp ::
-<span class="lineno">  579 </span>  TermTranslationMonad m =&gt;
-<span class="lineno">  580 </span>  Coq.Term -&gt; [(VarName, Term)] -&gt; Coq.Term -&gt; m Coq.Term
-<span class="lineno">  581 </span><span class="decl"><span class="nottickedoff">translateImplicitHyp tc [] tm = return (Coq.App tc [tm])</span>
-<span class="lineno">  582 </span><span class="spaces"></span><span class="nottickedoff">translateImplicitHyp tc args tm = do</span>
-<span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">inTermPos &lt;- view inTermPosition &lt;$&gt; askTR</span>
-<span class="lineno">  584 </span><span class="spaces">  </span><span class="nottickedoff">translateBinders args $ \args' -&gt;</span>
-<span class="lineno">  585 </span><span class="spaces">    </span><span class="nottickedoff">return $ Coq.Pi (concatMap (mkPi inTermPos) args') (Coq.App tc [Coq.App tm (map mkArg args')])</span>
-<span class="lineno">  586 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  587 </span><span class="spaces">    </span><span class="nottickedoff">mkPi inTermPos (BindTrans nm ty nhs) =</span>
-<span class="lineno">  588 </span><span class="spaces">      </span><span class="nottickedoff">Coq.PiBinder (Just nm) ty :</span>
-<span class="lineno">  589 </span><span class="spaces">      </span><span class="nottickedoff">map (\(nh,nhty) -&gt; if inTermPos</span>
-<span class="lineno">  590 </span><span class="spaces">                         </span><span class="nottickedoff">then Coq.PiBinder (Just nh) nhty</span>
-<span class="lineno">  591 </span><span class="spaces">                         </span><span class="nottickedoff">else Coq.PiImplicitBinder (Just nh) nhty) nhs</span>
-<span class="lineno">  592 </span><span class="spaces">    </span><span class="nottickedoff">mkArg b = Coq.Var $ bindTransIdent b</span></span>
+<span class="lineno">  509 </span>-- | The result of translating a SAW core variable binding to Coq, including the
+<span class="lineno">  510 </span>-- Coq identifier for the variable, the Coq translation of its type, and 0 or
+<span class="lineno">  511 </span>-- more implicit Coq arguments that apply to the variable
+<span class="lineno">  512 </span>data BindTrans = BindTrans { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bindTransIdent</span></span></span> :: Coq.Ident,
+<span class="lineno">  513 </span>                             <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bindTransType</span></span></span> :: Coq.Type,
+<span class="lineno">  514 </span>                             <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bindTransImps</span></span></span> :: [(Coq.Ident,Coq.Type)] }
+<span class="lineno">  515 </span>
+<span class="lineno">  516 </span>-- | Convert a 'BindTrans' to a list of Coq term-level binders
+<span class="lineno">  517 </span>bindTransToBinder :: Bool -&gt; BindTrans -&gt; [Coq.Binder]
+<span class="lineno">  518 </span><span class="decl"><span class="istickedoff">bindTransToBinder useImplicits (BindTrans {..}) =</span>
+<span class="lineno">  519 </span><span class="spaces">  </span><span class="istickedoff">Coq.Binder <span class="nottickedoff">False</span> bindTransIdent (Just bindTransType) :</span>
+<span class="lineno">  520 </span><span class="spaces">  </span><span class="istickedoff">map <span class="nottickedoff">(\(n,ty) -&gt; Coq.Binder useImplicits n (Just ty))</span> bindTransImps</span></span>
+<span class="lineno">  521 </span>
+<span class="lineno">  522 </span>-- | Convert a 'BindTrans' to a list of Coq type-level pi-abstraction binders.
+<span class="lineno">  523 </span>bindTransToPiBinder :: Bool -&gt; BindTrans -&gt; [Coq.PiBinder]
+<span class="lineno">  524 </span><span class="decl"><span class="istickedoff">bindTransToPiBinder useImplicits (BindTrans { .. }) =</span>
+<span class="lineno">  525 </span><span class="spaces">  </span><span class="istickedoff">case bindTransImps of</span>
+<span class="lineno">  526 </span><span class="spaces">    </span><span class="istickedoff">[] | <span class="tickonlyfalse">bindTransIdent == &quot;_&quot;</span> -&gt; <span class="nottickedoff">[Coq.PiBinder False Nothing bindTransType]</span></span>
+<span class="lineno">  527 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt; [Coq.PiBinder False <span class="nottickedoff">(Just bindTransIdent)</span> <span class="nottickedoff">bindTransType</span>]</span>
+<span class="lineno">  528 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  529 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Coq.PiBinder False (Just bindTransIdent) bindTransType :</span></span>
+<span class="lineno">  530 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">map (\(n,ty) -&gt; Coq.PiBinder useImplicits (Just n) ty) bindTransImps</span></span></span>
+<span class="lineno">  531 </span>
+<span class="lineno">  532 </span>-- | Given a 'VarName' and its type (as a 'Term'), translate the 'VarName'
+<span class="lineno">  533 </span>-- to a Coq identifier, translate the type to a Coq term, and generate zero or
+<span class="lineno">  534 </span>-- more additional 'Ident's and 'Type's representing additonal implicit
+<span class="lineno">  535 </span>-- typeclass arguments, added if the given type is @isort@, etc. Pass all of
+<span class="lineno">  536 </span>-- this information to the supplied computation, in which the SAW core variable
+<span class="lineno">  537 </span>-- is bound to its Coq identifier.
+<span class="lineno">  538 </span>translateBinder :: TermTranslationMonad m =&gt; VarName -&gt; Term -&gt;
+<span class="lineno">  539 </span>                   (BindTrans -&gt; m a) -&gt; m a
+<span class="lineno">  540 </span><span class="decl"><span class="istickedoff">translateBinder vn ty@(asPiList -&gt; (args, pi_body)) f =</span>
+<span class="lineno">  541 </span><span class="spaces">  </span><span class="istickedoff">do ty' &lt;- translateTerm ty</span>
+<span class="lineno">  542 </span><span class="spaces">     </span><span class="istickedoff">let mb_sort = asSortWithFlags pi_body</span>
+<span class="lineno">  543 </span><span class="spaces">         </span><span class="istickedoff">flagValues = sortFlagsToList $ maybe noFlags <span class="nottickedoff">snd</span> mb_sort</span>
+<span class="lineno">  544 </span><span class="spaces">         </span><span class="istickedoff">flagLocalNames = [<span class="nottickedoff">(&quot;Inh&quot;, &quot;SAWCoreScaffolding.Inhabited&quot;)</span>,</span>
+<span class="lineno">  545 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">(&quot;QT&quot;, &quot;QuantType&quot;)</span>]</span>
+<span class="lineno">  546 </span><span class="spaces">     </span><span class="istickedoff">withSAWVar vn $ \n' -&gt;</span>
+<span class="lineno">  547 </span><span class="spaces">       </span><span class="istickedoff">helper <span class="nottickedoff">n'</span> (zip flagValues flagLocalNames) (\imps -&gt;</span>
+<span class="lineno">  548 </span><span class="spaces">                                                   </span><span class="istickedoff">f $ BindTrans n' ty' imps)</span>
+<span class="lineno">  549 </span><span class="spaces">       </span><span class="istickedoff">where</span>
+<span class="lineno">  550 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">n = vnName vn</span></span>
+<span class="lineno">  551 </span><span class="spaces">         </span><span class="istickedoff">helper _ [] g = g []</span>
+<span class="lineno">  552 </span><span class="spaces">         </span><span class="istickedoff">helper n' ((True,(prefix,tc)):rest) g =</span>
+<span class="lineno">  553 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">do nhty &lt;- translateImplicitHyp (Coq.Var tc) args (Coq.Var n')</span></span>
+<span class="lineno">  554 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">withFreshIdent (prefix &lt;&gt; &quot;_&quot; &lt;&gt; n) $ \nh -&gt;</span></span>
+<span class="lineno">  555 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">helper n' rest (g . ((nh,nhty) :))</span></span>
+<span class="lineno">  556 </span><span class="spaces">         </span><span class="istickedoff">helper n' ((False,_):rest) g = helper <span class="nottickedoff">n'</span> rest g</span></span>
+<span class="lineno">  557 </span>
+<span class="lineno">  558 </span>-- | Call 'translateBinder' on a list of SAW core bindings
+<span class="lineno">  559 </span>translateBinders :: TermTranslationMonad m =&gt; [(VarName,Term)] -&gt;
+<span class="lineno">  560 </span>                    ([BindTrans] -&gt; m a) -&gt; m a
+<span class="lineno">  561 </span><span class="decl"><span class="istickedoff">translateBinders [] f = f []</span>
+<span class="lineno">  562 </span><span class="spaces"></span><span class="istickedoff">translateBinders ((n,ty):ns_tys) f =</span>
+<span class="lineno">  563 </span><span class="spaces">  </span><span class="istickedoff">translateBinder n ty $ \bnd -&gt;</span>
+<span class="lineno">  564 </span><span class="spaces">  </span><span class="istickedoff">translateBinders ns_tys $ \bnds -&gt; f (bnd : bnds)</span></span>
+<span class="lineno">  565 </span>
+<span class="lineno">  566 </span>-- | Given a typeclass (as a Coq term), a list of 'LocalName's and their
+<span class="lineno">  567 </span>-- corresponding types (as 'Term's), and a type-level function with argument
+<span class="lineno">  568 </span>-- types given by the prior list, return a 'Pi' of the given arguments, inside
+<span class="lineno">  569 </span>-- of which is an 'App' of the typeclass to the fully-applied type-level
+<span class="lineno">  570 </span>-- function
+<span class="lineno">  571 </span>translateImplicitHyp ::
+<span class="lineno">  572 </span>  TermTranslationMonad m =&gt;
+<span class="lineno">  573 </span>  Coq.Term -&gt; [(VarName, Term)] -&gt; Coq.Term -&gt; m Coq.Term
+<span class="lineno">  574 </span><span class="decl"><span class="nottickedoff">translateImplicitHyp tc [] tm = return (Coq.App tc [tm])</span>
+<span class="lineno">  575 </span><span class="spaces"></span><span class="nottickedoff">translateImplicitHyp tc args tm = do</span>
+<span class="lineno">  576 </span><span class="spaces">  </span><span class="nottickedoff">inTermPos &lt;- view inTermPosition &lt;$&gt; askTR</span>
+<span class="lineno">  577 </span><span class="spaces">  </span><span class="nottickedoff">translateBinders args $ \args' -&gt;</span>
+<span class="lineno">  578 </span><span class="spaces">    </span><span class="nottickedoff">return $ Coq.Pi (concatMap (mkPi inTermPos) args') (Coq.App tc [Coq.App tm (map mkArg args')])</span>
+<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  580 </span><span class="spaces">    </span><span class="nottickedoff">mkPi inTermPos (BindTrans nm ty nhs) =</span>
+<span class="lineno">  581 </span><span class="spaces">      </span><span class="nottickedoff">Coq.PiBinder False (Just nm) ty :</span>
+<span class="lineno">  582 </span><span class="spaces">      </span><span class="nottickedoff">map (\(nh,nhty) -&gt; Coq.PiBinder (not inTermPos) (Just nh) nhty) nhs</span>
+<span class="lineno">  583 </span><span class="spaces">    </span><span class="nottickedoff">mkArg b = Coq.Var $ bindTransIdent b</span></span>
+<span class="lineno">  584 </span>
+<span class="lineno">  585 </span>-- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
+<span class="lineno">  586 </span>-- return a list of 'Binder's, for use representing the bound variables
+<span class="lineno">  587 </span>-- in 'Lambda's, 'Let's, etc.
+<span class="lineno">  588 </span>translateParams :: TermTranslationMonad m =&gt; [(VarName, Term)] -&gt;
+<span class="lineno">  589 </span>                   ([Coq.Binder] -&gt; m a) -&gt; m a
+<span class="lineno">  590 </span><span class="decl"><span class="istickedoff">translateParams bs m = do</span>
+<span class="lineno">  591 </span><span class="spaces">  </span><span class="istickedoff">inTermPos &lt;- <span class="nottickedoff">view inTermPosition</span> &lt;$&gt; askTR</span>
+<span class="lineno">  592 </span><span class="spaces">  </span><span class="istickedoff">translateBinders bs (m . concat . map (bindTransToBinder <span class="nottickedoff">(not inTermPos)</span>))</span></span>
 <span class="lineno">  593 </span>
-<span class="lineno">  594 </span>-- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
-<span class="lineno">  595 </span>-- return a list of 'Binder's, for use representing the bound variables
-<span class="lineno">  596 </span>-- in 'Lambda's, 'Let's, etc.
-<span class="lineno">  597 </span>translateParams :: TermTranslationMonad m =&gt; [(VarName, Term)] -&gt;
-<span class="lineno">  598 </span>                   ([Coq.Binder] -&gt; m a) -&gt; m a
-<span class="lineno">  599 </span><span class="decl"><span class="istickedoff">translateParams bs m = do</span>
-<span class="lineno">  600 </span><span class="spaces">  </span><span class="istickedoff">inTermPos &lt;- <span class="nottickedoff">view inTermPosition</span> &lt;$&gt; askTR</span>
-<span class="lineno">  601 </span><span class="spaces">  </span><span class="istickedoff">translateBinders bs (m . concat . map (bindTransToBinder <span class="nottickedoff">(not inTermPos)</span>))</span></span>
-<span class="lineno">  602 </span>
-<span class="lineno">  603 </span>-- | Given a list of 'VarName's and their corresponding types (as 'Term's)
-<span class="lineno">  604 </span>-- representing argument types and a 'Term' representing the return type,
-<span class="lineno">  605 </span>-- return the resulting 'Pi', with additional implicit arguments added after
-<span class="lineno">  606 </span>-- each instance of @isort@, @qsort@, etc.
-<span class="lineno">  607 </span>translatePi :: TermTranslationMonad m =&gt; [(VarName, Term)] -&gt; Term -&gt; m Coq.Term
-<span class="lineno">  608 </span><span class="decl"><span class="istickedoff">translatePi binders body =</span>
-<span class="lineno">  609 </span><span class="spaces">  </span><span class="istickedoff">translatePiBinders binders $ \bindersT -&gt;</span>
-<span class="lineno">  610 </span><span class="spaces">  </span><span class="istickedoff">do bodyT &lt;- translateTermLet body</span>
-<span class="lineno">  611 </span><span class="spaces">     </span><span class="istickedoff">return $ Coq.Pi bindersT bodyT</span></span>
-<span class="lineno">  612 </span>
-<span class="lineno">  613 </span>-- | Given a 'LocalName' and its type (as a 'Term'), return an explicit
-<span class="lineno">  614 </span>-- 'PiBinder' followed by zero or more implicit 'PiBinder's representing
-<span class="lineno">  615 </span>-- additonal implicit typeclass arguments, added if the given type is @isort@,
-<span class="lineno">  616 </span>-- @qsort@, etc.
-<span class="lineno">  617 </span>translatePiBinders :: TermTranslationMonad m =&gt; [(VarName, Term)] -&gt;
-<span class="lineno">  618 </span>                      ([Coq.PiBinder] -&gt; m a) -&gt; m a
-<span class="lineno">  619 </span><span class="decl"><span class="istickedoff">translatePiBinders bs m = do</span>
-<span class="lineno">  620 </span><span class="spaces">  </span><span class="istickedoff">inTermPos &lt;- <span class="nottickedoff">view inTermPosition</span> &lt;$&gt; askTR</span>
-<span class="lineno">  621 </span><span class="spaces">  </span><span class="istickedoff">translateBinders bs (m . concat . map (bindTransToPiBinder <span class="nottickedoff">(not inTermPos)</span>))</span></span>
-<span class="lineno">  622 </span>
-<span class="lineno">  623 </span>-- | Find all subterms of a SAW core term that should be shared, and generate
-<span class="lineno">  624 </span>-- let-bindings in Coq to bind them to local variables. Translate SAW core term
-<span class="lineno">  625 </span>-- using those let-bindings for the shared subterms.
-<span class="lineno">  626 </span>translateTermLet :: TermTranslationMonad m =&gt; Term -&gt; m Coq.Term
-<span class="lineno">  627 </span><span class="decl"><span class="istickedoff">translateTermLet t =</span>
-<span class="lineno">  628 </span><span class="spaces">  </span><span class="istickedoff">let occ_map = scTermCount False t</span>
-<span class="lineno">  629 </span><span class="spaces">      </span><span class="istickedoff">shares = IntMap.assocs $ fmap fst $ IntMap.filter keep occ_map</span>
-<span class="lineno">  630 </span><span class="spaces">      </span><span class="istickedoff">share_tms = map snd shares in</span>
-<span class="lineno">  631 </span><span class="spaces">  </span><span class="istickedoff">-- NOTE: larger terms always have later stAppIndices than their subterms, so</span>
-<span class="lineno">  632 </span><span class="spaces">  </span><span class="istickedoff">-- IntMap.assocs above is guaranteed to return subterms before superterms;</span>
-<span class="lineno">  633 </span><span class="spaces">  </span><span class="istickedoff">-- this ensures that the right-hand sides in our nested let-bindings below</span>
-<span class="lineno">  634 </span><span class="spaces">  </span><span class="istickedoff">-- only refer to variables bound earlier, not later</span>
-<span class="lineno">  635 </span><span class="spaces">  </span><span class="istickedoff">withSharedTerms shares $ \names -&gt;</span>
-<span class="lineno">  636 </span><span class="spaces">  </span><span class="istickedoff">do defs &lt;- traverse translateTermUnshared share_tms</span>
-<span class="lineno">  637 </span><span class="spaces">     </span><span class="istickedoff">body &lt;- translateTerm t</span>
-<span class="lineno">  638 </span><span class="spaces">     </span><span class="istickedoff">pure (foldr mkLet body $ zip names defs)</span>
-<span class="lineno">  639 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  640 </span><span class="spaces">    </span><span class="istickedoff">keep (t', n) = n &gt; 1 &amp;&amp; shouldMemoizeTerm t'</span></span>
-<span class="lineno">  641 </span>
-<span class="lineno">  642 </span>-- | Translate a SAW core 'Term' to Coq, using let-bound Coq names when they are
-<span class="lineno">  643 </span>-- associated with the given term for sharing
-<span class="lineno">  644 </span>translateTerm :: TermTranslationMonad m =&gt; Term -&gt; m Coq.Term
-<span class="lineno">  645 </span><span class="decl"><span class="istickedoff">translateTerm t =</span>
-<span class="lineno">  646 </span><span class="spaces">  </span><span class="istickedoff">case t of</span>
-<span class="lineno">  647 </span><span class="spaces">    </span><span class="istickedoff">STApp { stAppIndex = i } -&gt;</span>
-<span class="lineno">  648 </span><span class="spaces">      </span><span class="istickedoff">do shared &lt;- view sharedNames &lt;$&gt; askTR</span>
-<span class="lineno">  649 </span><span class="spaces">         </span><span class="istickedoff">case IntMap.lookup i shared of</span>
-<span class="lineno">  650 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; translateTermUnshared t</span>
-<span class="lineno">  651 </span><span class="spaces">           </span><span class="istickedoff">Just sh -&gt; pure (Coq.Var $ sharedNameIdent sh)</span></span>
-<span class="lineno">  652 </span>
-<span class="lineno">  653 </span>-- | Translate a SAW core 'Term' to Coq without using sharing
-<span class="lineno">  654 </span>translateTermUnshared :: TermTranslationMonad m =&gt; Term -&gt; m Coq.Term
-<span class="lineno">  655 </span><span class="decl"><span class="istickedoff">translateTermUnshared t =</span>
-<span class="lineno">  656 </span><span class="spaces">  </span><span class="istickedoff">-- traceTerm &quot;translateTerm&quot; t $</span>
-<span class="lineno">  657 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
-<span class="lineno">  658 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  659 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; <span class="nottickedoff">flatTermFToExpr ftf</span></span>
-<span class="lineno">  660 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  661 </span><span class="spaces">    </span><span class="istickedoff">Pi {} -&gt;</span>
-<span class="lineno">  662 </span><span class="spaces">      </span><span class="istickedoff">let (params, e) = asPiList t in</span>
-<span class="lineno">  663 </span><span class="spaces">      </span><span class="istickedoff">translatePi params e</span>
-<span class="lineno">  664 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  665 </span><span class="spaces">    </span><span class="istickedoff">Lambda {} -&gt;</span>
-<span class="lineno">  666 </span><span class="spaces">      </span><span class="istickedoff">let (params, e) = asLambdaList t in</span>
-<span class="lineno">  667 </span><span class="spaces">      </span><span class="istickedoff">localTR (set inTermPosition <span class="nottickedoff">True</span>) $</span>
-<span class="lineno">  668 </span><span class="spaces">        </span><span class="istickedoff">translateParams params $ \paramTerms -&gt;</span>
-<span class="lineno">  669 </span><span class="spaces">        </span><span class="istickedoff">do e' &lt;- translateTermLet e</span>
-<span class="lineno">  670 </span><span class="spaces">           </span><span class="istickedoff">return (Coq.Lambda paramTerms e')</span>
-<span class="lineno">  671 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  672 </span><span class="spaces">    </span><span class="istickedoff">App {} -&gt;</span>
-<span class="lineno">  673 </span><span class="spaces">      </span><span class="istickedoff">-- asApplyAll: innermost argument first</span>
-<span class="lineno">  674 </span><span class="spaces">      </span><span class="istickedoff">let (f, args) = asApplyAll t</span>
-<span class="lineno">  675 </span><span class="spaces">      </span><span class="istickedoff">in</span>
-<span class="lineno">  676 </span><span class="spaces">      </span><span class="istickedoff">case f of</span>
-<span class="lineno">  677 </span><span class="spaces">      </span><span class="istickedoff">(asGlobalDef -&gt; Just i) -&gt;</span>
-<span class="lineno">  678 </span><span class="spaces">        </span><span class="istickedoff">case i of</span>
-<span class="lineno">  679 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.natToInt&quot; -&gt;</span>
-<span class="lineno">  680 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
-<span class="lineno">  681 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[n] -&gt; translateTerm n &gt;&gt;= \case</span></span>
-<span class="lineno">  682 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Coq.NatLit n' -&gt; pure $ Coq.ZLit n'</span></span>
-<span class="lineno">  683 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs &quot;Prelude.natToInt&quot; [n]</span></span>
-<span class="lineno">  684 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
-<span class="lineno">  685 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.intNeg&quot; -&gt;</span>
-<span class="lineno">  686 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
-<span class="lineno">  687 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[z] -&gt; translateTerm z &gt;&gt;= \case</span></span>
-<span class="lineno">  688 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Coq.ZLit z' -&gt; pure $ Coq.ZLit (-z')</span></span>
-<span class="lineno">  689 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs &quot;Prelude.intNeg&quot; [z]</span></span>
-<span class="lineno">  690 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
-<span class="lineno">  691 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.ite&quot; -&gt;</span>
-<span class="lineno">  692 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
-<span class="lineno">  693 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- `rest` can be non-empty in examples like:</span></span>
-<span class="lineno">  694 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- (if b then f else g) arg1 arg2</span></span>
-<span class="lineno">  695 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ty : c : tt : ft : rest -&gt; do</span></span>
-<span class="lineno">  696 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ite &lt;- Coq.If &lt;$&gt; translateTerm c &lt;*&gt; translateTerm tt &lt;*&gt; translateTerm ft</span></span>
-<span class="lineno">  697 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case rest of</span></span>
-<span class="lineno">  698 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[] -&gt; return ite</span></span>
-<span class="lineno">  699 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">_  -&gt; Coq.App ite &lt;$&gt; mapM translateTerm rest</span></span>
-<span class="lineno">  700 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
+<span class="lineno">  594 </span>-- | Given a list of 'VarName's and their corresponding types (as 'Term's)
+<span class="lineno">  595 </span>-- representing argument types and a 'Term' representing the return type,
+<span class="lineno">  596 </span>-- return the resulting 'Pi', with additional implicit arguments added after
+<span class="lineno">  597 </span>-- each instance of @isort@, @qsort@, etc.
+<span class="lineno">  598 </span>translatePi :: TermTranslationMonad m =&gt; [(VarName, Term)] -&gt; Term -&gt; m Coq.Term
+<span class="lineno">  599 </span><span class="decl"><span class="istickedoff">translatePi binders body =</span>
+<span class="lineno">  600 </span><span class="spaces">  </span><span class="istickedoff">translatePiBinders binders $ \bindersT -&gt;</span>
+<span class="lineno">  601 </span><span class="spaces">  </span><span class="istickedoff">do bodyT &lt;- translateTermLet body</span>
+<span class="lineno">  602 </span><span class="spaces">     </span><span class="istickedoff">return $ Coq.Pi bindersT bodyT</span></span>
+<span class="lineno">  603 </span>
+<span class="lineno">  604 </span>-- | Given a 'LocalName' and its type (as a 'Term'), return an explicit
+<span class="lineno">  605 </span>-- 'PiBinder' followed by zero or more implicit 'PiBinder's representing
+<span class="lineno">  606 </span>-- additonal implicit typeclass arguments, added if the given type is @isort@,
+<span class="lineno">  607 </span>-- @qsort@, etc.
+<span class="lineno">  608 </span>translatePiBinders :: TermTranslationMonad m =&gt; [(VarName, Term)] -&gt;
+<span class="lineno">  609 </span>                      ([Coq.PiBinder] -&gt; m a) -&gt; m a
+<span class="lineno">  610 </span><span class="decl"><span class="istickedoff">translatePiBinders bs m = do</span>
+<span class="lineno">  611 </span><span class="spaces">  </span><span class="istickedoff">inTermPos &lt;- <span class="nottickedoff">view inTermPosition</span> &lt;$&gt; askTR</span>
+<span class="lineno">  612 </span><span class="spaces">  </span><span class="istickedoff">translateBinders bs (m . concat . map (bindTransToPiBinder <span class="nottickedoff">(not inTermPos)</span>))</span></span>
+<span class="lineno">  613 </span>
+<span class="lineno">  614 </span>-- | Find all subterms of a SAW core term that should be shared, and generate
+<span class="lineno">  615 </span>-- let-bindings in Coq to bind them to local variables. Translate SAW core term
+<span class="lineno">  616 </span>-- using those let-bindings for the shared subterms.
+<span class="lineno">  617 </span>translateTermLet :: TermTranslationMonad m =&gt; Term -&gt; m Coq.Term
+<span class="lineno">  618 </span><span class="decl"><span class="istickedoff">translateTermLet t =</span>
+<span class="lineno">  619 </span><span class="spaces">  </span><span class="istickedoff">let occ_map = scTermCount False t</span>
+<span class="lineno">  620 </span><span class="spaces">      </span><span class="istickedoff">shares = IntMap.assocs $ fmap fst $ IntMap.filter keep occ_map</span>
+<span class="lineno">  621 </span><span class="spaces">      </span><span class="istickedoff">share_tms = map snd shares in</span>
+<span class="lineno">  622 </span><span class="spaces">  </span><span class="istickedoff">-- NOTE: larger terms always have later stAppIndices than their subterms, so</span>
+<span class="lineno">  623 </span><span class="spaces">  </span><span class="istickedoff">-- IntMap.assocs above is guaranteed to return subterms before superterms;</span>
+<span class="lineno">  624 </span><span class="spaces">  </span><span class="istickedoff">-- this ensures that the right-hand sides in our nested let-bindings below</span>
+<span class="lineno">  625 </span><span class="spaces">  </span><span class="istickedoff">-- only refer to variables bound earlier, not later</span>
+<span class="lineno">  626 </span><span class="spaces">  </span><span class="istickedoff">withSharedTerms shares $ \names -&gt;</span>
+<span class="lineno">  627 </span><span class="spaces">  </span><span class="istickedoff">do defs &lt;- traverse translateTermUnshared share_tms</span>
+<span class="lineno">  628 </span><span class="spaces">     </span><span class="istickedoff">body &lt;- translateTerm t</span>
+<span class="lineno">  629 </span><span class="spaces">     </span><span class="istickedoff">pure (foldr mkLet body $ zip names defs)</span>
+<span class="lineno">  630 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  631 </span><span class="spaces">    </span><span class="istickedoff">keep (t', n) = n &gt; 1 &amp;&amp; shouldMemoizeTerm t'</span></span>
+<span class="lineno">  632 </span>
+<span class="lineno">  633 </span>-- | Translate a SAW core 'Term' to Coq, using let-bound Coq names when they are
+<span class="lineno">  634 </span>-- associated with the given term for sharing
+<span class="lineno">  635 </span>translateTerm :: TermTranslationMonad m =&gt; Term -&gt; m Coq.Term
+<span class="lineno">  636 </span><span class="decl"><span class="istickedoff">translateTerm t =</span>
+<span class="lineno">  637 </span><span class="spaces">  </span><span class="istickedoff">case t of</span>
+<span class="lineno">  638 </span><span class="spaces">    </span><span class="istickedoff">STApp { stAppIndex = i } -&gt;</span>
+<span class="lineno">  639 </span><span class="spaces">      </span><span class="istickedoff">do shared &lt;- view sharedNames &lt;$&gt; askTR</span>
+<span class="lineno">  640 </span><span class="spaces">         </span><span class="istickedoff">case IntMap.lookup i shared of</span>
+<span class="lineno">  641 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; translateTermUnshared t</span>
+<span class="lineno">  642 </span><span class="spaces">           </span><span class="istickedoff">Just sh -&gt; pure (Coq.Var $ sharedNameIdent sh)</span></span>
+<span class="lineno">  643 </span>
+<span class="lineno">  644 </span>-- | Translate a SAW core 'Term' to Coq without using sharing
+<span class="lineno">  645 </span>translateTermUnshared :: TermTranslationMonad m =&gt; Term -&gt; m Coq.Term
+<span class="lineno">  646 </span><span class="decl"><span class="istickedoff">translateTermUnshared t =</span>
+<span class="lineno">  647 </span><span class="spaces">  </span><span class="istickedoff">-- traceTerm &quot;translateTerm&quot; t $</span>
+<span class="lineno">  648 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
+<span class="lineno">  649 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  650 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; <span class="nottickedoff">flatTermFToExpr ftf</span></span>
+<span class="lineno">  651 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  652 </span><span class="spaces">    </span><span class="istickedoff">Pi {} -&gt;</span>
+<span class="lineno">  653 </span><span class="spaces">      </span><span class="istickedoff">let (params, e) = asPiList t in</span>
+<span class="lineno">  654 </span><span class="spaces">      </span><span class="istickedoff">translatePi params e</span>
+<span class="lineno">  655 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  656 </span><span class="spaces">    </span><span class="istickedoff">Lambda {} -&gt;</span>
+<span class="lineno">  657 </span><span class="spaces">      </span><span class="istickedoff">let (params, e) = asLambdaList t in</span>
+<span class="lineno">  658 </span><span class="spaces">      </span><span class="istickedoff">localTR (set inTermPosition <span class="nottickedoff">True</span>) $</span>
+<span class="lineno">  659 </span><span class="spaces">        </span><span class="istickedoff">translateParams params $ \paramTerms -&gt;</span>
+<span class="lineno">  660 </span><span class="spaces">        </span><span class="istickedoff">do e' &lt;- translateTermLet e</span>
+<span class="lineno">  661 </span><span class="spaces">           </span><span class="istickedoff">return (Coq.Lambda paramTerms e')</span>
+<span class="lineno">  662 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  663 </span><span class="spaces">    </span><span class="istickedoff">App {} -&gt;</span>
+<span class="lineno">  664 </span><span class="spaces">      </span><span class="istickedoff">-- asApplyAll: innermost argument first</span>
+<span class="lineno">  665 </span><span class="spaces">      </span><span class="istickedoff">let (f, args) = asApplyAll t</span>
+<span class="lineno">  666 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  667 </span><span class="spaces">      </span><span class="istickedoff">case f of</span>
+<span class="lineno">  668 </span><span class="spaces">      </span><span class="istickedoff">(asGlobalDef -&gt; Just i) -&gt;</span>
+<span class="lineno">  669 </span><span class="spaces">        </span><span class="istickedoff">case i of</span>
+<span class="lineno">  670 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.natToInt&quot; -&gt;</span>
+<span class="lineno">  671 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
+<span class="lineno">  672 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[n] -&gt; translateTerm n &gt;&gt;= \case</span></span>
+<span class="lineno">  673 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Coq.NatLit n' -&gt; pure $ Coq.ZLit n'</span></span>
+<span class="lineno">  674 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs &quot;Prelude.natToInt&quot; [n]</span></span>
+<span class="lineno">  675 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
+<span class="lineno">  676 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.intNeg&quot; -&gt;</span>
+<span class="lineno">  677 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
+<span class="lineno">  678 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[z] -&gt; translateTerm z &gt;&gt;= \case</span></span>
+<span class="lineno">  679 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Coq.ZLit z' -&gt; pure $ Coq.ZLit (-z')</span></span>
+<span class="lineno">  680 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs &quot;Prelude.intNeg&quot; [z]</span></span>
+<span class="lineno">  681 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
+<span class="lineno">  682 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.ite&quot; -&gt;</span>
+<span class="lineno">  683 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
+<span class="lineno">  684 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- `rest` can be non-empty in examples like:</span></span>
+<span class="lineno">  685 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- (if b then f else g) arg1 arg2</span></span>
+<span class="lineno">  686 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ty : c : tt : ft : rest -&gt; do</span></span>
+<span class="lineno">  687 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ite &lt;- Coq.If &lt;$&gt; translateTerm c &lt;*&gt; translateTerm tt &lt;*&gt; translateTerm ft</span></span>
+<span class="lineno">  688 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case rest of</span></span>
+<span class="lineno">  689 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[] -&gt; return ite</span></span>
+<span class="lineno">  690 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">_  -&gt; Coq.App ite &lt;$&gt; mapM translateTerm rest</span></span>
+<span class="lineno">  691 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
+<span class="lineno">  692 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  693 </span><span class="spaces">        </span><span class="istickedoff">-- Refuse to translate any recursive value defined using Prelude.fix</span>
+<span class="lineno">  694 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.fix&quot; -&gt; <span class="nottickedoff">badTerm</span></span>
+<span class="lineno">  695 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  696 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; translateIdentWithArgs i args</span>
+<span class="lineno">  697 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Coq.App &lt;$&gt; translateTerm f &lt;*&gt; traverse translateTerm args</span></span>
+<span class="lineno">  698 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  699 </span><span class="spaces">    </span><span class="istickedoff">-- Constants</span>
+<span class="lineno">  700 </span><span class="spaces">    </span><span class="istickedoff">Constant n -&gt; translateConstant n</span>
 <span class="lineno">  701 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  702 </span><span class="spaces">        </span><span class="istickedoff">-- Refuse to translate any recursive value defined using Prelude.fix</span>
-<span class="lineno">  703 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.fix&quot; -&gt; <span class="nottickedoff">badTerm</span></span>
-<span class="lineno">  704 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  705 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; translateIdentWithArgs i args</span>
-<span class="lineno">  706 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Coq.App &lt;$&gt; translateTerm f &lt;*&gt; traverse translateTerm args</span></span>
-<span class="lineno">  707 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  708 </span><span class="spaces">    </span><span class="istickedoff">-- Constants</span>
-<span class="lineno">  709 </span><span class="spaces">    </span><span class="istickedoff">Constant n -&gt; translateConstant n</span>
+<span class="lineno">  702 </span><span class="spaces">    </span><span class="istickedoff">Variable nm _tp -&gt;</span>
+<span class="lineno">  703 </span><span class="spaces">      </span><span class="istickedoff">do nenv &lt;- view namedEnvironment &lt;$&gt; askTR</span>
+<span class="lineno">  704 </span><span class="spaces">         </span><span class="istickedoff">case Map.lookup nm nenv of</span>
+<span class="lineno">  705 </span><span class="spaces">           </span><span class="istickedoff">Just ident -&gt; pure (Coq.Var ident)</span>
+<span class="lineno">  706 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  707 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">do let nm_str = Text.unpack $ vnName nm</span></span>
+<span class="lineno">  708 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">let ident = escapeIdent $ Coq.Ident $ nm_str</span></span>
+<span class="lineno">  709 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">pure (Coq.Var ident)</span></span>
 <span class="lineno">  710 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  711 </span><span class="spaces">    </span><span class="istickedoff">Variable nm _tp -&gt;</span>
-<span class="lineno">  712 </span><span class="spaces">      </span><span class="istickedoff">do nenv &lt;- view namedEnvironment &lt;$&gt; askTR</span>
-<span class="lineno">  713 </span><span class="spaces">         </span><span class="istickedoff">case Map.lookup nm nenv of</span>
-<span class="lineno">  714 </span><span class="spaces">           </span><span class="istickedoff">Just ident -&gt; pure (Coq.Var ident)</span>
-<span class="lineno">  715 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  716 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">do let nm_str = Text.unpack $ vnName nm</span></span>
-<span class="lineno">  717 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">let ident = escapeIdent $ Coq.Ident $ nm_str</span></span>
-<span class="lineno">  718 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">pure (Coq.Var ident)</span></span>
-<span class="lineno">  719 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  720 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  721 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">badTerm          = Except.throwError $ BadTerm t</span></span></span>
-<span class="lineno">  722 </span>
-<span class="lineno">  723 </span>-- | In order to turn fixpoint computations into iterative computations, we need
-<span class="lineno">  724 </span>-- to be able to create \&quot;dummy\&quot; values at the type of the computation.
-<span class="lineno">  725 </span>defaultTermForType ::
-<span class="lineno">  726 </span>  TermTranslationMonad m =&gt;
-<span class="lineno">  727 </span>  Term -&gt; m Coq.Term
-<span class="lineno">  728 </span><span class="decl"><span class="nottickedoff">defaultTermForType typ = do</span>
-<span class="lineno">  729 </span><span class="spaces">  </span><span class="nottickedoff">case typ of</span>
-<span class="lineno">  730 </span><span class="spaces">    </span><span class="nottickedoff">(asBoolType -&gt; Just ()) -&gt; translateIdent (mkIdent preludeName &quot;False&quot;)</span>
-<span class="lineno">  731 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  732 </span><span class="spaces">    </span><span class="nottickedoff">(isGlobalDef &quot;Prelude.Nat&quot; -&gt; Just ()) -&gt; return $ Coq.NatLit 0</span>
+<span class="lineno">  711 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  712 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">badTerm          = Except.throwError $ BadTerm t</span></span></span>
+<span class="lineno">  713 </span>
+<span class="lineno">  714 </span>-- | In order to turn fixpoint computations into iterative computations, we need
+<span class="lineno">  715 </span>-- to be able to create \&quot;dummy\&quot; values at the type of the computation.
+<span class="lineno">  716 </span>defaultTermForType ::
+<span class="lineno">  717 </span>  TermTranslationMonad m =&gt;
+<span class="lineno">  718 </span>  Term -&gt; m Coq.Term
+<span class="lineno">  719 </span><span class="decl"><span class="nottickedoff">defaultTermForType typ = do</span>
+<span class="lineno">  720 </span><span class="spaces">  </span><span class="nottickedoff">case typ of</span>
+<span class="lineno">  721 </span><span class="spaces">    </span><span class="nottickedoff">(asBoolType -&gt; Just ()) -&gt; translateIdent (mkIdent preludeName &quot;False&quot;)</span>
+<span class="lineno">  722 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  723 </span><span class="spaces">    </span><span class="nottickedoff">(isGlobalDef &quot;Prelude.Nat&quot; -&gt; Just ()) -&gt; return $ Coq.NatLit 0</span>
+<span class="lineno">  724 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  725 </span><span class="spaces">    </span><span class="nottickedoff">(asIntegerType -&gt; Just ()) -&gt; return $ Coq.ZLit 0</span>
+<span class="lineno">  726 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  727 </span><span class="spaces">    </span><span class="nottickedoff">(asSeq -&gt; Just (n, typ')) -&gt; do</span>
+<span class="lineno">  728 </span><span class="spaces">      </span><span class="nottickedoff">seqConst &lt;- translateIdent (mkIdent (mkModuleName [&quot;Cryptol&quot;]) &quot;seqConst&quot;)</span>
+<span class="lineno">  729 </span><span class="spaces">      </span><span class="nottickedoff">nT       &lt;- translateTerm n</span>
+<span class="lineno">  730 </span><span class="spaces">      </span><span class="nottickedoff">typ'T    &lt;- translateTerm typ'</span>
+<span class="lineno">  731 </span><span class="spaces">      </span><span class="nottickedoff">defaultT &lt;- defaultTermForType typ'</span>
+<span class="lineno">  732 </span><span class="spaces">      </span><span class="nottickedoff">return $ Coq.App seqConst [ nT, typ'T, defaultT ]</span>
 <span class="lineno">  733 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  734 </span><span class="spaces">    </span><span class="nottickedoff">(asIntegerType -&gt; Just ()) -&gt; return $ Coq.ZLit 0</span>
-<span class="lineno">  735 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  736 </span><span class="spaces">    </span><span class="nottickedoff">(asSeq -&gt; Just (n, typ')) -&gt; do</span>
-<span class="lineno">  737 </span><span class="spaces">      </span><span class="nottickedoff">seqConst &lt;- translateIdent (mkIdent (mkModuleName [&quot;Cryptol&quot;]) &quot;seqConst&quot;)</span>
-<span class="lineno">  738 </span><span class="spaces">      </span><span class="nottickedoff">nT       &lt;- translateTerm n</span>
-<span class="lineno">  739 </span><span class="spaces">      </span><span class="nottickedoff">typ'T    &lt;- translateTerm typ'</span>
-<span class="lineno">  740 </span><span class="spaces">      </span><span class="nottickedoff">defaultT &lt;- defaultTermForType typ'</span>
-<span class="lineno">  741 </span><span class="spaces">      </span><span class="nottickedoff">return $ Coq.App seqConst [ nT, typ'T, defaultT ]</span>
-<span class="lineno">  742 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  743 </span><span class="spaces">    </span><span class="nottickedoff">(asPairType -&gt; Just (x,y)) -&gt; do</span>
-<span class="lineno">  744 </span><span class="spaces">      </span><span class="nottickedoff">x' &lt;- defaultTermForType x</span>
-<span class="lineno">  745 </span><span class="spaces">      </span><span class="nottickedoff">y' &lt;- defaultTermForType y</span>
-<span class="lineno">  746 </span><span class="spaces">      </span><span class="nottickedoff">return $ Coq.App (Coq.Var &quot;pair&quot;) [x',y']</span>
-<span class="lineno">  747 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  748 </span><span class="spaces">    </span><span class="nottickedoff">(asPiList -&gt; (bs,body))</span>
-<span class="lineno">  749 </span><span class="spaces">      </span><span class="nottickedoff">| not (null bs)</span>
-<span class="lineno">  750 </span><span class="spaces">      </span><span class="nottickedoff">, closedTerm body -&gt;</span>
-<span class="lineno">  751 </span><span class="spaces">      </span><span class="nottickedoff">do bs'   &lt;- forM bs $ \ (_nm, ty) -&gt; Coq.Binder &quot;_&quot; . Just &lt;$&gt; translateTerm ty</span>
-<span class="lineno">  752 </span><span class="spaces">         </span><span class="nottickedoff">body' &lt;- defaultTermForType body</span>
-<span class="lineno">  753 </span><span class="spaces">         </span><span class="nottickedoff">return $ Coq.Lambda bs' body'</span>
-<span class="lineno">  754 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  755 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; Except.throwError $ CannotCreateDefaultValue typ</span></span>
-<span class="lineno">  756 </span>
-<span class="lineno">  757 </span>-- | Translate a SAW core term along with its type to a Coq term and its Coq
-<span class="lineno">  758 </span>-- type, and pass the results to the supplied function
-<span class="lineno">  759 </span>translateTermToDocWith ::
-<span class="lineno">  760 </span>  TranslationConfiguration -&gt;
-<span class="lineno">  761 </span>  Maybe ModuleName -&gt;
-<span class="lineno">  762 </span>  ModuleMap -&gt;
-<span class="lineno">  763 </span>  [Coq.Ident] -&gt; -- ^ globals that have already been translated
-<span class="lineno">  764 </span>  [Coq.Ident] -&gt; -- ^ names of local variables in scope
-<span class="lineno">  765 </span>  (Coq.Term -&gt; Coq.Term -&gt; Doc ann) -&gt;
-<span class="lineno">  766 </span>  Term -&gt; Term -&gt;
-<span class="lineno">  767 </span>  Either (TranslationError Term) (Doc ann)
-<span class="lineno">  768 </span><span class="decl"><span class="istickedoff">translateTermToDocWith configuration r mm globalDecls localEnv f t tp_trm = do</span>
-<span class="lineno">  769 </span><span class="spaces">  </span><span class="istickedoff">((term, tp), state) &lt;-</span>
-<span class="lineno">  770 </span><span class="spaces">    </span><span class="istickedoff">runTermTranslationMonad <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> localEnv</span>
-<span class="lineno">  771 </span><span class="spaces">    </span><span class="istickedoff">((,) &lt;$&gt; translateTermLet t &lt;*&gt; translateTermLet tp_trm)</span>
-<span class="lineno">  772 </span><span class="spaces">  </span><span class="istickedoff">let decls = view topLevelDeclarations state</span>
-<span class="lineno">  773 </span><span class="spaces">  </span><span class="istickedoff">return $</span>
-<span class="lineno">  774 </span><span class="spaces">    </span><span class="istickedoff">vcat $</span>
-<span class="lineno">  775 </span><span class="spaces">    </span><span class="istickedoff">[ (vcat . intersperse <span class="nottickedoff">hardline</span> . map <span class="nottickedoff">Coq.prettyDecl</span> . reverse) decls</span>
-<span class="lineno">  776 </span><span class="spaces">    </span><span class="istickedoff">, if <span class="tickonlytrue">null decls</span> then mempty else <span class="nottickedoff">hardline</span></span>
-<span class="lineno">  777 </span><span class="spaces">    </span><span class="istickedoff">, f term tp</span>
-<span class="lineno">  778 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
-<span class="lineno">  779 </span>
-<span class="lineno">  780 </span>-- | Translate a SAW core 'Term' and its type (given as a 'Term') to a Coq
-<span class="lineno">  781 </span>-- definition with the supplied name
-<span class="lineno">  782 </span>translateDefDoc ::
-<span class="lineno">  783 </span>  TranslationConfiguration -&gt;
-<span class="lineno">  784 </span>  Maybe ModuleName -&gt;
-<span class="lineno">  785 </span>  ModuleMap -&gt;
-<span class="lineno">  786 </span>  [Coq.Ident] -&gt;
-<span class="lineno">  787 </span>  Coq.Ident -&gt; Term -&gt; Term -&gt;
-<span class="lineno">  788 </span>  Either (TranslationError Term) (Doc ann)
-<span class="lineno">  789 </span><span class="decl"><span class="istickedoff">translateDefDoc configuration r mm globalDecls name =</span>
-<span class="lineno">  790 </span><span class="spaces">  </span><span class="istickedoff">translateTermToDocWith <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> [name]</span>
-<span class="lineno">  791 </span><span class="spaces">  </span><span class="istickedoff">(\ t tp -&gt; Coq.prettyDecl $ mkDefinition name t tp)</span></span>
+<span class="lineno">  734 </span><span class="spaces">    </span><span class="nottickedoff">(asPairType -&gt; Just (x,y)) -&gt; do</span>
+<span class="lineno">  735 </span><span class="spaces">      </span><span class="nottickedoff">x' &lt;- defaultTermForType x</span>
+<span class="lineno">  736 </span><span class="spaces">      </span><span class="nottickedoff">y' &lt;- defaultTermForType y</span>
+<span class="lineno">  737 </span><span class="spaces">      </span><span class="nottickedoff">return $ Coq.App (Coq.Var &quot;pair&quot;) [x',y']</span>
+<span class="lineno">  738 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  739 </span><span class="spaces">    </span><span class="nottickedoff">(asPiList -&gt; (bs,body))</span>
+<span class="lineno">  740 </span><span class="spaces">      </span><span class="nottickedoff">| not (null bs)</span>
+<span class="lineno">  741 </span><span class="spaces">      </span><span class="nottickedoff">, closedTerm body -&gt;</span>
+<span class="lineno">  742 </span><span class="spaces">      </span><span class="nottickedoff">do bs'   &lt;- forM bs $ \ (_nm, ty) -&gt; Coq.Binder False &quot;_&quot; . Just &lt;$&gt; translateTerm ty</span>
+<span class="lineno">  743 </span><span class="spaces">         </span><span class="nottickedoff">body' &lt;- defaultTermForType body</span>
+<span class="lineno">  744 </span><span class="spaces">         </span><span class="nottickedoff">return $ Coq.Lambda bs' body'</span>
+<span class="lineno">  745 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  746 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; Except.throwError $ CannotCreateDefaultValue typ</span></span>
+<span class="lineno">  747 </span>
+<span class="lineno">  748 </span>-- | Translate a SAW core term along with its type to a Coq term and its Coq
+<span class="lineno">  749 </span>-- type, and pass the results to the supplied function
+<span class="lineno">  750 </span>translateTermToDocWith ::
+<span class="lineno">  751 </span>  TranslationConfiguration -&gt;
+<span class="lineno">  752 </span>  Maybe ModuleName -&gt;
+<span class="lineno">  753 </span>  ModuleMap -&gt;
+<span class="lineno">  754 </span>  [Coq.Ident] -&gt; -- ^ globals that have already been translated
+<span class="lineno">  755 </span>  [Coq.Ident] -&gt; -- ^ names of local variables in scope
+<span class="lineno">  756 </span>  (Coq.Term -&gt; Coq.Term -&gt; Doc ann) -&gt;
+<span class="lineno">  757 </span>  Term -&gt; Term -&gt;
+<span class="lineno">  758 </span>  Either (TranslationError Term) (Doc ann)
+<span class="lineno">  759 </span><span class="decl"><span class="istickedoff">translateTermToDocWith configuration r mm globalDecls localEnv f t tp_trm = do</span>
+<span class="lineno">  760 </span><span class="spaces">  </span><span class="istickedoff">((term, tp), state) &lt;-</span>
+<span class="lineno">  761 </span><span class="spaces">    </span><span class="istickedoff">runTermTranslationMonad <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> localEnv</span>
+<span class="lineno">  762 </span><span class="spaces">    </span><span class="istickedoff">((,) &lt;$&gt; translateTermLet t &lt;*&gt; translateTermLet tp_trm)</span>
+<span class="lineno">  763 </span><span class="spaces">  </span><span class="istickedoff">let decls = view topLevelDeclarations state</span>
+<span class="lineno">  764 </span><span class="spaces">  </span><span class="istickedoff">return $</span>
+<span class="lineno">  765 </span><span class="spaces">    </span><span class="istickedoff">vcat $</span>
+<span class="lineno">  766 </span><span class="spaces">    </span><span class="istickedoff">[ (vcat . intersperse <span class="nottickedoff">hardline</span> . map <span class="nottickedoff">Coq.prettyDecl</span> . reverse) decls</span>
+<span class="lineno">  767 </span><span class="spaces">    </span><span class="istickedoff">, if <span class="tickonlytrue">null decls</span> then mempty else <span class="nottickedoff">hardline</span></span>
+<span class="lineno">  768 </span><span class="spaces">    </span><span class="istickedoff">, f term tp</span>
+<span class="lineno">  769 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno">  770 </span>
+<span class="lineno">  771 </span>-- | Translate a SAW core 'Term' and its type (given as a 'Term') to a Coq
+<span class="lineno">  772 </span>-- definition with the supplied name
+<span class="lineno">  773 </span>translateDefDoc ::
+<span class="lineno">  774 </span>  TranslationConfiguration -&gt;
+<span class="lineno">  775 </span>  Maybe ModuleName -&gt;
+<span class="lineno">  776 </span>  ModuleMap -&gt;
+<span class="lineno">  777 </span>  [Coq.Ident] -&gt;
+<span class="lineno">  778 </span>  Coq.Ident -&gt; Term -&gt; Term -&gt;
+<span class="lineno">  779 </span>  Either (TranslationError Term) (Doc ann)
+<span class="lineno">  780 </span><span class="decl"><span class="istickedoff">translateDefDoc configuration r mm globalDecls name =</span>
+<span class="lineno">  781 </span><span class="spaces">  </span><span class="istickedoff">translateTermToDocWith <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> [name]</span>
+<span class="lineno">  782 </span><span class="spaces">  </span><span class="istickedoff">(\ t tp -&gt; Coq.prettyDecl $ mkDefinition name t tp)</span></span>
 
 </pre>
 </body>

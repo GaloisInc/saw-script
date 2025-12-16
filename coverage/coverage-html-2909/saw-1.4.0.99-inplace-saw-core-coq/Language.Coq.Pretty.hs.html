@@ -101,20 +101,20 @@ span.spaces    { background: white }
 <span class="lineno">   82 </span>
 <span class="lineno">   83 </span>prettyBinder :: Binder -&gt; Doc ann
 <span class="lineno">   84 </span><span class="decl"><span class="istickedoff">prettyBinder b = case b of</span>
-<span class="lineno">   85 </span><span class="spaces">    </span><span class="istickedoff">Binder x Nothing -&gt; <span class="nottickedoff">prettyIdent x</span></span>
-<span class="lineno">   86 </span><span class="spaces">    </span><span class="istickedoff">Binder x (Just ty) -&gt; parens $ prettyNameType x ty</span>
-<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">ImplicitBinder x Nothing -&gt; <span class="nottickedoff">braces $ prettyIdent x</span></span>
-<span class="lineno">   88 </span><span class="spaces">    </span><span class="istickedoff">ImplicitBinder x (Just ty) -&gt; <span class="nottickedoff">braces $ prettyNameType x ty</span></span></span>
+<span class="lineno">   85 </span><span class="spaces">    </span><span class="istickedoff">Binder False x Nothing   -&gt; <span class="nottickedoff">prettyIdent x</span></span>
+<span class="lineno">   86 </span><span class="spaces">    </span><span class="istickedoff">Binder False x (Just ty) -&gt; parens $ prettyNameType x ty</span>
+<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">Binder True x Nothing    -&gt; <span class="nottickedoff">braces $ prettyIdent x</span></span>
+<span class="lineno">   88 </span><span class="spaces">    </span><span class="istickedoff">Binder True x (Just ty)  -&gt; <span class="nottickedoff">braces $ prettyNameType x ty</span></span></span>
 <span class="lineno">   89 </span>
 <span class="lineno">   90 </span>prettyPiBinder :: PiBinder -&gt; Doc ann
 <span class="lineno">   91 </span><span class="decl"><span class="nottickedoff">prettyPiBinder b = case b of</span>
-<span class="lineno">   92 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder Nothing ty -&gt;</span>
+<span class="lineno">   92 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder False Nothing ty -&gt;</span>
 <span class="lineno">   93 </span><span class="spaces">        </span><span class="nottickedoff">prettyTerm PrecApp ty &lt;+&gt; &quot;-&gt;&quot;</span>
-<span class="lineno">   94 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder (Just x) ty -&gt;</span>
+<span class="lineno">   94 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder False (Just x) ty -&gt;</span>
 <span class="lineno">   95 </span><span class="spaces">        </span><span class="nottickedoff">&quot;forall&quot; &lt;+&gt; parens (prettyNameType x ty) &lt;&gt; comma</span>
-<span class="lineno">   96 </span><span class="spaces">    </span><span class="nottickedoff">PiImplicitBinder Nothing ty -&gt;</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder True Nothing ty -&gt;</span>
 <span class="lineno">   97 </span><span class="spaces">        </span><span class="nottickedoff">braces (prettyTerm PrecApp ty) &lt;+&gt; &quot;-&gt;&quot;</span>
-<span class="lineno">   98 </span><span class="spaces">    </span><span class="nottickedoff">PiImplicitBinder (Just x) ty -&gt;</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder True (Just x) ty -&gt;</span>
 <span class="lineno">   99 </span><span class="spaces">        </span><span class="nottickedoff">&quot;forall&quot; &lt;+&gt; braces (prettyNameType x ty) &lt;&gt; comma</span></span>
 <span class="lineno">  100 </span>
 <span class="lineno">  101 </span>prettyBinders :: [Binder] -&gt; Doc ann

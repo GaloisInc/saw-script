@@ -328,11 +328,11 @@ span.spaces    { background: white }
 <span class="lineno">  309 </span>-- @[arg/x]b@.
 <span class="lineno">  310 </span>-- If @fun_tp@ is not a pi type, raise the supplied error.
 <span class="lineno">  311 </span>applyPiTyped :: TCError -&gt; Term -&gt; Term -&gt; TCM Term
-<span class="lineno">  312 </span><span class="decl"><span class="istickedoff">applyPiTyped err fun_tp arg =</span>
-<span class="lineno">  313 </span><span class="spaces">  </span><span class="istickedoff">ensurePiType <span class="nottickedoff">err</span> fun_tp &gt;&gt;= \(nm, arg_tp, ret_tp) -&gt;</span>
-<span class="lineno">  314 </span><span class="spaces">  </span><span class="istickedoff">do checkSubtype arg arg_tp</span>
-<span class="lineno">  315 </span><span class="spaces">     </span><span class="istickedoff">let sub = IntMap.singleton (vnIndex nm) arg</span>
-<span class="lineno">  316 </span><span class="spaces">     </span><span class="istickedoff">liftTCM scInstantiate sub ret_tp</span></span>
+<span class="lineno">  312 </span><span class="decl"><span class="nottickedoff">applyPiTyped err fun_tp arg =</span>
+<span class="lineno">  313 </span><span class="spaces">  </span><span class="nottickedoff">ensurePiType err fun_tp &gt;&gt;= \(nm, arg_tp, ret_tp) -&gt;</span>
+<span class="lineno">  314 </span><span class="spaces">  </span><span class="nottickedoff">do checkSubtype arg arg_tp</span>
+<span class="lineno">  315 </span><span class="spaces">     </span><span class="nottickedoff">let sub = IntMap.singleton (vnIndex nm) arg</span>
+<span class="lineno">  316 </span><span class="spaces">     </span><span class="nottickedoff">liftTCM scInstantiate sub ret_tp</span></span>
 <span class="lineno">  317 </span>
 <span class="lineno">  318 </span>-- | Ensure that a 'Term' matches a recognizer function, normalizing if
 <span class="lineno">  319 </span>-- necessary; otherwise throw the supplied 'TCError'
