@@ -58,13 +58,13 @@ inferCompleteTerm ::
 inferCompleteTerm sc mnm t =
   do res <- runTCM (typeInferCompleteUTerm t) sc mnm
      case res of
-       -- TODO: avoid intermediate 'String's from 'prettyTCError'
-       Left err -> return $ Left $ vsep $ map pretty $ prettyTCError err
+       -- TODO: avoid intermediate 'String's from 'ppTCError'
+       Left err -> return $ Left $ vsep $ map pretty $ ppTCError err
        Right t' -> return $ Right t'
 
 -- | Pretty-print a type-checking error
-prettyTCError :: TCError -> [String]
-prettyTCError e = helper Nothing e where
+ppTCError :: TCError -> [String]
+ppTCError e = helper Nothing e where
 
   ppWithPos :: Maybe Pos -> [String] -> [String]
   ppWithPos maybe_p strs =
@@ -91,7 +91,7 @@ prettyTCError e = helper Nothing e where
                      ]
         ++ helper mp err'
       TermError err' ->
-        ppWithPos mp [showTermError err']
+        ppWithPos mp [ppTermError err']
 
   -- | Add prefix to every line, but remove final trailing newline
   indent2 :: String -> String
@@ -499,7 +499,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
   -- Finally, process all the decls
   decls_res <- runTCM (processDecls decls) sc (Just mnm)
   case decls_res of
-    Left err -> fail $ unlines $ prettyTCError err
+    Left err -> fail $ unlines $ ppTCError err
     Right _ -> return ()
 
 

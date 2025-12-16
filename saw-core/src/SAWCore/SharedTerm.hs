@@ -34,7 +34,7 @@ module SAWCore.SharedTerm
   , scResolveNameByURI
   , ppTerm
   , prettyTerm
-  , showTermError
+  , ppTermError
     -- * SharedContext interface for building shared terms
   , SharedContext -- abstract type
   , mkSharedContext
@@ -302,8 +302,8 @@ import SAWCore.Term.Pretty
 
 --------------------------------------------------------------------------------
 
-showTermError :: TermError -> String
-showTermError err =
+ppTermError :: TermError -> String
+ppTermError err =
   init $ unlines $
   case err of
     StaleTerm t s ->
@@ -423,7 +423,7 @@ execSCM :: SharedContext -> SCM a -> IO a
 execSCM sc m =
   do result <- runSCM sc m
      case result of
-       Left err -> fail (showTermError err)
+       Left err -> fail (ppTermError err)
        Right a -> pure a
 
 -- | Build a variant of a 'Term' with a specific type.

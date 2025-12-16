@@ -1223,7 +1223,7 @@ specializeTheorem _sc _what4PushMuxOps db _loc _rsn thm [] = return (thm, db)
 specializeTheorem sc what4PushMuxOps db loc rsn thm ts =
   do res <- specializeProp sc (_thmProp thm) ts
      case res of
-       Left err -> fail (unlines ["specialize_theorem: failed to specialize", showTermError err])
+       Left err -> fail (unlines ["specialize_theorem: failed to specialize", ppTermError err])
        Right p' ->
          constructTheorem sc what4PushMuxOps db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
 
@@ -2220,7 +2220,7 @@ tacticSpecializeHyp sc ts = Tactic \gl ->
       do res <- liftIO (specializeProp sc h ts)
          case res of
            Left err ->
-             fail (unlines ["specialize_hyp tactic: failed to specialize", showTermError err])
+             fail (unlines ["specialize_hyp tactic: failed to specialize", ppTermError err])
            Right h' ->
              do let gl' = gl{ goalSequent = HypFocusedSequent (FB hs1 h (hs2++[h'])) gs }
                 return ((), mempty, [gl'], specializeHypEvidence (genericLength hs1) h' ts)
@@ -2236,7 +2236,7 @@ tacticInsert sc thm ts = Tactic \gl ->
      case res of
        Left err ->
          fail (unlines (["goal_insert_and_specialize tactic: failed to specialize"] ++
-                        [showTermError err]))
+                        [ppTermError err]))
        Right h ->
          do let gl' = gl{ goalSequent = addHypothesis h (goalSequent gl) }
             return ((), mempty, [gl'], insertEvidence thm h ts)
