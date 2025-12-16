@@ -6648,6 +6648,8 @@ primitives = Map.fromList $
 
   , prim "mir_lifetime" "MIRType"
     (pureVal mir_lifetime)
+    -- This is needed to cope with mir-json issues and likely to be
+    -- removed once they're resolved. See mir-json #58.
     Experimental
     [ "The type of MIR lifetimes." ]
 
@@ -6957,6 +6959,9 @@ primitives = Map.fromList $
   , prim "mir_vec_of"
     "String -> MIRType -> MIRValue -> MIRSetup MIRValue"
     (pureVal mir_vec_of)
+    -- The design for this functionality hasn't settled yet, because
+    -- there are questions about how to handle internal reallocations
+    -- in Vec. See #2666.
     Experimental
     [ "Create a MIR 'Vec' value. The String argument is used as a"
     , "prefix for naming the internal symbolic variables created as"
