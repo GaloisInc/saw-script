@@ -16,7 +16,7 @@ module SAWCore.Typechecker
   ) where
 
 import Control.Monad (forM, forM_, mzero, void, unless)
-import Control.Monad.Except
+import Control.Monad.Except (ExceptT(..), runExceptT, catchError, throwError)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), asks, lift, local)
 import Control.Monad.Trans.Maybe

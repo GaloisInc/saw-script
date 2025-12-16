@@ -87,8 +87,9 @@ module SAWCore.Term.Certified
 
 import Control.Lens
 import Control.Monad (foldM, forM, forM_, join, unless, when)
-import Control.Monad.Except
-import Control.Monad.Reader
+import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (ReaderT(..), runReaderT, ask)
 
 import Data.Bits
 import qualified Data.Foldable as Fold
