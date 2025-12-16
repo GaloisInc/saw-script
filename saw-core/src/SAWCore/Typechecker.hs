@@ -28,7 +28,7 @@ import qualified Data.Text as Text
 
 import Prettyprinter hiding (Doc)
 
-import qualified SAWSupport.Pretty as PPS (Doc, defaultOpts, render)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
 
 import SAWCore.Panic (panic)
 
@@ -58,44 +58,48 @@ inferCompleteTerm ::
 inferCompleteTerm sc mnm t =
   do res <- runTCM (typeInferCompleteUTerm t) sc mnm
      case res of
-       -- TODO: avoid intermediate 'String's from 'ppTCError'
-       Left err -> return $ Left $ vsep $ map pretty $ ppTCError err
-       Right t' -> return $ Right t'
+       Right t' -> pure (Right t')
+       Left err ->
+         do ne <- scGetNamingEnv sc
+            let opts = PPS.defaultOpts
+            pure (Left (prettyTCError opts ne err))
 
 -- | Pretty-print a type-checking error
-ppTCError :: TCError -> [String]
-ppTCError e = helper Nothing e where
+ppTCError :: TCError -> String
+ppTCError e =
+  PPS.render PPS.defaultOpts $
+  prettyTCError PPS.defaultOpts emptyDisplayNameEnv e
 
-  ppWithPos :: Maybe Pos -> [String] -> [String]
+-- | Pretty-print a type-checking error
+prettyTCError :: PPS.Opts -> DisplayNameEnv -> TCError -> PPS.Doc
+prettyTCError opts ne e = helper Nothing e where
+
+  ppWithPos :: Maybe Pos -> [PPS.Doc] -> PPS.Doc
   ppWithPos maybe_p strs =
     case maybe_p of
-      Just p -> ppPos p : strs
-      Nothing -> strs
+      Just p -> vcat (pretty (ppPos p) : strs)
+      Nothing -> vcat strs
 
-  helper :: Maybe Pos -> TCError -> [String]
+  helper :: Maybe Pos -> TCError -> PPS.Doc
   helper mp err =
     case err of
       UnboundName str ->
-        ppWithPos mp [ "Unbound name: " ++ show str ]
+        ppWithPos mp [ "Unbound name:" <+> pretty str ]
       EmptyVectorLit ->
         ppWithPos mp [ "Empty vector literal"]
       NoSuchDataType d ->
-        ppWithPos mp [ "No such data type: " ++ show d ]
+        ppWithPos mp [ "No such data type:" <+> pretty (show d) ]
       DeclError nm reason ->
-        ppWithPos mp [ "Malformed declaration for " ++ show nm, reason ]
+        ppWithPos mp [ "Malformed declaration for" <+> pretty (show nm), pretty reason ]
       ErrorPos p err' ->
         helper (Just p) err'
       ErrorUTerm t err' ->
         ppWithPos mp [ "While typechecking term:"
-                     , indent2 $ PPS.render PPS.defaultOpts (Un.prettyUTerm t)
+                     , indent 2 $ Un.prettyUTerm t
+                     , helper mp err'
                      ]
-        ++ helper mp err'
       TermError err' ->
-        ppWithPos mp [ppTermError err']
-
-  -- | Add prefix to every line, but remove final trailing newline
-  indent2 :: String -> String
-  indent2 s = init (unlines (map ("  " ++) (lines s)))
+        ppWithPos mp [ prettyTermError opts ne err' ]
 
 ----------------------------------------------------------------------
 -- Type Checking Monad
@@ -499,7 +503,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
   -- Finally, process all the decls
   decls_res <- runTCM (processDecls decls) sc (Just mnm)
   case decls_res of
-    Left err -> fail $ unlines $ ppTCError err
+    Left err -> fail $ ppTCError err
     Right _ -> return ()
 
 

@@ -35,6 +35,7 @@ module SAWCore.SharedTerm
   , ppTerm
   , prettyTerm
   , ppTermError
+  , prettyTermError
     -- * SharedContext interface for building shared terms
   , SharedContext -- abstract type
   , mkSharedContext
@@ -263,10 +264,10 @@ import qualified Data.Map as Map
 import Data.Ref ( C )
 import Data.Set (Set)
 import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Data.Set as Set
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
+import qualified Prettyprinter as PP
 import Text.URI
 
 import qualified SAWSupport.IntRangeSet as IntRangeSet
@@ -304,17 +305,26 @@ import SAWCore.Term.Pretty
 
 ppTermError :: TermError -> String
 ppTermError err =
-  init $ unlines $
+  PPS.render PPS.defaultOpts $
+  prettyTermError PPS.defaultOpts emptyDisplayNameEnv err
+
+prettyTermError :: PPS.Opts -> DisplayNameEnv -> TermError -> PPS.Doc
+prettyTermError opts ne err =
+  PP.vcat $
   case err of
     StaleTerm t s ->
-      [ "Stale term encountered: index = " ++ show (termIndex t)
-      , "Valid indexes: " ++ show (IntRangeSet.toList s)
+      [ "Stale term encountered:"
+      , "Index:"
+      , PP.indent 2 (PP.pretty (termIndex t))
+      , "Valid indexes:"
+      , PP.indent 2 (PP.pretty (IntRangeSet.toList s))
       , "For term:"
       , ishow t
       ]
     VariableContextMismatch msg i t1 t2 ->
-      [ Text.unpack msg ++ ": variable typing context mismatch"
-      , "VarIndex: " ++ show i
+      [ PP.pretty msg <> ": variable typing context mismatch"
+      , "VarIndex:"
+      , PP.indent 2 (PP.pretty i)
       , "Type 1:"
       , ishow t1
       , "Type 2:"
@@ -358,7 +368,7 @@ ppTermError err =
     VariableFreeInContext x body ->
       [ "Variable occurs free in typing context"
       , "Variable:"
-      , "  " ++ show (vnName x)
+      , PP.indent 2 $ PP.pretty (show (vnName x))
       , "For term:"
       , ishow body
       ]
@@ -370,9 +380,9 @@ ppTermError err =
       , tyshow t
       ]
     NameNotFound nm ->
-      [ "No such constant: " ++ Text.unpack (toAbsoluteName (nameInfo nm)) ]
+      [ "No such constant:" PP.<+> PP.pretty (toAbsoluteName (nameInfo nm)) ]
     IdentNotFound ident ->
-      [ "No such global: " ++ show ident ]
+      [ "No such global:" PP.<+> PP.pretty (show ident) ]
     NotPairType t ->
       [ "Tuple field projection with non-tuple"
       , "For term:"
@@ -388,24 +398,25 @@ ppTermError err =
       , tyshow t
       ]
     FieldNotFound t fname ->
-      [ "No such record field: " ++ show fname
+      [ "No such record field:" PP.<+> PP.pretty fname
       , "For term:"
       , ishow t
       , "With type:"
       , tyshow t
       ]
     DataTypeNotFound d ->
-      [ "No such data type: " ++ show d ]
+      [ "No such data type:" PP.<+> PP.pretty (show d) ]
     RecursorPropElim d s ->
       [ "Invalid recursor with disallowed propositional elimination"
       , "Data type:"
-      , "  " ++ Text.unpack (toAbsoluteName (nameInfo d))
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo d))
       , "Elimination sort:"
-      , "  " ++ show s
+      , PP.indent 2 $ PP.pretty (show s)
       ]
     ConstantNotClosed nm body ->
       [ "Definition body contains free variables"
-      , "Name: " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+      , "Name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo nm))
       , "For term:"
       , ishow body
       , "With type:"
@@ -413,27 +424,30 @@ ppTermError err =
       ]
     DuplicateURI uri ->
       [ "Attempt to register name with duplicate URI"
-      , "  " ++ Text.unpack (render uri)
+      , PP.indent 2 $ PP.pretty (render uri)
       ]
     AlreadyDefined nm ->
       [ "Attempt to redefine existing constant"
-      , "  " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo nm))
       ]
   where
-    ishow :: Term -> String
-    ishow t = init (unlines (map ("  " ++) (lines (ppTermPureDefaults t))))
+    ishow :: Term -> PPS.Doc
+    ishow t = PP.indent 2 $ prettyTermWithEnv opts ne t
 
-    tyshow :: Term -> String
+    tyshow :: Term -> PPS.Doc
     tyshow t =
       case termSortOrType t of
-        Left s -> "  " ++ show s
+        Left s -> PP.indent 2 $ PP.pretty (show s)
         Right ty -> ishow ty
 
 execSCM :: SharedContext -> SCM a -> IO a
 execSCM sc m =
   do result <- runSCM sc m
      case result of
-       Left err -> fail (ppTermError err)
+       Left err ->
+         do ne <- scGetNamingEnv sc
+            let opts = PPS.defaultOpts -- TODO: obtain opts from SharedContext
+            fail (PPS.render opts (prettyTermError opts ne err))
        Right a -> pure a
 
 -- | Build a variant of a 'Term' with a specific type.
