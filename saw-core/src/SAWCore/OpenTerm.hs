@@ -77,41 +77,36 @@ import Numeric.Natural
 
 import SAWCore.Name
 import SAWCore.Panic
-import SAWCore.Term.Functor
 import SAWCore.SharedTerm
-import qualified SAWCore.Term.Certified as SC
-import SAWCore.SCTypeCheck
+import SAWCore.Term.Functor
 
 
 -- | An open term is represented as a type-checking computation that computes a
--- SAW core term and its type
-newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SC.Term }
+-- SAW core term.
+newtype OpenTerm = OpenTerm { unOpenTerm :: SharedContext -> IO Term }
 
--- | \"Complete\" an 'OpenTerm' to a closed term or 'fail' on type-checking
--- error
+-- | \"Complete\" an 'OpenTerm' to a 'Term' or 'fail' on type-checking
+-- error.
 complete :: SharedContext -> OpenTerm -> IO Term
-complete sc (OpenTerm termM) =
-  either (fail . show) return =<<
-  runTCM termM sc
+complete sc (OpenTerm m) = m sc
 
--- | \"Complete\" an 'OpenTerm' to a closed term for its type
+-- | \"Complete\" an 'OpenTerm' to a term for its type.
 completeType :: SharedContext -> OpenTerm -> IO Term
 completeType sc ot = scTypeOf sc =<< complete sc ot
 
 -- | Embed a 'Term' into an 'OpenTerm'.
 term :: Term -> OpenTerm
-term t = OpenTerm $ pure t
+term t = OpenTerm $ const (pure t)
 
 -- | Return type of an 'OpenTerm' as an 'OpenTerm'.
 typeOf :: OpenTerm -> OpenTerm
 typeOf (OpenTerm m) =
-  OpenTerm $ do t <- m
-                liftTCM SC.scTypeOf t
+  OpenTerm $ \sc -> m sc >>= scTypeOf sc
 
 -- | Build an 'OpenTerm' from a 'FlatTermF'
 flat :: FlatTermF OpenTerm -> OpenTerm
-flat ftf = OpenTerm $
-  (sequence (fmap unOpenTerm ftf) >>= inferFlatTermF)
+flat ftf =
+  OpenTerm $ \sc -> traverse (complete sc) ftf >>= scFlatTermF sc
 
 -- | Build an 'OpenTerm' for a sort
 sort :: Sort -> OpenTerm
@@ -119,7 +114,7 @@ sort s = flat (Sort s noFlags)
 
 -- | Build an 'OpenTerm' for a natural number literal
 nat :: Natural -> OpenTerm
-nat n = OpenTerm $ liftTCM SC.scNat n
+nat n = OpenTerm $ \sc -> scNat sc n
 
 -- | The 'OpenTerm' for the unit value
 unit :: OpenTerm
@@ -228,37 +223,42 @@ projTuple' len i tup =
 
 -- | Build a record value as an 'OpenTerm'
 record :: [(FieldName, OpenTerm)] -> OpenTerm
-record flds_ts =
-  OpenTerm $ do let (flds,ots) = unzip flds_ts
-                ts <- mapM unOpenTerm ots
-                inferFlatTermF $ RecordValue $ zip flds ts
+record fields =
+  OpenTerm $ \sc ->
+  do fields' <- traverse (traverse (complete sc)) fields
+     scRecordValue sc fields'
 
 -- | Build a record type as an 'OpenTerm'
 recordType :: [(FieldName, OpenTerm)] -> OpenTerm
-recordType flds_ts =
-  OpenTerm $ do let (flds,ots) = unzip flds_ts
-                ts <- mapM unOpenTerm ots
-                inferFlatTermF $ RecordType $ zip flds ts
+recordType fields =
+  OpenTerm $ \sc ->
+  do fields' <- traverse (traverse (complete sc)) fields
+     scRecordType sc fields'
 
 -- | Project a field from a record
 projRecord :: OpenTerm -> FieldName -> OpenTerm
 projRecord (OpenTerm m) f =
-  OpenTerm $ do t <- m
-                inferFlatTermF $ RecordProj t f
+  OpenTerm $ \sc ->
+  do t <- m sc
+     scRecordSelect sc t f
 
 -- | Build an 'OpenTerm' for a global name with a definition
 global :: Ident -> OpenTerm
 global ident =
-  OpenTerm (liftTCM SC.scGlobal ident)
+  OpenTerm $ \sc -> scGlobalDef sc ident
 
 -- | Build an 'OpenTerm' for a named variable.
 variable :: VarName -> Term -> OpenTerm
-variable x t = OpenTerm (liftTCM scVariable x t)
+variable x t =
+  OpenTerm $ \sc -> scVariable sc x t
 
 -- | Apply an 'OpenTerm' to another.
 app :: OpenTerm -> OpenTerm -> OpenTerm
 app (OpenTerm f) (OpenTerm arg) =
-  OpenTerm ((App <$> f <*> arg) >>= inferTermF)
+  OpenTerm $ \sc ->
+  do t1 <- f sc
+     t2 <- arg sc
+     scApply sc t1 t2
 
 -- | Apply an 'OpenTerm' to a list of zero or more arguments.
 apply :: OpenTerm -> [OpenTerm] -> OpenTerm
@@ -270,12 +270,13 @@ applyGlobal ident = apply (global ident)
 
 -- | Build a lambda abstraction as an 'OpenTerm'
 lambda :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
-lambda x (OpenTerm tpM) body_f = OpenTerm $
-  do tp <- tpM
-     vn <- liftTCM scFreshVarName x
-     var <- inferTermF $ Variable vn tp
-     body <- unOpenTerm (body_f (OpenTerm (pure var)))
-     inferTermF $ Lambda vn tp body
+lambda x (OpenTerm tpM) body_f =
+  OpenTerm $ \sc ->
+  do tp <- tpM sc
+     vn <- scFreshVarName sc x
+     var <- scVariable sc vn tp
+     body <- complete sc (body_f (OpenTerm (const (pure var))))
+     scLambda sc vn tp body
 
 -- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
 lambdas :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
@@ -286,20 +287,21 @@ lambdas xs_tps body_f =
 
 -- | Build a Pi abstraction as an 'OpenTerm'
 piType :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
-piType x (OpenTerm tpM) body_f = OpenTerm $
-  do tp <- tpM
-     nm <- liftTCM scFreshVarName x
-     var <- inferTermF $ Variable nm tp
-     body <- unOpenTerm (body_f (OpenTerm (pure var)))
-     inferTermF $ Pi nm tp body
+piType x (OpenTerm tpM) body_f =
+  OpenTerm $ \sc ->
+  do tp <- tpM sc
+     nm <- scFreshVarName sc x
+     var <- scVariable sc nm tp
+     body <- complete sc (body_f (OpenTerm (const (pure var))))
+     scPi sc nm tp body
 
 -- | Build a non-dependent function type.
 arrow :: OpenTerm -> OpenTerm -> OpenTerm
 arrow t1 t2 =
-  OpenTerm $
-  do t1' <- unOpenTerm t1
-     t2' <- unOpenTerm t2
-     inferTermF $ Pi wildcardVarName t1' t2'
+  OpenTerm $ \sc ->
+  do t1' <- complete sc t1
+     t2' <- complete sc t2
+     scFun sc t1' t2'
 
 -- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
 piMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
