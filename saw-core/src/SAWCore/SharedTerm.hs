@@ -320,21 +320,40 @@ ppTermError err =
       , "Type 2:"
       , ishow t2
       ]
-    ApplyNotPiType f arg t ->
+    ApplyNotPiType f arg ->
       [ "Function application with non-function type"
       , "For term:"
       , ishow f
       , "With type:"
-      , ishow t
+      , tyshow f
       , "To argument:"
       , ishow arg ]
     ApplyNotSubtype expected arg ->
-      [ "Argument type"
-      , tyshow arg
-      , "Not a subtype of expected type"
+      [ "Argument type not subtype of expected type"
+      , "Expected:"
       , ishow expected
-      , "For term"
+      , "Actual:"
+      , tyshow arg
+      , "For term:"
       , ishow arg
+      ]
+    VectorNotSubtype expected arg ->
+      [ "Vector element type not subtype of expected type"
+      , "Expected:"
+      , ishow expected
+      , "Actual:"
+      , tyshow arg
+      , "For term:"
+      , ishow arg
+      ]
+    AscriptionNotSubtype expected body ->
+      [ "Expression type not subtype of ascribed type"
+      , "Expected:"
+      , ishow expected
+      , "Actual:"
+      , tyshow body
+      , "For term:"
+      , ishow body
       ]
     VariableFreeInContext x body ->
       [ "Variable occurs free in typing context"
@@ -355,14 +374,19 @@ ppTermError err =
     IdentNotFound ident ->
       [ "No such global: " ++ show ident ]
     NotPairType t ->
-      [ "Tuple field projection with non-tuple type"
+      [ "Tuple field projection with non-tuple"
+      , "For term:"
       , ishow t
+      , "With type:"
+      , tyshow t
       ]
     NotRecord t ->
-      [ "Record field projection with non-record type"
+      [ "Record field projection with non-record"
+      , "For term:"
+      , ishow t
+      , "With type:"
       , tyshow t
-      , "In term:"
-      , ishow t ]
+      ]
     FieldNotFound t fname ->
       [ "No such record field: " ++ show fname
       , "For term:"
@@ -370,20 +394,14 @@ ppTermError err =
       , "With type:"
       , tyshow t
       ]
-    VectorNotSubtype expected arg ->
-      [ "Vector element type"
-      , tyshow arg
-      , "Not a subtype of expected type"
-      , ishow expected
-      , "For term"
-      , ishow arg
-      ]
     DataTypeNotFound d ->
       [ "No such data type: " ++ show d ]
     RecursorPropElim d s ->
-      [ "Disallowed propositional elimination"
-      , "Type: " ++ Text.unpack (toAbsoluteName (nameInfo d))
-      , "Sort: " ++ show s
+      [ "Invalid recursor with disallowed propositional elimination"
+      , "Data type:"
+      , "  " ++ Text.unpack (toAbsoluteName (nameInfo d))
+      , "Elimination sort:"
+      , "  " ++ show s
       ]
     ConstantNotClosed nm body ->
       [ "Definition body contains free variables"
@@ -400,14 +418,6 @@ ppTermError err =
     AlreadyDefined nm ->
       [ "Attempt to redefine existing constant"
       , "  " ++ Text.unpack (toAbsoluteName (nameInfo nm))
-      ]
-    AscriptionNotSubtype expected body ->
-      [ "Expression type"
-      , tyshow body
-      , "Not a subtype of ascribed type"
-      , ishow expected
-      , "For term"
-      , ishow body
       ]
   where
     ishow :: Term -> String

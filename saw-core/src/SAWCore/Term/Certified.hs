@@ -157,7 +157,7 @@ import SAWCore.Unique
 data TermError
   = StaleTerm Term IntRangeSet
   | VariableContextMismatch Text VarIndex Term Term
-  | ApplyNotPiType Term Term Term -- function, argument, type
+  | ApplyNotPiType Term Term -- function, argument
   | ApplyNotSubtype Term Term -- expected, arg
   | VariableFreeInContext VarName Term
   | NotType Term
@@ -552,8 +552,7 @@ scmUnifyVarTypes msg ctx1 ctx2 =
      sequence_ (IntMap.intersectionWithKey check ctx1 ctx2)
      pure (IntMap.union ctx1 ctx2)
 
-scmEnsureRecognizer ::
-  (Term -> TermError) -> (Term -> Maybe a) -> Term -> SCM a
+scmEnsureRecognizer :: TermError -> (Term -> Maybe a) -> Term -> SCM a
 scmEnsureRecognizer err f trm =
   case f trm of
     Just a -> pure a
@@ -561,17 +560,19 @@ scmEnsureRecognizer err f trm =
       do trm' <- scmWhnf trm
          case f trm' of
            Just a -> pure a
-           Nothing -> scmError (err trm')
+           Nothing -> scmError err
 
 -- | Ensure the type of a 'Term' is a sort, and return that sort.
 scmEnsureSortType :: Term -> SCM Sort
 scmEnsureSortType t =
   case termSortOrType t of
     Left s -> pure s
-    Right ty -> scmEnsureRecognizer (const (NotType t)) asSort ty
+    Right ty -> scmEnsureRecognizer (NotType t) asSort ty
 
 scmEnsurePairType :: Term -> SCM (Term, Term)
-scmEnsurePairType tp = scmEnsureRecognizer NotPairType asPairType tp
+scmEnsurePairType t =
+  do ty <- scmTypeOf t
+     scmEnsureRecognizer (NotPairType t) asPairType ty
 
 piSort :: Sort -> Sort -> Sort
 piSort s1 s2 = if s2 == propSort then propSort else max s1 s2
@@ -1476,7 +1477,7 @@ scmRecordSelect t fname =
      let vt = varTypes t
      let tf = FTermF (RecordProj t fname)
      ty <- scmTypeOf t
-     field_tys <- scmEnsureRecognizer (const (NotRecord t)) asRecordType ty
+     field_tys <- scmEnsureRecognizer (NotRecord t) asRecordType ty
      case Map.lookup fname field_tys of
        Nothing -> scmError (FieldNotFound t fname)
        Just ty' -> scmMakeTerm vt tf (Right ty')
@@ -1539,7 +1540,7 @@ scmPairType t1 t2 =
 scmPairLeft :: Term -> SCM Term
 scmPairLeft t =
   do scmEnsureValidTerm t
-     (ty, _) <- scmEnsurePairType =<< scmTypeOf t
+     (ty, _) <- scmEnsurePairType t
      let mty = maybe (Right ty) Left (asSort ty)
      scmMakeTerm (varTypes t) (FTermF (PairLeft t)) mty
 
@@ -1547,7 +1548,7 @@ scmPairLeft t =
 scmPairRight :: Term -> SCM Term
 scmPairRight t =
   do scmEnsureValidTerm t
-     (_, ty) <- scmEnsurePairType =<< scmTypeOf t
+     (_, ty) <- scmEnsurePairType t
      let mty = maybe (Right ty) Left (asSort ty)
      scmMakeTerm (varTypes t) (FTermF (PairRight t)) mty
 
