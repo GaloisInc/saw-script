@@ -241,7 +241,7 @@ Definition boolLt : forall (_1 : Init.Datatypes.bool), forall (_2 : Init.Datatyp
   fun (x : Init.Datatypes.bool) (y : Init.Datatypes.bool) => Init.Datatypes.andb (Init.Datatypes.negb x) y.
 
 Definition integerCmp : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), forall (_3 : Init.Datatypes.bool), Init.Datatypes.bool :=
-  fun (x : SAWCoreScaffolding.Integer) (y : SAWCoreScaffolding.Integer) (k : Init.Datatypes.bool) => Init.Datatypes.orb (SAWCoreScaffolding.intLt x y) (Init.Datatypes.andb (SAWCoreScaffolding.intEq x y) k).
+  fun (x : SAWCoreScaffolding.Integer) (y : SAWCoreScaffolding.Integer) (k : Init.Datatypes.bool) => Init.Datatypes.orb (SAWCoreScaffolding.intLt x y) (Init.Datatypes.andb (SAWCoreScaffolding.intEqb x y) k).
 
 Definition rationalCmp : forall (_1 : Rational), forall (_2 : Rational), forall (_3 : Init.Datatypes.bool), Init.Datatypes.bool :=
   fun (x : Rational) (y : Rational) (k : Init.Datatypes.bool) => Init.Datatypes.orb (ltRational x y) (Init.Datatypes.andb (eqRational x y) k).
@@ -277,16 +277,16 @@ Definition PEq : forall (_1 : Type), Type :=
   fun (a : Type) => RecordTypeCons "eq" (forall (_1 : a), forall (_2 : a), Init.Datatypes.bool) RecordTypeNil.
 
 Definition PEqBit : PEq Init.Datatypes.bool :=
-  RecordCons "eq" SAWCoreScaffolding.boolEq RecordNil.
+  RecordCons "eq" SAWCoreScaffolding.boolEqb RecordNil.
 
 Definition PEqInteger : PEq SAWCoreScaffolding.Integer :=
-  RecordCons "eq" SAWCoreScaffolding.intEq RecordNil.
+  RecordCons "eq" SAWCoreScaffolding.intEqb RecordNil.
 
 Definition PEqRational : PEq Rational :=
   RecordCons "eq" eqRational RecordNil.
 
 Definition PEqIntMod : forall (n : Init.Datatypes.nat), PEq (SAWCoreScaffolding.IntMod n) :=
-  fun (n : Init.Datatypes.nat) => RecordCons "eq" (SAWCoreScaffolding.intModEq n) RecordNil.
+  fun (n : Init.Datatypes.nat) => RecordCons "eq" (SAWCoreScaffolding.intModEqb n) RecordNil.
 
 Definition PEqIntModNum : forall (num : Num), PEq (IntModNum num) :=
   fun (num : Num) => @CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => PEq (IntModNum n)) PEqIntMod PEqInteger num.

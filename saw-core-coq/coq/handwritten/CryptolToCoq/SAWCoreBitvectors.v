@@ -409,13 +409,13 @@ Qed.
 
 (** Some general lemmas about boolean equality **)
 
-Lemma boolEq_eq a b : boolEq a b = true <-> a = b.
+Lemma boolEqb_eq a b : boolEqb a b = true <-> a = b.
 Proof. split; destruct a, b; easy. Qed.
 
-Lemma boolEq_neq a b : boolEq a b = false <-> a <> b.
+Lemma boolEqb_neq a b : boolEqb a b = false <-> a <> b.
 Proof. split; destruct a, b; easy. Qed.
 
-Lemma boolEq_refl a : boolEq a a = true.
+Lemma boolEqb_refl a : boolEqb a a = true.
 Proof. destruct a; easy. Qed.
 
 Lemma and_bool_eq_true b c : andb b c = true <-> (b = true) /\ (c = true).
@@ -457,13 +457,13 @@ Proof. split; destruct b; auto. Qed.
 
 Lemma bvEq_cons w h0 h1 a0 a1 :
   bvEq (S w) (VectorDef.cons _ h0 w a0) (VectorDef.cons _ h1 w a1) =
-  andb (boolEq h0 h1) (bvEq w a0 a1).
+  andb (boolEqb h0 h1) (bvEq w a0 a1).
 Proof. reflexivity. Qed.
 
 Lemma bvEq_refl w a : bvEq w a a = true.
 Proof.
   induction a; eauto.
-  rewrite bvEq_cons, boolEq_refl, IHa; eauto.
+  rewrite bvEq_cons, boolEqb_refl, IHa; eauto.
 Qed.
 
 Lemma bvEq_sym w a b : bvEq w a b = bvEq w b a.
@@ -473,11 +473,11 @@ Lemma bvEq_eq  w a b : bvEq w a b = true <-> a = b.
 Proof.
   split; intro; induction a; dependent destruction b; eauto.
   - rewrite bvEq_cons, and_bool_eq_true in H.
-    destruct H; rewrite boolEq_eq in H; apply IHa in H0.
+    destruct H; rewrite boolEqb_eq in H; apply IHa in H0.
     subst; reflexivity.
   - injection H as; apply inj_pair2 in H0; subst.
     rewrite bvEq_cons, and_bool_eq_true; split.
-    + apply boolEq_refl.
+    + apply boolEqb_refl.
     + apply bvEq_refl.
 Qed.
 
@@ -487,7 +487,7 @@ Proof.
   intro; induction a; dependent destruction b; eauto.
   intro; injection H0 as; apply inj_pair2 in H1.
   rewrite bvEq_cons, and_bool_eq_false in H.
-  destruct H; [ rewrite boolEq_neq in H | apply IHa in H ].
+  destruct H; [ rewrite boolEqb_neq in H | apply IHa in H ].
   all: contradiction.
 Qed.
 
@@ -610,19 +610,19 @@ Proof. intros H eq; apply H, not_bool_eq_false; eauto. Qed.
 (* Hint Extern 1 (IntroArg _ (not _ = false) _) => *)
 (*    simple apply IntroArg_not_bool_eq_false : refinesFun. *)
 
-Lemma IntroArg_boolEq_eq n a b goal :
+Lemma IntroArg_boolEqb_eq n a b goal :
   IntroArg n (a = b) (fun _ => goal) ->
-  IntroArg n (boolEq a b = true) (fun _ => goal).
-Proof. intros H eq; apply H, boolEq_eq; eauto. Qed.
-Lemma IntroArg_boolEq_neq n a b goal :
+  IntroArg n (boolEqb a b = true) (fun _ => goal).
+Proof. intros H eq; apply H, boolEqb_eq; eauto. Qed.
+Lemma IntroArg_boolEqb_neq n a b goal :
   IntroArg n (a <> b) (fun _ => goal) ->
-  IntroArg n (boolEq a b = false) (fun _ => goal).
-Proof. intros H eq; apply H, boolEq_neq; eauto. Qed.
+  IntroArg n (boolEqb a b = false) (fun _ => goal).
+Proof. intros H eq; apply H, boolEqb_neq; eauto. Qed.
 
-(* Hint Extern 1 (IntroArg _ (boolEq _ _ = true) _) => *)
-(*    simple apply IntroArg_boolEq_eq : refinesFun. *)
-(* Hint Extern 1 (IntroArg _ (boolEq _ _ = false) _) => *)
-(*    simple apply IntroArg_boolEq_neq : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ (boolEqb _ _ = true) _) => *)
+(*    simple apply IntroArg_boolEqb_eq : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ (boolEqb _ _ = false) _) => *)
+(*    simple apply IntroArg_boolEqb_neq : refinesFun. *)
 
 Lemma IntroArg_bool_eq_if_true n (b : bool) goal :
   IntroArg n (b = true) (fun _ => goal) ->
@@ -657,7 +657,7 @@ Hint Extern 1 (IntroArg _ (@eq bool ?x ?y) _) =>
     | andb _ _ => simple apply IntroArg_and_bool_eq_true
     | orb _ _ => simple apply IntroArg_or_bool_eq_true
     | negb _ => simple apply IntroArg_not_bool_eq_true
-    | boolEq _ _ => simple apply IntroArg_boolEq_eq
+    | boolEqb _ _ => simple apply IntroArg_boolEqb_eq
     | if _ then true   else false  => simple apply IntroArg_bool_eq_if_true
     | if _ then 1%bool else 0%bool => simple apply IntroArg_bool_eq_if_true
     | if _ then false  else true   => simple apply IntroArg_bool_eq_if_inv_true
@@ -668,7 +668,7 @@ Hint Extern 1 (IntroArg _ (@eq bool ?x ?y) _) =>
     | andb _ _ => simple apply IntroArg_and_bool_eq_false
     | orb _ _ => simple apply IntroArg_or_bool_eq_false
     | negb _ => simple apply IntroArg_not_bool_eq_false
-    | boolEq _ _ => simple apply IntroArg_boolEq_neq
+    | boolEqb _ _ => simple apply IntroArg_boolEqb_neq
     | if _ then true   else false  => simple apply IntroArg_bool_eq_if_false
     | if _ then 1%bool else 0%bool => simple apply IntroArg_bool_eq_if_false
     | if _ then false  else true   => simple apply IntroArg_bool_eq_if_inv_false

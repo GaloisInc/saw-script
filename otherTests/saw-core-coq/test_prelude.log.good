@@ -276,22 +276,22 @@ Definition xor_True2 : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Dat
 Definition xor_same : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (Init.Datatypes.xorb x x) Init.Datatypes.false :=
   fun (x : Init.Datatypes.bool) => SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (Init.Datatypes.xorb b b) Init.Datatypes.false) x (trans Init.Datatypes.bool (Init.Datatypes.xorb Init.Datatypes.true Init.Datatypes.true) (Init.Datatypes.negb Init.Datatypes.true) Init.Datatypes.false (xor_True1 Init.Datatypes.true) not_True) (xor_False1 Init.Datatypes.false).
 
-Definition boolEq_True1 : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEq Init.Datatypes.true x) x :=
+Definition boolEq_True1 : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEqb Init.Datatypes.true x) x :=
   fun (x : Init.Datatypes.bool) => let var__0   := Init.Datatypes.negb x in
-  trans Init.Datatypes.bool (SAWCoreScaffolding.boolEq Init.Datatypes.true x) (if Init.Datatypes.true then x else var__0) x (SAWCoreScaffolding.boolEq__eq Init.Datatypes.true x) (ite_true Init.Datatypes.bool x var__0).
+  trans Init.Datatypes.bool (SAWCoreScaffolding.boolEqb Init.Datatypes.true x) (if Init.Datatypes.true then x else var__0) x (SAWCoreScaffolding.boolEqb__eq Init.Datatypes.true x) (ite_true Init.Datatypes.bool x var__0).
 
-Definition boolEq_False1 : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEq Init.Datatypes.false x) (Init.Datatypes.negb x) :=
+Definition boolEq_False1 : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEqb Init.Datatypes.false x) (Init.Datatypes.negb x) :=
   fun (x : Init.Datatypes.bool) => let var__0   := Init.Datatypes.negb x in
-  trans Init.Datatypes.bool (SAWCoreScaffolding.boolEq Init.Datatypes.false x) (if Init.Datatypes.false then x else var__0) var__0 (SAWCoreScaffolding.boolEq__eq Init.Datatypes.false x) (ite_false Init.Datatypes.bool x var__0).
+  trans Init.Datatypes.bool (SAWCoreScaffolding.boolEqb Init.Datatypes.false x) (if Init.Datatypes.false then x else var__0) var__0 (SAWCoreScaffolding.boolEqb__eq Init.Datatypes.false x) (ite_false Init.Datatypes.bool x var__0).
 
-Definition boolEq_True2 : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEq x Init.Datatypes.true) x :=
-  fun (x : Init.Datatypes.bool) => SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEq b Init.Datatypes.true) b) x (boolEq_True1 Init.Datatypes.true) (trans Init.Datatypes.bool (SAWCoreScaffolding.boolEq Init.Datatypes.false Init.Datatypes.true) (Init.Datatypes.negb Init.Datatypes.true) Init.Datatypes.false (boolEq_False1 Init.Datatypes.true) not_True).
+Definition boolEq_True2 : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEqb x Init.Datatypes.true) x :=
+  fun (x : Init.Datatypes.bool) => SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEqb b Init.Datatypes.true) b) x (boolEq_True1 Init.Datatypes.true) (trans Init.Datatypes.bool (SAWCoreScaffolding.boolEqb Init.Datatypes.false Init.Datatypes.true) (Init.Datatypes.negb Init.Datatypes.true) Init.Datatypes.false (boolEq_False1 Init.Datatypes.true) not_True).
 
-Definition boolEq_False2 : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEq x Init.Datatypes.false) (Init.Datatypes.negb x) :=
-  fun (x : Init.Datatypes.bool) => SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEq b Init.Datatypes.false) (Init.Datatypes.negb b)) x (trans2 Init.Datatypes.bool (SAWCoreScaffolding.boolEq Init.Datatypes.true Init.Datatypes.false) (Init.Datatypes.negb Init.Datatypes.true) Init.Datatypes.false (boolEq_True1 Init.Datatypes.false) not_True) (boolEq_False1 Init.Datatypes.false).
+Definition boolEq_False2 : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEqb x Init.Datatypes.false) (Init.Datatypes.negb x) :=
+  fun (x : Init.Datatypes.bool) => SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEqb b Init.Datatypes.false) (Init.Datatypes.negb b)) x (trans2 Init.Datatypes.bool (SAWCoreScaffolding.boolEqb Init.Datatypes.true Init.Datatypes.false) (Init.Datatypes.negb Init.Datatypes.true) Init.Datatypes.false (boolEq_True1 Init.Datatypes.false) not_True) (boolEq_False1 Init.Datatypes.false).
 
-Definition boolEq_same : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEq x x) Init.Datatypes.true :=
-  fun (x : Init.Datatypes.bool) => SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEq b b) Init.Datatypes.true) x (boolEq_True1 Init.Datatypes.true) (trans Init.Datatypes.bool (SAWCoreScaffolding.boolEq Init.Datatypes.false Init.Datatypes.false) (Init.Datatypes.negb Init.Datatypes.false) Init.Datatypes.true (boolEq_False1 Init.Datatypes.false) not_False).
+Definition boolEq_same : forall (x : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEqb x x) Init.Datatypes.true :=
+  fun (x : Init.Datatypes.bool) => SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.boolEqb b b) Init.Datatypes.true) x (boolEq_True1 Init.Datatypes.true) (trans Init.Datatypes.bool (SAWCoreScaffolding.boolEqb Init.Datatypes.false Init.Datatypes.false) (Init.Datatypes.negb Init.Datatypes.false) Init.Datatypes.true (boolEq_False1 Init.Datatypes.false) not_False).
 
 Definition not_or : forall (x : Init.Datatypes.bool), forall (y : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (Init.Datatypes.negb (Init.Datatypes.orb x y)) (Init.Datatypes.andb (Init.Datatypes.negb x) (Init.Datatypes.negb y)) :=
   fun (x : Init.Datatypes.bool) (y : Init.Datatypes.bool) => let var__0   := Init.Datatypes.negb Init.Datatypes.true in
@@ -796,7 +796,7 @@ Definition bvCarry : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVector
 
 Definition bvSCarry : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool), Init.Datatypes.bool :=
   fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool) (y : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool) => let var__0   := msb n x in
-  Init.Datatypes.andb (SAWCoreScaffolding.boolEq var__0 (msb n y)) (Init.Datatypes.xorb var__0 (msb n (SAWCoreVectorsAsCoqVectors.bvAdd (SAWCoreScaffolding.Succ n) x y))).
+  Init.Datatypes.andb (SAWCoreScaffolding.boolEqb var__0 (msb n y)) (Init.Datatypes.xorb var__0 (msb n (SAWCoreVectorsAsCoqVectors.bvAdd (SAWCoreScaffolding.Succ n) x y))).
 
 Definition bvAddWithCarry : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool), prod Init.Datatypes.bool (SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool) :=
   fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool) (y : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool) => pair (bvCarry n x y) (SAWCoreVectorsAsCoqVectors.bvAdd n x y).
@@ -851,7 +851,7 @@ Definition bvXor : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsA
   bvZipWith Init.Datatypes.xorb.
 
 Definition bvEq : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool), Init.Datatypes.bool :=
-  fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool) (y : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool) => vecEq n Init.Datatypes.bool SAWCoreScaffolding.boolEq x y.
+  fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool) (y : SAWCoreVectorsAsCoqVectors.Vec n Init.Datatypes.bool) => vecEq n Init.Datatypes.bool SAWCoreScaffolding.boolEqb x y.
 
 (* "Prelude.bvEq_refl" was skipped *)
 
