@@ -34,7 +34,7 @@ module SAWCore.SharedTerm
   , scResolveNameByURI
   , ppTerm
   , prettyTerm
-  , DuplicateNameException(..)
+  , showTermError
     -- * SharedContext interface for building shared terms
   , SharedContext -- abstract type
   , mkSharedContext
@@ -129,7 +129,6 @@ module SAWCore.SharedTerm
   , scVectorReduced
     -- ** Normalization
   , scWhnf
-  , scConvertibleEval
   , scConvertible
   , scSubtype
     -- ** Type checking
@@ -255,7 +254,7 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Bits
 import Data.Maybe
 import qualified Data.Foldable as Fold
-import Data.Foldable (foldl', foldlM)
+import Data.Foldable (foldl', foldlM, foldrM)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
@@ -264,15 +263,15 @@ import qualified Data.Map as Map
 import Data.Ref ( C )
 import Data.Set (Set)
 import Data.Text (Text)
-import qualified Data.Set as Set
 import qualified Data.Text as Text
+import qualified Data.Set as Set
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 import Text.URI
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
+import qualified SAWSupport.IntRangeSet as IntRangeSet
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
 
-import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
 import SAWCore.Module
@@ -290,6 +289,7 @@ import SAWCore.Module
   , Ctor(..)
   , DataType(..)
   , Def(..)
+  , DefQualifier
   , Module
   , ResolvedName(..)
   )
@@ -298,14 +298,423 @@ import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Certified
 import SAWCore.Term.Functor
+import SAWCore.Term.Pretty
 
 --------------------------------------------------------------------------------
 
-data DuplicateNameException = DuplicateNameException URI
-instance Exception DuplicateNameException
-instance Show DuplicateNameException where
-  show (DuplicateNameException uri) =
-      "Attempted to register the following name twice: " ++ Text.unpack (render uri)
+showTermError :: TermError -> String
+showTermError err =
+  init $ unlines $
+  case err of
+    StaleTerm t s ->
+      [ "Stale term encountered: index = " ++ show (termIndex t)
+      , "Valid indexes: " ++ show (IntRangeSet.toList s)
+      , "For term:"
+      , ishow t
+      ]
+    VariableContextMismatch msg i t1 t2 ->
+      [ Text.unpack msg ++ ": variable typing context mismatch"
+      , "VarIndex: " ++ show i
+      , "Type 1:"
+      , ishow t1
+      , "Type 2:"
+      , ishow t2
+      ]
+    ApplyNotPiType f arg t ->
+      [ "Function application with non-function type"
+      , "For term:"
+      , ishow f
+      , "With type:"
+      , ishow t
+      , "To argument:"
+      , ishow arg ]
+    ApplyNotSubtype expected arg ->
+      [ "Argument type"
+      , tyshow arg
+      , "Not a subtype of expected type"
+      , ishow expected
+      , "For term"
+      , ishow arg
+      ]
+    VariableFreeInContext x body ->
+      [ "Variable occurs free in typing context"
+      , "Variable:"
+      , "  " ++ show (vnName x)
+      , "For term:"
+      , ishow body
+      ]
+    NotType t ->
+      [ "Type of term is not a sort"
+      , "For term:"
+      , ishow t
+      , "With type:"
+      , tyshow t
+      ]
+    NameNotFound nm ->
+      [ "No such constant: " ++ Text.unpack (toAbsoluteName (nameInfo nm)) ]
+    IdentNotFound ident ->
+      [ "No such global: " ++ show ident ]
+    NotPairType t ->
+      [ "Tuple field projection with non-tuple type"
+      , ishow t
+      ]
+    NotRecord t ->
+      [ "Record field projection with non-record type"
+      , tyshow t
+      , "In term:"
+      , ishow t ]
+    FieldNotFound t fname ->
+      [ "No such record field: " ++ show fname
+      , "For term:"
+      , ishow t
+      , "With type:"
+      , tyshow t
+      ]
+    VectorNotSubtype expected arg ->
+      [ "Vector element type"
+      , tyshow arg
+      , "Not a subtype of expected type"
+      , ishow expected
+      , "For term"
+      , ishow arg
+      ]
+    DataTypeNotFound d ->
+      [ "No such data type: " ++ show d ]
+    RecursorPropElim d s ->
+      [ "Disallowed propositional elimination"
+      , "Type: " ++ Text.unpack (toAbsoluteName (nameInfo d))
+      , "Sort: " ++ show s
+      ]
+    ConstantNotClosed nm body ->
+      [ "Definition body contains free variables"
+      , "Name: " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+      , "For term:"
+      , ishow body
+      , "With type:"
+      , tyshow body
+      ]
+    DuplicateURI uri ->
+      [ "Attempt to register name with duplicate URI"
+      , "  " ++ Text.unpack (render uri)
+      ]
+    AlreadyDefined nm ->
+      [ "Attempt to redefine existing constant"
+      , "  " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+      ]
+    AscriptionNotSubtype expected body ->
+      [ "Expression type"
+      , tyshow body
+      , "Not a subtype of ascribed type"
+      , ishow expected
+      , "For term"
+      , ishow body
+      ]
+  where
+    ishow :: Term -> String
+    ishow t = init (unlines (map ("  " ++) (lines (ppTermPureDefaults t))))
+
+    tyshow :: Term -> String
+    tyshow t =
+      case termSortOrType t of
+        Left s -> "  " ++ show s
+        Right ty -> ishow ty
+
+execSCM :: SharedContext -> SCM a -> IO a
+execSCM sc m =
+  do result <- runSCM sc m
+     case result of
+       Left err -> fail (showTermError err)
+       Right a -> pure a
+
+-- | Build a variant of a 'Term' with a specific type.
+-- The first term's type must be a subtype of the second term.
+scAscribe :: SharedContext -> Term -> Term -> IO Term
+scAscribe sc t0 ty = execSCM sc (scmAscribe t0 ty)
+
+-- | Build a new 'Term' value from the given 'TermF'.
+-- Reuse a 'Term' from the cache if an identical one already exists.
+scTermF :: SharedContext -> TermF Term -> IO Term
+scTermF sc tf = execSCM sc (scmTermF tf)
+
+-- | Create a new term from a lower-level 'FlatTermF' term.
+scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
+scFlatTermF sc ftf = execSCM sc (scmFlatTermF ftf)
+
+-- | Create a function application term.
+scApply ::
+  SharedContext ->
+  Term {- ^ The function to apply -} ->
+  Term {- ^ The argument to apply to -} ->
+  IO Term
+scApply sc t1 t2 = execSCM sc (scmApply t1 t2)
+
+-- | Create a lambda term from a parameter name (as a 'VarName'),
+-- parameter type (as a 'Term'), and a body ('Term').
+-- All free variables with the same 'VarName' in the body become
+-- bound.
+scLambda ::
+  SharedContext ->
+  VarName {- ^ The parameter name -} ->
+  Term {- ^ The parameter type -} ->
+  Term {- ^ The body -} ->
+  IO Term
+scLambda sc x t body = execSCM sc (scmLambda x t body)
+
+-- | Create a lambda term of multiple arguments (curried) from a list
+-- associating parameter names to types (as 'Term's) and a body.
+-- The parameters are listed outermost first.
+-- Variable names in the parameter list are in scope for all parameter
+-- types occurring later in the list.
+scLambdaList ::
+  SharedContext ->
+  [(VarName, Term)] {- ^ List of parameter / parameter type pairs -} ->
+  Term {- ^ The body -} ->
+  IO Term
+scLambdaList _ [] body = pure body
+scLambdaList sc ((x, t) : xts) body =
+  scLambda sc x t =<< scLambdaList sc xts body
+
+-- | Create a (possibly dependent) function given a parameter name,
+-- parameter type (as a 'Term'), and a body ('Term').
+-- All free variables with the same 'VarName' in the body become
+-- bound.
+scPi ::
+  SharedContext ->
+  VarName {- ^ The parameter name -} ->
+  Term {- ^ The parameter type -} ->
+  Term {- ^ The body -} ->
+  IO Term
+scPi sc x t body = execSCM sc (scmPi x t body)
+
+-- | Create a term representing the type of a non-dependent function, given a
+-- parameter and result type (as 'Term's).
+scFun ::
+  SharedContext ->
+  Term {- ^ The parameter type -} ->
+  Term {- ^ The result type -} ->
+  IO Term
+scFun sc a b = scPi sc wildcardVarName a b
+
+-- | Create a term representing the type of a non-dependent n-ary function,
+-- given a list of parameter types and a result type (as terms).
+scFunAll ::
+  SharedContext ->
+  [Term] {- ^ The parameter types -} ->
+  Term {- ^ The result type -} ->
+  IO Term
+scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
+
+-- | Create a constant 'Term' from a 'Name'.
+scConst :: SharedContext -> Name -> IO Term
+scConst sc nm = execSCM sc (scmConst nm)
+
+-- | Create a function application term from the 'Name' of a global
+-- constant and a list of 'Term' arguments.
+scConstApply :: SharedContext -> Name -> [Term] -> IO Term
+scConstApply sc i ts =
+  do c <- scConst sc i
+     scApplyAll sc c ts
+
+-- | Create a named variable 'Term' from a 'VarName' and a type.
+scVariable :: SharedContext -> VarName -> Term -> IO Term
+scVariable sc x t = execSCM sc (scmVariable x t)
+
+-- | Create a list of named variables from a list of names and types.
+scVariables :: Traversable t => SharedContext -> t (VarName, Term) -> IO (t Term)
+scVariables sc = traverse (\(v, t) -> scVariable sc v t)
+
+-- | Generate a 'Name' with a fresh 'VarIndex' for the given
+-- 'NameInfo' and register everything together in the naming
+-- environment of the 'SharedContext'.
+-- Throws an exception if the URI in the 'NameInfo' is already
+-- registered.
+scRegisterName :: SharedContext -> NameInfo -> IO Name
+scRegisterName sc nmi = execSCM sc (scmRegisterName nmi)
+
+-- | Create a unique global name with the given base name.
+scFreshName :: SharedContext -> Text -> IO Name
+scFreshName sc x = execSCM sc (scmFreshName x)
+
+-- | Create a 'VarName' with the given identifier (which may be "_").
+scFreshVarName :: SharedContext -> Text -> IO VarName
+scFreshVarName sc x = execSCM sc (scmFreshVarName x)
+
+-- | Returns shared term associated with ident.
+-- Does not check module namespace.
+scGlobalDef :: SharedContext -> Ident -> IO Term
+scGlobalDef sc ident = execSCM sc (scmGlobalDef ident)
+
+-- | Create a recursor for the data type of the given 'Name', which
+-- eliminates to the given 'Sort'.
+scRecursor :: SharedContext -> Name -> Sort -> IO Term
+scRecursor sc nm s = execSCM sc (scmRecursor nm s)
+
+-- | Create a term from a 'Sort', and set the given advisory flags
+scSortWithFlags :: SharedContext -> Sort -> SortFlags -> IO Term
+scSortWithFlags sc s flags = execSCM sc (scmSortWithFlags s flags)
+
+-- | Create a literal term from a 'Natural'.
+scNat :: SharedContext -> Natural -> IO Term
+scNat sc 0 = scGlobalDef sc "Prelude.Zero"
+scNat sc n =
+  do p <- scPos sc n
+     scGlobalApply sc "Prelude.NatPos" [p]
+
+scPos :: SharedContext -> Natural -> IO Term
+scPos sc n
+  | n <= 1    = scGlobalDef sc "Prelude.One"
+  | otherwise =
+    do arg <- scPos sc (div n 2)
+       let ident = if even n then "Prelude.Bit0" else "Prelude.Bit1"
+       scGlobalApply sc ident [arg]
+
+-- | Create a term from a 'Sort'.
+scSort :: SharedContext -> Sort -> IO Term
+scSort sc s = scSortWithFlags sc s noFlags
+
+-- | Create a literal term (of saw-core type @String@) from a 'Text'.
+scString :: SharedContext -> Text -> IO Term
+scString sc s = execSCM sc (scmString s)
+
+-- | Create a term representing the primitive saw-core type @String@.
+scStringType :: SharedContext -> IO Term
+scStringType sc = scGlobalDef sc preludeStringIdent
+
+-- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
+-- that type.
+scVector :: SharedContext -> Term -> [Term] -> IO Term
+scVector sc e xs = execSCM sc (scmVector e xs)
+
+-- | Create a record term from a 'Map' from 'FieldName's to 'Term's.
+scRecord :: SharedContext -> Map FieldName Term -> IO Term
+scRecord sc (Map.toList -> fields) = execSCM sc (scmRecordValue fields)
+
+-- | Create a record term from a list of 'FieldName's and 'Term's.
+scRecordValue :: SharedContext -> [(FieldName, Term)] -> IO Term
+scRecordValue sc fields = execSCM sc (scmRecordValue fields)
+
+-- | Create a record field access term from a 'Term' representing a record and
+-- a 'FieldName'.
+scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
+scRecordSelect sc t fname = execSCM sc (scmRecordSelect t fname)
+
+-- | Create a term representing the type of a record from a list associating
+-- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
+-- the given list is irrelevant, as record fields are not ordered.
+scRecordType :: SharedContext -> [(FieldName, Term)] -> IO Term
+scRecordType sc fields = execSCM sc (scmRecordType fields)
+
+-- | Create a unit-valued term.
+scUnitValue :: SharedContext -> IO Term
+scUnitValue sc = execSCM sc scmUnitValue
+
+-- | Create a term representing the unit type.
+scUnitType :: SharedContext -> IO Term
+scUnitType sc = execSCM sc scmUnitType
+
+-- | Create a pair term from two terms.
+scPairValue ::
+  SharedContext ->
+  Term {- ^ The left projection -} ->
+  Term {- ^ The right projection -} ->
+  IO Term
+scPairValue sc t1 t2 = execSCM sc (scmPairValue t1 t2)
+
+-- | Create a term representing a pair type from two other terms, each
+-- representing a type.
+scPairType ::
+  SharedContext ->
+  Term {- ^ Left projection type -} ->
+  Term {- ^ Right projection type -} ->
+  IO Term
+scPairType sc t1 t2 = execSCM sc (scmPairType t1 t2)
+
+-- | Create a term giving the left projection of a 'Term' representing a pair.
+scPairLeft :: SharedContext -> Term -> IO Term
+scPairLeft sc t = execSCM sc (scmPairLeft t)
+
+-- | Create a term giving the right projection of a 'Term' representing a pair.
+scPairRight :: SharedContext -> Term -> IO Term
+scPairRight sc t = execSCM sc (scmPairRight t)
+
+-- | Create a (possibly dependent) function of multiple arguments (curried)
+-- from a list associating parameter names to types (as 'Term's) and a body.
+-- Variable names in the parameter list are in scope for all parameter
+-- types occurring later in the list.
+scPiList ::
+  SharedContext ->
+  [(VarName, Term)] {- ^ List of parameter / parameter type pairs -} ->
+  Term {- ^ The body -} ->
+  IO Term
+scPiList sc binds body = execSCM sc (scmPiList binds body)
+
+-- | Define a global constant with the specified base name (as
+-- 'Text') and body.
+-- The term for the body must not have any free variables.
+-- A globally-unique name with the specified base name will be created
+-- using 'scFreshName'.
+-- The type of the body determines the type of the constant; to
+-- specify a different formulation of the type, use 'scAscribe'.
+scFreshConstant ::
+  SharedContext ->
+  Text {- ^ The base name -} ->
+  Term {- ^ The body -} ->
+  IO Term
+scFreshConstant sc name rhs = execSCM sc (scmFreshConstant name rhs)
+
+-- | Define a global constant with the specified name (as 'NameInfo')
+-- and body.
+-- The URI in the given 'NameInfo' must be globally unique.
+-- The term for the body must not have any free variables.
+-- The type of the body determines the type of the constant; to
+-- specify a different formulation of the type, use 'scAscribe'.
+scDefineConstant ::
+  SharedContext ->
+  NameInfo {- ^ The name -} ->
+  Term {- ^ The body -} ->
+  IO Term
+scDefineConstant sc nmi rhs = execSCM sc (scmDefineConstant nmi rhs)
+
+-- | Declare a SAW core primitive of the specified type.
+scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
+scDeclarePrim sc ident q ty = execSCM sc (scmDeclarePrim ident q ty)
+
+-- | Declare a global opaque constant with the specified name (as
+-- 'NameInfo') and type.
+-- Such a constant has no definition, but unlike a variable it may be
+-- used in other constant definitions and is not subject to
+-- lambda-binding or substitution.
+scOpaqueConstant ::
+  SharedContext ->
+  NameInfo ->
+  Term {- ^ type of the constant -} ->
+  IO Term
+scOpaqueConstant sc nmi ty = execSCM sc (scmOpaqueConstant nmi ty)
+
+-- | Insert an \"incomplete\" datatype, used as part of building up a
+-- 'DataType' to typecheck its constructors. The constructors must be
+-- registered separately with 'scCompleteDataType'.
+scBeginDataType ::
+  SharedContext ->
+  Ident {- ^ The name of this datatype -} ->
+  [(VarName, Term)] {- ^ The context of parameters of this datatype -} ->
+  [(VarName, Term)] {- ^ The context of indices of this datatype -} ->
+  Sort {- ^ The universe of this datatype -} ->
+  IO Name
+scBeginDataType sc dtIdent dtParams dtIndices dtSort =
+  execSCM sc (scmBeginDataType dtIdent dtParams dtIndices dtSort)
+
+-- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
+scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
+scCompleteDataType sc dtIdent ctors =
+  execSCM sc (scmCompleteDataType dtIdent ctors)
+
+-- | Create a function application term from a global identifier and a list of
+-- arguments (as 'Term's).
+scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
+scGlobalApply sc i ts =
+  do c <- scGlobalDef sc i
+     scApplyAll sc c ts
 
 scResolveName :: SharedContext -> Text -> IO [VarIndex]
 scResolveName sc nm =
@@ -368,6 +777,29 @@ scRequireCtor sc i =
     Just ctor -> return ctor
     Nothing -> fail ("Could not find constructor: " ++ show i)
 
+----------------------------------------------------------------------
+-- Printing
+
+-- | The preferred printing mechanism for `Term`, if you want a `Doc`.
+--
+--   Note that there are two naming conventions in conflict here: the
+--   convention that things using the `SharedContext` and in `IO`
+--   should be named `sc`, and the convention that the preferred way
+--   to prettyprint an object of type @Foo@ to a `Doc` should be
+--   called @prettyFoo@. For the time being at least we've concluded
+--   that the latter is more important.
+prettyTerm :: SharedContext -> PPS.Opts -> Term -> IO PPS.Doc
+prettyTerm sc opts t =
+  do env <- scGetNamingEnv sc
+     pure (prettyTermWithEnv opts env t)
+
+-- | The preferred printing mechanism for `Term`, if you want text.
+--
+--   The same naming considerations as `prettyTerm` apply.
+ppTerm :: SharedContext -> PPS.Opts -> Term -> IO String
+ppTerm sc opts t =
+  PPS.render opts <$> prettyTerm sc opts t
+
 --------------------------------------------------------------------------------
 -- Recursors
 
@@ -425,82 +857,6 @@ scBuildCtor sc d c arg_struct =
       , ctorType = tp
       }
 
--- | Reduce an application of a recursor to a particular constructor.
--- This is known in the Coq literature as an iota reduction. More specifically,
--- the call
---
--- > ctxReduceRecursor rec f_c [x1, .., xk]
---
--- reduces the term @(RecursorApp rec ixs (CtorApp c ps xs))@ to
---
--- > f_c x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
---
--- where @f_c@ is the eliminator function associated to the constructor @c@ by the
--- recursor value @rec@.  Here @maybe rec_tm_i@ indicates an optional recursive call
--- of the recursor on one of the @xi@. These recursive calls only exist for those
--- arguments @xi@ that are recursive arguments, i.e., that are specified with
--- 'RecursiveArg', and are omitted for non-recursive arguments specified by 'ConstArg'.
---
--- Specifically, for a @'RecursiveArg' zs ixs@ argument @xi@, which has type
--- @\(z1::Z1) -> .. -> d p1 .. pn ix1 .. ixp@, we build the recursive call
---
--- > \(z1::[xs/args]Z1) -> .. ->
--- >   RecursorApp rec [xs/args]ixs (xi z1 ... zn)
---
--- where @[xs/args]@ substitutes the concrete values for the earlier
--- constructor arguments @xs@ for the remaining free variables.
-
-ctxReduceRecursor ::
-  SharedContext ->
-  Term {- ^ recursor applied to params, motive, and eliminator functions -} ->
-  Term {- ^ constructor eliminator function -} ->
-  [Term] {- ^ constructor arguments -} ->
-  CtorArgStruct {- ^ constructor formal argument descriptor -} ->
-  IO Term
-ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
-  | length c_args /= length ctorArgs = panic "ctxReduceRecursor" ["Wrong number of constructor arguments"]
-  | otherwise =
-    do args <- mk_args IntMap.empty (zip c_args ctorArgs)
-       scWhnf sc =<< scApplyAll sc elimf args
-  where
-    mk_args :: IntMap Term ->  -- already processed parameters/arguments
-               [(Term, (VarName, CtorArg))] ->
-                 -- remaining actual arguments to process, with
-                 -- telescope for typing the actual arguments
-               IO [Term]
-    -- no more arguments to process
-    mk_args _ [] = return []
-
-    -- process an argument that is not a recursive call
-    mk_args pre_xs ((x, (nm, ConstArg _)) : xs_args) =
-      do tl <- mk_args (IntMap.insert (vnIndex nm) x pre_xs) xs_args
-         pure (x : tl)
-
-    -- process an argument that is a recursive call
-    mk_args pre_xs ((x, (nm, RecursiveArg zs ixs)) : xs_args) =
-      do zs'  <- traverse (traverse (scInstantiate sc pre_xs)) zs
-         ixs' <- traverse (scInstantiate sc pre_xs) ixs
-         recx <- mk_rec_arg zs' ixs' x
-         tl   <- mk_args (IntMap.insert (vnIndex nm) x pre_xs) xs_args
-         pure (x : recx : tl)
-
-    -- Build an individual recursive call, given the parameters, the bindings
-    -- for the RecursiveArg, and the argument we are going to recurse on
-    -- The resulting term has the form
-    -- > \(z1:Z1) .. (zk:Zk) -> r ixs (x z1 .. zk)
-    mk_rec_arg ::
-      [(VarName, Term)] ->             -- telescope describing the zs
-      [Term] ->                        -- actual values for the indices, shifted under zs
-      Term ->                         -- actual value in recursive position
-      IO Term
-    mk_rec_arg zs_ctx ixs x =
-      -- eta expand over the zs and apply the Recursor form
-      do zs <- scVariables sc zs_ctx
-         x_zs <- scApplyAll sc x zs
-         r_ixs <- scApplyAll sc r ixs
-         body <- scApply sc r_ixs x_zs
-         scLambdaList sc zs_ctx body
-
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
 --
@@ -511,9 +867,8 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 -- > fi x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
 --
 -- where @maybe rec_tm_i@ indicates an optional recursive call of the recursor
--- on one of the @xi@. These recursive calls only exist for those arguments
--- @xi@. See the documentation for 'ctxReduceRecursor' and the
--- 'ctorIotaReduction' field for more details.
+-- on one of the @xi@.
+-- These recursive calls only exist for those arguments @xi@.
 scReduceRecursor ::
   SharedContext ->
   Term {- ^ recursor term -} ->
@@ -525,44 +880,17 @@ scReduceRecursor ::
   [Term] {- ^ constructor arguments -} ->
   IO Term
 scReduceRecursor sc r crec params motive elims c args =
-  do mres <- lookupVarIndexInMap (nameIndex c) <$> scGetModuleMap sc
-     let cs_fs = Map.fromList (zip (map nameIndex (recursorCtorOrder crec)) elims)
-     r_applied <- scApplyAll sc r (params ++ motive : elims)
-     case mres of
-       Just (ResolvedCtor ctor) ->
-         -- The ctorIotaReduction field caches the result of iota reduction, which
-         -- we just substitute into to perform the reduction
-         ctorIotaReduction sc ctor r_applied cs_fs args
-       _ ->
-         panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
-
--- | Function for computing the result of one step of iota reduction
--- of the term
---
--- > dt#rec params elims ixs (c params args)
---
--- The arguments to this function are the recursor value (applied to
--- params, motive and elims), a mapping from constructor name indices
--- to eliminator functions, and the arguments to the constructor.
-ctorIotaReduction ::
-  SharedContext ->
-  Ctor ->
-  Term {- ^ recursor term -} ->
-  Map VarIndex Term {- ^ constructor eliminators -} ->
-  [Term] {- ^ constructor arguments -} ->
-  IO Term
-ctorIotaReduction sc ctor r cs_fs args =
-  ctxReduceRecursor sc r elim args (ctorArgStruct ctor)
-  where
-    elim =
-      case Map.lookup (nameIndex (ctorName ctor)) cs_fs of
-        Just e -> e
-        Nothing ->
-          panic "ctorIotaReduction"
-          ["no eliminator for constructor " <> toAbsoluteName (nameInfo (ctorName ctor))]
+  execSCM sc (scmReduceRecursor r crec params motive elims c args)
 
 --------------------------------------------------------------------------------
 -- Type checking
+
+-- | Return the type of a term.
+scTypeOf :: SharedContext -> Term -> IO Term
+scTypeOf sc t =
+  case termSortOrType t of
+    Right ty -> pure ty
+    Left s -> scSort sc s
 
 -- | @reducePi sc (Pi x tp body) t@ returns @[t/x]body@, and otherwise fails
 reducePi :: SharedContext -> Term -> Term -> IO Term
@@ -608,7 +936,30 @@ scImport sc t0 =
       useCache cache (termIndex t) (scTermF sc =<< traverse (go cache) (unwrapTermF t))
 
 --------------------------------------------------------------------------------
--- Beta Normalization
+-- Normalization
+
+-- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
+-- definitions at the top level of a term.
+scWhnf :: SharedContext -> Term -> IO Term
+scWhnf sc t = execSCM sc (scmWhnf t)
+
+-- | Test if two terms are convertible up to a given evaluation procedure. In
+-- practice, this procedure is usually 'scWhnf', possibly combined with some
+-- rewriting.
+scConvertible ::
+  SharedContext ->
+  Bool {- ^ Should constants be unfolded during this check? -} ->
+  Term ->
+  Term ->
+  IO Bool
+scConvertible sc unfoldConst t1 t2 =
+  execSCM sc (scmConvertible unfoldConst t1 t2)
+
+-- | Check whether one type is a subtype of another: Either they are
+-- convertible, or they are both Pi types with convertible argument
+-- types and result sorts @s1@ and @s2@ with @s1 <= s2@.
+scSubtype :: SharedContext -> Term -> Term -> IO Bool
+scSubtype sc t1 t2 = execSCM sc (scmSubtype t1 t2)
 
 -- | Apply a function to an argument, beta-reducing if the function is
 -- a lambda.
@@ -689,6 +1040,33 @@ scBetaNormalizeAux sc sub t0 args0 =
 betaNormalize :: SharedContext -> Term -> IO Term
 betaNormalize sc t = scBetaNormalizeAux sc IntMap.empty t []
 
+-- | Apply a function 'Term' to a list of zero or more arguments.
+-- If the function is a lambda term, then beta reduce the arguments
+-- into the function body.
+-- If all input terms are in beta-normal form, then the result will
+-- also be beta-normal.
+scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
+scApplyAllBeta sc t args = execSCM sc (scmApplyAllBeta t args)
+
+-- | Instantiate some of the named variables in the term.
+-- The 'IntMap' is keyed by 'VarIndex'.
+-- Note: The replacement is _not_ applied recursively
+-- to the terms in the substitution map.
+scInstantiate :: SharedContext -> IntMap Term -> Term -> IO Term
+scInstantiate sc vmap t0 = execSCM sc (scmInstantiate vmap t0)
+
+-- | Instantiate some of the named variables in the term, reducing any
+-- new beta redexes created in the process.
+-- The substitution 'IntMap' is keyed by 'VarIndex'.
+-- If the input term and all terms in the substitution are in
+-- beta-normal form, then the result will also be beta-normal.
+-- If a substituted term is a lambda, and it is substituted into the
+-- left side of an application, creating a new beta redex, then it
+-- will trigger further beta reduction.
+-- Existing beta redexes in the input term or substitution are
+-- not reduced.
+scInstantiateBeta :: SharedContext -> IntMap Term -> Term -> IO Term
+scInstantiateBeta sc sub t0 = execSCM sc (scmInstantiateBeta sub t0)
 
 --------------------------------------------------------------------------------
 -- Building shared terms

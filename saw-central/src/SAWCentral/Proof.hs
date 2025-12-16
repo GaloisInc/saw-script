@@ -159,8 +159,8 @@ import SAWCore.Name (DisplayNameEnv, Name(..), VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.FiniteValue (FirstOrderValue)
+import qualified SAWCore.Term.Certified as TC
 import SAWCore.Term.Pretty (prettyTermWithEnv, prettyTermContainerWithEnv)
-import qualified SAWCore.SCTypeCheck as TC
 
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
@@ -1223,16 +1223,19 @@ specializeTheorem _sc _what4PushMuxOps db _loc _rsn thm [] = return (thm, db)
 specializeTheorem sc what4PushMuxOps db loc rsn thm ts =
   do res <- specializeProp sc (_thmProp thm) ts
      case res of
-       Left err -> fail (unlines (["specialize_theorem: failed to specialize"] ++ TC.prettyTCError err))
+       Left err -> fail (unlines ["specialize_theorem: failed to specialize", showTermError err])
        Right p' ->
          constructTheorem sc what4PushMuxOps db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
 
-specializeProp :: SharedContext -> Prop -> [Term] -> IO (Either TC.TCError Prop)
-specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc
+specializeProp :: SharedContext -> Prop -> [Term] -> IO (Either TC.TermError Prop)
+specializeProp sc (Prop p0) ts0 =
+  do x <- scFreshVarName sc "_"
+     t0 <- scVariable sc x p0
+     TC.runSCM sc (loop t0 ts0)
  where
-  loop p [] = return (Prop p)
+  loop p [] = Prop <$> TC.scmTypeOf p
   loop p (t:ts) =
-    do p' <- TC.applyPiTyped (TC.NotFuncTypeInApp p t) p t
+    do p' <- TC.scmApply p t
        loop p' ts
 
 -- | Admit the given theorem without evidence.
@@ -2217,7 +2220,7 @@ tacticSpecializeHyp sc ts = Tactic \gl ->
       do res <- liftIO (specializeProp sc h ts)
          case res of
            Left err ->
-             fail (unlines (["specialize_hyp tactic: failed to specialize"] ++ TC.prettyTCError err))
+             fail (unlines ["specialize_hyp tactic: failed to specialize", showTermError err])
            Right h' ->
              do let gl' = gl{ goalSequent = HypFocusedSequent (FB hs1 h (hs2++[h'])) gs }
                 return ((), mempty, [gl'], specializeHypEvidence (genericLength hs1) h' ts)
@@ -2233,7 +2236,7 @@ tacticInsert sc thm ts = Tactic \gl ->
      case res of
        Left err ->
          fail (unlines (["goal_insert_and_specialize tactic: failed to specialize"] ++
-                        TC.prettyTCError err))
+                        [showTermError err]))
        Right h ->
          do let gl' = gl{ goalSequent = addHypothesis h (goalSequent gl) }
             return ((), mempty, [gl'], insertEvidence thm h ts)
