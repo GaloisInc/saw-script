@@ -212,20 +212,12 @@ making no other changes to the program state.
 
 In cases like this, a direct translation is possible, given only an
 identification of which code to execute.
-Three functions exist to handle such simple code. The functions for LLVM and
-JVM are the more stable of the three:
+Three functions exist to handle such simple code, one for each Crucible
+backend:
 
 - `llvm_extract : LLVMModule -> String -> TopLevel Term`
 - `jvm_extract : JavaClass -> String -> TopLevel Term`
-
-A similar function exists for MIR, but is more experimental.
-
 - `mir_extract : MIRModule -> String -> TopLevel Term`
-
-Because of its lack of maturity, it (and later MIR-related commands) must be
-enabled by running the `enable_experimental` command beforehand.
-
-- `enable_experimental : TopLevel ()`
 
 The structure of these extraction functions is essentially identical.
 The first argument describes where to look for code (in an LLVM module, Java

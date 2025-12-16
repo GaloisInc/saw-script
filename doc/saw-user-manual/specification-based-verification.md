@@ -64,10 +64,6 @@ mir_verify :
 
 ### Running a MIR-based verification
 
-(Note: API functions involving MIR verification require `enable_experimental`
-in order to be used. As such, some parts of this API may change before being
-finalized.)
-
 The `String` supplied as an argument to `mir_verify` is expected to be a
 function _identifier_. An identifier is expected adhere to one of the following
 conventions:
@@ -803,7 +799,7 @@ function should take as an argument a pointer to allocated space that it
 will not modify. Unlike `llvm_alloc`, regions allocated with
 `llvm_alloc_readonly` are allowed to alias other read-only regions.
 
-When using the experimental Java implementation, separate functions
+In the Java implementation, separate functions
 exist for specifying that arrays or objects are allocated:
 
 - `jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue` specifies an
@@ -812,7 +808,7 @@ array of the given concrete size, with elements of the given type.
 - `jvm_alloc_object : String -> JVMSetup JVMValue` specifies an object
 of the given class name.
 
-The experimental MIR implementation also has a `mir_alloc` function, which
+The MIR implementation also has a `mir_alloc` function, which
 behaves similarly to `llvm_alloc`. `mir_alloc` creates an immutable reference,
 but there is also a `mir_alloc_mut` function for creating a mutable reference:
 
@@ -1046,7 +1042,7 @@ type information with information contained in debug symbols is a bit
 heuristic. If `llvm_union` cannot figure out how to cast a pointer,
 one can fall back on the more manual `llvm_cast_pointer` instead.
 
-In the experimental Java verification implementation, the following
+In the Java verification implementation, the following
 functions can be used to state the equivalent of a combination of
 `llvm_points_to` and either `llvm_elem` or `llvm_field`.
 
@@ -1056,7 +1052,7 @@ the value of an array element.
 - `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
 specifies the name of an object field.
 
-In the experimental MIR verification implementation, the following functions
+In the MIR verification implementation, the following functions
 construct compound values:
 
 - `mir_array_value : MIRType -> [MIRValue] -> MIRValue` constructs an array
@@ -1786,7 +1782,6 @@ We can write a specification for `f` like so:
 
 :::{code-block} sawscript
 // statics.saw
-enable_experimental;
 
 let f_spec = do {
   mir_points_to (mir_static "statics::S2")

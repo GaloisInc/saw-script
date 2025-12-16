@@ -97,10 +97,6 @@ Putting this all together, our complete `saw-basics.saw` file is:
 :language: sawscript
 :::
 
-One minor detail that we left out until just now is that the SAW's interface to
-MIR is still experimental, so you must explicitly opt into it with the
-`enable_experimental` command.
-
 Now that everything is in place, we can check this proof like so:
 
 :::{code-block} console
@@ -199,11 +195,9 @@ without any other arguments:
 $ saw
 :::
 
-Then run `enable_experimental` (to enable MIR-related commands) and run `:type
-mir_term`:
+Then run `:type mir_term`:
 
 :::{code-block} console
-sawscript> enable_experimental
 sawscript> :type mir_term
 Term -> MIRValue
 :::

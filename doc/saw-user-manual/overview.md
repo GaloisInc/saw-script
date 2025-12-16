@@ -5,8 +5,8 @@ mathematical models of the computational behavior of software,
 transforming these models, and proving properties about them.
 
 SAW can currently construct models of a subset of programs written in
-Cryptol, LLVM (and therefore C), and JVM (and therefore Java). SAW also has
-experimental, incomplete support for MIR (and therefore Rust). The
+Cryptol, LLVM (and therefore C), JVM byte code (and therefore Java),
+and MIR (and therefore Rust). The
 models take the form of typed functional programs, so in a sense SAW can
 be considered a translator from imperative programs to their functional
 equivalents. Various external proof tools, including a variety of SAT
