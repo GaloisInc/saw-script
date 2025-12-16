@@ -1,5 +1,3 @@
-enable_experimental;
-
 m <- mir_load_module "overrides.linked-mir.json";
 
 let g_even_spec = do {

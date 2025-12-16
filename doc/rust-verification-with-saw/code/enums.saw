@@ -1,5 +1,3 @@
-enable_experimental;
-
 m <- mir_load_module "enums.linked-mir.json";
 
 let option_u32 = mir_find_adt m "core::option::Option" [mir_u32];
