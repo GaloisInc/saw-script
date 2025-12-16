@@ -756,7 +756,7 @@ scInsDefInMap :: SharedContext -> Def -> IO ()
 scInsDefInMap sc d =
   do e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case insDefInMap d mm of
-         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Left nm -> (mm, Just (DuplicateNameException (nameURI (nameInfo nm))))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
 
@@ -816,7 +816,7 @@ scBeginDataType sc dtIdent dtParams dtIndices dtSort =
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
-         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Left nm -> (mm, Just (DuplicateNameException (nameURI (nameInfo nm))))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
      scRegisterGlobal sc dtIdent =<< scConst sc dtName
@@ -827,7 +827,7 @@ scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
 scCompleteDataType sc dtIdent ctors =
   do e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case completeDataType dtIdent ctors mm of
-         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Left nm -> (mm, Just (DuplicateNameException (nameURI (nameInfo nm))))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
      forM_ ctors $ \ctor ->

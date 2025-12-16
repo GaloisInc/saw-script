@@ -316,15 +316,15 @@ insImport name_p i m =
 -- must have no constructors, and it will not be added to the
 -- declaration list until it is completed by 'completeDataType'.
 -- Return 'Left' in the case of a name clash, i.e., an existing
--- binding for the same 'Ident' name.
-beginDataType :: DataType -> ModuleMap -> Either Ident ModuleMap
+-- binding for the same 'Name'.
+beginDataType :: DataType -> ModuleMap -> Either Name ModuleMap
 beginDataType dt =
   insResolvedNameInMap (ResolvedDataType dt')
   where dt' = dt { dtCtors = [] }
 
 -- | Complete a datatype, by adding its constructors. Return 'Left' if
 -- there is a name clash with any constructor name.
-completeDataType :: Ident -> [Ctor] -> ModuleMap -> Either Ident ModuleMap
+completeDataType :: Ident -> [Ctor] -> ModuleMap -> Either Name ModuleMap
 completeDataType ident ctors mm0 =
   let str = identBaseName ident in
   case resolveNameInMap mm0 ident of
@@ -491,29 +491,30 @@ insertResolvedName r mm =
 -- | Insert a 'ResolvedName' into a 'ModuleMap', adding a mapping from
 -- the 'Ident' name of that resolved name to it. Return 'Left' in the
 -- case of a name clash, i.e., an existing binding for the same
--- 'Ident' name.
-insResolvedNameInMap :: ResolvedName -> ModuleMap -> Either Ident ModuleMap
+-- 'Name'.
+insResolvedNameInMap :: ResolvedName -> ModuleMap -> Either Name ModuleMap
 insResolvedNameInMap r mm =
   let mm' = insertResolvedName r mm in
-  case resolvedNameInfo r of
-    ModuleIdentifier ident ->
-      if Map.member base (displayIndexes env)
-      then Left ident
-      else Right $ mm' { mmNameEnv = Map.insert mname env' (mmNameEnv mm) }
-      where
-        vi = resolvedNameVarIndex r
-        mname = identModule ident
-        base = identBaseName ident
-        env = fromMaybe emptyDisplayNameEnv $ Map.lookup mname (mmNameEnv mm)
-        env' = extendDisplayNameEnv vi [base] env
-    ImportedName{} -> Right mm'
+  case lookupVarIndexInMap (resolvedNameVarIndex r) mm of
+    Just _ -> Left (resolvedNameName r)
+    Nothing ->
+      case resolvedNameInfo r of
+        ModuleIdentifier ident ->
+          Right $ mm' { mmNameEnv = Map.insert mname env' (mmNameEnv mm) }
+          where
+            vi = resolvedNameVarIndex r
+            mname = identModule ident
+            base = identBaseName ident
+            env = fromMaybe emptyDisplayNameEnv $ Map.lookup mname (mmNameEnv mm)
+            env' = extendDisplayNameEnv vi [base] env
+        ImportedName{} -> Right mm'
 
 insDeclInMap :: ModuleName -> ModuleDecl -> ModuleMap -> ModuleMap
 insDeclInMap mname decl mm =
   mm { mmRDecls = Map.alter (Just . (decl :) . fromMaybe []) mname (mmRDecls mm) }
 
 -- | Insert a definition into a 'ModuleMap'.
-insDefInMap :: Def -> ModuleMap -> Either Ident ModuleMap
+insDefInMap :: Def -> ModuleMap -> Either Name ModuleMap
 insDefInMap d mm =
   insResolvedNameInMap (ResolvedDef d) $
   case nameInfo (defName d) of
