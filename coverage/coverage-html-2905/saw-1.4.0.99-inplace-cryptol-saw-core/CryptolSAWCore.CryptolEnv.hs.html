@@ -1129,7 +1129,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1110 </span><span class="spaces">    </span><span class="istickedoff">T.TVar {}        -&gt; t</span>
 <span class="lineno"> 1111 </span><span class="spaces">    </span><span class="istickedoff">T.TUser _ _ ty   -&gt; typeNoUser ty</span>
 <span class="lineno"> 1112 </span><span class="spaces">    </span><span class="istickedoff">T.TRec fields    -&gt; <span class="nottickedoff">T.TRec (fmap typeNoUser fields)</span></span>
-<span class="lineno"> 1113 </span><span class="spaces">    </span><span class="istickedoff">T.TNominal nt ts -&gt; <span class="nottickedoff">T.TNominal nt (fmap typeNoUser ts)</span></span></span>
+<span class="lineno"> 1113 </span><span class="spaces">    </span><span class="istickedoff">T.TNominal nt ts -&gt; T.TNominal nt (fmap <span class="nottickedoff">typeNoUser</span> ts)</span></span>
 <span class="lineno"> 1114 </span>
 <span class="lineno"> 1115 </span>schemaNoUser :: T.Schema -&gt; T.Schema
 <span class="lineno"> 1116 </span><span class="decl"><span class="istickedoff">schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)</span></span>
