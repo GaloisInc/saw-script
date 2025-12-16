@@ -501,10 +501,7 @@ mkDefinition name t tp = Coq.Definition name [] (Just tp) t
 -- | Combine a term-level Binder with a type-level PiBinder, taking the name
 -- and type from the Binder but the implicit/explicit status from the PiBinder.
 combineBinders :: Coq.Binder -> Coq.PiBinder -> Coq.Binder
-combineBinders (Coq.Binder n mty)         Coq.PiImplicitBinder {} = Coq.ImplicitBinder n mty
-combineBinders (Coq.ImplicitBinder n mty) Coq.PiImplicitBinder {} = Coq.ImplicitBinder n mty
-combineBinders (Coq.Binder n mty)         Coq.PiBinder {}         = Coq.Binder n mty
-combineBinders (Coq.ImplicitBinder n mty) Coq.PiBinder {}         = Coq.Binder n mty
+combineBinders (Coq.Binder _ n mty) (Coq.PiBinder impl _ _) = Coq.Binder impl n mty
 
 mkLet :: (Coq.Ident, Coq.Term) -> Coq.Term -> Coq.Term
 mkLet (name, rhs) body = Coq.Let name [] Nothing rhs body
@@ -519,22 +516,18 @@ data BindTrans = BindTrans { bindTransIdent :: Coq.Ident,
 -- | Convert a 'BindTrans' to a list of Coq term-level binders
 bindTransToBinder :: Bool -> BindTrans -> [Coq.Binder]
 bindTransToBinder useImplicits (BindTrans {..}) =
-  Coq.Binder bindTransIdent (Just bindTransType) :
-  map (\(n,ty) -> if useImplicits
-                  then Coq.ImplicitBinder n (Just ty)
-                  else Coq.Binder n (Just ty)) bindTransImps
+  Coq.Binder False bindTransIdent (Just bindTransType) :
+  map (\(n,ty) -> Coq.Binder useImplicits n (Just ty)) bindTransImps
 
 -- | Convert a 'BindTrans' to a list of Coq type-level pi-abstraction binders.
 bindTransToPiBinder :: Bool -> BindTrans -> [Coq.PiBinder]
 bindTransToPiBinder useImplicits (BindTrans { .. }) =
   case bindTransImps of
-    [] | bindTransIdent == "_" -> [Coq.PiBinder Nothing bindTransType]
-    [] -> [Coq.PiBinder (Just bindTransIdent) bindTransType]
+    [] | bindTransIdent == "_" -> [Coq.PiBinder False Nothing bindTransType]
+    [] -> [Coq.PiBinder False (Just bindTransIdent) bindTransType]
     _ ->
-      Coq.PiBinder (Just bindTransIdent) bindTransType :
-      map (\(n,ty) -> if useImplicits
-                      then Coq.PiImplicitBinder (Just n) ty
-                      else Coq.PiBinder (Just n) ty) bindTransImps
+      Coq.PiBinder False (Just bindTransIdent) bindTransType :
+      map (\(n,ty) -> Coq.PiBinder useImplicits (Just n) ty) bindTransImps
 
 -- | Given a 'VarName' and its type (as a 'Term'), translate the 'VarName'
 -- to a Coq identifier, translate the type to a Coq term, and generate zero or
@@ -585,10 +578,8 @@ translateImplicitHyp tc args tm = do
     return $ Coq.Pi (concatMap (mkPi inTermPos) args') (Coq.App tc [Coq.App tm (map mkArg args')])
   where
     mkPi inTermPos (BindTrans nm ty nhs) =
-      Coq.PiBinder (Just nm) ty :
-      map (\(nh,nhty) -> if inTermPos
-                         then Coq.PiBinder (Just nh) nhty
-                         else Coq.PiImplicitBinder (Just nh) nhty) nhs
+      Coq.PiBinder False (Just nm) ty :
+      map (\(nh,nhty) -> Coq.PiBinder (not inTermPos) (Just nh) nhty) nhs
     mkArg b = Coq.Var $ bindTransIdent b
 
 -- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
@@ -748,7 +739,7 @@ defaultTermForType typ = do
     (asPiList -> (bs,body))
       | not (null bs)
       , closedTerm body ->
-      do bs'   <- forM bs $ \ (_nm, ty) -> Coq.Binder "_" . Just <$> translateTerm ty
+      do bs'   <- forM bs $ \ (_nm, ty) -> Coq.Binder False "_" . Just <$> translateTerm ty
          body' <- defaultTermForType body
          return $ Coq.Lambda bs' body'
 

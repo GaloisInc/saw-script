@@ -57,18 +57,19 @@ data Term
 -- | Type synonym useful for indicating when a term is used as a type.
 type Type = Term
 
+-- | Is this an implicit or explicit binder?
+type IsImplicit = Bool
+
 -- | An 'Ident' with an optional 'Type', which may be explicit or implicit.
 -- For use representing the bound variables in 'Lambda's, 'Let's, etc.
 data Binder
-  = Binder Ident (Maybe Type)
-  | ImplicitBinder Ident (Maybe Type)
+  = Binder IsImplicit Ident (Maybe Type)
     deriving (Show)
 
 -- | An 'Type' with an optional 'Ident', which may be explicit or implicit.
 -- For use representing arguments in 'Pi' types.
 data PiBinder
-  = PiBinder (Maybe Ident) Type
-  | PiImplicitBinder (Maybe Ident) Type
+  = PiBinder IsImplicit (Maybe Ident) Type
     deriving (Show)
 
 -- Because saw-core does not give very helpful access to the parameters and
