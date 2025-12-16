@@ -1,4 +1,3 @@
-enable_experimental;
 m <- mir_load_module "test.linked-mir.json";
 
 f8  <- mir_extract m (mir_find_name m "test::f" [mir_u8]);     // find instance

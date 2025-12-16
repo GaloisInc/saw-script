@@ -1,5 +1,3 @@
-enable_experimental;
-
 let hello = mir_term {{ "hello" : [5][8] }};
 
 // Alternatively we could define it like this:

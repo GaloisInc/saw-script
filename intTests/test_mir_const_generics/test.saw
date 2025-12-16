@@ -1,5 +1,4 @@
 // test.saw
-enable_experimental;
 
 m <- mir_load_module "test.linked-mir.json";
 

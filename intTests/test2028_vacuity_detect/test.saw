@@ -1,5 +1,4 @@
 // test.saw
-enable_experimental;
 
 let fun_rs_spec = do {
   x <- mir_fresh_var "x" mir_u32;

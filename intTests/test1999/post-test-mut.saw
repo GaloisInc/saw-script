@@ -1,5 +1,3 @@
-enable_experimental;
-
 m <- mir_load_module "post-test-mut.linked-mir.json";
 
 let get41_spec = do {
