@@ -103,7 +103,7 @@ haddock() {
     saw:saw-core-what4
     saw:saw-core-sbv
     saw:saw-core-aig
-    saw:saw-core-coq
+    saw:saw-core-rocq
     saw:saw-central
     saw:saw-script
     saw:saw-server

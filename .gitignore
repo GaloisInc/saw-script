@@ -17,4 +17,4 @@ cabal.project.freeze
 *~
 *#
 .#*
-saw-core-coq/coq/.Makefile.coq.d
+saw-core-rocq/rocq/.Makefile.rocq.d
