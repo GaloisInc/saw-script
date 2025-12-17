@@ -1,4 +1,4 @@
-test_offline_coq*_prove0.v
+test_offline_rocq*_prove0.v
 *.log
 *.rawlog
 *.log.diff

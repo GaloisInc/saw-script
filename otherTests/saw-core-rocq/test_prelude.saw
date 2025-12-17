@@ -1,2 +1,2 @@
 enable_experimental;
-write_coq_sawcore_prelude "" [] [];
+write_rocq_sawcore_prelude "" [] [];

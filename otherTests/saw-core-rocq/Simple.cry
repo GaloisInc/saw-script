@@ -1,4 +1,4 @@
-// Simple test module for Coq extraction
+// Simple test module for Rocq extraction
 module Simple where
 
 addOne : [8] -> [8]

@@ -2,37 +2,37 @@
 enable_experimental;
 
 let t1 = {{ (5 : [8]) + (3 - 3) * 2 }};
-write_coq_term "TestArith" [] [] "" t1;
+write_rocq_term "TestArith" [] [] "" t1;
 
 let t2 = {{ (5 : [8]) / 0 }};
-write_coq_term "TestArith_DivZero" [] [] "" t2;
+write_rocq_term "TestArith_DivZero" [] [] "" t2;
 
 let t3 = {{ (10 : [8]) / 2 }};
-write_coq_term "TestArith_Div" [] [] "" t3;
+write_rocq_term "TestArith_Div" [] [] "" t3;
 
 let t4 = {{ (10 : [8]) % 3 }};
-write_coq_term "TestArith_Mod" [] [] "" t4;
+write_rocq_term "TestArith_Mod" [] [] "" t4;
 
 let t5 = {{ ((0xFF : [8]) && 0x0F) || 0xE0 }};
-write_coq_term "TestArith_AndOr" [] [] "" t5;
+write_rocq_term "TestArith_AndOr" [] [] "" t5;
 
 let t6 = {{ (0xFF : [8]) ^ 0xAA }};
-write_coq_term "TestArith_Xor" [] [] "" t6;
+write_rocq_term "TestArith_Xor" [] [] "" t6;
 
 let t7 = {{ ~(0xAA : [8]) }};
-write_coq_term "TestArith_Complement" [] [] "" t7;
+write_rocq_term "TestArith_Complement" [] [] "" t7;
 
 let t8 = {{ -(5 : [8]) }};
-write_coq_term "TestArith_Negate" [] [] "" t8;
+write_rocq_term "TestArith_Negate" [] [] "" t8;
 
 let t9 = {{ (8 : [8]) << 2 }};
-write_coq_term "TestArith_ShiftLeft" [] [] "" t9;
+write_rocq_term "TestArith_ShiftLeft" [] [] "" t9;
 
 let t10 = {{ (8 : [8]) >> 2 }};
-write_coq_term "TestArith_ShiftRight" [] [] "" t10;
+write_rocq_term "TestArith_ShiftRight" [] [] "" t10;
 
 let t11 = {{ sext`{16} (5 : [8]) }};
-write_coq_term "TestArith_SignExtend" [] [] "" t11;
+write_rocq_term "TestArith_SignExtend" [] [] "" t11;
 
 let t12 = {{ zext`{16} (5 : [8]) }};
-write_coq_term "TestArith_ZeroExtend" [] [] "" t12;
+write_rocq_term "TestArith_ZeroExtend" [] [] "" t12;

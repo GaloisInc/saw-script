@@ -1,3 +1,3 @@
-// Test: write_coq_cryptol_primitives_for_sawcore command
+// Test: write_rocq_cryptol_primitives_for_sawcore command
 enable_experimental;
-write_coq_cryptol_primitives_for_sawcore "" [] [];
+write_rocq_cryptol_primitives_for_sawcore "" [] [];

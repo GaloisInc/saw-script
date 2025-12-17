@@ -3,19 +3,19 @@ enable_experimental;
 
 let f = {{ \(x : [8]) -> x + 1 }};
 let t1 = {{ f 5 }};
-write_coq_term "TestLambda_App" [] [] "" t1;
+write_rocq_term "TestLambda_App" [] [] "" t1;
 
 let g = {{ \(x : [8]) -> \(y : [8]) -> x + y }};
 let t2 = {{ g 3 4 }};
-write_coq_term "TestLambda_TwoArgs" [] [] "" t2;
+write_rocq_term "TestLambda_TwoArgs" [] [] "" t2;
 
 let t3 = {{ g 10 }};
-write_coq_term "TestLambda_Partial" [] [] "" t3;
+write_rocq_term "TestLambda_Partial" [] [] "" t3;
 
 let h = {{ \(x : [8]) -> x * 2 }};
 let t4 = {{ f (h 5) }};
-write_coq_term "TestLambda_Nested" [] [] "" t4;
+write_rocq_term "TestLambda_Nested" [] [] "" t4;
 
 let id = {{ \(x : [8]) -> x }};
 let t5 = {{ id 42 }};
-write_coq_term "TestLambda_Id" [] [] "" t5;
+write_rocq_term "TestLambda_Id" [] [] "" t5;

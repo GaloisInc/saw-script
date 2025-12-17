@@ -80,7 +80,7 @@ testParams base verbose = do
 
   pure $ envVarAssocList e1
 
--- | Tests SAWCore to Coq translation by turning the `./test.sh` script into a
+-- | Tests SAWCore to Rocq translation by turning the `./test.sh` script into a
 --   Tasty test. TODO: this is mostly duplicated from `intTests/IntegrationTests.hs`.
 main :: IO ()
 main = do
@@ -102,7 +102,7 @@ main = do
     mkTest envVars
   where
     base :: FilePath
-    base = "otherTests" </> "saw-core-coq"
+    base = "otherTests" </> "saw-core-rocq"
 
     mkTest :: [(String,String)] -> TestTree
     mkTest envVars = testCase (takeFileName base) $ do

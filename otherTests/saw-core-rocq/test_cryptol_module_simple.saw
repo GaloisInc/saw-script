@@ -1,3 +1,3 @@
-// Test: write_coq_cryptol_module command
+// Test: write_rocq_cryptol_module command
 enable_experimental;
-write_coq_cryptol_module "Simple.cry" "" [] [];
+write_rocq_cryptol_module "Simple.cry" "" [] [];
