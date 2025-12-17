@@ -171,11 +171,11 @@ applyOverride sc thm t = do
       isPreludeName _ = False
   let unfold nm = SC.nameIndex nm /= tidx && not (isPreludeName (SC.nameInfo nm))
   unfolded <- SC.scUnfoldConstants sc unfold t
-  cache <- SC.newCache
+  cache <- SC.newIntCache
   let
     go :: SC.Term -> IO SC.Term
     go s =
-      SC.useCache cache (SC.termIndex s) $
+      SC.useIntCache cache (SC.termIndex s) $
       case SC.unwrapTermF s of
         SC.Constant (SC.Name idx _)
           | idx == tidx -> theoremReplacement sc thm
