@@ -229,7 +229,7 @@ Definition IsLeNat__rec
 
 (* We could have SAW autogenerate this definition in SAWCorePrelude, but it is
    convenient to place it here so that it can be used in
-   SAWCoreVectorsAsCoqVectors.v, which cannot import SAWCorePrelude. *)
+   SAWCoreVectorsAsRocqVectors.v, which cannot import SAWCorePrelude. *)
 Definition IsLtNat := @lt.
 
 (* Definition minNat := Nat.min. *)
@@ -407,10 +407,10 @@ Global Instance Inhabited_RecordCons (fnm:string) (tp rest_tp:Type)
   := MkInhabited (RecordTypeCons fnm tp rest_tp) (RecordCons fnm inhabitant inhabitant).
 
 (* Get the head element of a non-empty record type *)
-(* NOTE: more recent versions of Coq seem to have changed constructor patterns
+(* NOTE: more recent versions of Rocq seem to have changed constructor patterns
 so that the parameters of an inductive type are not required, even when they are
 specified in the Arguments declaration, so we use the explicit arguments
-@RecordCons pattern, since that does not change between Coq versions *)
+@RecordCons pattern, since that does not change between Rocq versions *)
 Definition recordHead {str tp rest_tp} (r:RecordTypeCons str tp rest_tp) : tp :=
   match r with
   | @RecordCons _ _ _ x _ => x

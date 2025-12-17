@@ -1,16 +1,16 @@
-From Stdlib       Require Import Arith.
-From Stdlib       Require Import Lists.List.
-From Stdlib       Require Import Logic.Eqdep_dec.
-From Stdlib       Require Import Logic.FunctionalExtensionality.
+From Stdlib        Require Import Arith.
+From Stdlib        Require Import Lists.List.
+From Stdlib        Require Import Logic.Eqdep_dec.
+From Stdlib        Require Import Logic.FunctionalExtensionality.
 Import ListNotations.
-From Stdlib       Require Import String.
+From Stdlib        Require Import String.
 #[local] Set Warnings "-stdlib-vector".
-From Stdlib       Require Import Vectors.Vector.
+From Stdlib        Require Import Vectors.Vector.
 #[local] Set Warnings "stdlib-vector".
-From CryptolToCoq Require Import SAWCoreBitvectors.
-From CryptolToCoq Require Import SAWCoreScaffolding.
-From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToRocq Require Import SAWCoreBitvectors.
+From CryptolToRocq Require Import SAWCoreScaffolding.
+From CryptolToRocq Require Import SAWCorePrelude.
+From CryptolToRocq Require Import SAWCoreVectorsAsRocqVectors.
 Import SAWCorePrelude.
 
 
@@ -37,7 +37,7 @@ Proof.
   induction x; induction y; simpl; auto.
 Defined.
 
-(* NOTE: addNat is now defined as Coq plus, so this is trivial *)
+(* NOTE: addNat is now defined as Rocq plus, so this is trivial *)
 Theorem addNat_add : forall x y, addNat x y = x + y.
 Proof.
   reflexivity.
@@ -48,7 +48,7 @@ Proof.
   induction x; induction y; simpl; auto.
 Defined.
 
-(* NOTE: mulNat is now defined as Coq mult, so this is trivial *)
+(* NOTE: mulNat is now defined as Rocq mult, so this is trivial *)
 Theorem mulNat_mul : forall x y, mulNat x y = x * y.
 Proof.
   reflexivity.

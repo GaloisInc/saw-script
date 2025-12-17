@@ -4,9 +4,9 @@ From Stdlib Require Import ZArith.
 From Stdlib Require Import ZifyBool.
 From Stdlib Require Import ZifyClasses.
 
-From CryptolToCoq Require Import SAWCoreBitvectors.
-From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToRocq Require Import SAWCoreBitvectors.
+From CryptolToRocq Require Import SAWCorePrelude.
+From CryptolToRocq Require Import SAWCoreVectorsAsRocqVectors.
 
 Import SAWCorePrelude.
 
@@ -14,14 +14,14 @@ Import SAWCorePrelude.
    `lia` tactic on many theorems involving `bitvector 64` equalities and
    inequalities. This file includes a small number of proofs to test that `lia`
    is working as intended. The design was heavily inspired by the Zify instances
-   for Coq's Uint63, which can be found here:
+   for Rocq's Uint63, which can be found here:
    https://github.com/coq/coq/blob/756c560ab5d19a1568cf41caac6f0d67a97b08c6/theories/micromega/ZifyUint63.v
 
    This is far from complete, however. Be aware of the following caveats:
 
    1. These instances only work over unsigned arithmetic, so theorems involving
       signed arithmetic are not supported. If we wanted to support signed
-      arithmetic, we would likely need to take inspiration from how Coq's Zify
+      arithmetic, we would likely need to take inspiration from how Rocq's Zify
       instances for the Sint63 type work:
       https://github.com/coq/coq/blob/756c560ab5d19a1568cf41caac6f0d67a97b08c6/theories/micromega/ZifySint63.v
 
@@ -32,7 +32,7 @@ Import SAWCorePrelude.
    3. These instances only support bitvectors where the bit width is 64.
       Ideally, we would make the Zify instances parametric in the bit width, but
       this is surprisingly difficult to accomplish. At a minimum, this would
-      require some upstream changes to Coq. See, for instance,
+      require some upstream changes to Rocq. See, for instance,
       https://github.com/coq/coq/issues/16404.
 
       For now, we simply provide the machinery at 64 bits, which is a common
@@ -43,7 +43,7 @@ Import SAWCorePrelude.
 (* Unfortunately, https://github.com/coq/coq/issues/16404 prevents us from
    simply defining instances for `bitvector 64`, so we provide a thin wrapper
    around it and define instances for it. We may be able to remove this
-   workaround once the upstream Coq issue is fixed and enough time has passed.
+   workaround once the upstream Rocq issue is fixed and enough time has passed.
 *)
 Definition bitvector_64 := bitvector 64.
 

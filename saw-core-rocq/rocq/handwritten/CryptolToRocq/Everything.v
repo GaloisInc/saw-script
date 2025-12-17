@@ -2,14 +2,14 @@
    that there are no universe inconsistencies *)
 
 (* generated *)
-From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
-From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
+From CryptolToRocq Require Import SAWCorePrelude.
 
 (* handwritten *)
-From CryptolToCoq Require Import CoqVectorsExtra.
-From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra.
-From CryptolToCoq Require Import SAWCoreBitvectors.
-From CryptolToCoq Require Import SAWCorePrelude_proofs.
-From CryptolToCoq Require Import SAWCorePreludeExtra.
-From CryptolToCoq Require Import SAWCoreScaffolding.
-From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToRocq Require Import RocqVectorsExtra.
+From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
+From CryptolToRocq Require Import SAWCoreBitvectors.
+From CryptolToRocq Require Import SAWCorePrelude_proofs.
+From CryptolToRocq Require Import SAWCorePreludeExtra.
+From CryptolToRocq Require Import SAWCoreScaffolding.
+From CryptolToRocq Require Import SAWCoreVectorsAsRocqVectors.

@@ -1,5 +1,5 @@
 (***
- *** Lemmas about the bitvectors from SAWCoreVectorsAsCoqVectors
+ *** Lemmas about the bitvectors from SAWCoreVectorsAsRocqVectors
  ***)
 
 From Stdlib Require Import Program.Basics.
@@ -12,9 +12,9 @@ From Stdlib Require Import Classes.RelationClasses.
 From Stdlib Require Import Classes.Morphisms.
 From Stdlib Require Import ZArith.
 
-From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import SAWCoreScaffolding.
-From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToRocq Require Import SAWCorePrelude.
+From CryptolToRocq Require Import SAWCoreScaffolding.
+From CryptolToRocq Require Import SAWCoreVectorsAsRocqVectors.
 
 Import SAWCorePrelude.
 Import VectorNotations.

@@ -1,18 +1,18 @@
 (* This module contains additional definitions that can only be defined after *)
 (* the Cryptol prelude has been defined. *)
 
-From Stdlib       Require Import Lia.
-From Stdlib       Require Import Lists.List.
-From Stdlib       Require Import String.
+From Stdlib        Require Import Lia.
+From Stdlib        Require Import Lists.List.
+From Stdlib        Require Import String.
 #[local] Set Warnings "-stdlib-vector".
-From Stdlib       Require Import Vectors.Vector.
+From Stdlib        Require Import Vectors.Vector.
 #[local] Set Warnings "stdlib-vector".
-From CryptolToCoq Require Import SAWCoreScaffolding.
-From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToRocq Require Import SAWCoreScaffolding.
+From CryptolToRocq Require Import SAWCorePrelude.
 Import SAWCorePrelude.
-From CryptolToCoq Require Import SAWCorePreludeExtra.
-From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
+From CryptolToRocq Require Import SAWCorePreludeExtra.
+From CryptolToRocq Require Import SAWCoreVectorsAsRocqVectors.
+From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 Import CryptolPrimitivesForSAWCore.
 
 Import ListNotations.

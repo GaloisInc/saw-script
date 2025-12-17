@@ -37,7 +37,7 @@ From Stdlib Require Import ZArith.
 From Stdlib Require Import PArith.
 
 #[local] Undelimit Scope N_scope.
-From CryptolToCoq Require Import SAWCoreScaffolding.
+From CryptolToRocq Require Import SAWCoreScaffolding.
 
 From mathcomp Require Import ssreflect.
 #[local] Set Warnings "-notation-overridden".
@@ -53,7 +53,7 @@ Definition Vec (n : nat) (a : Type) : Type := VectorDef.t a n.
 
 (* Work around https://github.com/coq/coq/issues/16803. Without this, using
    `lia` on `bitvector` values will fail to typecheck on pre-8.17 versions of
-   Coq. Once our Coq support window shifts enough, we can drop this workaround.
+   Rocq. Once our Rocq support window shifts enough, we can drop this workaround.
 *)
 Constraint Vec.u1 <= mkapp2.u0.
 Constraint Vec.u1 <= mkapp2.u1.
@@ -285,7 +285,7 @@ Fixpoint genWithProof (n : nat) (a : Type) :
   end.
 
 (* NOTE: This version of `zip` accepts two vectors of different size, unlike the
- * one in `CoqVectorsExtra.v` *)
+ * one in `RocqVectorsExtra.v` *)
 Fixpoint zipFunctional (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
   : Vec (Nat.min m n) (a * b) :=
   match
@@ -370,7 +370,7 @@ Definition intToBv (n : nat) (z : Z) : bitvector n := bitsToBv (fromZ z).
 
 Arguments intToBv : simpl never.
 
-(* NOTE This can cause Coq to stack overflow, avoid it as much as possible! *)
+(* NOTE This can cause Rocq to stack overflow, avoid it as much as possible! *)
 Definition bvNat (size : nat) (number : nat) : bitvector size :=
   intToBv size (Z.of_nat number).
 

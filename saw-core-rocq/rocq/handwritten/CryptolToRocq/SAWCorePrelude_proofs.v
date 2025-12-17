@@ -13,9 +13,9 @@ From mathcomp Require Import ssreflect.
 From mathcomp Require Import ssrnat.
 #[local] Set Warnings "notation-overridden".
 
-From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import SAWCoreScaffolding.
-From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToRocq Require Import SAWCorePrelude.
+From CryptolToRocq Require Import SAWCoreScaffolding.
+From CryptolToRocq Require Import SAWCoreVectorsAsRocqVectors.
 
 Import ProperNotations.
 Import SAWCorePrelude.

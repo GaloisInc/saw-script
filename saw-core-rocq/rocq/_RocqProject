@@ -1,16 +1,16 @@
--Q generated/CryptolToCoq   CryptolToCoq
--Q handwritten/CryptolToCoq CryptolToCoq
+-Q generated/CryptolToRocq   CryptolToRocq
+-Q handwritten/CryptolToRocq CryptolToRocq
 
-generated/CryptolToCoq/SAWCorePrelude.v
-generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
+generated/CryptolToRocq/SAWCorePrelude.v
+generated/CryptolToRocq/CryptolPrimitivesForSAWCore.v
 
-handwritten/CryptolToCoq/CoqVectorsExtra.v
-handwritten/CryptolToCoq/CryptolPrimitivesForSAWCoreExtra.v
-handwritten/CryptolToCoq/SAWCoreBitvectors.v
-handwritten/CryptolToCoq/SAWCoreBitvectorsZifyU64.v
-handwritten/CryptolToCoq/SAWCorePrelude_proofs.v
-handwritten/CryptolToCoq/SAWCorePreludeExtra.v
-handwritten/CryptolToCoq/SAWCoreScaffolding.v
-handwritten/CryptolToCoq/SAWCoreVectorsAsCoqVectors.v
+handwritten/CryptolToRocq/RocqVectorsExtra.v
+handwritten/CryptolToRocq/CryptolPrimitivesForSAWCoreExtra.v
+handwritten/CryptolToRocq/SAWCoreBitvectors.v
+handwritten/CryptolToRocq/SAWCoreBitvectorsZifyU64.v
+handwritten/CryptolToRocq/SAWCorePrelude_proofs.v
+handwritten/CryptolToRocq/SAWCorePreludeExtra.v
+handwritten/CryptolToRocq/SAWCoreScaffolding.v
+handwritten/CryptolToRocq/SAWCoreVectorsAsRocqVectors.v
 
-handwritten/CryptolToCoq/Everything.v
+handwritten/CryptolToRocq/Everything.v

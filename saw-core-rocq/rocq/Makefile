@@ -1,9 +1,9 @@
-all: Makefile.coq
+all: Makefile.rocq
 
-Makefile.coq: _CoqProject
-	coq_makefile -f $< -o $@
+Makefile.rocq: _RocqProject
+	rocq makefile -f $< -o $@
 
-include Makefile.coq
+include Makefile.rocq
 
 # Set the SAW variable to the appropriate command. Always look in the path
 # first, otherwise fall back on cabal run saw, unless running in CI because if
@@ -18,8 +18,8 @@ ifeq ($(SAW),)
   endif
 endif
 
-generated/CryptolToCoq/SAWCorePrelude.v: ../../saw-core/prelude/Prelude.sawcore
-	(mkdir -p generated/CryptolToCoq; cd ../saw; $(SAW) generate_scaffolding.saw)
+generated/CryptolToRocq/SAWCorePrelude.v: ../../saw-core/prelude/Prelude.sawcore
+	(mkdir -p generated/CryptolToRocq; cd ../saw; $(SAW) generate_scaffolding.saw)
 
-generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v: ../../cryptol-saw-core/saw/Cryptol.sawcore
-	(mkdir -p generated/CryptolToCoq; cd ../saw; $(SAW) generate_scaffolding.saw)
+generated/CryptolToRocq/CryptolPrimitivesForSAWCore.v: ../../cryptol-saw-core/saw/Cryptol.sawcore
+	(mkdir -p generated/CryptolToRocq; cd ../saw; $(SAW) generate_scaffolding.saw)

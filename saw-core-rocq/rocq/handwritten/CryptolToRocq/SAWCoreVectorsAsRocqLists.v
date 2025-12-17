@@ -1,7 +1,7 @@
 From Stdlib.Lists          Require Import List.
 From Stdlib.Numbers.NatInt Require        NZLog.
 From Stdlib.Strings        Require        String.
-From CryptolToCoq          Require Import SAWCoreScaffolding.
+From CryptolToRocq         Require Import SAWCoreScaffolding.
 From Stdlib                Require Import ZifyClasses.
 
 Import ListNotations.
@@ -10,7 +10,7 @@ Definition Vec (n : nat) (a : Type) : Type := list a.
 
 (* Work around https://github.com/coq/coq/issues/16803. Without this, using
    `lia` on `bitvector` values will fail to typecheck on pre-8.17 versions of
-   Coq. Once our Coq support window shifts enough, we can drop this workaround.
+   Rocq. Once our Rocq support window shifts enough, we can drop this workaround.
 *)
 Constraint Vec.u1 <= mkapp2.u0.
 Constraint Vec.u1 <= mkapp2.u1.
