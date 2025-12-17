@@ -206,68 +206,64 @@ span.spaces    { background: white }
 <span class="lineno">  187 </span>    -- be available to print before throwing as intended.
 <span class="lineno">  188 </span>    --
 <span class="lineno">  189 </span>    <span class="decl"><span class="istickedoff">errX msg = Supp.errN say msg &gt;&gt; throwIO (Fatal True)</span></span>
-<span class="lineno">  190 </span>    --errX msg = Supp.errP say dummyPos msg &gt;&gt; throwIO (Fatal False)
-<span class="lineno">  191 </span>
-<span class="lineno">  192 </span>    -- XXX: These can't be handled correctly in IO; they need state.
-<span class="lineno">  193 </span>    <span class="decl"><span class="istickedoff">errDN msg = Supp.errN say msg &gt;&gt; throwIO (Fatal False)</span></span>
-<span class="lineno">  194 </span>    <span class="decl"><span class="istickedoff">errDP pos msg = Supp.errP say pos msg &gt;&gt; throwIO (Fatal False)</span></span>
-<span class="lineno">  195 </span>    -- XXX: same as above
-<span class="lineno">  196 </span>    <span class="decl"><span class="nottickedoff">errDX msg = Supp.errN say msg &gt;&gt; throwIO (Fatal True)</span></span>
-<span class="lineno">  197 </span>    --errDX msg = Supp.errP say dummyPos msg &gt;&gt; throwIO (Fatal False)
-<span class="lineno">  198 </span>
-<span class="lineno">  199 </span>    <span class="decl"><span class="nottickedoff">warnN msg = Supp.warnN say msg</span></span>
-<span class="lineno">  200 </span>    <span class="decl"><span class="istickedoff">warnP pos msg = Supp.warnP say pos msg</span></span>
-<span class="lineno">  201 </span>    <span class="decl"><span class="nottickedoff">warnX msg = Supp.warnP say dummyPos msg</span></span>
-<span class="lineno">  202 </span>
-<span class="lineno">  203 </span>    <span class="decl"><span class="istickedoff">noteN msg = Supp.noteN say msg</span></span>
-<span class="lineno">  204 </span>    <span class="decl"><span class="nottickedoff">noteP pos msg = Supp.noteP say pos msg</span></span>
-<span class="lineno">  205 </span>    <span class="decl"><span class="nottickedoff">noteX msg = Supp.noteP say dummyPos msg</span></span>
-<span class="lineno">  206 </span>
-<span class="lineno">  207 </span>    <span class="decl"><span class="nottickedoff">errN' msg = Supp.errN' say PPS.defaultOpts msg &gt;&gt; throwIO (Fatal False)</span></span>
-<span class="lineno">  208 </span>    <span class="decl"><span class="nottickedoff">errP' pos msg = Supp.errP' say PPS.defaultOpts pos msg &gt;&gt; throwIO (Fatal False)</span></span>
-<span class="lineno">  209 </span>    -- XXX: same as above
-<span class="lineno">  210 </span>    <span class="decl"><span class="nottickedoff">errX' msg = Supp.errN' say PPS.defaultOpts msg &gt;&gt; throwIO (Fatal True)</span></span>
-<span class="lineno">  211 </span>    --errX' msg = Supp.errP' say PPS.defaultOpts dummyPos msg &gt;&gt; throwIO (Fatal False)
-<span class="lineno">  212 </span>
-<span class="lineno">  213 </span>    -- XXX: These can't be handled correctly in IO; they need state.
-<span class="lineno">  214 </span>    <span class="decl"><span class="nottickedoff">errDN' msg = Supp.errN' say PPS.defaultOpts msg &gt;&gt; throwIO (Fatal False)</span></span>
-<span class="lineno">  215 </span>    <span class="decl"><span class="nottickedoff">errDP' pos msg = Supp.errP' say PPS.defaultOpts pos msg &gt;&gt; throwIO (Fatal False)</span></span>
-<span class="lineno">  216 </span>    -- XXX: same as above
-<span class="lineno">  217 </span>    <span class="decl"><span class="nottickedoff">errDX' msg = Supp.errN' say PPS.defaultOpts msg &gt;&gt; throwIO (Fatal True)</span></span>
-<span class="lineno">  218 </span>    --errDX' msg = Supp.errP' say PPS.defaultOpts dummyPos msg &gt;&gt; throwIO (Fatal False)
+<span class="lineno">  190 </span>
+<span class="lineno">  191 </span>    -- XXX: These can't be handled correctly in IO; they need state.
+<span class="lineno">  192 </span>    <span class="decl"><span class="istickedoff">errDN msg = Supp.errN say msg &gt;&gt; throwIO (Fatal False)</span></span>
+<span class="lineno">  193 </span>    <span class="decl"><span class="istickedoff">errDP pos msg = Supp.errP say pos msg &gt;&gt; throwIO (Fatal False)</span></span>
+<span class="lineno">  194 </span>    -- XXX: same as above
+<span class="lineno">  195 </span>    <span class="decl"><span class="nottickedoff">errDX msg = Supp.errN say msg &gt;&gt; throwIO (Fatal True)</span></span>
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>    <span class="decl"><span class="nottickedoff">warnN msg = Supp.warnN say msg</span></span>
+<span class="lineno">  198 </span>    <span class="decl"><span class="istickedoff">warnP pos msg = Supp.warnP say pos msg</span></span>
+<span class="lineno">  199 </span>    <span class="decl"><span class="nottickedoff">warnX msg = Supp.warnP say dummyPos msg</span></span>
+<span class="lineno">  200 </span>
+<span class="lineno">  201 </span>    <span class="decl"><span class="istickedoff">noteN msg = Supp.noteN say msg</span></span>
+<span class="lineno">  202 </span>    <span class="decl"><span class="nottickedoff">noteP pos msg = Supp.noteP say pos msg</span></span>
+<span class="lineno">  203 </span>    <span class="decl"><span class="nottickedoff">noteX msg = Supp.noteP say dummyPos msg</span></span>
+<span class="lineno">  204 </span>
+<span class="lineno">  205 </span>    <span class="decl"><span class="nottickedoff">errN' msg = Supp.errN' say PPS.defaultOpts msg &gt;&gt; throwIO (Fatal False)</span></span>
+<span class="lineno">  206 </span>    <span class="decl"><span class="nottickedoff">errP' pos msg = Supp.errP' say PPS.defaultOpts pos msg &gt;&gt; throwIO (Fatal False)</span></span>
+<span class="lineno">  207 </span>    -- XXX: same as above
+<span class="lineno">  208 </span>    <span class="decl"><span class="nottickedoff">errX' msg = Supp.errN' say PPS.defaultOpts msg &gt;&gt; throwIO (Fatal True)</span></span>
+<span class="lineno">  209 </span>
+<span class="lineno">  210 </span>    -- XXX: These can't be handled correctly in IO; they need state.
+<span class="lineno">  211 </span>    <span class="decl"><span class="nottickedoff">errDN' msg = Supp.errN' say PPS.defaultOpts msg &gt;&gt; throwIO (Fatal False)</span></span>
+<span class="lineno">  212 </span>    <span class="decl"><span class="nottickedoff">errDP' pos msg = Supp.errP' say PPS.defaultOpts pos msg &gt;&gt; throwIO (Fatal False)</span></span>
+<span class="lineno">  213 </span>    -- XXX: same as above
+<span class="lineno">  214 </span>    <span class="decl"><span class="nottickedoff">errDX' msg = Supp.errN' say PPS.defaultOpts msg &gt;&gt; throwIO (Fatal True)</span></span>
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>    <span class="decl"><span class="nottickedoff">warnN' msg = Supp.warnN' say PPS.defaultOpts msg</span></span>
+<span class="lineno">  217 </span>    <span class="decl"><span class="nottickedoff">warnP' pos msg = Supp.warnP' say PPS.defaultOpts pos msg</span></span>
+<span class="lineno">  218 </span>    <span class="decl"><span class="nottickedoff">warnX' msg = Supp.warnP' say PPS.defaultOpts dummyPos msg</span></span>
 <span class="lineno">  219 </span>
-<span class="lineno">  220 </span>    <span class="decl"><span class="nottickedoff">warnN' msg = Supp.warnN' say PPS.defaultOpts msg</span></span>
-<span class="lineno">  221 </span>    <span class="decl"><span class="nottickedoff">warnP' pos msg = Supp.warnP' say PPS.defaultOpts pos msg</span></span>
-<span class="lineno">  222 </span>    <span class="decl"><span class="nottickedoff">warnX' msg = Supp.warnP' say PPS.defaultOpts dummyPos msg</span></span>
+<span class="lineno">  220 </span>    <span class="decl"><span class="nottickedoff">noteN' msg = Supp.noteN' say PPS.defaultOpts msg</span></span>
+<span class="lineno">  221 </span>    <span class="decl"><span class="nottickedoff">noteP' pos msg = Supp.noteP' say PPS.defaultOpts pos msg</span></span>
+<span class="lineno">  222 </span>    <span class="decl"><span class="nottickedoff">noteX' msg = Supp.noteP' say PPS.defaultOpts dummyPos msg</span></span>
 <span class="lineno">  223 </span>
-<span class="lineno">  224 </span>    <span class="decl"><span class="nottickedoff">noteN' msg = Supp.noteN' say PPS.defaultOpts msg</span></span>
-<span class="lineno">  225 </span>    <span class="decl"><span class="nottickedoff">noteP' pos msg = Supp.noteP' say PPS.defaultOpts pos msg</span></span>
-<span class="lineno">  226 </span>    <span class="decl"><span class="nottickedoff">noteX' msg = Supp.noteP' say PPS.defaultOpts dummyPos msg</span></span>
-<span class="lineno">  227 </span>
-<span class="lineno">  228 </span>    <span class="decl"><span class="nottickedoff">checkFail = pure ()</span></span>
-<span class="lineno">  229 </span>
-<span class="lineno">  230 </span>    <span class="decl"><span class="nottickedoff">unimplemented loc msg = do</span>
-<span class="lineno">  231 </span><span class="spaces">        </span><span class="nottickedoff">let msglines = Supp.unimplementedMessage loc msg</span>
-<span class="lineno">  232 </span><span class="spaces">        </span><span class="nottickedoff">mapM_ say msglines</span>
-<span class="lineno">  233 </span><span class="spaces">        </span><span class="nottickedoff">throwIO (Fatal False)</span></span>
-<span class="lineno">  234 </span>
-<span class="lineno">  235 </span>    -- XXX: this implementation is a very weak placeholder
-<span class="lineno">  236 </span>    <span class="decl"><span class="nottickedoff">progressStart phase = say phase</span></span>
-<span class="lineno">  237 </span>    <span class="decl"><span class="nottickedoff">progressStep phase = say phase</span></span>
-<span class="lineno">  238 </span>    <span class="decl"><span class="nottickedoff">progressAmount n mm = do</span>
-<span class="lineno">  239 </span><span class="spaces">        </span><span class="nottickedoff">let n' = Text.pack $ show n</span>
-<span class="lineno">  240 </span><span class="spaces">            </span><span class="nottickedoff">m' = case mm of</span>
-<span class="lineno">  241 </span><span class="spaces">                </span><span class="nottickedoff">Nothing -&gt; &quot;unknown&quot;</span>
-<span class="lineno">  242 </span><span class="spaces">                </span><span class="nottickedoff">Just m -&gt; Text.pack $ show m</span>
-<span class="lineno">  243 </span><span class="spaces">        </span><span class="nottickedoff">TextIO.putStr $ &quot;(&quot; &lt;&gt; n' &lt;&gt; &quot; of &quot; &lt;&gt; m' &lt;&gt; &quot;)\r&quot;</span></span>
-<span class="lineno">  244 </span>    <span class="decl"><span class="nottickedoff">progressInterim msg = do</span>
-<span class="lineno">  245 </span><span class="spaces">        </span><span class="nottickedoff">TextIO.putStr &quot;\n&quot;</span>
-<span class="lineno">  246 </span><span class="spaces">        </span><span class="nottickedoff">say msg</span></span>
-<span class="lineno">  247 </span>    <span class="decl"><span class="nottickedoff">progressInterim' msg = do</span>
-<span class="lineno">  248 </span><span class="spaces">        </span><span class="nottickedoff">TextIO.putStr &quot;\n&quot;</span>
-<span class="lineno">  249 </span><span class="spaces">        </span><span class="nottickedoff">say $ PPS.renderText PPS.defaultOpts msg</span></span>
-<span class="lineno">  250 </span>    <span class="decl"><span class="nottickedoff">progressEnd =</span>
-<span class="lineno">  251 </span><span class="spaces">        </span><span class="nottickedoff">TextIO.putStr &quot;\n&quot;</span></span>
+<span class="lineno">  224 </span>    <span class="decl"><span class="nottickedoff">checkFail = pure ()</span></span>
+<span class="lineno">  225 </span>
+<span class="lineno">  226 </span>    <span class="decl"><span class="nottickedoff">unimplemented loc msg = do</span>
+<span class="lineno">  227 </span><span class="spaces">        </span><span class="nottickedoff">let msglines = Supp.unimplementedMessage loc msg</span>
+<span class="lineno">  228 </span><span class="spaces">        </span><span class="nottickedoff">mapM_ say msglines</span>
+<span class="lineno">  229 </span><span class="spaces">        </span><span class="nottickedoff">throwIO (Fatal False)</span></span>
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>    -- XXX: this implementation is a very weak placeholder
+<span class="lineno">  232 </span>    <span class="decl"><span class="nottickedoff">progressStart phase = say phase</span></span>
+<span class="lineno">  233 </span>    <span class="decl"><span class="nottickedoff">progressStep phase = say phase</span></span>
+<span class="lineno">  234 </span>    <span class="decl"><span class="nottickedoff">progressAmount n mm = do</span>
+<span class="lineno">  235 </span><span class="spaces">        </span><span class="nottickedoff">let n' = Text.pack $ show n</span>
+<span class="lineno">  236 </span><span class="spaces">            </span><span class="nottickedoff">m' = case mm of</span>
+<span class="lineno">  237 </span><span class="spaces">                </span><span class="nottickedoff">Nothing -&gt; &quot;unknown&quot;</span>
+<span class="lineno">  238 </span><span class="spaces">                </span><span class="nottickedoff">Just m -&gt; Text.pack $ show m</span>
+<span class="lineno">  239 </span><span class="spaces">        </span><span class="nottickedoff">TextIO.putStr $ &quot;(&quot; &lt;&gt; n' &lt;&gt; &quot; of &quot; &lt;&gt; m' &lt;&gt; &quot;)\r&quot;</span></span>
+<span class="lineno">  240 </span>    <span class="decl"><span class="nottickedoff">progressInterim msg = do</span>
+<span class="lineno">  241 </span><span class="spaces">        </span><span class="nottickedoff">TextIO.putStr &quot;\n&quot;</span>
+<span class="lineno">  242 </span><span class="spaces">        </span><span class="nottickedoff">say msg</span></span>
+<span class="lineno">  243 </span>    <span class="decl"><span class="nottickedoff">progressInterim' msg = do</span>
+<span class="lineno">  244 </span><span class="spaces">        </span><span class="nottickedoff">TextIO.putStr &quot;\n&quot;</span>
+<span class="lineno">  245 </span><span class="spaces">        </span><span class="nottickedoff">say $ PPS.renderText PPS.defaultOpts msg</span></span>
+<span class="lineno">  246 </span>    <span class="decl"><span class="nottickedoff">progressEnd =</span>
+<span class="lineno">  247 </span><span class="spaces">        </span><span class="nottickedoff">TextIO.putStr &quot;\n&quot;</span></span>
 
 </pre>
 </body>
