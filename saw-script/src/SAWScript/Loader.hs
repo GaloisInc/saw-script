@@ -97,10 +97,8 @@ seenSetInsert x ref = do
 wrapDir :: FilePath -> IO [Stmt] -> IO [Stmt]
 wrapDir dir m = do
     stmts <- m
-    -- XXX this is here to avoid reindenting, remove later
-    pure $
-                  let pos = PosInternal "pushd/popd derived from include" in
-                  [StmtPushdir pos dir] ++ stmts ++ [StmtPopdir pos]
+    let pos = PosInternal "pushd/popd derived from include"
+    pure $ [StmtPushdir pos dir] ++ stmts ++ [StmtPopdir pos]
 
 -- | Read some SAWScript text, using the selected parser entry point.
 --
@@ -277,23 +275,21 @@ readSchemaPattern ::
     IO SchemaPattern
 readSchemaPattern _opts fileName environ rbenv avail str = do
   pat <- readAnyIO fileName str parseSchemaPattern
-  -- XXX this is here to avoid reindenting, remove later
-  do
-          let Environ varenv tyenv _cryenv = environ
+  let Environ varenv tyenv _cryenv = environ
 
-          -- XXX it should not be necessary to do this munging
-          --
-          -- Note that we need to flatten the scopes we have here
-          -- (outside the typechecker) in order to have the union with
-          -- the rebindable env to work right.
-          let squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)
-              varenv' = Map.map squash $ ScopedMap.flatten varenv
-              rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)
-              rbenv' = Map.map rbsquash rbenv
-              varenv'' = Map.union varenv' rbenv'
-              varenv''' = ScopedMap.seed varenv''
+  -- XXX it should not be necessary to do this munging
+  --
+  -- Note that we need to flatten the scopes we have here
+  -- (outside the typechecker) in order to have the union with
+  -- the rebindable env to work right.
+  let squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)
+      varenv' = Map.map squash $ ScopedMap.flatten varenv
+      rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)
+      rbenv' = Map.map rbsquash rbenv
+      varenv'' = Map.union varenv' rbenv'
+      varenv''' = ScopedMap.seed varenv''
 
-          dispatchMsgs' $ checkSchemaPattern avail varenv''' tyenv pat
+  dispatchMsgs' $ checkSchemaPattern avail varenv''' tyenv pat
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
@@ -312,39 +308,35 @@ readExpression opts fileName environ rbenv avail str = do
 
   expr0 <- readAnyIO fileName str parseExpression
   expr <- resolveIncludes 0{-depth-} seen incpath opts Inc.processExpr expr0
-  -- XXX this is here to avoid reindenting, remove later
-  do
-           let Environ varenv tyenv _cryenvs = environ
+  let Environ varenv tyenv _cryenvs = environ
 
-           -- XXX it should not be necessary to do this munging
-           let squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
-               varenv' = Map.map squash $ ScopedMap.flatten varenv
-               rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
-               rbenv' = Map.map rbsquash rbenv
-               varenv'' = Map.union varenv' rbenv'
-               varenv''' = ScopedMap.seed varenv''
+  -- XXX it should not be necessary to do this munging
+  let squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
+      varenv' = Map.map squash $ ScopedMap.flatten varenv
+      rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
+      rbenv' = Map.map rbsquash rbenv
+      varenv'' = Map.union varenv' rbenv'
+      varenv''' = ScopedMap.seed varenv''
 
-           -- XXX: also it shouldn't be necessary to do this wrappery
-           let pos = Pos.getPos expr
-               decl = Decl pos (PWild pos Nothing) Nothing expr
+  -- XXX: also it shouldn't be necessary to do this wrappery
+  let pos = Pos.getPos expr
+      decl = Decl pos (PWild pos Nothing) Nothing expr
 
-           decl' <- dispatchMsgs' $ checkDecl avail varenv''' tyenv decl
+  decl' <- dispatchMsgs' $ checkDecl avail varenv''' tyenv decl
 
-           -- XXX this is here to avoid reindenting, remove later
-           pure $
-                   let expr' = dDef decl'
-                       schema = case dType decl' of
-                         Just sch -> sch
-                         Nothing ->
-                             -- If the typechecker didn't insert a type, it's bust,
-                             -- so panic. Not much point in printing the expression
-                             -- or position in panic, since it's what the user just
-                             -- typed.
-                             panic "readExpressionChecked" [
-                                 "Typechecker failed to produce a type"
-                             ]
-                   in
-                   (schema, expr')
+  let expr' = dDef decl'
+      schema = case dType decl' of
+        Just sch -> sch
+        Nothing ->
+            -- If the typechecker didn't insert a type, it's bust,
+            -- so panic. Not much point in printing the expression
+            -- or position in panic, since it's what the user just
+            -- typed.
+            panic "readExpressionChecked" [
+                "Typechecker failed to produce a type"
+            ]
+
+  pure (schema, expr')
 
 -- | Read statements from a string. This is used by the REPL evaluator.
 --   Doesn't run the typechecker (yet).
@@ -396,28 +388,26 @@ includeFile ::
     Int -> SeenSet -> IncludePath -> Options -> FilePath -> Bool -> IO [Stmt]
 includeFile depth seen incpath opts fname once = do
   fname' <- locateFile incpath fname
-  -- XXX this is here to avoid reindenting, remove later
-  do
-      alreadySeen <- seenSetMember fname' seen 
-      if depth > 128 then
-          -- XXX pass in the include position as well
-          Cons.errX $ "Maximum include depth exceeded"
-      else if once && alreadySeen then do
-          -- include_once and we've already seen this file
-          Cons.noteN $ "Skipping already-included file \"" <>
-                       Text.pack fname' <> "\""
-          pure []
-      else do
-          seenSetInsert fname' seen
-          let (_current, dirs) = incpath
-              current' = takeDirectory fname'
-              incpath' = (current', dirs)
+  alreadySeen <- seenSetMember fname' seen 
+  if depth > 128 then
+      -- XXX pass in the include position as well
+      Cons.errX $ "Maximum include depth exceeded"
+  else if once && alreadySeen then do
+      -- include_once and we've already seen this file
+      Cons.noteN $ "Skipping already-included file \"" <>
+                   Text.pack fname' <> "\""
+      pure []
+  else do
+      seenSetInsert fname' seen
+      let (_current, dirs) = incpath
+          current' = takeDirectory fname'
+          incpath' = (current', dirs)
 
-          Cons.noteN $ "Loading file \"" <> Text.pack fname' <> "\""
-          ftext <- TextIO.readFile fname'
+      Cons.noteN $ "Loading file \"" <> Text.pack fname' <> "\""
+      ftext <- TextIO.readFile fname'
 
-          stmts <- wrapDir current' $ readAnyIO fname ftext parseModule
-          resolveIncludes (depth + 1) seen incpath' opts Inc.processStmts stmts
+      stmts <- wrapDir current' $ readAnyIO fname ftext parseModule
+      resolveIncludes (depth + 1) seen incpath' opts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
