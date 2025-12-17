@@ -310,7 +310,7 @@ ppTermError err =
 
 prettyTermError :: PPS.Opts -> DisplayNameEnv -> TermError -> PPS.Doc
 prettyTermError opts ne err =
-  PP.vcat $
+  PP.vsep $
   case err of
     StaleTerm t s ->
       [ "Stale term encountered:"
