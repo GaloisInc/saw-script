@@ -17,6 +17,9 @@ module SAWCore.Cache
   , newCacheIntMap
   , newCacheIntMap'
   , useCache
+  , IntCache
+  , newIntCache
+  , useIntCache
   )
 where
 
@@ -58,3 +61,18 @@ newCacheIntMap' :: (C m) => IntMap a -> m (Cache m Int a)
 newCacheIntMap' initialMap = do
   ref <- new initialMap
   return (Cache ref IntMap.lookup IntMap.insert)
+
+newtype IntCache m a = IntCache (T m (IntMap a))
+
+useIntCache :: C m => IntCache m a -> Int -> m a -> m a
+useIntCache (IntCache ref) k action =
+  do result <- IntMap.lookup k <$> Data.Ref.read ref
+     case result of
+       Just x -> pure x
+       Nothing ->
+         do x <- action
+            modify ref (IntMap.insert k x)
+            pure x
+
+newIntCache :: (C m) => m (IntCache m a)
+newIntCache = IntCache <$> new IntMap.empty
