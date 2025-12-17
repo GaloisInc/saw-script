@@ -24,7 +24,8 @@ module SAWCore.Change
   ) where
 
 import Control.Monad.Trans
-import Control.Monad.Writer
+import Control.Monad.Writer.CPS
+import Control.Monad.Trans.Writer.CPS (runWriterT, writerT)
 import Data.Monoid
 
 ----------------------------------------------------------------------
@@ -69,7 +70,7 @@ changeList f xs =
 ----------------------------------------------------------------------
 -- Change monad
 
-type Change = Writer Any
+type Change a = (a, Any)
 
 --data Change a = Original a | Modified a
 --  deriving (Show, Functor)
@@ -94,7 +95,7 @@ type Change = Writer Any
 --  modified x = Modified x
 
 commitChange :: Change a -> a
-commitChange m = fst (runWriter m)
+commitChange m = fst m
 --commitChange (Original x) = x
 --commitChange (Modified x) = x
 -- ^ Satisfies the following laws:
@@ -108,11 +109,11 @@ commitChange m = fst (runWriter m)
 --newtype ChangeT m a = ChangeT { runChangeT :: m (Change a) }
 type ChangeT = WriterT Any
 
-changeT :: Functor m => m (Change a) -> ChangeT m a
-changeT m = WriterT (fmap runWriter m)
+changeT :: Functor m => m (a, Any) -> ChangeT m a
+changeT m = writerT m
 
-runChangeT :: Monad m => ChangeT m a -> m (Change a)
-runChangeT m = writer <$> runWriterT m
+runChangeT :: Monad m => ChangeT m a -> m (a, Any)
+runChangeT m = runWriterT m
 
 --instance Functor m => Functor (ChangeT m) where
 --  fmap f (ChangeT m) = ChangeT (fmap (fmap f) m)

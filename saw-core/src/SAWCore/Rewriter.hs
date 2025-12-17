@@ -50,7 +50,6 @@ module SAWCore.Rewriter
 import Control.Monad (MonadPlus(..), (>=>), guard)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
-import qualified Control.Monad.Writer as Writer
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
@@ -690,7 +689,7 @@ reduceSharedTerm _ _ = pure Nothing
 data Convertibility = AllRules | ConvertibleRulesOnly
 
 useChangeCache :: C m => Cache m k (v, Any) -> k -> ChangeT m v -> ChangeT m v
-useChangeCache c k a = Writer.WriterT $ useCache c k (Writer.runWriterT a)
+useChangeCache c k a = changeT $ useCache c k (runChangeT a)
 
 -- | Performs an action when a value has been modified, and otherwise
 -- returns a pure value.
