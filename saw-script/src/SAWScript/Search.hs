@@ -31,10 +31,10 @@ import SAWScript.Panic (panic)
 --
 -- Type matching for :search.
 --
--- The idea with :search is that it's like Coq's search: you give it
+-- The idea with :search is that it's like Rocq's search: you give it
 -- some things to look for and it searches the current symbol table
 -- for objects that mention those things. Because (in saw-script at
--- least) we aren't in Coq's dependently-typed world and we have
+-- least) we aren't in Rocq's dependently-typed world and we have
 -- stratified values and types, and because most of what we want to
 -- search for will be builtins that have no actual body to examine,
 -- the things we look for will be types.
