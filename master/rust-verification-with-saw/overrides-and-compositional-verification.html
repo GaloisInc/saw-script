@@ -158,15 +158,14 @@ however, as the same principles of compositional verification apply whether the
 implementation of <code class="docutils literal notranslate"><span class="pre">g</span></code> is small or large.</p>
 <p>The first step of compositional verification is to prove a spec for <code class="docutils literal notranslate"><span class="pre">g</span></code>, the
 callee function:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">g_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
 
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
 
 <span class="n">g_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::g&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">g_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>There’s nothing that different about this particular proof from the proofs
@@ -175,18 +174,17 @@ calling <code class="docutils literal notranslate"><span class="pre">mir_verify<
 override”). This part is important, as we will need to use <code class="docutils literal notranslate"><span class="pre">g_ov</span></code> shortly.</p>
 <p>The next step is to write a spec for <code class="docutils literal notranslate"><span class="pre">f</span></code>. Since <code class="docutils literal notranslate"><span class="pre">g</span></code> adds <code class="docutils literal notranslate"><span class="pre">1</span></code> to its argument,
 <code class="docutils literal notranslate"><span class="pre">f</span></code> will add <code class="docutils literal notranslate"><span class="pre">3</span></code> to its argument:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
 
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
+
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>Again, nothing too surprising. Now let’s prove <code class="docutils literal notranslate"><span class="pre">f</span></code> against <code class="docutils literal notranslate"><span class="pre">f_spec</span></code> by using
 <code class="docutils literal notranslate"><span class="pre">g_ov</span></code> as a compositional override:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">g_even_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>Here, note that instead of passing an empty list (<code class="docutils literal notranslate"><span class="pre">[]</span></code>) as we have done before,
@@ -236,9 +234,7 @@ the right override depending on the shape of the argument when invoking the
 function being overridden.</p>
 <p>For example, let’s suppose that we wrote different <code class="docutils literal notranslate"><span class="pre">g</span></code> specs, one where the
 argument to <code class="docutils literal notranslate"><span class="pre">g</span></code> is even, and another where the argument to <code class="docutils literal notranslate"><span class="pre">g</span></code> is odd:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">g_even_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
 
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
 
@@ -256,13 +252,11 @@ argument to <code class="docutils literal notranslate"><span class="pre">g</span
 
 <span class="n">g_even_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::g&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">g_even_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 <span class="n">g_odd_ov</span><span class="w">  </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::g&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">g_odd_spec</span><span class="w">  </span><span class="n">z3</span><span class="p">;</span>
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_even_ov</span><span class="p">,</span><span class="w"> </span><span class="n">g_odd_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>We can then prove <code class="docutils literal notranslate"><span class="pre">f</span></code> compositionally by passing both of the <code class="docutils literal notranslate"><span class="pre">g</span></code> overrides to
 <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_even_ov</span><span class="p">,</span><span class="w"> </span><span class="n">g_odd_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>Like before, this will successfully verify. The only different now is that SAW
 will print output involving two overrides instead of just one:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[20:48:07.649] Simulating overrides/96c5af24::f[0] ...</span>
@@ -277,9 +271,6 @@ of a compositional verification, then SAW <em>must</em> apply an override whenev
 invokes that function during simulation. If SAW cannot find a matching
 override, then the verification will fail. For instance, consider what would
 happen if you tried proving <code class="docutils literal notranslate"><span class="pre">f</span></code> like so:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_even_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>This time, we supply one override for <code class="docutils literal notranslate"><span class="pre">g</span></code> that only matches when the argument
 is even. This is a problem, as SAW will not be able to find a matching override
 when the argument is odd. Indeed, SAW will fail to verify this:</p>
@@ -337,12 +328,12 @@ will always return <code class="docutils literal notranslate"><span class="pre">
 surprises just yet.</p>
 <p>Now let’s make a first attempt at verifying <code class="docutils literal notranslate"><span class="pre">foo</span></code> using compositional
 verification. First, we will write a spec for <code class="docutils literal notranslate"><span class="pre">side_effect</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">a_ref</span><span class="p">];</span>
 <span class="p">};</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code> is somewhat odd. Although it goes through the effort of
@@ -351,24 +342,18 @@ spec states that <code class="docutils literal notranslate"><span class="pre">a_
 This omission is strange, but not outright wrong—the spec just underspecifies
 what the behavior of the function is. Indeed, SAW will successfully verify this
 spec using <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">side_effect_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides_mut::side_effect&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>Next, let’s try to write a spec for <code class="docutils literal notranslate"><span class="pre">foo</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
+
+<span class="n">side_effect_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides_mut::side_effect&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>At this point, alarm bells should be going off in your head. This spec
 incorrectly states that <code class="docutils literal notranslate"><span class="pre">foo(x)</span></code> should return <code class="docutils literal notranslate"><span class="pre">x</span></code>, but it should actually
 return <code class="docutils literal notranslate"><span class="pre">0</span></code>! This looks wrong, but consider what would happen if you tried to
 verify this compositionally using our <code class="docutils literal notranslate"><span class="pre">side_effect_ov</span></code> override:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides_mut::foo&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">side_effect_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>If SAW were to simulate <code class="docutils literal notranslate"><span class="pre">foo(x)</span></code>, it would invoke create a temporary variable
 <code class="docutils literal notranslate"><span class="pre">b</span></code> and assign it to the value <code class="docutils literal notranslate"><span class="pre">x</span></code>, and then it would invoke <code class="docutils literal notranslate"><span class="pre">side_effect(&amp;mut</span> <span class="pre">b)</span></code>. At this point, the <code class="docutils literal notranslate"><span class="pre">side_effect_ov</span></code> override would apply. According to
 <code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code>, the argument to <code class="docutils literal notranslate"><span class="pre">side_effect</span></code> is not modified at all after
@@ -388,7 +373,7 @@ in practice, SAW will catch your mistake:</p>
 </div>
 <p>The line of code that SAW points to in the “<code class="docutils literal notranslate"><span class="pre">State</span> <span class="pre">of</span> <span class="pre">memory</span> <span class="pre">...</span></code>” error
 message is:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 </pre></div>
 </div>
 <p>SAW informs us that although we allocated the mutable reference <code class="docutils literal notranslate"><span class="pre">a_ref</span></code>, we
@@ -401,25 +386,25 @@ preconditions <em>must</em> declare what its value should be in the postconditio
 exceptions.</p>
 <p>Thankfully, repairing this spec is relatively straightforward. Simply add a
 <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> statement in the postconditions of <code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">a_ref</span><span class="p">];</span>
 
 <span class="w">  </span><span class="c c-Singleline">// This is new</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>Then use the correct return value in <code class="docutils literal notranslate"><span class="pre">foo_spec</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
 
 <span class="w">  </span><span class="c c-Singleline">// This is new</span>
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
+
+<span class="n">side_effect_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides_mut::side_effect&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>And now the compositional proof of <code class="docutils literal notranslate"><span class="pre">foo_spec</span></code> works!</p>
@@ -458,10 +443,6 @@ should make an effort to go back and prove the hard-to-verify function’s spec
 later, but it can be nice to try something else first.</p>
 <p>For example, here is how one can unsafely assume <code class="docutils literal notranslate"><span class="pre">g_spec</span></code> and use it in a
 compositional proof of <code class="docutils literal notranslate"><span class="pre">f_spec</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">g_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_unsafe_assume_spec</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::g&quot;</span><span class="w"> </span><span class="n">g_spec</span><span class="p">;</span>
-<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>It should be emphasized that when we say “<code class="docutils literal notranslate"><span class="pre">unsafe</span></code>”, we really mean it.
 <code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code> can be used to prove specs that are blatantly wrong,
 so use it with caution.</p>

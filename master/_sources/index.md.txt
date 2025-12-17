@@ -8,7 +8,7 @@ If you are a new SAW user:
   introduces the core ideas of using SAW to verify LLVM/Java programs.
   This is the fastest way to get started with SAW for most use-cases.
 - [**Rust Verification with SAW**](rust-verification-with-saw/index) introduces
-  SAW's experimental support for Rust/MIR verification.
+  SAW's support for Rust/MIR verification.
   If you would like to be introduced to SAW at the cutting-edge, this is the
   right place to start (the LLVM/Java material is _not_ prerequisite).
 

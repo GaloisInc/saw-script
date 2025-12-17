@@ -341,9 +341,9 @@ which is approximately 4.6 megabytes when uncompressed.</p>
 <p>Now that we’ve built the <code class="docutils literal notranslate"><span class="pre">salsa20</span></code> crate, it’s time to start writing some
 proofs! Let’s start a new <code class="docutils literal notranslate"><span class="pre">code/salsa20/salsa20.saw</span></code> file as fill it in with
 the usual preamble:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">enable_experimental</span><span class="p">;</span>
-
-<span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_load_module</span><span class="w"> </span><span class="s2">&quot;salsa20.linked-mir.json&quot;</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_load_module</span><span class="w"> </span><span class="s2">&quot;salsa20.linked-mir.json&quot;</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="s2">&quot;Salsa20.cry&quot;</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="s2">&quot;Salsa20Extras.cry&quot;</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>We are also going to need to make use of the Cryptol implementation of the
@@ -351,7 +351,7 @@ Salsa20 spec, which is defined in
 <a class="reference external" href="https://github.com/GaloisInc/saw-script/tree/master/doc/rust-tutorial/code/salsa20/Salsa20.cry"><code class="docutils literal notranslate"><span class="pre">code/salsa20/Salsa20.cry</span></code></a>.
 SAW allows you to import standalone Cryptol <code class="docutils literal notranslate"><span class="pre">.cry</span></code> files by using the <code class="docutils literal notranslate"><span class="pre">import</span></code>
 command:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">&quot;Salsa20.cry&quot;</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span>
 </pre></div>
 </div>
 <p>As an aside, note that we have also checked in a
@@ -421,28 +421,26 @@ argument in the Rust <code class="docutils literal notranslate"><span class="pre
 too much yet. Our SAW spec is going to involve <code class="docutils literal notranslate"><span class="pre">quarterround</span></code> <em>somehow</em>—we just
 have to figure out how to make it fit.</p>
 <p>Let’s start filling out the SAW spec for <code class="docutils literal notranslate"><span class="pre">quarter_round</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">quarter_round_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">b</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;b&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>We are going to need some fresh variables for the <code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">b</span></code>, <code class="docutils literal notranslate"><span class="pre">c</span></code>, and <code class="docutils literal notranslate"><span class="pre">d</span></code>
 arguments:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">a</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
-<span class="w">  </span><span class="n">b</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;b&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
-<span class="w">  </span><span class="n">c</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;c&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">c</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;c&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
 <span class="w">  </span><span class="n">d</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;d&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
+<span class="w">  </span><span class="n">state_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
+<span class="w">  </span><span class="n">state_arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 </pre></div>
 </div>
 <p>We will also need to allocate a reference for the <code class="docutils literal notranslate"><span class="pre">state</span></code> argument. The
 reference’s underlying type is <code class="docutils literal notranslate"><span class="pre">STATE_WORDS</span></code> (<code class="docutils literal notranslate"><span class="pre">16</span></code>) elements long:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">state_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="n">state_arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">state_arr</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">state_arr</span><span class="p">);</span>
+
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a</span>
 </pre></div>
 </div>
 <p>Finally, we will need to pass these arguments to the function:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a</span>
-<span class="w">                   </span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">b</span>
-<span class="w">                   </span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">c</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">                   </span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">c</span>
 <span class="w">                   </span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">d</span>
 <span class="w">                   </span><span class="p">,</span><span class="w"> </span><span class="n">state_ref</span>
 <span class="w">                   </span><span class="p">];</span>
@@ -461,12 +459,8 @@ as expected.</p>
 <span class="go">...</span>
 <span class="go">[23:16:05.080] Type errors:</span>
 <span class="go">  salsa20.saw:12:39-12:68: Unbound variable: &quot;STATE_WORDS&quot; (salsa20.saw:12:49-12:60)</span>
-<span class="go">Note that some built-in commands are available only after running</span>
-<span class="go">either `enable_deprecated` or `enable_experimental`.</span>
 
 <span class="go">  salsa20/salsa20.saw:11:31-11:60: Unbound variable: &quot;STATE_WORDS&quot; (salsa20.saw:11:41-11:52)</span>
-<span class="go">Note that some built-in commands are available only after running</span>
-<span class="go">either `enable_deprecated` or `enable_experimental`.</span>
 </pre></div>
 </div>
 <p>We’ve already run into some type errors. Not too surprising, considering this
@@ -474,7 +468,7 @@ was our first attempt. The error message contains that <code class="docutils lit
 unbound. This makes sense if you think about it, as <code class="docutils literal notranslate"><span class="pre">STATE_WORDS</span></code> is defined in
 the Rust code, but not in the SAW file itself. Let’s fix that by adding this
 line to <code class="docutils literal notranslate"><span class="pre">salsa20.saw</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mi">16</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">quarter_round_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>That change fixes the type errors in <code class="docutils literal notranslate"><span class="pre">quarter_round_spec</span></code>. Hooray! Let’s press
@@ -483,10 +477,6 @@ on.</p>
 know what the full identifier for the <code class="docutils literal notranslate"><span class="pre">quarter_round</span></code> function is. Because it
 is defined in the <code class="docutils literal notranslate"><span class="pre">salsa20</span></code> crate and in the <code class="docutils literal notranslate"><span class="pre">core.rs</span></code> file, so we would expect
 the identifier to be named <code class="docutils literal notranslate"><span class="pre">salsa20::core::quarter_round</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">quarter_round_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core::quarter_round&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">quarter_round_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>However, SAW disagrees:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[00:22:56.970] Stack trace:</span>
 <span class="go">&quot;mir_verify&quot; (salsa20.saw:26:3-26:13)</span>
@@ -500,10 +490,6 @@ this for yourself by digging around in the MIR JSON file, if you’d like. (In a
 future version of SAW, one will be able to <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/1980">look this name
 up</a> more easily.)</p>
 <p>Once we change the identifier:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">quarter_round_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::quarter_round&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">quarter_round_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>We can run SAW once more. This time, SAW complains about a different thing:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">[01:00:19.697] Verifying salsa20/10e438b3::core#</span><span class="m">1</span><span class="o">[</span><span class="m">0</span><span class="o">]</span>::quarter_round<span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span>...
 <span class="gp">[01:00:19.714] Simulating salsa20/10e438b3::core#</span><span class="m">1</span><span class="o">[</span><span class="m">0</span><span class="o">]</span>::quarter_round<span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span>...
@@ -522,10 +508,10 @@ argument to be 16 or greater, which would cause the index into <code class="docu
 out of bounds.</p>
 <p>In practice, however, the only values of <code class="docutils literal notranslate"><span class="pre">a</span></code>/<code class="docutils literal notranslate"><span class="pre">b</span></code>/<code class="docutils literal notranslate"><span class="pre">c</span></code>/<code class="docutils literal notranslate"><span class="pre">d</span></code> that we will use are
 less than 16. We can express this fact as a precondition:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">a</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="p">`</span><span class="kt">STATE</span><span class="nf">_</span><span class="kt">WORDS</span><span class="w"> </span><span class="o">/</span><span class="nf">\</span>
-<span class="w">                 </span><span class="nf">b</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="p">`</span><span class="kt">STATE</span><span class="nf">_</span><span class="kt">WORDS</span><span class="w"> </span><span class="o">/</span><span class="nf">\</span>
-<span class="w">                 </span><span class="nf">c</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="p">`</span><span class="kt">STATE</span><span class="nf">_</span><span class="kt">WORDS</span><span class="w"> </span><span class="o">/</span><span class="nf">\</span>
-<span class="w">                 </span><span class="nf">d</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="p">`</span><span class="kt">STATE</span><span class="nf">_</span><span class="kt">WORDS</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">                 </span><span class="n">c</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="err">`</span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="o">/</span><span class="p">\</span>
+<span class="w">                 </span><span class="n">d</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="err">`</span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="p">}};</span>
+<span class="w">  </span><span class="n">state_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
+<span class="w">  </span><span class="n">state_arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 </pre></div>
 </div>
 <p>That is enough to finally get SAW to verify this very stripped-down version of
@@ -545,9 +531,8 @@ in-place bulk update of the <code class="docutils literal notranslate"><span cla
 <p>In Cryptol, one can look up elements of an array using the <code class="docutils literal notranslate"><span class="pre">(&#64;&#64;)</span></code> function,
 and one can perform in-place array updates using the <code class="docutils literal notranslate"><span class="pre">updates</span></code> function.
 This translates into a postcondition that looks like this:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">indices</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">[</span><span class="nf">a</span><span class="p">,</span><span class="w"> </span><span class="nf">b</span><span class="p">,</span><span class="w"> </span><span class="nf">c</span><span class="p">,</span><span class="w"> </span><span class="nf">d</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">state_arr&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">updates</span><span class="w"> </span><span class="nf">state_arr</span><span class="w"> </span><span class="nf">indices</span><span class="w"> </span><span class="p">(</span><span class="nf">quarterround</span><span class="w"> </span><span class="p">(</span><span class="nf">state_arr</span><span class="w"> </span><span class="o">@@</span><span class="w"> </span><span class="nf">indices</span><span class="p">))</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
-<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">state_arr&#39;</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">state_arr&#39;</span><span class="p">);</span>
+<span class="p">};</span>
 </pre></div>
 </div>
 <p>What does SAW think of this? Someone surprisingly, SAW finds a counterexample:</p>
@@ -592,9 +577,7 @@ is used in practice. The call sites are found in the <code class="docutils liter
 from a set of eight possible options. We can take advantage of this fact to
 constrain the possible set of values for <code class="docutils literal notranslate"><span class="pre">a</span></code>/<code class="docutils literal notranslate"><span class="pre">b</span></code>/<code class="docutils literal notranslate"><span class="pre">c</span></code>/<code class="docutils literal notranslate"><span class="pre">d</span></code>. The latest iteration
 of the <code class="docutils literal notranslate"><span class="pre">quarter_round_spec</span></code> is now:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">quarter_round_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">a</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
-<span class="w">  </span><span class="n">b</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;b&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">b</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;b&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
 <span class="w">  </span><span class="n">c</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;c&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
 <span class="w">  </span><span class="n">d</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;d&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">indices</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">[</span><span class="nf">a</span><span class="p">,</span><span class="w"> </span><span class="nf">b</span><span class="p">,</span><span class="w"> </span><span class="nf">c</span><span class="p">,</span><span class="w"> </span><span class="nf">d</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
@@ -610,6 +593,9 @@ of the <code class="docutils literal notranslate"><span class="pre">quarter_roun
 <span class="w">  </span><span class="n">state_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 <span class="w">  </span><span class="n">state_arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">state_arr</span><span class="p">);</span>
+
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a</span>
+<span class="w">                   </span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">b</span>
 </pre></div>
 </div>
 <p>Note that:</p>
@@ -635,11 +621,11 @@ have to wait 17 seconds on every subsequent invocation of SAW, and since we
 still have other functions to verify, this is a very real possibility. For this
 reason, it can be helpful to temporarily turn this use of <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> into a
 <code class="docutils literal notranslate"><span class="pre">mir_unsafe_assume_spec</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">quarter_round_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_unsafe_assume_spec</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::quarter_round&quot;</span><span class="w"> </span><span class="n">quarter_round_spec</span><span class="p">;</span>
-<span class="w">  </span><span class="c c-Singleline">// Temporarily commented out to save time:</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="c c-Singleline">// Temporarily commented out to save time:</span>
 <span class="w">  </span><span class="c c-Singleline">//</span>
 <span class="w">  </span><span class="c c-Singleline">// mir_verify m &quot;salsa20::core#1::quarter_round&quot; [] false quarter_round_spec z3;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="p">(</span><span class="nb">str_concat</span><span class="w"> </span><span class="s2">&quot;salsa20::rounds::R&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">show</span><span class="w"> </span><span class="n">num_rounds</span><span class="p">))</span><span class="w"> </span><span class="p">[];</span>
 </pre></div>
 </div>
 <p>Once we are done with the entire proof, we can come back and remove this use of
@@ -705,49 +691,47 @@ this a bit later.</p>
 <p>Alright, enough chatter—time to start writing a proof. First, let’s look up the
 <code class="docutils literal notranslate"><span class="pre">R8</span></code> ADT. This is defined in the <code class="docutils literal notranslate"><span class="pre">salsa20</span></code> crate in the <code class="docutils literal notranslate"><span class="pre">rounds.rs</span></code> file, so
 its identifier becomes <code class="docutils literal notranslate"><span class="pre">salsa20::rounds::R8</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::rounds::R8&quot;</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::Core&quot;</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">r_adt</span><span class="p">];</span>
 </pre></div>
 </div>
 <p>Next, we need to look up the <code class="docutils literal notranslate"><span class="pre">PhantomData&lt;R8&gt;</span></code> ADT, which is used in the
 <code class="docutils literal notranslate"><span class="pre">rounds</span></code> field of the <code class="docutils literal notranslate"><span class="pre">Core&lt;R8&gt;</span></code> struct. This is defined in <code class="docutils literal notranslate"><span class="pre">core::marker</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;core::marker::PhantomData&quot;</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">r_adt</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span>
 </pre></div>
 </div>
 <p>Finally, we must look up <code class="docutils literal notranslate"><span class="pre">Core&lt;R8&gt;</span></code> itself. Like <code class="docutils literal notranslate"><span class="pre">quarter_round</span></code>, the <code class="docutils literal notranslate"><span class="pre">Core</span></code>
 struct is defined in <code class="docutils literal notranslate"><span class="pre">salsa20::core#1</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::Core&quot;</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">r_adt</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">rounds_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>Now that we have the necessary prerequisites, let’s write a spec for the
 <code class="docutils literal notranslate"><span class="pre">rounds</span></code> function. First, we need to allocate a reference for the <code class="docutils literal notranslate"><span class="pre">self</span></code>
 argument:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">rounds_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">self_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">core_adt</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">self_state</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;self_state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="p">[];</span>
 </pre></div>
 </div>
 <p>Next, we need to create symbolic values for the fields of the <code class="docutils literal notranslate"><span class="pre">Core</span></code> struct,
 which <code class="docutils literal notranslate"><span class="pre">self_ref</span></code> will point to. The <code class="docutils literal notranslate"><span class="pre">self.state</span></code> field will be a fresh array,
 and the <code class="docutils literal notranslate"><span class="pre">self.rounds</span></code> field will be a simple, empty struct value:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">self_state</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;self_state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>Finally, putting all of the <code class="docutils literal notranslate"><span class="pre">self</span></code> values together:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
-<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">state_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 </pre></div>
 </div>
 <p>Next, we need a <code class="docutils literal notranslate"><span class="pre">state</span></code> argument (not to be confused with the <code class="docutils literal notranslate"><span class="pre">self.state</span></code>
 field in <code class="docutils literal notranslate"><span class="pre">Core</span></code>). This is handled much the same as it was in
 <code class="docutils literal notranslate"><span class="pre">quarter_round_spec</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">state_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="n">state_arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">state_arr</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">state_arr</span><span class="p">);</span>
+
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">self_ref</span><span class="p">,</span><span class="w"> </span><span class="n">state_ref</span><span class="p">];</span>
 </pre></div>
 </div>
 <p>Lastly, we cap it off with a call to <code class="docutils literal notranslate"><span class="pre">mir_execute_func</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">self_ref</span><span class="p">,</span><span class="w"> </span><span class="n">state_ref</span><span class="p">];</span>
-<span class="p">};</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">rounds_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
 </pre></div>
 </div>
 <p>(Again, we’re missing some postconditions describing what <code class="docutils literal notranslate"><span class="pre">self_ref</span></code> and
@@ -763,10 +747,6 @@ verify it directly—we must instead verify a particular instantiation of
 for instantiations of generic functions are (there <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/1980">will be in the
 future</a>), but it turns out
 that the identifier for <code class="docutils literal notranslate"><span class="pre">rounds::&lt;R8&gt;</span></code> is this:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">rounds_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::rounds::_inst6e4a2d7250998ef7&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">quarter_round_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">rounds_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>Note that we are using <code class="docutils literal notranslate"><span class="pre">quarter_round_ov</span></code> as a compositional override. Once
 again, SAW is happy with our work thus far:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">[03:12:35.990] Proof succeeded! salsa20/10e438b3::core#1[0]::{impl#</span><span class="m">0</span><span class="o">}[</span><span class="m">0</span><span class="o">]</span>::rounds<span class="o">[</span><span class="m">0</span><span class="o">]</span>::_inst6e4a2d7250998ef7<span class="o">[</span><span class="m">0</span><span class="o">]</span>
@@ -777,14 +757,14 @@ again, SAW is happy with our work thus far:</p>
 and <code class="docutils literal notranslate"><span class="pre">state_ref</span></code>. A closer examination of the code in the Rust <code class="docutils literal notranslate"><span class="pre">rounds</span></code> function
 reveals that the <code class="docutils literal notranslate"><span class="pre">self</span></code> argument is never modified at all, so that part is
 easy:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="p">};</span>
 </pre></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">state</span></code> argument, on the other hand, is modified in-place. This time, our
 job is made easier by the fact that <code class="docutils literal notranslate"><span class="pre">Salsa20_rounds</span></code> implements <em>exactly</em> what
 we need. Because we are instantiating <code class="docutils literal notranslate"><span class="pre">rounds</span></code> at type <code class="docutils literal notranslate"><span class="pre">R8</span></code>, we must explicitly
 state that we are using 8 rounds:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="kt">S</span><span class="nf">alsa</span><span class="mi">20</span><span class="nf">_rounds</span><span class="w"> </span><span class="mi">8</span><span class="w"> </span><span class="nf">self_state</span><span class="w"> </span><span class="nf">state_arr</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span>
 </pre></div>
 </div>
 <p>Once again, SAW is happy with our work. We’re on a roll!</p>
@@ -794,7 +774,7 @@ specify the number of rounds. The first thing that we will need to change is
 the <code class="docutils literal notranslate"><span class="pre">r_adt</span></code> definition, which is response for looking up <code class="docutils literal notranslate"><span class="pre">R8</span></code>. We want to turn
 this into a function that, depending on the user input, will look up <code class="docutils literal notranslate"><span class="pre">R8</span></code>,
 <code class="docutils literal notranslate"><span class="pre">R12</span></code>, or <code class="docutils literal notranslate"><span class="pre">R20</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="p">(</span><span class="nb">str_concat</span><span class="w"> </span><span class="s2">&quot;salsa20::rounds::R&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">show</span><span class="w"> </span><span class="n">num_rounds</span><span class="p">))</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::Core&quot;</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">r</span><span class="p">];</span>
 </pre></div>
 </div>
 <p>Where <code class="docutils literal notranslate"><span class="pre">str_concat</span></code> is a SAW function for concatenating strings together:</p>
@@ -803,42 +783,35 @@ this into a function that, depending on the user input, will look up <code class
 </pre></div>
 </div>
 <p>We also want to parameterize <code class="docutils literal notranslate"><span class="pre">phantom_data_adt</span></code> and <code class="docutils literal notranslate"><span class="pre">core_adt</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;core::marker::PhantomData&quot;</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">r</span><span class="p">];</span>
-<span class="kd">let</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::Core&quot;</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">r</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">rounds_spec</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>Next, we need to parameterize <code class="docutils literal notranslate"><span class="pre">rounds_spec</span></code> by the number of rounds. This will
 require changes in both the preconditions and postconditions. On the
 preconditions side, we must pass the number of rounds to the relevant
 functions:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">rounds_spec</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="n">num_rounds</span><span class="p">;</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
 <span class="w">  </span><span class="n">self_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="p">);</span>
 <span class="w">  </span><span class="n">self_state</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;self_state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="p">(</span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">[];</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>And on the postconditions side, we must pass the number of rounds to the
 Cryptol <code class="docutils literal notranslate"><span class="pre">Salsa20_rounds</span></code> function:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="kt">S</span><span class="nf">alsa</span><span class="mi">20</span><span class="nf">_rounds</span><span class="w"> </span><span class="p">`</span><span class="nf">num_rounds</span><span class="w"> </span><span class="nf">self_state</span><span class="w"> </span><span class="nf">state_arr</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
-<span class="p">};</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">rounds_8_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
 </pre></div>
 </div>
 <p>Finally, we must adjust the call to <code class="docutils literal notranslate"><span class="pre">rounds_spec</span></code> in the context of
 <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> so that we pick <code class="docutils literal notranslate"><span class="pre">8</span></code> as the number of rounds:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">rounds_8_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::rounds::_inst6e4a2d7250998ef7&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">quarter_round_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">rounds_spec</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">rounds_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
+<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::rounds::_instfa33e77d840484a0&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">quarter_round_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">rounds_spec</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>SAW is happy with this generalization. To demonstrate that we have generalized
 things correctly, we can also verify the same function at <code class="docutils literal notranslate"><span class="pre">R20</span></code> instead of
 <code class="docutils literal notranslate"><span class="pre">R8</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">rounds_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::rounds::_instfa33e77d840484a0&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">quarter_round_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">rounds_spec</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>The only things that we had to change were the identifier and the argument to
 <code class="docutils literal notranslate"><span class="pre">rounds_spec</span></code>. Not bad!</p>
 </section>
@@ -889,15 +862,13 @@ are 32-bit words. As a result, we have to explicitly truncate <code class="docut
 first 32 bits from each word.</p>
 <p>Returning to <code class="docutils literal notranslate"><span class="pre">salsa20.saw</span></code>, we must now make use of our new Cryptol file by
 <code class="docutils literal notranslate"><span class="pre">import</span></code>ing it at the top:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">&quot;Salsa20Extras.cry&quot;</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mi">16</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>With the <code class="docutils literal notranslate"><span class="pre">counter_setup</span></code> Cryptol implementation in scope, we can now write
 a spec for the Rust <code class="docutils literal notranslate"><span class="pre">counter_setup</span></code> function. There’s not too much to remark
 on here, as the spec proves relatively straightforward to write:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">counter_setup_spec</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="n">num_rounds</span><span class="p">;</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
 <span class="w">  </span><span class="n">self_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="p">);</span>
 <span class="w">  </span><span class="n">self_state</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;self_state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="p">(</span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">[];</span>
@@ -912,14 +883,16 @@ on here, as the spec proves relatively straightforward to write:</p>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val&#39;</span><span class="p">;</span>
 <span class="p">};</span>
+
+<span class="n">counter_setup_8_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
 </pre></div>
 </div>
 <p>We can now verify <code class="docutils literal notranslate"><span class="pre">counter_setup</span></code> against <code class="docutils literal notranslate"><span class="pre">counter_setup_spec</span></code> at lengths <code class="docutils literal notranslate"><span class="pre">8</span></code>
 and <code class="docutils literal notranslate"><span class="pre">20</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">counter_setup_8_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::counter_setup::_inst6e4a2d7250998ef7&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">counter_setup_spec</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-<span class="n">counter_setup_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">counter_setup_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
 <span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::counter_setup::_instfa33e77d840484a0&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">counter_setup_spec</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">new_raw_spec</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>That wasn’t so bad. It’s a bit unsatisfying that we had to resort to writing a
@@ -1000,14 +973,12 @@ sure to define a <code class="docutils literal notranslate"><span class="pre">BL
 <p>Now let’s write a SAW spec for <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code>. Once again, we will need to
 reference <code class="docutils literal notranslate"><span class="pre">BLOCK_SIZE</span></code> when talking about the <code class="docutils literal notranslate"><span class="pre">output</span></code>-related parts of the
 spec, so make sure to define <code class="docutils literal notranslate"><span class="pre">BLOCK_SIZE</span></code> at the top of the <code class="docutils literal notranslate"><span class="pre">.saw</span></code> file:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">BLOCK_SIZE</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mi">64</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">quarter_round_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>First, we need to declare all of our arguments, which proceeds as you would
 expect:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">apply_keystream_spec</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="n">num_rounds</span><span class="p">;</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
 <span class="w">  </span><span class="n">self_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="p">);</span>
 <span class="w">  </span><span class="n">self_state</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;self_state&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">STATE_WORDS</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="p">(</span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">[];</span>
@@ -1022,6 +993,8 @@ expect:</p>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">output</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_slice_value</span><span class="w"> </span><span class="n">output_ref</span><span class="p">;</span>
 
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">self_ref</span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">counter</span><span class="p">,</span><span class="w"> </span><span class="n">output</span><span class="p">];</span>
+
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_state&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">counter_setup</span><span class="w"> </span><span class="nf">self_state</span><span class="w"> </span><span class="nf">counter</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>What about the postconditions? We have two mutable references to contend with:
@@ -1030,24 +1003,24 @@ straightforward: the only time it is ever modified is when <code class="docutils
 called. This means that after the <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code> function has returned,
 <code class="docutils literal notranslate"><span class="pre">self_ref</span></code> will point to the results of calling the <code class="docutils literal notranslate"><span class="pre">counter_setup</span></code> Cryptol
 function:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_state&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">counter_setup</span><span class="w"> </span><span class="nf">self_state</span><span class="w"> </span><span class="nf">counter</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
-<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val&#39;</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val&#39;</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">output_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">apply_keystream</span><span class="w"> </span><span class="p">`</span><span class="nf">num_rounds</span><span class="w"> </span><span class="nf">self_state</span><span class="w"> </span><span class="nf">counter</span><span class="w"> </span><span class="nf">output_arr</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">output_ref</span></code> is where the interesting work happenings. After the Rust
 <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code> function has returned, it will point to the results of
 calling the Cryptol <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code> function that we just defined:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">output_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">apply_keystream</span><span class="w"> </span><span class="p">`</span><span class="nf">num_rounds</span><span class="w"> </span><span class="nf">self_state</span><span class="w"> </span><span class="nf">counter</span><span class="w"> </span><span class="nf">output_arr</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
-<span class="p">};</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">apply_keystream_8_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
 </pre></div>
 </div>
 <p>Finally, we can put this all together and verify <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code> against
 <code class="docutils literal notranslate"><span class="pre">apply_keystream_spec</span></code> at lengths <code class="docutils literal notranslate"><span class="pre">8</span></code> and <code class="docutils literal notranslate"><span class="pre">20</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">apply_keystream_8_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::apply_keystream::_inst6e4a2d7250998ef7&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">counter_setup_8_spec_ov</span><span class="p">,</span><span class="w"> </span><span class="n">rounds_8_spec_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">apply_keystream_spec</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-<span class="n">apply_keystream_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">apply_keystream_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
 <span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::apply_keystream::_instfa33e77d840484a0&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">counter_setup_20_spec_ov</span><span class="p">,</span><span class="w"> </span><span class="n">rounds_20_spec_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">apply_keystream_spec</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">apply_keystream_alt_spec</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">key</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;key&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">32</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
 </pre></div>
 </div>
 <p>SAW will successfully verify these. We’ve achieved victory… or have we?
@@ -1137,9 +1110,7 @@ hashing. Importantly, <code class="docutils literal notranslate"><span class="pr
 initialization. For this reason, we want to use <code class="docutils literal notranslate"><span class="pre">Salsa20_init</span></code> as the reference
 implementation of <code class="docutils literal notranslate"><span class="pre">new_raw</span></code>, not <code class="docutils literal notranslate"><span class="pre">Salsa20_expansion</span></code>.</p>
 <p>Alright, time to write a SAW spec. The first part of the spec is straightforward:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">new_raw_spec</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">key_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">32</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
-<span class="w">  </span><span class="n">key_arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;key_arr&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">32</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">key_arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;key_arr&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">32</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">key_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">key_arr</span><span class="p">);</span>
 
 <span class="w">  </span><span class="n">nonce_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">8</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
@@ -1147,22 +1118,21 @@ implementation of <code class="docutils literal notranslate"><span class="pre">n
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">nonce_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">nonce_arr</span><span class="p">);</span>
 
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">key_ref</span><span class="p">,</span><span class="w"> </span><span class="n">nonce_ref</span><span class="p">];</span>
+
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="n">num_rounds</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>As is usually the case, the postconditions are the tricky part. We know that
 the behavior of <code class="docutils literal notranslate"><span class="pre">new_raw</span></code> will roughly coincide with the <code class="docutils literal notranslate"><span class="pre">Salsa20_init</span></code>
 function, so let’s try that first:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="n">num_rounds</span><span class="p">;</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_state</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="kt">S</span><span class="nf">alsa</span><span class="mi">20</span><span class="nf">_init</span><span class="p">(</span><span class="nf">key_arr</span><span class="p">,</span><span class="w"> </span><span class="nf">nonce_arr</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="p">(</span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="p">(</span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">[];</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="p">(</span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">self_val</span><span class="p">;</span>
+<span class="p">};</span>
 </pre></div>
 </div>
 <p>If we attempt to verify this using <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">new_raw_8_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::new_raw::_inst6e4a2d7250998ef7&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">new_raw_spec</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-<span class="n">new_raw_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">new_raw_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
 <span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::new_raw::_instfa33e77d840484a0&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">new_raw_spec</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
@@ -1201,7 +1171,7 @@ value that <code class="docutils literal notranslate"><span class="pre">Salsa20_
 <p>Where <code class="docutils literal notranslate"><span class="pre">zero</span> <span class="pre">:</span> <span class="pre">[8][8]</span></code> is a Cryptol expression that returns all zeroes, and
 <code class="docutils literal notranslate"><span class="pre">(#)</span></code> is the Cryptol operator for concatenating two sequences together. Let’s
 update <code class="docutils literal notranslate"><span class="pre">new_raw_spec</span></code> to reflect this:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_state</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="kt">S</span><span class="nf">alsa</span><span class="mi">20</span><span class="nf">_init</span><span class="p">(</span><span class="nf">key_arr</span><span class="p">,</span><span class="w"> </span><span class="nf">nonce_arr</span><span class="w"> </span><span class="o">#</span><span class="w"> </span><span class="nf">zero</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="p">(</span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
 </pre></div>
 </div>
 <p>This is closer to what we want, but not quite. SAW still complains:</p>
@@ -1232,7 +1202,7 @@ function. There is a similar Cryptol function in <code class="docutils literal n
 <p>Note that <code class="docutils literal notranslate"><span class="pre">[64][8]</span></code> is the Cryptol equivalent of <code class="docutils literal notranslate"><span class="pre">[u8;</span> <span class="pre">64]</span></code>, and <code class="docutils literal notranslate"><span class="pre">[16][32]</span></code> is
 the Cryptol equivalent of <code class="docutils literal notranslate"><span class="pre">[u32;</span> <span class="pre">16]</span></code>. As such, this is exactly the function
 that we need to resolve the differences in types:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_state</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">littleendian_state</span><span class="w"> </span><span class="p">(</span><span class="kt">S</span><span class="nf">alsa</span><span class="mi">20</span><span class="nf">_init</span><span class="p">(</span><span class="nf">key_arr</span><span class="p">,</span><span class="w"> </span><span class="nf">nonce_arr</span><span class="w"> </span><span class="o">#</span><span class="w"> </span><span class="nf">zero</span><span class="p">))</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="p">(</span><span class="n">core_adt</span><span class="w"> </span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
 </pre></div>
 </div>
 <p>With that change, SAW is finally happy with <code class="docutils literal notranslate"><span class="pre">new_raw_spec</span></code> and successfully
@@ -1309,9 +1279,7 @@ the Salsa20 spec. If you assume that you invoke <code class="docutils literal no
 behavior of <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code> corresponds exactly to that of
 <code class="docutils literal notranslate"><span class="pre">Salsa20_encrypt_with_offset</span></code>. This insight will inform us how to write an
 alternative SAW spec for <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">apply_keystream_alt_spec</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">key</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;key&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">32</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
-<span class="w">  </span><span class="n">nonce</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;nonce&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">8</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">nonce</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;nonce&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">8</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
 <span class="w">  </span><span class="n">counter</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;counter&quot;</span><span class="w"> </span><span class="n">mir_u64</span><span class="p">;</span>
 
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="n">num_rounds</span><span class="p">;</span>
@@ -1321,6 +1289,8 @@ alternative SAW spec for <code class="docutils literal notranslate"><span class=
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="p">(</span><span class="n">phantom_data_adt</span><span class="w"> </span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">[];</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val</span><span class="p">;</span>
+
+<span class="w">  </span><span class="n">output_arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;output_arr&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">BLOCK_SIZE</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
 </pre></div>
 </div>
 <p>Observe the following differences between <code class="docutils literal notranslate"><span class="pre">apply_keystream_alt_spec</span></code> and our
@@ -1335,28 +1305,25 @@ is the part that encodes the assumption that <code class="docutils literal notra
 beforehand.</p></li>
 </ol>
 <p>The parts of the spec relating to <code class="docutils literal notranslate"><span class="pre">output</span></code> remain unchanged:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">output_arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;output_arr&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">BLOCK_SIZE</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
-<span class="w">  </span><span class="n">output_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="n">BLOCK_SIZE</span><span class="w"> </span><span class="n">mir_u8</span><span class="p">);</span>
-<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">output_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">output_arr</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">output_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">output_arr</span><span class="p">);</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">output</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_slice_value</span><span class="w"> </span><span class="n">output_ref</span><span class="p">;</span>
 
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">self_ref</span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">counter</span><span class="p">,</span><span class="w"> </span><span class="n">output</span><span class="p">];</span>
+
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_state&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">counter_setup</span><span class="w"> </span><span class="nf">self_state</span><span class="w"> </span><span class="nf">counter</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>The postconditions are slightly different in <code class="docutils literal notranslate"><span class="pre">apply_keystream_alt_spec</span></code>. While
 the parts relating to <code class="docutils literal notranslate"><span class="pre">self_ref</span></code> remain unchanged, we now have <code class="docutils literal notranslate"><span class="pre">output_ref</span></code>
 point to the results of calling <code class="docutils literal notranslate"><span class="pre">Salsa20_encrypt_with_offset</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_state&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">counter_setup</span><span class="w"> </span><span class="nf">self_state</span><span class="w"> </span><span class="nf">counter</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">self_val&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span><span class="w"> </span><span class="n">core_adt_inst</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">self_state&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">self_rounds</span><span class="p">];</span>
-<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val&#39;</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">self_ref</span><span class="w"> </span><span class="n">self_val&#39;</span><span class="p">;</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">output_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="kt">S</span><span class="nf">alsa</span><span class="mi">20</span><span class="nf">_encrypt_with_offset</span><span class="p">(`</span><span class="nf">num_rounds</span><span class="p">,</span><span class="w"> </span><span class="nf">key</span><span class="p">,</span><span class="w"> </span><span class="nf">nonce</span><span class="p">,</span><span class="w"> </span><span class="nf">counter</span><span class="p">,</span><span class="w"> </span><span class="nf">output_arr</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
 </pre></div>
 </div>
 <p>Tying this all together, we call <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>, making sure to use compositional
 overrides involving <code class="docutils literal notranslate"><span class="pre">counter_setup</span></code> and <code class="docutils literal notranslate"><span class="pre">rounds</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">apply_keystream_alt_8_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::apply_keystream::_inst6e4a2d7250998ef7&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">counter_setup_8_spec_ov</span><span class="p">,</span><span class="w"> </span><span class="n">rounds_8_spec_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">apply_keystream_alt_spec</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
-<span class="n">apply_keystream_alt_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">apply_keystream_alt_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
 <span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::apply_keystream::_instfa33e77d840484a0&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">counter_setup_20_spec_ov</span><span class="p">,</span><span class="w"> </span><span class="n">rounds_20_spec_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">apply_keystream_alt_spec</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
@@ -1387,9 +1354,7 @@ Yices (a different SMT solver) <em>can</em> spot the patterns needed to prove
 <code class="docutils literal notranslate"><span class="pre">apply_keystream_alt_spec</span></code> immediately. Fortunately, SAW includes support for
 both Z3 and Yices. In order to switch from Z3 to Yices, swap out the <code class="docutils literal notranslate"><span class="pre">z3</span></code> proof
 script with <code class="docutils literal notranslate"><span class="pre">yices</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">apply_keystream_alt_8_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
-<span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::apply_keystream::_inst6e4a2d7250998ef7&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">counter_setup_8_spec_ov</span><span class="p">,</span><span class="w"> </span><span class="n">rounds_8_spec_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">apply_keystream_alt_spec</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="n">yices</span><span class="p">;</span>
-<span class="n">apply_keystream_alt_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">apply_keystream_alt_20_spec_ov</span><span class="w"> </span><span class="ow">&lt;-</span>
 <span class="w">  </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;salsa20::core#1::{impl#0}::apply_keystream::_instfa33e77d840484a0&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">counter_setup_20_spec_ov</span><span class="p">,</span><span class="w"> </span><span class="n">rounds_20_spec_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">(</span><span class="n">apply_keystream_alt_spec</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="n">yices</span><span class="p">;</span>
 </pre></div>
 </div>

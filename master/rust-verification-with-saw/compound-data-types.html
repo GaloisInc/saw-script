@@ -141,9 +141,7 @@ ranging from <code class="docutils literal notranslate"><span class="pre">0</spa
 program to crash, since the <code class="docutils literal notranslate"><span class="pre">idx</span></code> will be out of the bounds of <code class="docutils literal notranslate"><span class="pre">arr</span></code>.</p>
 <p>SAW is suited to checking for these sorts of out-of-bound accesses. Let’s write
 an incorrect spec for <code class="docutils literal notranslate"><span class="pre">index</span></code> to illustrate this:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">index_fail_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;arr&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="n">idx</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;idx&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">idx</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;idx&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
 
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">arr</span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">idx</span><span class="p">];</span>
 
@@ -186,9 +184,7 @@ that acts much like arrays do in MIR.</p></li>
 </pre></div>
 </div>
 <p>We can repair this spec by adding some preconditions:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">index_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">arr</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;arr&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="n">idx</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;idx&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">idx</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;idx&quot;</span><span class="w"> </span><span class="n">mir_usize</span><span class="p">;</span>
 <span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&lt;</span><span class="ow">=</span><span class="w"> </span><span class="nf">idx</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span><span class="w"> </span><span class="c c-Singleline">// Lower bound of idx</span>
 <span class="w">  </span><span class="n">mir_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">idx</span><span class="w"> </span><span class="o">&lt;</span><span class="ow">=</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span><span class="w"> </span><span class="c c-Singleline">// Upper bound of idx</span>
 
@@ -196,6 +192,8 @@ that acts much like arrays do in MIR.</p></li>
 
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">arr</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="nf">idx</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
+
+<span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_load_module</span><span class="w"> </span><span class="s2">&quot;arrays.linked-mir.json&quot;</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>An alternative way of writing this spec is by using SAW’s <code class="docutils literal notranslate"><span class="pre">mir_array_value</span></code>
@@ -207,9 +205,7 @@ command:</p>
 <p>Here, the <code class="docutils literal notranslate"><span class="pre">MIRType</span></code> argument represents the element type, and the list of
 <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> arguments are the element values of the array. We can rewrite
 <code class="docutils literal notranslate"><span class="pre">index_spec</span></code> using <code class="docutils literal notranslate"><span class="pre">mir_array_value</span></code> like so:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">index_alt_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">arr0</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;arr0&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-<span class="w">  </span><span class="n">arr1</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;arr1&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">arr1</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;arr1&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
 <span class="w">  </span><span class="n">arr2</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;arr2&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">arr</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_array_value</span><span class="w"> </span><span class="n">mir_u32</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">arr0</span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">arr1</span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">arr2</span><span class="p">];</span>
 
@@ -220,6 +216,7 @@ command:</p>
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">arr</span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">idx</span><span class="p">];</span>
 
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">[</span><span class="nf">arr</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nf">arr</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nf">arr</span><span class="mi">2</span><span class="p">]</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="nf">idx</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
 </pre></div>
 </div>
 <p>Here, <code class="docutils literal notranslate"><span class="pre">[arr0,</span> <span class="pre">arr1,</span> <span class="pre">arr2]</span></code> is Cryptol notation for constructing a length-3
@@ -255,13 +252,12 @@ types. For example:</p>
 In addition, one can embed MIR tuples into Cryptol, as Cryptol also includes
 tuple types whose fields can be indexed with <code class="docutils literal notranslate"><span class="pre">.0</span></code>, <code class="docutils literal notranslate"><span class="pre">.1</span></code>, etc. Here is a spec
 for <code class="docutils literal notranslate"><span class="pre">flip</span></code> that makes use of all these features:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">flip_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_tuple</span><span class="w"> </span><span class="p">[</span><span class="n">mir_u32</span><span class="p">,</span><span class="w"> </span><span class="n">mir_u64</span><span class="p">]);</span>
-
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
 
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">(</span><span class="nf">x</span><span class="o">.</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nf">x</span><span class="o">.</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
+
+<span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_load_module</span><span class="w"> </span><span class="s2">&quot;tuples.linked-mir.json&quot;</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>SAW also includes a <code class="docutils literal notranslate"><span class="pre">mir_tuple_value</span></code> function for constructing a tuple value
@@ -310,10 +306,9 @@ definition, and the <code class="docutils literal notranslate"><span class="pre"
 look up. The list of <code class="docutils literal notranslate"><span class="pre">MIRType</span></code>s represent types to instantiate any type
 parameters to the struct (more on this in a bit).</p>
 <p>As an example, we can look up the <code class="docutils literal notranslate"><span class="pre">S</span></code> and <code class="docutils literal notranslate"><span class="pre">T</span></code> structs from above like so:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_load_module</span><span class="w"> </span><span class="s2">&quot;structs.linked-mir.json&quot;</span><span class="p">;</span>
-
-<span class="kd">let</span><span class="w"> </span><span class="n">s_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::S&quot;</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">s_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::S&quot;</span><span class="w"> </span><span class="p">[];</span>
 <span class="kd">let</span><span class="w"> </span><span class="n">t_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::T&quot;</span><span class="w"> </span><span class="p">[];</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">foo_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::Foo&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">mir_u32</span><span class="p">,</span><span class="w"> </span><span class="n">mir_u64</span><span class="p">];</span>
 </pre></div>
 </div>
 <p>We pass an empty list of <code class="docutils literal notranslate"><span class="pre">MIRType</span></code>s to each use of <code class="docutils literal notranslate"><span class="pre">mir_find_adt</span></code>, as neither
@@ -334,7 +329,7 @@ like this, for example:</p>
 <p>Then this function instantiates <code class="docutils literal notranslate"><span class="pre">Foo</span></code>’s <code class="docutils literal notranslate"><span class="pre">A</span></code> type parameter with <code class="docutils literal notranslate"><span class="pre">u32</span></code> and the
 <code class="docutils literal notranslate"><span class="pre">B</span></code> type parameter with <code class="docutils literal notranslate"><span class="pre">u64</span></code>. We can use <code class="docutils literal notranslate"><span class="pre">mir_find_adt</span></code> to look up this
 particular instantiation of <code class="docutils literal notranslate"><span class="pre">Foo</span></code> like so:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">foo_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::Foo&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">mir_u32</span><span class="p">,</span><span class="w"> </span><span class="n">mir_u64</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">make_foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>In general, a MIR JSON file can have many separate instantiations of a single
@@ -342,16 +337,15 @@ struct’s type parameters, and each instantiation must be looked up separately
 using <code class="docutils literal notranslate"><span class="pre">mir_find_adt</span></code>.</p>
 <p>Having looked up <code class="docutils literal notranslate"><span class="pre">Foo&lt;u32,</span> <span class="pre">u64&gt;</span></code> using <code class="docutils literal notranslate"><span class="pre">mir_find_adt</span></code>, let’s use the resulting
 <code class="docutils literal notranslate"><span class="pre">MIRAdt</span></code> in a spec:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">make_foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
-
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">ret</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">ret</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span>
 <span class="w">              </span><span class="n">foo_adt</span>
 <span class="w">              </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">27</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">42</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">64</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">];</span>
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">ret</span><span class="p">;</span>
 <span class="p">};</span>
 
 <span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::make_foo&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">make_foo_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">bar_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::Bar&quot;</span><span class="w"> </span><span class="p">[];</span>
 </pre></div>
 </div>
 <p>Note that we are directly writing out the values <code class="docutils literal notranslate"><span class="pre">27</span></code> and <code class="docutils literal notranslate"><span class="pre">42</span></code> in Cryptol.
@@ -372,9 +366,7 @@ explicit type annotation. For instance, the expression <code class="docutils lit
 <p>Moreover, let’s verify this function for all possible <code class="docutils literal notranslate"><span class="pre">Bar</span></code> values. One way to
 do this is to write a SAW spec that constructs a struct value whose fields are
 themselves symbolic:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">bar_adt</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::Bar&quot;</span><span class="w"> </span><span class="p">[];</span>
-
-<span class="kd">let</span><span class="w"> </span><span class="n">do_stuff_with_bar_spec1</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">do_stuff_with_bar_spec1</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="n">z1</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;z1&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
 <span class="w">  </span><span class="n">z2</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;z2&quot;</span><span class="w"> </span><span class="n">mir_u64</span><span class="p">;</span>
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_struct_value</span>
@@ -391,6 +383,8 @@ themselves symbolic:</p>
 
 <span class="w">  </span><span class="c c-Singleline">// ...</span>
 <span class="p">};</span>
+
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::do_stuff_with_bar&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">do_stuff_with_bar_spec1</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>This is a rather tedious process, however, as we had to repeatedly use
@@ -406,13 +400,12 @@ the process of creating fresh values for each field. This process also applies
 recursively for struct fields, such as the <code class="docutils literal notranslate"><span class="pre">Foo</span></code> field in <code class="docutils literal notranslate"><span class="pre">Bar</span></code>.</p>
 <p>As an example, a much shorter way to write the spec above using
 <code class="docutils literal notranslate"><span class="pre">mir_fresh_expanded_value</span></code> is:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">do_stuff_with_bar_spec2</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">b</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_expanded_value</span><span class="w"> </span><span class="s2">&quot;b&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">bar_adt</span><span class="p">);</span>
-
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">b</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">b</span><span class="p">];</span>
 
 <span class="w">  </span><span class="c c-Singleline">// ...</span>
 <span class="p">};</span>
+
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;structs::do_stuff_with_bar&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">do_stuff_with_bar_spec2</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>That’s it! Note that the string <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code> is used as a prefix for all fresh names
@@ -467,21 +460,20 @@ case of <code class="docutils literal notranslate"><span class="pre">Option</spa
 the <code class="docutils literal notranslate"><span class="pre">[MIRValue]</span></code> arguments represent the fields of the enum variant.</p>
 <p>Let’s now verify some enum-related code with SAW. First, we must look up the
 <code class="docutils literal notranslate"><span class="pre">Option&lt;u32&gt;</span></code> ADT, which works just as if you had a struct type:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">option_u32</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;core::option::Option&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">mir_u32</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">i_found_something_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>Next, we can use this ADT to construct enum values. We shall use
 <code class="docutils literal notranslate"><span class="pre">mir_enum_value</span></code> to create a <code class="docutils literal notranslate"><span class="pre">Some</span></code> value in the spec for <code class="docutils literal notranslate"><span class="pre">i_found_something</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">i_found_something_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
-
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
 
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">ret</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_enum_value</span><span class="w"> </span><span class="n">option_u32</span><span class="w"> </span><span class="s2">&quot;Some&quot;</span><span class="w"> </span><span class="p">[</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">ret</span><span class="p">;</span>
 <span class="p">};</span>
 
 <span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;enums::i_found_something&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">i_found_something_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">i_got_nothing_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <p>Note that while we used the full identifier <code class="docutils literal notranslate"><span class="pre">core::option::Option</span></code> to look up
@@ -490,14 +482,13 @@ specifying the <code class="docutils literal notranslate"><span class="pre">&quo
 prefix should be from the <code class="docutils literal notranslate"><span class="pre">option_u32</span></code> ADT, so the <code class="docutils literal notranslate"><span class="pre">&quot;Some&quot;</span></code> shorthand suffices.</p>
 <p>Similarly, we can also write a spec for <code class="docutils literal notranslate"><span class="pre">i_got_nothing</span></code>, which uses the <code class="docutils literal notranslate"><span class="pre">None</span></code>
 variant:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">i_got_nothing_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
-
-<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">ret</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_enum_value</span><span class="w"> </span><span class="n">option_u32</span><span class="w"> </span><span class="s2">&quot;None&quot;</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">ret</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_enum_value</span><span class="w"> </span><span class="n">option_u32</span><span class="w"> </span><span class="s2">&quot;None&quot;</span><span class="w"> </span><span class="p">[];</span>
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">ret</span><span class="p">;</span>
 <span class="p">};</span>
 
 <span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;enums::i_got_nothing&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">i_got_nothing_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">do_stuff_with_option_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 </pre></div>
 </div>
 <section id="symbolic-enums">
@@ -517,13 +508,12 @@ argument:</p>
 </div>
 <p>We can write a spec for this function that considers all possible <code class="docutils literal notranslate"><span class="pre">Option&lt;u32&gt;</span></code>
 values like so:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">do_stuff_with_option_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">o</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">mir_fresh_expanded_value</span><span class="w"> </span><span class="s2">&quot;o&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_adt</span><span class="w"> </span><span class="n">option_u32</span><span class="p">);</span>
-
-<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">o</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">o</span><span class="p">];</span>
 
 <span class="w">  </span><span class="c c-Singleline">// ...</span>
 <span class="p">};</span>
+
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;enums::do_stuff_with_option&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">do_stuff_with_option_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>Here, <code class="docutils literal notranslate"><span class="pre">o</span></code> can be a <code class="docutils literal notranslate"><span class="pre">None</span></code> value, or it can be a <code class="docutils literal notranslate"><span class="pre">Some</span></code> value with a symbolic
@@ -580,9 +570,7 @@ type <code class="docutils literal notranslate"><span class="pre">&amp;[T]</span
 array itself.</p>
 <p>Let’s use <code class="docutils literal notranslate"><span class="pre">mir_slice_value</span></code> to write a spec for <code class="docutils literal notranslate"><span class="pre">sum_of_prefix</span></code> when the slice
 argument is backed by an array of length two:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">sum_of_prefix_spec1</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_slice_value</span><span class="w"> </span><span class="n">a_ref</span><span class="p">;</span>
@@ -591,6 +579,8 @@ argument is backed by an array of length two:</p>
 
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">(</span><span class="nf">a_val</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="nf">a_val</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
+
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;slices::sum_of_prefix&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">sum_of_prefix_spec1</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>The first part of this spec allocates an array reference <code class="docutils literal notranslate"><span class="pre">a_ref</span></code> and declares
@@ -602,9 +592,7 @@ that back the slice <code class="docutils literal notranslate"><span class="pre"
 <p>As noted above, the <code class="docutils literal notranslate"><span class="pre">sum_of_prefix</span></code> function can work with slices of many
 different lengths. Here is a slight modification to this spec that declares it
 to take a slice of length 5 rather than a slice of length 2:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">sum_of_prefix_spec2</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_slice_value</span><span class="w"> </span><span class="n">a_ref</span><span class="p">;</span>
@@ -613,6 +601,8 @@ to take a slice of length 5 rather than a slice of length 2:</p>
 
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">(</span><span class="nf">a_val</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="nf">a_val</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
+
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;slices::sum_of_prefix&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">sum_of_prefix_spec2</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>Both of these examples declare a slice whose length matches the length of the
@@ -633,9 +623,7 @@ that is backed by the first element (index <code class="docutils literal notrans
 does <em>not</em> include the third element (index <code class="docutils literal notranslate"><span class="pre">2</span></code>).</p>
 <p>For example, here is how to write a spec for <code class="docutils literal notranslate"><span class="pre">sum_of_prefix</span></code> where the slice is
 a length-2 subset of the original array:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">sum_of_prefix_spec3</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
-<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_array</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">);</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 
 <span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_slice_range_value</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span>
@@ -644,6 +632,8 @@ a length-2 subset of the original array:</p>
 
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">(</span><span class="nf">a_val</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="nf">a_val</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
 <span class="p">};</span>
+
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;slices::sum_of_prefix&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">sum_of_prefix_spec3</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>Note that both <code class="docutils literal notranslate"><span class="pre">Int</span></code> arguments to <code class="docutils literal notranslate"><span class="pre">mir_slice_range_value</span></code> must be concrete

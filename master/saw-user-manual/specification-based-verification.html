@@ -222,9 +222,6 @@ that call this one.</p>
 </div>
 <section id="running-a-mir-based-verification">
 <h3>Running a MIR-based verification<a class="headerlink" href="#running-a-mir-based-verification" title="Link to this heading"></a></h3>
-<p>(Note: API functions involving MIR verification require <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code>
-in order to be used. As such, some parts of this API may change before being
-finalized.)</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">String</span></code> supplied as an argument to <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> is expected to be a
 function <em>identifier</em>. An identifier is expected adhere to one of the following
 conventions:</p>
@@ -929,7 +926,7 @@ allocated are forbidden. This can be useful for specifying that a
 function should take as an argument a pointer to allocated space that it
 will not modify. Unlike <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code>, regions allocated with
 <code class="docutils literal notranslate"><span class="pre">llvm_alloc_readonly</span></code> are allowed to alias other read-only regions.</p>
-<p>When using the experimental Java implementation, separate functions
+<p>In the Java implementation, separate functions
 exist for specifying that arrays or objects are allocated:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_alloc_array</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">JavaType</span> <span class="pre">-&gt;</span> <span class="pre">JVMSetup</span> <span class="pre">JVMValue</span></code> specifies an
@@ -937,7 +934,7 @@ array of the given concrete size, with elements of the given type.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_alloc_object</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">JVMSetup</span> <span class="pre">JVMValue</span></code> specifies an object
 of the given class name.</p></li>
 </ul>
-<p>The experimental MIR implementation also has a <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> function, which
+<p>The MIR implementation also has a <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> function, which
 behaves similarly to <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code>. <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> creates an immutable reference,
 but there is also a <code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> function for creating a mutable reference:</p>
 <ul class="simple">
@@ -1162,7 +1159,7 @@ symbols must be included; moreover, the process of correlating LLVM
 type information with information contained in debug symbols is a bit
 heuristic. If <code class="docutils literal notranslate"><span class="pre">llvm_union</span></code> cannot figure out how to cast a pointer,
 one can fall back on the more manual <code class="docutils literal notranslate"><span class="pre">llvm_cast_pointer</span></code> instead.</p>
-<p>In the experimental Java verification implementation, the following
+<p>In the Java verification implementation, the following
 functions can be used to state the equivalent of a combination of
 <code class="docutils literal notranslate"><span class="pre">llvm_points_to</span></code> and either <code class="docutils literal notranslate"><span class="pre">llvm_elem</span></code> or <code class="docutils literal notranslate"><span class="pre">llvm_field</span></code>.</p>
 <ul class="simple">
@@ -1171,7 +1168,7 @@ the value of an array element.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_field_is</span> <span class="pre">:</span> <span class="pre">JVMValue</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">JVMValue</span> <span class="pre">-&gt;</span> <span class="pre">JVMSetup</span> <span class="pre">()</span></code>
 specifies the name of an object field.</p></li>
 </ul>
-<p>In the experimental MIR verification implementation, the following functions
+<p>In the MIR verification implementation, the following functions
 construct compound values:</p>
 <ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_array_value</span> <span class="pre">:</span> <span class="pre">MIRType</span> <span class="pre">-&gt;</span> <span class="pre">[MIRValue]</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span></code> constructs an array
@@ -1830,7 +1827,6 @@ static items:</p>
 </div>
 <p>We can write a specification for <code class="docutils literal notranslate"><span class="pre">f</span></code> like so:</p>
 <div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="c c-Singleline">// statics.saw</span>
-<span class="n">enable_experimental</span><span class="p">;</span>
 
 <span class="kd">let</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="s2">&quot;statics::S2&quot;</span><span class="p">)</span>

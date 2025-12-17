@@ -341,12 +341,8 @@ $ saw salsa20.saw
 ...
 [23:16:05.080] Type errors:
   salsa20.saw:12:39-12:68: Unbound variable: "STATE_WORDS" (salsa20.saw:12:49-12:60)
-Note that some built-in commands are available only after running
-either `enable_deprecated` or `enable_experimental`.
 
   salsa20/salsa20.saw:11:31-11:60: Unbound variable: "STATE_WORDS" (salsa20.saw:11:41-11:52)
-Note that some built-in commands are available only after running
-either `enable_deprecated` or `enable_experimental`.
 :::
 
 We've already run into some type errors. Not too surprising, considering this
