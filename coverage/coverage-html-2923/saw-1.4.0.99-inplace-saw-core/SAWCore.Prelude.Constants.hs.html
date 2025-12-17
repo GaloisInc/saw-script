@@ -1,0 +1,67 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCore.Prelude.Constants
+<span class="lineno">    3 </span>Copyright   : Galois, Inc. 2012-2015
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : jhendrix@galois.com
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>Portability : non-portable (language extensions)
+<span class="lineno">    8 </span>-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>module SAWCore.Prelude.Constants where
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>import SAWCore.Name
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>preludeModuleName :: ModuleName
+<span class="lineno">   17 </span><span class="decl"><span class="istickedoff">preludeModuleName = mkModuleName [&quot;Prelude&quot;]</span></span>
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>preludeNatIdent :: Ident
+<span class="lineno">   20 </span><span class="decl"><span class="nottickedoff">preludeNatIdent =  mkIdent preludeModuleName &quot;Nat&quot;</span></span>
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>preludeZeroIdent :: Ident
+<span class="lineno">   23 </span><span class="decl"><span class="istickedoff">preludeZeroIdent =  mkIdent preludeModuleName &quot;Zero&quot;</span></span>
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>preludeSuccIdent :: Ident
+<span class="lineno">   26 </span><span class="decl"><span class="nottickedoff">preludeSuccIdent =  mkIdent preludeModuleName &quot;Succ&quot;</span></span>
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>preludeIntegerIdent :: Ident
+<span class="lineno">   29 </span><span class="decl"><span class="istickedoff">preludeIntegerIdent =  mkIdent preludeModuleName &quot;Integer&quot;</span></span>
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>preludeVecIdent :: Ident
+<span class="lineno">   32 </span><span class="decl"><span class="istickedoff">preludeVecIdent =  mkIdent preludeModuleName &quot;Vec&quot;</span></span>
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>preludeFloatIdent :: Ident
+<span class="lineno">   35 </span><span class="decl"><span class="nottickedoff">preludeFloatIdent =  mkIdent preludeModuleName &quot;Float&quot;</span></span>
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>preludeDoubleIdent :: Ident
+<span class="lineno">   38 </span><span class="decl"><span class="nottickedoff">preludeDoubleIdent =  mkIdent preludeModuleName &quot;Double&quot;</span></span>
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>preludeStringIdent :: Ident
+<span class="lineno">   41 </span><span class="decl"><span class="istickedoff">preludeStringIdent =  mkIdent preludeModuleName &quot;String&quot;</span></span>
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>preludeArrayIdent :: Ident
+<span class="lineno">   44 </span><span class="decl"><span class="nottickedoff">preludeArrayIdent =  mkIdent preludeModuleName &quot;Array&quot;</span></span>
+
+</pre>
+</body>
+</html>
