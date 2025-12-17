@@ -924,8 +924,8 @@ span.spaces    { background: white }
 <span class="lineno">  905 </span><span class="spaces">  </span><span class="istickedoff">PrimExcept $</span>
 <span class="lineno">  906 </span><span class="spaces">    </span><span class="istickedoff">case idx of</span>
 <span class="lineno">  907 </span><span class="spaces">      </span><span class="istickedoff">VNat i</span>
-<span class="lineno">  908 </span><span class="spaces">        </span><span class="istickedoff">| <span class="nottickedoff">toInteger i &lt; toInteger (V.length xv)</span></span>
-<span class="lineno">  909 </span><span class="spaces">           </span><span class="istickedoff">-&gt; <span class="nottickedoff">return (VVector (xv V.// [(fromIntegral i, y)]))</span></span>
+<span class="lineno">  908 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">toInteger i &lt; toInteger (V.length xv)</span></span>
+<span class="lineno">  909 </span><span class="spaces">           </span><span class="istickedoff">-&gt; return (VVector (xv V.// [(fromIntegral i, y)]))</span>
 <span class="lineno">  910 </span><span class="spaces">        </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>                   -&gt; <span class="nottickedoff">return (VVector xv)</span></span>
 <span class="lineno">  911 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat wsize (VWord w) | <span class="tickonlytrue">bpIsSymbolicEvaluator bp</span> -&gt; lift $</span>
 <span class="lineno">  912 </span><span class="spaces">        </span><span class="istickedoff">do let f i = do b &lt;- bpBvEq bp w =&lt;&lt; bpBvLit bp wsize (toInteger i)</span>
@@ -1364,7 +1364,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1345 </span>  EvalM l (Value l)
 <span class="lineno"> 1346 </span><span class="decl"><span class="istickedoff">lazyMuxValue bp b x y =</span>
 <span class="lineno"> 1347 </span><span class="spaces">  </span><span class="istickedoff">case bpAsBool bp b of</span>
-<span class="lineno"> 1348 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt; <span class="nottickedoff">x</span></span>
+<span class="lineno"> 1348 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt; x</span>
 <span class="lineno"> 1349 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; y</span>
 <span class="lineno"> 1350 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 1351 </span><span class="spaces">      </span><span class="istickedoff">do x' &lt;- x</span>

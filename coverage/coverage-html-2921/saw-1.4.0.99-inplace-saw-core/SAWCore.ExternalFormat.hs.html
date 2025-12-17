@@ -44,7 +44,7 @@ span.spaces    { background: white }
 <span class="lineno">   25 </span>
 <span class="lineno">   26 </span>import SAWCore.Name
 <span class="lineno">   27 </span>import SAWCore.Term.Functor
-<span class="lineno">   28 </span>import SAWCore.Term.Certified
+<span class="lineno">   28 </span>import SAWCore.SharedTerm
 <span class="lineno">   29 </span>
 <span class="lineno">   30 </span>--------------------------------------------------------------------------------
 <span class="lineno">   31 </span>-- External text format
@@ -264,7 +264,7 @@ span.spaces    { background: white }
 <span class="lineno">  245 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">t2 &lt;- readIdx e2</span></span>
 <span class="lineno">  246 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">lift $ scPi sc x t1 t2</span></span>
 <span class="lineno">  247 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Constant&quot;, i]     -&gt; do nm &lt;- readName i</span>
-<span class="lineno">  248 </span><span class="spaces">                                  </span><span class="istickedoff">lift $ scConstant sc nm</span>
+<span class="lineno">  248 </span><span class="spaces">                                  </span><span class="istickedoff">lift $ scConst sc nm</span>
 <span class="lineno">  249 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Unit&quot;]            -&gt; <span class="nottickedoff">lift $ scUnitValue sc</span></span>
 <span class="lineno">  250 </span><span class="spaces">        </span><span class="istickedoff">[&quot;UnitT&quot;]           -&gt; <span class="nottickedoff">lift $ scUnitType sc</span></span>
 <span class="lineno">  251 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Pair&quot;, e1, e2]    -&gt; <span class="nottickedoff">do t1 &lt;- readIdx e1</span></span>
@@ -290,7 +290,7 @@ span.spaces    { background: white }
 <span class="lineno">  271 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">lift $ scRecordValue sc ts</span></span>
 <span class="lineno">  272 </span><span class="spaces">        </span><span class="istickedoff">[&quot;RecordProj&quot;, e, prj]</span>
 <span class="lineno">  273 </span><span class="spaces">                            </span><span class="istickedoff">-&gt; <span class="nottickedoff">do t &lt;- readIdx e</span></span>
-<span class="lineno">  274 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">lift $ scRecordProj sc t (Text.pack prj)</span></span>
+<span class="lineno">  274 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">lift $ scRecordSelect sc t (Text.pack prj)</span></span>
 <span class="lineno">  275 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Prop&quot; : h)        -&gt; <span class="nottickedoff">do flags &lt;- sortFlagsFromList &lt;$&gt; mapM readM h</span></span>
 <span class="lineno">  276 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">lift $ scSortWithFlags sc propSort flags</span></span>
 <span class="lineno">  277 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Sort&quot; : s : h)    -&gt; <span class="nottickedoff">do s' &lt;- mkSort &lt;$&gt; readM s</span></span>
