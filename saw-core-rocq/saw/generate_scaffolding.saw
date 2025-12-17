@@ -1,4 +1,4 @@
 enable_experimental;
-write_coq_sawcore_prelude                "../coq/generated/CryptolToCoq/SAWCorePrelude.v" [] [];
-write_coq_cryptol_primitives_for_sawcore
-  "../coq/generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v" [] [];
+write_rocq_sawcore_prelude                "../rocq/generated/CryptolToRocq/SAWCorePrelude.v" [] [];
+write_rocq_cryptol_primitives_for_sawcore
+  "../rocq/generated/CryptolToRocq/CryptolPrimitivesForSAWCore.v" [] [];
