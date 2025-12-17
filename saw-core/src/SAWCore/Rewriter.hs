@@ -60,6 +60,7 @@ import qualified Data.List as List
 import Data.List.Extra (nubOrd)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ref (C)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad.Trans.Writer.Strict
@@ -686,34 +687,40 @@ reduceSharedTerm _ _ = pure Nothing
 
 data Convertibility = AllRules | ConvertibleRulesOnly
 
+useChangeCache :: C m => Cache m k (Change v) -> k -> ChangeT m v -> ChangeT m v
+useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)
+
+-- | Performs an action when a value has been modified, and otherwise
+-- returns a pure value.
+whenModified :: (Monad m) => b -> (a -> m b) -> ChangeT m a -> ChangeT m b
+whenModified b f m = preserveChangeT b (fmap f m)
+
 -- | Rewriter for shared terms.  The annotations of any used rules are collected
 --   and returned in the result set.
 rewriteSharedTerm :: forall a. Ord a => SharedContext -> Simpset a -> Term -> IO (Set a, Term)
 rewriteSharedTerm sc ss t0 =
-    commitChangeT $
     do cache <- newCache
        let ?cache = cache
-       setRef <- lift$ newIORef mempty
+       setRef <- newIORef mempty
        let ?annSet = setRef
-       t <- rewriteAll AllRules t0
-       anns <- lift $ readIORef setRef
+       t <- commitChangeT $ rewriteAll AllRules t0
+       anns <- readIORef setRef
        pure (anns, t)
 
   where
 
-    rewriteAll :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) => Convertibility -> Term -> ChangeT IO Term
+    rewriteAll ::
+      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      Convertibility -> Term -> ChangeT IO Term
     rewriteAll convertibleFlag t =
-        useCache ?cache (termIndex t) $
-        do
-          let tf = unwrapTermF t
-          ctf' <- lift $ runChangeT $ rewriteTermF convertibleFlag tf
-          t' <- case ctf' of
-                  Original _ -> pure t
-                  Modified tf' -> lift $ scTermF sc tf'
-          rewriteTop convertibleFlag t'
+        useChangeCache ?cache (termIndex t) $
+        do let tf = unwrapTermF t
+           t' <- whenModified t (scTermF sc) (rewriteTermF convertibleFlag tf)
+           rewriteTop convertibleFlag t'
 
-    rewriteTermF :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) =>
-                    Convertibility -> TermF Term -> ChangeT IO (TermF Term)
+    rewriteTermF ::
+      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      Convertibility -> TermF Term -> ChangeT IO (TermF Term)
     rewriteTermF convertibleFlag tf =
         case tf of
           FTermF ftf -> FTermF <$> rewriteFTermF convertibleFlag ftf
@@ -742,8 +749,9 @@ rewriteSharedTerm sc ss t0 =
                t2'' <- rewriteAll convertibleFlag t2'
                pure (Pi x t1' t2'')
 
-    rewriteFTermF :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) =>
-                     Convertibility -> FlatTermF Term -> ChangeT IO (FlatTermF Term)
+    rewriteFTermF ::
+      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      Convertibility -> FlatTermF Term -> ChangeT IO (FlatTermF Term)
     rewriteFTermF convertibleFlag ftf =
         case ftf of
           UnitValue        -> return ftf
@@ -772,7 +780,9 @@ rewriteSharedTerm sc ss t0 =
     filterRules convertibleFlag (Right (Conversion convConvFlag _)) =
       filterRulesFlag convertibleFlag convConvFlag
 
-    rewriteTop :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) => Convertibility -> Term -> ChangeT IO Term
+    rewriteTop ::
+      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      Convertibility -> Term -> ChangeT IO Term
     rewriteTop convertibleFlag t =
       do mt <- lift $ reduceSharedTerm sc t
          case mt of
@@ -784,8 +794,9 @@ rewriteSharedTerm sc ss t0 =
     recordAnn Nothing  = return ()
     recordAnn (Just a) = lift $ modifyIORef' ?annSet (Set.insert a)
 
-    apply :: (?cache :: Cache (ChangeT IO) TermIndex Term, ?annSet :: IORef (Set a)) =>
-             Convertibility -> [Either (RewriteRule a) Conversion] -> Term -> ChangeT IO Term
+    apply ::
+      (?cache :: Cache IO TermIndex (Change Term), ?annSet :: IORef (Set a)) =>
+      Convertibility -> [Either (RewriteRule a) Conversion] -> Term -> ChangeT IO Term
     apply _ [] t = return t
     apply convertibleFlag (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do
       -- if rewrite rule

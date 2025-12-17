@@ -1916,11 +1916,7 @@ useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)
 -- | Performs an action when a value has been modified, and otherwise
 -- returns a pure value.
 whenModified :: (Functor m, Monad m) => b -> (a -> m b) -> ChangeT m a -> ChangeT m b
-whenModified b f m = ChangeT $ do
-  ca <- runChangeT m
-  case ca of
-    Original{} -> return (Original b)
-    Modified a -> Modified <$> f a
+whenModified b f m = preserveChangeT b (fmap f m)
 
 -- | Can this term be evaluated to a constant?
 -- The parameter is a set of names which should be considered opaque---if
