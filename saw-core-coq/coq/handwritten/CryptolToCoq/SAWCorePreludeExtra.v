@@ -1,5 +1,4 @@
-From Stdlib       Require Import Arith.Peano_dec.
-From Stdlib       Require Import Arith.PeanoNat.
+From Stdlib       Require Import Arith.
 From Stdlib       Require Import Lists.List.
 From Stdlib       Require Import Logic.Eqdep_dec.
 From Stdlib       Require Import Logic.FunctionalExtensionality.

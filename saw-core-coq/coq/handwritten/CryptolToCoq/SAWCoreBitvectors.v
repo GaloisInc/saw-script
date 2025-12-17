@@ -10,7 +10,7 @@ From Stdlib Require Import Vectors.Vector.
 From Stdlib Require Import Logic.Eqdep.
 From Stdlib Require Import Classes.RelationClasses.
 From Stdlib Require Import Classes.Morphisms.
-From Stdlib Require Import ZArith.BinInt.
+From Stdlib Require Import ZArith.
 
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.

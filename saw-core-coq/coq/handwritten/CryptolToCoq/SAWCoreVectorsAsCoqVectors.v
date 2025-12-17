@@ -33,8 +33,8 @@ From Stdlib Require Import Vectors.Vector.
 From Stdlib Require Import Bool.Bool.
 From Stdlib Require Import ZifyClasses.
 
-From Stdlib Require Import ZArith.BinIntDef.
-From Stdlib Require Import PArith.BinPos.
+From Stdlib Require Import ZArith.
+From Stdlib Require Import PArith.
 
 #[local] Undelimit Scope N_scope.
 From CryptolToCoq Require Import SAWCoreScaffolding.

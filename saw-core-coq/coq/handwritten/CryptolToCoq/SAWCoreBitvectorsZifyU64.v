@@ -1,6 +1,6 @@
 From Stdlib Require Import Classes.Morphisms.
 From Stdlib Require Import Lia.
-From Stdlib Require Import ZArith.BinInt.
+From Stdlib Require Import ZArith.
 From Stdlib Require Import ZifyBool.
 From Stdlib Require Import ZifyClasses.
 
