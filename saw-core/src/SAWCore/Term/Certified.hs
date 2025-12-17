@@ -21,83 +21,75 @@ module SAWCore.Term.Certified
   , closedTerm
   , termSortOrType
   , alphaEquiv
+    -- * Term building monad
+  , TermError(..)
+  , SCM
+  , runSCM
     -- * Building certified terms
-  , scAscribe
-  , scTermF
-  , scFlatTermF
-  , scApply
-  , scLambda
-  , scLambdaList
-  , scPi
-  , scPiList
-  , scFun
-  , scFunAll
-  , scConstant
-  , scConst
-  , scConstApply
-  , scGlobal
-  , scGlobalDef
-  , scGlobalApply
-  , scVariable
-  , scVariables
-  , scUnitValue
-  , scUnitType
-  , scPairValue
-  , scPairType
-  , scPairLeft
-  , scPairRight
-  , scRecursor
-  , scRecordType
-  , scRecordValue
-  , scRecord
-  , scRecordProj
-  , scRecordSelect
-  , scSort
-  , scSortWithFlags
-  , scNat
-  , scVector
-  , scString, scStringType
+  , scmAscribe
+  , scmTermF
+  , scmFlatTermF
+  , scmApply
+  , scmLambda
+  --, scLambdaList
+  , scmPi
+  , scmPiList
+  , scmConst
+  , scmGlobalDef
+  , scmVariable
+  , scmUnitValue
+  , scmUnitType
+  , scmPairValue
+  , scmPairType
+  , scmPairLeft
+  , scmPairRight
+  , scmRecursor
+  , scmRecordType
+  , scmRecordValue
+  , scmRecordSelect
+  --, scSort
+  , scmSortWithFlags
+  , scmNat
+  , scmVector
+  , scmString
     -- * Typing and reduction
-  , scTypeOf
-  , scWhnf
-  , scConvertibleEval
-  , scConvertible
-  , scSubtype
-  , scInstantiate
-  , scInstantiateBeta
-  , scApplyAllBeta
+  , scmTypeOf
+  , scmEnsureSortType
+  , scmWhnf
+  , scmConvertible
+  , scmSubtype
+  , scmInstantiate
+  , scmInstantiateBeta
+  , scmApplyAllBeta
+  , scmReduceRecursor
   -- * SharedContext operations
   , mkSharedContext
   , scGetModuleMap
   , scGetNamingEnv
-  , scRegisterName
-  , scFreshVarName
+  , scmRegisterName
+  , scmFreshVarName
   , scInjectCode
-  , scDeclarePrim
-  , scFreshConstant
-  , scDefineConstant
-  , scOpaqueConstant
-  , scBeginDataType
-  , scCompleteDataType
+  , scmDeclarePrim
+  , scmFreshConstant
+  , scmDefineConstant
+  , scmOpaqueConstant
+  , scmBeginDataType
+  , scmCompleteDataType
   , scImportModule
   , scLoadModule
-  , scFreshName
+  , scmFreshName
   , scFreshenGlobalIdent
   , scResolveNameByURI
   , SharedContextCheckpoint
   , checkpointSharedContext
   , restoreSharedContext
-    -- * Prettyprinting hooks (re-exported from SharedTerm; get them from
-    -- there unless you need to be here for some reason)
-  , prettyTerm
-  , ppTerm
   ) where
 
-import Control.Applicative
--- ((<$>), pure, (<*>))
-import Control.Exception
 import Control.Lens
 import Control.Monad (foldM, forM, forM_, join, unless, when)
+import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (ReaderT(..), runReaderT, ask)
 
 import Data.Bits
 import qualified Data.Foldable as Fold
@@ -113,6 +105,7 @@ import Data.List (find)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
+import Data.Ref (C)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
@@ -122,7 +115,6 @@ import Text.URI
 
 import SAWSupport.IntRangeSet (IntRangeSet)
 import qualified SAWSupport.IntRangeSet as IntRangeSet
-import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Cache
 import SAWCore.Module
@@ -156,54 +148,46 @@ import SAWCore.Panic (panic)
 import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty
 import SAWCore.Term.Raw
 import SAWCore.Unique
 
-scGlobal :: SharedContext -> Ident -> IO Term
-scGlobal sc ident = scGlobalDef sc ident
+----------------------------------------------------------------------
 
--- possible errors: constant not defined
-scConstant :: SharedContext -> Name -> IO Term
-scConstant = scConst
-
--- possible errors: duplicate field name
-scRecordValue :: SharedContext -> [(FieldName, Term)] -> IO Term
-scRecordValue sc fields = scRecord sc (Map.fromList fields)
-
--- possible errors: not a record type, field name not found
-scRecordProj :: SharedContext -> Term -> FieldName -> IO Term
-scRecordProj sc t fname = scRecordSelect sc t fname
-
+-- | Errors that can occur while constructing 'Term's.
+data TermError
+  = StaleTerm Term IntRangeSet
+  | VariableContextMismatch Text VarIndex Term Term
+  | ApplyNotPiType Term Term -- function, argument
+  | ApplyNotSubtype Term Term -- expected, arg
+  | VariableFreeInContext VarName Term
+  | NotType Term
+  | NotPairType Term
+  | NameNotFound Name
+  | IdentNotFound Ident
+  | NotRecord Term
+  | FieldNotFound Term FieldName
+  | VectorNotSubtype Term Term -- expected type, element
+  | DataTypeNotFound Name
+  | RecursorPropElim Name Sort
+  | ConstantNotClosed Name Term
+  | DuplicateURI URI
+  | AlreadyDefined Name
+  | AscriptionNotSubtype Term Term -- expected type, body
 
 ----------------------------------------------------------------------
--- Printing
+-- SAWCore Monad
 
--- Ideally these would be able to live in Pretty.hs, but they can't
--- because they need the `SharedContext`. They used to live in
--- SharedTerm.hs, but we would like to use them from inside here for
--- error reporting.
+newtype SCM a = SCM (ReaderT SharedContext (ExceptT TermError IO) a)
+  deriving (Functor, Applicative, Monad, MonadIO, C)
 
--- | The preferred printing mechanism for `Term`, if you want a `Doc`.
---
---   Note that there are two naming conventions in conflict here: the
---   convention that things using the `SharedContext` and in `IO`
---   should be named `sc`, and the convention that the preferred way
---   to prettyprint an object of type @Foo@ to a `Doc` should be
---   called @prettyFoo@. For the time being at least we've concluded
---   that the latter is more important.
-prettyTerm :: SharedContext -> PPS.Opts -> Term -> IO PPS.Doc
-prettyTerm sc opts t =
-  do env <- scGetNamingEnv sc
-     pure (prettyTermWithEnv opts env t)
+scmSharedContext :: SCM SharedContext
+scmSharedContext = SCM ask
 
--- | The preferred printing mechanism for `Term`, if you want text.
---
---   The same naming considerations as `prettyTerm` apply.
-ppTerm :: SharedContext -> PPS.Opts -> Term -> IO String
-ppTerm sc opts t =
-  PPS.render opts <$> prettyTerm sc opts t
+scmError :: TermError -> SCM a
+scmError err = SCM (throwError err)
 
+runSCM :: SharedContext -> SCM a -> IO (Either TermError a)
+runSCM sc (SCM m) = runExceptT (runReaderT m sc)
 
 ----------------------------------------------------------------------
 -- TermFMaps
@@ -322,40 +306,37 @@ data SharedContext = SharedContext
   }
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
-scFreshTermIndex :: SharedContext -> IO VarIndex
-scFreshTermIndex sc = atomicModifyIORef' (scNextTermIndex sc) (\i -> (i + 1, i))
+scmFreshTermIndex :: SCM VarIndex
+scmFreshTermIndex =
+  do sc <- scmSharedContext
+     liftIO $ atomicModifyIORef' (scNextTermIndex sc) (\i -> (i + 1, i))
 
-scEnsureValidTerm :: SharedContext -> Term -> IO ()
-scEnsureValidTerm sc t =
-  do s <- readIORef (scValidTerms sc)
-     unless (IntRangeSet.member (termIndex t) s) $ do
-       -- XXX: we should probably have the prettyprinting options in the SharedContext
-       t' <- ppTerm sc PPS.defaultOpts t
-       fail $ unlines $ [
-           "Stale term encountered: index = " ++ show (termIndex t),
-           "Valid indexes: " ++ show (IntRangeSet.toList s),
-           t'
-        ]
+scmEnsureValidTerm :: Term -> SCM ()
+scmEnsureValidTerm t =
+  do sc <- scmSharedContext
+     s <- liftIO $ readIORef (scValidTerms sc)
+     unless (IntRangeSet.member (termIndex t) s) $ scmError (StaleTerm t s)
 
 -- | Internal function to make a 'Term' from a 'TermF' with a given
 -- variable typing context and type.
 -- Precondition: The 'Either' argument should never have 'Right'
 -- applied to a 'Sort'.
 -- Precondition: All subterms should have been checked with 'scEnsureValidTerm'.
-scMakeTerm :: SharedContext -> IntMap Term -> TermF Term -> Either Sort Term -> IO Term
-scMakeTerm sc vt tf mty =
-  do s <- readIORef (scAppCache sc)
+scmMakeTerm :: IntMap Term -> TermF Term -> Either Sort Term -> SCM Term
+scmMakeTerm vt tf mty =
+  do sc <- scmSharedContext
+     s <- liftIO $ readIORef (scAppCache sc)
      case lookupTFM tf mty s of
        Just term -> pure term
        Nothing ->
-         do i <- scFreshTermIndex sc
+         do i <- scmFreshTermIndex
             let term = STApp { stAppIndex = i
                              , stAppHash = hash tf
                              , stAppVarTypes = vt
                              , stAppTermF = tf
                              , stAppType = mty
                              }
-            modifyIORef' (scAppCache sc) (insertTFM tf mty term)
+            liftIO $ modifyIORef' (scAppCache sc) (insertTFM tf mty term)
             pure term
 
 --------------------------------------------------------------------------------
@@ -412,22 +393,16 @@ restoreSharedContext scc sc =
 
 -- | Build a variant of a 'Term' with a specific type.
 -- The first term's type must be a subtype of the second term.
-scAscribe :: SharedContext -> Term -> Term -> IO Term
-scAscribe sc t0 ty =
+scmAscribe :: Term -> Term -> SCM Term
+scmAscribe t0 ty =
   do let mty = maybe (Right ty) Left (asSort ty)
-     ty0 <- scTypeOf sc t0
-     ok <- scSubtype sc ty0 ty
-     unless ok $
-       do ty0' <- ppTerm sc PPS.defaultOpts ty0
-          ty' <- ppTerm sc PPS.defaultOpts ty
-          fail $ unlines $
-            [ "Not a subtype"
-            , "expected: " ++ ty'
-            , "got: " ++ ty0'
-            ]
+     ty0 <- scmTypeOf t0
+     sc <- scmSharedContext
+     ok <- scmSubtype ty0 ty
+     unless ok $ scmError (AscriptionNotSubtype ty t0)
      let tf = unwrapTermF t0
-     let fallback = scMakeTerm sc (varTypes t0) tf mty
-     tfm <- readIORef (scAppCache sc)
+     let fallback = scmMakeTerm (varTypes t0) tf mty
+     tfm <- liftIO $ readIORef (scAppCache sc)
      case tf of
        App f arg ->
          case lookupAppTFM f arg tfm of
@@ -439,69 +414,61 @@ scAscribe sc t0 ty =
 
 -- | Build a new 'Term' value from the given 'TermF'.
 -- Reuse a 'Term' from the cache if an identical one already exists.
-scTermF :: SharedContext -> TermF Term -> IO Term
-scTermF sc tf =
+scmTermF :: TermF Term -> SCM Term
+scmTermF tf =
   case tf of
-    FTermF ftf -> scFlatTermF sc ftf
-    App t1 t2 -> scApply sc t1 t2
-    Lambda x t1 t2 -> scLambda sc x t1 t2
-    Pi x t1 t2 -> scPi sc x t1 t2
-    Constant nm -> scConst sc nm
-    Variable x t1 -> scVariable sc x t1
+    FTermF ftf -> scmFlatTermF ftf
+    App t1 t2 -> scmApply t1 t2
+    Lambda x t1 t2 -> scmLambda x t1 t2
+    Pi x t1 t2 -> scmPi x t1 t2
+    Constant nm -> scmConst nm
+    Variable x t1 -> scmVariable x t1
 
 -- | Create a new term from a lower-level 'FlatTermF' term.
-scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
-scFlatTermF sc ftf =
+scmFlatTermF :: FlatTermF Term -> SCM Term
+scmFlatTermF ftf =
   case ftf of
-    UnitValue -> scUnitValue sc
-    UnitType -> scUnitType sc
-    PairValue t1 t2 -> scPairValue sc t1 t2
-    PairType t1 t2 -> scPairType sc t1 t2
-    PairLeft t -> scPairLeft sc t
-    PairRight t -> scPairRight sc t
-    Recursor crec -> scRecursor sc (recursorDataType crec) (recursorSort crec)
-    RecordType fs -> scRecordType sc fs
-    RecordValue fs -> scRecord sc (Map.fromList fs)
-    RecordProj t fname -> scRecordSelect sc t fname
-    Sort s flags -> scSortWithFlags sc s flags
-    ArrayValue t ts -> scVector sc t (V.toList ts)
-    StringLit s -> scString sc s
+    UnitValue -> scmUnitValue
+    UnitType -> scmUnitType
+    PairValue t1 t2 -> scmPairValue t1 t2
+    PairType t1 t2 -> scmPairType t1 t2
+    PairLeft t -> scmPairLeft t
+    PairRight t -> scmPairRight t
+    Recursor crec -> scmRecursor (recursorDataType crec) (recursorSort crec)
+    RecordType fs -> scmRecordType fs
+    RecordValue fs -> scmRecordValue fs
+    RecordProj t fname -> scmRecordSelect t fname
+    Sort s flags -> scmSortWithFlags s flags
+    ArrayValue t ts -> scmVector t (V.toList ts)
+    StringLit s -> scmString s
 
--- | Create a function application term.
-scApply ::
-  SharedContext ->
+-- | Create a function application term, or return a 'TermError'.
+scmApply ::
   Term {- ^ The function to apply -} ->
   Term {- ^ The argument to apply to -} ->
-  IO Term
-scApply sc t1 t2 =
+  SCM Term
+scmApply t1 t2 =
   -- Look up this application in the hash table first; if it is
   -- already there we can avoid recomputing the result type.
-  do tfm <- readIORef (scAppCache sc)
+  do sc <- scmSharedContext
+     tfm <- liftIO $ readIORef (scAppCache sc)
      case lookupAppTFM t1 t2 tfm of
        Just term -> pure term
        Nothing ->
-         do scEnsureValidTerm sc t1
-            scEnsureValidTerm sc t2
-            vt <- unifyVarTypes "scApply" sc (varTypes t1) (varTypes t2)
-            ty1 <- scTypeOf sc t1
-            (x, ty1a, ty1b) <- ensurePi sc ty1
-            ty2 <- scTypeOf sc t2
-            ok <- scSubtype sc ty2 ty1a
-            unless ok $ do
-              -- XXX we should probably have the prettyprint options in the SharedContext
-              ty1a' <- ppTerm sc PPS.defaultOpts ty1a
-              ty2' <- ppTerm sc PPS.defaultOpts ty2
-              fail $ unlines $ [
-                  "Not a subtype",
-                  "expected: " ++ ty1a',
-                  "got: " ++ ty2'
-               ]
-            -- Computing the result type with scInstantiateBeta may
+         do scmEnsureValidTerm t1
+            scmEnsureValidTerm t2
+            vt <- scmUnifyVarTypes "scApply" (varTypes t1) (varTypes t2)
+            ty1 <- scmTypeOf t1
+            (x, ty1a, ty1b) <- scmEnsureRecognizer (ApplyNotPiType t1 t2) asPi ty1
+            ty2 <- scmTypeOf t2
+            ok <- scmSubtype ty2 ty1a
+            unless ok $ scmError (ApplyNotSubtype ty1a t2)
+            -- Computing the result type with scmInstantiateBeta may
             -- lead to other calls to scApply, but these should be at
             -- simpler types, so it should always terminate.
-            ty <- scInstantiateBeta sc (IntMap.singleton (vnIndex x) t2) ty1b
+            ty <- scmInstantiateBeta (IntMap.singleton (vnIndex x) t2) ty1b
             let mty = maybe (Right ty) Left (asSort ty)
-            i <- scFreshTermIndex sc
+            i <- scmFreshTermIndex
             let tf = App t1 t2
             let term =
                   STApp
@@ -511,113 +478,101 @@ scApply sc t1 t2 =
                   , stAppTermF = tf
                   , stAppType = mty
                   }
-            modifyIORef' (scAppCache sc) (insertAppTFM t1 t2 term)
+            liftIO $ modifyIORef' (scAppCache sc) (insertAppTFM t1 t2 term)
             pure term
 
 -- | Create a lambda term from a parameter name (as a 'VarName'),
 -- parameter type (as a 'Term'), and a body ('Term').
 -- All free variables with the same 'VarName' in the body become
 -- bound.
-scLambda ::
-  SharedContext ->
+scmLambda ::
   VarName {- ^ The parameter name -} ->
   Term {- ^ The parameter type -} ->
   Term {- ^ The body -} ->
-  IO Term
-scLambda sc x t body =
-  do scEnsureValidTerm sc t
-     scEnsureValidTerm sc body
-     ensureNotFreeInContext x body
-     _ <- unifyVarTypes "scLambda" sc (IntMap.singleton (vnIndex x) t) (varTypes body)
-     vt <- unifyVarTypes "scLambda" sc (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
-     rty <- scTypeOf sc body
-     ty <- scPi sc x t rty
-     scMakeTerm sc vt (Lambda x t body) (Right ty)
+  SCM Term
+scmLambda x t body =
+  do scmEnsureValidTerm t
+     scmEnsureValidTerm body
+     scmEnsureNotFreeInContext x body
+     _ <- scmUnifyVarTypes "scLambda" (IntMap.singleton (vnIndex x) t) (varTypes body)
+     vt <- scmUnifyVarTypes "scLambda" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
+     rty <- scmTypeOf body
+     ty <- scmPi x t rty
+     scmMakeTerm vt (Lambda x t body) (Right ty)
 
 -- | Create a (possibly dependent) function given a parameter name,
 -- parameter type (as a 'Term'), and a body ('Term').
 -- All free variables with the same 'VarName' in the body become
 -- bound.
-scPi ::
-  SharedContext ->
+scmPi ::
   VarName {- ^ The parameter name -} ->
   Term {- ^ The parameter type -} ->
   Term {- ^ The body -} ->
-  IO Term
-scPi sc x t body =
-  do scEnsureValidTerm sc t
-     scEnsureValidTerm sc body
-     ensureNotFreeInContext x body
-     _ <- unifyVarTypes "scPi" sc (IntMap.singleton (vnIndex x) t) (varTypes body)
-     vt <- unifyVarTypes "scPi" sc (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
-     s1 <- either pure (ensureSort sc) (stAppType t)
-     s2 <- either pure (ensureSort sc) (stAppType body)
-     scMakeTerm sc vt (Pi x t body) (Left (piSort s1 s2))
+  SCM Term
+scmPi x t body =
+  do scmEnsureValidTerm t
+     scmEnsureValidTerm body
+     scmEnsureNotFreeInContext x body
+     _ <- scmUnifyVarTypes "scPi" (IntMap.singleton (vnIndex x) t) (varTypes body)
+     vt <- scmUnifyVarTypes "scPi" (varTypes t) (IntMap.delete (vnIndex x) (varTypes body))
+     s1 <- scmEnsureSortType t
+     s2 <- scmEnsureSortType body
+     scmMakeTerm vt (Pi x t body) (Left (piSort s1 s2))
 
 -- | Create a constant 'Term' from a 'Name'.
-scConst :: SharedContext -> Name -> IO Term
-scConst sc nm =
-  do ty <- scTypeOfName sc nm
+scmConst :: Name -> SCM Term
+scmConst nm =
+  do ty <- scmTypeOfName nm
      let mty = maybe (Right ty) Left (asSort ty)
-     scMakeTerm sc IntMap.empty (Constant nm) mty
+     scmMakeTerm IntMap.empty (Constant nm) mty
 
 -- | Create a named variable 'Term' from a 'VarName' and a type.
-scVariable :: SharedContext -> VarName -> Term -> IO Term
-scVariable sc x t =
-  do scEnsureValidTerm sc t
-     vt <- unifyVarTypes "scVariable" sc (IntMap.singleton (vnIndex x) t) (varTypes t)
-     _s <- either pure (ensureSort sc) (stAppType t)
+scmVariable :: VarName -> Term -> SCM Term
+scmVariable x t =
+  do scmEnsureValidTerm t
+     vt <- scmUnifyVarTypes "scVariable" (IntMap.singleton (vnIndex x) t) (varTypes t)
+     _s <- scmEnsureSortType t
      let mty = maybe (Right t) Left (asSort t)
-     scMakeTerm sc vt (Variable x t) mty
+     scmMakeTerm vt (Variable x t) mty
 
 -- | Check whether the given 'VarName' occurs free in the type of
 -- another variable in the context of the given 'Term', and fail if it
 -- does.
-ensureNotFreeInContext :: VarName -> Term -> IO ()
-ensureNotFreeInContext x body =
+scmEnsureNotFreeInContext :: VarName -> Term -> SCM ()
+scmEnsureNotFreeInContext x body =
   when (any (IntMap.member (vnIndex x) . varTypes) (varTypes body)) $
-    fail $ "Variable occurs free in typing context: " ++ show (vnName x)
+    scmError $ VariableFreeInContext x body
 
 -- | Two typing contexts are unifiable if they agree perfectly on all
 -- entries where they overlap.
-unifyVarTypes :: String -> SharedContext -> IntMap Term -> IntMap Term -> IO (IntMap Term)
-unifyVarTypes msg sc ctx1 ctx2 =
+scmUnifyVarTypes :: Text -> IntMap Term -> IntMap Term -> SCM (IntMap Term)
+scmUnifyVarTypes msg ctx1 ctx2 =
   do let check i t1 t2 =
-           unless (t1 == t2) $ do
-               t1' <- ppTerm sc PPS.defaultOpts t1
-               t2' <- ppTerm sc PPS.defaultOpts t2
-               fail $ unlines [
-                   msg ++ ": variable typing context mismatch",
-                   "VarIndex: " ++ show i,
-                   "t1: " ++ t1',
-                   "t2: " ++ t2'
-                ]
+           unless (t1 == t2) $ scmError (VariableContextMismatch msg i t1 t2)
      sequence_ (IntMap.intersectionWithKey check ctx1 ctx2)
      pure (IntMap.union ctx1 ctx2)
 
-ensureRecognizer :: String -> SharedContext -> (Term -> Maybe a) -> Term -> IO a
-ensureRecognizer s sc f trm =
+scmEnsureRecognizer :: TermError -> (Term -> Maybe a) -> Term -> SCM a
+scmEnsureRecognizer err f trm =
   case f trm of
     Just a -> pure a
     Nothing ->
-      do trm' <- scWhnf sc trm
+      do trm' <- scmWhnf trm
          case f trm' of
            Just a -> pure a
-           Nothing -> do
-             trm'' <- ppTerm sc PPS.defaultOpts trm'
-             fail $ "ensureRecognizer: Expected " ++ s ++ ", found: " ++ trm''
+           Nothing -> scmError err
 
-ensureSort :: SharedContext -> Term -> IO Sort
-ensureSort sc tp = ensureRecognizer "Sort" sc asSort tp
+-- | Ensure the type of a 'Term' is a sort, and return that sort.
+scmEnsureSortType :: Term -> SCM Sort
+scmEnsureSortType t =
+  case termSortOrType t of
+    Left s -> pure s
+    Right ty -> scmEnsureRecognizer (NotType t) asSort ty
 
-ensurePi :: SharedContext -> Term -> IO (VarName, Term, Term)
-ensurePi sc tp = ensureRecognizer "Pi" sc asPi tp
-
-ensurePairType :: SharedContext -> Term -> IO (Term, Term)
-ensurePairType sc tp = ensureRecognizer "PairType" sc asPairType tp
-
-ensureRecordType :: SharedContext -> Term -> IO (Map FieldName Term)
-ensureRecordType sc tp = ensureRecognizer "RecordType" sc asRecordType tp
+scmEnsurePairType :: Term -> SCM (Term, Term)
+scmEnsurePairType t =
+  do ty <- scmTypeOf t
+     scmEnsureRecognizer (NotPairType t) asPairType ty
 
 piSort :: Sort -> Sort -> Sort
 piSort s1 s2 = if s2 == propSort then propSort else max s1 s2
@@ -626,45 +581,39 @@ piSort s1 s2 = if s2 == propSort then propSort else max s1 s2
 
 -- | Create a function application term from the 'Name' of a global
 -- constant and a list of 'Term' arguments.
-scConstApply :: SharedContext -> Name -> [Term] -> IO Term
-scConstApply sc i ts =
-  do c <- scConst sc i
-     scApplyAll sc c ts
+scmConstApply :: Name -> [Term] -> SCM Term
+scmConstApply i ts =
+  do c <- scmConst i
+     scmApplyAll c ts
 
 -- | Create a list of named variables from a list of names and types.
-scVariables :: Traversable t => SharedContext -> t (VarName, Term) -> IO (t Term)
-scVariables sc = traverse (\(v, t) -> scVariable sc v t)
-
-data DuplicateNameException = DuplicateNameException URI
-instance Exception DuplicateNameException
-instance Show DuplicateNameException where
-  show (DuplicateNameException uri) =
-      "Attempted to register the following name twice: " ++ Text.unpack (render uri)
+scmVariables :: Traversable t => t (VarName, Term) -> SCM (t Term)
+scmVariables = traverse (\(v, t) -> scmVariable v t)
 
 -- | Internal function to get the next available 'VarIndex'. Not exported.
-scFreshVarIndex :: SharedContext -> IO VarIndex
-scFreshVarIndex sc = atomicModifyIORef' (scNextVarIndex sc) (\i -> (i + 1, i))
+scmFreshVarIndex :: SCM VarIndex
+scmFreshVarIndex =
+  do sc <- scmSharedContext
+     liftIO $ atomicModifyIORef' (scNextVarIndex sc) (\i -> (i + 1, i))
 
 -- | Internal function to register a name with a caller-provided
 -- 'VarIndex'. Not exported.
-scRegisterNameWithIndex :: SharedContext -> VarIndex -> NameInfo -> IO ()
-scRegisterNameWithIndex sc i nmi =
-  do uris <- readIORef (scURIEnv sc)
+scmRegisterNameWithIndex :: VarIndex -> NameInfo -> SCM ()
+scmRegisterNameWithIndex i nmi =
+  do sc <- scmSharedContext
+     uris <- liftIO $ readIORef (scURIEnv sc)
      let uri = nameURI nmi
-     when (Map.member uri uris) $ throwIO (DuplicateNameException uri)
-     writeIORef (scURIEnv sc) (Map.insert uri i uris)
-     modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i (nameAliases nmi)
-
+     when (Map.member uri uris) $ scmError (DuplicateURI uri)
+     liftIO $ writeIORef (scURIEnv sc) (Map.insert uri i uris)
+     liftIO $ modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i (nameAliases nmi)
 
 -- | Generate a 'Name' with a fresh 'VarIndex' for the given
 -- 'NameInfo' and register everything together in the naming
 -- environment of the 'SharedContext'.
--- Throws 'DuplicateNameException' if the URI in the 'NameInfo' is
--- already registered.
-scRegisterName :: SharedContext -> NameInfo -> IO Name
-scRegisterName sc nmi =
-  do i <- scFreshVarIndex sc
-     scRegisterNameWithIndex sc i nmi
+scmRegisterName :: NameInfo -> SCM Name
+scmRegisterName nmi =
+  do i <- scmFreshVarIndex
+     scmRegisterNameWithIndex i nmi
      pure (Name i nmi)
 
 scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
@@ -673,34 +622,36 @@ scResolveNameByURI sc uri =
      pure $! Map.lookup uri env
 
 -- | Create a unique global name with the given base name.
-scFreshName :: SharedContext -> Text -> IO Name
-scFreshName sc x =
-  do i <- scFreshVarIndex sc
+scmFreshName :: Text -> SCM Name
+scmFreshName x =
+  do i <- scmFreshVarIndex
      let uri = scFreshNameURI x i
      let nmi = ImportedName uri [x, x <> "#" <>  Text.pack (show i)]
-     scRegisterNameWithIndex sc i nmi
+     scmRegisterNameWithIndex i nmi
      pure (Name i nmi)
 
 -- | Create a 'VarName' with the given identifier (which may be "_").
-scFreshVarName :: SharedContext -> Text -> IO VarName
-scFreshVarName sc x = VarName <$> scFreshVarIndex sc <*> pure x
+scmFreshVarName :: Text -> SCM VarName
+scmFreshVarName x = VarName <$> scmFreshVarIndex <*> pure x
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
-scGlobalDef :: SharedContext -> Ident -> IO Term
-scGlobalDef sc ident =
-  do m <- readIORef (scGlobalEnv sc)
+scmGlobalDef :: Ident -> SCM Term
+scmGlobalDef ident =
+  do sc <- scmSharedContext
+     m <- liftIO $ readIORef (scGlobalEnv sc)
      case HMap.lookup ident m of
-       Nothing -> fail ("Could not find global: " ++ show ident)
+       Nothing -> scmError (IdentNotFound ident)
        Just t -> pure t
 
 -- | Internal function to register an 'Ident' with a 'Term' (which
 -- must be a 'Constant' term with the same 'Ident') in the
 -- 'scGlobalEnv' map of the 'SharedContext'. Not exported.
-scRegisterGlobal :: SharedContext -> Ident -> Term -> IO ()
-scRegisterGlobal sc ident t =
-  do dup <- atomicModifyIORef' (scGlobalEnv sc) f
-     when dup $ fail ("Global identifier already registered: " ++ show ident)
+scmRegisterGlobal :: Ident -> Term -> SCM ()
+scmRegisterGlobal ident t =
+  do sc <- scmSharedContext
+     dup <- liftIO $ atomicModifyIORef' (scGlobalEnv sc) f
+     when dup $ scmError (DuplicateURI (moduleIdentToURI ident))
   where
     f m =
       case HMap.lookup ident m of
@@ -724,6 +675,12 @@ scGetNamingEnv sc = readIORef (scDisplayNameEnv sc)
 -- | Get the current 'ModuleMap'
 scGetModuleMap :: SharedContext -> IO ModuleMap
 scGetModuleMap sc = readIORef (scModuleMap sc)
+
+-- | Get the current 'ModuleMap'
+scmGetModuleMap :: SCM ModuleMap
+scmGetModuleMap =
+  do sc <- scmSharedContext
+     liftIO $ readIORef (scModuleMap sc)
 
 -- | Test if a module is loaded in the current shared context
 scModuleIsLoaded :: SharedContext -> ModuleName -> IO Bool
@@ -750,50 +707,51 @@ scImportModule sc p mn1 mn2 =
   modifyIORef' (scModuleMap sc) (insImportInMap p mn1 mn2)
 
 -- | Internal function to insert a definition into the 'ModuleMap' of
--- the 'SharedContext'. Throws 'DuplicateNameException' if the name is
--- already registered.
-scInsDefInMap :: SharedContext -> Def -> IO ()
-scInsDefInMap sc d =
-  do e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
+-- the 'SharedContext'.
+-- Throws an exception if the name is already registered.
+scmInsDefInMap :: Def -> SCM ()
+scmInsDefInMap d =
+  do sc <- scmSharedContext
+     e <-
+       liftIO $ atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case insDefInMap d mm of
-         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Left nm -> (mm, Just (AlreadyDefined nm))
          Right mm' -> (mm', Nothing)
-     maybe (pure ()) throwIO e
+     maybe (pure ()) scmError e
 
 -- | Internal function to extend the SAWCore global environment with a
 -- new constant, which may or may not have a definition. Not exported.
 -- Assumes that the type and body (if present) are closed terms, and
 -- that the body has the given type.
-scDeclareDef ::
-  SharedContext -> Name -> DefQualifier -> Term -> Maybe Term -> IO Term
-scDeclareDef sc nm q ty body =
-  do scInsDefInMap sc $
+scmDeclareDef :: Name -> DefQualifier -> Term -> Maybe Term -> SCM Term
+scmDeclareDef nm q ty body =
+  do scmInsDefInMap $
        Def
        { defName = nm
        , defQualifier = q
        , defType = ty
        , defBody = body
        }
-     t <- scConst sc nm
+     t <- scmConst nm
      -- Register constant in scGlobalEnv if it has an Ident name
      case nameInfo nm of
-       ModuleIdentifier ident -> scRegisterGlobal sc ident t
+       ModuleIdentifier ident -> scmRegisterGlobal ident t
        ImportedName{} -> pure ()
      pure t
 
 -- | Declare a SAW core primitive of the specified type.
-scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
-scDeclarePrim sc ident q def_tp =
-  do _ <- either pure (ensureSort sc) (stAppType def_tp)
+scmDeclarePrim :: Ident -> DefQualifier -> Term -> SCM ()
+scmDeclarePrim ident q def_tp =
+  do _ <- scmEnsureSortType def_tp
      let nmi = ModuleIdentifier ident
-     nm <- scRegisterName sc nmi
-     _ <- scDeclareDef sc nm q def_tp Nothing
+     nm <- scmRegisterName nmi
+     _ <- scmDeclareDef nm q def_tp Nothing
      pure ()
 
 -- Internal function
-scFindDefBody :: SharedContext -> VarIndex -> IO (Maybe Term)
-scFindDefBody sc vi =
-  do mm <- scGetModuleMap sc
+scmFindDefBody :: VarIndex -> SCM (Maybe Term)
+scmFindDefBody vi =
+  do mm <- scmGetModuleMap
      case lookupVarIndexInMap vi mm of
        Just (ResolvedDef d) -> pure (defBody d)
        _ -> pure Nothing
@@ -801,40 +759,44 @@ scFindDefBody sc vi =
 -- | Insert an \"incomplete\" datatype, used as part of building up a
 -- 'DataType' to typecheck its constructors. The constructors must be
 -- registered separately with 'scCompleteDataType'.
-scBeginDataType ::
-  SharedContext ->
+scmBeginDataType ::
   Ident {- ^ The name of this datatype -} ->
   [(VarName, Term)] {- ^ The context of parameters of this datatype -} ->
   [(VarName, Term)] {- ^ The context of indices of this datatype -} ->
   Sort {- ^ The universe of this datatype -} ->
-  IO Name
-scBeginDataType sc dtIdent dtParams dtIndices dtSort =
-  do dtName <- scRegisterName sc (ModuleIdentifier dtIdent)
-     dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
-     dtMotiveName <- scFreshVarName sc "p"
-     dtArgName <- scFreshVarName sc "arg"
+  SCM Name
+scmBeginDataType dtIdent dtParams dtIndices dtSort =
+  do dtName <- scmRegisterName (ModuleIdentifier dtIdent)
+     dtType <- scmPiList (dtParams ++ dtIndices) =<< scmSort dtSort
+     dtMotiveName <- scmFreshVarName "p"
+     dtArgName <- scmFreshVarName "arg"
      let dt = DataType { dtCtors = [], .. }
-     e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
+     sc <- scmSharedContext
+     e <-
+       liftIO $ atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
-         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Left nm -> (mm, Just (AlreadyDefined nm))
          Right mm' -> (mm', Nothing)
-     maybe (pure ()) throwIO e
-     scRegisterGlobal sc dtIdent =<< scConst sc dtName
+     maybe (pure ()) scmError e
+     scmRegisterGlobal dtIdent =<< scmConst dtName
      pure dtName
 
 -- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
-scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
-scCompleteDataType sc dtIdent ctors =
-  do e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
+scmCompleteDataType :: Ident -> [Ctor] -> SCM ()
+scmCompleteDataType dtIdent ctors =
+  do sc <- scmSharedContext
+     e <-
+       liftIO $
+       atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case completeDataType dtIdent ctors mm of
-         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Left nm -> (mm, Just (AlreadyDefined nm))
          Right mm' -> (mm', Nothing)
-     maybe (pure ()) throwIO e
+     maybe (pure ()) scmError e
      forM_ ctors $ \ctor ->
        case nameInfo (ctorName ctor) of
          ModuleIdentifier ident ->
            -- register constructor in scGlobalEnv if it has an Ident name
-           scRegisterGlobal sc ident =<< scConst sc (ctorName ctor)
+           scmRegisterGlobal ident =<< scmConst (ctorName ctor)
          ImportedName{} ->
            pure ()
 
@@ -854,12 +816,13 @@ scInjectCode sc mnm ns txt =
 --------------------------------------------------------------------------------
 -- Recursors
 
-scRecursor :: SharedContext -> Name -> Sort -> IO Term
-scRecursor sc nm s =
-  do mm <- scGetModuleMap sc
+scmRecursor :: Name -> Sort -> SCM Term
+scmRecursor nm s =
+  do sc <- scmSharedContext
+     mm <- liftIO $ scGetModuleMap sc
      case lookupVarIndexInMap (nameIndex nm) mm of
        Just (ResolvedDataType dt) ->
-         do unless (allowedElimSort dt s) $ fail "Disallowed propositional elimination"
+         do unless (allowedElimSort dt s) $ scmError (RecursorPropElim nm s)
             let d = dtName dt
             let nparams = length (dtParams dt)
             let nixs = length (dtIndices dt)
@@ -867,10 +830,10 @@ scRecursor sc nm s =
             let crec = CompiledRecursor d s nparams nixs ctorOrder
             let vt = IntMap.empty
             let tf = FTermF (Recursor crec)
-            ty <- scRecursorType sc dt s
-            scMakeTerm sc vt tf (Right ty)
+            ty <- scmRecursorType dt s
+            scmMakeTerm vt tf (Right ty)
        _ ->
-         fail "datatype not found"
+         scmError (DataTypeNotFound nm)
 
 -- | Test whether a 'DataType' can be eliminated to the given sort. The rules
 -- are that you can only eliminate propositional datatypes to the proposition
@@ -908,21 +871,20 @@ allowedElimSort dt s =
 -- since it depends on fields of the 'CtorArgStruct', so, instead, the result is
 -- just casted to whatever type the caller specifies.
 ctxCtorElimType ::
-  SharedContext ->
   Name {- ^ data type name -} ->
   Name {- ^ constructor name -} ->
   Term {- ^ motive function -} ->
   CtorArgStruct ->
-  IO Term
-ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
-  do params <- scVariables sc ctorParams
-     d_params <- scConstApply sc d params
-     let helper :: [Term] -> [(VarName, CtorArg)] -> IO Term
+  SCM Term
+ctxCtorElimType d c p_ret (CtorArgStruct{..}) =
+  do params <- scmVariables ctorParams
+     d_params <- scmConstApply d params
+     let helper :: [Term] -> [(VarName, CtorArg)] -> SCM Term
          helper prevs ((nm, ConstArg tp) : args) =
            -- For a constant argument type, just abstract it and continue
-           do arg <- scVariable sc nm tp
+           do arg <- scmVariable nm tp
               rest <- helper (prevs ++ [arg]) args
-              scPi sc nm tp rest
+              scmPi nm tp rest
          helper prevs ((nm, RecursiveArg zs ts) : args) =
            -- For a recursive argument type of the form
            --
@@ -935,25 +897,25 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
            -- rest
            --
            -- where rest is the result of a recursive call
-           do d_params_ts <- scApplyAll sc d_params ts
+           do d_params_ts <- scmApplyAll d_params ts
               -- Build the type of the argument arg
-              arg_tp <- scPiList sc zs d_params_ts
-              arg <- scVariable sc nm arg_tp
+              arg_tp <- scmPiList zs d_params_ts
+              arg <- scmVariable nm arg_tp
               -- Build the type of ih
-              pret_ts <- scApplyAll sc p_ret ts
-              z_vars <- scVariables sc zs
-              arg_zs <- scApplyAll sc arg z_vars
-              ih_ret <- scApply sc pret_ts arg_zs
-              ih_tp <- scPiList sc zs ih_ret
+              pret_ts <- scmApplyAll p_ret ts
+              z_vars <- scmVariables zs
+              arg_zs <- scmApplyAll arg z_vars
+              ih_ret <- scmApply pret_ts arg_zs
+              ih_tp <- scmPiList zs ih_ret
               -- Finally, build the pi-abstraction for arg and ih around the rest
               rest <- helper (prevs ++ [arg]) args
-              scPi sc nm arg_tp =<< scFun sc ih_tp rest
+              scmPi nm arg_tp =<< scmFun ih_tp rest
          helper prevs [] =
            -- If we are finished with our arguments, construct the final result type
            -- (p_ret ret_ixs (c params prevs))
-           do p_ret_ixs <- scApplyAll sc p_ret ctorIndices
-              appliedCtor <- scConstApply sc c (params ++ prevs)
-              scApply sc p_ret_ixs appliedCtor
+           do p_ret_ixs <- scmApplyAll p_ret ctorIndices
+              appliedCtor <- scmConstApply c (params ++ prevs)
+              scmApply p_ret_ixs appliedCtor
      helper [] ctorArgs
 
 -- | Reduce an application of a recursor to a particular constructor.
@@ -982,23 +944,22 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
 -- constructor arguments @xs@ for the remaining free variables.
 
 ctxReduceRecursor ::
-  SharedContext ->
   Term {- ^ recursor applied to params, motive, and eliminator functions -} ->
   Term {- ^ constructor eliminator function -} ->
   [Term] {- ^ constructor arguments -} ->
   CtorArgStruct {- ^ constructor formal argument descriptor -} ->
-  IO Term
-ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
+  SCM Term
+ctxReduceRecursor r elimf c_args CtorArgStruct{..}
   | length c_args /= length ctorArgs = panic "ctxReduceRecursor" ["Wrong number of constructor arguments"]
   | otherwise =
     do args <- mk_args IntMap.empty (zip c_args ctorArgs)
-       scWhnf sc =<< scApplyAll sc elimf args
+       scmWhnf =<< scmApplyAll elimf args
   where
     mk_args :: IntMap Term ->  -- already processed parameters/arguments
                [(Term, (VarName, CtorArg))] ->
                  -- remaining actual arguments to process, with
                  -- telescope for typing the actual arguments
-               IO [Term]
+               SCM [Term]
     -- no more arguments to process
     mk_args _ [] = return []
 
@@ -1009,8 +970,8 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 
     -- process an argument that is a recursive call
     mk_args pre_xs ((x, (nm, RecursiveArg zs ixs)) : xs_args) =
-      do zs'  <- traverse (traverse (scInstantiate sc pre_xs)) zs
-         ixs' <- traverse (scInstantiate sc pre_xs) ixs
+      do zs'  <- traverse (traverse (scmInstantiate pre_xs)) zs
+         ixs' <- traverse (scmInstantiate pre_xs) ixs
          recx <- mk_rec_arg zs' ixs' x
          tl   <- mk_args (IntMap.insert (vnIndex nm) x pre_xs) xs_args
          pure (x : recx : tl)
@@ -1023,14 +984,14 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
       [(VarName, Term)] ->             -- telescope describing the zs
       [Term] ->                        -- actual values for the indices, shifted under zs
       Term ->                         -- actual value in recursive position
-      IO Term
+      SCM Term
     mk_rec_arg zs_ctx ixs x =
       -- eta expand over the zs and apply the Recursor form
-      do zs <- scVariables sc zs_ctx
-         x_zs <- scApplyAll sc x zs
-         r_ixs <- scApplyAll sc r ixs
-         body <- scApply sc r_ixs x_zs
-         scLambdaList sc zs_ctx body
+      do zs <- scmVariables zs_ctx
+         x_zs <- scmApplyAll x zs
+         r_ixs <- scmApplyAll r ixs
+         body <- scmApply r_ixs x_zs
+         scmLambdaList zs_ctx body
 
 -- | Build the type of the @p_ret@ function, also known as the "motive"
 -- function, of a recursor on datatype @d@. This type has the form
@@ -1040,13 +1001,13 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 -- where the @pi@ are the parameters of @d@, the @ixj@ are the indices
 -- of @d@, and @s@ is any sort supplied as an argument.
 -- Parameter variables @p1 .. pn@ will be free in the resulting term.
-scRecursorMotiveType :: SharedContext -> DataType -> Sort -> IO Term
-scRecursorMotiveType sc dt s =
-  do param_vars <- scVariables sc (dtParams dt)
-     ix_vars <- scVariables sc (dtIndices dt)
-     d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
-     ret <- scFun sc d =<< scSort sc s
-     scPiList sc (dtIndices dt) ret
+scmRecursorMotiveType :: DataType -> Sort -> SCM Term
+scmRecursorMotiveType dt s =
+  do param_vars <- scmVariables (dtParams dt)
+     ix_vars <- scmVariables (dtIndices dt)
+     d <- scmConstApply (dtName dt) (param_vars ++ ix_vars)
+     ret <- scmFun d =<< scmSort s
+     scmPiList (dtIndices dt) ret
 
 -- | Build the type of a recursor for datatype @d@ that has been
 -- applied to parameters, a motive function, and a full set of
@@ -1058,15 +1019,15 @@ scRecursorMotiveType sc dt s =
 -- where the @pi@ are the parameters of @d@, and the @ixj@ are the
 -- indices of @d@.
 -- Parameter variables @p1 .. pn@ will be free in the resulting term.
-scRecursorAppType :: SharedContext -> DataType -> Term -> IO Term
-scRecursorAppType sc dt motive =
-  do param_vars <- scVariables sc (dtParams dt)
-     ix_vars <- scVariables sc (dtIndices dt)
-     d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
+scmRecursorAppType :: DataType -> Term -> SCM Term
+scmRecursorAppType dt motive =
+  do param_vars <- scmVariables (dtParams dt)
+     ix_vars <- scmVariables (dtIndices dt)
+     d <- scmConstApply (dtName dt) (param_vars ++ ix_vars)
      let arg_vn = dtArgName dt
-     arg_var <- scVariable sc arg_vn d
-     ret <- scApplyAll sc motive (ix_vars ++ [arg_var])
-     scPiList sc (dtIndices dt ++ [(arg_vn, d)]) ret
+     arg_var <- scmVariable arg_vn d
+     ret <- scmApplyAll motive (ix_vars ++ [arg_var])
+     scmPiList (dtIndices dt ++ [(arg_vn, d)]) ret
 
 -- | Build the full type of an unapplied recursor for datatype @d@
 -- with elimination to sort @s@.
@@ -1077,25 +1038,25 @@ scRecursorAppType sc dt motive =
 -- > (elim1 : ..) -> .. (elimk : ..) ->
 -- > (i1:ix1) -> .. -> (im:ixm) ->
 -- >   (arg : d p1 .. pn i1 .. im) -> motive i1 .. im arg
-scRecursorType :: SharedContext -> DataType -> Sort -> IO Term
-scRecursorType sc dt s =
+scmRecursorType :: DataType -> Sort -> SCM Term
+scmRecursorType dt s =
   do let d = dtName dt
 
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
-     motive_ty <- scRecursorMotiveType sc dt s
+     motive_ty <- scmRecursorMotiveType dt s
      let motive_vn = dtMotiveName dt
-     motive_var <- scVariable sc motive_vn motive_ty
+     motive_var <- scmVariable motive_vn motive_ty
 
      -- Compute the types of the elimination functions
      elims_tps <-
        forM (dtCtors dt) $ \ctor ->
-       ctxCtorElimType sc d (ctorName ctor) motive_var (ctorArgStruct ctor)
+       ctxCtorElimType d (ctorName ctor) motive_var (ctorArgStruct ctor)
 
-     scPiList sc (dtParams dt) =<<
-       scPi sc motive_vn motive_ty =<<
-       scFunAll sc elims_tps =<<
-       scRecursorAppType sc dt motive_var
+     scmPiList (dtParams dt) =<<
+       scmPi motive_vn motive_ty =<<
+       scmFunAll elims_tps =<<
+       scmRecursorAppType dt motive_var
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
@@ -1108,10 +1069,8 @@ scRecursorType sc dt s =
 --
 -- where @maybe rec_tm_i@ indicates an optional recursive call of the recursor
 -- on one of the @xi@. These recursive calls only exist for those arguments
--- @xi@. See the documentation for 'ctxReduceRecursor' and the
--- 'ctorIotaReduction' field for more details.
-scReduceRecursor ::
-  SharedContext ->
+-- @xi@. See the documentation for 'ctxReduceRecursor' for more details.
+scmReduceRecursor ::
   Term {- ^ recursor term -} ->
   CompiledRecursor {- ^ concrete data included in the recursor term -} ->
   [Term] {- ^ datatype parameters -} ->
@@ -1119,16 +1078,14 @@ scReduceRecursor ::
   [Term] {- ^ eliminator functions -} ->
   Name {- ^ constructor name -} ->
   [Term] {- ^ constructor arguments -} ->
-  IO Term
-scReduceRecursor sc r crec params motive elims c args =
-  do mres <- lookupVarIndexInMap (nameIndex c) <$> scGetModuleMap sc
+  SCM Term
+scmReduceRecursor r crec params motive elims c args =
+  do mres <- lookupVarIndexInMap (nameIndex c) <$> scmGetModuleMap
      let cs_fs = Map.fromList (zip (map nameIndex (recursorCtorOrder crec)) elims)
-     r_applied <- scApplyAll sc r (params ++ motive : elims)
+     r_applied <- scmApplyAll r (params ++ motive : elims)
      case mres of
        Just (ResolvedCtor ctor) ->
-         -- The ctorIotaReduction field caches the result of iota reduction, which
-         -- we just substitute into to perform the reduction
-         ctorIotaReduction sc ctor r_applied cs_fs args
+         ctorIotaReduction ctor r_applied cs_fs args
        _ ->
          panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
 
@@ -1141,14 +1098,13 @@ scReduceRecursor sc r crec params motive elims c args =
 -- params, motive and elims), a mapping from constructor name indices
 -- to eliminator functions, and the arguments to the constructor.
 ctorIotaReduction ::
-  SharedContext ->
   Ctor ->
   Term {- ^ recursor term -} ->
   Map VarIndex Term {- ^ constructor eliminators -} ->
   [Term] {- ^ constructor arguments -} ->
-  IO Term
-ctorIotaReduction sc ctor r cs_fs args =
-  ctxReduceRecursor sc r elim args (ctorArgStruct ctor)
+  SCM Term
+ctorIotaReduction ctor r cs_fs args =
+  ctxReduceRecursor r elim args (ctorArgStruct ctor)
   where
     elim =
       case Map.lookup (nameIndex (ctorName ctor)) cs_fs of
@@ -1170,10 +1126,10 @@ data WHNFElim
 
 -- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
 -- definitions at the top level of a term.
-scWhnf :: SharedContext -> Term -> IO Term
-scWhnf sc t0 = go [] t0
+scmWhnf :: Term -> SCM Term
+scmWhnf t0 = go [] t0
   where
-    go :: [WHNFElim] -> Term -> IO Term
+    go :: [WHNFElim] -> Term -> SCM Term
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
     go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
@@ -1198,30 +1154,30 @@ scWhnf sc t0 = go [] t0
                                                                            Nothing -> foldM reapply t xs
                                                                            Just (rt, crec, params, motive, elims, args, xs') ->
                                                                              do let args' = drop (ctorNumParams ctor) args
-                                                                                scReduceRecursor sc rt crec params motive elims nm args' >>= go xs'
+                                                                                scmReduceRecursor rt crec params motive elims nm args' >>= go xs'
                                                                        ResolvedDataType _ ->
                                                                          foldM reapply t xs
 
     go xs                     t                                 = foldM reapply t xs
 
-    betaReduce :: [WHNFElim] -> [(VarName, Term)] -> Term -> IO Term
+    betaReduce :: [WHNFElim] -> [(VarName, Term)] -> Term -> SCM Term
     betaReduce (ElimApp x : xs) vs (asLambda -> Just (vn,_,body)) =
       betaReduce xs ((vn, x) : vs) body
     betaReduce xs vs body =
       do let subst = IntMap.fromList [ (vnIndex vn, x) | (vn, x) <- vs ]
-         body' <- scInstantiate sc subst body
+         body' <- scmInstantiate subst body
          go xs body'
 
-    reapply :: Term -> WHNFElim -> IO Term
-    reapply t (ElimApp x) = scApply sc t x
-    reapply t (ElimProj i) = scRecordSelect sc t i
-    reapply t (ElimPair i) = scPairSelector sc t i
+    reapply :: Term -> WHNFElim -> SCM Term
+    reapply t (ElimApp x) = scmApply t x
+    reapply t (ElimProj i) = scmRecordSelect t i
+    reapply t (ElimPair i) = scmPairSelector t i
     reapply t (ElimRecursor r _crec params motive elims ixs) =
-      do f <- scApplyAll sc r (params ++ motive : elims ++ ixs)
-         scApply sc f t
+      do f <- scmApplyAll r (params ++ motive : elims ++ ixs)
+         scmApply f t
 
-    resolveConstant :: Name -> IO ResolvedName
-    resolveConstant nm = requireNameInMap nm <$> scGetModuleMap sc
+    resolveConstant :: Name -> SCM ResolvedName
+    resolveConstant nm = requireNameInMap nm <$> scmGetModuleMap
 
     -- look for a prefix of ElimApps followed by an ElimRecursor
     asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor, [Term], Term, [Term], [Term], [WHNFElim])
@@ -1240,120 +1196,112 @@ scWhnf sc t0 = go [] t0
           Just (t : ts, xs')
     splitApps _ _ = Nothing
 
-
 -- | Test if two terms are convertible up to a given evaluation procedure. In
 -- practice, this procedure is usually 'scWhnf', possibly combined with some
 -- rewriting.
-scConvertibleEval :: SharedContext
-                  -> (SharedContext -> Term -> IO Term)
-                  -> Bool -- ^ Should constants be unfolded during this check?
-                  -> Term
-                  -> Term
-                  -> IO Bool
-scConvertibleEval sc eval unfoldConst tm1 tm2 = do
-   c <- newCache
-   go c IntMap.empty tm1 tm2
+scmConvertible ::
+  Bool {- ^ Should constants be unfolded during this check? -} ->
+  Term ->
+  Term ->
+  SCM Bool
+scmConvertible unfoldConst tm1 tm2 =
+  do c <- newCache
+     go c IntMap.empty tm1 tm2
 
- where whnf :: Cache IO TermIndex Term -> Term -> IO (TermF Term)
-       whnf c t@(STApp{ stAppIndex = idx}) =
-         unwrapTermF <$> useCache c idx (eval sc t)
+  where
+    whnf :: Cache SCM TermIndex Term -> Term -> SCM (TermF Term)
+    whnf c t@STApp{stAppIndex = idx} =
+      unwrapTermF <$> useCache c idx (scmWhnf t)
 
-       go :: Cache IO TermIndex Term -> IntMap VarIndex -> Term -> Term -> IO Bool
-       go _c vm (STApp{stAppIndex = idx1, stAppVarTypes = vt1}) (STApp{stAppIndex = idx2})
-         | IntMap.disjoint vt1 vm && idx1 == idx2 = pure True   -- succeed early case
-       go c vm t1 t2 = join (goF c vm <$> whnf c t1 <*> whnf c t2)
+    go :: Cache SCM TermIndex Term -> IntMap VarIndex -> Term -> Term -> SCM Bool
+    go _c vm (STApp{stAppIndex = idx1, stAppVarTypes = vt1}) (STApp{stAppIndex = idx2})
+      | IntMap.disjoint vt1 vm && idx1 == idx2 = pure True   -- succeed early case
+    go c vm t1 t2 = join (goF c vm <$> whnf c t1 <*> whnf c t2)
 
-       goF :: Cache IO TermIndex Term -> IntMap VarIndex -> TermF Term -> TermF Term -> IO Bool
+    goF :: Cache SCM TermIndex Term -> IntMap VarIndex -> TermF Term -> TermF Term -> SCM Bool
 
-       goF _c _vm (Constant nx) (Constant ny) | nameIndex nx == nameIndex ny = pure True
-       goF c vm (Constant nx) y
-           | unfoldConst =
-             do mx <- scFindDefBody sc (nameIndex nx)
-                case mx of
-                  Just x -> join (goF c vm <$> whnf c x <*> return y)
-                  Nothing -> pure False
-       goF c vm x (Constant ny)
-           | unfoldConst =
-             do my <- scFindDefBody sc (nameIndex ny)
-                case my of
-                  Just y -> join (goF c vm <$> return x <*> whnf c y)
-                  Nothing -> pure False
+    goF _c _vm (Constant nx) (Constant ny) | nameIndex nx == nameIndex ny = pure True
+    goF c vm (Constant nx) y
+        | unfoldConst =
+          do mx <- scmFindDefBody (nameIndex nx)
+             case mx of
+               Just x -> join (goF c vm <$> whnf c x <*> return y)
+               Nothing -> pure False
+    goF c vm x (Constant ny)
+        | unfoldConst =
+          do my <- scmFindDefBody (nameIndex ny)
+             case my of
+               Just y -> join (goF c vm <$> return x <*> whnf c y)
+               Nothing -> pure False
 
-       goF c vm (FTermF ftf1) (FTermF ftf2) =
-               case zipWithFlatTermF (go c vm) ftf1 ftf2 of
-                 Nothing -> return False
-                 Just zipped -> Fold.and <$> traverse id zipped
+    goF c vm (FTermF ftf1) (FTermF ftf2) =
+            case zipWithFlatTermF (go c vm) ftf1 ftf2 of
+              Nothing -> return False
+              Just zipped -> Fold.and <$> traverse id zipped
 
-       goF c vm (App f1 x1) (App f2 x2) =
-              pure (&&) <*> go c vm f1 f2 <*> go c vm x1 x2
+    goF c vm (App f1 x1) (App f2 x2) =
+           pure (&&) <*> go c vm f1 f2 <*> go c vm x1 x2
 
-       goF c vm (Lambda (vnIndex -> i1) ty1 body1) (Lambda (vnIndex -> i2) ty2 body2) =
-         pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
-           where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
+    goF c vm (Lambda (vnIndex -> i1) ty1 body1) (Lambda (vnIndex -> i2) ty2 body2) =
+      pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
+        where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
 
-       goF c vm (Pi (vnIndex -> i1) ty1 body1) (Pi (vnIndex -> i2) ty2 body2) =
-         pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
-           where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
+    goF c vm (Pi (vnIndex -> i1) ty1 body1) (Pi (vnIndex -> i2) ty2 body2) =
+      pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
+        where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
 
-       goF c vm (Variable x1 t1) (Variable x2 t2)
-         | i' == vnIndex x2 = go c vm t1 t2
-           where i' = case IntMap.lookup (vnIndex x1) vm of
-                        Nothing -> vnIndex x1
-                        Just i -> i
+    goF c vm (Variable x1 t1) (Variable x2 t2)
+      | i' == vnIndex x2 = go c vm t1 t2
+        where i' = case IntMap.lookup (vnIndex x1) vm of
+                     Nothing -> vnIndex x1
+                     Just i -> i
 
-       -- final catch-all case
-       goF _c _vm _x _y = pure False
-
--- | Test if two terms are convertible using 'scWhnf' for evaluation
-scConvertible :: SharedContext
-              -> Bool -- ^ Should constants be unfolded during this check?
-              -> Term
-              -> Term
-              -> IO Bool
-scConvertible sc = scConvertibleEval sc scWhnf
+    -- final catch-all case
+    goF _c _vm _x _y = pure False
 
 -- | Check whether one type is a subtype of another: Either they are
 -- convertible, or they are both Pi types with convertible argument
 -- types and result sorts @s1@ and @s2@ with @s1 <= s2@.
-scSubtype :: SharedContext -> Term -> Term -> IO Bool
-scSubtype sc t1 t2
+scmSubtype :: Term -> Term -> SCM Bool
+scmSubtype t1 t2
   | alphaEquiv t1 t2 = pure True
   | otherwise =
-    do t1' <- scWhnf sc t1
-       t2' <- scWhnf sc t2
+    do t1' <- scmWhnf t1
+       t2' <- scmWhnf t2
        case (t1', t2') of
          (asSort -> Just s1, asSort -> Just s2) ->
            pure (s1 <= s2)
          (unwrapTermF -> Pi x1 a1 b1, unwrapTermF -> Pi x2 a2 b2)
            | x1 == x2 ->
-             (&&) <$> scConvertible sc True a1 a2 <*> scSubtype sc b1 b2
+             (&&) <$> scmConvertible True a1 a2 <*> scmSubtype b1 b2
            | otherwise ->
-             do conv1 <- scConvertible sc True a1 a2
-                var1 <- scVariable sc x1 a1
-                b2' <- scInstantiate sc (IntMap.singleton (vnIndex x2) var1) b2
-                conv2 <- scSubtype sc b1 b2'
+             do conv1 <- scmConvertible True a1 a2
+                var1 <- scmVariable x1 a1
+                b2' <- scmInstantiate (IntMap.singleton (vnIndex x2) var1) b2
+                conv2 <- scmSubtype b1 b2'
                 pure (conv1 && conv2)
          _ ->
-           scConvertible sc True t1' t2'
+           scmConvertible True t1' t2'
 
 
 --------------------------------------------------------------------------------
 -- Type checking
 
 -- | Look up the type of a global constant, given its 'Name'.
-scTypeOfName :: SharedContext -> Name -> IO Term
-scTypeOfName sc nm =
-  do mm <- scGetModuleMap sc
+scmTypeOfName :: Name -> SCM Term
+scmTypeOfName nm =
+  do sc <- scmSharedContext
+     mm <- liftIO $ scGetModuleMap sc
      case lookupVarIndexInMap (nameIndex nm) mm of
        Just r -> pure (resolvedNameType r)
-       Nothing -> fail ("scTypeOfName: Name not found: " ++ show nm)
+       Nothing -> scmError (NameNotFound nm)
 
 -- | Return the type of a term.
-scTypeOf :: SharedContext -> Term -> IO Term
-scTypeOf sc t =
+scmTypeOf :: Term -> SCM Term
+scmTypeOf t =
   case stAppType t of
     Right ty -> pure ty
-    Left s -> scSort sc s
+    Left s -> scmSort s
 
 --------------------------------------------------------------------------------
 -- Beta Normalization
@@ -1368,59 +1316,59 @@ scTypeOf sc t =
 -- will trigger further beta reduction.
 -- Existing beta redexes in the input term or substitution are
 -- not reduced.
-scInstantiateBeta :: SharedContext -> IntMap Term -> Term -> IO Term
-scInstantiateBeta sc sub t0 =
+scmInstantiateBeta :: IntMap Term -> Term -> SCM Term
+scmInstantiateBeta sub t0 =
   do let domainVars = IntMap.keysSet sub
      let rangeVars = foldMap freeVars sub
      cache <- newCacheIntMap
-     let memo :: Term -> IO Term
+     let memo :: Term -> SCM Term
          memo t@STApp{stAppIndex = i} = useCache cache i (go t)
-         go :: Term -> IO Term
+         go :: Term -> SCM Term
          go t
            | IntSet.disjoint domainVars (freeVars t) = pure t
            | otherwise = goArgs t []
-         goArgs :: Term -> [Term] -> IO Term
+         goArgs :: Term -> [Term] -> SCM Term
          goArgs t args =
            case unwrapTermF t of
              FTermF ftf ->
                do ftf' <- traverse memo ftf
-                  t' <- scFlatTermF sc ftf'
-                  scApplyAll sc t' args
+                  t' <- scmFlatTermF ftf'
+                  scmApplyAll t' args
              App t1 t2 ->
                do t2' <- memo t2
                   goArgs t1 (t2' : args)
              Lambda x t1 t2 ->
                do t1' <- memo t1
                   (x', t2') <- goBinder x t1' t2
-                  t' <- scLambda sc x' t1' t2'
-                  scApplyAll sc t' args
+                  t' <- scmLambda x' t1' t2'
+                  scmApplyAll t' args
              Pi x t1 t2 ->
                do t1' <- memo t1
                   (x', t2') <- goBinder x t1' t2
-                  t' <- scPi sc x' t1' t2'
-                  scApplyAll sc t' args
+                  t' <- scmPi x' t1' t2'
+                  scmApplyAll t' args
              Constant {} ->
-               scApplyAll sc t args
+               scmApplyAll t args
              Variable x t1 ->
                case IntMap.lookup (vnIndex x) sub of
-                 Just t' -> scApplyAllBeta sc t' args
+                 Just t' -> scmApplyAllBeta t' args
                  Nothing ->
                    do t1' <- memo t1
-                      t' <- scVariable sc x t1'
-                      scApplyAll sc t' args
-         goBinder :: VarName -> Term -> Term -> IO (VarName, Term)
+                      t' <- scmVariable x t1'
+                      scmApplyAll t' args
+         goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
                -- Possibility of capture; rename bound variable.
-               do x' <- scFreshVarName sc (vnName x)
-                  var <- scVariable sc x' t
+               do x' <- scmFreshVarName (vnName x)
+                  var <- scmVariable x' t
                   let sub' = IntMap.insert i var sub
-                  body' <- scInstantiateBeta sc sub' body
+                  body' <- scmInstantiateBeta sub' body
                   pure (x', body')
            | IntMap.member i sub =
                -- Shadowing; remove entry from substitution.
                do let sub' = IntMap.delete i sub
-                  body' <- scInstantiateBeta sc sub' body
+                  body' <- scmInstantiateBeta sub' body
                   pure (x, body')
            | otherwise =
                -- No possibility of shadowing or capture.
@@ -1433,228 +1381,223 @@ scInstantiateBeta sc sub t0 =
 -- into the function body.
 -- If all input terms are in beta-normal form, then the result will
 -- also be beta-normal.
-scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
-scApplyAllBeta _ t0 [] = pure t0
-scApplyAllBeta sc t0 (arg0 : args0) =
+scmApplyAllBeta :: Term -> [Term] -> SCM Term
+scmApplyAllBeta t0 [] = pure t0
+scmApplyAllBeta t0 (arg0 : args0) =
   case asLambda t0 of
-    Nothing -> scApplyAll sc t0 (arg0 : args0)
+    Nothing -> scmApplyAll t0 (arg0 : args0)
     Just (x, _, body) -> go (IntMap.singleton (vnIndex x) arg0) body args0
   where
-    go :: IntMap Term -> Term -> [Term] -> IO Term
+    go :: IntMap Term -> Term -> [Term] -> SCM Term
     go sub (asLambda -> Just (x, _, body)) (arg : args) =
       go (IntMap.insert (vnIndex x) arg sub) body args
     go sub t args =
-      do t' <- scInstantiateBeta sc sub t
-         scApplyAllBeta sc t' args
+      do t' <- scmInstantiateBeta sub t
+         scmApplyAllBeta t' args
 
 
 --------------------------------------------------------------------------------
 -- Building shared terms
 
 -- | Apply a function 'Term' to zero or more argument 'Term's.
-scApplyAll :: SharedContext -> Term -> [Term] -> IO Term
-scApplyAll sc = foldlM (scApply sc)
+scmApplyAll :: Term -> [Term] -> SCM Term
+scmApplyAll = foldlM scmApply
 
 -- | Create a term from a 'Sort'.
-scSort :: SharedContext -> Sort -> IO Term
-scSort sc s = scSortWithFlags sc s noFlags
+scmSort :: Sort -> SCM Term
+scmSort s = scmSortWithFlags s noFlags
 
 -- | Create a term from a 'Sort', and set the given advisory flags
-scSortWithFlags :: SharedContext -> Sort -> SortFlags -> IO Term
-scSortWithFlags sc s flags =
-  scMakeTerm sc IntMap.empty (FTermF (Sort s flags)) (Left (sortOf s))
+scmSortWithFlags :: Sort -> SortFlags -> SCM Term
+scmSortWithFlags s flags =
+  scmMakeTerm IntMap.empty (FTermF (Sort s flags)) (Left (sortOf s))
 
 -- | Create a literal term from a 'Natural'.
-scNat :: SharedContext -> Natural -> IO Term
-scNat sc 0 = scGlobalDef sc "Prelude.Zero"
-scNat sc n =
-  do p <- scPos sc n
-     scGlobalApply sc "Prelude.NatPos" [p]
+scmNat :: Natural -> SCM Term
+scmNat 0 = scmGlobalDef "Prelude.Zero"
+scmNat n =
+  do p <- scmPos n
+     scmGlobalApply "Prelude.NatPos" [p]
 
-scPos :: SharedContext -> Natural -> IO Term
-scPos sc n
-  | n <= 1    = scGlobalDef sc "Prelude.One"
+scmPos :: Natural -> SCM Term
+scmPos n
+  | n <= 1 = scmGlobalDef "Prelude.One"
   | otherwise =
-    do arg <- scPos sc (div n 2)
+    do arg <- scmPos (div n 2)
        let ident = if even n then "Prelude.Bit0" else "Prelude.Bit1"
-       scGlobalApply sc ident [arg]
+       scmGlobalApply ident [arg]
 
 -- | Create a literal term (of saw-core type @String@) from a 'Text'.
-scString :: SharedContext -> Text -> IO Term
-scString sc s =
-  do ty <- scStringType sc
-     scMakeTerm sc IntMap.empty (FTermF (StringLit s)) (Right ty)
+scmString :: Text -> SCM Term
+scmString s =
+  do ty <- scmStringType
+     scmMakeTerm IntMap.empty (FTermF (StringLit s)) (Right ty)
 
 -- | Create a term representing the primitive saw-core type @String@.
-scStringType :: SharedContext -> IO Term
-scStringType sc = scGlobalDef sc preludeStringIdent
+scmStringType :: SCM Term
+scmStringType = scmGlobalDef preludeStringIdent
 
 -- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
 -- that type.
-scVector :: SharedContext -> Term -> [Term] -> IO Term
-scVector sc e xs =
-  do scEnsureValidTerm sc e
-     vt <- foldM (unifyVarTypes "scVector" sc) (varTypes e) (map varTypes xs)
+scmVector :: Term -> [Term] -> SCM Term
+scmVector e xs =
+  do scmEnsureValidTerm e
+     vt <- foldM (scmUnifyVarTypes "scVector") (varTypes e) (map varTypes xs)
      let check x =
-           do scEnsureValidTerm sc x
-              xty <- scTypeOf sc x
-              ok <- scSubtype sc xty e
-              unless ok $ do
-                  e' <- ppTerm sc PPS.defaultOpts e
-                  xty' <- ppTerm sc PPS.defaultOpts xty
-                  fail $ unlines [
-                      "Not a subtype",
-                      "expected: " ++ e',
-                      "got: " ++ xty'
-                   ]
+           do scmEnsureValidTerm x
+              xty <- scmTypeOf x
+              ok <- scmSubtype xty e
+              unless ok $ scmError (VectorNotSubtype e x)
      mapM_ check xs
-     n <- scNat sc (fromIntegral (length xs))
+     n <- scmNat (fromIntegral (length xs))
      let tf = FTermF (ArrayValue e (V.fromList xs))
-     ty <- scVecType sc n e
-     scMakeTerm sc vt tf (Right ty)
+     ty <- scmVecType n e
+     scmMakeTerm vt tf (Right ty)
 
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.
-scVecType :: SharedContext -> Term -> Term -> IO Term
-scVecType sc n e = scGlobalApply sc preludeVecIdent [n, e]
+scmVecType :: Term -> Term -> SCM Term
+scmVecType n e = scmGlobalApply preludeVecIdent [n, e]
 
--- | Create a record term from a 'Map' from 'FieldName's to 'Term's.
-scRecord :: SharedContext -> Map FieldName Term -> IO Term
-scRecord sc (Map.toList -> fields) =
-  do mapM_ (scEnsureValidTerm sc . snd) fields
-     vt <- foldM (unifyVarTypes "scRecord" sc) IntMap.empty (map (varTypes . snd) fields)
+-- | Create a record term from a list of record fields.
+scmRecordValue :: [(FieldName, Term)] -> SCM Term
+scmRecordValue fields =
+  do mapM_ (scmEnsureValidTerm . snd) fields
+     vt <- foldM (scmUnifyVarTypes "scRecord") IntMap.empty (map (varTypes . snd) fields)
      let tf = FTermF (RecordValue fields)
-     field_tys <- traverse (traverse (scTypeOf sc)) fields
-     ty <- scRecordType sc field_tys
-     scMakeTerm sc vt tf (Right ty)
+     field_tys <- traverse (traverse (scmTypeOf)) fields
+     ty <- scmRecordType field_tys
+     scmMakeTerm vt tf (Right ty)
 
 -- | Create a record field access term from a 'Term' representing a record and
 -- a 'FieldName'.
-scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
-scRecordSelect sc t fname =
-  do scEnsureValidTerm sc t
+scmRecordSelect :: Term -> FieldName -> SCM Term
+scmRecordSelect t fname =
+  do scmEnsureValidTerm t
      let vt = varTypes t
      let tf = FTermF (RecordProj t fname)
-     field_tys <- ensureRecordType sc =<< scTypeOf sc t
+     ty <- scmTypeOf t
+     field_tys <- scmEnsureRecognizer (NotRecord t) asRecordType ty
      case Map.lookup fname field_tys of
-       Nothing -> fail "scRecordSelect: field name not found"
-       Just ty' -> scMakeTerm sc vt tf (Right ty')
+       Nothing -> scmError (FieldNotFound t fname)
+       Just ty' -> scmMakeTerm vt tf (Right ty')
 
 -- | Create a term representing the type of a record from a list associating
 -- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
 -- the given list is irrelevant, as record fields are not ordered.
-scRecordType :: SharedContext -> [(FieldName, Term)] -> IO Term
-scRecordType sc field_tys =
-  do mapM_ (scEnsureValidTerm sc . snd) field_tys
-     vt <- foldM (unifyVarTypes "scRecordType" sc) IntMap.empty (map (varTypes . snd) field_tys)
+scmRecordType :: [(FieldName, Term)] -> SCM Term
+scmRecordType field_tys =
+  do mapM_ (scmEnsureValidTerm . snd) field_tys
+     vt <- foldM (scmUnifyVarTypes "scRecordType") IntMap.empty (map (varTypes . snd) field_tys)
      let tf = FTermF (RecordType field_tys)
-     let field_sort (_, t) = either pure (ensureSort sc) (stAppType t)
+     let field_sort (_, t) = scmEnsureSortType t
      sorts <- traverse field_sort field_tys
      let s = foldl max (mkSort 0) sorts
-     scMakeTerm sc vt tf (Left s)
+     scmMakeTerm vt tf (Left s)
 
 -- | Create a unit-valued term.
-scUnitValue :: SharedContext -> IO Term
-scUnitValue sc =
-  do ty <- scUnitType sc
-     scMakeTerm sc IntMap.empty (FTermF UnitValue) (Right ty)
+scmUnitValue :: SCM Term
+scmUnitValue =
+  do ty <- scmUnitType
+     scmMakeTerm IntMap.empty (FTermF UnitValue) (Right ty)
 
 -- | Create a term representing the unit type.
-scUnitType :: SharedContext -> IO Term
-scUnitType sc =
-  scMakeTerm sc IntMap.empty (FTermF UnitType) (Left (TypeSort 0))
+scmUnitType :: SCM Term
+scmUnitType =
+  scmMakeTerm IntMap.empty (FTermF UnitType) (Left (TypeSort 0))
 
 -- | Create a pair term from two terms.
-scPairValue :: SharedContext
-            -> Term -- ^ The left projection
-            -> Term -- ^ The right projection
-            -> IO Term
-scPairValue sc t1 t2 =
-  do scEnsureValidTerm sc t1
-     scEnsureValidTerm sc t2
-     vt <- unifyVarTypes "scPairValue" sc (varTypes t1) (varTypes t2)
+scmPairValue ::
+  Term {- ^ The left projection -} ->
+  Term {- ^ The right projection -} ->
+  SCM Term
+scmPairValue t1 t2 =
+  do scmEnsureValidTerm t1
+     scmEnsureValidTerm t2
+     vt <- scmUnifyVarTypes "scPairValue" (varTypes t1) (varTypes t2)
      let tf = FTermF (PairValue t1 t2)
-     ty1 <- scTypeOf sc t1
-     ty2 <- scTypeOf sc t2
-     ty <- scPairType sc ty1 ty2
-     scMakeTerm sc vt tf (Right ty)
+     ty1 <- scmTypeOf t1
+     ty2 <- scmTypeOf t2
+     ty <- scmPairType ty1 ty2
+     scmMakeTerm vt tf (Right ty)
 
 -- | Create a term representing a pair type from two other terms, each
 -- representing a type.
-scPairType :: SharedContext
-           -> Term -- ^ Left projection type
-           -> Term -- ^ Right projection type
-           -> IO Term
-scPairType sc t1 t2 =
-  do scEnsureValidTerm sc t1
-     scEnsureValidTerm sc t2
-     vt <- unifyVarTypes "scPairType" sc (varTypes t1) (varTypes t2)
+scmPairType ::
+  Term {- ^ Left projection type -} ->
+  Term {- ^ Right projection type -} ->
+  SCM Term
+scmPairType t1 t2 =
+  do scmEnsureValidTerm t1
+     scmEnsureValidTerm t2
+     vt <- scmUnifyVarTypes "scPairType" (varTypes t1) (varTypes t2)
      let tf = FTermF (PairType t1 t2)
-     s1 <- either pure (ensureSort sc) (stAppType t1)
-     s2 <- either pure (ensureSort sc) (stAppType t2)
-     scMakeTerm sc vt tf (Left (max s1 s2))
+     s1 <- scmEnsureSortType t1
+     s2 <- scmEnsureSortType t2
+     scmMakeTerm vt tf (Left (max s1 s2))
 
 -- | Create a term giving the left projection of a 'Term' representing a pair.
-scPairLeft :: SharedContext -> Term -> IO Term
-scPairLeft sc t =
-  do scEnsureValidTerm sc t
-     (ty, _) <- ensurePairType sc =<< scTypeOf sc t
+scmPairLeft :: Term -> SCM Term
+scmPairLeft t =
+  do scmEnsureValidTerm t
+     (ty, _) <- scmEnsurePairType t
      let mty = maybe (Right ty) Left (asSort ty)
-     scMakeTerm sc (varTypes t) (FTermF (PairLeft t)) mty
+     scmMakeTerm (varTypes t) (FTermF (PairLeft t)) mty
 
 -- | Create a term giving the right projection of a 'Term' representing a pair.
-scPairRight :: SharedContext -> Term -> IO Term
-scPairRight sc t =
-  do scEnsureValidTerm sc t
-     (_, ty) <- ensurePairType sc =<< scTypeOf sc t
+scmPairRight :: Term -> SCM Term
+scmPairRight t =
+  do scmEnsureValidTerm t
+     (_, ty) <- scmEnsurePairType t
      let mty = maybe (Right ty) Left (asSort ty)
-     scMakeTerm sc (varTypes t) (FTermF (PairRight t)) mty
+     scmMakeTerm (varTypes t) (FTermF (PairRight t)) mty
 
 -- | Create a term representing either the left or right projection of the
 -- given 'Term', depending on the given 'Bool': left if @False@, right if @True@.
-scPairSelector :: SharedContext -> Term -> Bool -> IO Term
-scPairSelector sc t False = scPairLeft sc t
-scPairSelector sc t True = scPairRight sc t
+scmPairSelector :: Term -> Bool -> SCM Term
+scmPairSelector t False = scmPairLeft t
+scmPairSelector t True = scmPairRight t
 
 -- | Create a term representing the type of a non-dependent function, given a
 -- parameter and result type (as 'Term's).
-scFun :: SharedContext
-      -> Term -- ^ The parameter type
-      -> Term -- ^ The result type
-      -> IO Term
-scFun sc a b = scPi sc wildcardVarName a b
+scmFun ::
+  Term {- ^ The parameter type -} ->
+  Term {- ^ The result type -} ->
+  SCM Term
+scmFun a b = scmPi wildcardVarName a b
 
 -- | Create a term representing the type of a non-dependent n-ary function,
 -- given a list of parameter types and a result type (as terms).
-scFunAll :: SharedContext
-         -> [Term] -- ^ The parameter types
-         -> Term   -- ^ The result type
-         -> IO Term
-scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
+scmFunAll ::
+  [Term] {- ^ The parameter types -} ->
+  Term {- ^ The result type -} ->
+  SCM Term
+scmFunAll argTypes resultType = foldrM scmFun resultType argTypes
 
 -- | Create a lambda term of multiple arguments (curried) from a list
 -- associating parameter names to types (as 'Term's) and a body.
 -- The parameters are listed outermost first.
 -- Variable names in the parameter list are in scope for all parameter
 -- types occurring later in the list.
-scLambdaList :: SharedContext
-             -> [(VarName, Term)] -- ^ List of parameter / parameter type pairs
-             -> Term -- ^ The body
-             -> IO Term
-scLambdaList _ [] rhs = return rhs
-scLambdaList sc ((nm,tp):r) rhs =
-  scLambda sc nm tp =<< scLambdaList sc r rhs
+scmLambdaList ::
+  [(VarName, Term)] {- ^ List of parameter / parameter type pairs -} ->
+  Term {- ^ The body -} ->
+  SCM Term
+scmLambdaList [] body = pure body
+scmLambdaList ((x, t) : xts) body =
+  scmLambda x t =<< scmLambdaList xts body
 
 -- | Create a (possibly dependent) function of multiple arguments (curried)
 -- from a list associating parameter names to types (as 'Term's) and a body.
 -- Variable names in the parameter list are in scope for all parameter
 -- types occurring later in the list.
-scPiList :: SharedContext
-         -> [(VarName, Term)] -- ^ List of parameter / parameter type pairs
-         -> Term -- ^ The body
-         -> IO Term
-scPiList _ [] rhs = return rhs
-scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
+scmPiList ::
+  [(VarName, Term)] {- ^ List of parameter / parameter type pairs -} ->
+  Term {- ^ The body -} ->
+  SCM Term
+scmPiList [] body = pure body
+scmPiList ((x, t) : xts) body =
+  scmPi x t =<< scmPiList xts body
 
 -- | Define a global constant with the specified base name (as
 -- 'Text') and body.
@@ -1663,24 +1606,15 @@ scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 -- using 'scFreshName'.
 -- The type of the body determines the type of the constant; to
 -- specify a different formulation of the type, use 'scAscribe'.
-scFreshConstant ::
-  SharedContext ->
+scmFreshConstant ::
   Text {- ^ The base name -} ->
   Term {- ^ The body -} ->
-  IO Term
-scFreshConstant sc name rhs =
-  do ty <- scTypeOf sc rhs
-     unless (closedTerm rhs) $ do
-       ty' <- ppTerm sc PPS.defaultOpts ty
-       rhs' <- ppTerm sc PPS.defaultOpts rhs
-       fail $ unlines [
-           "scFreshConstant: term contains free variables",
-           "name: " ++ Text.unpack name,
-           "ty: " ++ ty',
-           "rhs: " ++ rhs'
-        ]
-     nm <- scFreshName sc name
-     scDeclareDef sc nm NoQualifier ty (Just rhs)
+  SCM Term
+scmFreshConstant name rhs =
+  do nm <- scmFreshName name
+     unless (closedTerm rhs) $ scmError (ConstantNotClosed nm rhs)
+     ty <- scmTypeOf rhs
+     scmDeclareDef nm NoQualifier ty (Just rhs)
 
 -- | Define a global constant with the specified name (as 'NameInfo')
 -- and body.
@@ -1688,47 +1622,37 @@ scFreshConstant sc name rhs =
 -- The term for the body must not have any free variables.
 -- The type of the body determines the type of the constant; to
 -- specify a different formulation of the type, use 'scAscribe'.
-scDefineConstant ::
-  SharedContext ->
+scmDefineConstant ::
   NameInfo {- ^ The name -} ->
   Term {- ^ The body -} ->
-  IO Term
-scDefineConstant sc nmi rhs =
-  do ty <- scTypeOf sc rhs
-     unless (closedTerm rhs) $ do
-       ty' <- ppTerm sc PPS.defaultOpts ty
-       rhs' <- ppTerm sc PPS.defaultOpts rhs
-       fail $ unlines [
-           "scDefineConstant: term contains free variables",
-           "nmi: " ++ Text.unpack (toAbsoluteName nmi),
-           "ty: " ++ ty',
-           "rhs: " ++ rhs'
-        ]
-     nm <- scRegisterName sc nmi
-     scDeclareDef sc nm NoQualifier ty (Just rhs)
-
+  SCM Term
+scmDefineConstant nmi rhs =
+  do ty <- scmTypeOf rhs
+     nm <- scmRegisterName nmi
+     unless (closedTerm rhs) $
+       scmError (ConstantNotClosed nm rhs)
+     scmDeclareDef nm NoQualifier ty (Just rhs)
 
 -- | Declare a global opaque constant with the specified name (as
 -- 'NameInfo') and type.
 -- Such a constant has no definition, but unlike a variable it may be
 -- used in other constant definitions and is not subject to
 -- lambda-binding or substitution.
-scOpaqueConstant ::
-  SharedContext ->
+scmOpaqueConstant ::
   NameInfo ->
   Term {- ^ type of the constant -} ->
-  IO Term
-scOpaqueConstant sc nmi ty =
-  do _ <- either pure (ensureSort sc) (stAppType ty)
-     nm <- scRegisterName sc nmi
-     scDeclareDef sc nm NoQualifier ty Nothing
+  SCM Term
+scmOpaqueConstant nmi ty =
+  do _ <- scmEnsureSortType ty
+     nm <- scmRegisterName nmi
+     scmDeclareDef nm NoQualifier ty Nothing
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
-scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
-scGlobalApply sc i ts =
-    do c <- scGlobalDef sc i
-       scApplyAll sc c ts
+scmGlobalApply :: Ident -> [Term] -> SCM Term
+scmGlobalApply i ts =
+    do c <- scmGlobalDef i
+       scmApplyAll c ts
 
 
 ------------------------------------------------------------
@@ -1766,48 +1690,50 @@ mkSharedContext =
 -- The 'IntMap' is keyed by 'VarIndex'.
 -- Note: The replacement is _not_ applied recursively
 -- to the terms in the substitution map.
-scInstantiate :: SharedContext -> IntMap Term -> Term -> IO Term
-scInstantiate sc vmap t0 =
+scmInstantiate :: IntMap Term -> Term -> SCM Term
+scmInstantiate vmap t0 =
   do let domainVars = IntMap.keysSet vmap
      let rangeVars = foldMap freeVars vmap
      tcache <- newCacheIntMap
-     let memo :: Term -> IO Term
-         memo t =
-           case t of
-             STApp {stAppIndex = i} -> useCache tcache i (go t)
-         go :: Term -> IO Term
+     let memo :: Term -> SCM Term
+         memo t = useCache tcache (termIndex t) (go t)
+         go :: Term -> SCM Term
          go t
            | IntSet.disjoint domainVars (freeVars t) = pure t
            | otherwise =
              case unwrapTermF t of
-               FTermF ftf     -> scFlatTermF sc =<< traverse memo ftf
-               App t1 t2      -> scTermF sc =<< App <$> memo t1 <*> memo t2
+               FTermF ftf ->
+                 scmFlatTermF =<< traverse memo ftf
+               App t1 t2 ->
+                 do t1' <- memo t1
+                    t2' <- memo t2
+                    scmApply t1' t2'
                Lambda x t1 t2 ->
                  do t1' <- memo t1
                     (x', t2') <- goBinder x t1' t2
-                    scLambda sc x' t1' t2'
+                    scmLambda x' t1' t2'
                Pi x t1 t2 ->
                  do t1' <- memo t1
                     (x', t2') <- goBinder x t1' t2
-                    scPi sc x' t1' t2'
+                    scmPi x' t1' t2'
                Constant {} -> pure t
                Variable nm tp ->
                  case IntMap.lookup (vnIndex nm) vmap of
                    Just t' -> pure t'
-                   Nothing -> scVariable sc nm =<< memo tp
-         goBinder :: VarName -> Term -> Term -> IO (VarName, Term)
+                   Nothing -> scmVariable nm =<< memo tp
+         goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
                -- Possibility of capture; rename bound variable.
-               do x' <- scFreshVarName sc (vnName x)
-                  var <- scVariable sc x' t
+               do x' <- scmFreshVarName (vnName x)
+                  var <- scmVariable x' t
                   let vmap' = IntMap.insert i var vmap
-                  body' <- scInstantiate sc vmap' body
+                  body' <- scmInstantiate vmap' body
                   pure (x', body')
            | IntMap.member i vmap =
                -- Shadowing; remove entry from substitution.
                do let vmap' = IntMap.delete i vmap
-                  body' <- scInstantiate sc vmap' body
+                  body' <- scmInstantiate vmap' body
                   pure (x, body')
            | otherwise =
                -- No possibility of shadowing or capture.

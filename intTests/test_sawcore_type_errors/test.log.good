@@ -11,7 +11,7 @@ Stack trace:
 While typechecking term:
   false
 .:1:0:
-Unbound name: "false"
+Unbound name: false
 
 No such data type
 == Anticipated failure message ==
@@ -41,8 +41,11 @@ Stack trace:
 While typechecking term:
   \ (x : True) -> x
 .:1:0:
-Not a sort
-  Prelude.Bool
+Type of term is not a sort
+For term:
+  True
+With type:
+  Bool
 
 Not a sort (pi)
 == Anticipated failure message ==
@@ -56,8 +59,11 @@ Stack trace:
 While typechecking term:
   (x : True) -> Bool
 .:1:11:
-Not a sort
-  Prelude.Bool
+Type of term is not a sort
+For term:
+  True
+With type:
+  Bool
 
 Not a sort (pi)
 == Anticipated failure message ==
@@ -71,8 +77,11 @@ Stack trace:
 While typechecking term:
   (x : Bool) -> False
 .:1:11:
-Not a sort
-  Prelude.Bool
+Type of term is not a sort
+For term:
+  False
+With type:
+  Bool
 
 Not a sort (pair type)
 == Anticipated failure message ==
@@ -86,8 +95,11 @@ Stack trace:
 While typechecking term:
   True * Nat
 .:1:2:
-Not a sort
-  Prelude.Bool
+Type of term is not a sort
+For term:
+  True
+With type:
+  Bool
 
 Not a sort (pair type)
 == Anticipated failure message ==
@@ -101,8 +113,11 @@ Stack trace:
 While typechecking term:
   Bool * 5
 .:1:2:
-Not a sort
-  Prelude.Nat
+Type of term is not a sort
+For term:
+  5
+With type:
+  Nat
 
 Not a sort (record type)
 == Anticipated failure message ==
@@ -116,8 +131,11 @@ Stack trace:
 While typechecking term:
   #{foo : Bool, bar : False}
 .:1:0:
-Not a sort
-  Prelude.Bool
+Type of term is not a sort
+For term:
+  False
+With type:
+  Bool
 
 Disallowed propositional elimination
 == Anticipated failure message ==
@@ -131,9 +149,11 @@ Stack trace:
 While typechecking term:
   IsLeNat#rec
 .:1:0:
-Malformed recursor
-  Prelude.IsLeNat#rec
-Disallowed propositional elimination
+Invalid recursor with disallowed propositional elimination
+Data type:
+  Prelude.IsLeNat
+Elimination sort:
+  sort 0
 
 Function application with non-function type
 == Anticipated failure message ==
@@ -149,11 +169,11 @@ While typechecking term:
 .:1:0:
 Function application with non-function type
 For term:
-  Prelude.True
+  True
 With type:
-  Prelude.Bool
+  Bool
 To argument:
-  Prelude.True
+  True
 
 Tuple field projection with non-tuple type
 == Anticipated failure message ==
@@ -167,8 +187,11 @@ Stack trace:
 While typechecking term:
   True.1
 .:1:0:
-Tuple field projection with non-tuple type
-  Prelude.Bool
+Tuple field projection with non-tuple
+For term:
+  True
+With type:
+  Bool
 
 Record field projection with non-record type
 == Anticipated failure message ==
@@ -182,10 +205,11 @@ Stack trace:
 While typechecking term:
   False.foo
 .:1:0:
-Record field projection with non-record type
-  Prelude.Bool
-In term:
-  Prelude.False
+Record field projection with non-record
+For term:
+  False
+With type:
+  Bool
 
 Bad record field for type
 == Anticipated failure message ==
@@ -199,8 +223,11 @@ Stack trace:
 While typechecking term:
   {a = True, b = False}.c
 .:1:0:
-Bad record field ("c") for type
-  #{a : Prelude.Bool,b : Prelude.Bool}
+No such record field: c
+For term:
+  {a = True,b = False}
+With type:
+  #{a : Bool,b : Bool}
 
 Inferred type not a subtype of expected type
 == Anticipated failure message ==
@@ -214,11 +241,12 @@ Stack trace:
 While typechecking term:
   (\ (x : Bool) -> implies x False) 5
 .:1:1:
-Inferred type
-  Prelude.Nat
-Not a subtype of expected type
-  Prelude.Bool
-For term
+Argument type not subtype of expected type
+Expected:
+  Bool
+Actual:
+  Nat
+For term:
   5
 
 Empty vector literal
@@ -253,7 +281,6 @@ Prelude.Bool
 -> Prelude.Bool
 -> Prelude.Bool
 
-
 Definition without defining equation
 == Anticipated failure message ==
 Stack trace:
@@ -265,7 +292,6 @@ Stack trace:
 core002.sawcore:5:0:
 Malformed declaration for "foo"
 Definition without defining equation
-
 
 Primitive or axiom with definition
 == Anticipated failure message ==
@@ -279,7 +305,6 @@ core003.sawcore:5:10:
 Malformed declaration for "foo"
 Primitive or axiom with definition
 
-
 Dangling definition without a type
 == Anticipated failure message ==
 Stack trace:
@@ -291,7 +316,6 @@ Stack trace:
 core004.sawcore:5:0:
 Malformed declaration for "foo"
 Dangling definition without a type
-
 
 Wrong form for type of datatype
 == Anticipated failure message ==
@@ -305,7 +329,6 @@ core005.sawcore:5:5:
 Malformed declaration for "Foo"
 Wrong form for type of datatype
 
-
 Universe level of parameters should be no greater than that of the datatype
 == Anticipated failure message ==
 Stack trace:
@@ -317,7 +340,6 @@ Stack trace:
 core006.sawcore:5:5:
 Malformed declaration for "Foo"
 Universe level of parameters should be no greater than that of the datatype
-
 
 Universe level of indices should be strictly contained in that of the datatype
 == Anticipated failure message ==
@@ -331,7 +353,6 @@ core007.sawcore:5:5:
 Malformed declaration for "Foo"
 Universe level of indices should be strictly contained in that of the datatype
 
-
 Universe level of constructors should be strictly contained in that of the datatype
 == Anticipated failure message ==
 Stack trace:
@@ -343,5 +364,4 @@ Stack trace:
 core008.sawcore:5:5:
 Malformed declaration for "Foo"
 Universe level of constructors should be strictly contained in that of the datatype
-
 

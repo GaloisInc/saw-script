@@ -68,7 +68,6 @@ import SAWCore.FiniteValue
   )
 import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToURI)
 import SAWCore.SATQuery
-import SAWCore.SCTypeCheck
 import SAWCore.Simulator.Concrete (constMap)
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
