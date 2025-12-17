@@ -95,9 +95,10 @@ data TranslationReader = TranslationReader
   , _sawModuleMap :: ModuleMap
     -- ^ The environment of SAW global definitions
 
-  , _inTermPosition :: Bool
-    -- ^ This is True when translating inside lambda bodies, function arguments,
-    -- etc., and False when translating the type signature of a definition.
+  , _useImplicitBinders :: Bool
+    -- ^ This is False when in a term context where using implicit binders
+    -- doesn't make sense and are ignored by Rocq, such as inside lambda
+    -- bodies, function arguments, etc.
   }
   -- deriving (Show)
 
@@ -269,7 +270,7 @@ runTermTranslationMonad configuration mname mm globalDecls localEnv =
       , _sharedNames        = IntMap.empty
       , _nextSharedName     = "var__0"
       , _sawModuleMap       = mm
-      , _inTermPosition     = False })
+      , _useImplicitBinders = True })
   (TranslationState { _globalDeclarations = globalDecls
                     , _topLevelDeclarations  = []
                     })
@@ -475,13 +476,13 @@ withTopTranslationState :: TermTranslationMonad m => m a -> m a
 withTopTranslationState m =
   localTR (\r ->
             TranslationReader {
-              _currentModule     = view currentModule r,
-              _namedEnvironment  = Map.empty,
-              _unavailableIdents = reservedIdents,
-              _sharedNames       = IntMap.empty,
-              _nextSharedName    = "var__0" ,
-              _sawModuleMap      = view sawModuleMap r,
-              _inTermPosition    = False }) m
+              _currentModule      = view currentModule r,
+              _namedEnvironment   = Map.empty,
+              _unavailableIdents  = reservedIdents,
+              _sharedNames        = IntMap.empty,
+              _nextSharedName     = "var__0" ,
+              _sawModuleMap       = view sawModuleMap r,
+              _useImplicitBinders = True }) m
 
 -- | Generate a Coq @Definition@ with a given name, body, and type, using the
 -- lambda-bound variable names for the variables if they are available
@@ -506,6 +507,9 @@ combineBinders (Coq.Binder _ n mty) (Coq.PiBinder impl _ _) = Coq.Binder impl n 
 mkLet :: (Coq.Ident, Coq.Term) -> Coq.Term -> Coq.Term
 mkLet (name, rhs) body = Coq.Let name [] Nothing rhs body
 
+implicit :: Bool -> Coq.BinderImplicity
+implicit useImplicits = if useImplicits then Coq.Implicit else Coq.Explicit
+
 -- | The result of translating a SAW core variable binding to Coq, including the
 -- Coq identifier for the variable, the Coq translation of its type, and 0 or
 -- more implicit Coq arguments that apply to the variable
@@ -516,18 +520,18 @@ data BindTrans = BindTrans { bindTransIdent :: Coq.Ident,
 -- | Convert a 'BindTrans' to a list of Coq term-level binders
 bindTransToBinder :: Bool -> BindTrans -> [Coq.Binder]
 bindTransToBinder useImplicits (BindTrans {..}) =
-  Coq.Binder False bindTransIdent (Just bindTransType) :
-  map (\(n,ty) -> Coq.Binder useImplicits n (Just ty)) bindTransImps
+  Coq.Binder Coq.Explicit bindTransIdent (Just bindTransType) :
+  map (\(n,ty) -> Coq.Binder (implicit useImplicits) n (Just ty)) bindTransImps
 
 -- | Convert a 'BindTrans' to a list of Coq type-level pi-abstraction binders.
 bindTransToPiBinder :: Bool -> BindTrans -> [Coq.PiBinder]
 bindTransToPiBinder useImplicits (BindTrans { .. }) =
   case bindTransImps of
-    [] | bindTransIdent == "_" -> [Coq.PiBinder False Nothing bindTransType]
-    [] -> [Coq.PiBinder False (Just bindTransIdent) bindTransType]
+    [] | bindTransIdent == "_" -> [Coq.PiBinder Coq.Explicit Nothing bindTransType]
+    [] -> [Coq.PiBinder Coq.Explicit (Just bindTransIdent) bindTransType]
     _ ->
-      Coq.PiBinder False (Just bindTransIdent) bindTransType :
-      map (\(n,ty) -> Coq.PiBinder useImplicits (Just n) ty) bindTransImps
+      Coq.PiBinder Coq.Explicit (Just bindTransIdent) bindTransType :
+      map (\(n,ty) -> Coq.PiBinder (implicit useImplicits) (Just n) ty) bindTransImps
 
 -- | Given a 'VarName' and its type (as a 'Term'), translate the 'VarName'
 -- to a Coq identifier, translate the type to a Coq term, and generate zero or
@@ -573,13 +577,13 @@ translateImplicitHyp ::
   Coq.Term -> [(VarName, Term)] -> Coq.Term -> m Coq.Term
 translateImplicitHyp tc [] tm = return (Coq.App tc [tm])
 translateImplicitHyp tc args tm = do
-  inTermPos <- view inTermPosition <$> askTR
+  useImplicits <- view useImplicitBinders <$> askTR
   translateBinders args $ \args' ->
-    return $ Coq.Pi (concatMap (mkPi inTermPos) args') (Coq.App tc [Coq.App tm (map mkArg args')])
+    return $ Coq.Pi (concatMap (mkPi useImplicits) args') (Coq.App tc [Coq.App tm (map mkArg args')])
   where
-    mkPi inTermPos (BindTrans nm ty nhs) =
-      Coq.PiBinder False (Just nm) ty :
-      map (\(nh,nhty) -> Coq.PiBinder (not inTermPos) (Just nh) nhty) nhs
+    mkPi useImplicits (BindTrans nm ty nhs) =
+      Coq.PiBinder Coq.Explicit (Just nm) ty :
+      map (\(nh,nhty) -> Coq.PiBinder (implicit useImplicits) (Just nh) nhty) nhs
     mkArg b = Coq.Var $ bindTransIdent b
 
 -- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
@@ -588,8 +592,8 @@ translateImplicitHyp tc args tm = do
 translateParams :: TermTranslationMonad m => [(VarName, Term)] ->
                    ([Coq.Binder] -> m a) -> m a
 translateParams bs m = do
-  inTermPos <- view inTermPosition <$> askTR
-  translateBinders bs (m . concat . map (bindTransToBinder (not inTermPos)))
+  useImplicits <- view useImplicitBinders <$> askTR
+  translateBinders bs (m . concat . map (bindTransToBinder useImplicits))
 
 -- | Given a list of 'VarName's and their corresponding types (as 'Term's)
 -- representing argument types and a 'Term' representing the return type,
@@ -608,8 +612,8 @@ translatePi binders body =
 translatePiBinders :: TermTranslationMonad m => [(VarName, Term)] ->
                       ([Coq.PiBinder] -> m a) -> m a
 translatePiBinders bs m = do
-  inTermPos <- view inTermPosition <$> askTR
-  translateBinders bs (m . concat . map (bindTransToPiBinder (not inTermPos)))
+  useImplicits <- view useImplicitBinders <$> askTR
+  translateBinders bs (m . concat . map (bindTransToPiBinder useImplicits))
 
 -- | Find all subterms of a SAW core term that should be shared, and generate
 -- let-bindings in Coq to bind them to local variables. Translate SAW core term
@@ -655,7 +659,7 @@ translateTermUnshared t =
 
     Lambda {} ->
       let (params, e) = asLambdaList t in
-      localTR (set inTermPosition True) $
+      localTR (set useImplicitBinders False) $
         translateParams params $ \paramTerms ->
         do e' <- translateTermLet e
            return (Coq.Lambda paramTerms e')
@@ -739,7 +743,7 @@ defaultTermForType typ = do
     (asPiList -> (bs,body))
       | not (null bs)
       , closedTerm body ->
-      do bs'   <- forM bs $ \ (_nm, ty) -> Coq.Binder False "_" . Just <$> translateTerm ty
+      do bs'   <- forM bs $ \ (_nm, ty) -> Coq.Binder Coq.Explicit "_" . Just <$> translateTerm ty
          body' <- defaultTermForType body
          return $ Coq.Lambda bs' body'
 

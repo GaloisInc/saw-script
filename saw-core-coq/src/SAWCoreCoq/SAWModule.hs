@@ -105,11 +105,11 @@ translateDataType (DataType {..}) =
         -- only return explicit, not implicit, Binders.  Moreover, `translateParams`
         -- always returns Binders where the second field is `Just t`, where `t` is the type.
         let errorBecause msg = error $ "translateDataType.translateNamed: " ++ msg in
-        let bs = map (\case Coq.Binder False s (Just t) ->
-                              Coq.PiBinder False (Just s) t
-                            Coq.Binder False _ Nothing ->
+        let bs = map (\case Coq.Binder Coq.Explicit s (Just t) ->
+                              Coq.PiBinder Coq.Explicit (Just s) t
+                            Coq.Binder Coq.Explicit _ Nothing ->
                               errorBecause "encountered a Binder without a Type"
-                            Coq.Binder True _ _ ->
+                            Coq.Binder Coq.Implicit _ _ ->
                               errorBecause "encountered an implicit binder")
                      ixs in
         return (ps, bs)

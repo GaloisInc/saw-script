@@ -82,20 +82,20 @@ prettyNameType x ty = prettyIdent x <+> colon <+> prettyTerm PrecNone ty
 
 prettyBinder :: Binder -> Doc ann
 prettyBinder b = case b of
-    Binder False x Nothing   -> prettyIdent x
-    Binder False x (Just ty) -> parens $ prettyNameType x ty
-    Binder True x Nothing    -> braces $ prettyIdent x
-    Binder True x (Just ty)  -> braces $ prettyNameType x ty
+    Binder Explicit x Nothing   -> prettyIdent x
+    Binder Explicit x (Just ty) -> parens $ prettyNameType x ty
+    Binder Implicit x Nothing    -> braces $ prettyIdent x
+    Binder Implicit x (Just ty)  -> braces $ prettyNameType x ty
 
 prettyPiBinder :: PiBinder -> Doc ann
 prettyPiBinder b = case b of
-    PiBinder False Nothing ty ->
+    PiBinder Explicit Nothing ty ->
         prettyTerm PrecApp ty <+> "->"
-    PiBinder False (Just x) ty ->
+    PiBinder Explicit (Just x) ty ->
         "forall" <+> parens (prettyNameType x ty) <> comma
-    PiBinder True Nothing ty ->
+    PiBinder Implicit Nothing ty ->
         braces (prettyTerm PrecApp ty) <+> "->"
-    PiBinder True (Just x) ty ->
+    PiBinder Implicit (Just x) ty ->
         "forall" <+> braces (prettyNameType x ty) <> comma
 
 prettyBinders :: [Binder] -> Doc ann
