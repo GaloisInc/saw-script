@@ -100,17 +100,16 @@ translateDataType (DataType {..}) =
         liftTermTranslationMonad $
         TermTranslation.translateParams dtParams $ \ps ->
         TermTranslation.translateParams dtIndices $ \ixs ->
-        -- Translating the indices of a data type should never yield
-        -- Inhabited constraints, so the result of calling
-        -- `translateParams dtIndices` above should only return Binders and not
-        -- any ImplicitBinders. Moreover, `translateParams` always returns
-        -- Binders where the second field is `Just t`, where `t` is the type.
+        -- Translating the indices of a data type should never yield Inhabited
+        -- constraints, so the result of calling `translateParams dtIndices` above should
+        -- only return explicit, not implicit, Binders.  Moreover, `translateParams`
+        -- always returns Binders where the second field is `Just t`, where `t` is the type.
         let errorBecause msg = error $ "translateDataType.translateNamed: " ++ msg in
-        let bs = map (\case Coq.Binder s (Just t) ->
-                              Coq.PiBinder (Just s) t
-                            Coq.Binder _ Nothing ->
+        let bs = map (\case Coq.Binder Coq.Explicit s (Just t) ->
+                              Coq.PiBinder Coq.Explicit (Just s) t
+                            Coq.Binder Coq.Explicit _ Nothing ->
                               errorBecause "encountered a Binder without a Type"
-                            Coq.ImplicitBinder{} ->
+                            Coq.Binder Coq.Implicit _ _ ->
                               errorBecause "encountered an implicit binder")
                      ixs in
         return (ps, bs)

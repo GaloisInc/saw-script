@@ -1,6 +1,25 @@
-From Bits Require Import operations.
-From Bits Require Import spec.
+From Bits Require spec operations.
 #[export] Set Bullet Behavior "Strict Subproofs". (* Bits sets this to "None". *)
+(* We explicitly re-define local aliases for the parts of Bits we actually use
+   to avoid importing ambiguous coercions.
+*)
+Notation BITS := spec.BITS (only parsing).
+Notation nilB := (tuple.nil_tuple bool) (only parsing).
+Definition joinlsb {n} := @spec.joinlsb n.
+Definition splitlsb {n} := @spec.splitlsb n.
+Definition fromZ {n} := @spec.fromZ n.
+Definition toPosZ {n} := @spec.toPosZ n.
+Definition toZ {n} := @spec.toZ n.
+Definition thead {n} {T} := @tuple.thead T n.
+Definition behead_tuple {n} {T} := @tuple.behead_tuple T n.
+Definition addB {n} (p1 p2 : BITS n) := snd (operations.adcB false p1 p2).
+Definition subB {n} (p1 p2 : BITS n) := snd (operations.sbbB false p1 p2).
+Definition mulB {n} := @operations.mulB n.
+Definition ltB {n} := @operations.ltB n.
+Definition leB {n} := @operations.leB n.
+Definition sarB {n} := @operations.sarB n.
+Definition shlBn {n} := @operations.shlBn n.
+Definition shrBn {n} := @operations.shrBn n.
 
 From Stdlib Require Import FunctionalExtensionality.
 From Stdlib Require Import Lists.List.
@@ -8,21 +27,25 @@ From Stdlib Require        Numbers.NatInt.NZLog.
 From Stdlib Require Import Peano_dec.
 From Stdlib Require Import PeanoNat.
 From Stdlib Require Import Strings.String.
+#[local] Set Warnings "-stdlib-vector".
 From Stdlib Require Import Vectors.Vector.
+#[local] Set Warnings "stdlib-vector".
 From Stdlib Require Import Bool.Bool.
-From Stdlib Require Import BinNums.
 From Stdlib Require Import ZifyClasses.
 
+From Stdlib Require Import ZArith.
+From Stdlib Require Import PArith.
+
+#[local] Undelimit Scope N_scope.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 
 From mathcomp Require Import ssreflect.
+#[local] Set Warnings "-notation-overridden".
 From mathcomp Require Import ssrnat.
+#[local] Set Warnings "notation-overridden".
 From mathcomp Require Import ssrbool.
 From mathcomp Require Import fintype.
 From mathcomp Require Import tuple.
-
-From Stdlib Require Export ZArith.BinIntDef.
-From Stdlib Require Export PArith.BinPos.
 
 Import VectorNotations.
 

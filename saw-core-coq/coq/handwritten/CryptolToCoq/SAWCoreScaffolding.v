@@ -1,11 +1,10 @@
-From Stdlib Require Import ZArith.BinInt.
-From Stdlib Require Import ZArith.Zdiv.
-From Stdlib Require Import NArith.NArith.
+From Stdlib Require Import ZArith.
+From Stdlib Require Import NArith.
 From Stdlib Require Import Lists.List.
 From Stdlib Require        Numbers.NatInt.NZLog.
 From Stdlib Require Import Strings.String.
 From Stdlib Require Export Logic.Eqdep.
-From Stdlib Require Import Arith.PeanoNat.
+From Stdlib Require Import Arith.
 
 
 (***
@@ -102,7 +101,7 @@ Definition or     := orb.
 (** DEPRECATED: Use [xorb] instead. *)
 Definition xor    := xorb.
 
-Definition boolEq := Stdlib.Bool.Bool.eqb.
+Definition boolEqb := Stdlib.Bool.Bool.eqb.
 
 Global Instance Inhabited_Unit : Inhabited UnitType :=
   MkInhabited UnitType tt.
@@ -121,7 +120,7 @@ Definition Eq__rec (A : Type) (x : A) (P: forall y, x=y -> Type) (p:P x eq_refl)
   dependent inversion e; assumption.
 Defined.
 
-Theorem boolEq__eq (b1 b2:bool) : (boolEq b1 b2) = (ite bool b1 b2 (negb b2)).
+Theorem boolEqb__eq (b1 b2:bool) : (boolEqb b1 b2) = (ite bool b1 b2 (negb b2)).
 Proof.
   destruct b1, b2; reflexivity.
 Qed.
@@ -342,7 +341,7 @@ Definition intMin : Integer -> Integer -> Integer := Z.min.
 Definition intMax : Integer -> Integer -> Integer := Z.max.
 Definition intNeg : Integer -> Integer := Z.opp.
 Definition intAbs : Integer -> Integer := Z.abs.
-Definition intEq : Integer -> Integer -> bool := Z.eqb.
+Definition intEqb : Integer -> Integer -> bool := Z.eqb.
 Definition intLe : Integer -> Integer -> bool := Z.leb.
 Definition intLt : Integer -> Integer -> bool := Z.ltb.
 Definition intToNat : Integer -> nat := Z.to_nat.
@@ -367,7 +366,7 @@ Global Hint Resolve inh_Integer_witness : inh.
 Definition IntMod (n : nat) := Z.
 Definition toIntMod (n : nat) : Integer -> IntMod n := fun i => Z.modulo i (Z.of_nat n).
 Definition fromIntMod (n : nat) : (IntMod n) -> Integer := fun i => Z.modulo i (Z.of_nat n).
-Definition intModEq (n : nat) (a : IntMod n) (b : IntMod n) : bool
+Definition intModEqb (n : nat) (a : IntMod n) (b : IntMod n) : bool
   := Z.eqb (fromIntMod n a) (fromIntMod n b).
 Definition intModAdd : forall (n : nat), (IntMod n) -> (IntMod n) -> IntMod n
   := fun _ => Z.add.
@@ -397,8 +396,8 @@ Variant RecordTypeNil : Type :=
 Variant RecordTypeCons (str:string) (tp:Type) (rest_tp:Type) : Type :=
   RecordCons (x:tp) (rest:rest_tp) : RecordTypeCons str tp rest_tp.
 
-Arguments RecordTypeCons str%string_scope tp rest_tp.
-Arguments RecordCons str%string_scope {tp rest_tp} x rest.
+Arguments RecordTypeCons str%_string_scope tp rest_tp.
+Arguments RecordCons str%_string_scope {tp rest_tp} x rest.
 
 Global Instance Inhabited_RecordNil : Inhabited RecordTypeNil :=
     MkInhabited RecordTypeNil RecordNil.
@@ -455,7 +454,7 @@ Definition RecordProj {rtp} (r:rtp) str `{irf:IsRecordField str rtp} :
   getRecordFieldType rtp str :=
   getRecordField str r.
 
-Arguments RecordProj {_} r str%string {_}.
+Arguments RecordProj {_} r str%_string {_}.
 
 
 (* Some tests *)
