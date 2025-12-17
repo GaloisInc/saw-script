@@ -207,6 +207,7 @@ module SAWCentral.Value (
 import Prelude hiding (fail)
 
 import Control.Lens
+import Control.Monad (when)
 import Control.Monad.Fail (MonadFail(..))
 import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), catches, Handler(..))
 import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
@@ -234,6 +235,8 @@ import qualified Data.AIG as AIG
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
+import qualified SAWSupport.Console as Cons
+import qualified SAWSupport.ConsoleSupport as Cons (Fatal(..))
 
 import SAWCentral.Panic (panic)
 import SAWCentral.Trace (Trace)
@@ -1072,6 +1075,7 @@ io f = (TopLevel_ (liftIO f))
        `catches`
        [ Handler (\(ex :: X86Unsupported) -> handleX86Unsupported ex)
        , Handler (\(ex :: X86Error) -> handleX86Error ex)
+       , Handler handleFatal
        , Handler handleTopLevel
        , Handler handleIO
        ]
@@ -1084,6 +1088,28 @@ io f = (TopLevel_ (liftIO f))
          -- true and this logic should be reworked when we're doing the error
          -- printing cleanup.
          throwM (SS.TraceException stk SS.PosInsideBuiltin (X.SomeException ex))
+
+    -- If we get a `Fatal` from the new error infrastructure, and it
+    -- says inside it that a stack trace should be printed, collect
+    -- the current stack trace, print it, and rethrow the `Fatal`,
+    -- clearing the indication.
+    --
+    -- XXX: this is a temporary measure; in the long run, we want the
+    -- error infrastructure to print the trace, if any, along with the
+    -- error message and not have magic behavior attached to the
+    -- exception. For the time being, there's code running directly in
+    -- `IO` that has no access to the stack trace, and this is the best
+    -- place that does have access that can intercept and print one.
+    handleFatal :: Cons.Fatal -> TopLevel a
+    handleFatal (Cons.Fatal needTrace) = do
+        when needTrace $ do
+            trace <- getStackTrace
+            -- XXX: for now assume we are coming from inside a builtin
+            let curpos = SS.PosInsideBuiltin
+            let trace' = Trace.ppTrace trace curpos
+            -- Caution: this is recursive. (But it can't come back here.)
+            io $ Cons.noteN $ "Stack trace:\n" <> trace'
+        throwM (Cons.Fatal False)
 
     handleTopLevel :: SS.TopLevelException -> TopLevel a
     handleTopLevel e = rethrow e

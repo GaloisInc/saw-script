@@ -394,7 +394,12 @@ executeSAWScriptText :: Text -> REPL ()
 executeSAWScriptText str = exceptionProtect $ do
   ro <- getTopLevelRO
   let opts = roOptions ro
-  errs_or_stmts <- liftIO $ Loader.readREPLTextUnchecked opts replFileName str
+  -- XXX: for now use liftTopLevel as well as liftIO to make sure this uses
+  -- TopLevel's MonadIO instance and therefore goes through the exception goo
+  -- in Value.hs. That will make sure stack traces get printed from anything
+  -- that blows up in the loader. (Note that while by default stack traces
+  -- from here aren't particularly interesting, we might be in a nested REPL.)
+  errs_or_stmts <- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts replFileName str
   case errs_or_stmts of
     Left errs -> failOn errs
     Right stmts -> do

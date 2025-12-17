@@ -7,6 +7,8 @@ import Control.Lens ( view, set )
 import Control.Monad.State ( MonadIO(liftIO) )
 import Data.Typeable (cast)
 
+import qualified SAWSupport.ConsoleSupport as Cons
+
 import SAWCentral.Value ( TopLevel, runTopLevel )
 
 import qualified Argo
@@ -23,6 +25,11 @@ tl act =
      liftIO (try (runTopLevel act ro rw)) >>=
        \case
          Left e@(SomeException e')
+           |  Just (Cons.Fatal _) <- cast e'
+              -- XXX/FUTURE: collect the messages and use a new
+              -- protocol-level exception code to return them
+              -- explicitly.
+           -> Argo.raise (verificationException e)
            |  Just (CryptolModuleException err warnings) <- cast e'
            -> Argo.raise (cryptolError err warnings)
            |  otherwise

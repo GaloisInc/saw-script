@@ -58,6 +58,7 @@ import qualified SAWSupport.PanicSupport as PanicSupport
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText, render)
+import qualified SAWSupport.ConsoleSupport as Cons
 
 -- saw-core
 import qualified SAWCore.Parser.AST as Un
@@ -1733,12 +1734,13 @@ failsPrim m = do
   topRW <- getTopLevelRW
   x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
-    Left (ex :: Ex.SomeException) ->
-      case Ex.fromException ex of
-          Just (e :: PanicSupport.PanicException) ->
+    Left (ex :: Ex.SomeException)
+      | Just (e :: PanicSupport.PanicException) <- Ex.fromException ex ->
               -- Avoid trapping panics
               throwM e
-          Nothing -> do
+      | Just (_ :: Cons.Fatal) <- Ex.fromException ex -> do
+              liftIO $ TextIO.putStrLn "== Anticipated failure =="
+      | otherwise -> do
               liftIO $ TextIO.putStrLn "== Anticipated failure message =="
               liftIO $ print ex
     Right _ ->
