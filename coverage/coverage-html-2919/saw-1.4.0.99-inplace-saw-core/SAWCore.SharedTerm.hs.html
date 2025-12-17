@@ -329,7 +329,7 @@ span.spaces    { background: white }
 <span class="lineno">  310 </span>
 <span class="lineno">  311 </span>prettyTermError :: PPS.Opts -&gt; DisplayNameEnv -&gt; TermError -&gt; PPS.Doc
 <span class="lineno">  312 </span><span class="decl"><span class="istickedoff">prettyTermError opts ne err =</span>
-<span class="lineno">  313 </span><span class="spaces">  </span><span class="istickedoff">PP.vcat $</span>
+<span class="lineno">  313 </span><span class="spaces">  </span><span class="istickedoff">PP.vsep $</span>
 <span class="lineno">  314 </span><span class="spaces">  </span><span class="istickedoff">case err of</span>
 <span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">StaleTerm t s -&gt;</span>
 <span class="lineno">  316 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Stale term encountered:&quot;</span></span>
