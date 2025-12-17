@@ -586,7 +586,7 @@ loadExtCryptolModule sc env path =
 -- NOTE RE CALLS TO THIS:
 --  - There is only the path to this function from the command line,
 --    and it is only via the experimental command,
---      "write_coq_cryptol_module".
+--      "write_rocq_cryptol_module".
 --
 -- This function (note `mkCryptolModule`) returns the public types and values
 -- of the module in a `CryptolModule` structure.
