@@ -30,12 +30,12 @@ module SAWCentral.Prover.Exporter
   , writeSMTLib2What4
   , write_smtlib2
   , write_smtlib2_w4
-  , writeCoqCryptolPrimitivesForSAWCore
-  , writeCoqCryptolModule
-  , writeCoqSAWCorePrelude
-  , writeCoqTerm
-  , coqTranslationConfiguration
-  , writeCoqProp
+  , writeRocqCryptolPrimitivesForSAWCore
+  , writeRocqCryptolModule
+  , writeRocqSAWCorePrelude
+  , writeRocqTerm
+  , rocqTranslationConfiguration
+  , writeRocqProp
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -81,8 +81,8 @@ import SAWCore.Prelude (preludeModule)
 import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
-import qualified SAWCoreCoq.Coq as Coq
-import qualified Language.Coq.AST as Coq
+import qualified SAWCoreRocq.Rocq as Rocq
+import qualified Language.Rocq.AST as Rocq
 import CryptolSAWCore.TypedTerm
 import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified SAWCore.Simulator.Value as Sim
@@ -414,89 +414,89 @@ writeCoreProp path t =
      tm <- io (propToTerm sc t)
      io $ writeFile path (scWriteExternal tm)
 
-coqTranslationConfiguration ::
+rocqTranslationConfiguration ::
   [(Text, Text)] ->
   [Text] ->
-  Coq.TranslationConfiguration
-coqTranslationConfiguration renamings skips = Coq.TranslationConfiguration
-  { Coq.constantRenaming = map (\(a, b) -> (Text.unpack a, Text.unpack b)) renamings
-  , Coq.constantSkips = map Text.unpack skips
-  , Coq.monadicTranslation = False
-  , Coq.postPreamble = []
-  , Coq.vectorModule = "SAWCoreVectorsAsCoqVectors"
+  Rocq.TranslationConfiguration
+rocqTranslationConfiguration renamings skips = Rocq.TranslationConfiguration
+  { Rocq.constantRenaming = map (\(a, b) -> (Text.unpack a, Text.unpack b)) renamings
+  , Rocq.constantSkips = map Text.unpack skips
+  , Rocq.monadicTranslation = False
+  , Rocq.postPreamble = []
+  , Rocq.vectorModule = "SAWCoreVectorsAsRocqVectors"
   }
 
-withImportSAWCorePrelude :: Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
-withImportSAWCorePrelude config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
-  config { Coq.postPreamble = postPreamble ++ unlines
-   [ "From CryptolToCoq Require Import SAWCorePrelude."
+withImportSAWCorePrelude :: Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
+withImportSAWCorePrelude config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
+  config { Rocq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToRocq Require Import SAWCorePrelude."
    ]
   }
 
-withImportSAWCorePreludeExtra :: Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
-withImportSAWCorePreludeExtra config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
-  config { Coq.postPreamble = postPreamble ++ unlines
-   [ "From CryptolToCoq Require Import SAWCorePreludeExtra."
+withImportSAWCorePreludeExtra :: Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
+withImportSAWCorePreludeExtra config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
+  config { Rocq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToRocq Require Import SAWCorePreludeExtra."
    ]
   }
 
 
 withImportCryptolPrimitivesForSAWCore ::
-  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
-withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
-  config { Coq.postPreamble = postPreamble ++ unlines
-   [ "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
+  Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
+withImportCryptolPrimitivesForSAWCore config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
+  config { Rocq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToRocq Require Import CryptolPrimitivesForSAWCore."
    ]
   }
 
 withImportCryptolPrimitivesForSAWCoreExtra ::
-  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
-withImportCryptolPrimitivesForSAWCoreExtra config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
-  config { Coq.postPreamble = postPreamble ++ unlines
-   [ "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
+  Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
+withImportCryptolPrimitivesForSAWCoreExtra config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
+  config { Rocq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra."
    ]
   }
 
 
-writeCoqTerm ::
+writeRocqTerm ::
   Text ->
   [(Text, Text)] ->
   [Text] ->
   FilePath ->
   Term ->
   TopLevel ()
-writeCoqTerm name notations skips path t = do
+writeRocqTerm name notations skips path t = do
   let configuration =
         withImportCryptolPrimitivesForSAWCore $
         withImportSAWCorePrelude $
-        coqTranslationConfiguration notations skips
+        rocqTranslationConfiguration notations skips
   sc <- getSharedContext
   mm <- io $ scGetModuleMap sc
   tp <- io $ scTypeOf sc t
-  case Coq.translateTermAsDeclImports configuration mm (Coq.Ident (Text.unpack name)) t tp of
+  case Rocq.translateTermAsDeclImports configuration mm (Rocq.Ident (Text.unpack name)) t tp of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
     Right doc -> io $ case path of
       ""  -> print doc
       "-" -> print doc
       _   -> writeFile path (show doc)
 
-writeCoqProp ::
+writeRocqProp ::
   Text ->
   [(Text, Text)] ->
   [Text] ->
   FilePath ->
   Prop ->
   TopLevel ()
-writeCoqProp name notations skips path t =
+writeRocqProp name notations skips path t =
   do sc <- getSharedContext
      tm <- io (propToTerm sc t)
-     writeCoqTerm name notations skips path tm
+     writeRocqTerm name notations skips path tm
 
--- | Write out a representation of a Cryptol module in Gallina syntax for Coq.
-writeCoqCryptolModule ::
+-- | Write out a representation of a Cryptol module in Gallina syntax for Rocq.
+writeRocqCryptolModule ::
   -- | Path to module to export
   FilePath ->
-  -- | Path for output Coq file
+  -- | Path for output Rocq file
   FilePath ->
   -- | Pairs of notation substitutions: operator on the left will be replaced
   -- with the identifier on the right
@@ -504,7 +504,7 @@ writeCoqCryptolModule ::
   -- | List of identifiers to skip during translation
   [Text] ->
   TopLevel ()
-writeCoqCryptolModule inputFile outputFile notations skips = io $ do
+writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
@@ -518,20 +518,20 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   mm <- scGetModuleMap sc
   let ?mm = mm
   let cryptolPreludeDecls =
-        map Coq.Ident $
-        mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
+        map Rocq.Ident $
+        mapMaybe Rocq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
         withImportCryptolPrimitivesForSAWCoreExtra $
         withImportCryptolPrimitivesForSAWCore $
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
-        coqTranslationConfiguration notations skips
-  let nm = Coq.Ident (takeBaseName inputFile)
-  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm
+        rocqTranslationConfiguration notations skips
+  let nm = Rocq.Ident (takeBaseName inputFile)
+  res <- Rocq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm
   case res of
     Left e -> putStrLn $ show e
     Right cmDoc -> do
-      let doc = vcat [ Coq.preamble configuration, cmDoc ]
+      let doc = vcat [ Rocq.preamble configuration, cmDoc ]
       case outputFile of
         ""  -> print doc
         "-" -> print doc
@@ -543,29 +543,29 @@ nameOfSAWCorePrelude = Un.moduleName preludeModule
 nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
 nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule
 
-writeCoqSAWCorePrelude ::
+writeRocqSAWCorePrelude ::
   FilePath ->
   [(Text, Text)] ->
   [Text] ->
   IO ()
-writeCoqSAWCorePrelude outputFile notations skips = do
+writeRocqSAWCorePrelude outputFile notations skips = do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   mm  <- scGetModuleMap sc
   m   <- scFindModule sc nameOfSAWCorePrelude
-  let configuration = coqTranslationConfiguration notations skips
-  let doc = vcat [ Coq.preamble configuration, Coq.translateSAWModule configuration mm m ]
+  let configuration = rocqTranslationConfiguration notations skips
+  let doc = vcat [ Rocq.preamble configuration, Rocq.translateSAWModule configuration mm m ]
   case outputFile of
     ""  -> print doc
     "-" -> print doc
     _   -> writeFile outputFile $ show doc
 
-writeCoqCryptolPrimitivesForSAWCore ::
+writeRocqCryptolPrimitivesForSAWCore ::
   FilePath ->
   [(Text, Text)] ->
   [Text] ->
   IO ()
-writeCoqCryptolPrimitivesForSAWCore cryFile notations skips = do
+writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do
   sc <- mkSharedContext
   () <- scLoadPreludeModule sc
   () <- scLoadCryptolModule sc
@@ -575,8 +575,8 @@ writeCoqCryptolPrimitivesForSAWCore cryFile notations skips = do
   let configuration =
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
-        coqTranslationConfiguration notations skips
-  let doc = vcat [ Coq.preamble configuration, Coq.translateSAWModule configuration mm m ]
+        rocqTranslationConfiguration notations skips
+  let doc = vcat [ Rocq.preamble configuration, Rocq.translateSAWModule configuration mm m ]
   case cryFile of
     ""  -> print doc
     "-" -> print doc

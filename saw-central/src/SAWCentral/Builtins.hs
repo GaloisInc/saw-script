@@ -1142,8 +1142,8 @@ offline_cnf_external :: FilePath -> ProofScript ()
 offline_cnf_external path =
   proveWithSATExporter Prover.writeCNF_SATviaVerilog mempty path "." ".cnf"
 
-offline_coq :: FilePath -> ProofScript ()
-offline_coq path = proveWithPropExporter (Prover.writeCoqProp "goal" [] []) path "_" ".v"
+offline_rocq :: FilePath -> ProofScript ()
+offline_rocq path = proveWithPropExporter (Prover.writeRocqProp "goal" [] []) path "_" ".v"
 
 offline_extcore :: FilePath -> ProofScript ()
 offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".extcore"
