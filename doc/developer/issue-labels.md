@@ -268,7 +268,7 @@ monadic-recursive solver in Heapster. (historical)
 * _subsystem: saw-core_ - issues related to the saw-core
 representation or the saw-core subsystem.
 
-* _subsystem: saw-core-coq_ - issues related to converting saw-core to
+* _subsystem: saw-core-rocq_ - issues related to converting saw-core to
 Gallina for use with the Coq/Rocq theorem prover.
 
 * _subsystem: saw-python_ - issues related to the Python bindings for

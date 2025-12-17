@@ -87,7 +87,7 @@ class SAWScriptLexer(RegexLexer):
                 r"unfolding|simplify|normalize_term|goal_normalize|"
                 r"goal_apply|admit|"
                 r"abc|bitwuzla|boolector|cvc4|cvc5|z3|mathsat|yices|rme|"
-                r"offline_coq|"
+                r"offline_rocq|"
                 r"empty_ss|basic_ss|cryptol_ss|addsimp|rewrite|"
                 r"parse_core|"
                 r"declare_ghost_state|"

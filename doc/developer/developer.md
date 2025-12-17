@@ -150,7 +150,7 @@ The following can be run with `cabal test`:
 - `integration-tests` (this is the main test suite)
 - `saw-core-tests`
 - `cryptol-saw-core-tests`
-- `saw-core-coq-tests`
+- `saw-core-rocq-tests`
 - `crux-mir-comp-tests`
 
 There is one other set of tests:
