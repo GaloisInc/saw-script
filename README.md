@@ -1,16 +1,20 @@
 [![Build Status](https://github.com/GaloisInc/saw-script/workflows/SAWScript/badge.svg)](https://github.com/GaloisInc/saw-script/actions?query=event%3Aschedule)
 
-# SAWScript
+# SAW
 
-This repository contains the code for SAWScript, the scripting
-language that forms the primary user interface to the Software
-Analysis Workbench (SAW). It provides the ability to reason about
+This repository contains the code for SAW, the Software
+Analysis Workbench.
+SAW provides the ability to reason about
 formal models describing the denotation of programs written in
 languages such as C, Java, Rust, and Cryptol.
 
+SAWScript is the scripting language that serves as the primary
+user interface to SAW.
+The repository is named after it for historical reasons.
+
 ## Documentation
 
-There are two SAWScript tutorials that give an introduction to using the
+There are two SAW tutorials that give an introduction to using the
 SAWScript interpreter:
 
 * [This tutorial](https://github.com/GaloisInc/saw-script/blob/master/doc/pdfs/llvm-java-verification-with-saw.pdf) gives an
@@ -20,11 +24,11 @@ SAWScript interpreter:
 
 There is also a longer
 [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/pdfs/saw-user-manual.pdf)
-that describes the breadth of SAWScript's features.
+that describes the breadth of SAW's features.
 
 ## Precompiled Binaries
 
-Precompiled SAWScript binaries for a variety of platforms are available
+Precompiled SAW binaries for a variety of platforms are available
 on the [releases
 page](https://github.com/GaloisInc/saw-script/releases).
 
@@ -40,6 +44,9 @@ always needs to have Microsoft Research's [Z3 SMT
 solver](https://github.com/Z3Prover/z3) installed.  You can download Z3
 binaries for a variety of platforms from their [releases
 page](https://github.com/Z3Prover/z3/releases).
+You can also download binaries for Z3 and other solvers from our
+[what4-solvers](https://github.com/GaloisInc/what4-solvers/releases)
+package.
 
 We currently recommend Z3 4.8.10. If you plan to use path satisfiability
 checking, you'll also need Yices version 2.6.1 or newer.
@@ -74,25 +81,24 @@ release tag (e.g. `v1.3`).
 
 ## Manual Installation
 
-To build SAWScript and related utilities from source:
+To build SAW and related utilities from source:
+
+  * Ensure that you have the C libraries and header files for
+    `terminfo`, which generally comes as part of `ncurses` on most
+    platforms. On Fedora, it is part of the `ncurses-compat-libs` package.
+    You will also need the C headers and libraries for `zlib`.
+    Some platforms split library packages into runtime and development
+    portions; you need the development packages.
 
   * Ensure that you have the `cabal` and `ghc` executables in your
     `PATH`. If you don't already have them, we recommend using `ghcup`
     to install them: <https://www.haskell.org/ghcup/>. We recommend
     Cabal 3.10 or newer, and GHC 9.4, 9.6, or 9.8.
+    You may need to install additional system packages for this as well,
+    most likely `gmp` and `perl`.
 
-  * Ensure that you have the C libraries and header files for
-    `terminfo`, which generally comes as part of `ncurses` on most
-    platforms. On Fedora, it is part of the `ncurses-compat-libs` package.
-    You will also need the C headers for `zlib`.
-
-  * Ensure that you have the programs `javac` and `z3` on your
-    `PATH`. Z3 binaries are available at
-    https://github.com/Z3Prover/z3/releases
-
-    On MacOS you need an actual JDK; the placeholder `javac` that
-    comes with the system by default, unfortunately, breaks SAW.
-    See issue [#1709](https://github.com/GaloisInc/saw-script/issues/1709).
+  * Ensure that you have Z3 installed (as described above) and that
+    the `z3` binary is on your `PATH`.
 
   * Optionally, put in place dependency version freeze files:
 
@@ -100,11 +106,11 @@ To build SAWScript and related utilities from source:
 
   * Run `cabal update` if you had installed `cabal` prior to using this README.
 
-  * Build SAWScript by running
+  * Build SAW by running
 
         ./build.sh
 
-    The SAWScript executables will be available in the `bin` directory.
+    The SAW executables will be available in the `bin` directory.
 
     Note that running `cabal build` or `cabal install` directly will not work.
 
@@ -125,34 +131,45 @@ will be possible for all language constructs. There are various
 instructions that are not supported during verification. However,
 any failure during `llvm_load_module` should be considered a bug.
 
+## Notes on Java
+
+To work with Java programs, you will need a JDK installed.
+Make sure the `javac` binary is on your `PATH`.
+
 ## Notes on Rust
 
-SAW also has support for analyzing Rust programs. For this purpose, one must
-compile Rust code using [`mir-json`](https://github.com/GaloisInc/mir-json), a
-tool which compiles Rust code to a machine-readable, JSON-based format.
+SAW also has support for analyzing Rust programs, based on the MIR intermediate
+representation.
+For this purpose, one must compile Rust code using
+[`mir-json`](https://github.com/GaloisInc/mir-json), a tool which
+compiles Rust code to a machine-readable, JSON-based format.
+A copy of `mir-json` is bundled with SAW as a git submodule.
+For best results, always use that version of `mir-json`.
+
+Sometimes as `mir-json` evolves, its output format changes.
+These changes are captured in a _schema version_; SAW and `mir-json` must
+agree on the schema version.
+(So far, backwards compatibility with old schema versions has proven
+impractical.)
+If after updating SAW, preexisting JSON output files no longer load because
+of a schema version mismatch, recompile them with the corresponding updated
+version of `mir-json`.
+
+`mir-json` is a Rust compiler plugin and works with a specific version of
+the Rust compiler.
+Instructions for installing the proper Rust compiler, building and installing
+`mir-json` itself, and then using it to compile the Rust standard libraries
+can be found 
+[in the `mir-json` repository](https://github.com/GaloisInc/mir-json#installation-instructions).
+
+The installation instructions will tell you to set the `SAW_RUST_LIBRARY_PATH`
+environment variable to point at the compiled standard libraries.
+SAW uses this environment variable to find them; it must be set to use the
+Rust verification subsystem.
 
 Currently, SAW supports [version
 7](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#6) of
-`mir-json`'s schema. Note that the schema versions produced by `mir-json` can
-change over time as dictated by internal requirements and upstream changes. To
-help smooth this over:
-
-* We intend that once SAW introduces support for any given schema version, it
-  will retain that support across at least two releases.
-* An exception to this rule is when `mir-json` updates to support a new Rust
-  toolchain version. In general, we cannot promise backwards compatibility
-  across Rust toolchains, as the changes are often significant enough to
-  impede any ability to reasonably provide backwards-compatibility guarantees.
-
-Moreover, SAW requires slightly modified versions of the Rust standard
-libraries that are suited to verification purposes. SAW consults the value of
-the `SAW_RUST_LIBRARY_PATH` environment variable to determine where to look for
-these modified standard libraries.
-
-For complete instructions on how to install `mir-json`, the modified Rust
-standard libraries, and how to defined the `SAW_RUST_LIBRARY_PATH` environment
-variable, follow the instructions
-[here](https://github.com/GaloisInc/mir-json#installation-instructions).
+`mir-json`'s schema.
 
 ## Notes on Windows
 
@@ -169,29 +186,6 @@ downloaded dependencies include:
 * `deps/crucible/`:         [Crucible symbolic execution engine](https://github.com/GaloisInc/crucible)
 * `deps/cryptol/`:          [Cryptol](https://github.com/GaloisInc/cryptol)
 
-## For SAW developers
-
-Presently, the `saw-script` main executable cannot be loaded into GHCi due to a
-linker issue. However, the rest of the library can be manipulated in GHCi, with
-a little convincing.
-
-If you are using `cabal` to build, select the `saw-script` target:
-
-```
-$ cabal new-repl saw-script
-```
-
-In order to use interactive tools like `intero`, you need to configure them with
-this target. You can configure `intero-mode` in Emacs to use the `saw-script`
-library target by setting the variable `intero-targets` to the string
-`"saw-script:lib"`. To make this setting persistent for all files in this
-project, place the following snippet in the file `src/.dir-locals.el`:
-
-```elisp
-((haskell-mode
-  (intero-targets "saw-script:lib")))
-```
-
 ## Notes on Freeze Files
 
 We use the `cabal.GHC-*.config` files to constrain dependency versions
@@ -203,7 +197,7 @@ ln -s cabal.GHC-<VER>.config cabal.project.freeze
 ```
 
 These configuration files were generated using `cabal freeze`, but with
-some manual changes to allow cross-platfom builds, since Unix-like
+some manual changes to allow cross-platform builds, since Unix-like
 systems and Windows systems end up with different package dependencies.
 Specifically, we remove lines for the following packages or flags:
 
