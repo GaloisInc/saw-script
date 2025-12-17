@@ -1,5 +1,5 @@
 {- |
-Module      : Language.Coq.AST
+Module      : Language.Rocq.AST
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : atomb@galois.com
@@ -7,13 +7,13 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Language.Coq.AST where
+module Language.Rocq.AST where
 
 import Data.String (IsString(..))
 
--- | An 'Ident' is a Coq qualified identifier represented as a string,
+-- | An 'Ident' is a Rocq qualified identifier represented as a string,
 -- with the invariant that it is lexically valid.
--- A valid Coq identifier is a sequence of letters, digits,
+-- A valid Rocq identifier is a sequence of letters, digits,
 -- underscores and primes that starts with a letter or underscore.
 -- A /qualified/ identifier is a sequence of one or more identifiers
 -- separated by periods.

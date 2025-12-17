@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
-Module      : Language.Coq.Pretty
+Module      : Language.Rocq.Pretty
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : atomb@galois.com
@@ -10,17 +10,17 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Language.Coq.Pretty where
+module Language.Rocq.Pretty where
 
 import Prettyprinter
 
-import Language.Coq.AST
+import Language.Rocq.AST
 import Data.Word
 import Numeric (showHex)
 import Prelude hiding ((<$>), (<>))
 
 -- | Replace all occurrences of the double quote character @"@ with the string
--- @""@, i.e., two copies of it, as this is how Coq escapes double quote
+-- @""@, i.e., two copies of it, as this is how Rocq escapes double quote
 -- characters.
 escapeStringLit :: String -> String
 escapeStringLit = concatMap (\c -> if c == '"' then "\"\"" else [c])

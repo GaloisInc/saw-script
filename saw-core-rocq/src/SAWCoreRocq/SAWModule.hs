@@ -7,7 +7,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
-Module      : SAWCoreCoq.SAWModule
+Module      : SAWCoreRocq.SAWModule
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : atomb@galois.com
@@ -15,24 +15,24 @@ Stability   : experimental
 Portability : portable
 -}
 
-module SAWCoreCoq.SAWModule where
+module SAWCoreRocq.SAWModule where
 
-import qualified Control.Monad.Except                          as Except
-import           Control.Monad.Reader                          (asks)
-import qualified Data.Text                                     as Text
-import           Prelude                                       hiding (fail)
-import           Prettyprinter                                 (Doc, pretty)
+import qualified Control.Monad.Except         as Except
+import           Control.Monad.Reader         (asks)
+import qualified Data.Text                    as Text
+import           Prelude                      hiding (fail)
+import           Prettyprinter                (Doc, pretty)
 
-import qualified Language.Coq.AST                              as Coq
-import qualified Language.Coq.Pretty                           as Coq
+import qualified Language.Rocq.AST            as Rocq
+import qualified Language.Rocq.Pretty         as Rocq
 import           SAWCore.Module
 import           SAWCore.Name
 import           SAWCore.SharedTerm
 
-import qualified SAWCoreCoq.Monad            as M
-import           SAWCoreCoq.SpecialTreatment
-import qualified SAWCoreCoq.Term             as TermTranslation
-import SAWCoreCoq.Monad
+import qualified SAWCoreRocq.Monad            as M
+import           SAWCoreRocq.SpecialTreatment
+import qualified SAWCoreRocq.Term             as TermTranslation
+import           SAWCoreRocq.Monad
 
 -- import Debug.Trace
 
@@ -48,15 +48,15 @@ runModuleTranslationMonad ::
 runModuleTranslationMonad configuration modName mm =
   M.runTranslationMonad configuration (modName, mm) ()
 
-dropPi :: Coq.Term -> Coq.Term
-dropPi (Coq.Pi (_ : t) r) = Coq.Pi t r
-dropPi (Coq.Pi _       r) = dropPi r
-dropPi t                  = t
+dropPi :: Rocq.Term -> Rocq.Term
+dropPi (Rocq.Pi (_ : t) r) = Rocq.Pi t r
+dropPi (Rocq.Pi _       r) = dropPi r
+dropPi t                   = t
 
 translateCtor ::
   ModuleTranslationMonad m =>
-  [Coq.Binder] -> -- list of parameters to drop from `ctorType`
-  Ctor -> m Coq.Constructor
+  [Rocq.Binder] -> -- list of parameters to drop from `ctorType`
+  Ctor -> m Rocq.Constructor
 translateCtor inductiveParameters (Ctor {..}) = do
   maybe_constructorName <-
     case nameInfo ctorName of
@@ -64,7 +64,7 @@ translateCtor inductiveParameters (Ctor {..}) = do
       ImportedName{} -> pure Nothing
   let constructorName = case maybe_constructorName of
         -- Drop qualifiers from constructor name
-        Just (Coq.Ident n) -> Coq.Ident (reverse (takeWhile (/= '.') (reverse n)))
+        Just (Rocq.Ident n) -> Rocq.Ident (reverse (takeWhile (/= '.') (reverse n)))
         Nothing -> error "translateCtor: unexpected translation for constructor"
   constructorType <-
     -- Unfortunately, `ctorType` qualifies the inductive type's name in the
@@ -74,26 +74,26 @@ translateCtor inductiveParameters (Ctor {..}) = do
     -- quantified.
     (\ t -> iterate dropPi t !! length inductiveParameters) <$>
     (liftTermTranslationMonad (TermTranslation.translateTerm ctorType))
-  return $ Coq.Constructor
+  return $ Rocq.Constructor
     { constructorName
     , constructorType
     }
 
-translateDataType :: ModuleTranslationMonad m => DataType -> m Coq.Decl
+translateDataType :: ModuleTranslationMonad m => DataType -> m Rocq.Decl
 -- translateDataType (DataType {..})
 --   | trace ("translateDataType: " ++ show dtName) False = undefined
 translateDataType (DataType {..}) =
   case nameInfo dtName of
     ModuleIdentifier dtIdent ->
       atDefSite <$> findSpecialTreatment dtIdent >>= \case
-      DefPreserve            -> translateNamed $ Coq.Ident (identName dtIdent)
+      DefPreserve            -> translateNamed $ Rocq.Ident (identName dtIdent)
       DefRename   targetName -> translateNamed $ targetName
-      DefReplace  str        -> return $ Coq.Snippet str
+      DefReplace  str        -> return $ Rocq.Snippet str
       DefSkip                -> return $ skipped dtIdent
     ImportedName{} ->
-      translateNamed $ Coq.Ident (Text.unpack (toShortName (nameInfo dtName)))
+      translateNamed $ Rocq.Ident (Text.unpack (toShortName (nameInfo dtName)))
   where
-    translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
+    translateNamed :: ModuleTranslationMonad m => Rocq.Ident -> m Rocq.Decl
     translateNamed name = do
       let inductiveName = name
       (inductiveParameters, inductiveIndices) <-
@@ -105,17 +105,17 @@ translateDataType (DataType {..}) =
         -- only return explicit, not implicit, Binders.  Moreover, `translateParams`
         -- always returns Binders where the second field is `Just t`, where `t` is the type.
         let errorBecause msg = error $ "translateDataType.translateNamed: " ++ msg in
-        let bs = map (\case Coq.Binder Coq.Explicit s (Just t) ->
-                              Coq.PiBinder Coq.Explicit (Just s) t
-                            Coq.Binder Coq.Explicit _ Nothing ->
+        let bs = map (\case Rocq.Binder Rocq.Explicit s (Just t) ->
+                              Rocq.PiBinder Rocq.Explicit (Just s) t
+                            Rocq.Binder Rocq.Explicit _ Nothing ->
                               errorBecause "encountered a Binder without a Type"
-                            Coq.Binder Coq.Implicit _ _ ->
+                            Rocq.Binder Rocq.Implicit _ _ ->
                               errorBecause "encountered an implicit binder")
                      ixs in
         return (ps, bs)
       let inductiveSort = TermTranslation.translateSort dtSort
       inductiveConstructors <- mapM (translateCtor inductiveParameters) dtCtors
-      return $ Coq.InductiveDecl $ Coq.Inductive
+      return $ Rocq.InductiveDecl $ Rocq.Inductive
         { inductiveName
         , inductiveParameters
         , inductiveIndices
@@ -123,52 +123,52 @@ translateDataType (DataType {..}) =
         , inductiveConstructors
         }
 
--- translateModuleDecl :: ModuleTranslationMonad m => ModuleDecl -> m Coq.Decl
+-- translateModuleDecl :: ModuleTranslationMonad m => ModuleDecl -> m Rocq.Decl
 -- translateModuleDecl = \case
 --   TypeDecl dataType -> translateDataType dataType
 --   DefDecl definition -> translateDef definition
 
-_mapped :: Ident -> Ident -> Coq.Decl
+_mapped :: Ident -> Ident -> Rocq.Decl
 _mapped sawIdent newIdent =
-  Coq.Comment $ show sawIdent ++ " is mapped to " ++ show newIdent
+  Rocq.Comment $ show sawIdent ++ " is mapped to " ++ show newIdent
 
-skipped' :: NameInfo -> Coq.Decl
+skipped' :: NameInfo -> Rocq.Decl
 skipped' nmi =
-  Coq.Comment $ show (toAbsoluteName nmi) ++ " was skipped"
+  Rocq.Comment $ show (toAbsoluteName nmi) ++ " was skipped"
 
-skipped :: Ident -> Coq.Decl
+skipped :: Ident -> Rocq.Decl
 skipped sawIdent =
-  Coq.Comment $ show sawIdent ++ " was skipped"
+  Rocq.Comment $ show sawIdent ++ " was skipped"
 
-translateDef :: ModuleTranslationMonad m => Def -> m Coq.Decl
+translateDef :: ModuleTranslationMonad m => Def -> m Rocq.Decl
 translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
   specialTreatment <- findSpecialTreatment' (nameInfo defName)
   translateAccordingly (atDefSite specialTreatment)
 
   where
 
-    translateAccordingly :: ModuleTranslationMonad m => DefSiteTreatment -> m Coq.Decl
-    translateAccordingly  DefPreserve           = translateNamed $ Coq.Ident (Text.unpack (toShortName (nameInfo defName)))
+    translateAccordingly :: ModuleTranslationMonad m => DefSiteTreatment -> m Rocq.Decl
+    translateAccordingly  DefPreserve           = translateNamed $ Rocq.Ident (Text.unpack (toShortName (nameInfo defName)))
     translateAccordingly (DefRename targetName) = translateNamed $ targetName
-    translateAccordingly (DefReplace  str)      = return $ Coq.Snippet str
+    translateAccordingly (DefReplace  str)      = return $ Rocq.Snippet str
     translateAccordingly  DefSkip               = return $ skipped' (nameInfo defName)
 
-    translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
+    translateNamed :: ModuleTranslationMonad m => Rocq.Ident -> m Rocq.Decl
     translateNamed name = liftTermTranslationMonad (go defQualifier defBody)
 
       where
 
-        go :: TermTranslation.TermTranslationMonad m => DefQualifier -> Maybe Term -> m Coq.Decl
+        go :: TermTranslation.TermTranslationMonad m => DefQualifier -> Maybe Term -> m Rocq.Decl
         go NoQualifier    Nothing     = error "Terms should have a body (unless axiom/primitive)"
-        go NoQualifier    (Just body) = Coq.Definition
+        go NoQualifier    (Just body) = Rocq.Definition
                                         <$> pure name
                                         <*> pure []
                                         <*> (Just <$> TermTranslation.translateTerm defType)
                                         <*> TermTranslation.translateTerm body
-        go AxiomQualifier _           = Coq.Axiom
+        go AxiomQualifier _           = Rocq.Axiom
                                         <$> pure name
                                         <*> TermTranslation.translateTerm defType
-        go PrimQualifier  _           = Coq.Axiom
+        go PrimQualifier  _           = Rocq.Axiom
                                         <$> pure name
                                         <*> TermTranslation.translateTerm defType
 
@@ -181,8 +181,7 @@ liftTermTranslationMonad n = do
   let r = TermTranslation.runTermTranslationMonad configuration modname mm [] [] n
   case r of
     Left  e      -> Except.throwError e
-    Right (a, _) -> do
-      return a
+    Right (a, _) -> return a
 
 translateDecl ::
   M.TranslationConfiguration ->
@@ -192,14 +191,14 @@ translateDecl ::
   Doc ann
 translateDecl configuration modname mm decl =
   case decl of
-  TypeDecl td -> do
-    case runModuleTranslationMonad configuration modname mm (translateDataType td) of
-      Left e -> error $ show e
-      Right (tdecl, _) -> Coq.prettyDecl tdecl
-  DefDecl dd -> do
-    case runModuleTranslationMonad configuration modname mm (translateDef dd) of
-      Left e -> error $ show e
-      Right (tdecl, _) -> Coq.prettyDecl tdecl
-  InjectCodeDecl ns txt
-    | ns == "Coq" -> pretty txt
-    | otherwise   -> mempty
+    TypeDecl td -> do
+      case runModuleTranslationMonad configuration modname mm (translateDataType td) of
+        Left e           -> error $ show e
+        Right (tdecl, _) -> Rocq.prettyDecl tdecl
+    DefDecl dd -> do
+      case runModuleTranslationMonad configuration modname mm (translateDef dd) of
+        Left e           -> error $ show e
+        Right (tdecl, _) -> Rocq.prettyDecl tdecl
+    InjectCodeDecl ns txt
+      | ns == "Rocq" -> pretty txt
+      | otherwise    -> mempty

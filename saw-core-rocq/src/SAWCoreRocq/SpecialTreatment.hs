@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
-Module      : SAWCoreCoq.SpecialTreatment
+Module      : SAWCoreRocq.SpecialTreatment
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : atomb@galois.com
@@ -12,23 +12,23 @@ Stability   : experimental
 Portability : portable
 -}
 
-module SAWCoreCoq.SpecialTreatment where
+module SAWCoreRocq.SpecialTreatment where
 
-import           Control.Lens                       (_1, _2, over)
-import           Control.Monad.Reader               (asks)
-import           Data.Char                          (isAlphaNum)
-import qualified Data.Map                           as Map
-import           Data.Map                           (Map)
-import           Data.String.Interpolate            (i)
-import qualified Data.Text                          as Text
-import           Prelude                            hiding (fail)
-import           Text.Encoding.Z                    (zEncodeString)
+import           Control.Lens            (_1, _2, over)
+import           Control.Monad.Reader    (asks)
+import           Data.Char               (isAlphaNum)
+import qualified Data.Map                as Map
+import           Data.Map                (Map)
+import           Data.String.Interpolate (i)
+import qualified Data.Text               as Text
+import           Prelude                 hiding (fail)
+import           Text.Encoding.Z         (zEncodeString)
 
-import qualified Language.Coq.AST                   as Coq
+import qualified Language.Rocq.AST       as Rocq
 
 import           SAWCore.Name
 
-import           SAWCoreCoq.Monad
+import           SAWCoreRocq.Monad
 
 data SpecialTreatment = SpecialTreatment
   { moduleRenaming        :: Map ModuleName String
@@ -40,9 +40,9 @@ data DefSiteTreatment
   = -- | Translate the identifier unchanged, and directly translate the assocated
     --   SAWCore declaration.
     DefPreserve
-  | -- | Translate the identifier into the given Coq identifer,
+  | -- | Translate the identifier into the given Rocq identifer,
     --   and otherwise directly translate the associated SAWCore declaration.
-    DefRename Coq.Ident
+    DefRename Rocq.Ident
   | -- | Replace the declaration of the identifier with the given text.
     DefReplace  String
     -- | Skip the declartion of the identifier altogether.
@@ -53,14 +53,14 @@ data UseSiteTreatment
   = -- | Translate the identifier unchanged
     UsePreserve
     -- | Rename the given identifier into the given (optionally qualified)
-    --   Coq identifier.  The boolean value, if true, indicates that the
+    --   Rocq identifier.  The boolean value, if true, indicates that the
     --   identifier should be an "explicit" identifier with a leading \"\@\"
-    --   symbol, which indicates to Coq that all implicit arguments should be
+    --   symbol, which indicates to Rocq that all implicit arguments should be
     --   treated as explicit.
-  | UseRename (Maybe ModuleName) Coq.Ident Bool
+  | UseRename (Maybe ModuleName) Rocq.Ident Bool
     -- | Apply a macro function to the translations of the first @n@ SAWCore
     -- arguments of this identifier
-  | UseMacro Int ([Coq.Term] -> Coq.Term)
+  | UseMacro Int ([Rocq.Term] -> Rocq.Term)
 
 data IdentSpecialTreatment = IdentSpecialTreatment
   { atDefSite :: DefSiteTreatment
@@ -102,9 +102,9 @@ findSpecialTreatment ident = do
   pure $ Map.findWithDefault defaultTreatment (identName ident) moduleMap
 
 -- | Use `mapsTo` for identifiers whose definition has a matching definition
--- already on the Coq side.  As such, their definition can be skipped, and use
+-- already on the Rocq side.  As such, their definition can be skipped, and use
 -- sites can be replaced by the appropriate call.
-mapsTo :: ModuleName -> Coq.Ident -> IdentSpecialTreatment
+mapsTo :: ModuleName -> Rocq.Ident -> IdentSpecialTreatment
 mapsTo targetModule targetName = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UseRename (Just targetModule) targetName False
@@ -112,24 +112,24 @@ mapsTo targetModule targetName = IdentSpecialTreatment
 
 -- | Like 'mapsTo' but use an explicit variable reference so
 -- that all implicit arguments must be provided.
-mapsToExpl :: ModuleName -> Coq.Ident -> IdentSpecialTreatment
+mapsToExpl :: ModuleName -> Rocq.Ident -> IdentSpecialTreatment
 mapsToExpl targetModule targetName = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UseRename (Just targetModule) targetName True
   }
 
--- | Like 'mapsToExpl' but add an @n@th argument that is inferred by Coq
-mapsToExplInferArg :: Coq.Ident -> Int -> IdentSpecialTreatment
+-- | Like 'mapsToExpl' but add an @n@th argument that is inferred by Rocq
+mapsToExplInferArg :: Rocq.Ident -> Int -> IdentSpecialTreatment
 mapsToExplInferArg targetName argNum = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UseMacro argNum (\args ->
-                                  Coq.App (Coq.ExplVar targetName)
-                                  (args ++ [Coq.Var "_"]))
+                                  Rocq.App (Rocq.ExplVar targetName)
+                                  (args ++ [Rocq.Var "_"]))
   }
 
 -- | Use `realize` for axioms that can be realized, or for primitives that must
 -- be realized. While some primitives can be written directly in a standalone
--- Coq module, some primitives depend on code from the extracted module, and are
+-- Rocq module, some primitives depend on code from the extracted module, and are
 -- depended upon by following code in the same module. Such primitives can
 -- therefore *neither* be defined a priori, *nor* a posteriori, and must be
 -- realized where they were originally declared.
@@ -141,63 +141,63 @@ realize code = IdentSpecialTreatment
 
 -- | Use `rename` for identifiers whose definition can be translated, but has to
 -- be renamed. This is useful for certain definitions whose name on the
--- SAWCore/Cryptol side clashes with names on the Coq side. For instance, `at`
--- is a reserved Coq keyword, but is used as a function name in SAWCore Prelude.
+-- SAWCore/Cryptol side clashes with names on the Rocq side. For instance, `at`
+-- is a reserved Rocq keyword, but is used as a function name in SAWCore Prelude.
 -- Also useful for translation notations, until they are better supported.
-rename :: Coq.Ident -> IdentSpecialTreatment
+rename :: Rocq.Ident -> IdentSpecialTreatment
 rename ident = IdentSpecialTreatment
   { atDefSite = DefRename ident
   , atUseSite = UseRename Nothing ident False
   }
 
 -- | Replace any occurrences of identifier applied to @n@ arguments with the
--- supplied Coq term
-replaceDropArgs :: Int -> Coq.Term -> IdentSpecialTreatment
+-- supplied Rocq term
+replaceDropArgs :: Int -> Rocq.Term -> IdentSpecialTreatment
 replaceDropArgs n term = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UseMacro n (const term)
   }
 
 -- | A version of 'replaceDropArgs' that drops no arguments; i.e., just replaces
--- an identifier with the supplied Coq term
-replace :: Coq.Term -> IdentSpecialTreatment
+-- an identifier with the supplied Rocq term
+replace :: Rocq.Term -> IdentSpecialTreatment
 replace = replaceDropArgs 0
 
 
 -- | Use `skip` for identifiers that are already defined in the appropriate
--- module on the Coq side.
+-- module on the Rocq side.
 skip :: IdentSpecialTreatment
 skip = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UsePreserve
   }
 
--- | The Coq built-in @Datatypes@ module
+-- | The Rocq built-in @Datatypes@ module
 datatypesModule :: ModuleName
 datatypesModule =
   mkModuleName ["Init", "Datatypes"]
 
--- | The Coq built-in @Logic@ module
+-- | The Rocq built-in @Logic@ module
 logicModule :: ModuleName
 logicModule =
   mkModuleName ["Init", "Logic"]
 
--- | The Coq built-in @String@ module.
+-- | The Rocq built-in @String@ module.
 stringModule :: ModuleName
 stringModule =
   mkModuleName ["Stdlib", "Strings", "String"]
 
--- | The Coq built-in @BinNums@ module.
+-- | The Rocq built-in @BinNums@ module.
 binNumsModule :: ModuleName
 binNumsModule =
   mkModuleName ["Stdlib", "Numbers", "BinNums"]
 
--- | The Coq built-in @BinPos@ module.
+-- | The Rocq built-in @BinPos@ module.
 binPosModule :: ModuleName
 binPosModule =
   mkModuleName ["Stdlib", "PArith", "BinPos"]
 
--- | The Coq built-in @BinInt@ module.
+-- | The Rocq built-in @BinInt@ module.
 binIntModule :: ModuleName
 binIntModule =
   mkModuleName ["Stdlib", "ZArith", "BinInt"]
@@ -237,13 +237,13 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
   ]
 
 -- NOTE: while I initially did the mapping from SAW core names to the
--- corresponding Coq construct here, it makes the job of translating SAW core
--- axioms into Coq theorems much more annoying, because one needs to manually
--- rename every constant mentioned in the statement to its Coq counterpart.
+-- corresponding Rocq construct here, it makes the job of translating SAW core
+-- axioms into Rocq theorems much more annoying, because one needs to manually
+-- rename every constant mentioned in the statement to its Rocq counterpart.
 -- Instead, I am now trying to keep the names the same as much as possible
 -- during this translation (it is sometimes impossible, for instance, `at` is a
--- reserved keyword in Coq), so that primitives' and axioms' types can be
--- copy-pasted as is on the Coq side.
+-- reserved keyword in Rocq), so that primitives' and axioms' types can be
+-- copy-pasted as is on the Rocq side.
 sawCorePreludeSpecialTreatmentMap :: TranslationConfiguration ->
                                      Map String IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap configuration =
@@ -258,9 +258,9 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("error",             mapsTo sawDefinitionsModule "error")
   , ("fix",               skip)
   , ("fix_unfold",        skip)
-  , ("unsafeAssert",      replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssert")
-  , ("unsafeAssertBVULt", replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssertBVULt")
-  , ("unsafeAssertBVULe", replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssertBVULe")
+  , ("unsafeAssert",      replaceDropArgs 3 $ Rocq.Ltac "solveUnsafeAssert")
+  , ("unsafeAssertBVULt", replaceDropArgs 3 $ Rocq.Ltac "solveUnsafeAssertBVULt")
+  , ("unsafeAssertBVULe", replaceDropArgs 3 $ Rocq.Ltac "solveUnsafeAssertBVULe")
   , ("unsafeCoerce",      skip)
   , ("unsafeCoerce_same", skip)
   ]
@@ -269,8 +269,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ++
   [ ("coerce",      mapsTo sawDefinitionsModule "coerce")
   , ("coerce__def", mapsTo sawDefinitionsModule "coerce")
-  , ("coerce__eq",  replace (Coq.Var "eq_refl"))
-  , ("uip",         replace (Coq.Var "UIP"))
+  , ("coerce__eq",  replace (Rocq.Var "eq_refl"))
+  , ("uip",         replace (Rocq.Var "UIP"))
   ]
 
   -- Unit
@@ -320,8 +320,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("PairType",  mapsTo sawDefinitionsModule "PairType")
   , ("PairValue", mapsTo sawDefinitionsModule "PairValue")
   , ("Pair__rec", mapsTo sawDefinitionsModule "Pair__rec")
-  , ("fst",       replaceDropArgs 2 $ Coq.Var "fst")
-  , ("snd",       replaceDropArgs 2 $ Coq.Var "snd")
+  , ("fst",       replaceDropArgs 2 $ Rocq.Var "fst")
+  , ("snd",       replaceDropArgs 2 $ Rocq.Var "snd")
   ]
 
   -- Equality
@@ -405,10 +405,10 @@ sawCorePreludeSpecialTreatmentMap configuration =
   -- Vectors
   ++
   [ ("EmptyVec",      mapsTo vectorsModule "EmptyVec")
-  , ("at",            rename "sawAt") -- `at` is a reserved keyword in Coq
+  , ("at",            rename "sawAt") -- `at` is a reserved keyword in Rocq
   , ("atWithDefault", mapsTo vectorsModule "atWithDefault")
   , ("atWithProof",   mapsTo vectorsModule "atWithProof")
-  , ("at_single",     skip) -- is boring, could be proved on the Coq side
+  , ("at_single",     skip) -- is boring, could be proved on the Rocq side
   , ("bvAdd",         mapsTo vectorsModule "bvAdd")
   , ("bvLg2",         mapsTo vectorsModule "bvLg2")
   , ("bvMul",         mapsTo vectorsModule "bvMul")
@@ -552,10 +552,10 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("List__rec", mapsToExpl datatypesModule "list_rect")
   ]
 
-escapeIdent :: Coq.Ident -> Coq.Ident
-escapeIdent (Coq.Ident str)
-  | all okChar str = Coq.Ident str
-  | otherwise      = Coq.Ident ("Op_" ++ zEncodeString str)
+escapeIdent :: Rocq.Ident -> Rocq.Ident
+escapeIdent (Rocq.Ident str)
+  | all okChar str = Rocq.Ident str
+  | otherwise      = Rocq.Ident ("Op_" ++ zEncodeString str)
  where
    okChar x = isAlphaNum x || x `elem` ("_'" :: String)
 
