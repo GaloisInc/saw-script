@@ -134,7 +134,7 @@ Eq__rec : (t : sort 1) -> (x : t) -> (p : (y : t) -> Eq t x y -> sort 1) ->
            p x (Refl t x) -> (y : t) -> (pf : Eq t x y) -> p y pf;
 Eq__rec t x p f1 y pf = Eq#rec1 t x p f1 y pf;
 
--- Uniqueness of Identity Proofs, a core logical principle of, e.g., Coq
+-- Uniqueness of Identity Proofs, a core logical principle of, e.g., Rocq
 axiom uip : (t : sort 1) -> (x : t) -> (y : t) -> (pf1 pf2 : Eq t x y) ->
             Eq (Eq t x y) pf1 pf2;
 
@@ -354,7 +354,7 @@ iteWithProof : (a : sort 0) -> (b:Bool) -> (Eq Bool b True -> a) ->
 iteWithProof a b f1 f2 =
   iteDep (\ (b1:Bool) -> Eq Bool b b1 -> a) b f1 f2 (Refl Bool b);
   -- NOTE: we cannot use unsafeAssert in the Prelude, because the translation
-  -- for it into Coq is currently defined in CryptolPrimitivesForSAWCoreExtra.v,
+  -- for it into Rocq is currently defined in CryptolPrimitivesForSAWCoreExtra.v,
   -- which is defined *after* the Prelude
   --
   -- ite a b (f1 (unsafeAssert Bool b True)) (f2 (unsafeAssert Bool b False));
@@ -1237,13 +1237,13 @@ pred x = Nat_cases Nat Zero (\ (n:Nat) -> \ (m:Nat) -> n) x;
 
 axiom eqNatPrec : (x y : Nat) -> eqNat (Succ x) (Succ y) -> eqNat x y;
 
--- | Propositional less than or equal to; defined the same way as in Coq
+-- | Propositional less than or equal to; defined the same way as in Rocq
 data IsLeNat (n:Nat) : Nat -> Prop where {
   IsLeNat_base : IsLeNat n n;
   IsLeNat_succ : (m:Nat) -> IsLeNat n m -> IsLeNat n (Succ m);
 }
 
--- | m < n is defined as m+1 <= n (as in Coq)
+-- | m < n is defined as m+1 <= n (as in Rocq)
 IsLtNat : Nat -> Nat -> Prop;
 IsLtNat m n = IsLeNat (Succ m) n;
 
@@ -1839,7 +1839,7 @@ data Stream (a : sort 0) : sort 0 where {
     MkStream : (Nat -> a) -> Stream a;
   }
 
-injectCode "Coq"
+injectCode "Rocq"
   "#[global] Instance Inhabited_Stream (a:Type) (Ha:Inhabited a) : Inhabited (Stream a) := MkInhabited (Stream a) (MkStream a (fun _ => inhabitant)).";
 
 Stream__rec : (a:sort 0) -> (p:Stream a -> sort 0) ->
@@ -1911,7 +1911,7 @@ streamShiftR a z xs i = streamAppend a i (replicate i a z) xs;
 -- The fixpoint is well founded because each element only refers to elements with
 -- smaller indices.
 --
--- For Coq support, this definition is replaced with a naive implementation
+-- For Rocq support, this definition is replaced with a naive implementation
 -- that performs independent iterations for each location.
 streamScanl : (a b : sort 0) -> (b -> a -> b) -> b -> Stream a -> Stream b;
 streamScanl a b f z as =

@@ -838,9 +838,9 @@ scmRecursor nm s =
 -- | Test whether a 'DataType' can be eliminated to the given sort. The rules
 -- are that you can only eliminate propositional datatypes to the proposition
 -- sort, unless your propositional data type is the empty type. This differs
--- slightly from the Coq rules, which allow elimination of propositional
+-- slightly from the Rocq rules, which allow elimination of propositional
 -- datatypes with a single constructor that has only propositional arguments,
--- but this Coq behavior can be simulated with the behavior we are using here.
+-- but this Rocq behavior can be simulated with the behavior we are using here.
 allowedElimSort :: DataType -> Sort -> Bool
 allowedElimSort dt s =
   if dtSort dt == propSort && s /= propSort then
@@ -919,7 +919,7 @@ ctxCtorElimType d c p_ret (CtorArgStruct{..}) =
      helper [] ctorArgs
 
 -- | Reduce an application of a recursor to a particular constructor.
--- This is known in the Coq literature as an iota reduction. More specifically,
+-- This is known in the Rocq literature as an iota reduction. More specifically,
 -- the call
 --
 -- > ctxReduceRecursor rec f_c [x1, .., xk]
@@ -1058,7 +1058,7 @@ scmRecursorType dt s =
        scmFunAll elims_tps =<<
        scmRecursorAppType dt motive_var
 
--- | Reduce an application of a recursor. This is known in the Coq literature as
+-- | Reduce an application of a recursor. This is known in the Rocq literature as
 -- an iota reduction. More specifically, the call
 --
 -- > scReduceRecursor sc rec crec ci [x1, .., xk]

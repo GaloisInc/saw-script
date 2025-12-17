@@ -92,18 +92,18 @@ maxSort [] = propSort
 maxSort ss = maximum ss
 
 -- | This type represents a set of advisory flags for 'Sort's that are mostly
--- ignored, but are used in the Coq export process to indicate where various
+-- ignored, but are used in the Rocq export process to indicate where various
 -- typeclass instances are necessary in function definitions. In the concrete
 -- syntax "isort", "qsort", etc. is used to indicate cases where these flags
 -- are set. Note in particular that these flags do not affect typechecking,
 -- so missing or overeager "isort"/"qsort" annotations will only be detected
--- via the Coq export.
+-- via the Rocq export.
 --
 -- * If 'flagInhabited' is 'True', an implicit @Inhabited@ typeclass argument
---   will be added during Coq translation. In the concrete syntax, an "i" is
+--   will be added during Rocq translation. In the concrete syntax, an "i" is
 --   prepended to the sort (e.g. "isort").
 -- * If 'flagQuantType' is 'True', an implicit @QuantType@ typeclass argument
---   will be added during Coq translation. In the concrete syntax, an "q" is
+--   will be added during Rocq translation. In the concrete syntax, an "q" is
 --   prepended to the sort (e.g. "qsort", "qisort").
 data SortFlags = SortFlags { flagInhabited :: Bool
                            , flagQuantType :: Bool }
