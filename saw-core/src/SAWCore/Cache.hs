@@ -10,69 +10,47 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.Cache
-  ( Cache
-  , newCache
-  , newCacheMap
-  , newCacheMap'
-  , newCacheIntMap
-  , newCacheIntMap'
-  , useCache
+  ( MapCache
+  , newMapCache
+  , useMapCache
   , IntCache
   , newIntCache
   , useIntCache
   )
 where
 
-import           Control.Monad (liftM)
 import qualified Data.IntMap as IntMap
 import           Data.IntMap (IntMap)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Ref
-import           Prelude hiding (lookup)
 
-data Cache m k a = forall t. Cache (T m t) (k -> t -> Maybe a) (k -> a -> t -> t)
+newtype MapCache m k a = MapCache (T m (Map k a))
 
-useCache :: C m => Cache m k a -> k -> m a -> m a
-useCache (Cache ref lookup update) k action = do
-  result <- liftM (lookup k) (Data.Ref.read ref)
-  case result of
-    Just x -> return x
-    Nothing -> do
-      x <- action
-      modify ref (update k x)
-      return x
+newMapCache :: (C m, Ord k) => m (MapCache m k a)
+newMapCache = MapCache <$> new Map.empty
 
-newCache :: (C m, Ord k) => m (Cache m k a)
-newCache = newCacheMap
-
-newCacheMap :: (C m, Ord k) => m (Cache m k a)
-newCacheMap = newCacheMap' Map.empty
-
-newCacheMap' :: (C m, Ord k) => Map k a -> m (Cache m k a)
-newCacheMap' initialMap = do
-  ref <- new initialMap
-  return (Cache ref Map.lookup Map.insert)
-
-newCacheIntMap :: (C m) => m (Cache m Int a)
-newCacheIntMap = newCacheIntMap' IntMap.empty
-
-newCacheIntMap' :: (C m) => IntMap a -> m (Cache m Int a)
-newCacheIntMap' initialMap = do
-  ref <- new initialMap
-  return (Cache ref IntMap.lookup IntMap.insert)
+useMapCache :: (C m, Ord k) => MapCache m k a -> k -> m a -> m a
+useMapCache (MapCache ref) k action =
+  do m <- Data.Ref.read ref
+     case Map.lookup k m of
+       Just x -> pure x
+       Nothing ->
+         do x <- action
+            modify ref (Map.insert k x)
+            pure x
 
 newtype IntCache m a = IntCache (T m (IntMap a))
 
+newIntCache :: (C m) => m (IntCache m a)
+newIntCache = IntCache <$> new IntMap.empty
+
 useIntCache :: C m => IntCache m a -> Int -> m a -> m a
 useIntCache (IntCache ref) k action =
-  do result <- IntMap.lookup k <$> Data.Ref.read ref
-     case result of
+  do m <- Data.Ref.read ref
+     case IntMap.lookup k m of
        Just x -> pure x
        Nothing ->
          do x <- action
             modify ref (IntMap.insert k x)
             pure x
-
-newIntCache :: (C m) => m (IntCache m a)
-newIntCache = IntCache <$> new IntMap.empty
