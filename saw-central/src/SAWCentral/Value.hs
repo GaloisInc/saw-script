@@ -105,6 +105,11 @@ module SAWCentral.Value (
     getPosition,
     -- used all over the place
     getSharedContext,
+    -- used in SAWCentral.Builtins, SAWCentral.Crucible.{LLVM,JVM,MIR}.Builtins,
+    -- SAWCentral.Bisimulation
+    getPPOpts,
+    -- used in SAWCentral.Builtins
+    withPPOpts,
     -- used in SAWCentral.Crucible.JVM.Builtins{,JVM} and SAWScript.AutoMatch
     getJavaCodebase,
     -- used in SAWCentral.Builtins
@@ -219,6 +224,8 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
+import Data.IORef (IORef)
+import qualified Data.IORef as IORef
 import Data.List.Extra ( dropEnd )
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -237,7 +244,7 @@ import qualified Data.AIG as AIG
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, Doc, renderText, ppStringLiteral)
+import qualified SAWSupport.Pretty as PPS (Opts, withOpts, Doc, renderText, ppStringLiteral)
 import qualified SAWSupport.Console as Cons
 import qualified SAWSupport.ConsoleSupport as Cons (Fatal(..))
 
@@ -675,8 +682,8 @@ prettySimpset opts ss =
       in
       "*" <+> (PP.nest 2 $ PP.fillSep [lhs, "=" <+> rhs])
 
-prettyValue :: SharedContext -> PPS.Opts -> Value -> IO PPS.Doc
-prettyValue sc opts = visit (0 :: Int)
+prettyValue :: SharedContext -> Value -> IO PPS.Doc
+prettyValue sc = visit (0 :: Int)
   where
     visit prec v0 = case v0 of
       VBool True -> pure "true"
@@ -711,7 +718,7 @@ prettyValue sc opts = visit (0 :: Int)
           pure $ PP.sep ["<<", "builtin", name', ">>"]
 
       VTerm t ->
-          prettyTerm sc opts (ttTerm t)
+          prettyTerm sc (ttTerm t)
       VType sig ->
           pure $ CryPP.pretty sig
       VReturn _pos _chain v -> do
@@ -729,14 +736,17 @@ prettyValue sc opts = visit (0 :: Int)
         v2' <- visit 0 v2
         pure $ v1' <+> ">>=" <+> v2'
       VTopLevel {} -> pure "<<TopLevel>>"
-      VSimpset ss -> pure $ prettySimpset opts ss
+      VSimpset ss -> do
+        ppopts <- scGetPPOpts sc
+        pure $ prettySimpset ppopts ss
       VProofScript {} -> pure "<<proof script>>"
       VTheorem thm -> do
         nenv <- scGetNamingEnv sc
-        pure $ "Theorem" <+> PP.parens (prettyProp opts nenv (thmProp thm))
+        ppopts <- scGetPPOpts sc
+        pure $ "Theorem" <+> PP.parens (prettyProp ppopts nenv (thmProp thm))
       VBisimTheorem _ -> pure "<<Bisimulation theorem>>"
       VLLVMCrucibleSetup{} -> pure "<<LLVM Setup>>"
-      VLLVMCrucibleSetupValue x -> CMS.prettySetupValue sc opts $ CMSLLVM.getAllLLVM x
+      VLLVMCrucibleSetupValue x -> CMS.prettySetupValue sc $ CMSLLVM.getAllLLVM x
       VLLVMCrucibleMethodSpec{} -> pure "<<LLVM MethodSpec>>"
       VLLVMModuleSkeleton s -> pure $ PP.viaShow s
       VLLVMFunctionSkeleton s -> pure $ PP.viaShow s
@@ -750,8 +760,12 @@ prettyValue sc opts = visit (0 :: Int)
       VMIRModule m -> pure $ PP.pretty (m^.rmCS^.collection)
       VMIRAdt adt -> pure $ PP.pretty adt
       VJavaClass c -> pure $ prettyClass c
-      VProofResult r -> pure $ prettyProofResult opts r
-      VSatResult r -> pure $ prettySatResult opts r
+      VProofResult r -> do
+        ppopts <- scGetPPOpts sc
+        pure $ prettyProofResult ppopts r
+      VSatResult r -> do
+        ppopts <- scGetPPOpts sc
+        pure $ prettySatResult ppopts r
       VAIG _ -> pure "<<AIG>>"
       VCFG (LLVM_CFG g) -> pure $ PP.viaShow g
       VCFG (JVM_CFG g) -> pure $ PP.viaShow g
@@ -764,16 +778,17 @@ prettyValue sc opts = visit (0 :: Int)
       VYosysTheorem _ -> pure "<<Yosys theorem>>"
       VJVMSetup{}      -> pure "<<JVM Setup>>"
       VJVMMethodSpec _ -> pure "<<JVM MethodSpec>>"
-      VJVMSetupValue x -> CMS.prettySetupValue sc opts x
+      VJVMSetupValue x -> CMS.prettySetupValue sc x
       VMIRSetup{} -> pure "<<MIR Setup>>"
       VMIRMethodSpec{} -> pure "<<MIR MethodSpec>>"
-      VMIRSetupValue x -> CMS.prettySetupValue sc opts x
+      VMIRSetupValue x -> CMS.prettySetupValue sc x
 
 -- | Print a value to `Text`.
-ppValue :: SharedContext -> PPS.Opts -> Value -> IO Text
-ppValue sc opts v = do
-    v' <- prettyValue sc opts v
-    pure $ PPS.renderText opts v'
+ppValue :: SharedContext -> Value -> IO Text
+ppValue sc v = do
+    ppopts <- scGetPPOpts sc
+    v' <- prettyValue sc v
+    pure $ PPS.renderText ppopts v'
 
 -- | Ugly-print a value. This is for use in a few cases (below, and in
 --   the interpreter) where `IO` is really not available but printing
@@ -839,7 +854,7 @@ evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =
   C.runEval mempty . exportValueWithSchema schema =<< evaluateTerm sc trm
 evaluateTypedTerm sc (TypedTerm tp _) = do
-  tp' <- prettyTypedTermType sc PPS.defaultOpts tp
+  tp' <- prettyTypedTermType sc tp
   fail $ unlines [ "Could not evaluate term with type", show tp' ]
 
 
@@ -1047,6 +1062,10 @@ data TopLevelRO =
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)
 
+  , roPPOpts        :: IORef PPS.Opts
+    -- ^ The prettyprinter options, which are stored in an `IORef` so
+    --   they can be shared with the SAWCore `SharedContext`.
+
   }
 
 -- | Current state of the Java sub-system.
@@ -1082,7 +1101,6 @@ data TopLevelRW =
   , rwJavaCodebase  :: JavaCodebase -- ^ Current state of Java sub-system.
 
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
-  , rwPPOpts  :: PPS.Opts
   , rwSharedContext :: SharedContext
   , rwSolverCache :: Maybe SolverCache
   , rwTheoremDB :: TheoremDB
@@ -1318,6 +1336,16 @@ putTheoremDB db = modifyTopLevelRW (\tl -> tl { rwTheoremDB = db })
 
 getOptions :: TopLevel Options
 getOptions = TopLevel_ (asks roOptions)
+
+getPPOpts :: TopLevel PPS.Opts
+getPPOpts = do
+  ref <- asks roPPOpts
+  liftIO $ IORef.readIORef ref
+
+withPPOpts :: (PPS.Opts -> PPS.Opts) -> IO a -> TopLevel a
+withPPOpts f m = do
+  ref <- asks roPPOpts
+  liftIO $ PPS.withOpts ref f m
 
 getProxy :: TopLevel AIGProxy
 getProxy = TopLevel_ (asks roProxy)

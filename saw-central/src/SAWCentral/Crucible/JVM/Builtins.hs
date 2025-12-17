@@ -349,7 +349,7 @@ verifyObligations cc mspec tactic assumes asserts =
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
            printOutLnTop Info $ Text.unpack (ppStats stats)
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
-           opts <- rwPPOpts <$> getTopLevelRW
+           opts <- getPPOpts
            if null vals then
              printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
            else
@@ -1212,7 +1212,7 @@ generic_field_is ptr fname mval =
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
              sc <- lift $ lift $ getSharedContext
-             ptr' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts ptr
+             ptr' <- liftIO $ MS.prettySetupValue sc ptr
              X.throwM $ JVMFieldNonReference ptr' fname
      st <- get
      let cc = st ^. Setup.csCrucibleContext
@@ -1322,7 +1322,7 @@ generic_elem_is ptr idx mval =
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
              sc <- lift $ lift $ getSharedContext
-             ptr' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts ptr
+             ptr' <- liftIO $ MS.prettySetupValue sc ptr
              X.throwM $ JVMElemNonReference ptr' idx
      st <- get
      let cc = st ^. Setup.csCrucibleContext
@@ -1378,7 +1378,7 @@ generic_array_is ptr mval =
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
              sc <- lift $ lift $ getSharedContext
-             ptr' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts ptr
+             ptr' <- liftIO $ MS.prettySetupValue sc ptr
              X.throwM $ JVMArrayNonReference ptr'
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)

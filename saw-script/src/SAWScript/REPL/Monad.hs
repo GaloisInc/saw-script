@@ -33,7 +33,7 @@ module SAWScript.REPL.Monad (
 import Control.Monad.Catch (
     MonadThrow(..), MonadCatch(..), MonadMask(..)
  )
-import Control.Monad.State (MonadState(..), StateT(..), get, gets, modify)
+import Control.Monad.State (MonadState(..), StateT(..), gets, modify)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Exception as X
@@ -54,7 +54,8 @@ import SAWCentral.TopLevel (
  )
 import SAWCentral.Value (
     ProofScript(..),
-    rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook
+    rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook,
+    getPPOpts
  )
 
 import SAWScript.Panic (panic)
@@ -167,7 +168,7 @@ liftProofScript m = do
     modify (\st -> st { rProofState = Just pst' })
     liftTopLevel $ case result of
        Left (stats, cex) ->
-         do ppOpts <- rwPPOpts <$> get
+         do ppOpts <- getPPOpts
             fail (Text.unpack $ ppProofResult ppOpts (InvalidProof stats cex pst'))
        Right x -> return x
 

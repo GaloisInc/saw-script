@@ -58,7 +58,7 @@ import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..) )
 import qualified Data.Aeson as JSON
 
 import SAWSupport.Pretty (prettyNat)
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts)
 
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
@@ -356,7 +356,7 @@ asFiniteType sc t = do
     (R.asRecordType -> Just fs)
       -> FTRec <$> traverse (asFiniteType sc) (Map.fromList fs)
     _ -> do
-        t'' <- ppTerm sc PPS.defaultOpts t'
+        t'' <- ppTerm sc t'
         fail $ "asFiniteType: unsupported argument type: " ++ t''
 
 asFirstOrderType :: SharedContext -> Term -> IO FirstOrderType
@@ -364,7 +364,7 @@ asFirstOrderType sc t = maybe err pure =<< runMaybeT (asFirstOrderTypeMaybe sc t
   where
     err =
       do t' <- scWhnf sc t
-         t'' <- ppTerm sc PPS.defaultOpts t'
+         t'' <- ppTerm sc t'
          fail $ "asFirstOrderType: unsupported argument type: " ++ t''
 
 asFirstOrderTypeMaybe :: SharedContext -> Term -> MaybeT IO FirstOrderType

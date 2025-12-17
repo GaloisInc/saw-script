@@ -26,8 +26,6 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
-
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
 import SAWCore.Name (VarName(..))
 import SAWCore.Module (ModuleMap)
@@ -519,7 +517,7 @@ asFiniteType sc t =
   case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty Map.empty t) of
     Just ft -> return ft
     Nothing -> do
-      t' <- ppTerm sc PPS.defaultOpts t
+      t' <- ppTerm sc t
       fail $ "SAWCoreAIG.BitBlast.bitBlastTerm: invalid AIG type: " ++ t'
 
 processVar ::

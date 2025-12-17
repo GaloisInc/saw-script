@@ -13,8 +13,12 @@ module Tests.SharedTerm
   ) where
 
 import Control.Monad
+import qualified Data.IORef as IORef
+
 import Test.Tasty
 import Test.Tasty.HUnit
+
+import qualified SAWSupport.Pretty as PPS
 import SAWCore.Prelude
 import SAWCore.SharedTerm
 
@@ -29,7 +33,8 @@ sharedTermTests =
 preludeSharedSmokeTest :: TestTree
 preludeSharedSmokeTest =
   testCase "preludeSharedSmokeTest" $ do
-    sc <- mkSharedContext
+    ppopts <- IORef.newIORef PPS.defaultOpts
+    sc <- mkSharedContext ppopts
     scLoadPreludeModule sc
     void $ scGlobalDef sc "Prelude.Bool"
     return ()

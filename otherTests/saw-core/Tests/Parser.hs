@@ -8,8 +8,12 @@ Portability : non-portable (language extensions)
 
 module Tests.Parser (parserTests) where
 
+import qualified Data.IORef as IORef
+
 import Test.Tasty
 import Test.Tasty.HUnit
+
+import qualified SAWSupport.Pretty as PPS
 import SAWCore.Module
 import SAWCore.Name
 import SAWCore.Prelude
@@ -31,7 +35,8 @@ checkDef d = do
 
 checkPrelude :: Assertion
 checkPrelude =
-  do sc <- mkSharedContext
+  do ppopts <- IORef.newIORef PPS.defaultOpts
+     sc <- mkSharedContext ppopts
      scLoadPreludeModule sc
      modmap <- scGetModuleMap sc
      mapM_ checkDef $ allModuleDefs modmap

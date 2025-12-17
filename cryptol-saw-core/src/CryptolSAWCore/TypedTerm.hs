@@ -94,20 +94,20 @@ data TypedTermType
 -- probably go away as they produce worse output.
 
 -- | Print a `TypedTerm` to a `PP.Doc`.
-prettyTypedTerm :: SharedContext -> PPS.Opts -> TypedTerm -> IO (PP.Doc ann)
-prettyTypedTerm sc opts (TypedTerm tp tm) = do
-  tm' <- prettyTerm sc opts tm
-  tp' <- prettyTypedTermType sc opts tp
+prettyTypedTerm :: SharedContext -> TypedTerm -> IO (PP.Doc ann)
+prettyTypedTerm sc (TypedTerm tp tm) = do
+  tm' <- prettyTerm sc tm
+  tp' <- prettyTypedTermType sc tp
   pure $ PP.unAnnotate tm' <+> ":" <+> tp'
 
 -- | Print a `TypedTermType` to a `PP.Doc`.
-prettyTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO (PP.Doc ann)
-prettyTypedTermType _sc _opts (TypedTermSchema sch) =
+prettyTypedTermType :: SharedContext -> TypedTermType -> IO (PP.Doc ann)
+prettyTypedTermType _sc (TypedTermSchema sch) =
   pure $ CryPP.pretty sch
-prettyTypedTermType _sc _opts (TypedTermKind k) =
+prettyTypedTermType _sc (TypedTermKind k) =
   pure $ CryPP.pretty k
-prettyTypedTermType sc opts (TypedTermOther tp) = do
-  tp' <- prettyTerm sc opts tp
+prettyTypedTermType sc (TypedTermOther tp) = do
+  tp' <- prettyTerm sc tp
   pure $ PP.unAnnotate tp'
 
 -- | Print a `TypedTerm` to a `PP.Doc`, without needing the
@@ -142,9 +142,10 @@ prettyTypedVariable (TypedVariable ctp vn _tp) =
   CryPP.pretty ctp
 
 -- | Print a `TypedTermType` to `Text`.
-ppTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO Text
-ppTypedTermType sc opts ty =
-  PPS.renderText opts <$> prettyTypedTermType sc opts ty
+ppTypedTermType :: SharedContext -> TypedTermType -> IO Text
+ppTypedTermType sc ty = do
+  opts <- scGetPPOpts sc
+  PPS.renderText opts <$> prettyTypedTermType sc ty
 
 -- | Print a `TypedTermType` to `Text`, without needing the
 --   `SharedContext` or `IO`.
@@ -156,9 +157,10 @@ ppTypedTermTypePure opts ty =
   PPS.renderText opts $ prettyTypedTermTypePure ty
 
 -- | Print a `TypedTerm` to `Text`.
-ppTypedTerm :: SharedContext -> PPS.Opts -> TypedTerm -> IO Text
-ppTypedTerm sc opts ty =
-  PPS.renderText opts <$> prettyTypedTerm sc opts ty
+ppTypedTerm :: SharedContext -> TypedTerm -> IO Text
+ppTypedTerm sc ty = do
+  opts <- scGetPPOpts sc
+  PPS.renderText opts <$> prettyTypedTerm sc ty
 
 -- | Print a `TypedTermType` to `Text`, without needing the
 --   `SharedContext` or `IO`.

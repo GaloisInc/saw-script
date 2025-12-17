@@ -11,6 +11,8 @@ import qualified Data.Set as Set
 import Data.Text(Text)
 import qualified Data.Text as Text
 
+import qualified SAWSupport.Pretty as PPS
+
 import qualified SAWCentral.Builtins as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
@@ -45,7 +47,8 @@ data MirState t = MirState {
 newMirState :: IO (MirState t)
 newMirState =
   do
-    sc <- SAW.mkSharedContext
+    ppOptsRef <- newIORef PPS.defaultOpts
+    sc <- SAW.mkSharedContext ppOptsRef
     SAW.scLoadPreludeModule sc
     SAW.scLoadCryptolModule sc
     let ?fileReader = BS.readFile

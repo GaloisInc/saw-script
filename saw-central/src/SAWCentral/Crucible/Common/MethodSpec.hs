@@ -197,13 +197,13 @@ instance IsExt MIR where
 --   Consider using 'resolveSetupValue' and printing the language-specific value
 --   (e.g., an 'LLVMVal') with @PP.pretty@ instead.
 --
---   This needs the `SharedContext` and `Opts` and prints in `IO` so it can
+--   This needs the `SharedContext` and prints in `IO` so it can
 --   print SAWCore `Term`s correctly.
 prettySetupValue ::
     forall ext. IsExt ext =>
-    SharedContext -> PPS.Opts -> SetupValue ext -> IO PPS.Doc
-prettySetupValue sc opts setupval = case setupval of
-  SetupTerm tm   -> prettyTypedTerm sc opts tm
+    SharedContext -> SetupValue ext -> IO PPS.Doc
+prettySetupValue sc setupval = case setupval of
+  SetupTerm tm   -> prettyTypedTerm sc tm
   SetupVar i     -> pure $ prettyAllocIndex i
   SetupNull _    -> pure $ "NULL"
   SetupStruct x vs ->
@@ -239,10 +239,10 @@ prettySetupValue sc opts setupval = case setupval of
       (MIRExt, slice) ->
         prettyMirSetupSlice slice
   SetupArray _ vs  -> do
-    vs' <- mapM (prettySetupValue sc opts) vs
+    vs' <- mapM (prettySetupValue sc) vs
     pure $ PP.brackets $ PP.hsep $ PP.punctuate "," vs'
   SetupElem x v i  -> do
-    v' <- PP.parens <$> prettySetupValue sc opts v
+    v' <- PP.parens <$> prettySetupValue sc v
     let i' :: PPS.Doc  -- required to avoid type errors on at least GHC 9.4
         i' = PP.pretty i
     case (ext, x) of
@@ -259,7 +259,7 @@ prettySetupValue sc opts setupval = case setupval of
           MirIndexOffsetRef ->
             pure $ v' <> ".offset" <> PP.parens i'
   SetupField x v f -> do
-    v' <- prettySetupValue sc opts v
+    v' <- prettySetupValue sc v
     let vf' = PP.parens v' <> "." <> PP.pretty f
     case (ext, x) of
       (LLVMExt, ()) ->
@@ -273,7 +273,7 @@ prettySetupValue sc opts setupval = case setupval of
           MirFieldAccessByRef ->
             pure $ "&" <> vf'
   SetupUnion _ v u -> do
-    v' <- prettySetupValue sc opts v
+    v' <- prettySetupValue sc v
     pure $ PP.parens v' <> "." <> PP.pretty u
   SetupCast x v ->
     case (ext, x) of
@@ -288,9 +288,9 @@ prettySetupValue sc opts setupval = case setupval of
   SetupGlobalInitializer _ nm ->
     pure $ "global_initializer" <> PP.parens (PP.pretty nm)
   SetupMux x c t f -> do
-    c' :: PPS.Doc <- prettyTypedTerm sc opts c
-    t' <- prettySetupValue sc opts t
-    f' <- prettySetupValue sc opts f
+    c' :: PPS.Doc <- prettyTypedTerm sc c
+    t' <- prettySetupValue sc t
+    f' <- prettySetupValue sc f
     case (ext, x) of
       (LLVMExt, empty) ->
         absurd empty
@@ -312,12 +312,12 @@ prettySetupValue sc opts setupval = case setupval of
 
     prettySetupStructDefault :: forall ext'. IsExt ext' => [SetupValue ext'] -> IO PPS.Doc
     prettySetupStructDefault vs = do
-        vs' <- mapM (prettySetupValue sc opts) vs
+        vs' <- mapM (prettySetupValue sc) vs
         pure $ PP.braces $ PP.hsep $ PP.punctuate "," vs'
 
     prettySetupTuple :: [SetupValue MIR] -> IO PPS.Doc
     prettySetupTuple vs = do
-        vs' <- mapM (prettySetupValue sc opts) vs
+        vs' <- mapM (prettySetupValue sc) vs
         pure $ PP.parens $ PP.hsep $ PP.punctuate "," vs'
 
     prettyMirSetupEnum :: MirSetupEnum -> IO PPS.Doc
@@ -332,29 +332,30 @@ prettySetupValue sc opts setupval = case setupval of
         reflen' <- prettySetupTuple [ref, len]
         pure $ "SliceRaw" <> reflen'
     prettyMirSetupSlice (MirSetupSlice _ arr) = do
-        arr' <- prettySetupValue sc opts arr
+        arr' <- prettySetupValue sc arr
         pure $ arr' <> "[..]"
     prettyMirSetupSlice (MirSetupSliceRange _ arr start end) = do
-        arr' <- prettySetupValue sc opts arr
+        arr' <- prettySetupValue sc arr
         pure $ arr' <> "[" <> PP.pretty start <> ".." <> PP.pretty end <> "]"
 
     prettyCast :: PP.Pretty ty => SetupValue ext -> ty -> IO PPS.Doc
     prettyCast v ty = do
-        v' <- prettySetupValue sc opts v
+        v' <- prettySetupValue sc v
         pure $ PP.parens v' <+> "AS" <+> PP.pretty ty
 
     -- XXX: there's no Pretty instance for LLVM types so we need to
     -- use Show instead until someone fixes that.
     prettyCast' :: Show ty => SetupValue ext -> ty -> IO PPS.Doc
     prettyCast' v ty = do
-        v' <- prettySetupValue sc opts v
+        v' <- prettySetupValue sc v
         pure $ PP.parens v' <+> "AS" <+> PP.viaShow ty
 
 ppSetupValue ::
     forall ext. IsExt ext =>
-    SharedContext -> PPS.Opts -> SetupValue ext -> IO Text
-ppSetupValue sc opts v =
-    PPS.renderText opts <$> prettySetupValue sc opts v
+    SharedContext -> SetupValue ext -> IO Text
+ppSetupValue sc v = do
+    ppopts <- scGetPPOpts sc
+    PPS.renderText ppopts <$> prettySetupValue sc v
 
 --------------------------------------------------------------------------------
 -- ** Ghost state
@@ -421,21 +422,21 @@ prettyConditionMetadata meta =
     type' <+> "at" <+> loc' <> context' <> tags'
 
 prettySetupCondition :: IsExt ext =>
-      SharedContext -> PPS.Opts -> SetupCondition ext -> IO PPS.Doc
-prettySetupCondition sc opts cond = case cond of
+      SharedContext -> SetupCondition ext -> IO PPS.Doc
+prettySetupCondition sc cond = case cond of
   SetupCond_Equal meta val1 val2 -> do
     let meta' = prettyConditionMetadata meta
-    val1' <- prettySetupValue sc opts val1
-    val2' <- prettySetupValue sc opts val2
+    val1' <- prettySetupValue sc val1
+    val2' <- prettySetupValue sc val2
     pure $ "equal" <+> PP.braces meta' <+> val1' <+> "==" <+> val2'
   SetupCond_Pred meta tt -> do
     let meta' = prettyConditionMetadata meta
-    tt' <- prettyTypedTerm sc opts tt
+    tt' <- prettyTypedTerm sc tt
     pure $ "pred" <+> PP.braces meta' <+> tt'
   SetupCond_Ghost meta ghost tt -> do
     let meta' = prettyConditionMetadata meta
         ghost' = PP.pretty ghost
-    tt' <- prettyTypedTerm sc opts tt
+    tt' <- prettyTypedTerm sc tt
     pure $ "ghost" <+> PP.braces meta' <+> ghost' <+> ":" <+> tt'
 
 -- | Verification state (either pre- or post-) specification

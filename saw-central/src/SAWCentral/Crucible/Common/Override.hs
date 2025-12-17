@@ -660,7 +660,7 @@ learnGhost sc md prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =
      instantiateExtMatchTerm sc md prepost tm tmEx
 learnGhost sc _md _prepost _var (TypedTerm tp _)
   = do
-    tp' <- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp
+    tp' <- liftIO $ prettyTypedTermType sc tp
     fail $ unlines
       [ "Ghost variable expected value has improper type"
       , "expected Cryptol schema type, but got"
@@ -678,7 +678,7 @@ executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =
      tm' <- liftIO (scInstantiate sc s tm)
      writeGlobal var (sch,tm')
 executeGhost sc _md _var (TypedTerm tp _) = do
-  tp' <- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp
+  tp' <- liftIO $ prettyTypedTermType sc tp
   fail $ unlines
     [ "executeGhost: improper value type"
     , "expected Cryptol schema type, but got"
@@ -716,12 +716,11 @@ matchTerm sc md prepost real expect =
 
        _ ->
          do t <- liftIO $ scEq sc real expect
-            -- XXX get the user's ppOpts setting from somewhere
-            let ppOpts = PPS.defaultOpts
             -- clamp the print depth to 20
-            let ppOpts' = PPS.limitMaxDepth ppOpts 20
-            expect' <- liftIO $ SAWVerifier.ppTerm sc ppOpts' expect
-            real' <- liftIO $ SAWVerifier.ppTerm sc ppOpts' real
+            (expect', real') <- liftIO $ scWithPPOpts sc (PPS.limitMaxDepth 20) $ do
+                e' <- SAWVerifier.ppTerm sc expect
+                r' <- SAWVerifier.ppTerm sc real
+                pure (e', r')
             let msg = unlines $
                   [ "Literal equality " ++ MS.stateCond prepost
                   , "Expected term: "

@@ -65,8 +65,6 @@ import qualified Data.Set as Set
 import Control.Monad.Trans.Writer.Strict
 import Numeric.Natural
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
-
 import SAWCore.Cache
 import SAWCore.Conversion
   (Conversion(..)
@@ -835,13 +833,13 @@ rewriteSharedTerm sc ss1 t0 =
             -- This should never happen because we avoid inserting
             -- reflexive rules into simp sets in the first place.
             do
-               lhs' <- ppTerm sc PPS.defaultOpts lhs
+               lhs' <- ppTerm sc lhs
                putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
                           "(THE IMPOSSIBLE HAPPENED!): " ++ lhs'
                apply convertibleFlag rules t
           | IntMap.keysSet inst /= IntSet.fromList (map (vnIndex . fst) ctxt) ->
             do
-               lhs' <- ppTerm sc PPS.defaultOpts lhs
+               lhs' <- ppTerm sc lhs
                putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
                  ++ lhs'
                apply convertibleFlag rules t

@@ -75,6 +75,8 @@ module SAWCore.Term.Certified
   , mkSharedContext
   , scGetModuleMap
   , scGetNamingEnv
+  , scGetPPOpts
+  , scGetPPOptsRef
   , scmRegisterName
   , scmFreshVarName
   , scmFreshInventedVar
@@ -127,6 +129,7 @@ import Prelude hiding (maximum)
 
 import SAWSupport.IntRangeSet (IntRangeSet)
 import qualified SAWSupport.IntRangeSet as IntRangeSet
+import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Cache
 import SAWCore.Module
@@ -313,6 +316,13 @@ emptyAppCache = emptyTFM
 -- then do another lookup for hash-consing the Constant term.
 -- Invariant: All entries in 'scAppCache' must have 'TermIndex'es that
 -- are less than 'scNextTermIndex' and marked valid in 'scValidTerms'.
+--
+-- The `PPS.Opts` (prettyprinter options) are shared with higher-level
+-- code for convenience. Our reference should be considered readonly;
+-- the upper-level code updates it based on user actions and also
+-- takes responsibility for handling any needed checkpointing. There
+-- is currently one ugly exception to this that can be found by locating
+-- the one use of @scWithPPOpts@.
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scAppCache       :: AppCacheRef
@@ -328,6 +338,7 @@ data SharedContext = SharedContext
                                             -- been given a global name and
                                             -- are expected to appear free
                                             -- at the top-level.
+  , scPPOpts         :: IORef PPS.Opts
   }
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
@@ -726,6 +737,15 @@ scFreshenGlobalIdent sc ident =
   ident : map (mkIdent (identModule ident) .
                Text.append (identBaseName ident) .
                Text.pack . show) [(0::Integer) ..]
+
+-- | Get the current prettyprinter options
+scGetPPOpts :: SharedContext -> IO PPS.Opts
+scGetPPOpts sc = readIORef (scPPOpts sc)
+
+-- | Get the current prettyprinter options as an IORef. This is used
+--    by @scWithPPOpts@ in @SharedTerm@ and not otherwise exported.
+scGetPPOptsRef :: SharedContext -> IORef PPS.Opts
+scGetPPOptsRef sc = scPPOpts sc
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -1788,8 +1808,8 @@ scmGlobalApply i ts =
 ------------------------------------------------------------
 
 -- | The default instance of the SharedContext operations.
-mkSharedContext :: IO SharedContext
-mkSharedContext =
+mkSharedContext :: IORef PPS.Opts -> IO SharedContext
+mkSharedContext ppoptsref =
   do vr <- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.
      cr <- newIORef emptyAppCache
      gr <- newIORef HMap.empty
@@ -1816,6 +1836,7 @@ mkSharedContext =
        , scNextTermIndex = tr
        , scValidTerms = ir
        , scInventedVars = dvr
+       , scPPOpts = ppoptsref
        }
 
 -- | Instantiate some of the named variables in the term.

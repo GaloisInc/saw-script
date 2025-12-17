@@ -48,15 +48,17 @@ import Control.Monad.Catch (MonadThrow(..), try)
 import Control.Monad.State (get, gets, modify, put)
 import qualified Control.Exception as X
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (local)
+import Control.Monad.Reader (local, asks)
 
 import Data.Text (Text)
 import qualified Data.Text as Text (pack, unpack)
 --import Data.Map ( Map )
 import qualified Data.Map as Map
 --import Data.Set ( Set )
+import qualified Data.IORef as IORef
 
 import SAWSupport.Position
+import qualified SAWSupport.Pretty as PPS
 import SAWCore.SharedTerm
 
 import CryptolSAWCore.CryptolEnv as CEnv
@@ -83,9 +85,8 @@ indexValue pos (VArray vs) (VInteger x)
     where i = fromInteger x
 indexValue pos v1 v2 = do
     sc <- getSharedContext
-    opts <- gets rwPPOpts
-    v1' <- liftIO $ ppValue sc opts v1
-    v2' <- liftIO $ ppValue sc opts v2
+    v1' <- liftIO $ ppValue sc v1
+    v2' <- liftIO $ ppValue sc v2
     panic "indexValue" [
         "Type error that escaped the typechecker",
         "Source position: " <> ppPosition pos,
@@ -100,8 +101,7 @@ lookupValue pos (VRecord vm) name =
       Just x -> pure x
 lookupValue pos v1 v2 = do
     sc <- getSharedContext
-    opts <- gets rwPPOpts
-    v1' <- liftIO $ ppValue sc opts v1
+    v1' <- liftIO $ ppValue sc v1
     panic "lookupValue" [
         "Type error that escaped the typechecker",
         "Source position: " <> ppPosition pos,
@@ -115,8 +115,7 @@ tupleLookupValue pos (VTuple vs) i
   | otherwise = error $ Text.unpack $ ppPosition pos <> ": No such tuple index: " <> Text.pack (show i)
 tupleLookupValue pos v1 v2 = do
     sc <- getSharedContext
-    opts <- gets rwPPOpts
-    v1' <- liftIO $ ppValue sc opts v1
+    v1' <- liftIO $ ppValue sc v1
     panic "tupleLookupValue" [
         "Type error that escaped the typechecker",
         "Source position: " <> ppPosition pos,
@@ -139,6 +138,7 @@ bracketTopLevel acquire release action =
 data TopLevelCheckpoint =
   TopLevelCheckpoint
     TopLevelRW
+    PPS.Opts
     SharedContextCheckpoint
 
 -- | Create a SAWScript checkpoint. This captures the current state of
@@ -156,7 +156,8 @@ makeCheckpoint :: TopLevel TopLevelCheckpoint
 makeCheckpoint = do
     rw <- get
     scc <- liftIO $ checkpointSharedContext (rwSharedContext rw)
-    return $ TopLevelCheckpoint rw scc
+    opts <- getPPOpts
+    return $ TopLevelCheckpoint rw opts scc
 
 -- | Restore the Cryptol environment stack (full Cryptol environment)
 --   from a checkpoint.
@@ -177,7 +178,7 @@ restoreCryptolEnvStack chk'cryenv now'cryenv =
 
 -- | Restore a SAWScript checkpoint.
 restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
-restoreCheckpoint (TopLevelCheckpoint chk'rw scc) = do
+restoreCheckpoint (TopLevelCheckpoint chk'rw ppopts scc) = do
      now'rw <- getTopLevelRW
 
      -- First, restore the SAWCore state.
@@ -191,6 +192,10 @@ restoreCheckpoint (TopLevelCheckpoint chk'rw scc) = do
      let chk'cryenv = rwGetCryptolEnvStack chk'rw
          now'cryenv = rwGetCryptolEnvStack now'rw
          result'cryenv = restoreCryptolEnvStack chk'cryenv now'cryenv
+
+     -- Restore the prettyprinting options.
+     ppoptsref <- asks roPPOpts
+     liftIO $ IORef.writeIORef ppoptsref ppopts
 
      -- Restore the old TopLevelRW with the adjusted Cryptol environment
      let chk'rw' = rwSetCryptolEnvStack result'cryenv chk'rw

@@ -41,7 +41,6 @@ module SAWCentral.Crucible.LLVM.FFI
   ) where
 
 import           Control.Monad
-import           Control.Monad.State                  (gets)
 import           Control.Monad.Trans
 import           Data.Bits                            (finiteBitSize)
 import           Data.Foldable
@@ -148,7 +147,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   case asConstant funTerm of
     Just nm -> case Map.lookup (nameInfo nm) (eFFITypes cryEnv) of
       Nothing -> do
-        opts <- lll $ gets rwPPOpts
+        opts <- lll $ getPPOpts
         nm' <- lio $ ppName sc opts nm
         throwFFISetup $ "No Cryptol foreign function " ++ Text.unpack nm' ++ " found"
       Just (CallC (FFIFunType {..})) -> do
@@ -182,8 +181,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
 -- | Report an error in generating setup for a foreign function.
 throwFFISetup :: Ctx => String -> LLVMCrucibleSetupM a
 throwFFISetup msg = do
-  opts <- llvmTopLevel $ gets rwPPOpts
-  tm' <- llvmTopLevel $ io $ ppTerm (sc ?ctx) opts (funTerm ?ctx)
+  tm' <- llvmTopLevel $ io $ ppTerm (sc ?ctx) (funTerm ?ctx)
   throwLLVMFun "llvm_ffi_setup" $
     "Cannot generate FFI setup for " ++ tm' ++ ":\n" ++ msg
 
@@ -198,8 +196,7 @@ buildTypeEnv (param:params) (argTerm:argTerms) =
         buildTypeEnv params argTerms
     _ -> do
       sc <- llvmTopLevel getSharedContext
-      opts <- llvmTopLevel $ gets rwPPOpts
-      argTerm' <- llvmTopLevel $ io $ ppTerm sc opts argTerm
+      argTerm' <- llvmTopLevel $ io $ ppTerm sc argTerm
       throwFFISetup $
         "Not a numeric literal type argument: " ++ argTerm'
 buildTypeEnv params [] = throwFFISetup $

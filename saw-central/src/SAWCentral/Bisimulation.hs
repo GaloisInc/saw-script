@@ -91,6 +91,9 @@ import Data.Map.Strict (Map)
 import Data.Maybe (mapMaybe)
 import qualified Data.Text as Text
 
+import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
+
 import qualified Cryptol.TypeCheck.Type as C
 
 import qualified SAWSupport.Pretty as PPS
@@ -162,7 +165,7 @@ proveAll script ts = do
   where
     failProof :: ProofResult -> TopLevel ()
     failProof res = do
-      opts <- rwPPOpts <$> getTopLevelRW
+      opts <- getPPOpts
       fail $ "prove_bisim failed.\n" ++ Text.unpack (ppProofResult opts res)
 
 -- | Generate 'Term' for application of a relation
@@ -256,8 +259,7 @@ stateFromApp app = do
     App _ arg -> io $ scPairLeft sc arg
     _ -> do
       term <- io $ scTermF sc app
-      opts <- State.gets rwPPOpts
-      term' <- io $ ppTerm sc opts term
+      term' <- io $ ppTerm sc term
       fail $ "Error: " ++ term' ++ " is not an App"
 
 -- | Given a term containing the application of a 'Constant', locate this
@@ -292,9 +294,8 @@ openConstantApp constant t = do
         Just lambda -> return lambda
         Nothing -> do
           sc <- getSharedContext
-          opts <- State.gets rwPPOpts
-          tt' <- io $ PPS.render opts <$> prettyTypedTerm sc opts tt
-          fail $ "Error: Expected a lambda term, got " ++ tt'
+          tt' <- io $ ppTypedTerm sc tt
+          fail $ Text.unpack $ "Error: Expected a lambda term, got " <> tt'
 
 -- Traverses 'term' and extracts the application of 'constant' within it.  Fails
 -- if 'constant' cannot be found within 'term'.
@@ -308,12 +309,14 @@ extractApp constant term =
     Just app -> return app
     Nothing -> do
         sc <- getSharedContext
-        opts <- State.gets rwPPOpts
-        term' <- io $ ppTerm sc opts term
-        constant' <- io $ PPS.render opts <$> prettyTypedTerm sc opts constant
-        fail $ unlines [ "Error: Failed to locate constant in term."
-                              , "  Constant: " ++ constant'
-                              , "  Term: " ++ term' ]
+        ppopts <- getPPOpts
+        term' <- io $ prettyTerm sc term
+        constant' <- io $ prettyTypedTerm sc constant
+        fail $ PPS.render ppopts $ PP.vsep [
+            "Error: Failed to locate constant in term.",
+            "  Constant:" <+> constant',
+            "  Term:" <+> term'
+         ]
   where
     go :: (IntSet, Maybe (TermF Term))
        -> Term
@@ -624,9 +627,8 @@ proveBisimulation script bthms srel orel lhs rhs = do
           return (s1, s2, o1)
         _ -> do
             sc <- getSharedContext
-            opts <- State.gets rwPPOpts
-            orel' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType orel)
-            fail $ "Error: Unexpected output relation type: " ++ orel'
+            orel' <- liftIO $ ppTypedTermType sc (ttType orel)
+            fail $ Text.unpack $ "Error: Unexpected output relation type: " <> orel'
 
     -- Check that 'lhsStateType' and 'rhsStateType' match the extracted types
     -- from 'typecheckOutputRelation'.  Invokes 'fail' if the types do not
@@ -655,9 +657,8 @@ proveBisimulation script bthms srel orel lhs rhs = do
             , "  Output relation RHS state type: " ++ Text.unpack (CryPP.pp rhsStateType) ]
         _ -> do
             sc <- getSharedContext
-            opts <- State.gets rwPPOpts
-            srel' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType srel)
-            fail $ "Error: Unexpected state relation type: " ++ srel'
+            srel' <- liftIO $ ppTypedTermType sc (ttType srel)
+            fail $ Text.unpack $ "Error: Unexpected state relation type: " <> srel'
 
     -- Typecheck bisimulation term. The expected type for a bisimulation term
     -- is:
@@ -700,13 +701,15 @@ proveBisimulation script bthms srel orel lhs rhs = do
           return (name, i)
         _ -> do
           sc <- getSharedContext
-          opts <- State.gets rwPPOpts
-          let stStr = Text.unpack $ CryPP.pp stateType
-          side' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType side)
-          fail $ unlines [
+          ppopts <- liftIO $ scGetPPOpts sc
+          let stateType' = CryPP.pretty stateType
+              input' = "(" <> stateType' <> ", inputType)"
+              output' = "(" <> stateType' <> ", outputType)"
+          side' <- liftIO $ prettyTypedTermType sc (ttType side)
+          fail $ PPS.render ppopts $ PP.vsep [
               "Error: Unexpected bisimulation term type.",
-              "  Expected: (" ++ stStr ++ ", inputType) -> (" ++ stStr ++ ", outputType)",
-              "  Actual: " ++ side'
+              "  Expected:" <+> input' <+> "->" <+> output',
+              "  Actual:" <+> side'
            ]
 
 -- | Replace the invocation of a specific 'Constant' with a 'Variable'.  The
@@ -782,7 +785,6 @@ constantName (Constant e) =
   return $ toShortName $ nameInfo e
 constantName tf = do
   sc <- getSharedContext
-  opts <- State.gets rwPPOpts
   term <- io $ scTermF sc tf
-  term' <- io $ ppTerm sc opts term
+  term' <- io $ ppTerm sc term
   fail $ "Error: Expected a constant, but got: " ++ term'

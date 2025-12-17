@@ -70,8 +70,6 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
-import qualified SAWSupport.Pretty as PPS
-
 import CryptolSAWCore.CryptolEnv
 import SAWCore.FiniteValue
 import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
@@ -735,7 +733,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
          case maybe_fix_body of
            Just f -> pure f
            Nothing -> do
-               func' <- ppTerm sc PPS.defaultOpts (ttTerm func)
+               func' <- ppTerm sc (ttTerm func)
                fail $ "not Prelude.fix: " ++ func'
        func_body <- betaNormalize sc
          =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
@@ -820,7 +818,7 @@ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
          case maybe_fix_body of
            Just f -> pure f
            Nothing -> do
-               func' <- ppTerm sc PPS.defaultOpts (ttTerm func)
+               func' <- ppTerm sc (ttTerm func)
                fail $ "not Prelude.fix: " ++ func'
        func_body <- betaNormalize sc
          =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ [explicit_parameters_tuple]))
@@ -901,10 +899,10 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
        when (phase == SimpleInvariant.InitialInvariant) $
          do printFn "Loop invariant implicit parameters!"
             forM_ implicit_params' $ \x ->
-                do x' <- ppTerm sc PPS.defaultOpts x
+                do x' <- ppTerm sc x
                    printFn x'
                    tp <- scTypeOf sc x
-                   tp' <- ppTerm sc PPS.defaultOpts tp
+                   tp' <- ppTerm sc tp
                    printFn tp'
 
        -- actually apply the arguments to the given term
@@ -914,8 +912,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
        tp <- scTypeOf sc inv
        ok <- scConvertible sc tp =<< scBoolType sc
        unless ok $ do
-         -- TODO, get ppOpts from the right place
-         tp' <- ppTerm sc PPS.defaultOpts tp
+         tp' <- ppTerm sc tp
          fail $ unlines [ "Loop invariant must return a boolean value, but got:"
                         , tp'
                         ]
@@ -1632,7 +1629,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
         printOutLnTop Info $ unwords ["Subgoal failed:", msg]
         printOutLnTop Info $ Text.unpack (ppStats stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
-        ppOpts <- rwPPOpts <$> getTopLevelRW
+        ppOpts <- getPPOpts
         case vals of
           [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
           _ -> let showVar x = Text.unpack (vnName x) in

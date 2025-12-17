@@ -118,8 +118,8 @@ overlapPointsTo =
         JVMPointsToArray _ p2 _    -> p1 == p2
         _                          -> False
 
-prettyJVMPointsTo :: SharedContext -> PPS.Opts -> JVMPointsTo -> IO PPS.Doc
-prettyJVMPointsTo sc opts =
+prettyJVMPointsTo :: SharedContext -> JVMPointsTo -> IO PPS.Doc
+prettyJVMPointsTo sc =
   \case
     JVMPointsToField _loc ptr fid val -> do
         let ptr' = MS.prettyAllocIndex ptr
@@ -143,7 +143,7 @@ prettyJVMPointsTo sc opts =
   where
     opt prt x = case x of
       Nothing -> pure "<unspecified>"
-      Just x' -> prt sc opts x'
+      Just x' -> prt sc x'
 
 
 --------------------------------------------------------------------------------
