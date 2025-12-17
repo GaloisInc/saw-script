@@ -849,7 +849,7 @@ hoistIfs :: SharedContext
          -> Term
          -> IO Term
 hoistIfs sc t = do
-   cache <- newCache
+   cache <- newIntCache
 
    rules <- map (\rt -> ruleOfTerm rt Nothing) <$> mapM (scTypeOfIdent sc)
               [ "Prelude.ite_true"
@@ -910,13 +910,13 @@ orderTerms _sc xs = return $ List.sort xs
 doHoistIfs :: Ord a =>
   SharedContext ->
   Simpset a ->
-  Cache IO TermIndex (HoistIfs s) ->
+  IntCache IO (HoistIfs s) ->
   Term ->
   IO (HoistIfs s)
 doHoistIfs sc ss hoistCache = go
 
  where go :: Term -> IO (HoistIfs s)
-       go t = useCache hoistCache (termIndex t) $ top t (unwrapTermF t)
+       go t = useIntCache hoistCache (termIndex t) $ top t (unwrapTermF t)
 
        top :: Term -> TermF Term -> IO (HoistIfs s)
        top t tf =

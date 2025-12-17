@@ -1205,20 +1205,20 @@ scmConvertible ::
   Term ->
   SCM Bool
 scmConvertible unfoldConst tm1 tm2 =
-  do c <- newCache
+  do c <- newIntCache
      go c IntMap.empty tm1 tm2
 
   where
-    whnf :: Cache SCM TermIndex Term -> Term -> SCM (TermF Term)
+    whnf :: IntCache SCM Term -> Term -> SCM (TermF Term)
     whnf c t@STApp{stAppIndex = idx} =
-      unwrapTermF <$> useCache c idx (scmWhnf t)
+      unwrapTermF <$> useIntCache c idx (scmWhnf t)
 
-    go :: Cache SCM TermIndex Term -> IntMap VarIndex -> Term -> Term -> SCM Bool
+    go :: IntCache SCM Term -> IntMap VarIndex -> Term -> Term -> SCM Bool
     go _c vm (STApp{stAppIndex = idx1, stAppVarTypes = vt1}) (STApp{stAppIndex = idx2})
       | IntMap.disjoint vt1 vm && idx1 == idx2 = pure True   -- succeed early case
     go c vm t1 t2 = join (goF c vm <$> whnf c t1 <*> whnf c t2)
 
-    goF :: Cache SCM TermIndex Term -> IntMap VarIndex -> TermF Term -> TermF Term -> SCM Bool
+    goF :: IntCache SCM Term -> IntMap VarIndex -> TermF Term -> TermF Term -> SCM Bool
 
     goF _c _vm (Constant nx) (Constant ny) | nameIndex nx == nameIndex ny = pure True
     goF c vm (Constant nx) y
@@ -1320,9 +1320,9 @@ scmInstantiateBeta :: IntMap Term -> Term -> SCM Term
 scmInstantiateBeta sub t0 =
   do let domainVars = IntMap.keysSet sub
      let rangeVars = foldMap freeVars sub
-     cache <- newCacheIntMap
+     cache <- newIntCache
      let memo :: Term -> SCM Term
-         memo t@STApp{stAppIndex = i} = useCache cache i (go t)
+         memo t@STApp{stAppIndex = i} = useIntCache cache i (go t)
          go :: Term -> SCM Term
          go t
            | IntSet.disjoint domainVars (freeVars t) = pure t
@@ -1694,9 +1694,9 @@ scmInstantiate :: IntMap Term -> Term -> SCM Term
 scmInstantiate vmap t0 =
   do let domainVars = IntMap.keysSet vmap
      let rangeVars = foldMap freeVars vmap
-     tcache <- newCacheIntMap
+     tcache <- newIntCache
      let memo :: Term -> SCM Term
-         memo t = useCache tcache (termIndex t) (go t)
+         memo t = useIntCache tcache (termIndex t) (go t)
          go :: Term -> SCM Term
          go t
            | IntSet.disjoint domainVars (freeVars t) = pure t

@@ -952,12 +952,12 @@ scTypeOfName sc nm =
 -- appearing in the term are valid in the new context.
 scImport :: SharedContext -> Term -> IO Term
 scImport sc t0 =
-    do cache <- newCache
+    do cache <- newIntCache
        go cache t0
   where
-    go :: Cache IO TermIndex Term -> Term -> IO Term
+    go :: IntCache IO Term -> Term -> IO Term
     go cache t =
-      useCache cache (termIndex t) (scTermF sc =<< traverse (go cache) (unwrapTermF t))
+      useIntCache cache (termIndex t) (scTermF sc =<< traverse (go cache) (unwrapTermF t))
 
 --------------------------------------------------------------------------------
 -- Normalization
@@ -1003,9 +1003,9 @@ scBetaNormalizeAux sc sub t0 args0 =
      -- The cache memoizes the result of normalizing a given
      -- expression under the current substitution; recursive calls
      -- that change the substitution must start a new memo table.
-     cache <- newCacheIntMap
+     cache <- newIntCache
      let memo :: Term -> IO Term
-         memo t = useCache cache (termIndex t) (go t [])
+         memo t = useIntCache cache (termIndex t) (go t [])
          go :: Term -> [Term] -> IO Term
          go t args =
            case unwrapTermF t of
@@ -1910,8 +1910,8 @@ scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a,
 
 ------------------------------------------------------------
 
-useChangeCache :: C m => Cache m k (Change v) -> k -> ChangeT m v -> ChangeT m v
-useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)
+useChangeCache :: C m => IntCache m (Change v) -> Int -> ChangeT m v -> ChangeT m v
+useChangeCache c k a = ChangeT $ useIntCache c k (runChangeT a)
 
 -- | Performs an action when a value has been modified, and otherwise
 -- returns a pure value.
@@ -2052,7 +2052,7 @@ scUnfoldConstants ::
   (Name -> Bool) {- ^ whether to unfold a constant with this name -} ->
   Term -> IO Term
 scUnfoldConstants sc unfold t0 =
-  do tcache <- newCacheMap' Map.empty
+  do tcache <- newIntCache
      mm <- scGetModuleMap sc
      let getRhs nm =
            case lookupVarIndexInMap (nameIndex nm) mm of
@@ -2084,7 +2084,7 @@ scUnfoldConstantsBeta ::
   (Name -> Bool) {- ^ whether to unfold a constant with this name -} ->
   Term -> IO Term
 scUnfoldConstantsBeta sc unfold t0 =
-  do tcache <- newCacheMap' Map.empty
+  do tcache <- newIntCache
      mm <- scGetModuleMap sc
      let getRhs nm =
            case lookupVarIndexInMap (nameIndex nm) mm of
@@ -2116,7 +2116,7 @@ scUnfoldOnceFixConstantSet :: SharedContext
                            -> Term
                            -> IO Term
 scUnfoldOnceFixConstantSet sc b names t0 = do
-  cache <- newCache
+  cache <- newIntCache
   mm <- scGetModuleMap sc
   let getRhs v =
         case lookupVarIndexInMap v mm of
@@ -2129,7 +2129,7 @@ scUnfoldOnceFixConstantSet sc b names t0 = do
         | otherwise =
           return t
   let go :: Term -> IO Term
-      go t = useCache cache (termIndex t) $
+      go t = useIntCache cache (termIndex t) $
         case unwrapTermF t of
           Constant (Name nmidx _) | Just rhs <- getRhs nmidx -> unfold t nmidx rhs
           tf -> scTermF sc =<< traverse go tf
