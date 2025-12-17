@@ -6,8 +6,7 @@ This repository contains the code for SAWScript, the scripting
 language that forms the primary user interface to the Software
 Analysis Workbench (SAW). It provides the ability to reason about
 formal models describing the denotation of programs written in
-languages such as C, Java, and Cryptol. It also provides experimental,
-incomplete support for the Rust language.
+languages such as C, Java, Rust, and Cryptol.
 
 ## Documentation
 
@@ -128,7 +127,7 @@ any failure during `llvm_load_module` should be considered a bug.
 
 ## Notes on Rust
 
-SAW has experimental support for analyzing Rust programs. To do so, one must
+SAW also has support for analyzing Rust programs. For this purpose, one must
 compile Rust code using [`mir-json`](https://github.com/GaloisInc/mir-json), a
 tool which compiles Rust code to a machine-readable, JSON-based format.
 
@@ -143,7 +142,7 @@ help smooth this over:
 * An exception to this rule is when `mir-json` updates to support a new Rust
   toolchain version. In general, we cannot promise backwards compatibility
   across Rust toolchains, as the changes are often significant enough to
-  impeded any ability to reasonably provide backwards-compatibility guarantees.
+  impede any ability to reasonably provide backwards-compatibility guarantees.
 
 Moreover, SAW requires slightly modified versions of the Rust standard
 libraries that are suited to verification purposes. SAW consults the value of

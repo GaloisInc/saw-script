@@ -1,5 +1,3 @@
-enable_experimental;
-
 let f_spec = do {
     x <- mir_fresh_expanded_value "x" (mir_array 32 mir_u16);
     y <- mir_fresh_expanded_value "y" (mir_array 32 mir_u16);

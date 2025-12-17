@@ -142,7 +142,7 @@ currently managed as part of this documentation ecosystem:
   This is a tutorial-style introduction to SAW
 - `rust-verification-with-saw/`
   "Rust Verification with SAW"
-  Like the above, but using the experimental MIR features
+  Like the above, but using Rust instead of LLVM and Java
 - `saw-user-manual/`
   "SAW User Manual"
   The only 'complete' SAW reference right now

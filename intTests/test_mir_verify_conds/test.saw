@@ -1,5 +1,3 @@
-enable_experimental;
-
 // A spec using mir_precond
 
 let add1_precond_spec = do {

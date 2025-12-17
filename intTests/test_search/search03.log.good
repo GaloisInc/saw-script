@@ -19,6 +19,7 @@ goal_num : ProofScript Int
 jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 mathsat : ProofScript ()
+mir_verify : MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec
 offline_aig : String -> ProofScript ()
 offline_aig_external : String -> ProofScript ()
 offline_cnf : String -> ProofScript ()
@@ -83,7 +84,7 @@ w4_unint_z3_using : String -> [String] -> ProofScript ()
 write_goal : String -> ProofScript ()
 yices : ProofScript ()
 z3 : ProofScript ()
-46 more matches tagged experimental; use enable_experimental to see them
+45 more matches tagged experimental; use enable_experimental to see them
 --------------------------------
 -- (ProofScript)
 abc : ProofScript ()
@@ -105,6 +106,7 @@ goal_num : ProofScript Int
 jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 mathsat : ProofScript ()
+mir_verify : MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec
 offline_aig : String -> ProofScript ()
 offline_aig_external : String -> ProofScript ()
 offline_cnf : String -> ProofScript ()
@@ -169,7 +171,7 @@ w4_unint_z3_using : String -> [String] -> ProofScript ()
 write_goal : String -> ProofScript ()
 yices : ProofScript ()
 z3 : ProofScript ()
-46 more matches tagged experimental; use enable_experimental to see them
+45 more matches tagged experimental; use enable_experimental to see them
 --------------------------------
 -- ProofScript Int
 goal_num : ProofScript Int

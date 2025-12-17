@@ -1,5 +1,3 @@
-enable_experimental;
-
 m <- mir_load_module "pre-test-mut.linked-mir.json";
 let ty = mir_u32;
 

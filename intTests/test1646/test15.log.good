@@ -221,7 +221,76 @@ llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMS
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 load_aig : String -> TopLevel AIG
 mathsat : ProofScript ()
+mir_adt : MIRAdt -> MIRType
+mir_alloc : MIRType -> MIRSetup MIRValue
+mir_alloc_mut : MIRType -> MIRSetup MIRValue
+mir_alloc_raw_ptr_const : MIRType -> MIRSetup MIRValue
+mir_alloc_raw_ptr_const_multi : Int -> MIRType -> MIRSetup MIRValue
+mir_alloc_raw_ptr_mut : MIRType -> MIRSetup MIRValue
+mir_alloc_raw_ptr_mut_multi : Int -> MIRType -> MIRSetup MIRValue
+mir_array : Int -> MIRType -> MIRType
+mir_array_value : MIRType -> [MIRValue] -> MIRValue
+mir_assert : Term -> MIRSetup ()
+mir_bool : MIRType
+mir_cast_raw_ptr : MIRValue -> MIRType -> MIRValue
+mir_char : MIRType
+mir_const : MIRType -> Term -> MIRType
+mir_elem_ref : MIRValue -> Int -> MIRValue
+mir_elem_value : MIRValue -> Int -> MIRValue
+mir_enum_value : MIRAdt -> String -> [MIRValue] -> MIRValue
+mir_equal : MIRValue -> MIRValue -> MIRSetup ()
+mir_execute_func : [MIRValue] -> MIRSetup ()
+mir_extract : MIRModule -> String -> TopLevel Term
+mir_f32 : MIRType
+mir_f64 : MIRType
+mir_find_adt : MIRModule -> String -> [MIRType] -> MIRAdt
+mir_find_mangled_adt : MIRModule -> String -> MIRAdt
+mir_find_name : MIRModule -> String -> [MIRType] -> String
+mir_fresh_cryptol_var : String -> Type -> MIRSetup Term
+mir_fresh_expanded_value : String -> MIRType -> MIRSetup MIRValue
+mir_fresh_var : String -> MIRType -> MIRSetup Term
+mir_ghost_value : Ghost -> Term -> MIRSetup ()
+mir_i128 : MIRType
+mir_i16 : MIRType
+mir_i32 : MIRType
+mir_i64 : MIRType
+mir_i8 : MIRType
+mir_isize : MIRType
+mir_load_module : String -> TopLevel MIRModule
+mir_mux_values : Term -> MIRValue -> MIRValue -> MIRValue
+mir_points_to : MIRValue -> MIRValue -> MIRSetup ()
+mir_points_to_multi : MIRValue -> MIRValue -> MIRSetup ()
+mir_postcond : Term -> MIRSetup ()
+mir_precond : Term -> MIRSetup ()
+mir_raw_ptr_const : MIRType -> MIRType
+mir_raw_ptr_mut : MIRType -> MIRType
+mir_ref : MIRType -> MIRType
+mir_ref_mut : MIRType -> MIRType
+mir_ref_of : MIRValue -> MIRSetup MIRValue
+mir_ref_of_mut : MIRValue -> MIRSetup MIRValue
+mir_return : MIRValue -> MIRSetup ()
+mir_slice : MIRType -> MIRType
+mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue
+mir_slice_value : MIRValue -> MIRValue
+mir_static : String -> MIRValue
+mir_static_initializer : String -> MIRValue
+mir_str : MIRType
+mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue
+mir_str_slice_value : MIRValue -> MIRValue
+mir_struct_value : MIRAdt -> [MIRValue] -> MIRValue
+mir_term : Term -> MIRValue
+mir_tuple : [MIRType] -> MIRType
+mir_tuple_value : [MIRValue] -> MIRValue
+mir_u128 : MIRType
+mir_u16 : MIRType
+mir_u32 : MIRType
+mir_u64 : MIRType
+mir_u8 : MIRType
 mir_unint : [String] -> MIRSetup ()
+mir_unsafe_assume_spec : MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec
+mir_usize : MIRType
+mir_vec : MIRModule -> MIRType -> MIRType
+mir_verify : MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec
 nat_to_term : Int -> Term
 nth : {a} [a] -> Int -> a
 null : {a} [a] -> Bool

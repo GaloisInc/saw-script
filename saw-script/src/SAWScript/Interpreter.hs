@@ -2568,10 +2568,10 @@ primTypes = foldl doadd Map.empty
   , abstype "LLVMModule" Current
   , abstype "LLVMType" Current
   , abstype' SS.kindStarToStar "MIRSetup" Current
-  , abstype "MIRAdt" Experimental
-  , abstype "MIRModule" Experimental
-  , abstype "MIRType" Experimental
-  , abstype "MIRValue" Experimental
+  , abstype "MIRAdt" Current
+  , abstype "MIRModule" Current
+  , abstype "MIRType" Current
+  , abstype "MIRValue" Current
   , abstype "ModuleSkeleton" Experimental
   , abstype "ProofResult" Current
   , abstype "SatResult" Current
@@ -5153,7 +5153,7 @@ primitives = Map.fromList $
   , prim "mir_ghost_value"
     "Ghost -> Term -> MIRSetup ()"
     (pureVal mir_ghost_value)
-    Experimental
+    Current
     [ "Specifies the value of a ghost variable. This can be used"
     , "in the pre- and post- conditions of a setup block."
     ]
@@ -6495,92 +6495,92 @@ primitives = Map.fromList $
 
   , prim "mir_bool" "MIRType"
     (pureVal mir_bool)
-    Experimental
+    Current
     [ "The type of MIR booleans." ]
 
   , prim "mir_char" "MIRType"
     (pureVal mir_char)
-    Experimental
+    Current
     [ "The type of MIR characters." ]
 
   , prim "mir_i8" "MIRType"
     (pureVal mir_i8)
-    Experimental
+    Current
     [ "The type of MIR 8-bit signed integers." ]
 
   , prim "mir_i16" "MIRType"
     (pureVal mir_i16)
-    Experimental
+    Current
     [ "The type of MIR 16-bit signed integers." ]
 
   , prim "mir_i32" "MIRType"
     (pureVal mir_i32)
-    Experimental
+    Current
     [ "The type of MIR 32-bit signed integers." ]
 
   , prim "mir_i64" "MIRType"
     (pureVal mir_i64)
-    Experimental
+    Current
     [ "The type of MIR 64-bit signed integers." ]
 
   , prim "mir_i128" "MIRType"
     (pureVal mir_i128)
-    Experimental
+    Current
     [ "The type of MIR 128-bit signed integers." ]
 
   , prim "mir_isize" "MIRType"
     (pureVal mir_isize)
-    Experimental
+    Current
     [ "The type of MIR pointer-sized signed integers." ]
 
   , prim "mir_u8" "MIRType"
     (pureVal mir_u8)
-    Experimental
+    Current
     [ "The type of MIR 8-bit unsigned integers." ]
 
   , prim "mir_u16" "MIRType"
     (pureVal mir_u16)
-    Experimental
+    Current
     [ "The type of MIR 16-bit unsigned integers." ]
 
   , prim "mir_u32" "MIRType"
     (pureVal mir_u32)
-    Experimental
+    Current
     [ "The type of MIR 32-bit unsigned integers." ]
 
   , prim "mir_u64" "MIRType"
     (pureVal mir_u64)
-    Experimental
+    Current
     [ "The type of MIR 64-bit unsigned integers." ]
 
   , prim "mir_u128" "MIRType"
     (pureVal mir_u128)
-    Experimental
+    Current
     [ "The type of MIR 128-bit unsigned integers." ]
 
   , prim "mir_usize" "MIRType"
     (pureVal mir_usize)
-    Experimental
+    Current
     [ "The type of MIR pointer-sized unsigned integers." ]
 
   , prim "mir_f32" "MIRType"
     (pureVal mir_f32)
-    Experimental
+    Current
     [ "The type of MIR single-precision floating-point values." ]
 
   , prim "mir_f64" "MIRType"
     (pureVal mir_f64)
-    Experimental
+    Current
     [ "The type of MIR double-precision floating-point values." ]
 
   , prim "mir_tuple" "[MIRType] -> MIRType"
     (pureVal mir_tuple)
-    Experimental
+    Current
     [ "The type of MIR tuples of the given types." ]
 
   , prim "mir_adt" "MIRAdt -> MIRType"
     (pureVal mir_adt)
-    Experimental
+    Current
     [ "The type of a MIR algebraic data type (ADT), i.e., a struct or"
     , "enum, corresponding to the given MIRAdt. Use the 'mir_find_adt'"
     , "command to retrieve a MIRAdt value."
@@ -6588,34 +6588,34 @@ primitives = Map.fromList $
 
   , prim "mir_ref" "MIRType -> MIRType"
     (pureVal mir_ref)
-    Experimental
+    Current
     [ "The type of MIR immutable references." ]
 
   , prim "mir_ref_mut" "MIRType -> MIRType"
     (pureVal mir_ref_mut)
-    Experimental
+    Current
     [ "The type of MIR mutable references." ]
 
   , prim "mir_raw_ptr_const" "MIRType -> MIRType"
     (pureVal mir_raw_ptr_const)
-    Experimental
+    Current
     [ "The type of MIR immutable raw pointers." ]
 
   , prim "mir_raw_ptr_mut" "MIRType -> MIRType"
     (pureVal mir_raw_ptr_mut)
-    Experimental
+    Current
     [ "The type of MIR mutable raw pointers." ]
 
   , prim "mir_array" "Int -> MIRType -> MIRType"
     (pureVal mir_array)
-    Experimental
+    Current
     [ "The type of MIR arrays with the given number of elements of the"
     , "given type."
     ]
 
   , prim "mir_slice" "MIRType -> MIRType"
     (pureVal mir_slice)
-    Experimental
+    Current
     [ "The type of MIR slices, i.e., dynamically sized views into a"
     , "contiguous sequence of the given type. Currently, SAW can only"
     , "handle references to slices (&[T])."
@@ -6623,14 +6623,14 @@ primitives = Map.fromList $
 
   , prim "mir_str" "MIRType"
     (pureVal mir_str)
-    Experimental
+    Current
     [ "The type of MIR strings, which are a particular kind of slice."
     , "Currently, SAW can only handle references to strings (&str)."
     ]
 
   , prim "mir_const" "MIRType -> Term -> MIRType"
     (funVal2 mir_const)
-    Experimental
+    Current
     [ "A constant value used to instantiate a const generic parameter."
     , "This is intended to be used in conjunction with 'mir_find_adt'"
     , "to look up instantiations of const generic ADTs. This is never"
@@ -6648,12 +6648,14 @@ primitives = Map.fromList $
 
   , prim "mir_lifetime" "MIRType"
     (pureVal mir_lifetime)
+    -- This is needed to cope with mir-json issues and likely to be
+    -- removed once they're resolved. See mir-json #58.
     Experimental
     [ "The type of MIR lifetimes." ]
 
   , prim "mir_find_adt" "MIRModule -> String -> [MIRType] -> MIRAdt"
     (funVal3 mir_find_adt)
-    Experimental
+    Current
     [ "Consult the given MIRModule to find an algebraic data type"
     , "(MIRAdt) with the given String as an identifier and the given"
     , "MIRTypes as the types used to instantiate the type parameters."
@@ -6662,7 +6664,7 @@ primitives = Map.fromList $
 
   , prim "mir_find_mangled_adt" "MIRModule -> String -> MIRAdt"
     (funVal2 mir_find_mangled_adt)
-    Experimental
+    Current
     [ "Consult the given MIRModule to find an algebraic data type"
     , "(MIRAdt) with the given String as a mangled identifier. A"
     , "mangled identifier is one referring to an ADT that is already"
@@ -6677,7 +6679,7 @@ primitives = Map.fromList $
 
   , prim "mir_vec" "MIRModule -> MIRType -> MIRType"
     (funVal2 mir_vec)
-    Experimental
+    Current
     [ "The type of MIR vectors, i.e., Vec<T> (for some type T)."
     , "This requires looking up Vec-related relevant identifiers"
     , "in the supplied MIRModule."
@@ -6688,7 +6690,7 @@ primitives = Map.fromList $
 
   , prim "mir_find_name" "MIRModule -> String -> [MIRType] -> String"
     (funVal3 mir_find_name)
-    Experimental
+    Current
     [ "Consult the given MIRModule to find an instantiation of a"
     , "function with the given String as an identifier and the given"
     , "MIRTypes as the types used to instantiate the type parameters."
@@ -6698,12 +6700,12 @@ primitives = Map.fromList $
   , prim "mir_term"
     "Term -> MIRValue"
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue MIR))
-    Experimental
+    Current
     [ "Construct a 'MIRValue' from a 'Term'." ]
 
   , prim "mir_enum_value" "MIRAdt -> String -> [MIRValue] -> MIRValue"
     (funVal3 mir_enum_value)
-    Experimental
+    Current
     [ "Create a MIRValue representing a variant of a MIR enum with the"
     , "given list of values as elements. The MIRAdt argument determines"
     , "what enum type to create; use 'mir_find_adt' to retrieve a"
@@ -6712,7 +6714,7 @@ primitives = Map.fromList $
 
   , prim "mir_tuple_value" "[MIRValue] -> MIRValue"
     (pureVal (CMS.SetupTuple () :: [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
-    Experimental
+    Current
     [ "Create a MIRValue representing a MIR tuple with the given list"
     , "of values as elements."
     ]
@@ -6720,21 +6722,21 @@ primitives = Map.fromList $
   , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
     (pureVal (CMS.SetupArray :: MIR.Ty -> [CMS.SetupValue MIR] ->
               CMS.SetupValue MIR))
-    Experimental
+    Current
     [ "Create a MIRValue representing an array of the given type, with"
     , "the given list of values as elements."
     ]
 
   , prim "mir_elem_value" "MIRValue -> Int -> MIRValue"
     (pureVal mir_elem_value)
-    Experimental
+    Current
     [ "Given a MIR array value and an index, return the MIR value in"
     , "the array at that index."
     ]
 
   , prim "mir_elem_ref" "MIRValue -> Int -> MIRValue"
     (pureVal mir_elem_ref)
-    Experimental
+    Current
     [ "Given a reference (or raw pointer) to a MIR array, and an index,"
     , "return a reference (resp. raw pointer) to the element in that"
     , "array at that index."
@@ -6747,7 +6749,7 @@ primitives = Map.fromList $
 
   , prim "mir_slice_value" "MIRValue -> MIRValue"
     (pureVal mir_slice_value)
-    Experimental
+    Current
     [ "Create a MIRValue representing a slice of type &[T]. The"
     , "argument must be a reference to an array value, whose overall"
     , "type must be &[T; N] for some length N."
@@ -6755,7 +6757,7 @@ primitives = Map.fromList $
 
   , prim "mir_slice_range_value" "MIRValue -> Int -> Int -> MIRValue"
     (pureVal mir_slice_range_value)
-    Experimental
+    Current
     [ "Create a MIRValue representing a slice of type &[T] over a given"
     , "range. The first argument must be a reference to an array value,"
     , "whose overall type must be &[T; N] for some length N. The second"
@@ -6765,7 +6767,7 @@ primitives = Map.fromList $
 
   , prim "mir_str_slice_value" "MIRValue -> MIRValue"
     (pureVal mir_str_slice_value)
-    Experimental
+    Current
     [ "Create a MIRValue representing a slice of type &str. The"
     , "argument must be a reference to an array value, whose overall"
     , "type must be &[u8; N] for some length N. This array is expected"
@@ -6774,7 +6776,7 @@ primitives = Map.fromList $
 
   , prim "mir_str_slice_range_value" "MIRValue -> Int -> Int -> MIRValue"
     (pureVal mir_str_slice_range_value)
-    Experimental
+    Current
     [ "Create a MIRValue representing a slice of type &str over a given"
     , "range. The first argument must be a reference to an array value,"
     , "whose overall type must be &[u8; N] for some length N. This"
@@ -6787,7 +6789,7 @@ primitives = Map.fromList $
   , prim "mir_struct_value" "MIRAdt -> [MIRValue] -> MIRValue"
     (pureVal (CMS.SetupStruct :: MIR.Adt -> [CMS.SetupValue MIR] ->
               CMS.SetupValue MIR))
-    Experimental
+    Current
     [ "Create a MIRValue representing a MIR struct with the given list"
     , "of values as elements. The MIRAdt argument determines what"
     , "struct type to create; use 'mir_find_adt' to retrieve a MIRAdt"
@@ -6796,7 +6798,7 @@ primitives = Map.fromList $
 
   , prim "mir_mux_values" "Term -> MIRValue -> MIRValue -> MIRValue"
     (pureVal mir_mux_values)
-    Experimental
+    Current
     [ "Multiplex two MIRValues based on whether a (possibly symbolic)"
     , "Term predicate holds or not. The Term argument must have the"
     , "Cryptol type Bit, and the two MIRValue arguments must have the"
@@ -6806,7 +6808,7 @@ primitives = Map.fromList $
   , prim "mir_static"
     "String -> MIRValue"
     (pureVal (CMS.SetupGlobal () :: Text -> CMS.SetupValue MIR))
-    Experimental
+    Current
     [ "Return a MIRValue representing a reference to the named static."
     , "The String should be the name of a static value."
     ]
@@ -6814,14 +6816,14 @@ primitives = Map.fromList $
   , prim "mir_static_initializer"
     "String -> MIRValue"
     (pureVal (CMS.SetupGlobalInitializer () :: Text -> CMS.SetupValue MIR))
-    Experimental
+    Current
     [ "Return a MIRValue representing the value of the initializer of a"
     , "named static. The String should be the name of a static value."
     ]
 
   , prim "mir_cast_raw_ptr" "MIRValue -> MIRType -> MIRValue"
     (pureVal mir_cast_raw_ptr)
-    Experimental
+    Current
     [ "Given a raw pointer, return a raw pointer to the same memory"
     , "location and with the same mutability, but with the given type"
     , "as the pointee type instead."
@@ -6838,7 +6840,7 @@ primitives = Map.fromList $
 
   , prim "mir_fresh_cryptol_var" "String -> Type -> MIRSetup Term"
     (pureVal mir_fresh_cryptol_var)
-    Experimental
+    Current
     [ "Create a fresh symbolic variable of the given Cryptol type for"
     , "use within a MIR specification. The given name is used only for"
     , "pretty-printing. Unlike 'mir_fresh_var', this can be used when"
@@ -6848,7 +6850,7 @@ primitives = Map.fromList $
 
   , prim "mir_fresh_expanded_value" "String -> MIRType -> MIRSetup MIRValue"
     (pureVal mir_fresh_expanded_value)
-    Experimental
+    Current
     [ "Create a MIR value entirely populated with fresh symbolic"
     , "variables. For compound types such as structs and arrays, this"
     , "will explicitly set each field or element to contain a fresh"
@@ -6858,7 +6860,7 @@ primitives = Map.fromList $
 
   , prim "mir_fresh_var" "String -> MIRType -> MIRSetup Term"
     (pureVal mir_fresh_var)
-    Experimental
+    Current
     [ "Create a fresh symbolic variable for use within a MIR"
     , "specification. The name is used only for pretty-printing."
     ]
@@ -6868,7 +6870,7 @@ primitives = Map.fromList $
 
   , prim "mir_alloc" "MIRType -> MIRSetup MIRValue"
     (pureVal mir_alloc)
-    Experimental
+    Current
     [ "Declare that an immutable reference to the given type should be"
     , "allocated in a MIR specification. Before 'mir_execute_func',"
     , "this states that the function expects the object to be allocated"
@@ -6883,7 +6885,7 @@ primitives = Map.fromList $
 
   , prim "mir_alloc_mut" "MIRType -> MIRSetup MIRValue"
     (pureVal mir_alloc_mut)
-    Experimental
+    Current
     [ "Declare that a mutable reference to the given type should be"
     , "allocated in a MIR specification. Before 'mir_execute_func',"
     , "this states that the function expects the object to be allocated"
@@ -6898,7 +6900,7 @@ primitives = Map.fromList $
 
   , prim "mir_alloc_raw_ptr_const" "MIRType -> MIRSetup MIRValue"
     (pureVal mir_alloc_raw_ptr_const)
-    Experimental
+    Current
     [ "Declare that an immutable raw pointer to the given type should"
     , "be allocated in a MIR specification. Before 'mir_execute_func',"
     , "this states that the function expects the object to be allocated"
@@ -6908,7 +6910,7 @@ primitives = Map.fromList $
 
   , prim "mir_alloc_raw_ptr_const_multi" "Int -> MIRType -> MIRSetup MIRValue"
     (pureVal mir_alloc_raw_ptr_const_multi)
-    Experimental
+    Current
     [ "Declare that an immutable raw pointer to a contiguous sequence"
     , "of values should be allocated in a MIR specification. The first"
     , "argument specifies the number of values and the second argument"
@@ -6920,7 +6922,7 @@ primitives = Map.fromList $
 
   , prim "mir_alloc_raw_ptr_mut" "MIRType -> MIRSetup MIRValue"
     (pureVal mir_alloc_raw_ptr_mut)
-    Experimental
+    Current
     [ "Declare that a mutable raw pointer to the given type should be"
     , "allocated in a MIR specification. Before 'mir_execute_func',"
     , "this states that the function expects the object to be allocated"
@@ -6930,7 +6932,7 @@ primitives = Map.fromList $
 
   , prim "mir_alloc_raw_ptr_mut_multi" "Int -> MIRType -> MIRSetup MIRValue"
     (pureVal mir_alloc_raw_ptr_mut_multi)
-    Experimental
+    Current
     [ "Declare that a mutable raw pointer to a contiguous sequence of"
     , "values should be allocated in a MIR specification. The first"
     , "argument specifies the number of values and the second argument"
@@ -6942,14 +6944,14 @@ primitives = Map.fromList $
 
   , prim "mir_ref_of" "MIRValue -> MIRSetup MIRValue"
     (pureVal mir_ref_of)
-    Experimental
+    Current
     [ "Allocates an immutable reference and initializes it to point to"
     , "the given MIRValue."
     ]
 
   , prim "mir_ref_of_mut" "MIRValue -> MIRSetup MIRValue"
     (pureVal mir_ref_of_mut)
-    Experimental
+    Current
     [ "Allocates a mutable reference and initializes it to point to the"
     , "given MIRValue."
     ]
@@ -6957,6 +6959,9 @@ primitives = Map.fromList $
   , prim "mir_vec_of"
     "String -> MIRType -> MIRValue -> MIRSetup MIRValue"
     (pureVal mir_vec_of)
+    -- The design for this functionality hasn't settled yet, because
+    -- there are questions about how to handle internal reallocations
+    -- in Vec. See #2666.
     Experimental
     [ "Create a MIR 'Vec' value. The String argument is used as a"
     , "prefix for naming the internal symbolic variables created as"
@@ -6971,21 +6976,21 @@ primitives = Map.fromList $
 
   , prim "mir_postcond" "Term -> MIRSetup ()"
     (pureVal mir_postcond)
-    Experimental
+    Current
     [ "State that the given predicate is a post-condition for the"
     , "execution of the method being verified."
     ]
 
   , prim "mir_precond" "Term -> MIRSetup ()"
     (pureVal mir_precond)
-    Experimental
+    Current
     [ "State that the given predicate is a pre-condition on the"
     , "execution of the method being verified."
     ]
 
   , prim "mir_assert" "Term -> MIRSetup ()"
     (pureVal mir_assert)
-    Experimental
+    Current
     [ "State that the given predicate must hold.  Acts as 'mir_precond'"
     , "or 'mir_postcond' depending on whether it appears before or"
     , "after 'mir_execute_func'."
@@ -6993,7 +6998,7 @@ primitives = Map.fromList $
 
   , prim "mir_equal" "MIRValue -> MIRValue -> MIRSetup ()"
     (pureVal mir_equal)
-    Experimental
+    Current
     [ "State that two MIR values should be equal. Can be used as either"
     , "a pre-condition or a post-condition. It is semantically"
     , "equivalent to a 'mir_precond' or 'mir_postcond' statement that"
@@ -7002,7 +7007,7 @@ primitives = Map.fromList $
 
   , prim "mir_points_to" "MIRValue -> MIRValue -> MIRSetup ()"
     (pureVal mir_points_to)
-    Experimental
+    Current
     [ "Declare that the memory location indicated by the given"
     , "reference or raw pointer (first argument) contains the given"
     , "value (second argument)."
@@ -7015,7 +7020,7 @@ primitives = Map.fromList $
 
   , prim "mir_points_to_multi" "MIRValue -> MIRValue -> MIRSetup ()"
     (pureVal mir_points_to_multi)
-    Experimental
+    Current
     [ "Declare that the memory location indicated by the given raw"
     , "pointer (first argument) contains the given contiguous sequence"
     , "of values (second argument, which must have MIR array type). If"
@@ -7037,7 +7042,7 @@ primitives = Map.fromList $
 
   , prim "mir_execute_func" "[MIRValue] -> MIRSetup ()"
     (pureVal mir_execute_func)
-    Experimental
+    Current
     [ "Specify the given list of values as the arguments of the method."
     ,  ""
     , "The mir_execute_func statement also serves to separate the pre-"
@@ -7052,7 +7057,7 @@ primitives = Map.fromList $
 
   , prim "mir_return" "MIRValue -> MIRSetup ()"
     (pureVal mir_return)
-    Experimental
+    Current
     [ "Specify the given value as the return value of the method. A"
     , "mir_return statement is required if and only if the method has"
     , "a non-() return type."
@@ -7063,7 +7068,7 @@ primitives = Map.fromList $
 
   , prim "mir_load_module" "String -> TopLevel MIRModule"
     (pureVal do_mir_load_module)
-    Experimental
+    Current
     [ "Load a MIR JSON file and return a handle to it." ]
 
     ------------------------------------------------------------
@@ -7071,7 +7076,7 @@ primitives = Map.fromList $
 
   , prim "mir_extract" "MIRModule -> String -> TopLevel Term"
     (pureVal mir_extract)
-    Experimental
+    Current
     [ "Translate a MIR function directly to a Term. The parameters of"
     , "the Term will be the parameters of the MIR function, and the"
     , "return value will be the return value of the function. Only"
@@ -7084,7 +7089,7 @@ primitives = Map.fromList $
     ("MIRModule -> String -> [MIRSpec] -> Bool -> " <>
      "MIRSetup () -> ProofScript () -> TopLevel MIRSpec")
     (pureVal mir_verify)
-    Experimental
+    Current
     [ "Verify the MIR function named by the second parameter in the"
     , "module specified by the first. The third parameter lists the"
     , "MIRSpec values returned by previous calls to use as overrides."
@@ -7098,7 +7103,7 @@ primitives = Map.fromList $
   , prim "mir_unsafe_assume_spec"
     "MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec"
     (pureVal mir_unsafe_assume_spec)
-    Experimental
+    Current
     [ "Return a MIRSpec corresponding to a MIRSetup block, as would be"
     , "returned by mir_verify but without performing any verification."
     ]

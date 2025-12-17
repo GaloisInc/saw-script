@@ -1,5 +1,3 @@
-enable_experimental;
-
 let read_ref_spec = do {
   r_ref <- mir_alloc mir_u32;
   r_val <- mir_fresh_var "r_val" mir_u32;

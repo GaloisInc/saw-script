@@ -1,5 +1,3 @@
-enable_experimental;
-
 let next_spec counter = do {
   n <- mir_fresh_var "n" mir_u32;
   mir_ghost_value counter n;

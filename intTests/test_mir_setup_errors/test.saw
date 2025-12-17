@@ -15,8 +15,6 @@ saw-script.
 
 */
 
-enable_experimental;
-
 // Load the MIR module once.
 m <- mir_load_module "test.linked-mir.json";
 

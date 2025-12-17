@@ -1,5 +1,3 @@
-enable_experimental;
-
 let id_spec cty = do {
   x <- mir_fresh_cryptol_var "x" cty;
 

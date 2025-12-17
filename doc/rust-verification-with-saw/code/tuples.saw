@@ -1,5 +1,3 @@
-enable_experimental;
-
 let flip_spec = do {
   x <- mir_fresh_var "x" (mir_tuple [mir_u32, mir_u64]);
 

@@ -1,5 +1,3 @@
-enable_experimental;
-
 let index_spec = do {
   arr <- mir_fresh_var "arr" (mir_array 3 mir_u32);
   idx <- mir_fresh_var "idx" mir_usize;

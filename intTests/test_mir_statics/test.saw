@@ -1,5 +1,3 @@
-enable_experimental;
-
 // A basic spec that uses the initial value of S1.
 let f1_spec = do {
   mir_execute_func [];

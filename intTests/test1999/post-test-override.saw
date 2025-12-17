@@ -1,5 +1,3 @@
-enable_experimental;
-
 m <- mir_load_module "post-test.linked-mir.json";
 
 // Override for x using mir_ref_of in postcondition

@@ -1,5 +1,3 @@
-enable_experimental;
-
 impl_mir <- mir_load_module "test.linked-mir.json";
 
 let inner_spec = do {

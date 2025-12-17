@@ -1,5 +1,3 @@
-enable_experimental;
-
 m <- mir_load_module "statics.linked-mir.json";
 
 let mut_answer_to_the_ultimate_question_spec = do {
