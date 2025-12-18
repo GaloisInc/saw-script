@@ -55,225 +55,231 @@ span.spaces    { background: white }
 <span class="lineno">   36 </span>
 <span class="lineno">   37 </span>import qualified Lang.JVM.Codebase as JSS
 <span class="lineno">   38 </span>
-<span class="lineno">   39 </span>import SAWCentral.Options
-<span class="lineno">   40 </span>import SAWCentral.Position
-<span class="lineno">   41 </span>
-<span class="lineno">   42 </span>bullets :: Char -&gt; [PP.Doc ann] -&gt; PP.Doc ann
-<span class="lineno">   43 </span><span class="decl"><span class="istickedoff">bullets c = PP.vcat . map (PP.hang 2 . (PP.pretty c PP.&lt;+&gt;))</span></span>
-<span class="lineno">   44 </span>
-<span class="lineno">   45 </span>-- | Convert a string to a paragraph formatted document.
-<span class="lineno">   46 </span>ftext :: String -&gt; Doc ann
-<span class="lineno">   47 </span><span class="decl"><span class="istickedoff">ftext msg = fillSep (map pretty $ words msg)</span></span>
-<span class="lineno">   48 </span>
-<span class="lineno">   49 </span>-- | Insert multiple keys that map to the same value in a map.
-<span class="lineno">   50 </span>mapInsertKeys :: Ord k =&gt; [k] -&gt; a -&gt; Map k a -&gt; Map k a
-<span class="lineno">   51 </span><span class="decl"><span class="nottickedoff">mapInsertKeys keys val m = foldr (\i -&gt; Map.insert i val) m keys</span></span>
-<span class="lineno">   52 </span>
-<span class="lineno">   53 </span>-- | Returns the value bound to the first key in the map, or
-<span class="lineno">   54 </span>-- Nothing if none of the keys are in the map.
-<span class="lineno">   55 </span>mapLookupAny :: Ord k =&gt; [k] -&gt; Map k a -&gt; Maybe a
-<span class="lineno">   56 </span><span class="decl"><span class="nottickedoff">mapLookupAny keys m = listToMaybe $ catMaybes $ map (\k -&gt; Map.lookup k m) keys</span></span>
-<span class="lineno">   57 </span>
-<span class="lineno">   58 </span>-- ExecException
+<span class="lineno">   39 </span>import qualified SAWSupport.ConsoleSupport as Cons
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>import SAWCentral.Options
+<span class="lineno">   42 </span>import SAWCentral.Position
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>bullets :: Char -&gt; [PP.Doc ann] -&gt; PP.Doc ann
+<span class="lineno">   45 </span><span class="decl"><span class="istickedoff">bullets c = PP.vcat . map (PP.hang 2 . (PP.pretty c PP.&lt;+&gt;))</span></span>
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>-- | Convert a string to a paragraph formatted document.
+<span class="lineno">   48 </span>ftext :: String -&gt; Doc ann
+<span class="lineno">   49 </span><span class="decl"><span class="istickedoff">ftext msg = fillSep (map pretty $ words msg)</span></span>
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>-- | Insert multiple keys that map to the same value in a map.
+<span class="lineno">   52 </span>mapInsertKeys :: Ord k =&gt; [k] -&gt; a -&gt; Map k a -&gt; Map k a
+<span class="lineno">   53 </span><span class="decl"><span class="nottickedoff">mapInsertKeys keys val m = foldr (\i -&gt; Map.insert i val) m keys</span></span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>-- | Returns the value bound to the first key in the map, or
+<span class="lineno">   56 </span>-- Nothing if none of the keys are in the map.
+<span class="lineno">   57 </span>mapLookupAny :: Ord k =&gt; [k] -&gt; Map k a -&gt; Maybe a
+<span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">mapLookupAny keys m = listToMaybe $ catMaybes $ map (\k -&gt; Map.lookup k m) keys</span></span>
 <span class="lineno">   59 </span>
-<span class="lineno">   60 </span>-- | Class of exceptions thrown by SBV parser.
-<span class="lineno">   61 </span>data ExecException = ExecException Pos          -- Position
-<span class="lineno">   62 </span>                                   (Doc Void)   -- Error message
-<span class="lineno">   63 </span>                                   String       -- Resolution tip
-<span class="lineno">   64 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
-<span class="lineno">   65 </span>
-<span class="lineno">   66 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Exception ExecException</span></span></span></span></span></span>
+<span class="lineno">   60 </span>-- ExecException
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>-- | Class of exceptions thrown by SBV parser.
+<span class="lineno">   63 </span>data ExecException = ExecException Pos          -- Position
+<span class="lineno">   64 </span>                                   (Doc Void)   -- Error message
+<span class="lineno">   65 </span>                                   String       -- Resolution tip
+<span class="lineno">   66 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">   67 </span>
-<span class="lineno">   68 </span>-- | Throw exec exception in a MonadIO.
-<span class="lineno">   69 </span>throwIOExecException :: MonadIO m =&gt; Pos -&gt; Doc Void -&gt; String -&gt; m a
-<span class="lineno">   70 </span><span class="decl"><span class="istickedoff">throwIOExecException site errorMsg resolution = liftIO $ throwIO (ExecException site errorMsg resolution)</span></span>
-<span class="lineno">   71 </span>
-<span class="lineno">   72 </span>-- | Throw exec exception in a MonadIO.
-<span class="lineno">   73 </span>throwExecException :: Pos -&gt; Doc Void -&gt; String -&gt; m a
-<span class="lineno">   74 </span><span class="decl"><span class="nottickedoff">throwExecException site errorMsg resolution = throw (ExecException site errorMsg resolution)</span></span>
-<span class="lineno">   75 </span>
-<span class="lineno">   76 </span>-- Timing
+<span class="lineno">   68 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Exception ExecException</span></span></span></span></span></span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>-- | Throw exec exception in a MonadIO.
+<span class="lineno">   71 </span>throwIOExecException :: MonadIO m =&gt; Pos -&gt; Doc Void -&gt; String -&gt; m a
+<span class="lineno">   72 </span><span class="decl"><span class="istickedoff">throwIOExecException site errorMsg resolution = liftIO $ throwIO (ExecException site errorMsg resolution)</span></span>
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>-- | Throw exec exception in a MonadIO.
+<span class="lineno">   75 </span>throwExecException :: Pos -&gt; Doc Void -&gt; String -&gt; m a
+<span class="lineno">   76 </span><span class="decl"><span class="nottickedoff">throwExecException site errorMsg resolution = throw (ExecException site errorMsg resolution)</span></span>
 <span class="lineno">   77 </span>
-<span class="lineno">   78 </span>-- | Return a string representation of the elapsed time since start
-<span class="lineno">   79 </span>timeIt :: (NFData a, MonadIO m) =&gt; m a -&gt; m (a, String)
-<span class="lineno">   80 </span><span class="decl"><span class="nottickedoff">timeIt action = do</span>
-<span class="lineno">   81 </span><span class="spaces">        </span><span class="nottickedoff">start &lt;- liftIO $ getClockTime</span>
-<span class="lineno">   82 </span><span class="spaces">        </span><span class="nottickedoff">r &lt;- action</span>
-<span class="lineno">   83 </span><span class="spaces">        </span><span class="nottickedoff">end &lt;- rnf r `seq` liftIO getClockTime</span>
-<span class="lineno">   84 </span><span class="spaces">        </span><span class="nottickedoff">let itd = diffClockTimes end start</span>
-<span class="lineno">   85 </span><span class="spaces">            </span><span class="nottickedoff">td = normalizeTimeDiff itd</span>
-<span class="lineno">   86 </span><span class="spaces">            </span><span class="nottickedoff">vals = dropWhile (\(v, _) -&gt; v == 0) (zip [tdYear td, tdMonth td, tdDay td, tdHour td, tdMin td] &quot;YMDhm&quot;)</span>
-<span class="lineno">   87 </span><span class="spaces">            </span><span class="nottickedoff">sec = ' ' : show (tdSec td) ++ dropWhile (/= '.') pico</span>
-<span class="lineno">   88 </span><span class="spaces">            </span><span class="nottickedoff">pico = showFFloat (Just 3) (((10**(-12))::Double) * fromIntegral (tdPicosec td)) &quot;s&quot;</span>
-<span class="lineno">   89 </span><span class="spaces">        </span><span class="nottickedoff">return $ (r, dropWhile isSpace $ concatMap (\(v, c) -&gt; ' ':show v ++ [c]) vals ++ sec)</span></span>
-<span class="lineno">   90 </span>
-<span class="lineno">   91 </span>-- | get a readable time stamp
-<span class="lineno">   92 </span>getTimeStamp :: MonadIO m =&gt; m String
-<span class="lineno">   93 </span><span class="decl"><span class="nottickedoff">getTimeStamp = do t &lt;- liftIO (getClockTime &gt;&gt;= toCalendarTime)</span>
-<span class="lineno">   94 </span><span class="spaces">                  </span><span class="nottickedoff">return $ formatCalendarTime defaultTimeLocale &quot;%l:%M:%S %p&quot; t</span></span>
-<span class="lineno">   95 </span>
-<span class="lineno">   96 </span>showDuration :: NominalDiffTime -&gt; String
-<span class="lineno">   97 </span><span class="decl"><span class="nottickedoff">showDuration n = printf &quot;%02d:%s&quot; m (show s)</span>
-<span class="lineno">   98 </span><span class="spaces">  </span><span class="nottickedoff">where s = n - (fromIntegral m * 60)</span>
-<span class="lineno">   99 </span><span class="spaces">        </span><span class="nottickedoff">m :: Int</span>
-<span class="lineno">  100 </span><span class="spaces">        </span><span class="nottickedoff">m = floor ((toRational n) * (1 % 60))</span></span>
-<span class="lineno">  101 </span>
-<span class="lineno">  102 </span>-- Java lookup functions
+<span class="lineno">   78 </span>-- Timing
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>-- | Return a string representation of the elapsed time since start
+<span class="lineno">   81 </span>timeIt :: (NFData a, MonadIO m) =&gt; m a -&gt; m (a, String)
+<span class="lineno">   82 </span><span class="decl"><span class="nottickedoff">timeIt action = do</span>
+<span class="lineno">   83 </span><span class="spaces">        </span><span class="nottickedoff">start &lt;- liftIO $ getClockTime</span>
+<span class="lineno">   84 </span><span class="spaces">        </span><span class="nottickedoff">r &lt;- action</span>
+<span class="lineno">   85 </span><span class="spaces">        </span><span class="nottickedoff">end &lt;- rnf r `seq` liftIO getClockTime</span>
+<span class="lineno">   86 </span><span class="spaces">        </span><span class="nottickedoff">let itd = diffClockTimes end start</span>
+<span class="lineno">   87 </span><span class="spaces">            </span><span class="nottickedoff">td = normalizeTimeDiff itd</span>
+<span class="lineno">   88 </span><span class="spaces">            </span><span class="nottickedoff">vals = dropWhile (\(v, _) -&gt; v == 0) (zip [tdYear td, tdMonth td, tdDay td, tdHour td, tdMin td] &quot;YMDhm&quot;)</span>
+<span class="lineno">   89 </span><span class="spaces">            </span><span class="nottickedoff">sec = ' ' : show (tdSec td) ++ dropWhile (/= '.') pico</span>
+<span class="lineno">   90 </span><span class="spaces">            </span><span class="nottickedoff">pico = showFFloat (Just 3) (((10**(-12))::Double) * fromIntegral (tdPicosec td)) &quot;s&quot;</span>
+<span class="lineno">   91 </span><span class="spaces">        </span><span class="nottickedoff">return $ (r, dropWhile isSpace $ concatMap (\(v, c) -&gt; ' ':show v ++ [c]) vals ++ sec)</span></span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>-- | get a readable time stamp
+<span class="lineno">   94 </span>getTimeStamp :: MonadIO m =&gt; m String
+<span class="lineno">   95 </span><span class="decl"><span class="nottickedoff">getTimeStamp = do t &lt;- liftIO (getClockTime &gt;&gt;= toCalendarTime)</span>
+<span class="lineno">   96 </span><span class="spaces">                  </span><span class="nottickedoff">return $ formatCalendarTime defaultTimeLocale &quot;%l:%M:%S %p&quot; t</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>showDuration :: NominalDiffTime -&gt; String
+<span class="lineno">   99 </span><span class="decl"><span class="nottickedoff">showDuration n = printf &quot;%02d:%s&quot; m (show s)</span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="nottickedoff">where s = n - (fromIntegral m * 60)</span>
+<span class="lineno">  101 </span><span class="spaces">        </span><span class="nottickedoff">m :: Int</span>
+<span class="lineno">  102 </span><span class="spaces">        </span><span class="nottickedoff">m = floor ((toRational n) * (1 % 60))</span></span>
 <span class="lineno">  103 </span>
-<span class="lineno">  104 </span>-- | Atempt to find class with given name, or throw ExecException if no class
-<span class="lineno">  105 </span>-- with that name exists. Class name should be in slash-separated form.
-<span class="lineno">  106 </span>lookupClass :: JSS.Codebase -&gt; Pos -&gt; JSS.ClassName -&gt; IO JSS.Class
-<span class="lineno">  107 </span><span class="decl"><span class="istickedoff">lookupClass cb site nm = do</span>
-<span class="lineno">  108 </span><span class="spaces">  </span><span class="istickedoff">maybeCl &lt;- JSS.tryLookupClass cb nm</span>
-<span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">case maybeCl of</span>
-<span class="lineno">  110 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  111 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">let msg = ftext (&quot;The Java class &quot; ++ JSS.slashesToDots (JSS.unClassName nm) ++ &quot; could not be found.&quot;)</span></span>
-<span class="lineno">  112 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">res = unwords [ &quot;Please check that the path to Java is set correctly&quot;</span></span>
-<span class="lineno">  113 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, &quot;(either through the --java-bin-dirs option or your PATH)&quot;</span></span>
-<span class="lineno">  114 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, &quot;and you are using Java 8 or earlier&quot;</span></span>
-<span class="lineno">  115 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, &quot;(SAW does not support 9+ currently).&quot;</span></span>
-<span class="lineno">  116 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  117 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in throwIOExecException site msg res</span></span>
-<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">Just cl -&gt; return cl</span></span>
-<span class="lineno">  119 </span>
-<span class="lineno">  120 </span>-- | Returns method with given name in this class or one of its subclasses.
-<span class="lineno">  121 </span>-- Throws an ExecException if method could not be found or is ambiguous.
-<span class="lineno">  122 </span>findMethod :: JSS.Codebase -&gt; Pos -&gt; String -&gt; JSS.Class -&gt; IO (JSS.Class, JSS.Method)
-<span class="lineno">  123 </span><span class="decl"><span class="istickedoff">findMethod cb site nm initClass = impl <span class="nottickedoff">[]</span> initClass</span>
-<span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff">where javaClassName = JSS.slashesToDots (JSS.unClassName (JSS.className initClass))</span>
-<span class="lineno">  125 </span><span class="spaces">        </span><span class="istickedoff">methodType m = (JSS.methodParameterTypes m, JSS.methodReturnType m)</span>
-<span class="lineno">  126 </span><span class="spaces">        </span><span class="istickedoff">baseName m = JSS.methodName m</span>
-<span class="lineno">  127 </span><span class="spaces">        </span><span class="istickedoff">typedName m = JSS.methodName m ++ &quot;:&quot; ++ unparseMethodDescriptor (methodType m)</span>
-<span class="lineno">  128 </span><span class="spaces">        </span><span class="istickedoff">methodMatches m = nm `elem` [baseName m, typedName m]</span>
-<span class="lineno">  129 </span><span class="spaces">        </span><span class="istickedoff">impl names cl =</span>
-<span class="lineno">  130 </span><span class="spaces">          </span><span class="istickedoff">let candidates = filter (not . JSS.methodIsAbstract) (JSS.classMethods cl) in</span>
-<span class="lineno">  131 </span><span class="spaces">          </span><span class="istickedoff">case filter methodMatches candidates of</span>
-<span class="lineno">  132 </span><span class="spaces">            </span><span class="istickedoff">[] -&gt; do</span>
-<span class="lineno">  133 </span><span class="spaces">              </span><span class="istickedoff">case JSS.superClass cl of</span>
-<span class="lineno">  134 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  135 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">let msg = ftext $ &quot;Could not find method &quot; ++ nm</span></span>
-<span class="lineno">  136 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">++ &quot; in class &quot; ++ javaClassName ++ &quot;.\n&quot;</span></span>
-<span class="lineno">  137 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">++ &quot;Available methods: &quot;</span></span>
-<span class="lineno">  138 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">++ unlines names</span></span>
-<span class="lineno">  139 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">res = &quot;Please check that the class and method are correct.&quot;</span></span>
-<span class="lineno">  140 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">in throwIOExecException site msg res</span></span>
-<span class="lineno">  141 </span><span class="spaces">                </span><span class="istickedoff">Just superName -&gt;</span>
-<span class="lineno">  142 </span><span class="spaces">                  </span><span class="istickedoff">do super &lt;- lookupClass cb <span class="nottickedoff">site</span> superName</span>
-<span class="lineno">  143 </span><span class="spaces">                     </span><span class="istickedoff">impl <span class="nottickedoff">(names ++ map baseName candidates)</span> super</span>
-<span class="lineno">  144 </span><span class="spaces">            </span><span class="istickedoff">[method] -&gt; return (cl,method)</span>
-<span class="lineno">  145 </span><span class="spaces">            </span><span class="istickedoff">l -&gt; let msg = &quot;The method &quot; ++ show nm ++ &quot; in class &quot; ++ javaClassName ++ &quot; is ambiguous. &quot; ++</span>
-<span class="lineno">  146 </span><span class="spaces">                           </span><span class="istickedoff">&quot;Methods can be disambiguated by appending a type descriptor: &quot; ++</span>
-<span class="lineno">  147 </span><span class="spaces">                           </span><span class="istickedoff">unlines [ show (typedName m) | m &lt;- l ]</span>
-<span class="lineno">  148 </span><span class="spaces">                     </span><span class="istickedoff">res = &quot;Please disambiguate method name.&quot;</span>
-<span class="lineno">  149 </span><span class="spaces">                  </span><span class="istickedoff">in throwIOExecException site (ftext msg) res</span></span>
-<span class="lineno">  150 </span>
-<span class="lineno">  151 </span>throwFieldNotFound :: JSS.Type -&gt; String -&gt; [String] -&gt; ExceptT String IO a
-<span class="lineno">  152 </span><span class="decl"><span class="istickedoff">throwFieldNotFound tp fieldName names = throwE msg</span>
-<span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  154 </span><span class="spaces">    </span><span class="istickedoff">msg = &quot;Values with type \'&quot; ++ show tp ++</span>
-<span class="lineno">  155 </span><span class="spaces">          </span><span class="istickedoff">&quot;\' do not contain field named &quot; ++</span>
-<span class="lineno">  156 </span><span class="spaces">          </span><span class="istickedoff">fieldName ++ &quot;.&quot;</span>
-<span class="lineno">  157 </span><span class="spaces">          </span><span class="istickedoff">++ &quot;\nAvailable fields:\n&quot; ++ unlines names</span></span>
-<span class="lineno">  158 </span>
-<span class="lineno">  159 </span>findField :: JSS.Codebase -&gt; Pos -&gt; JSS.Type -&gt; String -&gt; ExceptT String IO JSS.FieldId
-<span class="lineno">  160 </span><span class="decl"><span class="istickedoff">findField _  _ tp@(JSS.ArrayType _) nm = throwFieldNotFound tp nm []</span>
-<span class="lineno">  161 </span><span class="spaces"></span><span class="istickedoff">findField cb site tp@(JSS.ClassType clName) nm = impl [] =&lt;&lt; lift (lookupClass cb <span class="nottickedoff">site</span> clName)</span>
-<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">impl nms cl =</span>
-<span class="lineno">  164 </span><span class="spaces">      </span><span class="istickedoff">case filter (\f -&gt; nm `elem` names f) $ JSS.classFields cl of</span>
-<span class="lineno">  165 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; do</span>
-<span class="lineno">  166 </span><span class="spaces">          </span><span class="istickedoff">case JSS.superClass cl of</span>
-<span class="lineno">  167 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; throwFieldNotFound tp nm nms</span>
-<span class="lineno">  168 </span><span class="spaces">            </span><span class="istickedoff">Just superName -&gt;</span>
-<span class="lineno">  169 </span><span class="spaces">              </span><span class="istickedoff">do super &lt;- lift $ lookupClass cb <span class="nottickedoff">site</span> superName</span>
-<span class="lineno">  170 </span><span class="spaces">                 </span><span class="istickedoff">impl (nms ++ map JSS.fieldName (JSS.classFields cl)) super</span>
-<span class="lineno">  171 </span><span class="spaces">        </span><span class="istickedoff">[f] -&gt; return $ JSS.FieldId (JSS.className cl) (JSS.fieldName f) (JSS.fieldType f)</span>
-<span class="lineno">  172 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $</span></span>
-<span class="lineno">  173 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;internal: Found multiple fields with the same name: &quot; ++ nm</span></span>
-<span class="lineno">  174 </span><span class="spaces">      </span><span class="istickedoff">where</span>
-<span class="lineno">  175 </span><span class="spaces">        </span><span class="istickedoff">names f =</span>
-<span class="lineno">  176 </span><span class="spaces">          </span><span class="istickedoff">do prefix &lt;- [&quot;&quot;, JSS.unClassName (JSS.className cl) ++ &quot;.&quot;]</span>
-<span class="lineno">  177 </span><span class="spaces">             </span><span class="istickedoff">suffix &lt;- [&quot;&quot;, <span class="nottickedoff">&quot;:&quot; ++ unparseTypeDescriptor (JSS.fieldType f)</span>]</span>
-<span class="lineno">  178 </span><span class="spaces">             </span><span class="istickedoff">pure (prefix ++ JSS.fieldName f ++ suffix)</span>
-<span class="lineno">  179 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  180 </span><span class="spaces"></span><span class="istickedoff">findField _ _ _ _ =</span>
-<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">throwE &quot;Primitive types cannot be dereferenced.&quot;</span></span></span>
-<span class="lineno">  182 </span>
-<span class="lineno">  183 </span>
-<span class="lineno">  184 </span>-- | Convert a non-negative integer to to an ordinal string.
-<span class="lineno">  185 </span>--
-<span class="lineno">  186 </span>-- Note: @0 -&gt; &quot;0th&quot;@, so do @'ordinal' (n + 1)@ if you want one-based
-<span class="lineno">  187 </span>-- results.
-<span class="lineno">  188 </span>ordinal :: (Integral a, Show a) =&gt; a -&gt; String
-<span class="lineno">  189 </span>-- Not sure what to do with negative integers so bail.
-<span class="lineno">  190 </span><span class="decl"><span class="nottickedoff">ordinal n | n &lt; 0 = error &quot;Only non-negative cardinals are supported.&quot;</span>
-<span class="lineno">  191 </span><span class="spaces">          </span><span class="nottickedoff">| otherwise = show n ++ suffix</span>
-<span class="lineno">  192 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  193 </span><span class="spaces">    </span><span class="nottickedoff">suffix =</span>
-<span class="lineno">  194 </span><span class="spaces">      </span><span class="nottickedoff">if inTens then &quot;th&quot;</span>
-<span class="lineno">  195 </span><span class="spaces">      </span><span class="nottickedoff">else case n `mod` 10 of</span>
-<span class="lineno">  196 </span><span class="spaces">             </span><span class="nottickedoff">1 -&gt; &quot;st&quot;</span>
-<span class="lineno">  197 </span><span class="spaces">             </span><span class="nottickedoff">2 -&gt; &quot;nd&quot;</span>
-<span class="lineno">  198 </span><span class="spaces">             </span><span class="nottickedoff">3 -&gt; &quot;rd&quot;</span>
-<span class="lineno">  199 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; &quot;th&quot;</span>
-<span class="lineno">  200 </span><span class="spaces">    </span><span class="nottickedoff">inTens = (n `mod` 100) `div` 10 == 1</span></span>
-<span class="lineno">  201 </span>
-<span class="lineno">  202 </span>handleException :: Options -&gt; CE.SomeException -&gt; IO a
-<span class="lineno">  203 </span><span class="decl"><span class="istickedoff">handleException opts e</span>
-<span class="lineno">  204 </span><span class="spaces">    </span><span class="istickedoff">| Just (_ :: ExitCode) &lt;- CE.fromException e = CE.throw e</span>
-<span class="lineno">  205 </span><span class="spaces">    </span><span class="istickedoff">| Just ioe &lt;- CE.fromException e =</span>
-<span class="lineno">  206 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Error (displayIOE ioe) &gt;&gt; exitProofUnknown</span></span>
-<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno">  208 </span><span class="spaces">         </span><span class="istickedoff">printOutLn opts Error (CE.displayException e) &gt;&gt; exitProofUnknown</span>
-<span class="lineno">  209 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  210 </span><span class="spaces"> </span><span class="istickedoff">where</span>
-<span class="lineno">  211 </span><span class="spaces"> </span><span class="istickedoff"><span class="nottickedoff">displayIOE ioe</span></span>
-<span class="lineno">  212 </span><span class="spaces">   </span><span class="istickedoff"><span class="nottickedoff">| IOE.isUserError ioe = IOE.ioeGetErrorString ioe</span></span>
-<span class="lineno">  213 </span><span class="spaces">   </span><span class="istickedoff"><span class="nottickedoff">| otherwise = CE.displayException ioe</span></span></span>
-<span class="lineno">  214 </span>
-<span class="lineno">  215 </span>exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
-<span class="lineno">  216 </span><span class="decl"><span class="nottickedoff">exitProofFalse = exitWith (ExitFailure 1)</span></span>
-<span class="lineno">  217 </span><span class="decl"><span class="istickedoff">exitProofUnknown = exitWith (ExitFailure 2)</span></span>
-<span class="lineno">  218 </span><span class="decl"><span class="nottickedoff">exitProofSuccess = exitSuccess</span></span>
-<span class="lineno">  219 </span>
-<span class="lineno">  220 </span>--------------------------------------------------------------------------------
-<span class="lineno">  221 </span>
-<span class="lineno">  222 </span>unparseTypeDescriptor :: JSS.Type -&gt; String
-<span class="lineno">  223 </span><span class="decl"><span class="istickedoff">unparseTypeDescriptor =</span>
-<span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">\case</span>
-<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">JSS.ArrayType ty -&gt; <span class="nottickedoff">&quot;[&quot; ++ unparseTypeDescriptor ty</span></span>
-<span class="lineno">  226 </span><span class="spaces">    </span><span class="istickedoff">JSS.BooleanType  -&gt; <span class="nottickedoff">&quot;Z&quot;</span></span>
-<span class="lineno">  227 </span><span class="spaces">    </span><span class="istickedoff">JSS.ByteType     -&gt; <span class="nottickedoff">&quot;B&quot;</span></span>
-<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">JSS.CharType     -&gt; <span class="nottickedoff">&quot;C&quot;</span></span>
-<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">JSS.ClassType cn -&gt; &quot;L&quot; ++ JSS.unClassName cn ++ &quot;;&quot;</span>
-<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">JSS.DoubleType   -&gt; <span class="nottickedoff">&quot;D&quot;</span></span>
-<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">JSS.FloatType    -&gt; <span class="nottickedoff">&quot;F&quot;</span></span>
-<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">JSS.IntType      -&gt; &quot;I&quot;</span>
-<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">JSS.LongType     -&gt; &quot;J&quot;</span>
-<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">JSS.ShortType    -&gt; <span class="nottickedoff">&quot;S&quot;</span></span></span>
-<span class="lineno">  235 </span>
-<span class="lineno">  236 </span>unparseMethodDescriptor :: ([JSS.Type], Maybe JSS.Type) -&gt; String
-<span class="lineno">  237 </span><span class="decl"><span class="istickedoff">unparseMethodDescriptor (args, ret) =</span>
-<span class="lineno">  238 </span><span class="spaces">  </span><span class="istickedoff">&quot;(&quot; ++ concatMap unparseTypeDescriptor args ++ &quot;)&quot; ++</span>
-<span class="lineno">  239 </span><span class="spaces">  </span><span class="istickedoff">maybe &quot;V&quot; <span class="nottickedoff">unparseTypeDescriptor</span> ret</span></span>
-<span class="lineno">  240 </span>
+<span class="lineno">  104 </span>-- Java lookup functions
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>-- | Atempt to find class with given name, or throw ExecException if no class
+<span class="lineno">  107 </span>-- with that name exists. Class name should be in slash-separated form.
+<span class="lineno">  108 </span>lookupClass :: JSS.Codebase -&gt; Pos -&gt; JSS.ClassName -&gt; IO JSS.Class
+<span class="lineno">  109 </span><span class="decl"><span class="istickedoff">lookupClass cb site nm = do</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">maybeCl &lt;- JSS.tryLookupClass cb nm</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">case maybeCl of</span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  113 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">let msg = ftext (&quot;The Java class &quot; ++ JSS.slashesToDots (JSS.unClassName nm) ++ &quot; could not be found.&quot;)</span></span>
+<span class="lineno">  114 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">res = unwords [ &quot;Please check that the path to Java is set correctly&quot;</span></span>
+<span class="lineno">  115 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, &quot;(either through the --java-bin-dirs option or your PATH)&quot;</span></span>
+<span class="lineno">  116 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, &quot;and you are using Java 8 or earlier&quot;</span></span>
+<span class="lineno">  117 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, &quot;(SAW does not support 9+ currently).&quot;</span></span>
+<span class="lineno">  118 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in throwIOExecException site msg res</span></span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff">Just cl -&gt; return cl</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>-- | Returns method with given name in this class or one of its subclasses.
+<span class="lineno">  123 </span>-- Throws an ExecException if method could not be found or is ambiguous.
+<span class="lineno">  124 </span>findMethod :: JSS.Codebase -&gt; Pos -&gt; String -&gt; JSS.Class -&gt; IO (JSS.Class, JSS.Method)
+<span class="lineno">  125 </span><span class="decl"><span class="istickedoff">findMethod cb site nm initClass = impl <span class="nottickedoff">[]</span> initClass</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">where javaClassName = JSS.slashesToDots (JSS.unClassName (JSS.className initClass))</span>
+<span class="lineno">  127 </span><span class="spaces">        </span><span class="istickedoff">methodType m = (JSS.methodParameterTypes m, JSS.methodReturnType m)</span>
+<span class="lineno">  128 </span><span class="spaces">        </span><span class="istickedoff">baseName m = JSS.methodName m</span>
+<span class="lineno">  129 </span><span class="spaces">        </span><span class="istickedoff">typedName m = JSS.methodName m ++ &quot;:&quot; ++ unparseMethodDescriptor (methodType m)</span>
+<span class="lineno">  130 </span><span class="spaces">        </span><span class="istickedoff">methodMatches m = nm `elem` [baseName m, typedName m]</span>
+<span class="lineno">  131 </span><span class="spaces">        </span><span class="istickedoff">impl names cl =</span>
+<span class="lineno">  132 </span><span class="spaces">          </span><span class="istickedoff">let candidates = filter (not . JSS.methodIsAbstract) (JSS.classMethods cl) in</span>
+<span class="lineno">  133 </span><span class="spaces">          </span><span class="istickedoff">case filter methodMatches candidates of</span>
+<span class="lineno">  134 </span><span class="spaces">            </span><span class="istickedoff">[] -&gt; do</span>
+<span class="lineno">  135 </span><span class="spaces">              </span><span class="istickedoff">case JSS.superClass cl of</span>
+<span class="lineno">  136 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  137 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">let msg = ftext $ &quot;Could not find method &quot; ++ nm</span></span>
+<span class="lineno">  138 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">++ &quot; in class &quot; ++ javaClassName ++ &quot;.\n&quot;</span></span>
+<span class="lineno">  139 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">++ &quot;Available methods: &quot;</span></span>
+<span class="lineno">  140 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">++ unlines names</span></span>
+<span class="lineno">  141 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">res = &quot;Please check that the class and method are correct.&quot;</span></span>
+<span class="lineno">  142 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">in throwIOExecException site msg res</span></span>
+<span class="lineno">  143 </span><span class="spaces">                </span><span class="istickedoff">Just superName -&gt;</span>
+<span class="lineno">  144 </span><span class="spaces">                  </span><span class="istickedoff">do super &lt;- lookupClass cb <span class="nottickedoff">site</span> superName</span>
+<span class="lineno">  145 </span><span class="spaces">                     </span><span class="istickedoff">impl <span class="nottickedoff">(names ++ map baseName candidates)</span> super</span>
+<span class="lineno">  146 </span><span class="spaces">            </span><span class="istickedoff">[method] -&gt; return (cl,method)</span>
+<span class="lineno">  147 </span><span class="spaces">            </span><span class="istickedoff">l -&gt; let msg = &quot;The method &quot; ++ show nm ++ &quot; in class &quot; ++ javaClassName ++ &quot; is ambiguous. &quot; ++</span>
+<span class="lineno">  148 </span><span class="spaces">                           </span><span class="istickedoff">&quot;Methods can be disambiguated by appending a type descriptor: &quot; ++</span>
+<span class="lineno">  149 </span><span class="spaces">                           </span><span class="istickedoff">unlines [ show (typedName m) | m &lt;- l ]</span>
+<span class="lineno">  150 </span><span class="spaces">                     </span><span class="istickedoff">res = &quot;Please disambiguate method name.&quot;</span>
+<span class="lineno">  151 </span><span class="spaces">                  </span><span class="istickedoff">in throwIOExecException site (ftext msg) res</span></span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>throwFieldNotFound :: JSS.Type -&gt; String -&gt; [String] -&gt; ExceptT String IO a
+<span class="lineno">  154 </span><span class="decl"><span class="istickedoff">throwFieldNotFound tp fieldName names = throwE msg</span>
+<span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  156 </span><span class="spaces">    </span><span class="istickedoff">msg = &quot;Values with type \'&quot; ++ show tp ++</span>
+<span class="lineno">  157 </span><span class="spaces">          </span><span class="istickedoff">&quot;\' do not contain field named &quot; ++</span>
+<span class="lineno">  158 </span><span class="spaces">          </span><span class="istickedoff">fieldName ++ &quot;.&quot;</span>
+<span class="lineno">  159 </span><span class="spaces">          </span><span class="istickedoff">++ &quot;\nAvailable fields:\n&quot; ++ unlines names</span></span>
+<span class="lineno">  160 </span>
+<span class="lineno">  161 </span>findField :: JSS.Codebase -&gt; Pos -&gt; JSS.Type -&gt; String -&gt; ExceptT String IO JSS.FieldId
+<span class="lineno">  162 </span><span class="decl"><span class="istickedoff">findField _  _ tp@(JSS.ArrayType _) nm = throwFieldNotFound tp nm []</span>
+<span class="lineno">  163 </span><span class="spaces"></span><span class="istickedoff">findField cb site tp@(JSS.ClassType clName) nm = impl [] =&lt;&lt; lift (lookupClass cb <span class="nottickedoff">site</span> clName)</span>
+<span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">impl nms cl =</span>
+<span class="lineno">  166 </span><span class="spaces">      </span><span class="istickedoff">case filter (\f -&gt; nm `elem` names f) $ JSS.classFields cl of</span>
+<span class="lineno">  167 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; do</span>
+<span class="lineno">  168 </span><span class="spaces">          </span><span class="istickedoff">case JSS.superClass cl of</span>
+<span class="lineno">  169 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; throwFieldNotFound tp nm nms</span>
+<span class="lineno">  170 </span><span class="spaces">            </span><span class="istickedoff">Just superName -&gt;</span>
+<span class="lineno">  171 </span><span class="spaces">              </span><span class="istickedoff">do super &lt;- lift $ lookupClass cb <span class="nottickedoff">site</span> superName</span>
+<span class="lineno">  172 </span><span class="spaces">                 </span><span class="istickedoff">impl (nms ++ map JSS.fieldName (JSS.classFields cl)) super</span>
+<span class="lineno">  173 </span><span class="spaces">        </span><span class="istickedoff">[f] -&gt; return $ JSS.FieldId (JSS.className cl) (JSS.fieldName f) (JSS.fieldType f)</span>
+<span class="lineno">  174 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $</span></span>
+<span class="lineno">  175 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;internal: Found multiple fields with the same name: &quot; ++ nm</span></span>
+<span class="lineno">  176 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno">  177 </span><span class="spaces">        </span><span class="istickedoff">names f =</span>
+<span class="lineno">  178 </span><span class="spaces">          </span><span class="istickedoff">do prefix &lt;- [&quot;&quot;, JSS.unClassName (JSS.className cl) ++ &quot;.&quot;]</span>
+<span class="lineno">  179 </span><span class="spaces">             </span><span class="istickedoff">suffix &lt;- [&quot;&quot;, <span class="nottickedoff">&quot;:&quot; ++ unparseTypeDescriptor (JSS.fieldType f)</span>]</span>
+<span class="lineno">  180 </span><span class="spaces">             </span><span class="istickedoff">pure (prefix ++ JSS.fieldName f ++ suffix)</span>
+<span class="lineno">  181 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  182 </span><span class="spaces"></span><span class="istickedoff">findField _ _ _ _ =</span>
+<span class="lineno">  183 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">throwE &quot;Primitive types cannot be dereferenced.&quot;</span></span></span>
+<span class="lineno">  184 </span>
+<span class="lineno">  185 </span>
+<span class="lineno">  186 </span>-- | Convert a non-negative integer to to an ordinal string.
+<span class="lineno">  187 </span>--
+<span class="lineno">  188 </span>-- Note: @0 -&gt; &quot;0th&quot;@, so do @'ordinal' (n + 1)@ if you want one-based
+<span class="lineno">  189 </span>-- results.
+<span class="lineno">  190 </span>ordinal :: (Integral a, Show a) =&gt; a -&gt; String
+<span class="lineno">  191 </span>-- Not sure what to do with negative integers so bail.
+<span class="lineno">  192 </span><span class="decl"><span class="nottickedoff">ordinal n | n &lt; 0 = error &quot;Only non-negative cardinals are supported.&quot;</span>
+<span class="lineno">  193 </span><span class="spaces">          </span><span class="nottickedoff">| otherwise = show n ++ suffix</span>
+<span class="lineno">  194 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="nottickedoff">suffix =</span>
+<span class="lineno">  196 </span><span class="spaces">      </span><span class="nottickedoff">if inTens then &quot;th&quot;</span>
+<span class="lineno">  197 </span><span class="spaces">      </span><span class="nottickedoff">else case n `mod` 10 of</span>
+<span class="lineno">  198 </span><span class="spaces">             </span><span class="nottickedoff">1 -&gt; &quot;st&quot;</span>
+<span class="lineno">  199 </span><span class="spaces">             </span><span class="nottickedoff">2 -&gt; &quot;nd&quot;</span>
+<span class="lineno">  200 </span><span class="spaces">             </span><span class="nottickedoff">3 -&gt; &quot;rd&quot;</span>
+<span class="lineno">  201 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; &quot;th&quot;</span>
+<span class="lineno">  202 </span><span class="spaces">    </span><span class="nottickedoff">inTens = (n `mod` 100) `div` 10 == 1</span></span>
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>-- XXX this is used from several places that should not just exit. See #2920
+<span class="lineno">  205 </span>handleException :: Options -&gt; CE.SomeException -&gt; IO a
+<span class="lineno">  206 </span><span class="decl"><span class="istickedoff">handleException opts e</span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">| Just (_ :: ExitCode) &lt;- CE.fromException e = CE.throw e</span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">| Just (_ :: Cons.Fatal) &lt;- CE.fromException e =</span>
+<span class="lineno">  209 </span><span class="spaces">         </span><span class="istickedoff">-- Cons.Fatal means we've already printed a message, don't print again</span>
+<span class="lineno">  210 </span><span class="spaces">         </span><span class="istickedoff">exitProofUnknown</span>
+<span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff">| Just ioe &lt;- CE.fromException e =</span>
+<span class="lineno">  212 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Error (displayIOE ioe) &gt;&gt; exitProofUnknown</span></span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno">  214 </span><span class="spaces">         </span><span class="istickedoff">printOutLn opts Error (CE.displayException e) &gt;&gt; exitProofUnknown</span>
+<span class="lineno">  215 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  216 </span><span class="spaces"> </span><span class="istickedoff">where</span>
+<span class="lineno">  217 </span><span class="spaces"> </span><span class="istickedoff"><span class="nottickedoff">displayIOE ioe</span></span>
+<span class="lineno">  218 </span><span class="spaces">   </span><span class="istickedoff"><span class="nottickedoff">| IOE.isUserError ioe = IOE.ioeGetErrorString ioe</span></span>
+<span class="lineno">  219 </span><span class="spaces">   </span><span class="istickedoff"><span class="nottickedoff">| otherwise = CE.displayException ioe</span></span></span>
+<span class="lineno">  220 </span>
+<span class="lineno">  221 </span>exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
+<span class="lineno">  222 </span><span class="decl"><span class="nottickedoff">exitProofFalse = exitWith (ExitFailure 1)</span></span>
+<span class="lineno">  223 </span><span class="decl"><span class="istickedoff">exitProofUnknown = exitWith (ExitFailure 2)</span></span>
+<span class="lineno">  224 </span><span class="decl"><span class="nottickedoff">exitProofSuccess = exitSuccess</span></span>
+<span class="lineno">  225 </span>
+<span class="lineno">  226 </span>--------------------------------------------------------------------------------
+<span class="lineno">  227 </span>
+<span class="lineno">  228 </span>unparseTypeDescriptor :: JSS.Type -&gt; String
+<span class="lineno">  229 </span><span class="decl"><span class="istickedoff">unparseTypeDescriptor =</span>
+<span class="lineno">  230 </span><span class="spaces">  </span><span class="istickedoff">\case</span>
+<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">JSS.ArrayType ty -&gt; <span class="nottickedoff">&quot;[&quot; ++ unparseTypeDescriptor ty</span></span>
+<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">JSS.BooleanType  -&gt; <span class="nottickedoff">&quot;Z&quot;</span></span>
+<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">JSS.ByteType     -&gt; <span class="nottickedoff">&quot;B&quot;</span></span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">JSS.CharType     -&gt; <span class="nottickedoff">&quot;C&quot;</span></span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">JSS.ClassType cn -&gt; &quot;L&quot; ++ JSS.unClassName cn ++ &quot;;&quot;</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">JSS.DoubleType   -&gt; <span class="nottickedoff">&quot;D&quot;</span></span>
+<span class="lineno">  237 </span><span class="spaces">    </span><span class="istickedoff">JSS.FloatType    -&gt; <span class="nottickedoff">&quot;F&quot;</span></span>
+<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">JSS.IntType      -&gt; &quot;I&quot;</span>
+<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">JSS.LongType     -&gt; &quot;J&quot;</span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">JSS.ShortType    -&gt; <span class="nottickedoff">&quot;S&quot;</span></span></span>
 <span class="lineno">  241 </span>
-<span class="lineno">  242 </span>neGroupOn ::
-<span class="lineno">  243 </span>  Ord b =&gt;
-<span class="lineno">  244 </span>  (a -&gt; b) {- ^ equivalence class projection -} -&gt;
-<span class="lineno">  245 </span>  [a] -&gt; [NE.NonEmpty a]
-<span class="lineno">  246 </span><span class="decl"><span class="istickedoff">neGroupOn f = NE.groupBy ((==) `on` f) . sortBy (compare `on` f)</span></span>
+<span class="lineno">  242 </span>unparseMethodDescriptor :: ([JSS.Type], Maybe JSS.Type) -&gt; String
+<span class="lineno">  243 </span><span class="decl"><span class="istickedoff">unparseMethodDescriptor (args, ret) =</span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="istickedoff">&quot;(&quot; ++ concatMap unparseTypeDescriptor args ++ &quot;)&quot; ++</span>
+<span class="lineno">  245 </span><span class="spaces">  </span><span class="istickedoff">maybe &quot;V&quot; <span class="nottickedoff">unparseTypeDescriptor</span> ret</span></span>
+<span class="lineno">  246 </span>
 <span class="lineno">  247 </span>
-<span class="lineno">  248 </span>neNubOrd ::
-<span class="lineno">  249 </span>  Ord a =&gt;
-<span class="lineno">  250 </span>  NE.NonEmpty a -&gt;
-<span class="lineno">  251 </span>  NE.NonEmpty a
-<span class="lineno">  252 </span><span class="decl"><span class="istickedoff">neNubOrd (hd NE.:| tl) = hd NE.:| loop <span class="nottickedoff">(Set.singleton hd)</span> tl</span>
-<span class="lineno">  253 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">loop _prev [] = []</span>
-<span class="lineno">  255 </span><span class="spaces">    </span><span class="istickedoff">loop prev (x:xs)</span>
-<span class="lineno">  256 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">Set.member x prev</span> = <span class="nottickedoff">loop prev xs</span></span>
-<span class="lineno">  257 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>         = <span class="nottickedoff">x : loop (Set.insert x prev) xs</span></span></span>
+<span class="lineno">  248 </span>neGroupOn ::
+<span class="lineno">  249 </span>  Ord b =&gt;
+<span class="lineno">  250 </span>  (a -&gt; b) {- ^ equivalence class projection -} -&gt;
+<span class="lineno">  251 </span>  [a] -&gt; [NE.NonEmpty a]
+<span class="lineno">  252 </span><span class="decl"><span class="istickedoff">neGroupOn f = NE.groupBy ((==) `on` f) . sortBy (compare `on` f)</span></span>
+<span class="lineno">  253 </span>
+<span class="lineno">  254 </span>neNubOrd ::
+<span class="lineno">  255 </span>  Ord a =&gt;
+<span class="lineno">  256 </span>  NE.NonEmpty a -&gt;
+<span class="lineno">  257 </span>  NE.NonEmpty a
+<span class="lineno">  258 </span><span class="decl"><span class="istickedoff">neNubOrd (hd NE.:| tl) = hd NE.:| loop <span class="nottickedoff">(Set.singleton hd)</span> tl</span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">loop _prev [] = []</span>
+<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">loop prev (x:xs)</span>
+<span class="lineno">  262 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">Set.member x prev</span> = <span class="nottickedoff">loop prev xs</span></span>
+<span class="lineno">  263 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>         = <span class="nottickedoff">x : loop (Set.insert x prev) xs</span></span></span>
 
 </pre>
 </body>
