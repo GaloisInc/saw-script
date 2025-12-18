@@ -1,6 +1,3 @@
 Loading file "test3.saw"
-Stack trace:
-   (builtin) (at top level)
-test3.saw:1:1-1:3: Unclosed block comment
-
+test3.saw:1:1-1:3: Error: Unclosed block comment
 FAILED

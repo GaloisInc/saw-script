@@ -85,8 +85,11 @@ library saw-support
 
   hs-source-dirs: saw-support/src
   exposed-modules:
+    SAWSupport.Console
+    SAWSupport.ConsoleSupport
     SAWSupport.IntRangeSet
     SAWSupport.PanicSupport
+    SAWSupport.Position
     SAWSupport.Pretty
     SAWSupport.ScopedMap
     SAWSupport.Trie

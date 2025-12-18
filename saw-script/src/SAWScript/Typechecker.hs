@@ -2043,12 +2043,15 @@ typesMatch avail tenv schema'found schema'expected =
 -- Purely a validity check; there's no updates it can make to the
 -- schema that are of use to the caller, on the assumption that the
 -- caller doesn't want to do stuff with the schema before exiting on
--- errors, which it doesn't. Thus, just return unit and not an updated
--- schema.
+-- errors, which it doesn't. Thus, return the original schema and not
+-- one with the potentially updated type.
 --
 -- (Otherwise we'd need to rerun `generalize` to build a new schema,
 -- and that's a headache and not worthwhile given that the result
 -- isn't going to be used.)
+--
+-- Do however return the original schema and not unit to make sure
+-- the code actually gets evaluated.
 --
 -- This is called for the types of objects that may themselves not be
 -- visible, so rather than using the caller's set of visible lifecycle
@@ -2057,7 +2060,7 @@ typesMatch avail tenv schema'found schema'expected =
 -- deprecated types; experimental objects can see experimental types;
 -- everything can see current types.
 --
-checkSchema :: PrimitiveLifecycle -> TyEnv -> Schema -> Result ()
+checkSchema :: PrimitiveLifecycle -> TyEnv -> Schema -> Result Schema
 checkSchema contextLC tyenv schema = do
   let check = do
         let Forall tyvars ty = schema
@@ -2071,7 +2074,7 @@ checkSchema contextLC tyenv schema = do
         -- The only way checking can return an updated type is if
         -- there's also an error, so discard the type
         _ <- checkType kindStar ty'
-        return ()
+        return schema
 
   let avail = Set.fromList $ case contextLC of
           Current -> [Current]

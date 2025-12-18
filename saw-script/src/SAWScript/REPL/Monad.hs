@@ -41,6 +41,7 @@ import System.IO.Error (isUserError, ioeGetErrorString)
 import System.Exit (ExitCode)
 
 import qualified SAWSupport.PanicSupport as PanicSupport
+import qualified SAWSupport.ConsoleSupport as Cons
 
 import CryptolSAWCore.CryptolEnv
 
@@ -191,10 +192,13 @@ getCryptolEnv = do
 ------------------------------------------------------------
 -- Exceptions
 
-captureError :: TopLevelCheckpoint -> String -> REPL ()
-captureError chk msg = do
-    liftIO $ putStrLn ""
-    liftIO $ putStrLn msg
+captureError :: TopLevelCheckpoint -> Maybe String -> REPL ()
+captureError chk mmsg = do
+    case mmsg of
+        Nothing -> pure ()
+        Just msg -> do
+            liftIO $ putStrLn ""
+            liftIO $ putStrLn msg
     liftTopLevel $ restoreCheckpoint chk
 
 -- | Inspect and handle or rethrow exceptions.
@@ -214,11 +218,17 @@ captureError chk msg = do
 handleExceptions :: TopLevelCheckpoint -> X.SomeException -> REPL ()
 handleExceptions chk e
 
+    -- Cons.Fatal: catch and continue. We don't need to print the
+    -- exception; the point of `Fatal` vs. anything else is that
+    -- we already printed the error messages.
+  | Just (_ :: Cons.Fatal) <- X.fromException e =
+        captureError chk Nothing
+
     -- IO exceptions: catch and continue on UserError (this includes
     -- `fail` calls), but treat anything else as fatal.
   | Just (e' :: X.IOException) <- X.fromException e =
         if isUserError e' then
-            captureError chk $ ioeGetErrorString e'
+            captureError chk $ Just $ ioeGetErrorString e'
         else
             throwM e'
 
@@ -237,7 +247,7 @@ handleExceptions chk e
 
     -- Trap anything and everything else. XXX: this is way too broad.
   | otherwise =
-        captureError chk $ X.displayException e
+        captureError chk $ Just $ X.displayException e
 
 
 

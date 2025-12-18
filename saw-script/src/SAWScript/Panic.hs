@@ -6,7 +6,7 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 
-module SAWScript.Panic (panic) where
+module SAWScript.Panic (HasCallStack, panic) where
 
 import Data.Text (Text)
 

@@ -1,2 +1,1 @@
-
-<stdin>:1:12-1:14: Invalid character escape in string
+<stdin>:1:12-1:14: Error: Invalid character escape in string

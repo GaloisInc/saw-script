@@ -36,6 +36,8 @@ import Numeric(showFFloat)
 
 import qualified Lang.JVM.Codebase as JSS
 
+import qualified SAWSupport.ConsoleSupport as Cons
+
 import SAWCentral.Options
 import SAWCentral.Position
 
@@ -199,9 +201,13 @@ ordinal n | n < 0 = error "Only non-negative cardinals are supported."
              _ -> "th"
     inTens = (n `mod` 100) `div` 10 == 1
 
+-- XXX this is used from several places that should not just exit. See #2920
 handleException :: Options -> CE.SomeException -> IO a
 handleException opts e
     | Just (_ :: ExitCode) <- CE.fromException e = CE.throw e
+    | Just (_ :: Cons.Fatal) <- CE.fromException e =
+         -- Cons.Fatal means we've already printed a message, don't print again
+         exitProofUnknown
     | Just ioe <- CE.fromException e =
          printOutLn opts Error (displayIOE ioe) >> exitProofUnknown
     | otherwise =
