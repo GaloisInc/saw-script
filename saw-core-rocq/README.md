@@ -19,7 +19,7 @@ support libraries must be compiled by Rocq in order to use them.
 To compile the Rocq support libraries, Rocq must be installed, as must the
 following library:
 
-* [coq-bits](https://github.com/coq-community/bits)
+* [coq-bits](https://github.com/rocq-community/bits)
 
 The recommended way to install Rocq and these dependencies is using `opam`. This
 can be done with the following steps, which will not only install `opam`, Rocq, and

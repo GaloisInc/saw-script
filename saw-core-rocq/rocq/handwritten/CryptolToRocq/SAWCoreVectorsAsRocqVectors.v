@@ -51,7 +51,7 @@ Import VectorNotations.
 
 Definition Vec (n : nat) (a : Type) : Type := VectorDef.t a n.
 
-(* Work around https://github.com/coq/coq/issues/16803. Without this, using
+(* Work around https://github.com/rocq-prover/rocq/issues/16803. Without this, using
    `lia` on `bitvector` values will fail to typecheck on pre-8.17 versions of
    Rocq. Once our Rocq support window shifts enough, we can drop this workaround.
 *)

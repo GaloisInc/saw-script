@@ -15,7 +15,7 @@ Import SAWCorePrelude.
    inequalities. This file includes a small number of proofs to test that `lia`
    is working as intended. The design was heavily inspired by the Zify instances
    for Rocq's Uint63, which can be found here:
-   https://github.com/coq/coq/blob/756c560ab5d19a1568cf41caac6f0d67a97b08c6/theories/micromega/ZifyUint63.v
+   https://github.com/rocq-prover/rocq/blob/756c560ab5d19a1568cf41caac6f0d67a97b08c6/theories/micromega/ZifyUint63.v
 
    This is far from complete, however. Be aware of the following caveats:
 
@@ -23,7 +23,7 @@ Import SAWCorePrelude.
       signed arithmetic are not supported. If we wanted to support signed
       arithmetic, we would likely need to take inspiration from how Rocq's Zify
       instances for the Sint63 type work:
-      https://github.com/coq/coq/blob/756c560ab5d19a1568cf41caac6f0d67a97b08c6/theories/micromega/ZifySint63.v
+      https://github.com/rocq-prover/rocq/blob/756c560ab5d19a1568cf41caac6f0d67a97b08c6/theories/micromega/ZifySint63.v
 
    2. There are likely many operations that are not covered here. If there is
       an unsupported operation that you would like to see added, please file an
@@ -33,14 +33,14 @@ Import SAWCorePrelude.
       Ideally, we would make the Zify instances parametric in the bit width, but
       this is surprisingly difficult to accomplish. At a minimum, this would
       require some upstream changes to Rocq. See, for instance,
-      https://github.com/coq/coq/issues/16404.
+      https://github.com/rocq-prover/rocq/issues/16404.
 
       For now, we simply provide the machinery at 64 bits, which is a common
       case. If there is enough demand, we can also provide similar machinery
       for bitvectors at other common bit widths.
 *)
 
-(* Unfortunately, https://github.com/coq/coq/issues/16404 prevents us from
+(* Unfortunately, https://github.com/rocq-prover/rocq/issues/16404 prevents us from
    simply defining instances for `bitvector 64`, so we provide a thin wrapper
    around it and define instances for it. We may be able to remove this
    workaround once the upstream Rocq issue is fixed and enough time has passed.
