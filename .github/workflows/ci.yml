@@ -526,7 +526,7 @@ jobs:
           opam install -y coq=9.1.0 # coq-* packages include compatibility shims (e.g., coq_makefile).
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
 
-      # FIXME: the following steps generate Rocq libraries for the SAW core to
+      # FIXME: the following steps generate Rocq libraries for the SAWCore to
       # Rocq translator and builds them; if we do other Rocq tests, these steps
       # should become their own build artifact, to avoid re-compiling the Rocq
       # libraries
