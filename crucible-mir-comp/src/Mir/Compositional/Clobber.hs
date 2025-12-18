@@ -36,11 +36,11 @@ import Mir.TransTy (pattern CTyUnsafeCell)
 -- only on the immediate descendants of `rv`; it does not perform a recursive
 -- traversal.
 --
--- For types that don't contain any nested `RegValue`s, such as `UnitShape` and
--- `PrimShape`, this function returns the input unchanged.  For types where
--- there isn't a clear way to traverse the type, such as `EnumShape` and
--- `RefShape`, this function will throw an error; the caller should handle
--- these cases itself rather than dispatching to `traverseTypeShape`.
+-- For types that don't contain any nested `RegValue`s, such as `PrimShape`,
+-- this function returns the input unchanged.  For types where there isn't a
+-- clear way to traverse the type, such as `EnumShape` and `RefShape`, this
+-- function will throw an error; the caller should handle these cases itself
+-- rather than dispatching to `traverseTypeShape`.
 traverseTypeShape :: forall sym p t st fs tp0 rtp args ret.
   (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
   sym -> String ->
@@ -54,7 +54,6 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
-    go (UnitShape _) () = return ()
     go (PrimShape _ _) rv = return rv
     go (ArrayShape _ _ sz shp len) ag = do
         traverseMirAggregateArray sym sz shp len ag $ \_off rv -> f shp rv
@@ -174,7 +173,6 @@ freshSymbolic sym loc nameStr shp0 = go shp0
   where
     go :: forall tp. TypeShape tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
-    go (UnitShape _) = return ()
     go (PrimShape _ btpr) = do
         let nameSymbol = W4.safeSymbol nameStr
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr

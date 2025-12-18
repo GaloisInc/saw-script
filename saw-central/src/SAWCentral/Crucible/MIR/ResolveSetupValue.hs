@@ -124,8 +124,6 @@ prettyMIRVal ::
   PP.Doc ann
 prettyMIRVal sym (MIRVal shp val) =
   case shp of
-    UnitShape _ ->
-      PP.pretty val
     PrimShape _ _ ->
       W4.printSymExpr val
     TupleShape _ elems -> prettyAggregate elems val
@@ -723,7 +721,6 @@ resolveSetupVal mcc env tyenv nameEnv val =
               panic "resolveSetupVal" [
                   "Expected enum type, received union: " <> Text.pack (show nm)
               ]
-    MS.SetupTuple () [] -> pure $ MIRVal (UnitShape (Mir.TyTuple [])) ()
     MS.SetupTuple () flds -> do
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
@@ -1070,7 +1067,6 @@ resolveSAWTerm mcc tp tm =
           pure $ MIRVal arrShp ag
     Cryptol.TVStream _tp' ->
       fail "resolveSAWTerm: unsupported infinite stream type"
-    Cryptol.TVTuple [] -> pure $ MIRVal (UnitShape (Mir.TyTuple [])) ()
     Cryptol.TVTuple tps -> do
       st <- sawCoreState sym
       let sc = saw_ctx st
@@ -1204,8 +1200,6 @@ equalValsPred cc mv1 mv2 =
          -> RegValue Sym tp
          -> RegValue Sym tp
          -> MaybeT IO (W4.Pred Sym)
-    goTy (UnitShape _) () () =
-      pure $ W4.truePred sym
     goTy (PrimShape _ _) v1 v2 =
       liftIO $ W4.isEq sym v1 v2
     goTy (TupleShape _ elems) ag1 ag2 =

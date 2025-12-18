@@ -507,8 +507,12 @@ computeReturnValue ::
 computeReturnValue opts cc sc spec ty mbVal =
   case mbVal of
     Nothing ->
+      -- We know that the returned value is (), so assert that the type
+      -- representation is MirAggregateRepr (which is how all tuples are
+      -- represented in crucible-mir), then a zero-sized type aggregate (which
+      -- is the same size as () in crucible-mir).
       case ty of
-        Crucible.UnitRepr -> return ()
+        Mir.MirAggregateRepr -> liftIO Mir.mirAggregate_zstIO
         _ -> fail_
     Just val -> do
       MIRVal shp val' <- resolveSetupValueMIR opts cc sc spec val
@@ -1934,8 +1938,6 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -> liftIO (toSC sym st val)
       |  n == 128, Just _ <- W4.testEquality w (W4.knownNat @128)
       -> liftIO (toSC sym st val)
-    (Cryptol.TVTuple [], UnitShape _) ->
-      liftIO (scUnitValue sc)
     (Cryptol.TVTuple tys, TupleShape _ elems)
       -> do terms <- accessMirAggregate' sym elems tys val $
               \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val')

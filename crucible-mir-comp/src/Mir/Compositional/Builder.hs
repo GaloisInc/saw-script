@@ -699,7 +699,6 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
 
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         BuilderT sym t (OverrideSim p sym MIR rtp args ret) (MS.SetupValue MIR)
-    go (UnitShape _) () = return $ MS.SetupTuple () []
     go (PrimShape _ btpr) expr = do
         -- Record all vars used in `expr`
         cache <- use msbVisitCache

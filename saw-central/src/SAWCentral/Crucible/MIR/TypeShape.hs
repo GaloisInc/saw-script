@@ -96,8 +96,9 @@ import qualified SAWCore.SharedTerm as SAW
 -- ArrayShape, this is the TyArray type).  The overall `TypeRepr tp` isn't
 -- stored directly, but can be computed with `shapeType`.
 data TypeShape (tp :: CrucibleType) where
-    UnitShape :: M.Ty -> TypeShape UnitType
     PrimShape :: M.Ty -> BaseTypeRepr btp -> TypeShape (BaseToType btp)
+    -- | A shape for tuples, as well as for tuple-like types (e.g.,
+    -- 'M.TyFnDef', which is treated like an empty tuple).
     TupleShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
     ArrayShape :: M.Ty
                -- ^ The array type
@@ -236,10 +237,9 @@ tyToShape col = go
         M.TyChar -> goPrim ty
         M.TyInt _ -> goPrim ty
         M.TyUint _ -> goPrim ty
-        M.TyTuple [] -> goUnit ty
         M.TyTuple tys -> goTuple ty tys
         M.TyClosure tys -> goTuple ty tys
-        M.TyFnDef _ -> goUnit ty
+        M.TyFnDef _ -> goTuple ty []
         M.TyArray ty' len | Some shp <- go ty' ->
           let elemSz = 1 in   -- TODO: hardcoded size=1
           Some $ ArrayShape ty ty' elemSz shp (fromIntegral len)
@@ -269,9 +269,6 @@ tyToShape col = go
         Right (Some tpr)
           | AsBaseType btpr <- asBaseType tpr -> Some (PrimShape ty btpr)
           | otherwise -> error ("goPrim: type " ++ show ty ++ " produced non-primitive type " ++ show tpr)
-
-    goUnit :: M.Ty -> Some TypeShape
-    goUnit ty = Some $ UnitShape ty
 
     goTuple :: M.Ty -> [M.Ty] -> Some TypeShape
     goTuple ty tys = Some $ TupleShape ty (zipWith mkElem [0..] tys)
@@ -364,7 +361,6 @@ shapeType :: TypeShape tp -> TypeRepr tp
 shapeType = go
   where
     go :: forall tp. TypeShape tp -> TypeRepr tp
-    go (UnitShape _) = UnitRepr
     go (PrimShape _ btpr) = baseToType btpr
     go (TupleShape _ _) = MirAggregateRepr
     go (ArrayShape _ _ _ _ _) = MirAggregateRepr
@@ -385,7 +381,6 @@ variantShapeType (VariantShape flds) =
   StructRepr $ fmapFC fieldShapeType flds
 
 shapeMirTy :: TypeShape tp -> M.Ty
-shapeMirTy (UnitShape ty) = ty
 shapeMirTy (PrimShape ty _) = ty
 shapeMirTy (TupleShape ty _) = ty
 shapeMirTy (ArrayShape ty _ _ _ _) = ty
@@ -455,7 +450,6 @@ shapeToTerm' :: forall tp m.
 shapeToTerm' sc = go
   where
     go :: forall tp'. CryTermAdaptor Integer -> TypeShape tp' -> m SAW.Term
-    go NoAdapt (UnitShape _) = liftIO $ SAW.scUnitType sc
     go NoAdapt (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
     go NoAdapt (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w)
     go ada (TupleShape _ elems) = do
