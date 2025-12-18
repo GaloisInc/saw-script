@@ -1,3 +1,0 @@
-// Test: write_coq_cryptol_module command
-enable_experimental;
-write_coq_cryptol_module "Simple.cry" "" [] [];

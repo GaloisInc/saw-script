@@ -1,0 +1,17 @@
+// Test: Boolean, comparison operators.
+enable_experimental;
+
+let t1 = {{ True && False || ~True == True}};
+write_rocq_term "TestBool" [] [] "" t1;
+
+let t2 = {{ (((t1 && t1) || ~(~t1)) ^ t1) != True}};
+write_rocq_term "TestBool_NestedOps" [] [] "" t2;
+
+let t3 = {{ ((10 : [8]) < 5) && (10 > 5) && (5 <= 10) && (10 >= 5) }};
+write_rocq_term "TestBool_Comparison" [] [] "" t3;
+
+let t4 = {{ if (5 : [8]) < 10 then 1 else 2 }};
+write_rocq_term "TestBool_Ite1" [] [] "" t4;
+
+let t5 = {{ if True then (if False then (1 : [8]) else 2) else 3 }};
+write_rocq_term "TestBool_Ite2" [] [] "" t5;

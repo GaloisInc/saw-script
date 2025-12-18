@@ -1,0 +1,9 @@
+*.aux
+*.coqdeps.d
+*.rocqdeps.d
+*.glob
+*.vo
+/default.nix
+/Makefile.rocq
+/Makefile.rocq.conf
+/saw

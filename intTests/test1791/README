@@ -30,7 +30,7 @@ paths05:
    - write_smtlib2 outputs to the script directory.
 
 paths06:
-   - write_coq_term outputs to the script directory.
+   - write_rocq_term outputs to the script directory.
 
 paths07:
    - offline_w4_unint_z3 outputs to the script directory.

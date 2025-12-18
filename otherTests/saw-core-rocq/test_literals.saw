@@ -1,0 +1,51 @@
+// Test: Literals.
+enable_experimental;
+
+let t1 = {{ "" }};
+write_rocq_term "TestString_Empty" [] [] "" t1;
+
+let t2 = {{ "The quick brown fox jumps over the lazy dog" }};
+write_rocq_term "TestString_Basic" [] [] "" t2;
+
+let t3 = {{ "\"Line 1\"\nLine 2\tTabbed\r\nLine 3\rpath\\to\\file" }};
+write_rocq_term "TestString_Escapes" [] [] "" t3;
+
+let t4 = {{ "Hello, world! (--what?) No; it's a test. At least: [b] {c}" }};
+write_rocq_term "TestString_Punct" [] [] "" t4;
+
+let t5 = {{ "1 + 2^6 <= n_2, 5 - 3@2# => 2 * 999 / 4% & y | ~x" }};
+write_rocq_term "TestString_Mathy" [] [] "" t5;
+
+let t6 = {{ "café" }};
+write_rocq_term "TestString_Accent" [] [] "" t6;
+
+let t7 = {{ 0xFFFFFFFFFFFFFFFF : [64] }};
+write_rocq_term "TestLit_Max64" [] [] "" t7;
+
+// Decimal literal
+let t8 = {{ 0254 }};
+write_rocq_term "TestLit_0254" [] [] "" t8;
+
+// Binary literal
+let t9 = {{ 0b11111110 }};
+write_rocq_term "TestLit_Bin" [] [] "" t9;
+
+// Octal literal
+let t10 = {{ 0o376 }};
+write_rocq_term "TestLit_Oct" [] [] "" t10;
+
+// Hexadecimal literal
+let t11 = {{ 0xFE }};
+write_rocq_term "TestLit_Hex1" [] [] "" t11;
+
+// Hexadecimal literal
+let t12 = {{ 0xfe }};
+write_rocq_term "TestLit_Hex2" [] [] "" t12;
+
+// : [7], equal to 0b1010111
+let t13 = {{ <| x^^6 + x^^4 + x^^2 + x^^1 + 1 |> }};
+write_rocq_term "TestLit_Poly1" [] [] "" t13;
+
+// : [5], equal to 0b11010
+let t14 = {{ <| x^^4 + x^^3 + x |> }};
+write_rocq_term "TestLit_Poly2" [] [] "" t14;

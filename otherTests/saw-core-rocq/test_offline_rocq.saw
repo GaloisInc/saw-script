@@ -1,0 +1,14 @@
+// Test: offline_rocq command.
+enable_experimental;
+
+prove_print (offline_rocq "test_offline_rocq1") {{ \(x:[8]) (y:[8]) -> x == y ==> x+y == x+x }};
+
+prove_print (offline_rocq "test_offline_rocq2") {{ \(a:Bit) (b:Bit) (c:Bit) -> (a && b) || (a && c) == a && (b || c) }};
+
+prove_print (offline_rocq "test_offline_rocq3") {{ \(x:[16]) (y:[16]) (z:[16]) -> (x + y) + z == x + (y + z) }};
+
+prove_print (offline_rocq "test_offline_rocq4") {{ \(b:Bit) (x:[8]) (y:[8]) -> (if b then x else y) == (if ~b then y else x) }};
+
+prove_print (offline_rocq "test_offline_rocq5") {{ \(x:[8]) (y:[8]) -> [x, y] == reverse [y, x] }};
+
+prove_print (offline_rocq "test_offline_rocq6") {{ \(a:Bit) (b:Bit) (c:Bit) -> (a ==> b) && (b ==> c) ==> (a ==> c) }};

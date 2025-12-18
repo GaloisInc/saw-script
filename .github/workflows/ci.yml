@@ -193,7 +193,7 @@ jobs:
             saw-core-tests
             cryptol-saw-core-tests
             crux-mir-comp-tests
-            saw-core-coq-tests
+            saw-core-rocq-tests
           dest: dist-tests
 
       # In the next 2 steps, we upload to different names depending on whether
@@ -481,7 +481,7 @@ jobs:
           publish_dir: gh-pages
           keep_files: true
 
-  saw-core-coq-tests:
+  saw-core-rocq-tests:
     needs: [build]
     strategy:
       fail-fast: false
@@ -521,16 +521,16 @@ jobs:
 
       # Install coq-bits from source. FIXME: replace with compatible
       # opam-released version when available.
-      - working-directory: saw-core-coq/coq
+      - working-directory: saw-core-rocq/rocq
         run: |
           opam install -y coq=9.1.0 # coq-* packages include compatibility shims (e.g., coq_makefile).
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
 
-      # FIXME: the following steps generate Coq libraries for the SAW core to
-      # Coq translator and builds them; if we do other Coq tests, these steps
-      # should become their own build artifact, to avoid re-compiling the Coq
+      # FIXME: the following steps generate Rocq libraries for the SAWCore to
+      # Rocq translator and builds them; if we do other Rocq tests, these steps
+      # should become their own build artifact, to avoid re-compiling the Rocq
       # libraries
-      - working-directory: saw-core-coq/coq
+      - working-directory: saw-core-rocq/rocq
         shell: bash
         run: opam exec -- make -j
 
@@ -1083,7 +1083,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - build
-      - saw-core-coq-tests
+      - saw-core-rocq-tests
       - crux-mir-comp-tests
       - saw-remote-api-tests
       - cabal-test

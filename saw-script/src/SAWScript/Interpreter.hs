@@ -2367,27 +2367,27 @@ do_write_verilog :: SharedContext -> Text -> Term -> IO ()
 do_write_verilog sc f t =
   writeVerilog sc (Text.unpack f) t
 
-do_write_coq_term :: Text -> [(Text, Text)] -> [Text] -> Text -> Term -> TopLevel ()
-do_write_coq_term name notations skips path t =
-  writeCoqTerm name notations skips (Text.unpack path) t
+do_write_rocq_term :: Text -> [(Text, Text)] -> [Text] -> Text -> Term -> TopLevel ()
+do_write_rocq_term name notations skips path t =
+  writeRocqTerm name notations skips (Text.unpack path) t
 
-do_write_coq_cryptol_module :: Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
-do_write_coq_cryptol_module infile outfile notations skips =
-  writeCoqCryptolModule (Text.unpack infile) (Text.unpack outfile) notations skips
+do_write_rocq_cryptol_module :: Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
+do_write_rocq_cryptol_module infile outfile notations skips =
+  writeRocqCryptolModule (Text.unpack infile) (Text.unpack outfile) notations skips
 
-do_write_coq_sawcore_prelude :: Text -> [(Text, Text)] -> [Text] -> IO ()
-do_write_coq_sawcore_prelude outfile notations skips =
-  writeCoqSAWCorePrelude (Text.unpack outfile) notations skips
+do_write_rocq_sawcore_prelude :: Text -> [(Text, Text)] -> [Text] -> IO ()
+do_write_rocq_sawcore_prelude outfile notations skips =
+  writeRocqSAWCorePrelude (Text.unpack outfile) notations skips
 
-do_write_coq_cryptol_primitives_for_sawcore :: Text -> [(Text, Text)] -> [Text] -> IO ()
-do_write_coq_cryptol_primitives_for_sawcore cryfile notations skips =
+do_write_rocq_cryptol_primitives_for_sawcore :: Text -> [(Text, Text)] -> [Text] -> IO ()
+do_write_rocq_cryptol_primitives_for_sawcore cryfile notations skips =
   let cryfile' = Text.unpack cryfile
   in
-  writeCoqCryptolPrimitivesForSAWCore cryfile' notations skips
+  writeRocqCryptolPrimitivesForSAWCore cryfile' notations skips
 
-do_offline_coq :: Text -> ProofScript ()
-do_offline_coq f =
-  offline_coq (Text.unpack f)
+do_offline_rocq :: Text -> ProofScript ()
+do_offline_rocq f =
+  offline_rocq (Text.unpack f)
 
 do_auto_match :: Text -> Text -> TopLevel ()
 do_auto_match f1 f2 =
@@ -4966,18 +4966,18 @@ primitives = Map.fromList $
     ]
 
     ------------------------------------------------------------
-    -- Rocq / Coq export
+    -- Rocq export
 
-  , prim "write_coq_term" ("String -> [(String, String)] -> [String] -> " <>
-                           "String -> Term -> TopLevel ()")
-    (pureVal do_write_coq_term)
+  , prim "write_rocq_term" ("String -> [(String, String)] -> [String] -> " <>
+                            "String -> Term -> TopLevel ()")
+    (pureVal do_write_rocq_term)
     Experimental
-    [ "Write out a representation of a term in Gallina syntax for Coq."
+    [ "Write out a representation of a term in Gallina syntax for Rocq."
     , " - The first argument is the name to use in a Definition."
     , " - The second argument is a list of pairs of notation"
     , "   substitutions: the operator on the left will be replaced with"
     , "   the identifier on the right, as we do not support notations"
-    , "   on the Coq side."
+    , "   on the Rocq side."
     , " - The third argument is a list of identifiers to skip"
     , "   translating."
     , " - The fourth argument is the name of the file to output into;"
@@ -4985,13 +4985,20 @@ primitives = Map.fromList $
     , " - The fifth argument is the term to export."
     ]
 
-  , prim "write_coq_cryptol_module" ("String -> String -> " <>
-                                     "[(String, String)] -> [String] -> " <>
-                                     "TopLevel ()")
-    (pureVal do_write_coq_cryptol_module)
+  , prim "write_coq_term" ("String -> [(String, String)] -> [String] -> " <>
+                           "String -> Term -> TopLevel ()")
+    (pureVal do_write_rocq_term)
+    WarnDeprecated
+    [ "Legacy alternative name for 'write_rocq_term'."
+    ]
+
+  , prim "write_rocq_cryptol_module" ("String -> String -> " <>
+                                      "[(String, String)] -> [String] -> " <>
+                                      "TopLevel ()")
+    (pureVal do_write_rocq_cryptol_module)
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax"
-    , "for Coq."
+    , "for Rocq."
     , " - The first argument is the file containing the module to"
     , "   export."
     , " - The second argument is the name of the file to output into;"
@@ -4999,49 +5006,77 @@ primitives = Map.fromList $
     , " - The third argument is a list of pairs of notation"
     , "   substitutions: the operator on the left will be replaced with"
     , "   the identifier on the right, as we do not support notations"
-    , "   on the Coq side."
+    , "   on the Rocq side."
     , " - The fourth argument is a list of identifiers to skip"
     , "   translating."
     ]
 
-  , prim "write_coq_sawcore_prelude" ("String -> [(String, String)] -> " <>
-                                      "[String] -> TopLevel ()")
-    (pureVal do_write_coq_sawcore_prelude)
+  , prim "write_coq_cryptol_module" ("String -> String -> " <>
+                                     "[(String, String)] -> [String] -> " <>
+                                     "TopLevel ()")
+    (pureVal do_write_rocq_cryptol_module)
+    WarnDeprecated
+    [ "Legacy alternative name for 'write_rocq_cryptol_module'."
+    ]
+
+  , prim "write_rocq_sawcore_prelude" ("String -> [(String, String)] -> " <>
+                                       "[String] -> TopLevel ()")
+    (pureVal do_write_rocq_sawcore_prelude)
     Experimental
     [ "Write out a representation of the SAWCore prelude in Gallina"
-    , "syntax for Coq."
+    , "syntax for Rocq."
     , " - The first argument is the name of the file to output into;"
     , "   use an empty string or \"-\" to output to standard output."
     , " - The second argument is a list of pairs of notation"
     , "   substitutions: the operator on the left will be replaced"
     , "   with the identifier on the right, as we do not support"
-    , "   notations on the Coq side."
+    , "   notations on the Rocq side."
     , " - The third argument is a list of identifiers to skip"
     , "   translating."
     ]
 
-  , prim "write_coq_cryptol_primitives_for_sawcore"
+  , prim "write_coq_sawcore_prelude" ("String -> [(String, String)] -> " <>
+                                      "[String] -> TopLevel ()")
+    (pureVal do_write_rocq_sawcore_prelude)
+    WarnDeprecated
+    [ "Legacy alternative name for 'write_rocq_sawcore_prelude'."
+    ]
+
+  , prim "write_rocq_cryptol_primitives_for_sawcore"
     "String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal do_write_coq_cryptol_primitives_for_sawcore)
+    (pureVal do_write_rocq_cryptol_primitives_for_sawcore)
     Experimental
     [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore"
-    , "in Gallina syntax for Coq."
+    , "in Gallina syntax for Rocq."
     , " - The first argument is the name of the output file for"
     , "   translating Cryptol.sawcore. Use an empty string or \"-\""
     , "   to output to standard output."
     , " - The second argument is a list of pairs of notation"
     , "   substitutions: the operator on the left will be replaced"
     , "   with the identifier on the right, as we do not support"
-    , "   notations on the Coq side."
+    , "   notations on the Rocq side."
     , " - The third argument is a list of identifiers to skip"
     , "   translating."
     ]
 
-  , prim "offline_coq" "String -> ProofScript ()"
-    (pureVal do_offline_coq)
+  , prim "write_coq_cryptol_primitives_for_sawcore"
+    "String -> [(String, String)] -> [String] -> TopLevel ()"
+    (pureVal do_write_rocq_cryptol_primitives_for_sawcore)
+    WarnDeprecated
+    [ "Legacy alternative name for 'write_rocq_cryptol_primitives_for_sawcore'."
+    ]
+
+  , prim "offline_rocq" "String -> ProofScript ()"
+    (pureVal do_offline_rocq)
     Experimental
     [ "Write out a representation of the current goal in Gallina syntax"
-    , "(for Coq). The argument is a prefix to use for file names."
+    , "(for Rocq). The argument is a prefix to use for file names."
+    ]
+
+  , prim "offline_coq" "String -> ProofScript ()"
+    (pureVal do_offline_rocq)
+    WarnDeprecated
+    [ "Legacy alternative name for 'offline_rocq'."
     ]
 
     ------------------------------------------------------------

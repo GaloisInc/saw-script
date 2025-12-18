@@ -1,4 +1,0 @@
-test_offline_coq*_prove0.v
-*.log
-*.rawlog
-*.log.diff

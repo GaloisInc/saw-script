@@ -71,10 +71,10 @@ compiler that `mir-json` supports.
 See the
 [mir-json installation instructions](https://github.com/GaloisInc/mir-json#installation-instructions).
 
-To work with saw-core-coq you'll need Coq (and OCaml); the recommended
+To work with saw-core-rocq you'll need Rocq (and OCaml); the recommended
 way to get them is via opam.
 We are currently using OCaml 4.x and not OCaml 5.x.
-Transition to OCaml 5 should be guided by upstream support in Coq.
+Transition to OCaml 5 should be guided by upstream support in Rocq.
 
 Finally, to run the full set of integration tests you will need a full
 set of solvers, which at some times and in some cases includes
@@ -274,7 +274,7 @@ The top-level repository directories are:
 * `saw-core-aig` - A library for translating SAWCore to And-Inverter
   Graphs.
 
-* `saw-core-coq` - A library for translating SAWCore to Coq's Gallina
+* `saw-core-rocq` - A library for translating SAWCore to Rocq's Gallina
   language.
 
 * `saw-core-sbv` - A library for translating SAWCore predicates to SMT

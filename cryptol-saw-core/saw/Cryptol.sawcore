@@ -241,7 +241,7 @@ seqInhabited =
     (\ (n:Nat) -> \ (a:sort 0) -> \ (x:a) -> gen n a (\ (i:Nat) -> x))
     (\ (a:sort 0) -> \ (x:a) -> MkStream a (\ (i:Nat) -> x));
 
-injectCode "Coq"
+injectCode "Rocq"
   "#[global] Instance Inhabited_seq (n:Num) (a:Type) (Ha:Inhabited a) : Inhabited (seq n a) := MkInhabited (seq n a) (seqInhabited n a inhabitant).";
 
 --------------------------------------------------------------------------------

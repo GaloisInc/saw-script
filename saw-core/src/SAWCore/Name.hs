@@ -133,7 +133,7 @@ instance Read Ident where
 mkIdent :: ModuleName -> Text -> Ident
 mkIdent m s = Ident m s
 
--- | Make a \"coq-safe\" identifier from a string that might contain
+-- | Make a \"rocq-safe\" identifier from a string that might contain
 -- non-identifier characters, where we use the SAW core notion of identifier
 -- characters as letters, digits, underscore and primes. Any disallowed
 -- character is mapped to the string @__xNN@, where @NN@ is the hexadecimal code

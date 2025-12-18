@@ -1,0 +1,71 @@
+// Test: Sequence operations.
+enable_experimental;
+
+let t1 = {{ [1, 2, 3, 255] : [4][8] }};
+write_rocq_term "TestSeq" [] [] "" t1;
+
+let t2 = {{ [255] : [1][8] }};
+write_rocq_term "TestSeq_Single" [] [] "" t2;
+
+let t3 = {{ [] : [0][8] }};
+write_rocq_term "TestSeq_Empty" [] [] "" t3;
+
+let t4 = {{ [1, 2, 3, 4, 5, 6, 7, 8] : [8][16] }};
+write_rocq_term "TestSeq_Eight" [] [] "" t4;
+
+let t5 = {{ take`{3} ([1, 2, 3, 4, 5] : [5][8]) }};
+write_rocq_term "TestSeq_Take3" [] [] "" t5;
+
+let t6 = {{ take`{5} ([1, 2, 3, 4, 5] : [5][8]) }};
+write_rocq_term "TestSeq_TakeAll" [] [] "" t6;
+
+let t7 = {{ take`{0} ([1, 2, 3] : [3][8]) }};
+write_rocq_term "TestSeq_TakeZero" [] [] "" t7;
+
+let t8 = {{ drop`{2} ([1, 2, 3, 4, 5] : [5][8]) }};
+write_rocq_term "TestSeq_Drop" [] [] "" t8;
+
+let t9 = {{ drop`{3} ([1, 2, 3] : [3][8]) }};
+write_rocq_term "TestSeq_DropAll" [] [] "" t9;
+
+let t10 = {{ drop`{0} ([1, 2, 3] : [3][8]) }};
+write_rocq_term "TestSeq_DropZero" [] [] "" t10;
+
+let t11 = {{ take`{2} (drop`{1} ([1, 2, 3, 4] : [4][8])) }};
+write_rocq_term "TestSeq_TakeDrop" [] [] "" t11;
+
+let t12 = {{ update ([1, 2, 3, 4] : [4][8]) 2 99 }};
+write_rocq_term "TestSeq_Update" [] [] "" t12;
+
+let t13 = {{ update ([1, 2, 3, 4] : [4][8]) 0 99 }};
+write_rocq_term "TestSeq_UpdateFirst" [] [] "" t13;
+
+let t14 = {{ update ([1, 2, 3, 4] : [4][8]) 3 99 }};
+write_rocq_term "TestSeq_UpdateLast" [] [] "" t14;
+
+let t15 = {{ update (update ([1, 2, 3, 4] : [4][8]) 0 10) 1 20 }};
+write_rocq_term "TestSeq_UpdateMult" [] [] "" t15;
+
+let t16 = {{ zip ([1, 2, 3] : [3][8]) ([4, 5, 6] : [3][8]) }};
+write_rocq_term "TestSeq_Zip" [] [] "" t16;
+
+let t17 = {{ map (\(x : [8]) -> x + 1) ([1, 2, 3] : [3][8]) }};
+write_rocq_term "TestSeq_Map" [] [] "" t17;
+
+let t18 = {{ foldl (+) (0 : [16]) ([1, 2, 3, 4] : [4][16]) }};
+write_rocq_term "TestSeq_Fold" [] [] "" t18;
+
+let t19 = {{ [1, 2] # [3, 4] : [4][8] }};
+write_rocq_term "TestSeq_Concat" [] [] "" t19;
+
+let t20 = {{ [ x + 1 | x <- [1, 2, 3, 4] ] : [4][8] }};
+write_rocq_term "TestSeq_Comprehension" [] [] "" t20;
+
+let t21 = {{ reverse ([1, 2, 3, 4] : [4][8]) }};
+write_rocq_term "TestSeq_Reverse" [] [] "" t21;
+
+let t22 = {{ transpose [[1, 2], [3, 4]] : [2][2][8] }};
+write_rocq_term "TestSeq_Transpose" [] [] "" t22;
+
+let t23 = {{ [1, 2, 3, 4] @ 2 : [8] }};
+write_rocq_term "TestSeq_Index" [] [] "" t23;

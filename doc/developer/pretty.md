@@ -405,7 +405,7 @@ The following will get you an adequate but not great starter:
   Otherwise, if (as is likely) the output is not everything one would
   wish, open an issue to track the technical debt and move on.
 
-- The Rocq AST prettyprinter in saw-core-coq's Language.Coq.Pretty is a
+- The Rocq AST prettyprinter in saw-core-rocq's Language.Rocq.Pretty is a
   decent place to crib from.
   Avoid cribbing from either the SAWCore or SAWScript prettyprinting
   logic until further notice; as of this writing both are in a pretty
