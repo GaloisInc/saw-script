@@ -1,0 +1,9 @@
+let {{
+f : [32] -> ([32], [32])
+f x = undefined
+
+g : [32] -> ([32], [32])
+g = f
+}};
+
+prove_print (w4_unint_bitwuzla ["f"]) {{ \x -> f x == g x }};
