@@ -16,7 +16,6 @@ lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
 llvm_array : Int -> LLVMType -> LLVMType
 llvm_pointer : LLVMType -> LLVMType
-mergesimpsets : Simpset -> Simpset -> Simpset
 mir_array : Int -> MIRType -> MIRType
 mir_mux_values : Term -> MIRValue -> MIRValue -> MIRValue
 mir_raw_ptr_const : MIRType -> MIRType
@@ -28,6 +27,7 @@ mir_slice_value : MIRValue -> MIRValue
 mir_str_slice_value : MIRValue -> MIRValue
 mir_vec : MIRModule -> MIRType -> MIRType
 rewrite : Simpset -> Term -> Term
+simpset_union : Simpset -> Simpset -> Simpset
 str_concat : String -> String -> String
 tail : {a} [a] -> [a]
 term_eval : Term -> Term

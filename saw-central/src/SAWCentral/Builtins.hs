@@ -1555,8 +1555,8 @@ addsimp_shallow thm ss =
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule (shallowRule rule) ss)
 
-mergesimpsets :: SV.SAWSimpset -> SV.SAWSimpset -> SV.SAWSimpset
-mergesimpsets ss1 ss2 = Net.merge ss1 ss2
+simpset_union :: SV.SAWSimpset -> SV.SAWSimpset -> SV.SAWSimpset
+simpset_union ss1 ss2 = Net.merge ss1 ss2
 
 -- TODO: remove this, it implicitly adds axioms
 addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset

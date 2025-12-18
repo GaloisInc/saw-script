@@ -221,7 +221,6 @@ llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMS
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
 load_aig : String -> TopLevel AIG
 mathsat : ProofScript ()
-mergesimpsets : Simpset -> Simpset -> Simpset
 mir_adt : MIRAdt -> MIRType
 mir_alloc : MIRType -> MIRSetup MIRValue
 mir_alloc_mut : MIRType -> MIRSetup MIRValue
@@ -369,6 +368,7 @@ show_cfg : CFG -> String
 show_term : Term -> String
 simplify : Simpset -> ProofScript ()
 simplify_local : [Int] -> Simpset -> ProofScript ()
+simpset_union : Simpset -> Simpset -> Simpset
 size_to_term : Type -> Term
 str_concat : String -> String -> String
 str_concats : [String] -> String
