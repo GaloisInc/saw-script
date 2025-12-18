@@ -10,51 +10,65 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.Cache
-  ( Cache
-  , newCache
-  , newCacheMap
-  , newCacheMap'
-  , newCacheIntMap
-  , newCacheIntMap'
-  , useCache
+  ( MapCache
+  , newMapCache
+  , useMapCache
+  , IntCache
+  , newIntCache
+  , useIntCache
   )
 where
 
-import           Control.Monad (liftM)
 import qualified Data.IntMap as IntMap
 import           Data.IntMap (IntMap)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Ref
-import           Prelude hiding (lookup)
 
-data Cache m k a = forall t. Cache (T m t) (k -> t -> Maybe a) (k -> a -> t -> t)
+-- | A @MapCache m k a@ is a mutable reference to a 'Map' with keys of
+-- type @k@ and values of type @a@, for use in monad @m@.
+newtype MapCache m k a = MapCache (T m (Map k a))
 
-useCache :: C m => Cache m k a -> k -> m a -> m a
-useCache (Cache ref lookup update) k action = do
-  result <- liftM (lookup k) (Data.Ref.read ref)
-  case result of
-    Just x -> return x
-    Nothing -> do
-      x <- action
-      modify ref (update k x)
-      return x
+-- | Create a new empty 'MapCache'.
+newMapCache :: (C m, Ord k) => m (MapCache m k a)
+newMapCache = MapCache <$> new Map.empty
 
-newCache :: (C m, Ord k) => m (Cache m k a)
-newCache = newCacheMap
+-- | Memoize a computation of type @k -> m a@ using a 'MapCache'.
+-- If the cache already contains an entry for the given key, return
+-- the value immediately without running the given monadic action.
+-- Otherwise run the monadic action, store the result in the cache,
+-- and also return the newly-computed value.
+useMapCache :: (C m, Ord k) => MapCache m k a -> k -> m a -> m a
+useMapCache (MapCache ref) k action =
+  do m <- Data.Ref.read ref
+     case Map.lookup k m of
+       Just x -> pure x
+       Nothing ->
+         do x <- action
+            modify ref (Map.insert k x)
+            pure x
 
-newCacheMap :: (C m, Ord k) => m (Cache m k a)
-newCacheMap = newCacheMap' Map.empty
+-- | An @IntCache m k a@ is a mutable reference to an 'IntMap' with
+-- keys of type 'Int' and values of type @a@, for use in monad @m@.
+-- @IntCache m a@ is a more efficient alternative to @MapCache m Int
+-- a@.
+newtype IntCache m a = IntCache (T m (IntMap a))
 
-newCacheMap' :: (C m, Ord k) => Map k a -> m (Cache m k a)
-newCacheMap' initialMap = do
-  ref <- new initialMap
-  return (Cache ref Map.lookup Map.insert)
+-- | Create a new empty 'IntCache'.
+newIntCache :: (C m) => m (IntCache m a)
+newIntCache = IntCache <$> new IntMap.empty
 
-newCacheIntMap :: (C m) => m (Cache m Int a)
-newCacheIntMap = newCacheIntMap' IntMap.empty
-
-newCacheIntMap' :: (C m) => IntMap a -> m (Cache m Int a)
-newCacheIntMap' initialMap = do
-  ref <- new initialMap
-  return (Cache ref IntMap.lookup IntMap.insert)
+-- | Memoize a computation of type @Int -> m a@ using an 'IntCache'.
+-- If the cache already contains an entry for the given key, return
+-- the value immediately without running the given monadic action.
+-- Otherwise run the monadic action, store the result in the cache,
+-- and also return the newly-computed value.
+useIntCache :: C m => IntCache m a -> Int -> m a -> m a
+useIntCache (IntCache ref) k action =
+  do m <- Data.Ref.read ref
+     case IntMap.lookup k m of
+       Just x -> pure x
+       Nothing ->
+         do x <- action
+            modify ref (IntMap.insert k x)
+            pure x

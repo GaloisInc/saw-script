@@ -38,11 +38,11 @@ cacheMapTestIO =
   testGroup "normal map IO tests"
   [
     testCase "String->Bool small test" $
-      cTestA newCacheMap [ ("hello", True), ("world", False) ]
+      cTestA newMapCache useMapCache [ ("hello", True), ("world", False) ]
   , testCase "String->String test" $
-      cTestA newCacheMap [ ("hello", "world"), ("world", "fair"), ("Goodbye", "!") ]
+      cTestA newMapCache useMapCache [ ("hello", "world"), ("world", "fair"), ("Goodbye", "!") ]
   , testCase "Int->Char test" $
-      cTestA newCacheMap [ (9 :: Int, 'n'), (3, 't'), (-427, 'f'), (0, 'z') ]
+      cTestA newMapCache useMapCache [ (9 :: Int, 'n'), (3, 't'), (-427, 'f'), (0, 'z') ]
   ]
 
 cacheMapTestST :: TestTree
@@ -50,11 +50,11 @@ cacheMapTestST =
   testGroup "normal map ST tests"
   [
     testCase "String->Bool small test" $
-      stToIO $ cTestA newCacheMap [ ("hello", True), ("world", False) ]
+      stToIO $ cTestA newMapCache useMapCache [ ("hello", True), ("world", False) ]
   , testCase "String->String test" $
-      stToIO $ cTestA newCacheMap [ ("hello", "world"), ("world", "fair"), ("Goodbye", "!") ]
+      stToIO $ cTestA newMapCache useMapCache [ ("hello", "world"), ("world", "fair"), ("Goodbye", "!") ]
   , testCase "Int->Char test" $
-      stToIO $ cTestA newCacheMap [ (9 :: Int, 'n'), (3, 't'), (-427, 'f'), (0, 'z') ]
+      stToIO $ cTestA newMapCache useMapCache [ (9 :: Int, 'n'), (3, 't'), (-427, 'f'), (0, 'z') ]
   ]
 
 -- | Tests that a normal cache map can be used that will memoize
@@ -64,11 +64,11 @@ intMapTestIO =
   testGroup "int map IO tests"
   [
     testCase "intmap Bool small test" $
-      cTestA newCacheIntMap [ (11, True), (0, False) ]
+      cTestA newIntCache useIntCache [ (11, True), (0, False) ]
   , testCase "intmap Int test" $
-      cTestA newCacheIntMap [ (1, 0 :: Int), (0, -5), (-5, 39) ]
+      cTestA newIntCache useIntCache [ (1, 0 :: Int), (0, -5), (-5, 39) ]
   , testCase "intmap String test" $
-      cTestA newCacheIntMap [ (1, "True"), (0, "not yet"), (-5, "negative"), (3248902, "big") ]
+      cTestA newIntCache useIntCache [ (1, "True"), (0, "not yet"), (-5, "negative"), (3248902, "big") ]
   ]
 
 
@@ -79,18 +79,18 @@ intMapTestST =
   testGroup "int map IO tests"
   [
     testCase "intmap Bool small test" $
-      stToIO $ cTestA newCacheIntMap [ (11, True), (0, False) ]
+      stToIO $ cTestA newIntCache useIntCache [ (11, True), (0, False) ]
   , testCase "intmap Int test" $
-      stToIO $ cTestA newCacheIntMap [ (1, 0 :: Int), (0, -5), (-5, 39) ]
+      stToIO $ cTestA newIntCache useIntCache [ (1, 0 :: Int), (0, -5), (-5, 39) ]
   , testCase "intmap String test" $
-      stToIO $ cTestA newCacheIntMap [ (1, "True"), (0, "not yet"), (-5, "negative"), (3248902, "big") ]
+      stToIO $ cTestA newIntCache useIntCache [ (1, "True"), (0, "not yet"), (-5, "negative"), (3248902, "big") ]
   ]
 
 
 -- Always pass at least 2 entries in the keyval array, keys and values should be independently unique
 cTestA :: (C m, Eq k, Eq v, Show k, Show v) =>
-          m (Cache m k v) -> NonEmpty (k,v) -> m ()
-cTestA mkCache keyvals = do
+          m c -> (c -> k -> m v -> m v) -> NonEmpty (k,v) -> m ()
+cTestA mkCache useCache keyvals = do
   c1 <- mkCache  -- will cache the keyvals
   c2 <- mkCache  -- will separately cache all keys equal to the same val (the first)
   let (k0, v0) = NE.head keyvals
