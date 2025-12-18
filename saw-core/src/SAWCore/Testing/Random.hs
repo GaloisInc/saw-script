@@ -4,7 +4,7 @@
 -- Module      :  SAWCore.Testing.Random
 -- Copyright   :  (c) 2013-2015 Galois, Inc.
 -- License     :  BSD3
--- Maintainer  :  jhendrix@galois.com, conathan@galois.com
+-- Maintainer  :  saw@galois.com
 -- Stability   :  experimental
 -- Portability :  portable
 --
