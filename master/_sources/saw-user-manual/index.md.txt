@@ -30,7 +30,7 @@ specification-based-verification
 bisimulation-prover
 transforming-term-values
 proofs-about-terms
-extraction-to-the-coq-theorem-prover
+extraction-to-the-rocq-theorem-prover
 formal-deprecation-process
 appendices/index
 ```
