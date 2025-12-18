@@ -4969,7 +4969,7 @@ primitives = Map.fromList $
     -- Rocq export
 
   , prim "write_rocq_term" ("String -> [(String, String)] -> [String] -> " <>
-                           "String -> Term -> TopLevel ()")
+                            "String -> Term -> TopLevel ()")
     (pureVal do_write_rocq_term)
     Experimental
     [ "Write out a representation of a term in Gallina syntax for Rocq."
@@ -4985,9 +4985,16 @@ primitives = Map.fromList $
     , " - The fifth argument is the term to export."
     ]
 
+  , prim "write_coq_term" ("String -> [(String, String)] -> [String] -> " <>
+                           "String -> Term -> TopLevel ()")
+    (pureVal do_write_rocq_term)
+    WarnDeprecated
+    [ "Legacy alternative name for 'write_rocq_term'."
+    ]
+
   , prim "write_rocq_cryptol_module" ("String -> String -> " <>
-                                     "[(String, String)] -> [String] -> " <>
-                                     "TopLevel ()")
+                                      "[(String, String)] -> [String] -> " <>
+                                      "TopLevel ()")
     (pureVal do_write_rocq_cryptol_module)
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax"
@@ -5004,8 +5011,16 @@ primitives = Map.fromList $
     , "   translating."
     ]
 
+  , prim "write_coq_cryptol_module" ("String -> String -> " <>
+                                     "[(String, String)] -> [String] -> " <>
+                                     "TopLevel ()")
+    (pureVal do_write_rocq_cryptol_module)
+    WarnDeprecated
+    [ "Legacy alternative name for 'write_rocq_module'."
+    ]
+
   , prim "write_rocq_sawcore_prelude" ("String -> [(String, String)] -> " <>
-                                      "[String] -> TopLevel ()")
+                                       "[String] -> TopLevel ()")
     (pureVal do_write_rocq_sawcore_prelude)
     Experimental
     [ "Write out a representation of the SAWCore prelude in Gallina"
@@ -5018,6 +5033,13 @@ primitives = Map.fromList $
     , "   notations on the Rocq side."
     , " - The third argument is a list of identifiers to skip"
     , "   translating."
+    ]
+
+  , prim "write_coq_sawcore_prelude" ("String -> [(String, String)] -> " <>
+                                      "[String] -> TopLevel ()")
+    (pureVal do_write_rocq_sawcore_prelude)
+    WarnDeprecated
+    [ "Legacy alternative name for 'write_rocq_sawcore_prelude'."
     ]
 
   , prim "write_rocq_cryptol_primitives_for_sawcore"
@@ -5037,11 +5059,24 @@ primitives = Map.fromList $
     , "   translating."
     ]
 
+  , prim "write_coq_cryptol_primitives_for_sawcore"
+    "String -> [(String, String)] -> [String] -> TopLevel ()"
+    (pureVal do_write_rocq_cryptol_primitives_for_sawcore)
+    WarnDeprecated
+    [ "Legacy alternative name for 'write_rocq_cryptol_primitives_for_sawcore'."
+    ]
+
   , prim "offline_rocq" "String -> ProofScript ()"
     (pureVal do_offline_rocq)
     Experimental
     [ "Write out a representation of the current goal in Gallina syntax"
     , "(for Rocq). The argument is a prefix to use for file names."
+    ]
+
+  , prim "offline_coq" "String -> ProofScript ()"
+    (pureVal do_offline_rocq)
+    WarnDeprecated
+    [ "Legacy alternative name for 'offline_rocq'."
     ]
 
     ------------------------------------------------------------
