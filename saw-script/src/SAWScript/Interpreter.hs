@@ -5016,7 +5016,7 @@ primitives = Map.fromList $
                                      "TopLevel ()")
     (pureVal do_write_rocq_cryptol_module)
     WarnDeprecated
-    [ "Legacy alternative name for 'write_rocq_module'."
+    [ "Legacy alternative name for 'write_rocq_cryptol_module'."
     ]
 
   , prim "write_rocq_sawcore_prelude" ("String -> [(String, String)] -> " <>
