@@ -1224,20 +1224,20 @@ span.spaces    { background: white }
 <span class="lineno"> 1205 </span>  Term -&gt;
 <span class="lineno"> 1206 </span>  SCM Bool
 <span class="lineno"> 1207 </span><span class="decl"><span class="istickedoff">scmConvertible unfoldConst tm1 tm2 =</span>
-<span class="lineno"> 1208 </span><span class="spaces">  </span><span class="istickedoff">do c &lt;- newCache</span>
+<span class="lineno"> 1208 </span><span class="spaces">  </span><span class="istickedoff">do c &lt;- newIntCache</span>
 <span class="lineno"> 1209 </span><span class="spaces">     </span><span class="istickedoff">go c IntMap.empty tm1 tm2</span>
 <span class="lineno"> 1210 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1211 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1212 </span><span class="spaces">    </span><span class="istickedoff">whnf :: Cache SCM TermIndex Term -&gt; Term -&gt; SCM (TermF Term)</span>
+<span class="lineno"> 1212 </span><span class="spaces">    </span><span class="istickedoff">whnf :: IntCache SCM Term -&gt; Term -&gt; SCM (TermF Term)</span>
 <span class="lineno"> 1213 </span><span class="spaces">    </span><span class="istickedoff">whnf c t@STApp{stAppIndex = idx} =</span>
-<span class="lineno"> 1214 </span><span class="spaces">      </span><span class="istickedoff">unwrapTermF &lt;$&gt; useCache c idx (scmWhnf t)</span>
+<span class="lineno"> 1214 </span><span class="spaces">      </span><span class="istickedoff">unwrapTermF &lt;$&gt; useIntCache c idx (scmWhnf t)</span>
 <span class="lineno"> 1215 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1216 </span><span class="spaces">    </span><span class="istickedoff">go :: Cache SCM TermIndex Term -&gt; IntMap VarIndex -&gt; Term -&gt; Term -&gt; SCM Bool</span>
+<span class="lineno"> 1216 </span><span class="spaces">    </span><span class="istickedoff">go :: IntCache SCM Term -&gt; IntMap VarIndex -&gt; Term -&gt; Term -&gt; SCM Bool</span>
 <span class="lineno"> 1217 </span><span class="spaces">    </span><span class="istickedoff">go _c vm (STApp{stAppIndex = idx1, stAppVarTypes = vt1}) (STApp{stAppIndex = idx2})</span>
 <span class="lineno"> 1218 </span><span class="spaces">      </span><span class="istickedoff">| IntMap.disjoint vt1 vm &amp;&amp; idx1 == idx2 = pure True   -- succeed early case</span>
 <span class="lineno"> 1219 </span><span class="spaces">    </span><span class="istickedoff">go c vm t1 t2 = join (goF c vm &lt;$&gt; whnf c t1 &lt;*&gt; whnf c t2)</span>
 <span class="lineno"> 1220 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1221 </span><span class="spaces">    </span><span class="istickedoff">goF :: Cache SCM TermIndex Term -&gt; IntMap VarIndex -&gt; TermF Term -&gt; TermF Term -&gt; SCM Bool</span>
+<span class="lineno"> 1221 </span><span class="spaces">    </span><span class="istickedoff">goF :: IntCache SCM Term -&gt; IntMap VarIndex -&gt; TermF Term -&gt; TermF Term -&gt; SCM Bool</span>
 <span class="lineno"> 1222 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1223 </span><span class="spaces">    </span><span class="istickedoff">goF _c _vm (Constant nx) (Constant ny) | nameIndex nx == nameIndex ny = pure True</span>
 <span class="lineno"> 1224 </span><span class="spaces">    </span><span class="istickedoff">goF c vm (Constant nx) y</span>
@@ -1339,9 +1339,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1320 </span><span class="decl"><span class="istickedoff">scmInstantiateBeta sub t0 =</span>
 <span class="lineno"> 1321 </span><span class="spaces">  </span><span class="istickedoff">do let domainVars = IntMap.keysSet sub</span>
 <span class="lineno"> 1322 </span><span class="spaces">     </span><span class="istickedoff">let rangeVars = foldMap freeVars sub</span>
-<span class="lineno"> 1323 </span><span class="spaces">     </span><span class="istickedoff">cache &lt;- newCacheIntMap</span>
+<span class="lineno"> 1323 </span><span class="spaces">     </span><span class="istickedoff">cache &lt;- newIntCache</span>
 <span class="lineno"> 1324 </span><span class="spaces">     </span><span class="istickedoff">let memo :: Term -&gt; SCM Term</span>
-<span class="lineno"> 1325 </span><span class="spaces">         </span><span class="istickedoff">memo t@STApp{stAppIndex = i} = useCache cache i (go t)</span>
+<span class="lineno"> 1325 </span><span class="spaces">         </span><span class="istickedoff">memo t@STApp{stAppIndex = i} = useIntCache cache i (go t)</span>
 <span class="lineno"> 1326 </span><span class="spaces">         </span><span class="istickedoff">go :: Term -&gt; SCM Term</span>
 <span class="lineno"> 1327 </span><span class="spaces">         </span><span class="istickedoff">go t</span>
 <span class="lineno"> 1328 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.disjoint domainVars (freeVars t) = pure t</span>
@@ -1713,9 +1713,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1694 </span><span class="decl"><span class="istickedoff">scmInstantiate vmap t0 =</span>
 <span class="lineno"> 1695 </span><span class="spaces">  </span><span class="istickedoff">do let domainVars = IntMap.keysSet vmap</span>
 <span class="lineno"> 1696 </span><span class="spaces">     </span><span class="istickedoff">let rangeVars = foldMap freeVars vmap</span>
-<span class="lineno"> 1697 </span><span class="spaces">     </span><span class="istickedoff">tcache &lt;- newCacheIntMap</span>
+<span class="lineno"> 1697 </span><span class="spaces">     </span><span class="istickedoff">tcache &lt;- newIntCache</span>
 <span class="lineno"> 1698 </span><span class="spaces">     </span><span class="istickedoff">let memo :: Term -&gt; SCM Term</span>
-<span class="lineno"> 1699 </span><span class="spaces">         </span><span class="istickedoff">memo t = useCache tcache (termIndex t) (go t)</span>
+<span class="lineno"> 1699 </span><span class="spaces">         </span><span class="istickedoff">memo t = useIntCache tcache (termIndex t) (go t)</span>
 <span class="lineno"> 1700 </span><span class="spaces">         </span><span class="istickedoff">go :: Term -&gt; SCM Term</span>
 <span class="lineno"> 1701 </span><span class="spaces">         </span><span class="istickedoff">go t</span>
 <span class="lineno"> 1702 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.disjoint domainVars (freeVars t) = pure t</span>

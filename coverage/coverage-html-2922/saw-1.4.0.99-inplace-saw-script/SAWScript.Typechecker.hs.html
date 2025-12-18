@@ -2062,90 +2062,93 @@ span.spaces    { background: white }
 <span class="lineno"> 2043 </span>-- Purely a validity check; there's no updates it can make to the
 <span class="lineno"> 2044 </span>-- schema that are of use to the caller, on the assumption that the
 <span class="lineno"> 2045 </span>-- caller doesn't want to do stuff with the schema before exiting on
-<span class="lineno"> 2046 </span>-- errors, which it doesn't. Thus, just return unit and not an updated
-<span class="lineno"> 2047 </span>-- schema.
+<span class="lineno"> 2046 </span>-- errors, which it doesn't. Thus, return the original schema and not
+<span class="lineno"> 2047 </span>-- one with the potentially updated type.
 <span class="lineno"> 2048 </span>--
 <span class="lineno"> 2049 </span>-- (Otherwise we'd need to rerun `generalize` to build a new schema,
 <span class="lineno"> 2050 </span>-- and that's a headache and not worthwhile given that the result
 <span class="lineno"> 2051 </span>-- isn't going to be used.)
 <span class="lineno"> 2052 </span>--
-<span class="lineno"> 2053 </span>-- This is called for the types of objects that may themselves not be
-<span class="lineno"> 2054 </span>-- visible, so rather than using the caller's set of visible lifecycle
-<span class="lineno"> 2055 </span>-- states, construct the set based on the lifecycle state of the
-<span class="lineno"> 2056 </span>-- declaration context. Deprecated objects can see equally or less
-<span class="lineno"> 2057 </span>-- deprecated types; experimental objects can see experimental types;
-<span class="lineno"> 2058 </span>-- everything can see current types.
-<span class="lineno"> 2059 </span>--
-<span class="lineno"> 2060 </span>checkSchema :: PrimitiveLifecycle -&gt; TyEnv -&gt; Schema -&gt; Result ()
-<span class="lineno"> 2061 </span><span class="decl"><span class="istickedoff">checkSchema contextLC tyenv schema = do</span>
-<span class="lineno"> 2062 </span><span class="spaces">  </span><span class="istickedoff">let check = do</span>
-<span class="lineno"> 2063 </span><span class="spaces">        </span><span class="istickedoff">let Forall tyvars ty = schema</span>
-<span class="lineno"> 2064 </span><span class="spaces">        </span><span class="istickedoff">-- Generate unification vars for all the forall-bindings</span>
-<span class="lineno"> 2065 </span><span class="spaces">        </span><span class="istickedoff">let generate (pos'a, a) = do</span>
-<span class="lineno"> 2066 </span><span class="spaces">              </span><span class="istickedoff">ty'a &lt;- getFreshTyVar <span class="nottickedoff">pos'a</span></span>
-<span class="lineno"> 2067 </span><span class="spaces">              </span><span class="istickedoff">return (a, (Current, ConcreteType ty'a))</span>
-<span class="lineno"> 2068 </span><span class="spaces">        </span><span class="istickedoff">substs &lt;- mapM generate tyvars</span>
-<span class="lineno"> 2069 </span><span class="spaces">        </span><span class="istickedoff">-- Substitute them into the type</span>
-<span class="lineno"> 2070 </span><span class="spaces">        </span><span class="istickedoff">let ty' = substituteTyVars' everythingAvailable (Map.fromList substs) ty</span>
-<span class="lineno"> 2071 </span><span class="spaces">        </span><span class="istickedoff">-- The only way checking can return an updated type is if</span>
-<span class="lineno"> 2072 </span><span class="spaces">        </span><span class="istickedoff">-- there's also an error, so discard the type</span>
-<span class="lineno"> 2073 </span><span class="spaces">        </span><span class="istickedoff">_ &lt;- checkType kindStar ty'</span>
-<span class="lineno"> 2074 </span><span class="spaces">        </span><span class="istickedoff">return ()</span>
-<span class="lineno"> 2075 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2076 </span><span class="spaces">  </span><span class="istickedoff">let avail = Set.fromList $ case contextLC of</span>
-<span class="lineno"> 2077 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; [Current]</span>
-<span class="lineno"> 2078 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; [Current, WarnDeprecated]</span>
-<span class="lineno"> 2079 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; [Current, WarnDeprecated, HideDeprecated]</span>
-<span class="lineno"> 2080 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; [Current, Experimental]</span>
-<span class="lineno"> 2081 </span><span class="spaces">  </span><span class="istickedoff">evalTIWithEnv avail <span class="nottickedoff">ScopedMap.empty</span> tyenv check</span></span>
-<span class="lineno"> 2082 </span>
-<span class="lineno"> 2083 </span>-- | Check a schema (type) pattern as used by :search. (This is an
-<span class="lineno"> 2084 </span>-- external interface.)
-<span class="lineno"> 2085 </span>--
-<span class="lineno"> 2086 </span>-- The first two arguments are the starting variable and typedef
-<span class="lineno"> 2087 </span>-- environments to use. The third argument is the pattern.
+<span class="lineno"> 2053 </span>-- Do however return the original schema and not unit to make sure
+<span class="lineno"> 2054 </span>-- the code actually gets evaluated.
+<span class="lineno"> 2055 </span>--
+<span class="lineno"> 2056 </span>-- This is called for the types of objects that may themselves not be
+<span class="lineno"> 2057 </span>-- visible, so rather than using the caller's set of visible lifecycle
+<span class="lineno"> 2058 </span>-- states, construct the set based on the lifecycle state of the
+<span class="lineno"> 2059 </span>-- declaration context. Deprecated objects can see equally or less
+<span class="lineno"> 2060 </span>-- deprecated types; experimental objects can see experimental types;
+<span class="lineno"> 2061 </span>-- everything can see current types.
+<span class="lineno"> 2062 </span>--
+<span class="lineno"> 2063 </span>checkSchema :: PrimitiveLifecycle -&gt; TyEnv -&gt; Schema -&gt; Result Schema
+<span class="lineno"> 2064 </span><span class="decl"><span class="istickedoff">checkSchema contextLC tyenv schema = do</span>
+<span class="lineno"> 2065 </span><span class="spaces">  </span><span class="istickedoff">let check = do</span>
+<span class="lineno"> 2066 </span><span class="spaces">        </span><span class="istickedoff">let Forall tyvars ty = schema</span>
+<span class="lineno"> 2067 </span><span class="spaces">        </span><span class="istickedoff">-- Generate unification vars for all the forall-bindings</span>
+<span class="lineno"> 2068 </span><span class="spaces">        </span><span class="istickedoff">let generate (pos'a, a) = do</span>
+<span class="lineno"> 2069 </span><span class="spaces">              </span><span class="istickedoff">ty'a &lt;- getFreshTyVar <span class="nottickedoff">pos'a</span></span>
+<span class="lineno"> 2070 </span><span class="spaces">              </span><span class="istickedoff">return (a, (Current, ConcreteType ty'a))</span>
+<span class="lineno"> 2071 </span><span class="spaces">        </span><span class="istickedoff">substs &lt;- mapM generate tyvars</span>
+<span class="lineno"> 2072 </span><span class="spaces">        </span><span class="istickedoff">-- Substitute them into the type</span>
+<span class="lineno"> 2073 </span><span class="spaces">        </span><span class="istickedoff">let ty' = substituteTyVars' everythingAvailable (Map.fromList substs) ty</span>
+<span class="lineno"> 2074 </span><span class="spaces">        </span><span class="istickedoff">-- The only way checking can return an updated type is if</span>
+<span class="lineno"> 2075 </span><span class="spaces">        </span><span class="istickedoff">-- there's also an error, so discard the type</span>
+<span class="lineno"> 2076 </span><span class="spaces">        </span><span class="istickedoff">_ &lt;- checkType kindStar ty'</span>
+<span class="lineno"> 2077 </span><span class="spaces">        </span><span class="istickedoff">return schema</span>
+<span class="lineno"> 2078 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2079 </span><span class="spaces">  </span><span class="istickedoff">let avail = Set.fromList $ case contextLC of</span>
+<span class="lineno"> 2080 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; [Current]</span>
+<span class="lineno"> 2081 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; [Current, WarnDeprecated]</span>
+<span class="lineno"> 2082 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; [Current, WarnDeprecated, HideDeprecated]</span>
+<span class="lineno"> 2083 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; [Current, Experimental]</span>
+<span class="lineno"> 2084 </span><span class="spaces">  </span><span class="istickedoff">evalTIWithEnv avail <span class="nottickedoff">ScopedMap.empty</span> tyenv check</span></span>
+<span class="lineno"> 2085 </span>
+<span class="lineno"> 2086 </span>-- | Check a schema (type) pattern as used by :search. (This is an
+<span class="lineno"> 2087 </span>-- external interface.)
 <span class="lineno"> 2088 </span>--
-<span class="lineno"> 2089 </span>-- Returns a possibly updated pattern.
-<span class="lineno"> 2090 </span>--
-<span class="lineno"> 2091 </span>checkSchemaPattern :: Set PrimitiveLifecycle -&gt; VarEnv -&gt; TyEnv -&gt; SchemaPattern -&gt; Result SchemaPattern
-<span class="lineno"> 2092 </span><span class="decl"><span class="istickedoff">checkSchemaPattern _avail _env _tenv pat =</span>
-<span class="lineno"> 2093 </span><span class="spaces">    </span><span class="istickedoff">-- For the time being, do nothing -- we specifically don't want it</span>
-<span class="lineno"> 2094 </span><span class="spaces">    </span><span class="istickedoff">-- to reject unbound/free type variables (see Search.hs for a</span>
-<span class="lineno"> 2095 </span><span class="spaces">    </span><span class="istickedoff">-- discussion of why) or underapplied type constructors, so the</span>
-<span class="lineno"> 2096 </span><span class="spaces">    </span><span class="istickedoff">-- only check in checkType that makes sense to apply is the one</span>
-<span class="lineno"> 2097 </span><span class="spaces">    </span><span class="istickedoff">-- for _overapplied_ type constructors, and that is (a) not</span>
-<span class="lineno"> 2098 </span><span class="spaces">    </span><span class="istickedoff">-- critical (an overapplied type constructor will never match</span>
-<span class="lineno"> 2099 </span><span class="spaces">    </span><span class="istickedoff">-- anything valid) and (b) as noted in checkType not currently</span>
-<span class="lineno"> 2100 </span><span class="spaces">    </span><span class="istickedoff">-- actually reasonable because of limitations in the concrete</span>
-<span class="lineno"> 2101 </span><span class="spaces">    </span><span class="istickedoff">-- syntax. Point (b) will probably change eventually, so we want</span>
-<span class="lineno"> 2102 </span><span class="spaces">    </span><span class="istickedoff">-- to keep this hook and keep knowledge of its internals private</span>
-<span class="lineno"> 2103 </span><span class="spaces">    </span><span class="istickedoff">-- here even though for now it's a nop.</span>
-<span class="lineno"> 2104 </span><span class="spaces">    </span><span class="istickedoff">(Right pat, [])</span></span>
-<span class="lineno"> 2105 </span>
-<span class="lineno"> 2106 </span>
-<span class="lineno"> 2107 </span>{-
-<span class="lineno"> 2108 </span>Note [-Wincomplete-uni-patterns and irrefutable patterns]
-<span class="lineno"> 2109 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-<span class="lineno"> 2110 </span>Various parts of SAW use irrefutable patterns in functions that assume that
-<span class="lineno"> 2111 </span>their arguments have particular shapes. For example, inferDecl in this module
-<span class="lineno"> 2112 </span>matches on ~[(e1,s)] with an irrefutable pattern because it assumes the
-<span class="lineno"> 2113 </span>invariant that the list will have exactly one element. This lets inferDecl be
-<span class="lineno"> 2114 </span>slightly lazier when evaluated.
-<span class="lineno"> 2115 </span>
-<span class="lineno"> 2116 </span>Unfortunately, this use of irrefutable patterns is at odds with the
-<span class="lineno"> 2117 </span>-Wincomplete-uni-patterns warning. At present, -Wincomplete-uni-patterns will
-<span class="lineno"> 2118 </span>produce a warning for any irrefutable pattern that does not cover all possible
-<span class="lineno"> 2119 </span>data constructors. While we could rewrite functions like `inferDecl` to
-<span class="lineno"> 2120 </span>explicitly provide a fall-through case, that would change its strictness
-<span class="lineno"> 2121 </span>properties. As a result, we simply disable -Wincomplete-uni-patterns warnings
-<span class="lineno"> 2122 </span>in each part of SAW that uses irrefutable patterns.
-<span class="lineno"> 2123 </span>
-<span class="lineno"> 2124 </span>Arguably, -Wincomplete-uni-patterns shouldn't be producing warnings for
-<span class="lineno"> 2125 </span>irrefutable patterns at all. GHC issue #14800
-<span class="lineno"> 2126 </span>(https://gitlab.haskell.org/ghc/ghc/-/issues/14800) proposes this idea.
-<span class="lineno"> 2127 </span>If that issue is fixed in the future, we may want to reconsider whether we want
-<span class="lineno"> 2128 </span>to disable -Wincomplete-uni-patterns.
-<span class="lineno"> 2129 </span>-}
+<span class="lineno"> 2089 </span>-- The first two arguments are the starting variable and typedef
+<span class="lineno"> 2090 </span>-- environments to use. The third argument is the pattern.
+<span class="lineno"> 2091 </span>--
+<span class="lineno"> 2092 </span>-- Returns a possibly updated pattern.
+<span class="lineno"> 2093 </span>--
+<span class="lineno"> 2094 </span>checkSchemaPattern :: Set PrimitiveLifecycle -&gt; VarEnv -&gt; TyEnv -&gt; SchemaPattern -&gt; Result SchemaPattern
+<span class="lineno"> 2095 </span><span class="decl"><span class="istickedoff">checkSchemaPattern _avail _env _tenv pat =</span>
+<span class="lineno"> 2096 </span><span class="spaces">    </span><span class="istickedoff">-- For the time being, do nothing -- we specifically don't want it</span>
+<span class="lineno"> 2097 </span><span class="spaces">    </span><span class="istickedoff">-- to reject unbound/free type variables (see Search.hs for a</span>
+<span class="lineno"> 2098 </span><span class="spaces">    </span><span class="istickedoff">-- discussion of why) or underapplied type constructors, so the</span>
+<span class="lineno"> 2099 </span><span class="spaces">    </span><span class="istickedoff">-- only check in checkType that makes sense to apply is the one</span>
+<span class="lineno"> 2100 </span><span class="spaces">    </span><span class="istickedoff">-- for _overapplied_ type constructors, and that is (a) not</span>
+<span class="lineno"> 2101 </span><span class="spaces">    </span><span class="istickedoff">-- critical (an overapplied type constructor will never match</span>
+<span class="lineno"> 2102 </span><span class="spaces">    </span><span class="istickedoff">-- anything valid) and (b) as noted in checkType not currently</span>
+<span class="lineno"> 2103 </span><span class="spaces">    </span><span class="istickedoff">-- actually reasonable because of limitations in the concrete</span>
+<span class="lineno"> 2104 </span><span class="spaces">    </span><span class="istickedoff">-- syntax. Point (b) will probably change eventually, so we want</span>
+<span class="lineno"> 2105 </span><span class="spaces">    </span><span class="istickedoff">-- to keep this hook and keep knowledge of its internals private</span>
+<span class="lineno"> 2106 </span><span class="spaces">    </span><span class="istickedoff">-- here even though for now it's a nop.</span>
+<span class="lineno"> 2107 </span><span class="spaces">    </span><span class="istickedoff">(Right pat, [])</span></span>
+<span class="lineno"> 2108 </span>
+<span class="lineno"> 2109 </span>
+<span class="lineno"> 2110 </span>{-
+<span class="lineno"> 2111 </span>Note [-Wincomplete-uni-patterns and irrefutable patterns]
+<span class="lineno"> 2112 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="lineno"> 2113 </span>Various parts of SAW use irrefutable patterns in functions that assume that
+<span class="lineno"> 2114 </span>their arguments have particular shapes. For example, inferDecl in this module
+<span class="lineno"> 2115 </span>matches on ~[(e1,s)] with an irrefutable pattern because it assumes the
+<span class="lineno"> 2116 </span>invariant that the list will have exactly one element. This lets inferDecl be
+<span class="lineno"> 2117 </span>slightly lazier when evaluated.
+<span class="lineno"> 2118 </span>
+<span class="lineno"> 2119 </span>Unfortunately, this use of irrefutable patterns is at odds with the
+<span class="lineno"> 2120 </span>-Wincomplete-uni-patterns warning. At present, -Wincomplete-uni-patterns will
+<span class="lineno"> 2121 </span>produce a warning for any irrefutable pattern that does not cover all possible
+<span class="lineno"> 2122 </span>data constructors. While we could rewrite functions like `inferDecl` to
+<span class="lineno"> 2123 </span>explicitly provide a fall-through case, that would change its strictness
+<span class="lineno"> 2124 </span>properties. As a result, we simply disable -Wincomplete-uni-patterns warnings
+<span class="lineno"> 2125 </span>in each part of SAW that uses irrefutable patterns.
+<span class="lineno"> 2126 </span>
+<span class="lineno"> 2127 </span>Arguably, -Wincomplete-uni-patterns shouldn't be producing warnings for
+<span class="lineno"> 2128 </span>irrefutable patterns at all. GHC issue #14800
+<span class="lineno"> 2129 </span>(https://gitlab.haskell.org/ghc/ghc/-/issues/14800) proposes this idea.
+<span class="lineno"> 2130 </span>If that issue is fixed in the future, we may want to reconsider whether we want
+<span class="lineno"> 2131 </span>to disable -Wincomplete-uni-patterns.
+<span class="lineno"> 2132 </span>-}
 
 </pre>
 </body>
