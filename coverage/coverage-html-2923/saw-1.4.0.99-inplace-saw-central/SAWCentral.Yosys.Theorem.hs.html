@@ -190,11 +190,11 @@ span.spaces    { background: white }
 <span class="lineno">  171 </span><span class="spaces">      </span><span class="istickedoff">isPreludeName _ = False</span>
 <span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">let unfold nm = SC.nameIndex nm /= tidx &amp;&amp; not (isPreludeName (SC.nameInfo nm))</span>
 <span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">unfolded &lt;- SC.scUnfoldConstants sc unfold t</span>
-<span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">cache &lt;- SC.newCache</span>
+<span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">cache &lt;- SC.newIntCache</span>
 <span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">let</span>
 <span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">go :: SC.Term -&gt; IO SC.Term</span>
 <span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">go s =</span>
-<span class="lineno">  178 </span><span class="spaces">      </span><span class="istickedoff">SC.useCache cache (SC.termIndex s) $</span>
+<span class="lineno">  178 </span><span class="spaces">      </span><span class="istickedoff">SC.useIntCache cache (SC.termIndex s) $</span>
 <span class="lineno">  179 </span><span class="spaces">      </span><span class="istickedoff">case SC.unwrapTermF s of</span>
 <span class="lineno">  180 </span><span class="spaces">        </span><span class="istickedoff">SC.Constant (SC.Name idx _)</span>
 <span class="lineno">  181 </span><span class="spaces">          </span><span class="istickedoff">| idx == tidx -&gt; theoremReplacement sc thm</span>
