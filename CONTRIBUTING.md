@@ -167,6 +167,32 @@ The procedure for this is:
 - Examine the diff to hie.yaml in case something broke
 - Commit hie.yaml with a commit message like "Regen hie.yaml"
 
+## GHCi
+
+As large as SAW is, it is possible to load it into GHCi.
+Be sure to build with `build.sh`, or at least `build.sh gitrev`, first.
+Just running `cabal repl` will not work because Cabal considers that
+ambiguous.
+To load the whole works (equivalent to the `saw` executable) run
+`cabal repl saw`.
+You can also load the individual sublibraries, the remote API server,
+etc.
+
+In order to use interactive tools like `intero`, you need to configure
+them with this target. You can configure `intero-mode` in Emacs to use
+the `saw` executable target by setting the variable `intero-targets`
+to the string `"saw"`.
+
+To make this setting persistent, you can use the following snippet:
+
+```elisp
+((haskell-mode
+  (intero-targets "saw")))
+```
+
+This can be placed in your `.emacs` file (where you might conditionalize
+it as needed) or in one or more `.dir-locals.el` about the tree.
+
 
 # Testing
 
