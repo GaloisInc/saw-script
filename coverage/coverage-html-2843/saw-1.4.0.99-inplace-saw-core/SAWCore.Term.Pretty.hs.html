@@ -438,11 +438,11 @@ span.spaces    { background: white }
 <span class="lineno">  419 </span>--   types and @=@ for values.
 <span class="lineno">  420 </span>prettyRecord :: Bool -&gt; [(FieldName, PPS.Doc)] -&gt; PPS.Doc
 <span class="lineno">  421 </span><span class="decl"><span class="istickedoff">prettyRecord type_p alist =</span>
-<span class="lineno">  422 </span><span class="spaces">  </span><span class="istickedoff">(if <span class="tickonlytrue">type_p</span> then (pretty '#' &lt;&gt;) else <span class="nottickedoff">id</span>) $</span>
+<span class="lineno">  422 </span><span class="spaces">  </span><span class="istickedoff">(if type_p then (pretty '#' &lt;&gt;) else id) $</span>
 <span class="lineno">  423 </span><span class="spaces">  </span><span class="istickedoff">encloseSep lbrace rbrace comma $ map ppField alist</span>
 <span class="lineno">  424 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  425 </span><span class="spaces">    </span><span class="istickedoff">ppField (fld, rhs) = group (nest 2 (vsep [pretty fld &lt;+&gt; op_str, rhs]))</span>
-<span class="lineno">  426 </span><span class="spaces">    </span><span class="istickedoff">op_str = if <span class="tickonlytrue">type_p</span> then &quot;:&quot; else <span class="nottickedoff">&quot;=&quot;</span></span></span>
+<span class="lineno">  426 </span><span class="spaces">    </span><span class="istickedoff">op_str = if type_p then &quot;:&quot; else &quot;=&quot;</span></span>
 <span class="lineno">  427 </span>
 <span class="lineno">  428 </span>-- | Pretty-print a projection / selector &quot;x.f&quot;
 <span class="lineno">  429 </span>prettyProj :: FieldName -&gt; PPS.Doc -&gt; PPS.Doc
@@ -495,7 +495,7 @@ span.spaces    { background: white }
 <span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">RecordType alist -&gt;</span>
 <span class="lineno">  477 </span><span class="spaces">      </span><span class="istickedoff">prettyRecord True &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; prettyTerm' <span class="nottickedoff">PrecTerm</span> t) alist</span>
 <span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">RecordValue alist -&gt;</span>
-<span class="lineno">  479 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettyRecord False &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; prettyTerm' PrecTerm t) alist</span></span>
+<span class="lineno">  479 </span><span class="spaces">      </span><span class="istickedoff">prettyRecord False &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; prettyTerm' <span class="nottickedoff">PrecTerm</span> t) alist</span>
 <span class="lineno">  480 </span><span class="spaces">    </span><span class="istickedoff">RecordProj e fld -&gt; <span class="nottickedoff">prettyProj fld &lt;$&gt; prettyTerm' PrecArg e</span></span>
 <span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">Sort s h -&gt; return (viaShow h &lt;&gt; viaShow s)</span>
 <span class="lineno">  482 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue (asBoolType -&gt; Just _) args</span>

@@ -29,54 +29,68 @@ span.spaces    { background: white }
 <span class="lineno">   10 </span>-}
 <span class="lineno">   11 </span>
 <span class="lineno">   12 </span>module SAWCore.Cache
-<span class="lineno">   13 </span>  ( Cache
-<span class="lineno">   14 </span>  , newCache
-<span class="lineno">   15 </span>  , newCacheMap
-<span class="lineno">   16 </span>  , newCacheMap'
-<span class="lineno">   17 </span>  , newCacheIntMap
-<span class="lineno">   18 </span>  , newCacheIntMap'
-<span class="lineno">   19 </span>  , useCache
-<span class="lineno">   20 </span>  )
-<span class="lineno">   21 </span>where
-<span class="lineno">   22 </span>
-<span class="lineno">   23 </span>import           Control.Monad (liftM)
-<span class="lineno">   24 </span>import qualified Data.IntMap as IntMap
-<span class="lineno">   25 </span>import           Data.IntMap (IntMap)
-<span class="lineno">   26 </span>import qualified Data.Map as Map
-<span class="lineno">   27 </span>import           Data.Map (Map)
-<span class="lineno">   28 </span>import           Data.Ref
-<span class="lineno">   29 </span>import           Prelude hiding (lookup)
-<span class="lineno">   30 </span>
-<span class="lineno">   31 </span>data Cache m k a = forall t. Cache (T m t) (k -&gt; t -&gt; Maybe a) (k -&gt; a -&gt; t -&gt; t)
-<span class="lineno">   32 </span>
-<span class="lineno">   33 </span>useCache :: C m =&gt; Cache m k a -&gt; k -&gt; m a -&gt; m a
-<span class="lineno">   34 </span><span class="decl"><span class="istickedoff">useCache (Cache ref lookup update) k action = do</span>
-<span class="lineno">   35 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- liftM (lookup k) (Data.Ref.read ref)</span>
-<span class="lineno">   36 </span><span class="spaces">  </span><span class="istickedoff">case result of</span>
-<span class="lineno">   37 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; return x</span>
-<span class="lineno">   38 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno">   39 </span><span class="spaces">      </span><span class="istickedoff">x &lt;- action</span>
-<span class="lineno">   40 </span><span class="spaces">      </span><span class="istickedoff">modify ref (update k x)</span>
-<span class="lineno">   41 </span><span class="spaces">      </span><span class="istickedoff">return x</span></span>
-<span class="lineno">   42 </span>
-<span class="lineno">   43 </span>newCache :: (C m, Ord k) =&gt; m (Cache m k a)
-<span class="lineno">   44 </span><span class="decl"><span class="istickedoff">newCache = newCacheMap</span></span>
-<span class="lineno">   45 </span>
-<span class="lineno">   46 </span>newCacheMap :: (C m, Ord k) =&gt; m (Cache m k a)
-<span class="lineno">   47 </span><span class="decl"><span class="istickedoff">newCacheMap = newCacheMap' Map.empty</span></span>
-<span class="lineno">   48 </span>
-<span class="lineno">   49 </span>newCacheMap' :: (C m, Ord k) =&gt; Map k a -&gt; m (Cache m k a)
-<span class="lineno">   50 </span><span class="decl"><span class="istickedoff">newCacheMap' initialMap = do</span>
-<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">ref &lt;- new initialMap</span>
-<span class="lineno">   52 </span><span class="spaces">  </span><span class="istickedoff">return (Cache ref Map.lookup Map.insert)</span></span>
-<span class="lineno">   53 </span>
-<span class="lineno">   54 </span>newCacheIntMap :: (C m) =&gt; m (Cache m Int a)
-<span class="lineno">   55 </span><span class="decl"><span class="istickedoff">newCacheIntMap = newCacheIntMap' IntMap.empty</span></span>
+<span class="lineno">   13 </span>  ( MapCache
+<span class="lineno">   14 </span>  , newMapCache
+<span class="lineno">   15 </span>  , useMapCache
+<span class="lineno">   16 </span>  , IntCache
+<span class="lineno">   17 </span>  , newIntCache
+<span class="lineno">   18 </span>  , useIntCache
+<span class="lineno">   19 </span>  )
+<span class="lineno">   20 </span>where
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import qualified Data.IntMap as IntMap
+<span class="lineno">   23 </span>import           Data.IntMap (IntMap)
+<span class="lineno">   24 </span>import qualified Data.Map as Map
+<span class="lineno">   25 </span>import           Data.Map (Map)
+<span class="lineno">   26 </span>import           Data.Ref
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>-- | A @MapCache m k a@ is a mutable reference to a 'Map' with keys of
+<span class="lineno">   29 </span>-- type @k@ and values of type @a@, for use in monad @m@.
+<span class="lineno">   30 </span>newtype MapCache m k a = MapCache (T m (Map k a))
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>-- | Create a new empty 'MapCache'.
+<span class="lineno">   33 </span>newMapCache :: (C m, Ord k) =&gt; m (MapCache m k a)
+<span class="lineno">   34 </span><span class="decl"><span class="nottickedoff">newMapCache = MapCache &lt;$&gt; new Map.empty</span></span>
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>-- | Memoize a computation of type @k -&gt; m a@ using a 'MapCache'.
+<span class="lineno">   37 </span>-- If the cache already contains an entry for the given key, return
+<span class="lineno">   38 </span>-- the value immediately without running the given monadic action.
+<span class="lineno">   39 </span>-- Otherwise run the monadic action, store the result in the cache,
+<span class="lineno">   40 </span>-- and also return the newly-computed value.
+<span class="lineno">   41 </span>useMapCache :: (C m, Ord k) =&gt; MapCache m k a -&gt; k -&gt; m a -&gt; m a
+<span class="lineno">   42 </span><span class="decl"><span class="nottickedoff">useMapCache (MapCache ref) k action =</span>
+<span class="lineno">   43 </span><span class="spaces">  </span><span class="nottickedoff">do m &lt;- Data.Ref.read ref</span>
+<span class="lineno">   44 </span><span class="spaces">     </span><span class="nottickedoff">case Map.lookup k m of</span>
+<span class="lineno">   45 </span><span class="spaces">       </span><span class="nottickedoff">Just x -&gt; pure x</span>
+<span class="lineno">   46 </span><span class="spaces">       </span><span class="nottickedoff">Nothing -&gt;</span>
+<span class="lineno">   47 </span><span class="spaces">         </span><span class="nottickedoff">do x &lt;- action</span>
+<span class="lineno">   48 </span><span class="spaces">            </span><span class="nottickedoff">modify ref (Map.insert k x)</span>
+<span class="lineno">   49 </span><span class="spaces">            </span><span class="nottickedoff">pure x</span></span>
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>-- | An @IntCache m k a@ is a mutable reference to an 'IntMap' with
+<span class="lineno">   52 </span>-- keys of type 'Int' and values of type @a@, for use in monad @m@.
+<span class="lineno">   53 </span>-- @IntCache m a@ is a more efficient alternative to @MapCache m Int
+<span class="lineno">   54 </span>-- a@.
+<span class="lineno">   55 </span>newtype IntCache m a = IntCache (T m (IntMap a))
 <span class="lineno">   56 </span>
-<span class="lineno">   57 </span>newCacheIntMap' :: (C m) =&gt; IntMap a -&gt; m (Cache m Int a)
-<span class="lineno">   58 </span><span class="decl"><span class="istickedoff">newCacheIntMap' initialMap = do</span>
-<span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff">ref &lt;- new initialMap</span>
-<span class="lineno">   60 </span><span class="spaces">  </span><span class="istickedoff">return (Cache ref IntMap.lookup IntMap.insert)</span></span>
+<span class="lineno">   57 </span>-- | Create a new empty 'IntCache'.
+<span class="lineno">   58 </span>newIntCache :: (C m) =&gt; m (IntCache m a)
+<span class="lineno">   59 </span><span class="decl"><span class="istickedoff">newIntCache = IntCache &lt;$&gt; new IntMap.empty</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>-- | Memoize a computation of type @Int -&gt; m a@ using an 'IntCache'.
+<span class="lineno">   62 </span>-- If the cache already contains an entry for the given key, return
+<span class="lineno">   63 </span>-- the value immediately without running the given monadic action.
+<span class="lineno">   64 </span>-- Otherwise run the monadic action, store the result in the cache,
+<span class="lineno">   65 </span>-- and also return the newly-computed value.
+<span class="lineno">   66 </span>useIntCache :: C m =&gt; IntCache m a -&gt; Int -&gt; m a -&gt; m a
+<span class="lineno">   67 </span><span class="decl"><span class="istickedoff">useIntCache (IntCache ref) k action =</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="istickedoff">do m &lt;- Data.Ref.read ref</span>
+<span class="lineno">   69 </span><span class="spaces">     </span><span class="istickedoff">case IntMap.lookup k m of</span>
+<span class="lineno">   70 </span><span class="spaces">       </span><span class="istickedoff">Just x -&gt; pure x</span>
+<span class="lineno">   71 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">   72 </span><span class="spaces">         </span><span class="istickedoff">do x &lt;- action</span>
+<span class="lineno">   73 </span><span class="spaces">            </span><span class="istickedoff">modify ref (IntMap.insert k x)</span>
+<span class="lineno">   74 </span><span class="spaces">            </span><span class="istickedoff">pure x</span></span>
 
 </pre>
 </body>

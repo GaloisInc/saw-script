@@ -335,15 +335,15 @@ span.spaces    { background: white }
 <span class="lineno">  316 </span>-- must have no constructors, and it will not be added to the
 <span class="lineno">  317 </span>-- declaration list until it is completed by 'completeDataType'.
 <span class="lineno">  318 </span>-- Return 'Left' in the case of a name clash, i.e., an existing
-<span class="lineno">  319 </span>-- binding for the same 'Ident' name.
-<span class="lineno">  320 </span>beginDataType :: DataType -&gt; ModuleMap -&gt; Either Ident ModuleMap
+<span class="lineno">  319 </span>-- binding for the same 'Name'.
+<span class="lineno">  320 </span>beginDataType :: DataType -&gt; ModuleMap -&gt; Either Name ModuleMap
 <span class="lineno">  321 </span><span class="decl"><span class="istickedoff">beginDataType dt =</span>
 <span class="lineno">  322 </span><span class="spaces">  </span><span class="istickedoff">insResolvedNameInMap (ResolvedDataType dt')</span>
 <span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">where dt' = dt { dtCtors = [] }</span></span>
 <span class="lineno">  324 </span>
 <span class="lineno">  325 </span>-- | Complete a datatype, by adding its constructors. Return 'Left' if
 <span class="lineno">  326 </span>-- there is a name clash with any constructor name.
-<span class="lineno">  327 </span>completeDataType :: Ident -&gt; [Ctor] -&gt; ModuleMap -&gt; Either Ident ModuleMap
+<span class="lineno">  327 </span>completeDataType :: Ident -&gt; [Ctor] -&gt; ModuleMap -&gt; Either Name ModuleMap
 <span class="lineno">  328 </span><span class="decl"><span class="istickedoff">completeDataType ident ctors mm0 =</span>
 <span class="lineno">  329 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">str = identBaseName ident</span> in</span>
 <span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">case resolveNameInMap mm0 ident of</span>
@@ -510,50 +510,51 @@ span.spaces    { background: white }
 <span class="lineno">  491 </span>-- | Insert a 'ResolvedName' into a 'ModuleMap', adding a mapping from
 <span class="lineno">  492 </span>-- the 'Ident' name of that resolved name to it. Return 'Left' in the
 <span class="lineno">  493 </span>-- case of a name clash, i.e., an existing binding for the same
-<span class="lineno">  494 </span>-- 'Ident' name.
-<span class="lineno">  495 </span>insResolvedNameInMap :: ResolvedName -&gt; ModuleMap -&gt; Either Ident ModuleMap
+<span class="lineno">  494 </span>-- 'Name'.
+<span class="lineno">  495 </span>insResolvedNameInMap :: ResolvedName -&gt; ModuleMap -&gt; Either Name ModuleMap
 <span class="lineno">  496 </span><span class="decl"><span class="istickedoff">insResolvedNameInMap r mm =</span>
 <span class="lineno">  497 </span><span class="spaces">  </span><span class="istickedoff">let mm' = insertResolvedName r mm in</span>
-<span class="lineno">  498 </span><span class="spaces">  </span><span class="istickedoff">case resolvedNameInfo r of</span>
-<span class="lineno">  499 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
-<span class="lineno">  500 </span><span class="spaces">      </span><span class="istickedoff">if <span class="tickonlyfalse">Map.member base (displayIndexes env)</span></span>
-<span class="lineno">  501 </span><span class="spaces">      </span><span class="istickedoff">then <span class="nottickedoff">Left ident</span></span>
-<span class="lineno">  502 </span><span class="spaces">      </span><span class="istickedoff">else Right $ mm' { mmNameEnv = Map.insert mname env' (mmNameEnv mm) }</span>
-<span class="lineno">  503 </span><span class="spaces">      </span><span class="istickedoff">where</span>
-<span class="lineno">  504 </span><span class="spaces">        </span><span class="istickedoff">vi = resolvedNameVarIndex r</span>
-<span class="lineno">  505 </span><span class="spaces">        </span><span class="istickedoff">mname = identModule ident</span>
-<span class="lineno">  506 </span><span class="spaces">        </span><span class="istickedoff">base = identBaseName ident</span>
-<span class="lineno">  507 </span><span class="spaces">        </span><span class="istickedoff">env = fromMaybe <span class="nottickedoff">emptyDisplayNameEnv</span> $ Map.lookup mname (mmNameEnv mm)</span>
-<span class="lineno">  508 </span><span class="spaces">        </span><span class="istickedoff">env' = extendDisplayNameEnv vi [base] env</span>
-<span class="lineno">  509 </span><span class="spaces">    </span><span class="istickedoff">ImportedName{} -&gt; Right mm'</span></span>
-<span class="lineno">  510 </span>
-<span class="lineno">  511 </span>insDeclInMap :: ModuleName -&gt; ModuleDecl -&gt; ModuleMap -&gt; ModuleMap
-<span class="lineno">  512 </span><span class="decl"><span class="istickedoff">insDeclInMap mname decl mm =</span>
-<span class="lineno">  513 </span><span class="spaces">  </span><span class="istickedoff">mm { mmRDecls = Map.alter (Just . (<span class="nottickedoff">decl</span> :) . <span class="nottickedoff">fromMaybe []</span>) mname (mmRDecls mm) }</span></span>
-<span class="lineno">  514 </span>
-<span class="lineno">  515 </span>-- | Insert a definition into a 'ModuleMap'.
-<span class="lineno">  516 </span>insDefInMap :: Def -&gt; ModuleMap -&gt; Either Ident ModuleMap
-<span class="lineno">  517 </span><span class="decl"><span class="istickedoff">insDefInMap d mm =</span>
-<span class="lineno">  518 </span><span class="spaces">  </span><span class="istickedoff">insResolvedNameInMap (ResolvedDef d) $</span>
-<span class="lineno">  519 </span><span class="spaces">  </span><span class="istickedoff">case nameInfo (defName d) of</span>
-<span class="lineno">  520 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier i -&gt;</span>
-<span class="lineno">  521 </span><span class="spaces">      </span><span class="istickedoff">insDeclInMap (identModule i) <span class="nottickedoff">(DefDecl d)</span> mm</span>
-<span class="lineno">  522 </span><span class="spaces">    </span><span class="istickedoff">ImportedName{} -&gt; mm</span></span>
-<span class="lineno">  523 </span>
-<span class="lineno">  524 </span>-- | Insert an injectCode declaration into a 'ModuleMap'.
-<span class="lineno">  525 </span>insInjectCodeInMap :: ModuleName -&gt; Text -&gt; Text -&gt; ModuleMap -&gt; ModuleMap
-<span class="lineno">  526 </span><span class="decl"><span class="istickedoff">insInjectCodeInMap mname ns txt = insDeclInMap mname <span class="nottickedoff">(InjectCodeDecl ns txt)</span></span></span>
-<span class="lineno">  527 </span>
-<span class="lineno">  528 </span>-- | @insImportInMap p m1 m2@ adds all the names from module @m1@ into
-<span class="lineno">  529 </span>-- module @m2@ in the name table of the 'ModuleMap'. The predicate @p@
-<span class="lineno">  530 </span>-- determines which names to import.
-<span class="lineno">  531 </span>insImportInMap :: (Text -&gt; Bool) -&gt; ModuleName -&gt; ModuleName -&gt; ModuleMap -&gt; ModuleMap
-<span class="lineno">  532 </span><span class="decl"><span class="istickedoff">insImportInMap p name1 name2 mm =</span>
-<span class="lineno">  533 </span><span class="spaces">  </span><span class="istickedoff">mm { mmNameEnv = Map.insert name2 env2' (mmNameEnv mm) }</span>
-<span class="lineno">  534 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  535 </span><span class="spaces">    </span><span class="istickedoff">env1 = fromMaybe <span class="nottickedoff">emptyDisplayNameEnv</span> $ Map.lookup name1 (mmNameEnv mm)</span>
-<span class="lineno">  536 </span><span class="spaces">    </span><span class="istickedoff">env2 = fromMaybe <span class="nottickedoff">emptyDisplayNameEnv</span> $ Map.lookup name2 (mmNameEnv mm)</span>
-<span class="lineno">  537 </span><span class="spaces">    </span><span class="istickedoff">env2' = mergeDisplayNameEnv (filterDisplayNameEnv p env1) env2</span></span>
+<span class="lineno">  498 </span><span class="spaces">  </span><span class="istickedoff">case lookupVarIndexInMap (resolvedNameVarIndex r) mm of</span>
+<span class="lineno">  499 </span><span class="spaces">    </span><span class="istickedoff">Just _ -&gt; <span class="nottickedoff">Left (resolvedNameName r)</span></span>
+<span class="lineno">  500 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  501 </span><span class="spaces">      </span><span class="istickedoff">case resolvedNameInfo r of</span>
+<span class="lineno">  502 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
+<span class="lineno">  503 </span><span class="spaces">          </span><span class="istickedoff">Right $ mm' { mmNameEnv = Map.insert mname env' (mmNameEnv mm) }</span>
+<span class="lineno">  504 </span><span class="spaces">          </span><span class="istickedoff">where</span>
+<span class="lineno">  505 </span><span class="spaces">            </span><span class="istickedoff">vi = resolvedNameVarIndex r</span>
+<span class="lineno">  506 </span><span class="spaces">            </span><span class="istickedoff">mname = identModule ident</span>
+<span class="lineno">  507 </span><span class="spaces">            </span><span class="istickedoff">base = identBaseName ident</span>
+<span class="lineno">  508 </span><span class="spaces">            </span><span class="istickedoff">env = fromMaybe <span class="nottickedoff">emptyDisplayNameEnv</span> $ Map.lookup mname (mmNameEnv mm)</span>
+<span class="lineno">  509 </span><span class="spaces">            </span><span class="istickedoff">env' = extendDisplayNameEnv vi [base] env</span>
+<span class="lineno">  510 </span><span class="spaces">        </span><span class="istickedoff">ImportedName{} -&gt; Right mm'</span></span>
+<span class="lineno">  511 </span>
+<span class="lineno">  512 </span>insDeclInMap :: ModuleName -&gt; ModuleDecl -&gt; ModuleMap -&gt; ModuleMap
+<span class="lineno">  513 </span><span class="decl"><span class="istickedoff">insDeclInMap mname decl mm =</span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">mm { mmRDecls = Map.alter (Just . (<span class="nottickedoff">decl</span> :) . <span class="nottickedoff">fromMaybe []</span>) mname (mmRDecls mm) }</span></span>
+<span class="lineno">  515 </span>
+<span class="lineno">  516 </span>-- | Insert a definition into a 'ModuleMap'.
+<span class="lineno">  517 </span>insDefInMap :: Def -&gt; ModuleMap -&gt; Either Name ModuleMap
+<span class="lineno">  518 </span><span class="decl"><span class="istickedoff">insDefInMap d mm =</span>
+<span class="lineno">  519 </span><span class="spaces">  </span><span class="istickedoff">insResolvedNameInMap (ResolvedDef d) $</span>
+<span class="lineno">  520 </span><span class="spaces">  </span><span class="istickedoff">case nameInfo (defName d) of</span>
+<span class="lineno">  521 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier i -&gt;</span>
+<span class="lineno">  522 </span><span class="spaces">      </span><span class="istickedoff">insDeclInMap (identModule i) <span class="nottickedoff">(DefDecl d)</span> mm</span>
+<span class="lineno">  523 </span><span class="spaces">    </span><span class="istickedoff">ImportedName{} -&gt; mm</span></span>
+<span class="lineno">  524 </span>
+<span class="lineno">  525 </span>-- | Insert an injectCode declaration into a 'ModuleMap'.
+<span class="lineno">  526 </span>insInjectCodeInMap :: ModuleName -&gt; Text -&gt; Text -&gt; ModuleMap -&gt; ModuleMap
+<span class="lineno">  527 </span><span class="decl"><span class="istickedoff">insInjectCodeInMap mname ns txt = insDeclInMap mname <span class="nottickedoff">(InjectCodeDecl ns txt)</span></span></span>
+<span class="lineno">  528 </span>
+<span class="lineno">  529 </span>-- | @insImportInMap p m1 m2@ adds all the names from module @m1@ into
+<span class="lineno">  530 </span>-- module @m2@ in the name table of the 'ModuleMap'. The predicate @p@
+<span class="lineno">  531 </span>-- determines which names to import.
+<span class="lineno">  532 </span>insImportInMap :: (Text -&gt; Bool) -&gt; ModuleName -&gt; ModuleName -&gt; ModuleMap -&gt; ModuleMap
+<span class="lineno">  533 </span><span class="decl"><span class="istickedoff">insImportInMap p name1 name2 mm =</span>
+<span class="lineno">  534 </span><span class="spaces">  </span><span class="istickedoff">mm { mmNameEnv = Map.insert name2 env2' (mmNameEnv mm) }</span>
+<span class="lineno">  535 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  536 </span><span class="spaces">    </span><span class="istickedoff">env1 = fromMaybe <span class="nottickedoff">emptyDisplayNameEnv</span> $ Map.lookup name1 (mmNameEnv mm)</span>
+<span class="lineno">  537 </span><span class="spaces">    </span><span class="istickedoff">env2 = fromMaybe <span class="nottickedoff">emptyDisplayNameEnv</span> $ Map.lookup name2 (mmNameEnv mm)</span>
+<span class="lineno">  538 </span><span class="spaces">    </span><span class="istickedoff">env2' = mergeDisplayNameEnv (filterDisplayNameEnv p env1) env2</span></span>
 
 </pre>
 </body>
