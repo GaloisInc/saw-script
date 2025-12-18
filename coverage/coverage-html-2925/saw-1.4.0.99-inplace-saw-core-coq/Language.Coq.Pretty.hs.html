@@ -1,0 +1,298 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>{-# LANGUAGE RecordWildCards #-}
+<span class="lineno">    3 </span>
+<span class="lineno">    4 </span>{- |
+<span class="lineno">    5 </span>Module      : Language.Coq.Pretty
+<span class="lineno">    6 </span>Copyright   : Galois, Inc. 2018
+<span class="lineno">    7 </span>License     : BSD3
+<span class="lineno">    8 </span>Maintainer  : atomb@galois.com
+<span class="lineno">    9 </span>Stability   : experimental
+<span class="lineno">   10 </span>Portability : portable
+<span class="lineno">   11 </span>-}
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>module Language.Coq.Pretty where
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>import Prettyprinter
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>import Language.Coq.AST
+<span class="lineno">   18 </span>import Data.Word
+<span class="lineno">   19 </span>import Numeric (showHex)
+<span class="lineno">   20 </span>import Prelude hiding ((&lt;$&gt;), (&lt;&gt;))
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>-- | Replace all occurrences of the double quote character @&quot;@ with the string
+<span class="lineno">   23 </span>-- @&quot;&quot;@, i.e., two copies of it, as this is how Coq escapes double quote
+<span class="lineno">   24 </span>-- characters.
+<span class="lineno">   25 </span>escapeStringLit :: String -&gt; String
+<span class="lineno">   26 </span><span class="decl"><span class="nottickedoff">escapeStringLit = concatMap (\c -&gt; if c == '&quot;' then &quot;\&quot;\&quot;&quot; else [c])</span></span>
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>text :: String -&gt; Doc ann
+<span class="lineno">   29 </span><span class="decl"><span class="nottickedoff">text = pretty</span></span>
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>string :: String -&gt; Doc ann
+<span class="lineno">   32 </span><span class="decl"><span class="nottickedoff">string = pretty</span></span>
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>integer :: Integer -&gt; Doc ann
+<span class="lineno">   35 </span><span class="decl"><span class="nottickedoff">integer = pretty</span></span>
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>-- FUTURE: Move these to SAWSupport.Pretty
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>-- | Like hsep, but behaves usefully for lists that might be empty:
+<span class="lineno">   40 </span>--   returns the empty doc like hsep for empty lists, but for
+<span class="lineno">   41 </span>--   non-empty lists prepends horizontal space. The result can then
+<span class="lineno">   42 </span>--   be inserted like this: x &lt;&gt; result &lt;+&gt; y, and will produce
+<span class="lineno">   43 </span>--   either &quot;x y&quot; or &quot;x result y&quot; but not &quot;x  y&quot;, which is what
+<span class="lineno">   44 </span>--   happens if you do x &lt;+&gt; hsep ... &lt;+&gt; y.
+<span class="lineno">   45 </span>--
+<span class="lineno">   46 </span>--   This baloney arises because d1 &lt;+&gt; emptyDoc &lt;+&gt; d2 prints two
+<span class="lineno">   47 </span>--   spaces instead of one, which I'd describe as a bug. If you
+<span class="lineno">   48 </span>--   _really_ want to accumulate multiple spaces by concatenating
+<span class="lineno">   49 </span>--   empty docs, which seems against the concept of prettyprinting
+<span class="lineno">   50 </span>--   layout anyway, there can be another way to do that, like the
+<span class="lineno">   51 </span>--   latex &quot;phantom&quot; object.
+<span class="lineno">   52 </span>hsep' :: [Doc ann] -&gt; Doc ann
+<span class="lineno">   53 </span><span class="decl"><span class="istickedoff">hsep' docs = case docs of</span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">emptyDoc</span></span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="istickedoff">_ : _ -&gt; emptyDoc &lt;+&gt; hsep docs</span></span>
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>-- This version glues the separator to the end of each element.
+<span class="lineno">   58 </span>tightSepList :: Doc ann -&gt; [Doc ann] -&gt; Doc ann
+<span class="lineno">   59 </span><span class="decl"><span class="nottickedoff">tightSepList _ [] = mempty</span>
+<span class="lineno">   60 </span><span class="spaces"></span><span class="nottickedoff">tightSepList _ [d] = d</span>
+<span class="lineno">   61 </span><span class="spaces"></span><span class="nottickedoff">tightSepList s (d:l) = d &lt;&gt; s &lt;+&gt; tightSepList s l</span></span>
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>-- This version issues space before the separator.
+<span class="lineno">   64 </span>looseSepList :: Doc ann -&gt; [Doc ann] -&gt; Doc ann
+<span class="lineno">   65 </span><span class="decl"><span class="nottickedoff">looseSepList _ [] = mempty</span>
+<span class="lineno">   66 </span><span class="spaces"></span><span class="nottickedoff">looseSepList _ [d] = d</span>
+<span class="lineno">   67 </span><span class="spaces"></span><span class="nottickedoff">looseSepList s (d:l) = d &lt;+&gt; s &lt;+&gt; looseSepList s l</span></span>
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>commaSepList, starSepList, semiSepList :: [Doc ann] -&gt; Doc ann
+<span class="lineno">   70 </span><span class="decl"><span class="nottickedoff">commaSepList = tightSepList comma</span></span>
+<span class="lineno">   71 </span><span class="decl"><span class="nottickedoff">starSepList = looseSepList &quot;*&quot;</span></span>
+<span class="lineno">   72 </span><span class="decl"><span class="nottickedoff">semiSepList = tightSepList semi</span></span>
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>period :: Doc ann
+<span class="lineno">   75 </span><span class="decl"><span class="istickedoff">period = &quot;.&quot;</span></span>
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>prettyIdent :: Ident -&gt; Doc ann
+<span class="lineno">   78 </span><span class="decl"><span class="istickedoff">prettyIdent (Ident s) = pretty s</span></span>
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>prettyNameType :: Ident -&gt; Type -&gt; Doc ann
+<span class="lineno">   81 </span><span class="decl"><span class="istickedoff">prettyNameType x ty = prettyIdent x &lt;+&gt; colon &lt;+&gt; prettyTerm PrecNone ty</span></span>
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>prettyBinder :: Binder -&gt; Doc ann
+<span class="lineno">   84 </span><span class="decl"><span class="istickedoff">prettyBinder b = case b of</span>
+<span class="lineno">   85 </span><span class="spaces">    </span><span class="istickedoff">Binder Explicit x Nothing   -&gt; <span class="nottickedoff">prettyIdent x</span></span>
+<span class="lineno">   86 </span><span class="spaces">    </span><span class="istickedoff">Binder Explicit x (Just ty) -&gt; parens $ prettyNameType x ty</span>
+<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">Binder Implicit x Nothing    -&gt; <span class="nottickedoff">braces $ prettyIdent x</span></span>
+<span class="lineno">   88 </span><span class="spaces">    </span><span class="istickedoff">Binder Implicit x (Just ty)  -&gt; <span class="nottickedoff">braces $ prettyNameType x ty</span></span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>prettyPiBinder :: PiBinder -&gt; Doc ann
+<span class="lineno">   91 </span><span class="decl"><span class="nottickedoff">prettyPiBinder b = case b of</span>
+<span class="lineno">   92 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder Explicit Nothing ty -&gt;</span>
+<span class="lineno">   93 </span><span class="spaces">        </span><span class="nottickedoff">prettyTerm PrecApp ty &lt;+&gt; &quot;-&gt;&quot;</span>
+<span class="lineno">   94 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder Explicit (Just x) ty -&gt;</span>
+<span class="lineno">   95 </span><span class="spaces">        </span><span class="nottickedoff">&quot;forall&quot; &lt;+&gt; parens (prettyNameType x ty) &lt;&gt; comma</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder Implicit Nothing ty -&gt;</span>
+<span class="lineno">   97 </span><span class="spaces">        </span><span class="nottickedoff">braces (prettyTerm PrecApp ty) &lt;+&gt; &quot;-&gt;&quot;</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="nottickedoff">PiBinder Implicit (Just x) ty -&gt;</span>
+<span class="lineno">   99 </span><span class="spaces">        </span><span class="nottickedoff">&quot;forall&quot; &lt;+&gt; braces (prettyNameType x ty) &lt;&gt; comma</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>prettyBinders :: [Binder] -&gt; Doc ann
+<span class="lineno">  102 </span><span class="decl"><span class="istickedoff">prettyBinders bs = hsep $ map <span class="nottickedoff">prettyBinder</span> bs</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>prettyMaybeTy :: Maybe Type -&gt; Doc ann
+<span class="lineno">  105 </span><span class="decl"><span class="istickedoff">prettyMaybeTy Nothing = mempty</span>
+<span class="lineno">  106 </span><span class="spaces"></span><span class="istickedoff">prettyMaybeTy (Just ty) = colon &lt;+&gt; prettyTerm <span class="nottickedoff">PrecNone</span> ty</span></span>
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>prettySort :: Sort -&gt; Doc ann
+<span class="lineno">  109 </span><span class="decl"><span class="nottickedoff">prettySort s = case s of</span>
+<span class="lineno">  110 </span><span class="spaces">    </span><span class="nottickedoff">Prop -&gt; &quot;Prop&quot;</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="nottickedoff">Set -&gt; &quot;Set&quot;</span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="nottickedoff">Type -&gt; &quot;Type&quot;</span></span>
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>prettyPiBinders :: [PiBinder] -&gt; Doc ann
+<span class="lineno">  115 </span><span class="decl"><span class="nottickedoff">prettyPiBinders bs = hsep $ map prettyPiBinder bs</span></span>
+<span class="lineno">  116 </span>
+<span class="lineno">  117 </span>data Prec
+<span class="lineno">  118 </span>  = PrecNone
+<span class="lineno">  119 </span>  | PrecLambda
+<span class="lineno">  120 </span>  | PrecApp
+<span class="lineno">  121 </span>  | PrecAtom
+<span class="lineno">  122 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>parensIf :: Bool -&gt; Doc ann -&gt; Doc ann
+<span class="lineno">  125 </span><span class="decl"><span class="istickedoff">parensIf p d = if p then parens d else d</span></span>
+<span class="lineno">  126 </span>
+<span class="lineno">  127 </span>prettyTerm :: Prec -&gt; Term -&gt; Doc ann
+<span class="lineno">  128 </span><span class="decl"><span class="istickedoff">prettyTerm p e =</span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">case e of</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">Lambda bs t -&gt;</span>
+<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let bs' = prettyBinders bs</span></span>
+<span class="lineno">  132 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">t' = prettyTerm PrecLambda t</span></span>
+<span class="lineno">  133 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) $ &quot;fun&quot; &lt;+&gt; bs' &lt;+&gt; &quot;=&gt;&quot; &lt;+&gt; t'</span></span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">Fix ident binders returnType body -&gt;</span>
+<span class="lineno">  136 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let ident' = prettyIdent ident</span></span>
+<span class="lineno">  137 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">binders' = prettyBinders binders</span></span>
+<span class="lineno">  138 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">returnType' = prettyTerm PrecNone returnType</span></span>
+<span class="lineno">  139 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">body' = prettyTerm PrecLambda body</span></span>
+<span class="lineno">  140 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  141 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span></span>
+<span class="lineno">  142 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;fix&quot; &lt;+&gt; ident' &lt;+&gt; binders' &lt;+&gt; &quot;:&quot; &lt;+&gt; returnType' &lt;+&gt; &quot;:=&quot; &lt;+&gt; body'</span></span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">Pi bs t -&gt;</span>
+<span class="lineno">  144 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let bs' = prettyPiBinders bs</span></span>
+<span class="lineno">  145 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">t' = prettyTerm PrecLambda t</span></span>
+<span class="lineno">  146 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  147 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) $ bs' &lt;+&gt; t'</span></span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">Let x bs mty t body -&gt;</span>
+<span class="lineno">  149 </span><span class="spaces">      </span><span class="istickedoff">let x' = prettyIdent x</span>
+<span class="lineno">  150 </span><span class="spaces">          </span><span class="istickedoff">bs' = prettyBinders bs</span>
+<span class="lineno">  151 </span><span class="spaces">          </span><span class="istickedoff">mty' = prettyMaybeTy mty</span>
+<span class="lineno">  152 </span><span class="spaces">          </span><span class="istickedoff">t' = prettyTerm PrecNone t</span>
+<span class="lineno">  153 </span><span class="spaces">          </span><span class="istickedoff">body' = prettyTerm PrecLambda body</span>
+<span class="lineno">  154 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  155 </span><span class="spaces">      </span><span class="istickedoff">parensIf (p &gt; PrecLambda) $ fillSep [</span>
+<span class="lineno">  156 </span><span class="spaces">          </span><span class="istickedoff">&quot;let&quot; &lt;+&gt; x' &lt;+&gt; bs' &lt;+&gt; mty' &lt;+&gt; &quot;:=&quot; &lt;+&gt; t' &lt;+&gt; &quot;in&quot;,</span>
+<span class="lineno">  157 </span><span class="spaces">          </span><span class="istickedoff">body'</span>
+<span class="lineno">  158 </span><span class="spaces">      </span><span class="istickedoff">]</span>
+<span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff">If c t f -&gt;</span>
+<span class="lineno">  160 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let c' = prettyTerm PrecNone c</span></span>
+<span class="lineno">  161 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">t' = prettyTerm PrecNone t</span></span>
+<span class="lineno">  162 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">f' = prettyTerm PrecLambda f</span></span>
+<span class="lineno">  163 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  164 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) $</span></span>
+<span class="lineno">  165 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;if&quot; &lt;+&gt; c' &lt;+&gt; &quot;then&quot; &lt;+&gt; t' &lt;+&gt; &quot;else&quot; &lt;+&gt; f'</span></span>
+<span class="lineno">  166 </span><span class="spaces">    </span><span class="istickedoff">App f [] -&gt;</span>
+<span class="lineno">  167 </span><span class="spaces">      </span><span class="istickedoff">prettyTerm <span class="nottickedoff">p</span> f</span>
+<span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">App f args -&gt;</span>
+<span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff">let f' = prettyTerm <span class="nottickedoff">PrecApp</span> f</span>
+<span class="lineno">  170 </span><span class="spaces">          </span><span class="istickedoff">args' = map (prettyTerm PrecAtom) args</span>
+<span class="lineno">  171 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  172 </span><span class="spaces">      </span><span class="istickedoff">parensIf (p &gt; PrecApp) $ hsep (f' : args')</span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">Sort s -&gt;</span>
+<span class="lineno">  174 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettySort s</span></span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">Var x -&gt;</span>
+<span class="lineno">  176 </span><span class="spaces">      </span><span class="istickedoff">prettyIdent x</span>
+<span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">ExplVar x -&gt;</span>
+<span class="lineno">  178 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let x' = prettyIdent x in</span></span>
+<span class="lineno">  179 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecApp) $ &quot;@&quot; &lt;&gt; x'</span></span>
+<span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff">Ascription tm tp -&gt;</span>
+<span class="lineno">  181 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let tm' = prettyTerm PrecApp tm</span></span>
+<span class="lineno">  182 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">tp' = prettyTerm PrecApp tp</span></span>
+<span class="lineno">  183 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  184 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) $ tm' &lt;+&gt; &quot;:&quot; &lt;+&gt; tp'</span></span>
+<span class="lineno">  185 </span><span class="spaces">    </span><span class="istickedoff">NatLit i -&gt;</span>
+<span class="lineno">  186 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if i &gt; 1000 then</span></span>
+<span class="lineno">  187 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- Explicitly convert from Z if an integer is too big</span></span>
+<span class="lineno">  188 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">parensIf (p &gt; PrecLambda) (&quot;Z.to_nat&quot; &lt;+&gt; integer i &lt;&gt; &quot;%Z&quot;)</span></span>
+<span class="lineno">  189 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">else</span></span>
+<span class="lineno">  190 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">integer i</span></span>
+<span class="lineno">  191 </span><span class="spaces">    </span><span class="istickedoff">ZLit i -&gt;</span>
+<span class="lineno">  192 </span><span class="spaces">      </span><span class="istickedoff">-- we use hex unless our integer is a positive or negative digit</span>
+<span class="lineno">  193 </span><span class="spaces">      </span><span class="istickedoff">-- XXX: this cannot possibly work as intended for negative values</span>
+<span class="lineno">  194 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if abs i &gt; 9 then</span></span>
+<span class="lineno">  195 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">let ui = toInteger (fromInteger i :: Word64)</span></span>
+<span class="lineno">  196 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ui' = showHex ui []</span></span>
+<span class="lineno">  197 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  198 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">text (&quot;0x&quot; ++ ui' ++ &quot;%Z&quot;)</span></span>
+<span class="lineno">  199 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">else if i &lt; 0 then</span></span>
+<span class="lineno">  200 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">text (&quot;(&quot; ++ show i ++ &quot;)%Z&quot;)</span></span>
+<span class="lineno">  201 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">else</span></span>
+<span class="lineno">  202 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">text (show i ++ &quot;%Z&quot;)</span></span>
+<span class="lineno">  203 </span><span class="spaces">    </span><span class="istickedoff">List ts -&gt;</span>
+<span class="lineno">  204 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let ts' = map (prettyTerm PrecNone) ts in</span></span>
+<span class="lineno">  205 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">brackets $ semiSepList ts'</span></span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff">StringLit s -&gt;</span>
+<span class="lineno">  207 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">dquotes (string $ escapeStringLit s)</span></span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">Scope term scope -&gt;</span>
+<span class="lineno">  209 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let term' = prettyTerm PrecAtom term</span></span>
+<span class="lineno">  210 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">scope' = text scope</span></span>
+<span class="lineno">  211 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  212 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">term' &lt;&gt; &quot;%&quot; &lt;&gt; scope'</span></span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff">Ltac s -&gt;</span>
+<span class="lineno">  214 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;ltac:&quot; &lt;&gt; parens (string s)</span></span></span>
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>prettyBasicDecl :: Doc ann -&gt; Ident -&gt; Type -&gt; Doc ann
+<span class="lineno">  217 </span><span class="decl"><span class="nottickedoff">prettyBasicDecl what nm ty =</span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="nottickedoff">let nm' = prettyIdent nm</span>
+<span class="lineno">  219 </span><span class="spaces">      </span><span class="nottickedoff">ty' = prettyTerm PrecNone ty</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="nottickedoff">in</span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="nottickedoff">nest 2 (what &lt;+&gt; nm' &lt;+&gt; &quot;:&quot; &lt;+&gt; ty' &lt;+&gt; period) &lt;&gt; hardline</span></span>
+<span class="lineno">  222 </span>
+<span class="lineno">  223 </span>prettyDecl :: Decl -&gt; Doc ann
+<span class="lineno">  224 </span><span class="decl"><span class="istickedoff">prettyDecl decl = case decl of</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">Axiom nm ty -&gt; <span class="nottickedoff">prettyBasicDecl &quot;Axiom&quot; nm ty</span></span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">Parameter nm ty -&gt; <span class="nottickedoff">prettyBasicDecl &quot;Parameter&quot; nm ty</span></span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">Variable nm ty -&gt; <span class="nottickedoff">prettyBasicDecl &quot;Variable&quot; nm ty</span></span>
+<span class="lineno">  228 </span><span class="spaces">  </span><span class="istickedoff">Comment s -&gt;</span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;(*&quot; &lt;+&gt; text s &lt;+&gt; &quot;*)&quot; &lt;&gt; hardline</span></span>
+<span class="lineno">  230 </span><span class="spaces">  </span><span class="istickedoff">Definition nm bs mty body -&gt;</span>
+<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">let nm' = prettyIdent nm</span>
+<span class="lineno">  232 </span><span class="spaces">        </span><span class="istickedoff">bs' = hsep' $ map prettyBinder bs</span>
+<span class="lineno">  233 </span><span class="spaces">        </span><span class="istickedoff">mty' = prettyMaybeTy mty</span>
+<span class="lineno">  234 </span><span class="spaces">        </span><span class="istickedoff">body' = prettyTerm PrecNone body</span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">nest 2 (</span>
+<span class="lineno">  237 </span><span class="spaces">      </span><span class="istickedoff">vsep [</span>
+<span class="lineno">  238 </span><span class="spaces">          </span><span class="istickedoff">&quot;Definition&quot; &lt;+&gt; nm' &lt;&gt; bs' &lt;+&gt; mty' &lt;+&gt; &quot;:=&quot;,</span>
+<span class="lineno">  239 </span><span class="spaces">          </span><span class="istickedoff">body' &lt;&gt; period</span>
+<span class="lineno">  240 </span><span class="spaces">      </span><span class="istickedoff">]</span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">) &lt;&gt; hardline</span>
+<span class="lineno">  242 </span><span class="spaces">  </span><span class="istickedoff">InductiveDecl ind -&gt;</span>
+<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">prettyInductive ind</span></span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="istickedoff">Section nm ds -&gt;</span>
+<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let nm' = prettyIdent nm</span></span>
+<span class="lineno">  246 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ds' = map (indent 2 . prettyDecl) ds</span></span>
+<span class="lineno">  247 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">header = &quot;Section&quot; &lt;+&gt; nm' &lt;+&gt; period</span></span>
+<span class="lineno">  248 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">footer = &quot;End&quot; &lt;+&gt; nm' &lt;+&gt; period</span></span>
+<span class="lineno">  249 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  250 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- XXX vsep issues soft newlines and there should be a hard newline</span></span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- after the head and after the foot. (Note that every other Decl</span></span>
+<span class="lineno">  252 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- always ends in a hard newline, so ds' is ok.)</span></span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- (XXX: Does `vsep` on top of `hardline` generate two lines?)</span></span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">vsep $ [header] ++ ds' ++ [footer]</span></span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="istickedoff">Snippet s -&gt;</span>
+<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">text s</span></span></span>
+<span class="lineno">  257 </span>
+<span class="lineno">  258 </span>prettyConstructor :: Constructor -&gt; Doc ann
+<span class="lineno">  259 </span><span class="decl"><span class="nottickedoff">prettyConstructor (Constructor {..}) =</span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="nottickedoff">let name' = prettyIdent constructorName</span>
+<span class="lineno">  261 </span><span class="spaces">      </span><span class="nottickedoff">ty' = prettyTerm PrecNone constructorType</span>
+<span class="lineno">  262 </span><span class="spaces">  </span><span class="nottickedoff">in</span>
+<span class="lineno">  263 </span><span class="spaces">  </span><span class="nottickedoff">nest 2 $ &quot;|&quot; &lt;+&gt; name' &lt;+&gt; &quot;:&quot; &lt;+&gt; ty'</span></span>
+<span class="lineno">  264 </span>
+<span class="lineno">  265 </span>prettyInductive :: Inductive -&gt; Doc ann
+<span class="lineno">  266 </span><span class="decl"><span class="nottickedoff">prettyInductive (Inductive {..}) =</span>
+<span class="lineno">  267 </span><span class="spaces">  </span><span class="nottickedoff">let name' = prettyIdent inductiveName</span>
+<span class="lineno">  268 </span><span class="spaces">      </span><span class="nottickedoff">params' = hsep' $ map prettyBinder inductiveParameters</span>
+<span class="lineno">  269 </span><span class="spaces">      </span><span class="nottickedoff">indices' = hsep' $ map prettyPiBinder inductiveIndices</span>
+<span class="lineno">  270 </span><span class="spaces">      </span><span class="nottickedoff">sort' = prettySort inductiveSort</span>
+<span class="lineno">  271 </span><span class="spaces">      </span><span class="nottickedoff">ctors' = map prettyConstructor inductiveConstructors</span>
+<span class="lineno">  272 </span><span class="spaces">      </span><span class="nottickedoff">header = &quot;Inductive&quot; &lt;+&gt; name' &lt;&gt; params' &lt;+&gt; &quot;:&quot; &lt;&gt; indices' &lt;+&gt; sort' &lt;+&gt; &quot;:=&quot;</span>
+<span class="lineno">  273 </span><span class="spaces">  </span><span class="nottickedoff">in</span>
+<span class="lineno">  274 </span><span class="spaces">  </span><span class="nottickedoff">vsep ([nest 2 header] ++ ctors' ++ [period]) &lt;&gt; hardline</span></span>
+<span class="lineno">  275 </span>
+
+</pre>
+</body>
+</html>
