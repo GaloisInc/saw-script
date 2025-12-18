@@ -16,9 +16,47 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.Simulator.Value
-       ( module SAWCore.Simulator.Value
-       , module SAWCore.Simulator.MonadLazy
-       ) where
+  ( Value(..)
+  , TValue(..)
+  , PiBody(..)
+  , VRecursor(..)
+  -- * Type families
+  , EvalM
+  , VBool
+  , VWord
+  , VInt
+  , VArray
+  , Extra
+  , WithM
+  -- * Type synonyms
+  , Thunk
+  , MValue
+  , MBool
+  , MWord
+  , MInt
+  , MArray
+  , VMonad
+  , VMonadLazy
+  -- * Value combinators
+  , vStrictFun
+  , vFunList
+  , vStrictFunList
+  , vTuple
+  , vTupleType
+  , valPairLeft
+  , valPairRight
+  , vRecord
+  , valRecordProj
+  , apply
+  , applyAll
+  , applyPiBody
+  -- * Recognizers
+  , asFiniteTypeValue
+  , asFirstOrderTypeValue
+  , suffixTValue
+  -- * Re-exports
+  , module SAWCore.Simulator.MonadLazy
+  ) where
 
 import Prelude hiding (mapM)
 
