@@ -5,6 +5,14 @@ License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
+
+This module is the low-level internal interface to the SAWCore 'Term'
+type, and exposes the data type implementation.
+
+Using this interface directly, it is possible to violate internal
+'Term' invariants and break the soundness of SAWCore type system; do
+so at your own risk!
+
 -}
 
 module SAWCore.Term.Raw
@@ -34,11 +42,19 @@ import SAWCore.Term.Functor
 
 type TermIndex = Int -- Word64
 
--- | For more information on the semantics of 'Term's, see the
--- [manual](https://saw.galois.com/manual.html). 'Term' and 'TermF' are split
--- into two structures to facilitate mutual structural recursion (sometimes
--- referred to as the ["knot-tying"](https://wiki.haskell.org/Tying_the_Knot)
--- pattern, sometimes referred to in terms of ["recursion
+-- | Dependently-typed SAWCore terms.
+-- 'Term's are represented as directed acyclic graphs: Every 'Term' is
+-- labeled with a unique 'TermIndex' to allow recognition of repeated
+-- subterms.
+-- Every 'Term' is also labeled with its type, as well as the types of
+-- all the free variables it contains.
+--
+-- For more information on the semantics of 'Term's, see the
+-- [manual](https://saw.galois.com/manual.html).
+-- 'Term' and 'TermF' are split into two structures to facilitate
+-- mutual structural recursion (sometimes referred to as the
+-- ["knot-tying"](https://wiki.haskell.org/Tying_the_Knot) pattern,
+-- sometimes referred to in terms of ["recursion
 -- schemes"](https://blog.sumtypeofway.com/posts/introduction-to-recursion-schemes.html))
 -- and term object reuse via hash-consing.
 data Term
@@ -160,12 +176,29 @@ alphaEquiv = term IntMap.empty
         Nothing -> False
         Just ftf3 -> Foldable.and ftf3
 
+-- | Inspect the form of a 'Term' as a 'TermF'.
 unwrapTermF :: Term -> TermF Term
-unwrapTermF STApp{stAppTermF = tf} = tf
+unwrapTermF STApp{ stAppTermF = tf } = tf
 
+-- | Return the unique 'TermIndex' of the given 'Term'.
+--
+-- We maintain the invariant that indexes are globally unique, so
+-- @termIndex t1 == termIndex t2@ implies that @t1@ and @t2@ are the
+-- same Haskell object.
+--
+-- Note that term equality according to the 'Eq' instance is weaker
+-- than index equality: We allow terms such that @t1 == t2@ and
+-- @termIndex t1 /= termIndex t2@.
 termIndex :: Term -> TermIndex
 termIndex STApp{ stAppIndex = i } = i
 
+-- | Return the type tagged on the given 'Term'.
+-- Return a 'Left' constructor if and only if the type is a 'Sort'.
+--
+-- Note that in the SAWCore type system, the type of the type of any
+-- term is always a 'Sort' (or a 'Term' that reduces to a 'Sort').
+-- So representing the type tag as an 'Either' ensures that that we
+-- never need an infinitely-nested tower of types inside a 'Term'.
 termSortOrType :: Term -> Either Sort Term
 termSortOrType STApp{ stAppType = ty } = ty
 

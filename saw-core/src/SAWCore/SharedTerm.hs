@@ -10,104 +10,88 @@ License     : BSD3
 Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
+
+"SAWCore.SharedTerm" is the standard API for building and using
+SAWCore terms.
+The API is built around 'SharedContext' and 'IO': Most functions take
+a 'SharedContext' as the first argument and return results in the 'IO'
+monad.
+Functions with types of this form are recognized by the @sc@ prefix.
+
+The API guarantees that all 'Term's are well-formed and well-typed
+with respect to the declarations in the 'SharedContext' they were
+constructed with.
+Attempting to construct an invalid term will result in a failure
+thrown in the 'IO' monad with a pretty-printed error message.
 -}
 
 module SAWCore.SharedTerm
-  ( TermF(..)
+  ( -- * Terms
+    Term -- exported as abstract
+  , TermF(..)
   , Ident, mkIdent
   , VarIndex
   , NameInfo(..)
-    -- * Shared terms
-  , Term -- exported as abstract
+  , TermIndex
   , unwrapTermF
   , termIndex
   , varTypes
   , freeVars
   , closedTerm
   , termSortOrType
-  , TermIndex
-  , scImport
   , alphaEquiv
-  , alistAllFields
-  , scRegisterName
-  , scResolveName
-  , scResolveNameByURI
+    -- * SharedContext
+  , SharedContext -- abstract type
+  , mkSharedContext
+  , scGetModuleMap
+  , scGetNamingEnv
+  -- * Pretty printing
   , ppTerm
   , prettyTerm
   , ppTermError
   , prettyTermError
-    -- * SharedContext interface for building shared terms
-  , SharedContext -- abstract type
-  , mkSharedContext
-  , scGetModuleMap
+    -- * Checkpointing
   , SharedContextCheckpoint -- abstract type
   , checkpointSharedContext
   , restoreSharedContext
-  , scGetNamingEnv
-    -- ** Low-level generic term constructors
-  , scAscribe
-  , scTermF
-  , scFlatTermF
-    -- ** Implicit versions of functions.
-  , scFreshVariable
+    -- * Names
+  , scRegisterName
   , scFreshName
   , scFreshVarName
+  , scFreshenGlobalIdent
+  , scResolveName
+  , scResolveNameByURI
+    -- * Term builders
+  , scTermF
+  , scFlatTermF
+    -- ** Application
+  , scApply
+  , scApplyAll
+    -- ** Lambda
+  , scLambda
+  , scLambdaList
+  , scLambdaListEtaCollapse
+  , scAbstractTerms
+    -- ** Pi
+  , scPi
+  , scPiList
+  , scGeneralizeTerms
+  , scFun
+  , scFunAll
+    -- ** Variables
   , scVariable
   , scVariables
+  , scFreshVariable
+    -- ** Constants
+  , scConst
+  , scConstApply
   , scGlobalDef
-  , scFreshenGlobalIdent
-    -- ** Recursors and datatypes
-  , scRecursor
-  , scReduceRecursor
-  , allowedElimSort
-  , scBuildCtor
-    -- ** Modules
-  , scLoadModule
-  , scImportModule
-  , scModuleIsLoaded
-  , scFindModule
-  , scFindDef
-  , scFindDataType
-  , scFindCtor
-  , scRequireDef
-  , scRequireDataType
-  , scRequireCtor
-  , scInjectCode
-    -- ** Declaring global constants
-  , scDeclarePrim
-  , scFreshConstant
-  , scDefineConstant
-  , scOpaqueConstant
-  , scBeginDataType
-  , scCompleteDataType
-    -- ** Term construction
-    -- *** Sorts
+  , scGlobalApply
+    -- ** Sorts
   , scSort
   , scISort
   , scSortWithFlags
-    -- *** Variables and constants
-  , scConst
-  , scConstApply
-    -- *** Functions and function application
-  , scApply
-  , scApplyAll
-  , scApplyBeta
-  , scApplyAllBeta
-  , scGlobalApply
-  , scFun
-  , scFunAll
-  , scLambda
-  , scLambdaList
-  , scPi
-  , scPiList
-    -- *** Strings
-  , scString
-  , scStringType
-    -- *** Booleans
-  , scEqTrue
-  , scBool
-  , scBoolType
-    -- *** Unit, pairs, and tuples
+    -- ** Tuples
   , scUnitValue
   , scUnitType
   , scPairValue
@@ -119,27 +103,77 @@ module SAWCore.SharedTerm
   , scTupleType
   , scTupleSelector
   , scTupleReduced
-    -- *** Records
+    -- ** Records
   , scRecord
   , scRecordValue
   , scRecordSelect
   , scRecordType
-    -- *** Vectors
+    -- ** Recursors
+  , scRecursor
+    -- ** Strings
+  , scString
+  , scStringType
+    -- ** Vectors
   , scVector
   , scVecType
   , scVectorReduced
-    -- ** Normalization
+    -- * Global declarations
+  , scDeclarePrim
+  , scFreshConstant
+  , scDefineConstant
+  , scOpaqueConstant
+  , scBeginDataType
+  , scCompleteDataType
+    -- * Reduction
   , scWhnf
   , scConvertible
   , scSubtype
-    -- ** Type checking
+  , betaNormalize
+  , scApplyBeta
+  , scApplyAllBeta
+  , scInstantiate
+  , scInstantiateBeta
+  , scReduceRecursor
+  , allowedElimSort
+  , scBuildCtor
+  , scUnfoldConstants
+  , scUnfoldConstantsBeta
+  , scUnfoldOnceFixConstantSet
+    -- * Type checking
   , scTypeOf
+  , scAscribe
   , asSort
   , reducePi
   , scTypeOfIdent
   , scTypeOfName
-    -- ** Prelude operations
-    -- *** Booleans
+    -- * Modules
+  , scLoadModule
+  , scImportModule
+  , scModuleIsLoaded
+  , scFindModule
+  , scFindDef
+  , scFindDataType
+  , scFindCtor
+  , scRequireDef
+  , scRequireDataType
+  , scRequireCtor
+  , scInjectCode
+    -- * Inspecting terms
+  , isConstFoldTerm
+  , getAllVars
+  , getAllVarsMap
+  , getConstantSet
+  , scSharedSize
+  , scSharedSizeAux
+  , scSharedSizeMany
+  , scTreeSize
+  , scTreeSizeAux
+  , scTreeSizeMany
+    -- * Prelude operations
+    -- ** Booleans
+  , scEqTrue
+  , scBool
+  , scBoolType
   , scNot
   , scAnd
   , scOr
@@ -149,7 +183,7 @@ module SAWCore.SharedTerm
   , scIte
   , scAndList
   , scOrList
-  -- *** Natural numbers
+  -- ** Natural numbers
   , scNat
   , scNatType
   , scAddNat
@@ -163,7 +197,7 @@ module SAWCore.SharedTerm
   , scMinNat
   , scMaxNat
   , scUpdNatFun
-    -- *** Integers
+    -- ** Integers
   , scIntegerType
   , scIntegerConst
   , scIntAdd, scIntSub, scIntMul
@@ -172,7 +206,7 @@ module SAWCore.SharedTerm
   , scIntEq, scIntLe, scIntLt
   , scIntToNat, scNatToInt
   , scIntToBv, scBvToInt, scSbvToInt
-    -- *** IntMod
+    -- ** IntMod
   , scIntModType
   , scToIntMod
   , scFromIntMod
@@ -181,7 +215,7 @@ module SAWCore.SharedTerm
   , scIntModSub
   , scIntModMul
   , scIntModNeg
-    -- *** Vectors
+    -- ** Vectors
   , scAppend
   , scJoin
   , scSplit
@@ -190,7 +224,7 @@ module SAWCore.SharedTerm
   , scAt
   , scSingle
   , scSlice
-    -- *** Bitvectors
+    -- ** Bitvectors
   , scBitvector
   , scBvNat
   , scBvToNat
@@ -214,7 +248,7 @@ module SAWCore.SharedTerm
   , scBvCountLeadingZeros
   , scBvCountTrailingZeros
   , scLsb, scMsb
-    -- *** Arrays
+    -- ** Arrays
   , scArrayType
   , scArrayConstant
   , scArrayLookup
@@ -223,26 +257,9 @@ module SAWCore.SharedTerm
   , scArrayCopy
   , scArraySet
   , scArrayRangeEq
-    -- ** Variable substitution
-  , betaNormalize
-  , isConstFoldTerm
-  , getAllVars
-  , getAllVarsMap
-  , getConstantSet
-  , scInstantiate
-  , scInstantiateBeta
-  , scAbstractTerms
-  , scLambdaListEtaCollapse
-  , scGeneralizeTerms
-  , scUnfoldConstants
-  , scUnfoldConstantsBeta
-  , scUnfoldOnceFixConstantSet
-  , scSharedSize
-  , scSharedSizeAux
-  , scSharedSizeMany
-  , scTreeSize
-  , scTreeSizeAux
-  , scTreeSizeMany
+  -- * Miscellaneous
+  , alistAllFields
+  , scImport
   ) where
 
 import Control.Applicative
@@ -563,8 +580,7 @@ scFreshName sc x = execSCM sc (scmFreshName x)
 scFreshVarName :: SharedContext -> Text -> IO VarName
 scFreshVarName sc x = execSCM sc (scmFreshVarName x)
 
--- | Returns shared term associated with ident.
--- Does not check module namespace.
+-- | Create a 'Term' for the global constant with the given 'Ident'.
 scGlobalDef :: SharedContext -> Ident -> IO Term
 scGlobalDef sc ident = execSCM sc (scmGlobalDef ident)
 
@@ -967,9 +983,10 @@ scImport sc t0 =
 scWhnf :: SharedContext -> Term -> IO Term
 scWhnf sc t = execSCM sc (scmWhnf t)
 
--- | Test if two terms are convertible up to a given evaluation procedure. In
--- practice, this procedure is usually 'scWhnf', possibly combined with some
--- rewriting.
+-- | Test if two terms are convertible according to the SAWCore type
+-- system rules.
+-- The convertibility test uses the same set of reductions performed
+-- by 'scWhnf'.
 scConvertible ::
   SharedContext ->
   Bool {- ^ Should constants be unfolded during this check? -} ->
@@ -1140,7 +1157,7 @@ scPairValueReduced sc x y =
     (FTermF (PairLeft a), FTermF (PairRight b)) | a == b -> return a
     _ -> scPairValue sc x y
 
--- | An optimized variant of 'scPairTuple' that will reduce tuples of
+-- | An optimized variant of 'scTuple' that will reduce tuples of
 -- the form @(x.1, x.2, x.3)@ to @x@.
 scTupleReduced :: SharedContext -> [Term] -> IO Term
 scTupleReduced sc [] = scUnitValue sc
