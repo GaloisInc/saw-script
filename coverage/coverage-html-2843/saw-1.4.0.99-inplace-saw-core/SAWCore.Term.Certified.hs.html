@@ -857,9 +857,9 @@ span.spaces    { background: white }
 <span class="lineno">  838 </span>-- | Test whether a 'DataType' can be eliminated to the given sort. The rules
 <span class="lineno">  839 </span>-- are that you can only eliminate propositional datatypes to the proposition
 <span class="lineno">  840 </span>-- sort, unless your propositional data type is the empty type. This differs
-<span class="lineno">  841 </span>-- slightly from the Coq rules, which allow elimination of propositional
+<span class="lineno">  841 </span>-- slightly from the Rocq rules, which allow elimination of propositional
 <span class="lineno">  842 </span>-- datatypes with a single constructor that has only propositional arguments,
-<span class="lineno">  843 </span>-- but this Coq behavior can be simulated with the behavior we are using here.
+<span class="lineno">  843 </span>-- but this Rocq behavior can be simulated with the behavior we are using here.
 <span class="lineno">  844 </span>allowedElimSort :: DataType -&gt; Sort -&gt; Bool
 <span class="lineno">  845 </span><span class="decl"><span class="istickedoff">allowedElimSort dt s =</span>
 <span class="lineno">  846 </span><span class="spaces">  </span><span class="istickedoff">if dtSort dt == propSort &amp;&amp; s /= propSort then</span>
@@ -938,7 +938,7 @@ span.spaces    { background: white }
 <span class="lineno">  919 </span><span class="spaces">     </span><span class="istickedoff">helper [] ctorArgs</span></span>
 <span class="lineno">  920 </span>
 <span class="lineno">  921 </span>-- | Reduce an application of a recursor to a particular constructor.
-<span class="lineno">  922 </span>-- This is known in the Coq literature as an iota reduction. More specifically,
+<span class="lineno">  922 </span>-- This is known in the Rocq literature as an iota reduction. More specifically,
 <span class="lineno">  923 </span>-- the call
 <span class="lineno">  924 </span>--
 <span class="lineno">  925 </span>-- &gt; ctxReduceRecursor rec f_c [x1, .., xk]
@@ -1077,7 +1077,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1058 </span><span class="spaces">       </span><span class="istickedoff">scmFunAll elims_tps =&lt;&lt;</span>
 <span class="lineno"> 1059 </span><span class="spaces">       </span><span class="istickedoff">scmRecursorAppType dt motive_var</span></span>
 <span class="lineno"> 1060 </span>
-<span class="lineno"> 1061 </span>-- | Reduce an application of a recursor. This is known in the Coq literature as
+<span class="lineno"> 1061 </span>-- | Reduce an application of a recursor. This is known in the Rocq literature as
 <span class="lineno"> 1062 </span>-- an iota reduction. More specifically, the call
 <span class="lineno"> 1063 </span>--
 <span class="lineno"> 1064 </span>-- &gt; scReduceRecursor sc rec crec ci [x1, .., xk]

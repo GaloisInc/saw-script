@@ -22,7 +22,7 @@ span.spaces    { background: white }
 <span class="lineno">    3 </span>{-# LANGUAGE QuasiQuotes #-}
 <span class="lineno">    4 </span>
 <span class="lineno">    5 </span>{- |
-<span class="lineno">    6 </span>Module      : SAWCoreCoq.Coq
+<span class="lineno">    6 </span>Module      : SAWCoreRocq.Rocq
 <span class="lineno">    7 </span>Copyright   : Galois, Inc. 2018
 <span class="lineno">    8 </span>License     : BSD3
 <span class="lineno">    9 </span>Maintainer  : atomb@galois.com
@@ -30,7 +30,7 @@ span.spaces    { background: white }
 <span class="lineno">   11 </span>Portability : portable
 <span class="lineno">   12 </span>-}
 <span class="lineno">   13 </span>
-<span class="lineno">   14 </span>module SAWCoreCoq.Coq (
+<span class="lineno">   14 </span>module SAWCoreRocq.Rocq (
 <span class="lineno">   15 </span>  TranslationConfiguration(..),
 <span class="lineno">   16 </span>  moduleDeclName,
 <span class="lineno">   17 </span>  preamble,
@@ -40,53 +40,53 @@ span.spaces    { background: white }
 <span class="lineno">   21 </span>  translateSAWModule,
 <span class="lineno">   22 </span>  ) where
 <span class="lineno">   23 </span>
-<span class="lineno">   24 </span>import           Data.String.Interpolate                       (i)
-<span class="lineno">   25 </span>import qualified Data.Text                                     as Text
-<span class="lineno">   26 </span>import           Prelude                                       hiding (fail)
+<span class="lineno">   24 </span>import           Data.String.Interpolate      (i)
+<span class="lineno">   25 </span>import qualified Data.Text                    as Text
+<span class="lineno">   26 </span>import           Prelude                      hiding (fail)
 <span class="lineno">   27 </span>import           Prettyprinter
 <span class="lineno">   28 </span>
-<span class="lineno">   29 </span>import qualified Language.Coq.AST                              as Coq
-<span class="lineno">   30 </span>import qualified Language.Coq.Pretty                           as Coq
+<span class="lineno">   29 </span>import qualified Language.Rocq.AST            as Rocq
+<span class="lineno">   30 </span>import qualified Language.Rocq.Pretty         as Rocq
 <span class="lineno">   31 </span>import           SAWCore.Module
 <span class="lineno">   32 </span>import           SAWCore.Name
 <span class="lineno">   33 </span>import           SAWCore.SharedTerm
 <span class="lineno">   34 </span>
-<span class="lineno">   35 </span>import qualified SAWCoreCoq.CryptolModule    as CMT
-<span class="lineno">   36 </span>import qualified SAWCoreCoq.SAWModule        as SAWModuleTranslation
-<span class="lineno">   37 </span>import           SAWCoreCoq.Monad
-<span class="lineno">   38 </span>import           SAWCoreCoq.SpecialTreatment
-<span class="lineno">   39 </span>import qualified SAWCoreCoq.Term             as TermTranslation
+<span class="lineno">   35 </span>import qualified SAWCoreRocq.CryptolModule    as CMT
+<span class="lineno">   36 </span>import qualified SAWCoreRocq.SAWModule        as SAWModuleTranslation
+<span class="lineno">   37 </span>import           SAWCoreRocq.Monad
+<span class="lineno">   38 </span>import           SAWCoreRocq.SpecialTreatment
+<span class="lineno">   39 </span>import qualified SAWCoreRocq.Term             as TermTranslation
 <span class="lineno">   40 </span>import           CryptolSAWCore.TypedTerm
-<span class="lineno">   41 </span>import           CryptolSAWCore.Cryptol (Env)
+<span class="lineno">   41 </span>import           CryptolSAWCore.Cryptol       (Env)
 <span class="lineno">   42 </span>
 <span class="lineno">   43 </span>text :: String -&gt; Doc ann
 <span class="lineno">   44 </span><span class="decl"><span class="istickedoff">text = pretty</span></span>
 <span class="lineno">   45 </span>
-<span class="lineno">   46 </span>-- | Generate a preamble for a Coq file, containing a list of Coq imports. This
-<span class="lineno">   47 </span>-- includes standard imports, one of which is the @VectorNotations@ module to
-<span class="lineno">   48 </span>-- support the vector literals used to translate SAW core array values, along
-<span class="lineno">   49 </span>-- with any user-supplied imports in the 'postPreamble' field of the
-<span class="lineno">   50 </span>-- supplied 'TranslationConfiguration'.
+<span class="lineno">   46 </span>-- | Generate a preamble for a Rocq file, containing a list of Rocq imports.
+<span class="lineno">   47 </span>-- This includes standard imports, one of which is the @VectorNotations@ module to
+<span class="lineno">   48 </span>-- support the vector literals used to translate SAW core array values, along with
+<span class="lineno">   49 </span>-- any user-supplied imports in the 'postPreamble' field of the supplied
+<span class="lineno">   50 </span>-- 'TranslationConfiguration'.
 <span class="lineno">   51 </span>preamble :: TranslationConfiguration -&gt; Doc ann
 <span class="lineno">   52 </span><span class="decl"><span class="istickedoff">preamble (TranslationConfiguration { vectorModule, postPreamble }) = text [i|</span>
-<span class="lineno">   53 </span><span class="spaces"></span><span class="istickedoff">(** Mandatory imports from saw-core-coq *)</span>
-<span class="lineno">   54 </span><span class="spaces"></span><span class="istickedoff">From Stdlib       Require Import Lists.List.</span>
-<span class="lineno">   55 </span><span class="spaces"></span><span class="istickedoff">From Stdlib       Require Import String.</span>
+<span class="lineno">   53 </span><span class="spaces"></span><span class="istickedoff">(** Mandatory imports from saw-core-rocq *)</span>
+<span class="lineno">   54 </span><span class="spaces"></span><span class="istickedoff">From Stdlib        Require Import Lists.List.</span>
+<span class="lineno">   55 </span><span class="spaces"></span><span class="istickedoff">From Stdlib        Require Import String.</span>
 <span class="lineno">   56 </span><span class="spaces"></span><span class="istickedoff">#[local] Set Warnings &quot;-stdlib-vector&quot;.</span>
-<span class="lineno">   57 </span><span class="spaces"></span><span class="istickedoff">From Stdlib       Require Import Vectors.Vector.</span>
+<span class="lineno">   57 </span><span class="spaces"></span><span class="istickedoff">From Stdlib        Require Import Vectors.Vector.</span>
 <span class="lineno">   58 </span><span class="spaces"></span><span class="istickedoff">#[local] Set Warnings &quot;stdlib-vector&quot;.</span>
-<span class="lineno">   59 </span><span class="spaces"></span><span class="istickedoff">From CryptolToCoq Require Import SAWCoreScaffolding.</span>
-<span class="lineno">   60 </span><span class="spaces"></span><span class="istickedoff">From CryptolToCoq Require Import #{vectorModule}.</span>
+<span class="lineno">   59 </span><span class="spaces"></span><span class="istickedoff">From CryptolToRocq Require Import SAWCoreScaffolding.</span>
+<span class="lineno">   60 </span><span class="spaces"></span><span class="istickedoff">From CryptolToRocq Require Import #{vectorModule}.</span>
 <span class="lineno">   61 </span><span class="spaces"></span><span class="istickedoff">Import VectorNotations.</span>
 <span class="lineno">   62 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   63 </span><span class="spaces"></span><span class="istickedoff">(** Post-preamble section specified by you *)</span>
 <span class="lineno">   64 </span><span class="spaces"></span><span class="istickedoff">#{postPreamble}</span>
 <span class="lineno">   65 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">   66 </span><span class="spaces"></span><span class="istickedoff">(** Code generated by saw-core-coq *)</span>
+<span class="lineno">   66 </span><span class="spaces"></span><span class="istickedoff">(** Code generated by saw-core-rocq *)</span>
 <span class="lineno">   67 </span><span class="spaces"></span><span class="istickedoff">|]</span></span>
 <span class="lineno">   68 </span>
 <span class="lineno">   69 </span>translateTermAsDeclImports ::
-<span class="lineno">   70 </span>  TranslationConfiguration -&gt; ModuleMap -&gt; Coq.Ident -&gt; Term -&gt; Term -&gt;
+<span class="lineno">   70 </span>  TranslationConfiguration -&gt; ModuleMap -&gt; Rocq.Ident -&gt; Term -&gt; Term -&gt;
 <span class="lineno">   71 </span>  Either (TranslationError Term) (Doc ann)
 <span class="lineno">   72 </span><span class="decl"><span class="istickedoff">translateTermAsDeclImports configuration mm name t tp = do</span>
 <span class="lineno">   73 </span><span class="spaces">  </span><span class="istickedoff">doc &lt;-</span>
@@ -97,7 +97,7 @@ span.spaces    { background: white }
 <span class="lineno">   78 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[]</span> name t tp</span>
 <span class="lineno">   79 </span><span class="spaces">  </span><span class="istickedoff">return $ vcat [preamble configuration, hardline &lt;&gt; doc]</span></span>
 <span class="lineno">   80 </span>
-<span class="lineno">   81 </span>-- | Translate a SAW core module to a Coq module
+<span class="lineno">   81 </span>-- | Translate a SAW core module to a Rocq module
 <span class="lineno">   82 </span>translateSAWModule :: TranslationConfiguration -&gt; ModuleMap -&gt; Module -&gt; Doc ann
 <span class="lineno">   83 </span><span class="decl"><span class="nottickedoff">translateSAWModule configuration mm m =</span>
 <span class="lineno">   84 </span><span class="spaces">  </span><span class="nottickedoff">let name = show $ translateModuleName (moduleName m)</span>
@@ -112,18 +112,18 @@ span.spaces    { background: white }
 <span class="lineno">   93 </span><span class="spaces">     </span><span class="nottickedoff">, &quot;&quot;</span>
 <span class="lineno">   94 </span><span class="spaces">     </span><span class="nottickedoff">]</span></span>
 <span class="lineno">   95 </span>
-<span class="lineno">   96 </span>-- | Translate a Cryptol module to a Coq module
+<span class="lineno">   96 </span>-- | Translate a Cryptol module to a Rocq module
 <span class="lineno">   97 </span>translateCryptolModule ::
 <span class="lineno">   98 </span>  SharedContext -&gt; Env -&gt;
-<span class="lineno">   99 </span>  Coq.Ident {- ^ Section name -} -&gt;
+<span class="lineno">   99 </span>  Rocq.Ident {- ^ Section name -} -&gt;
 <span class="lineno">  100 </span>  TranslationConfiguration -&gt;
 <span class="lineno">  101 </span>  -- | List of already translated global declarations
-<span class="lineno">  102 </span>  [Coq.Ident] -&gt;
+<span class="lineno">  102 </span>  [Rocq.Ident] -&gt;
 <span class="lineno">  103 </span>  CryptolModule -&gt;
 <span class="lineno">  104 </span>  IO (Either (TranslationError Term) (Doc ann))
 <span class="lineno">  105 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc env nm configuration globalDecls m = do</span>
 <span class="lineno">  106 </span><span class="spaces">  </span><span class="nottickedoff">translated &lt;- CMT.translateCryptolModule sc env configuration globalDecls m</span>
-<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">return $ Coq.prettyDecl . Coq.Section (escapeIdent nm) &lt;$&gt; translated</span></span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">return $ Rocq.prettyDecl . Rocq.Section (escapeIdent nm) &lt;$&gt; translated</span></span>
 <span class="lineno">  108 </span>
 <span class="lineno">  109 </span>-- | Extract out the 'String' name of a declaration in a SAW core module
 <span class="lineno">  110 </span>moduleDeclName :: ModuleDecl -&gt; Maybe String

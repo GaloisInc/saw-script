@@ -111,18 +111,18 @@ span.spaces    { background: white }
 <span class="lineno">   92 </span><span class="spaces"></span><span class="istickedoff">maxSort ss = maximum ss</span></span>
 <span class="lineno">   93 </span>
 <span class="lineno">   94 </span>-- | This type represents a set of advisory flags for 'Sort's that are mostly
-<span class="lineno">   95 </span>-- ignored, but are used in the Coq export process to indicate where various
+<span class="lineno">   95 </span>-- ignored, but are used in the Rocq export process to indicate where various
 <span class="lineno">   96 </span>-- typeclass instances are necessary in function definitions. In the concrete
 <span class="lineno">   97 </span>-- syntax &quot;isort&quot;, &quot;qsort&quot;, etc. is used to indicate cases where these flags
 <span class="lineno">   98 </span>-- are set. Note in particular that these flags do not affect typechecking,
 <span class="lineno">   99 </span>-- so missing or overeager &quot;isort&quot;/&quot;qsort&quot; annotations will only be detected
-<span class="lineno">  100 </span>-- via the Coq export.
+<span class="lineno">  100 </span>-- via the Rocq export.
 <span class="lineno">  101 </span>--
 <span class="lineno">  102 </span>-- * If 'flagInhabited' is 'True', an implicit @Inhabited@ typeclass argument
-<span class="lineno">  103 </span>--   will be added during Coq translation. In the concrete syntax, an &quot;i&quot; is
+<span class="lineno">  103 </span>--   will be added during Rocq translation. In the concrete syntax, an &quot;i&quot; is
 <span class="lineno">  104 </span>--   prepended to the sort (e.g. &quot;isort&quot;).
 <span class="lineno">  105 </span>-- * If 'flagQuantType' is 'True', an implicit @QuantType@ typeclass argument
-<span class="lineno">  106 </span>--   will be added during Coq translation. In the concrete syntax, an &quot;q&quot; is
+<span class="lineno">  106 </span>--   will be added during Rocq translation. In the concrete syntax, an &quot;q&quot; is
 <span class="lineno">  107 </span>--   prepended to the sort (e.g. &quot;qsort&quot;, &quot;qisort&quot;).
 <span class="lineno">  108 </span>data SortFlags = SortFlags { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">flagInhabited</span></span></span> :: Bool
 <span class="lineno">  109 </span>                           , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">flagQuantType</span></span></span> :: Bool }

@@ -23,7 +23,7 @@ span.spaces    { background: white }
 <span class="lineno">    4 </span>{-# LANGUAGE RecordWildCards #-}
 <span class="lineno">    5 </span>
 <span class="lineno">    6 </span>{- |
-<span class="lineno">    7 </span>Module      : SAWCoreCoq.SpecialTreatment
+<span class="lineno">    7 </span>Module      : SAWCoreRocq.SpecialTreatment
 <span class="lineno">    8 </span>Copyright   : Galois, Inc. 2018
 <span class="lineno">    9 </span>License     : BSD3
 <span class="lineno">   10 </span>Maintainer  : atomb@galois.com
@@ -31,23 +31,23 @@ span.spaces    { background: white }
 <span class="lineno">   12 </span>Portability : portable
 <span class="lineno">   13 </span>-}
 <span class="lineno">   14 </span>
-<span class="lineno">   15 </span>module SAWCoreCoq.SpecialTreatment where
+<span class="lineno">   15 </span>module SAWCoreRocq.SpecialTreatment where
 <span class="lineno">   16 </span>
-<span class="lineno">   17 </span>import           Control.Lens                       (_1, _2, over)
-<span class="lineno">   18 </span>import           Control.Monad.Reader               (asks)
-<span class="lineno">   19 </span>import           Data.Char                          (isAlphaNum)
-<span class="lineno">   20 </span>import qualified Data.Map                           as Map
-<span class="lineno">   21 </span>import           Data.Map                           (Map)
-<span class="lineno">   22 </span>import           Data.String.Interpolate            (i)
-<span class="lineno">   23 </span>import qualified Data.Text                          as Text
-<span class="lineno">   24 </span>import           Prelude                            hiding (fail)
-<span class="lineno">   25 </span>import           Text.Encoding.Z                    (zEncodeString)
+<span class="lineno">   17 </span>import           Control.Lens            (_1, _2, over)
+<span class="lineno">   18 </span>import           Control.Monad.Reader    (asks)
+<span class="lineno">   19 </span>import           Data.Char               (isAlphaNum)
+<span class="lineno">   20 </span>import qualified Data.Map                as Map
+<span class="lineno">   21 </span>import           Data.Map                (Map)
+<span class="lineno">   22 </span>import           Data.String.Interpolate (i)
+<span class="lineno">   23 </span>import qualified Data.Text               as Text
+<span class="lineno">   24 </span>import           Prelude                 hiding (fail)
+<span class="lineno">   25 </span>import           Text.Encoding.Z         (zEncodeString)
 <span class="lineno">   26 </span>
-<span class="lineno">   27 </span>import qualified Language.Coq.AST                   as Coq
+<span class="lineno">   27 </span>import qualified Language.Rocq.AST       as Rocq
 <span class="lineno">   28 </span>
 <span class="lineno">   29 </span>import           SAWCore.Name
 <span class="lineno">   30 </span>
-<span class="lineno">   31 </span>import           SAWCoreCoq.Monad
+<span class="lineno">   31 </span>import           SAWCoreRocq.Monad
 <span class="lineno">   32 </span>
 <span class="lineno">   33 </span>data SpecialTreatment = SpecialTreatment
 <span class="lineno">   34 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">moduleRenaming</span></span></span>        :: Map ModuleName String
@@ -59,9 +59,9 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>  = -- | Translate the identifier unchanged, and directly translate the assocated
 <span class="lineno">   41 </span>    --   SAWCore declaration.
 <span class="lineno">   42 </span>    DefPreserve
-<span class="lineno">   43 </span>  | -- | Translate the identifier into the given Coq identifer,
+<span class="lineno">   43 </span>  | -- | Translate the identifier into the given Rocq identifer,
 <span class="lineno">   44 </span>    --   and otherwise directly translate the associated SAWCore declaration.
-<span class="lineno">   45 </span>    DefRename Coq.Ident
+<span class="lineno">   45 </span>    DefRename Rocq.Ident
 <span class="lineno">   46 </span>  | -- | Replace the declaration of the identifier with the given text.
 <span class="lineno">   47 </span>    DefReplace  String
 <span class="lineno">   48 </span>    -- | Skip the declartion of the identifier altogether.
@@ -72,14 +72,14 @@ span.spaces    { background: white }
 <span class="lineno">   53 </span>  = -- | Translate the identifier unchanged
 <span class="lineno">   54 </span>    UsePreserve
 <span class="lineno">   55 </span>    -- | Rename the given identifier into the given (optionally qualified)
-<span class="lineno">   56 </span>    --   Coq identifier.  The boolean value, if true, indicates that the
+<span class="lineno">   56 </span>    --   Rocq identifier.  The boolean value, if true, indicates that the
 <span class="lineno">   57 </span>    --   identifier should be an &quot;explicit&quot; identifier with a leading \&quot;\@\&quot;
-<span class="lineno">   58 </span>    --   symbol, which indicates to Coq that all implicit arguments should be
+<span class="lineno">   58 </span>    --   symbol, which indicates to Rocq that all implicit arguments should be
 <span class="lineno">   59 </span>    --   treated as explicit.
-<span class="lineno">   60 </span>  | UseRename (Maybe ModuleName) Coq.Ident Bool
+<span class="lineno">   60 </span>  | UseRename (Maybe ModuleName) Rocq.Ident Bool
 <span class="lineno">   61 </span>    -- | Apply a macro function to the translations of the first @n@ SAWCore
 <span class="lineno">   62 </span>    -- arguments of this identifier
-<span class="lineno">   63 </span>  | UseMacro Int ([Coq.Term] -&gt; Coq.Term)
+<span class="lineno">   63 </span>  | UseMacro Int ([Rocq.Term] -&gt; Rocq.Term)
 <span class="lineno">   64 </span>
 <span class="lineno">   65 </span>data IdentSpecialTreatment = IdentSpecialTreatment
 <span class="lineno">   66 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">atDefSite</span></span></span> :: DefSiteTreatment
@@ -121,9 +121,9 @@ span.spaces    { background: white }
 <span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">pure $ Map.findWithDefault defaultTreatment (identName ident) moduleMap</span></span>
 <span class="lineno">  103 </span>
 <span class="lineno">  104 </span>-- | Use `mapsTo` for identifiers whose definition has a matching definition
-<span class="lineno">  105 </span>-- already on the Coq side.  As such, their definition can be skipped, and use
+<span class="lineno">  105 </span>-- already on the Rocq side.  As such, their definition can be skipped, and use
 <span class="lineno">  106 </span>-- sites can be replaced by the appropriate call.
-<span class="lineno">  107 </span>mapsTo :: ModuleName -&gt; Coq.Ident -&gt; IdentSpecialTreatment
+<span class="lineno">  107 </span>mapsTo :: ModuleName -&gt; Rocq.Ident -&gt; IdentSpecialTreatment
 <span class="lineno">  108 </span><span class="decl"><span class="istickedoff">mapsTo targetModule targetName = IdentSpecialTreatment</span>
 <span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">{ atDefSite = <span class="nottickedoff">DefSkip</span></span>
 <span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">, atUseSite = UseRename (Just targetModule) targetName False</span>
@@ -131,24 +131,24 @@ span.spaces    { background: white }
 <span class="lineno">  112 </span>
 <span class="lineno">  113 </span>-- | Like 'mapsTo' but use an explicit variable reference so
 <span class="lineno">  114 </span>-- that all implicit arguments must be provided.
-<span class="lineno">  115 </span>mapsToExpl :: ModuleName -&gt; Coq.Ident -&gt; IdentSpecialTreatment
+<span class="lineno">  115 </span>mapsToExpl :: ModuleName -&gt; Rocq.Ident -&gt; IdentSpecialTreatment
 <span class="lineno">  116 </span><span class="decl"><span class="nottickedoff">mapsToExpl targetModule targetName = IdentSpecialTreatment</span>
 <span class="lineno">  117 </span><span class="spaces">  </span><span class="nottickedoff">{ atDefSite = DefSkip</span>
 <span class="lineno">  118 </span><span class="spaces">  </span><span class="nottickedoff">, atUseSite = UseRename (Just targetModule) targetName True</span>
 <span class="lineno">  119 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
 <span class="lineno">  120 </span>
-<span class="lineno">  121 </span>-- | Like 'mapsToExpl' but add an @n@th argument that is inferred by Coq
-<span class="lineno">  122 </span>mapsToExplInferArg :: Coq.Ident -&gt; Int -&gt; IdentSpecialTreatment
+<span class="lineno">  121 </span>-- | Like 'mapsToExpl' but add an @n@th argument that is inferred by Rocq
+<span class="lineno">  122 </span>mapsToExplInferArg :: Rocq.Ident -&gt; Int -&gt; IdentSpecialTreatment
 <span class="lineno">  123 </span><span class="decl"><span class="nottickedoff">mapsToExplInferArg targetName argNum = IdentSpecialTreatment</span>
 <span class="lineno">  124 </span><span class="spaces">  </span><span class="nottickedoff">{ atDefSite = DefSkip</span>
 <span class="lineno">  125 </span><span class="spaces">  </span><span class="nottickedoff">, atUseSite = UseMacro argNum (\args -&gt;</span>
-<span class="lineno">  126 </span><span class="spaces">                                  </span><span class="nottickedoff">Coq.App (Coq.ExplVar targetName)</span>
-<span class="lineno">  127 </span><span class="spaces">                                  </span><span class="nottickedoff">(args ++ [Coq.Var &quot;_&quot;]))</span>
+<span class="lineno">  126 </span><span class="spaces">                                  </span><span class="nottickedoff">Rocq.App (Rocq.ExplVar targetName)</span>
+<span class="lineno">  127 </span><span class="spaces">                                  </span><span class="nottickedoff">(args ++ [Rocq.Var &quot;_&quot;]))</span>
 <span class="lineno">  128 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
 <span class="lineno">  129 </span>
 <span class="lineno">  130 </span>-- | Use `realize` for axioms that can be realized, or for primitives that must
 <span class="lineno">  131 </span>-- be realized. While some primitives can be written directly in a standalone
-<span class="lineno">  132 </span>-- Coq module, some primitives depend on code from the extracted module, and are
+<span class="lineno">  132 </span>-- Rocq module, some primitives depend on code from the extracted module, and are
 <span class="lineno">  133 </span>-- depended upon by following code in the same module. Such primitives can
 <span class="lineno">  134 </span>-- therefore *neither* be defined a priori, *nor* a posteriori, and must be
 <span class="lineno">  135 </span>-- realized where they were originally declared.
@@ -160,63 +160,63 @@ span.spaces    { background: white }
 <span class="lineno">  141 </span>
 <span class="lineno">  142 </span>-- | Use `rename` for identifiers whose definition can be translated, but has to
 <span class="lineno">  143 </span>-- be renamed. This is useful for certain definitions whose name on the
-<span class="lineno">  144 </span>-- SAWCore/Cryptol side clashes with names on the Coq side. For instance, `at`
-<span class="lineno">  145 </span>-- is a reserved Coq keyword, but is used as a function name in SAWCore Prelude.
+<span class="lineno">  144 </span>-- SAWCore/Cryptol side clashes with names on the Rocq side. For instance, `at`
+<span class="lineno">  145 </span>-- is a reserved Rocq keyword, but is used as a function name in SAWCore Prelude.
 <span class="lineno">  146 </span>-- Also useful for translation notations, until they are better supported.
-<span class="lineno">  147 </span>rename :: Coq.Ident -&gt; IdentSpecialTreatment
+<span class="lineno">  147 </span>rename :: Rocq.Ident -&gt; IdentSpecialTreatment
 <span class="lineno">  148 </span><span class="decl"><span class="nottickedoff">rename ident = IdentSpecialTreatment</span>
 <span class="lineno">  149 </span><span class="spaces">  </span><span class="nottickedoff">{ atDefSite = DefRename ident</span>
 <span class="lineno">  150 </span><span class="spaces">  </span><span class="nottickedoff">, atUseSite = UseRename Nothing ident False</span>
 <span class="lineno">  151 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
 <span class="lineno">  152 </span>
 <span class="lineno">  153 </span>-- | Replace any occurrences of identifier applied to @n@ arguments with the
-<span class="lineno">  154 </span>-- supplied Coq term
-<span class="lineno">  155 </span>replaceDropArgs :: Int -&gt; Coq.Term -&gt; IdentSpecialTreatment
+<span class="lineno">  154 </span>-- supplied Rocq term
+<span class="lineno">  155 </span>replaceDropArgs :: Int -&gt; Rocq.Term -&gt; IdentSpecialTreatment
 <span class="lineno">  156 </span><span class="decl"><span class="nottickedoff">replaceDropArgs n term = IdentSpecialTreatment</span>
 <span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">{ atDefSite = DefSkip</span>
 <span class="lineno">  158 </span><span class="spaces">  </span><span class="nottickedoff">, atUseSite = UseMacro n (const term)</span>
 <span class="lineno">  159 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
 <span class="lineno">  160 </span>
 <span class="lineno">  161 </span>-- | A version of 'replaceDropArgs' that drops no arguments; i.e., just replaces
-<span class="lineno">  162 </span>-- an identifier with the supplied Coq term
-<span class="lineno">  163 </span>replace :: Coq.Term -&gt; IdentSpecialTreatment
+<span class="lineno">  162 </span>-- an identifier with the supplied Rocq term
+<span class="lineno">  163 </span>replace :: Rocq.Term -&gt; IdentSpecialTreatment
 <span class="lineno">  164 </span><span class="decl"><span class="nottickedoff">replace = replaceDropArgs 0</span></span>
 <span class="lineno">  165 </span>
 <span class="lineno">  166 </span>
 <span class="lineno">  167 </span>-- | Use `skip` for identifiers that are already defined in the appropriate
-<span class="lineno">  168 </span>-- module on the Coq side.
+<span class="lineno">  168 </span>-- module on the Rocq side.
 <span class="lineno">  169 </span>skip :: IdentSpecialTreatment
 <span class="lineno">  170 </span><span class="decl"><span class="nottickedoff">skip = IdentSpecialTreatment</span>
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="nottickedoff">{ atDefSite = DefSkip</span>
 <span class="lineno">  172 </span><span class="spaces">  </span><span class="nottickedoff">, atUseSite = UsePreserve</span>
 <span class="lineno">  173 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
 <span class="lineno">  174 </span>
-<span class="lineno">  175 </span>-- | The Coq built-in @Datatypes@ module
+<span class="lineno">  175 </span>-- | The Rocq built-in @Datatypes@ module
 <span class="lineno">  176 </span>datatypesModule :: ModuleName
 <span class="lineno">  177 </span><span class="decl"><span class="istickedoff">datatypesModule =</span>
 <span class="lineno">  178 </span><span class="spaces">  </span><span class="istickedoff">mkModuleName [&quot;Init&quot;, &quot;Datatypes&quot;]</span></span>
 <span class="lineno">  179 </span>
-<span class="lineno">  180 </span>-- | The Coq built-in @Logic@ module
+<span class="lineno">  180 </span>-- | The Rocq built-in @Logic@ module
 <span class="lineno">  181 </span>logicModule :: ModuleName
 <span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">logicModule =</span>
 <span class="lineno">  183 </span><span class="spaces">  </span><span class="nottickedoff">mkModuleName [&quot;Init&quot;, &quot;Logic&quot;]</span></span>
 <span class="lineno">  184 </span>
-<span class="lineno">  185 </span>-- | The Coq built-in @String@ module.
+<span class="lineno">  185 </span>-- | The Rocq built-in @String@ module.
 <span class="lineno">  186 </span>stringModule :: ModuleName
 <span class="lineno">  187 </span><span class="decl"><span class="nottickedoff">stringModule =</span>
 <span class="lineno">  188 </span><span class="spaces">  </span><span class="nottickedoff">mkModuleName [&quot;Stdlib&quot;, &quot;Strings&quot;, &quot;String&quot;]</span></span>
 <span class="lineno">  189 </span>
-<span class="lineno">  190 </span>-- | The Coq built-in @BinNums@ module.
+<span class="lineno">  190 </span>-- | The Rocq built-in @BinNums@ module.
 <span class="lineno">  191 </span>binNumsModule :: ModuleName
 <span class="lineno">  192 </span><span class="decl"><span class="nottickedoff">binNumsModule =</span>
 <span class="lineno">  193 </span><span class="spaces">  </span><span class="nottickedoff">mkModuleName [&quot;Stdlib&quot;, &quot;Numbers&quot;, &quot;BinNums&quot;]</span></span>
 <span class="lineno">  194 </span>
-<span class="lineno">  195 </span>-- | The Coq built-in @BinPos@ module.
+<span class="lineno">  195 </span>-- | The Rocq built-in @BinPos@ module.
 <span class="lineno">  196 </span>binPosModule :: ModuleName
 <span class="lineno">  197 </span><span class="decl"><span class="istickedoff">binPosModule =</span>
 <span class="lineno">  198 </span><span class="spaces">  </span><span class="istickedoff">mkModuleName [&quot;Stdlib&quot;, &quot;PArith&quot;, &quot;BinPos&quot;]</span></span>
 <span class="lineno">  199 </span>
-<span class="lineno">  200 </span>-- | The Coq built-in @BinInt@ module.
+<span class="lineno">  200 </span>-- | The Rocq built-in @BinInt@ module.
 <span class="lineno">  201 </span>binIntModule :: ModuleName
 <span class="lineno">  202 </span><span class="decl"><span class="nottickedoff">binIntModule =</span>
 <span class="lineno">  203 </span><span class="spaces">  </span><span class="nottickedoff">mkModuleName [&quot;Stdlib&quot;, &quot;ZArith&quot;, &quot;BinInt&quot;]</span></span>
@@ -256,13 +256,13 @@ span.spaces    { background: white }
 <span class="lineno">  237 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
 <span class="lineno">  238 </span>
 <span class="lineno">  239 </span>-- NOTE: while I initially did the mapping from SAW core names to the
-<span class="lineno">  240 </span>-- corresponding Coq construct here, it makes the job of translating SAW core
-<span class="lineno">  241 </span>-- axioms into Coq theorems much more annoying, because one needs to manually
-<span class="lineno">  242 </span>-- rename every constant mentioned in the statement to its Coq counterpart.
+<span class="lineno">  240 </span>-- corresponding Rocq construct here, it makes the job of translating SAW core
+<span class="lineno">  241 </span>-- axioms into Rocq theorems much more annoying, because one needs to manually
+<span class="lineno">  242 </span>-- rename every constant mentioned in the statement to its Rocq counterpart.
 <span class="lineno">  243 </span>-- Instead, I am now trying to keep the names the same as much as possible
 <span class="lineno">  244 </span>-- during this translation (it is sometimes impossible, for instance, `at` is a
-<span class="lineno">  245 </span>-- reserved keyword in Coq), so that primitives' and axioms' types can be
-<span class="lineno">  246 </span>-- copy-pasted as is on the Coq side.
+<span class="lineno">  245 </span>-- reserved keyword in Rocq), so that primitives' and axioms' types can be
+<span class="lineno">  246 </span>-- copy-pasted as is on the Rocq side.
 <span class="lineno">  247 </span>sawCorePreludeSpecialTreatmentMap :: TranslationConfiguration -&gt;
 <span class="lineno">  248 </span>                                     Map String IdentSpecialTreatment
 <span class="lineno">  249 </span><span class="decl"><span class="istickedoff">sawCorePreludeSpecialTreatmentMap configuration =</span>
@@ -277,9 +277,9 @@ span.spaces    { background: white }
 <span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;error&quot;,             <span class="nottickedoff">mapsTo sawDefinitionsModule &quot;error&quot;</span>)</span>
 <span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fix&quot;,               <span class="nottickedoff">skip</span>)</span>
 <span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fix_unfold&quot;,        <span class="nottickedoff">skip</span>)</span>
-<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;unsafeAssert&quot;,      <span class="nottickedoff">replaceDropArgs 3 $ Coq.Ltac &quot;solveUnsafeAssert&quot;</span>)</span>
-<span class="lineno">  262 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;unsafeAssertBVULt&quot;, <span class="nottickedoff">replaceDropArgs 3 $ Coq.Ltac &quot;solveUnsafeAssertBVULt&quot;</span>)</span>
-<span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;unsafeAssertBVULe&quot;, <span class="nottickedoff">replaceDropArgs 3 $ Coq.Ltac &quot;solveUnsafeAssertBVULe&quot;</span>)</span>
+<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;unsafeAssert&quot;,      <span class="nottickedoff">replaceDropArgs 3 $ Rocq.Ltac &quot;solveUnsafeAssert&quot;</span>)</span>
+<span class="lineno">  262 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;unsafeAssertBVULt&quot;, <span class="nottickedoff">replaceDropArgs 3 $ Rocq.Ltac &quot;solveUnsafeAssertBVULt&quot;</span>)</span>
+<span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;unsafeAssertBVULe&quot;, <span class="nottickedoff">replaceDropArgs 3 $ Rocq.Ltac &quot;solveUnsafeAssertBVULe&quot;</span>)</span>
 <span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;unsafeCoerce&quot;,      <span class="nottickedoff">skip</span>)</span>
 <span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;unsafeCoerce_same&quot;, <span class="nottickedoff">skip</span>)</span>
 <span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">]</span>
@@ -288,8 +288,8 @@ span.spaces    { background: white }
 <span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">++</span>
 <span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;coerce&quot;,      <span class="nottickedoff">mapsTo sawDefinitionsModule &quot;coerce&quot;</span>)</span>
 <span class="lineno">  271 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;coerce__def&quot;, <span class="nottickedoff">mapsTo sawDefinitionsModule &quot;coerce&quot;</span>)</span>
-<span class="lineno">  272 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;coerce__eq&quot;,  <span class="nottickedoff">replace (Coq.Var &quot;eq_refl&quot;)</span>)</span>
-<span class="lineno">  273 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;uip&quot;,         <span class="nottickedoff">replace (Coq.Var &quot;UIP&quot;)</span>)</span>
+<span class="lineno">  272 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;coerce__eq&quot;,  <span class="nottickedoff">replace (Rocq.Var &quot;eq_refl&quot;)</span>)</span>
+<span class="lineno">  273 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;uip&quot;,         <span class="nottickedoff">replace (Rocq.Var &quot;UIP&quot;)</span>)</span>
 <span class="lineno">  274 </span><span class="spaces">  </span><span class="istickedoff">]</span>
 <span class="lineno">  275 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  276 </span><span class="spaces">  </span><span class="istickedoff">-- Unit</span>
@@ -339,8 +339,8 @@ span.spaces    { background: white }
 <span class="lineno">  320 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;PairType&quot;,  <span class="nottickedoff">mapsTo sawDefinitionsModule &quot;PairType&quot;</span>)</span>
 <span class="lineno">  321 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;PairValue&quot;, <span class="nottickedoff">mapsTo sawDefinitionsModule &quot;PairValue&quot;</span>)</span>
 <span class="lineno">  322 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Pair__rec&quot;, <span class="nottickedoff">mapsTo sawDefinitionsModule &quot;Pair__rec&quot;</span>)</span>
-<span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fst&quot;,       <span class="nottickedoff">replaceDropArgs 2 $ Coq.Var &quot;fst&quot;</span>)</span>
-<span class="lineno">  324 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;snd&quot;,       <span class="nottickedoff">replaceDropArgs 2 $ Coq.Var &quot;snd&quot;</span>)</span>
+<span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fst&quot;,       <span class="nottickedoff">replaceDropArgs 2 $ Rocq.Var &quot;fst&quot;</span>)</span>
+<span class="lineno">  324 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;snd&quot;,       <span class="nottickedoff">replaceDropArgs 2 $ Rocq.Var &quot;snd&quot;</span>)</span>
 <span class="lineno">  325 </span><span class="spaces">  </span><span class="istickedoff">]</span>
 <span class="lineno">  326 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  327 </span><span class="spaces">  </span><span class="istickedoff">-- Equality</span>
@@ -424,10 +424,10 @@ span.spaces    { background: white }
 <span class="lineno">  405 </span><span class="spaces">  </span><span class="istickedoff">-- Vectors</span>
 <span class="lineno">  406 </span><span class="spaces">  </span><span class="istickedoff">++</span>
 <span class="lineno">  407 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;EmptyVec&quot;,      <span class="nottickedoff">mapsTo vectorsModule &quot;EmptyVec&quot;</span>)</span>
-<span class="lineno">  408 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;at&quot;,            <span class="nottickedoff">rename &quot;sawAt&quot;</span>) -- `at` is a reserved keyword in Coq</span>
+<span class="lineno">  408 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;at&quot;,            <span class="nottickedoff">rename &quot;sawAt&quot;</span>) -- `at` is a reserved keyword in Rocq</span>
 <span class="lineno">  409 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;atWithDefault&quot;, <span class="nottickedoff">mapsTo vectorsModule &quot;atWithDefault&quot;</span>)</span>
 <span class="lineno">  410 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;atWithProof&quot;,   <span class="nottickedoff">mapsTo vectorsModule &quot;atWithProof&quot;</span>)</span>
-<span class="lineno">  411 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;at_single&quot;,     <span class="nottickedoff">skip</span>) -- is boring, could be proved on the Coq side</span>
+<span class="lineno">  411 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;at_single&quot;,     <span class="nottickedoff">skip</span>) -- is boring, could be proved on the Rocq side</span>
 <span class="lineno">  412 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;bvAdd&quot;,         <span class="nottickedoff">mapsTo vectorsModule &quot;bvAdd&quot;</span>)</span>
 <span class="lineno">  413 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;bvLg2&quot;,         <span class="nottickedoff">mapsTo vectorsModule &quot;bvLg2&quot;</span>)</span>
 <span class="lineno">  414 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;bvMul&quot;,         <span class="nottickedoff">mapsTo vectorsModule &quot;bvMul&quot;</span>)</span>
@@ -571,10 +571,10 @@ span.spaces    { background: white }
 <span class="lineno">  552 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;List__rec&quot;, <span class="nottickedoff">mapsToExpl datatypesModule &quot;list_rect&quot;</span>)</span>
 <span class="lineno">  553 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
 <span class="lineno">  554 </span>
-<span class="lineno">  555 </span>escapeIdent :: Coq.Ident -&gt; Coq.Ident
-<span class="lineno">  556 </span><span class="decl"><span class="istickedoff">escapeIdent (Coq.Ident str)</span>
-<span class="lineno">  557 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">all okChar str</span> = Coq.Ident str</span>
-<span class="lineno">  558 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>      = <span class="nottickedoff">Coq.Ident (&quot;Op_&quot; ++ zEncodeString str)</span></span>
+<span class="lineno">  555 </span>escapeIdent :: Rocq.Ident -&gt; Rocq.Ident
+<span class="lineno">  556 </span><span class="decl"><span class="istickedoff">escapeIdent (Rocq.Ident str)</span>
+<span class="lineno">  557 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">all okChar str</span> = Rocq.Ident str</span>
+<span class="lineno">  558 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>      = <span class="nottickedoff">Rocq.Ident (&quot;Op_&quot; ++ zEncodeString str)</span></span>
 <span class="lineno">  559 </span><span class="spaces"> </span><span class="istickedoff">where</span>
 <span class="lineno">  560 </span><span class="spaces">   </span><span class="istickedoff">okChar x = isAlphaNum x || <span class="nottickedoff">x `elem` (&quot;_'&quot; :: String)</span></span></span>
 <span class="lineno">  561 </span>

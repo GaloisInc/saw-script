@@ -21,7 +21,7 @@ span.spaces    { background: white }
 <span class="lineno">    2 </span>{-# LANGUAGE RecordWildCards #-}
 <span class="lineno">    3 </span>
 <span class="lineno">    4 </span>{- |
-<span class="lineno">    5 </span>Module      : Language.Coq.Pretty
+<span class="lineno">    5 </span>Module      : Language.Rocq.Pretty
 <span class="lineno">    6 </span>Copyright   : Galois, Inc. 2018
 <span class="lineno">    7 </span>License     : BSD3
 <span class="lineno">    8 </span>Maintainer  : atomb@galois.com
@@ -29,17 +29,17 @@ span.spaces    { background: white }
 <span class="lineno">   10 </span>Portability : portable
 <span class="lineno">   11 </span>-}
 <span class="lineno">   12 </span>
-<span class="lineno">   13 </span>module Language.Coq.Pretty where
+<span class="lineno">   13 </span>module Language.Rocq.Pretty where
 <span class="lineno">   14 </span>
 <span class="lineno">   15 </span>import Prettyprinter
 <span class="lineno">   16 </span>
-<span class="lineno">   17 </span>import Language.Coq.AST
+<span class="lineno">   17 </span>import Language.Rocq.AST
 <span class="lineno">   18 </span>import Data.Word
 <span class="lineno">   19 </span>import Numeric (showHex)
 <span class="lineno">   20 </span>import Prelude hiding ((&lt;$&gt;), (&lt;&gt;))
 <span class="lineno">   21 </span>
 <span class="lineno">   22 </span>-- | Replace all occurrences of the double quote character @&quot;@ with the string
-<span class="lineno">   23 </span>-- @&quot;&quot;@, i.e., two copies of it, as this is how Coq escapes double quote
+<span class="lineno">   23 </span>-- @&quot;&quot;@, i.e., two copies of it, as this is how Rocq escapes double quote
 <span class="lineno">   24 </span>-- characters.
 <span class="lineno">   25 </span>escapeStringLit :: String -&gt; String
 <span class="lineno">   26 </span><span class="decl"><span class="nottickedoff">escapeStringLit = concatMap (\c -&gt; if c == '&quot;' then &quot;\&quot;\&quot;&quot; else [c])</span></span>

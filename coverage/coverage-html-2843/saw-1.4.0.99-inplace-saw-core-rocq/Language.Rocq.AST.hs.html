@@ -18,7 +18,7 @@ span.spaces    { background: white }
 </pre>
 <pre>
 <span class="lineno">    1 </span>{- |
-<span class="lineno">    2 </span>Module      : Language.Coq.AST
+<span class="lineno">    2 </span>Module      : Language.Rocq.AST
 <span class="lineno">    3 </span>Copyright   : Galois, Inc. 2018
 <span class="lineno">    4 </span>License     : BSD3
 <span class="lineno">    5 </span>Maintainer  : atomb@galois.com
@@ -26,13 +26,13 @@ span.spaces    { background: white }
 <span class="lineno">    7 </span>Portability : portable
 <span class="lineno">    8 </span>-}
 <span class="lineno">    9 </span>
-<span class="lineno">   10 </span>module Language.Coq.AST where
+<span class="lineno">   10 </span>module Language.Rocq.AST where
 <span class="lineno">   11 </span>
 <span class="lineno">   12 </span>import Data.String (IsString(..))
 <span class="lineno">   13 </span>
-<span class="lineno">   14 </span>-- | An 'Ident' is a Coq qualified identifier represented as a string,
+<span class="lineno">   14 </span>-- | An 'Ident' is a Rocq qualified identifier represented as a string,
 <span class="lineno">   15 </span>-- with the invariant that it is lexically valid.
-<span class="lineno">   16 </span>-- A valid Coq identifier is a sequence of letters, digits,
+<span class="lineno">   16 </span>-- A valid Rocq identifier is a sequence of letters, digits,
 <span class="lineno">   17 </span>-- underscores and primes that starts with a letter or underscore.
 <span class="lineno">   18 </span>-- A /qualified/ identifier is a sequence of one or more identifiers
 <span class="lineno">   19 </span>-- separated by periods.

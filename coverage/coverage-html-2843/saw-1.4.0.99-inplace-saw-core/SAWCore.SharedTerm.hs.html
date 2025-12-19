@@ -849,9 +849,9 @@ span.spaces    { background: white }
 <span class="lineno">  830 </span>-- | Test whether a 'DataType' can be eliminated to the given sort. The rules
 <span class="lineno">  831 </span>-- are that you can only eliminate propositional datatypes to the proposition
 <span class="lineno">  832 </span>-- sort, unless your propositional data type is the empty type. This differs
-<span class="lineno">  833 </span>-- slightly from the Coq rules, which allow elimination of propositional
+<span class="lineno">  833 </span>-- slightly from the Rocq rules, which allow elimination of propositional
 <span class="lineno">  834 </span>-- datatypes with a single constructor that has only propositional arguments,
-<span class="lineno">  835 </span>-- but this Coq behavior can be simulated with the behavior we are using here.
+<span class="lineno">  835 </span>-- but this Rocq behavior can be simulated with the behavior we are using here.
 <span class="lineno">  836 </span>allowedElimSort :: DataType -&gt; Sort -&gt; Bool
 <span class="lineno">  837 </span><span class="decl"><span class="nottickedoff">allowedElimSort dt s =</span>
 <span class="lineno">  838 </span><span class="spaces">  </span><span class="nottickedoff">if dtSort dt == propSort &amp;&amp; s /= propSort then</span>
@@ -900,7 +900,7 @@ span.spaces    { background: white }
 <span class="lineno">  881 </span><span class="spaces">      </span><span class="istickedoff">, ctorType = tp</span>
 <span class="lineno">  882 </span><span class="spaces">      </span><span class="istickedoff">}</span></span>
 <span class="lineno">  883 </span>
-<span class="lineno">  884 </span>-- | Reduce an application of a recursor. This is known in the Coq literature as
+<span class="lineno">  884 </span>-- | Reduce an application of a recursor. This is known in the Rocq literature as
 <span class="lineno">  885 </span>-- an iota reduction. More specifically, the call
 <span class="lineno">  886 </span>--
 <span class="lineno">  887 </span>-- &gt; scReduceRecursor sc rec crec ci [x1, .., xk]
@@ -1162,7 +1162,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1143 </span>-- | An optimized variant of 'scPairTuple' that will reduce tuples of
 <span class="lineno"> 1144 </span>-- the form @(x.1, x.2, x.3)@ to @x@.
 <span class="lineno"> 1145 </span>scTupleReduced :: SharedContext -&gt; [Term] -&gt; IO Term
-<span class="lineno"> 1146 </span><span class="decl"><span class="istickedoff">scTupleReduced sc [] = <span class="nottickedoff">scUnitValue sc</span></span>
+<span class="lineno"> 1146 </span><span class="decl"><span class="istickedoff">scTupleReduced sc [] = scUnitValue sc</span>
 <span class="lineno"> 1147 </span><span class="spaces"></span><span class="istickedoff">scTupleReduced _ [t] = return t</span>
 <span class="lineno"> 1148 </span><span class="spaces"></span><span class="istickedoff">scTupleReduced sc (t : ts) = scPairValueReduced sc t =&lt;&lt; scTupleReduced sc ts</span></span>
 <span class="lineno"> 1149 </span>

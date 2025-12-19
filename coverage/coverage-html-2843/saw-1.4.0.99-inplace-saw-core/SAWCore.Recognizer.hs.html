@@ -227,7 +227,7 @@ span.spaces    { background: white }
 <span class="lineno">  208 </span><span class="decl"><span class="istickedoff">asTupleType t =</span>
 <span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">do ftf &lt;- asFTermF t</span>
 <span class="lineno">  210 </span><span class="spaces">     </span><span class="istickedoff">case ftf of</span>
-<span class="lineno">  211 </span><span class="spaces">       </span><span class="istickedoff">UnitType     -&gt; <span class="nottickedoff">Just []</span></span>
+<span class="lineno">  211 </span><span class="spaces">       </span><span class="istickedoff">UnitType     -&gt; Just []</span>
 <span class="lineno">  212 </span><span class="spaces">       </span><span class="istickedoff">PairType x y -&gt; Just (<span class="nottickedoff">x</span> : destTupleType y)</span>
 <span class="lineno">  213 </span><span class="spaces">       </span><span class="istickedoff">_            -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  214 </span>
