@@ -44,7 +44,6 @@ module SAWScript.ValueOps (
 
 import Prelude hiding (fail)
 
-import Control.Monad (zipWithM)
 import Control.Monad.Catch (MonadThrow(..), try)
 import Control.Monad.State (get, gets, modify, put)
 import qualified Control.Exception as X
@@ -124,26 +123,6 @@ bracketTopLevel acquire release action =
         Left (bad :: X.SomeException) -> release resource >> throwM bad
         Right good -> release resource >> pure good
 
--- Note: this is used only by restoreCheckpoint and restoreCheckpoint is
--- not really expected to work.
---
--- This is good, because whatever this function is doing does not seem
--- to make a great deal of sense. (Which has become more overt with recent
--- reorgs and cleanup, but hasn't itself changed.)
-combineRW :: TopLevelCheckpoint -> TopLevelRW -> IO TopLevelRW
-combineRW (TopLevelCheckpoint chk scc) rw = do
-     let CryptolEnvStack chk'cenv chk'cenvs = rwGetCryptolEnvStack chk
-         CryptolEnvStack rw'cenv rw'cenvs = rwGetCryptolEnvStack rw
-     -- Caution: this merge may have unexpected results if the
-     -- number of scopes doesn't match. But, it doesn't make sense
-     -- to do that in the first place. Caveat emptor...
-     cenv' <- CEnv.combineCryptolEnv chk'cenv rw'cenv
-     cenvs' <- zipWithM CEnv.combineCryptolEnv chk'cenvs rw'cenvs
-     sc' <- restoreSharedContext scc (rwSharedContext rw)
-     let cryenv' = CryptolEnvStack cenv' cenvs'
-     let chk' = rwSetCryptolEnvStack cryenv' chk
-     return chk' { rwSharedContext = sc' }
-
 -- | Represents the mutable state of the TopLevel monad
 --   that can later be restored.
 data TopLevelCheckpoint =
@@ -151,29 +130,76 @@ data TopLevelCheckpoint =
     TopLevelRW
     SharedContextCheckpoint
 
-makeCheckpoint :: TopLevelRW -> IO TopLevelCheckpoint
-makeCheckpoint rw =
-  do scc <- checkpointSharedContext (rwSharedContext rw)
-     return (TopLevelCheckpoint rw scc)
+-- | Create a SAWScript checkpoint. This captures the current state of
+--   the TopLevel monad.
+--
+--   Caution: this logic assumes that TopLevelRO is genuinely
+--   readonly. Currently it is; but if it isn't (e.g. it used to have
+--   some things that updated while in nested blocks, because it's
+--   held in a `ReaderT` and not just a value), it won't and can't be
+--   restored. This doesn't matter if you don't try to restore a
+--   checkpoint that came from a different block; but if you do the
+--   resulting behavior can be odd (and likely unsound).
+--
+makeCheckpoint :: TopLevel TopLevelCheckpoint
+makeCheckpoint = do
+    rw <- get
+    scc <- liftIO $ checkpointSharedContext (rwSharedContext rw)
+    return $ TopLevelCheckpoint rw scc
 
+-- | Restore the Cryptol environment stack (full Cryptol environment)
+--   from a checkpoint.
+--
+-- Caution: the stack merge may have unexpected results if the number
+-- of scopes doesn't match, e.g. by using a checkpoint to teleport out
+-- of (or into) a nested block. But, it doesn't make sense to do that
+-- in the first place. Caveat emptor...
+--
+restoreCryptolEnvStack :: CryptolEnvStack -> CryptolEnvStack -> CryptolEnvStack
+restoreCryptolEnvStack chk'cryenv now'cryenv =
+     let CryptolEnvStack chk'cenv chk'cenvs = chk'cryenv
+         CryptolEnvStack now'cenv now'cenvs = now'cryenv
+         result'cenv = CEnv.restoreCryptolEnv chk'cenv now'cenv
+         result'cenvs = zipWith CEnv.restoreCryptolEnv chk'cenvs now'cenvs
+     in
+     CryptolEnvStack result'cenv result'cenvs
+
+-- | Restore a SAWScript checkpoint.
 restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
-restoreCheckpoint chk =
-  do rw <- getTopLevelRW
-     rw' <- io (combineRW chk rw)
-     putTopLevelRW rw'
+restoreCheckpoint (TopLevelCheckpoint chk'rw scc) = do
+     now'rw <- getTopLevelRW
 
--- | Capture the current state of the TopLevel monad
---   and return an action that, if invoked, resets
---   the state back to that point.
+     -- First, restore the SAWCore state.
+     -- (The SharedContext handle doesn't change; it doesn't matter
+     -- which reference to it we use.)
+     let sc = rwSharedContext now'rw
+     liftIO $ restoreSharedContext scc sc
+
+     -- Second, attend to the Cryptol environment so the Cryptol name
+     -- supply gets handled properly.
+     let chk'cryenv = rwGetCryptolEnvStack chk'rw
+         now'cryenv = rwGetCryptolEnvStack now'rw
+         result'cryenv = restoreCryptolEnvStack chk'cryenv now'cryenv
+
+     -- Restore the old TopLevelRW with the adjusted Cryptol environment
+     let chk'rw' = rwSetCryptolEnvStack result'cryenv chk'rw
+     putTopLevelRW chk'rw'
+
+-- | User-facing checkpoint command. Returns an action in TopLevel
+--   that, if invoked, rolls back the state.
+--
+--   The print is here rather than in `restoreCheckpoint` so only the
+--   user's own checkpoints issue it. The checkpoints made by the REPL
+--   are supposed to be silent.
 checkpoint :: TopLevel (() -> TopLevel ())
-checkpoint = TopLevel_ $
-  do chk <- liftIO . makeCheckpoint =<< get
-     return $ \_ ->
-       do printOutLnTop Info "Restoring state from checkpoint"
-          restoreCheckpoint chk
+checkpoint = do
+    chk <- makeCheckpoint
+    return $ \_ -> do
+        printOutLnTop Info "Restoring state from checkpoint"
+        restoreCheckpoint chk
 
--- | Capture the current proof state and return an
---   action that, if invoked, resets the state back to that point.
+-- | Capture the current proof state and return an action that, if
+--   invoked, resets the state back to that point.
 proof_checkpoint :: ProofScript (() -> ProofScript ())
 proof_checkpoint =
   do ps <- get
