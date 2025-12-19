@@ -7,7 +7,7 @@
 Module      : SAWCore.Parser.AST
 Copyright   : Galois, Inc. 2012-2025
 License     : BSD3
-Maintainer  : jhendrix@galois.com
+Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}

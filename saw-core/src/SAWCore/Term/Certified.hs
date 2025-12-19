@@ -8,10 +8,20 @@ License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
+
+This module is the interface to the trusted kernel of SAWCore.
+The API is built around operations in the SAWCore monad, 'SCM'.
+Such functions are recognized by the @scm@ prefix.
+
+The API guarantees that all 'Term's are well-formed and well-typed
+with respect to the 'SharedContext' they were built with.
+Attempting to build an invalid 'Term' will result in a failure of type
+'TermError' being raised in the 'SCM' monad.
 -}
 
 module SAWCore.Term.Certified
-  ( SharedContext -- abstract
+  ( -- * Terms
+    SharedContext -- abstract
   , Term -- abstract
   , TermIndex
   , unwrapTermF
@@ -31,7 +41,6 @@ module SAWCore.Term.Certified
   , scmFlatTermF
   , scmApply
   , scmLambda
-  --, scLambdaList
   , scmPi
   , scmPiList
   , scmConst
@@ -47,7 +56,6 @@ module SAWCore.Term.Certified
   , scmRecordType
   , scmRecordValue
   , scmRecordSelect
-  --, scSort
   , scmSortWithFlags
   , scmNat
   , scmVector
@@ -80,6 +88,7 @@ module SAWCore.Term.Certified
   , scmFreshName
   , scFreshenGlobalIdent
   , scResolveNameByURI
+    -- * Checkpointing
   , SharedContextCheckpoint
   , checkpointSharedContext
   , restoreSharedContext
@@ -780,7 +789,7 @@ scmBeginDataType dtIdent dtParams dtIndices dtSort =
      scmRegisterGlobal dtIdent =<< scmConst dtName
      pure dtName
 
--- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
+-- | Complete a datatype, by adding its constructors. See also 'scmBeginDataType'.
 scmCompleteDataType :: Ident -> [Ctor] -> SCM ()
 scmCompleteDataType dtIdent ctors =
   do sc <- scmSharedContext

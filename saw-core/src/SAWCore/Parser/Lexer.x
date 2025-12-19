@@ -17,7 +17,7 @@
 Module      : SAWCore.Parser.Lexer
 Copyright   : Galois, Inc. 2012-2014
 License     : BSD3
-Maintainer  : jhendrix@galois.com
+Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}

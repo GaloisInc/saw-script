@@ -12,10 +12,13 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Simulator.RME
   ( evalSharedTerm
-  , RValue, Value(..)
+  , ReedMuller
+  , RPrim
+  , RValue
   , RExtra(..)
-  , runIdentity
   , withBitBlastedSATQuery
+  -- * Re-exports
+  , Value(..)
   ) where
 
 import Control.Monad (unless)
