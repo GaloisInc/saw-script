@@ -368,6 +368,7 @@ show_cfg : CFG -> String
 show_term : Term -> String
 simplify : Simpset -> ProofScript ()
 simplify_local : [Int] -> Simpset -> ProofScript ()
+simpset_union : Simpset -> Simpset -> Simpset
 size_to_term : Type -> Term
 str_concat : String -> String -> String
 str_concats : [String] -> String

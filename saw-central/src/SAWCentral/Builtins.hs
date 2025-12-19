@@ -75,6 +75,7 @@ import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
 import SAWCore.Typechecker (tcInsertModule, inferCompleteTerm)
 import SAWCore.Term.Functor
+import qualified SAWCore.TermNet as Net
 import CryptolSAWCore.TypedTerm
 
 import SAWCore.Prim (rethrowEvalError)
@@ -1553,6 +1554,9 @@ addsimp_shallow thm ss =
      io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule (shallowRule rule) ss)
+
+simpset_union :: SV.SAWSimpset -> SV.SAWSimpset -> SV.SAWSimpset
+simpset_union ss1 ss2 = Net.merge ss1 ss2
 
 -- TODO: remove this, it implicitly adds axioms
 addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset

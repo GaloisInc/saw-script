@@ -227,6 +227,9 @@ This release supports [version
 
 ## New Features
 
+* We have added a new command `simpset_union` that takes the union
+  of two `SimpSet`s.
+
 * SAW has a new command `mir_find_name : MIRModule -> String -> [MIRType] -> String`
   which can be used to find the name of the instantiation of a polymorphic function.
 

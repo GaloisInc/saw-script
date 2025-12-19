@@ -27,6 +27,7 @@ mir_slice_value : MIRValue -> MIRValue
 mir_str_slice_value : MIRValue -> MIRValue
 mir_vec : MIRModule -> MIRType -> MIRType
 rewrite : Simpset -> Term -> Term
+simpset_union : Simpset -> Simpset -> Simpset
 str_concat : String -> String -> String
 tail : {a} [a] -> [a]
 term_eval : Term -> Term

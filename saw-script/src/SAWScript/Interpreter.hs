@@ -3869,6 +3869,11 @@ primitives = Map.fromList $
     , "set. Returns a new set."
     ]
 
+  , prim "simpset_union"       "Simpset -> Simpset -> Simpset"
+    (pureVal simpset_union)
+    Current
+    [ "Merge two simplification sets into one." ]
+
   , prim "addsimp'"            "Term -> Simpset -> Simpset"
     (funVal2 addsimp')
     HideDeprecated
