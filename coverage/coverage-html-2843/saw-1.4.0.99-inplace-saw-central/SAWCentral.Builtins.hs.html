@@ -1574,8 +1574,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1555 </span><span class="spaces">       </span><span class="nottickedoff">Nothing -&gt; fail &quot;addsimp: theorem not an equation&quot;</span>
 <span class="lineno"> 1556 </span><span class="spaces">       </span><span class="nottickedoff">Just rule -&gt; pure (addRule (shallowRule rule) ss)</span></span>
 <span class="lineno"> 1557 </span>
-<span class="lineno"> 1558 </span>simpset_union :: SV.SAWSimpset -&gt; SV.SAWSimpset -&gt; SV.SAWSimpset
-<span class="lineno"> 1559 </span><span class="decl"><span class="nottickedoff">simpset_union ss1 ss2 = Net.merge ss1 ss2</span></span>
+<span class="lineno"> 1558 </span>mergesimpsets :: SV.SAWSimpset -&gt; SV.SAWSimpset -&gt; SV.SAWSimpset
+<span class="lineno"> 1559 </span><span class="decl"><span class="nottickedoff">mergesimpsets ss1 ss2 = Net.merge ss1 ss2</span></span>
 <span class="lineno"> 1560 </span>
 <span class="lineno"> 1561 </span>-- TODO: remove this, it implicitly adds axioms
 <span class="lineno"> 1562 </span>addsimp' :: Term -&gt; SV.SAWSimpset -&gt; TopLevel SV.SAWSimpset
