@@ -365,7 +365,7 @@ checkpointSharedContext sc =
             , sccTermIndex = i
             }
 
-restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO SharedContext
+restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
 restoreSharedContext scc sc =
   do -- Ensure that the checkpoint itself is not stale
      let i = sccTermIndex scc
@@ -386,7 +386,6 @@ restoreSharedContext scc sc =
      -- Filter stale terms from AppCache
      modifyIORef' (scAppCache sc) (filterTFM (\t -> termIndex t < i))
      -- scNextVarIndex and scNextTermIndex are left untouched
-     pure sc
 
 --------------------------------------------------------------------------------
 -- Fundamental term builders

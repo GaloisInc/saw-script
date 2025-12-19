@@ -255,6 +255,5 @@ handleExceptions chk e
 --   action.
 exceptionProtect :: REPL () -> REPL ()
 exceptionProtect cmd = do
-    rw <- getTopLevelRW
-    chk <- liftIO $ makeCheckpoint rw
+    chk <- liftTopLevel makeCheckpoint
     cmd `catch` handleExceptions chk

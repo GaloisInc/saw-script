@@ -23,7 +23,7 @@ module CryptolSAWCore.CryptolEnv
   , bindExtCryptolModule
 
   , extractDefFromExtCryptolModule
-  , combineCryptolEnv
+  , restoreCryptolEnv
   , importCryptolModule
   , bindTypedTerm
   , bindType
@@ -491,12 +491,25 @@ translateDeclGroups sc env dgs =
 
 ---- Misc Exports --------------------------------------------------------------
 
-combineCryptolEnv :: CryptolEnv -> CryptolEnv -> IO CryptolEnv
-combineCryptolEnv chkEnv newEnv =
-  do let newMEnv = eModuleEnv newEnv
-     let chkMEnv = eModuleEnv chkEnv
-     let menv' = chkMEnv { ME.meNameSeeds = ME.meNameSeeds newMEnv }
-     return chkEnv { eModuleEnv = menv' }
+-- | Restore a `CryptolEnv` from a checkpoint. The first argument
+--   `chkEnv` is the `CryptolEnv` saved by / copied into the
+--   checkpoint; the second argument `newEnv` is the current one
+--   we wish to overwrite by rolling back to the checkpoint.
+--
+--   We need to keep the newer name supply so as to not reuse names
+--   already issued, in case some of those are still floating around
+--   after the restore. (They should not... but bugs happen.)
+--
+--   We also ought to invalidate terms constructed since the checkpoint
+--   was taken, like SAWCore does. See #2859.
+--
+restoreCryptolEnv :: CryptolEnv -> CryptolEnv -> CryptolEnv
+restoreCryptolEnv chkEnv newEnv =
+    let newMEnv = eModuleEnv newEnv
+        chkMEnv = eModuleEnv chkEnv
+        menv' = chkMEnv { ME.meNameSeeds = ME.meNameSeeds newMEnv }
+    in
+    chkEnv { eModuleEnv = menv' }
 
 
 ---- Types and functions for CryptolModule & ExtCryptolModule ------------------
