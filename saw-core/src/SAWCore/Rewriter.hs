@@ -703,8 +703,12 @@ rewriteSharedTerm sc ss t0 =
 
     rewriteAll :: (?cache :: RewriterCache, ?annSet :: IORef (Set a)) => Convertibility -> Term  -> IO Term
     rewriteAll convertibleFlag t =
-        useIntCache ?cache (termIndex t)
-        (rewriteTermF convertibleFlag (unwrapTermF t) >>= scTermF sc >>= rewriteTop convertibleFlag)
+      useIntCache ?cache (termIndex t) $
+      do let tf = unwrapTermF t
+         tf' <- rewriteTermF convertibleFlag tf
+         let same = (fmap termIndex tf' == fmap termIndex tf)
+         t' <- if same then pure t else scTermF sc tf'
+         rewriteTop convertibleFlag t'
 
     rewriteTermF :: (?cache :: RewriterCache, ?annSet :: IORef (Set a)) =>
                     Convertibility -> TermF Term -> IO (TermF Term)
