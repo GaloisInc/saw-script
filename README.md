@@ -159,7 +159,7 @@ version of `mir-json`.
 the Rust compiler.
 Instructions for installing the proper Rust compiler, building and installing
 `mir-json` itself, and then using it to compile the Rust standard libraries
-can be found 
+can be found
 [in the `mir-json` repository](https://github.com/GaloisInc/mir-json#installation-instructions).
 
 The installation instructions will tell you to set the `SAW_RUST_LIBRARY_PATH`
@@ -168,7 +168,7 @@ SAW uses this environment variable to find them; it must be set to use the
 Rust verification subsystem.
 
 Currently, SAW supports [version
-7](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#6) of
+8](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#6) of
 `mir-json`'s schema.
 
 ## Notes on Windows

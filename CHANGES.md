@@ -11,7 +11,7 @@
      cause SAW to raise an error.
 
 This release supports [version
-7](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#7) of
+8](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#7) of
 `mir-json`'s schema.
 
 ## Changes
