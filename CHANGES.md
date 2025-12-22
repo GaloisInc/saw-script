@@ -16,8 +16,8 @@ This release supports [version
 
 ## Changes
 
-* Renamed `coq` in command names to `rocq`. The old command names will
-  continue to work but have been deprecated.
+* Renamed `coq` in command names to `rocq` and removed experimental status. The
+  old command names will continue to work but have been deprecated.
   - `write_coq_term` is now `write_rocq_term`.
   - `write_coq_cryptol_module` is now `write_rocq_cryptol_module`.
   - `write_coq_sawcore_prelude` is now `write_rocq_sawcore_prelude`.

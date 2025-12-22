@@ -26,6 +26,7 @@ offline_cnf : String -> ProofScript ()
 offline_cnf_external : String -> ProofScript ()
 offline_coq : String -> ProofScript ()  (DEPRECATED AND WILL WARN)
 offline_extcore : String -> ProofScript ()
+offline_rocq : String -> ProofScript ()
 offline_smtlib2 : String -> ProofScript ()
 offline_unint_smtlib2 : [String] -> String -> ProofScript ()
 offline_w4_unint_bitwuzla : [String] -> String -> ProofScript ()
@@ -85,7 +86,7 @@ w4_unint_z3_using : String -> [String] -> ProofScript ()
 write_goal : String -> ProofScript ()
 yices : ProofScript ()
 z3 : ProofScript ()
-45 more matches tagged experimental; use enable_experimental to see them
+44 more matches tagged experimental; use enable_experimental to see them
 --------------------------------
 -- (ProofScript)
 abc : ProofScript ()
@@ -114,6 +115,7 @@ offline_cnf : String -> ProofScript ()
 offline_cnf_external : String -> ProofScript ()
 offline_coq : String -> ProofScript ()  (DEPRECATED AND WILL WARN)
 offline_extcore : String -> ProofScript ()
+offline_rocq : String -> ProofScript ()
 offline_smtlib2 : String -> ProofScript ()
 offline_unint_smtlib2 : [String] -> String -> ProofScript ()
 offline_w4_unint_bitwuzla : [String] -> String -> ProofScript ()
@@ -173,7 +175,7 @@ w4_unint_z3_using : String -> [String] -> ProofScript ()
 write_goal : String -> ProofScript ()
 yices : ProofScript ()
 z3 : ProofScript ()
-45 more matches tagged experimental; use enable_experimental to see them
+44 more matches tagged experimental; use enable_experimental to see them
 --------------------------------
 -- ProofScript Int
 goal_num : ProofScript Int

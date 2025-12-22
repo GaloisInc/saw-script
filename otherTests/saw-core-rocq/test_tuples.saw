@@ -1,6 +1,4 @@
 // Test: Tuples.
-enable_experimental;
-
 let t1 = {{ (0, 0) : ([8], [16]) }};
 write_rocq_term "TestTuple_Pair" [] [] "" t1;
 

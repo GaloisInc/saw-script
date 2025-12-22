@@ -1,6 +1,4 @@
 // Test: Lambda abstraction, application.
-enable_experimental;
-
 let f = {{ \(x : [8]) -> x + 1 }};
 let t1 = {{ f 5 }};
 write_rocq_term "TestLambda_App" [] [] "" t1;

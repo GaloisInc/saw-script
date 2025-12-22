@@ -1,3 +1,2 @@
 // Test: write_rocq_cryptol_module command
-enable_experimental;
 write_rocq_cryptol_module "../../exercises/sha512/SHA512.cry" "" [] [];
