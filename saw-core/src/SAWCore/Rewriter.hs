@@ -706,6 +706,7 @@ rewriteSharedTerm sc ss t0 =
       useIntCache ?cache (termIndex t) $
       do let tf = unwrapTermF t
          tf' <- rewriteTermF convertibleFlag tf
+         -- Optimization: Avoid calling scTermF to reconstruct an identical term
          let same = (fmap termIndex tf' == fmap termIndex tf)
          t' <- if same then pure t else scTermF sc tf'
          rewriteTop convertibleFlag t'
