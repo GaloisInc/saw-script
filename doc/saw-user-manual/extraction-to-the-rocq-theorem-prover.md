@@ -1,7 +1,7 @@
 # Extraction to the Rocq theorem prover
 
 In addition to the (semi-)automatic and compositional proof modes
-already discussed above, SAW has experimental support for exporting
+already discussed above, SAW has support for exporting
 Cryptol and SAWCore values as terms to the Rocq proof assistant[^5].
 This is intended to support more manual proof efforts for properties
 that go beyond what SAW can support (for example, proofs requiring
@@ -92,7 +92,6 @@ running the following commands in saw (either directly from the `saw`
 command prompt, or via a script file)
 
 :::{code-block} sawscript
-enable_experimental;
 write_rocq_cryptol_module "source.cry" "output.v" [] [];
 :::
 
@@ -105,7 +104,7 @@ necessary by giving a list of `(in,out)` pairs of names.  The fourth
 argument is a list of source identifiers to skip translating, if
 desired.  Authoritative online documentation for this command can be
 obtained directly from the `saw` executable via `:help
-write_rocq_cryptol_module` after `enable_experimental`.
+write_rocq_cryptol_module`.
 
 The resulting "output.v" file will have some of the usual hallmarks of
 computer-generated code; it will have poor formatting and, explicit

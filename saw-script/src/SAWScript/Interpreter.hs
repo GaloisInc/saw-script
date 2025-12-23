@@ -4976,7 +4976,7 @@ primitives = Map.fromList $
   , prim "write_rocq_term" ("String -> [(String, String)] -> [String] -> " <>
                             "String -> Term -> TopLevel ()")
     (pureVal do_write_rocq_term)
-    Experimental
+    Current
     [ "Write out a representation of a term in Gallina syntax for Rocq."
     , " - The first argument is the name to use in a Definition."
     , " - The second argument is a list of pairs of notation"
@@ -5001,7 +5001,7 @@ primitives = Map.fromList $
                                       "[(String, String)] -> [String] -> " <>
                                       "TopLevel ()")
     (pureVal do_write_rocq_cryptol_module)
-    Experimental
+    Current
     [ "Write out a representation of a Cryptol module in Gallina syntax"
     , "for Rocq."
     , " - The first argument is the file containing the module to"
@@ -5027,7 +5027,7 @@ primitives = Map.fromList $
   , prim "write_rocq_sawcore_prelude" ("String -> [(String, String)] -> " <>
                                        "[String] -> TopLevel ()")
     (pureVal do_write_rocq_sawcore_prelude)
-    Experimental
+    Current
     [ "Write out a representation of the SAWCore prelude in Gallina"
     , "syntax for Rocq."
     , " - The first argument is the name of the file to output into;"
@@ -5050,7 +5050,7 @@ primitives = Map.fromList $
   , prim "write_rocq_cryptol_primitives_for_sawcore"
     "String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal do_write_rocq_cryptol_primitives_for_sawcore)
-    Experimental
+    Current
     [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore"
     , "in Gallina syntax for Rocq."
     , " - The first argument is the name of the output file for"
@@ -5073,7 +5073,7 @@ primitives = Map.fromList $
 
   , prim "offline_rocq" "String -> ProofScript ()"
     (pureVal do_offline_rocq)
-    Experimental
+    Current
     [ "Write out a representation of the current goal in Gallina syntax"
     , "(for Rocq). The argument is a prefix to use for file names."
     ]

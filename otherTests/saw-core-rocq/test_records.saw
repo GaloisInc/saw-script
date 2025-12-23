@@ -1,6 +1,4 @@
 // Test: Record types, values, operations.
-enable_experimental;
-
 let t1 = {{ {x = 1, y = 2} : {x : [8], y : [8]} }};
 write_rocq_term "TestRec" [] [] "" t1;
 

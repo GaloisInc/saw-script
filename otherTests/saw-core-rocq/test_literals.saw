@@ -1,6 +1,4 @@
 // Test: Literals.
-enable_experimental;
-
 let t1 = {{ "" }};
 write_rocq_term "TestString_Empty" [] [] "" t1;
 

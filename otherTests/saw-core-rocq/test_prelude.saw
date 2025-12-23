@@ -1,2 +1,1 @@
-enable_experimental;
 write_rocq_sawcore_prelude "" [] [];

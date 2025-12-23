@@ -1,6 +1,4 @@
 // Test: Cryptol built-in type-level operations.
-enable_experimental;
-
 let t1 = {{ `(max (width (width 9)) (width 9)) == 4 }};
 write_rocq_term "TestTypelvl_MaxWidth" [] [] "" t1;
 

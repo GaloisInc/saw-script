@@ -19,7 +19,7 @@ ifeq ($(SAW),)
 endif
 
 generated/CryptolToRocq/SAWCorePrelude.v: ../../saw-core/prelude/Prelude.sawcore
-	(mkdir -p generated/CryptolToRocq; cd ../saw; $(SAW) generate_scaffolding.saw)
+	(mkdir -p generated/CryptolToRocq && cd ../saw && $(SAW) generate_scaffolding.saw)
 
 generated/CryptolToRocq/CryptolPrimitivesForSAWCore.v: ../../cryptol-saw-core/saw/Cryptol.sawcore
-	(mkdir -p generated/CryptolToRocq; cd ../saw; $(SAW) generate_scaffolding.saw)
+	(mkdir -p generated/CryptolToRocq && cd ../saw && $(SAW) generate_scaffolding.saw)

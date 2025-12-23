@@ -1,6 +1,4 @@
 // Test: offline_rocq command.
-enable_experimental;
-
 prove_print (offline_rocq "test_offline_rocq1") {{ \(x:[8]) (y:[8]) -> x == y ==> x+y == x+x }};
 
 prove_print (offline_rocq "test_offline_rocq2") {{ \(a:Bit) (b:Bit) (c:Bit) -> (a && b) || (a && c) == a && (b || c) }};
