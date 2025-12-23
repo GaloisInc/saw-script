@@ -51,17 +51,6 @@ Import VectorNotations.
 
 Definition Vec (n : nat) (a : Type) : Type := VectorDef.t a n.
 
-(* Work around https://github.com/rocq-prover/rocq/issues/16803. Without this, using
-   `lia` on `bitvector` values will fail to typecheck on pre-8.17 versions of
-   Rocq. Once our Rocq support window shifts enough, we can drop this workaround.
-*)
-Constraint Vec.u1 <= mkapp2.u0.
-Constraint Vec.u1 <= mkapp2.u1.
-Constraint Vec.u1 <= mkapp2.u2.
-Constraint Vec.u1 <= mkrel.u0.
-Constraint Vec.u1 <= mkapp.u0.
-Constraint Vec.u1 <= mkapp.u1.
-
 Lemma Vec_0_nil :
   forall (a : Type) (v : Vec 0 a),
   v = [].
