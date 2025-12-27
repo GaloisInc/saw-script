@@ -122,8 +122,6 @@ module SAWCore.SharedTerm
   , scFreshConstant
   , scDefineConstant
   , scOpaqueConstant
-  , scBeginDataType
-  , scCompleteDataType
   , CtorSpec(..)
   , DataTypeSpec(..)
   , scDefineDataType
@@ -738,24 +736,6 @@ scOpaqueConstant sc nmi ty = execSCM sc (scmOpaqueConstant nmi ty)
 -- Return the type constructor and data constructors as 'Term's.
 scDefineDataType :: SharedContext -> DataTypeSpec -> IO (Term, [Term])
 scDefineDataType sc spec = execSCM sc (scmDefineDataType spec)
-
--- | Insert an \"incomplete\" datatype, used as part of building up a
--- 'DataType' to typecheck its constructors. The constructors must be
--- registered separately with 'scCompleteDataType'.
-scBeginDataType ::
-  SharedContext ->
-  Ident {- ^ The name of this datatype -} ->
-  [(VarName, Term)] {- ^ The context of parameters of this datatype -} ->
-  [(VarName, Term)] {- ^ The context of indices of this datatype -} ->
-  Sort {- ^ The universe of this datatype -} ->
-  IO Name
-scBeginDataType sc dtIdent dtParams dtIndices dtSort =
-  execSCM sc (scmBeginDataType dtIdent dtParams dtIndices dtSort)
-
--- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
-scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
-scCompleteDataType sc dtIdent ctors =
-  execSCM sc (scmCompleteDataType dtIdent ctors)
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).

@@ -39,8 +39,6 @@ module SAWCore.Module
   , requireNameInMap
   , findDataType
   , insImport
-  , beginDataType
-  , completeDataType
   , findCtor
   , moduleDefs
   , findDef
@@ -311,37 +309,6 @@ insImport :: (ResolvedName -> Bool) -> Module -> Module -> Module
 insImport name_p i m =
   (foldl' insResolvedName m $ Map.elems $
    Map.filter name_p (moduleResolveMap i))
-
--- | Insert an \"incomplete\" datatype, used as part of building up a
--- 'DataType' to typecheck its constructors. This incomplete datatype
--- must have no constructors, and it will not be added to the
--- declaration list until it is completed by 'completeDataType'.
--- Return 'Left' in the case of a name clash, i.e., an existing
--- binding for the same 'Name'.
-beginDataType :: DataType -> ModuleMap -> Either Name ModuleMap
-beginDataType dt =
-  insResolvedNameInMap (ResolvedDataType dt')
-  where dt' = dt { dtCtors = [] }
-
--- | Complete a datatype, by adding its constructors. Return 'Left' if
--- there is a name clash with any constructor name.
-completeDataType :: Ident -> [Ctor] -> ModuleMap -> Either Name ModuleMap
-completeDataType ident ctors mm0 =
-  let str = identBaseName ident in
-  case resolveNameInMap mm0 ident of
-    Just (ResolvedDataType dt)
-      | null (dtCtors dt) ->
-        do let dt' = dt {dtCtors = ctors}
-           let r = ResolvedDataType dt'
-           let mm1 = insDeclInMap (identModule ident) (TypeDecl dt') mm0
-           let mm2 = mm1 { mmIndexMap = IntMap.insert (nameIndex (dtName dt)) r (mmIndexMap mm1) }
-           foldM (flip insResolvedNameInMap) mm2 (map ResolvedCtor ctors)
-    Just (ResolvedDataType _) ->
-      panic "completeDataType" ["datatype already completed: " <> str]
-    Just _ ->
-      panic "completeDataType" ["not a datatype: " <> str]
-    Nothing ->
-      panic "completeDataType" ["datatype not found: " <> str]
 
 -- | Add a declaration for a datatype along with its constructors.
 -- Return 'Left' if there is a name clash with the data type name or

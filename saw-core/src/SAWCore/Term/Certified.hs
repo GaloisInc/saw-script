@@ -84,8 +84,6 @@ module SAWCore.Term.Certified
   , scmOpaqueConstant
   , DataTypeSpec(..)
   , CtorSpec(..)
-  , scmBeginDataType
-  , scmCompleteDataType
   , scmDefineDataType
   , scImportModule
   , scLoadModule
@@ -99,7 +97,7 @@ module SAWCore.Term.Certified
   ) where
 
 import Control.Lens
-import Control.Monad (foldM, forM, forM_, join, unless, when)
+import Control.Monad (foldM, forM, join, unless, when)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), runReaderT, ask)
@@ -131,9 +129,7 @@ import qualified SAWSupport.IntRangeSet as IntRangeSet
 
 import SAWCore.Cache
 import SAWCore.Module
-  ( beginDataType
-  , completeDataType
-  , dtName
+  ( dtName
   , ctorNumParams
   , ctorName
   , emptyModuleMap
@@ -768,50 +764,6 @@ scmFindDefBody vi =
      case lookupVarIndexInMap vi mm of
        Just (ResolvedDef d) -> pure (defBody d)
        _ -> pure Nothing
-
--- | Insert an \"incomplete\" datatype, used as part of building up a
--- 'DataType' to typecheck its constructors. The constructors must be
--- registered separately with 'scCompleteDataType'.
-scmBeginDataType ::
-  Ident {- ^ The name of this datatype -} ->
-  [(VarName, Term)] {- ^ The context of parameters of this datatype -} ->
-  [(VarName, Term)] {- ^ The context of indices of this datatype -} ->
-  Sort {- ^ The universe of this datatype -} ->
-  SCM Name
-scmBeginDataType dtIdent dtParams dtIndices dtSort =
-  do dtName <- scmRegisterName (ModuleIdentifier dtIdent)
-     dtType <- scmPiList (dtParams ++ dtIndices) =<< scmSort dtSort
-     dtMotiveName <- scmFreshVarName "p"
-     dtArgName <- scmFreshVarName "arg"
-     let dt = DataType { dtCtors = [], .. }
-     sc <- scmSharedContext
-     e <-
-       liftIO $ atomicModifyIORef' (scModuleMap sc) $ \mm ->
-       case beginDataType dt mm of
-         Left nm -> (mm, Just (AlreadyDefined nm))
-         Right mm' -> (mm', Nothing)
-     maybe (pure ()) scmError e
-     scmRegisterGlobal dtIdent =<< scmConst dtName
-     pure dtName
-
--- | Complete a datatype, by adding its constructors. See also 'scmBeginDataType'.
-scmCompleteDataType :: Ident -> [Ctor] -> SCM ()
-scmCompleteDataType dtIdent ctors =
-  do sc <- scmSharedContext
-     e <-
-       liftIO $
-       atomicModifyIORef' (scModuleMap sc) $ \mm ->
-       case completeDataType dtIdent ctors mm of
-         Left nm -> (mm, Just (AlreadyDefined nm))
-         Right mm' -> (mm', Nothing)
-     maybe (pure ()) scmError e
-     forM_ ctors $ \ctor ->
-       case nameInfo (ctorName ctor) of
-         ModuleIdentifier ident ->
-           -- register constructor in scGlobalEnv if it has an Ident name
-           scmRegisterGlobal ident =<< scmConst (ctorName ctor)
-         ImportedName{} ->
-           pure ()
 
 -- | Insert an \"injectCode\" declaration to the given SAWCore module.
 -- This declaration has no logical effect within SAW; it is used to
