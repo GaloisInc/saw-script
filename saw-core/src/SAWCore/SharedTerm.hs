@@ -124,6 +124,9 @@ module SAWCore.SharedTerm
   , scOpaqueConstant
   , scBeginDataType
   , scCompleteDataType
+  , CtorSpec(..)
+  , DataTypeSpec(..)
+  , scDefineDataType
     -- * Reduction
   , scWhnf
   , scConvertible
@@ -730,6 +733,11 @@ scOpaqueConstant ::
   Term {- ^ type of the constant -} ->
   IO Term
 scOpaqueConstant sc nmi ty = execSCM sc (scmOpaqueConstant nmi ty)
+
+-- | Define a new data type with constructors in the global context.
+-- Return the type constructor and data constructors as 'Term's.
+scDefineDataType :: SharedContext -> DataTypeSpec -> IO (Term, [Term])
+scDefineDataType sc spec = execSCM sc (scmDefineDataType spec)
 
 -- | Insert an \"incomplete\" datatype, used as part of building up a
 -- 'DataType' to typecheck its constructors. The constructors must be

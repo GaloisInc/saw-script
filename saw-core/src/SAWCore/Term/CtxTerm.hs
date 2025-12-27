@@ -17,7 +17,6 @@ import SAWCore.Module (CtorArg(..))
 import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
-import SAWCore.Term.Certified (CtorSpec(..))
 
 -- | Test if a 'Term' is an application of a specific datatype with the
 -- supplied context of parameters and indices
