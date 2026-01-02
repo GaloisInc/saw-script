@@ -81,7 +81,7 @@ span.spaces    { background: white }
 <span class="lineno">   62 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
 <span class="lineno">   63 </span>
 <span class="lineno">   64 </span>-- Prop is the lowest sort
-<span class="lineno">   65 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Ord Sort</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">   65 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Ord Sort</span></span></span></span></span></span></span></span></span></span></span></span> where
 <span class="lineno">   66 </span>  <span class="decl"><span class="istickedoff">PropSort &lt;= _ = True</span>
 <span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">(TypeSort _) &lt;= PropSort = <span class="nottickedoff">False</span></span>
 <span class="lineno">   68 </span><span class="spaces">  </span><span class="istickedoff">(TypeSort i) &lt;= (TypeSort j) = i &lt;= j</span></span>
@@ -107,8 +107,8 @@ span.spaces    { background: white }
 <span class="lineno">   88 </span>
 <span class="lineno">   89 </span>-- | Get the maximum sort in a list, returning Prop for the empty list
 <span class="lineno">   90 </span>maxSort :: [Sort] -&gt; Sort
-<span class="lineno">   91 </span><span class="decl"><span class="istickedoff">maxSort [] = propSort</span>
-<span class="lineno">   92 </span><span class="spaces"></span><span class="istickedoff">maxSort ss = maximum ss</span></span>
+<span class="lineno">   91 </span><span class="decl"><span class="nottickedoff">maxSort [] = propSort</span>
+<span class="lineno">   92 </span><span class="spaces"></span><span class="nottickedoff">maxSort ss = maximum ss</span></span>
 <span class="lineno">   93 </span>
 <span class="lineno">   94 </span>-- | This type represents a set of advisory flags for 'Sort's that are mostly
 <span class="lineno">   95 </span>-- ignored, but are used in the Rocq export process to indicate where various
