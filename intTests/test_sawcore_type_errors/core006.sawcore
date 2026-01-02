@@ -3,5 +3,5 @@
 module core006 where import Prelude;
 
 data Foo (a : sort 1) : sort 0 where {
-  MkFoo : a -> Foo;
+  MkFoo : a -> Foo a;
 }

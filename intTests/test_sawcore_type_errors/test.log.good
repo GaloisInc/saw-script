@@ -338,8 +338,15 @@ Stack trace:
    test.saw:3:21-3:59 in load
    test.saw:72:1-72:23 (at top level)
 core006.sawcore:5:5:
-Malformed declaration for "Foo"
-Universe level of parameters should be no greater than that of the datatype
+Universe level of parameters greater than data type sort
+Data type name:
+  core006.Foo
+Data type sort:
+  sort 0
+Parameter name:
+  a
+Parameter type:
+  sort 1
 
 Universe level of indices should be strictly contained in that of the datatype
 == Anticipated failure message ==
@@ -350,8 +357,17 @@ Stack trace:
    test.saw:3:21-3:59 in load
    test.saw:75:1-75:23 (at top level)
 core007.sawcore:5:5:
-Malformed declaration for "Foo"
-Universe level of indices should be strictly contained in that of the datatype
+Universe level of indices not contained in data type sort
+Data type name:
+  core007.Foo
+Data type sort:
+  sort 0
+Index name:
+  t
+Index type:
+  sort 0
+Index sort:
+  sort 1
 
 Universe level of constructors should be strictly contained in that of the datatype
 == Anticipated failure message ==
@@ -362,6 +378,18 @@ Stack trace:
    test.saw:3:21-3:59 in load
    test.saw:78:1-78:23 (at top level)
 core008.sawcore:5:5:
-Malformed declaration for "Foo"
-Universe level of constructors should be strictly contained in that of the datatype
+Universe level of constructor not contained in data type sort
+Data type name:
+  core008.Foo
+Data type sort:
+  sort 0
+Constructor name:
+  core008.MkFoo
+Constructor type:
+  (a : sort 0)
+  -> t
+  -> a
+  -> core008.Foo t
+Constructor sort:
+  sort 1
 

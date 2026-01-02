@@ -122,8 +122,9 @@ module SAWCore.SharedTerm
   , scFreshConstant
   , scDefineConstant
   , scOpaqueConstant
-  , scBeginDataType
-  , scCompleteDataType
+  , CtorSpec(..)
+  , DataTypeSpec(..)
+  , scDefineDataType
     -- * Reduction
   , scWhnf
   , scConvertible
@@ -447,6 +448,59 @@ prettyTermError opts ne err =
       [ "Attempt to redefine existing constant"
       , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo nm))
       ]
+    DataTypeKindNotClosed dname dtype ->
+      [ "Kind of data type contains free variables"
+      , "Name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Kind:"
+      , ishow dtype
+      ]
+    DataTypeParameterSort dname dsort pname ptype ->
+      [ "Universe level of parameters greater than data type sort"
+      , "Data type name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Data type sort:"
+      , PP.indent 2 $ PP.pretty (show dsort)
+      , "Parameter name:"
+      , PP.indent 2 $ PP.pretty (vnName pname)
+      , "Parameter type:"
+      , ishow ptype
+      ]
+    DataTypeIndexSort dname dsort iname itype ->
+      [ "Universe level of indices not contained in data type sort"
+      , "Data type name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Data type sort:"
+      , PP.indent 2 $ PP.pretty (show dsort)
+      , "Index name:"
+      , PP.indent 2 $ PP.pretty (vnName iname)
+      , "Index type:"
+      , ishow itype
+      , "Index sort:"
+      , tyshow itype
+      ]
+    DataTypeCtorNotClosed dname cname ctype ->
+      [ "Data constructor type contains free variables"
+      , "Data type name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Constructor name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo cname))
+      , "Constructor type:"
+      , ishow ctype
+      ]
+    DataTypeCtorSort dname dsort cname ctype ->
+      [ "Universe level of constructor not contained in data type sort"
+      , "Data type name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Data type sort:"
+      , PP.indent 2 $ PP.pretty (show dsort)
+      , "Constructor name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo cname))
+      , "Constructor type:"
+      , ishow ctype
+      , "Constructor sort:"
+      , tyshow ctype
+      ]
   where
     ishow :: Term -> PPS.Doc
     ishow t = PP.indent 2 $ prettyTermWithEnv opts ne t
@@ -731,23 +785,10 @@ scOpaqueConstant ::
   IO Term
 scOpaqueConstant sc nmi ty = execSCM sc (scmOpaqueConstant nmi ty)
 
--- | Insert an \"incomplete\" datatype, used as part of building up a
--- 'DataType' to typecheck its constructors. The constructors must be
--- registered separately with 'scCompleteDataType'.
-scBeginDataType ::
-  SharedContext ->
-  Ident {- ^ The name of this datatype -} ->
-  [(VarName, Term)] {- ^ The context of parameters of this datatype -} ->
-  [(VarName, Term)] {- ^ The context of indices of this datatype -} ->
-  Sort {- ^ The universe of this datatype -} ->
-  IO Name
-scBeginDataType sc dtIdent dtParams dtIndices dtSort =
-  execSCM sc (scmBeginDataType dtIdent dtParams dtIndices dtSort)
-
--- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
-scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
-scCompleteDataType sc dtIdent ctors =
-  execSCM sc (scmCompleteDataType dtIdent ctors)
+-- | Define a new data type with constructors in the global context.
+-- Return the type constructor and data constructors as 'Term's.
+scDefineDataType :: SharedContext -> DataTypeSpec -> IO (Term, [Term])
+scDefineDataType sc spec = execSCM sc (scmDefineDataType spec)
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
