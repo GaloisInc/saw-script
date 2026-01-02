@@ -448,6 +448,59 @@ prettyTermError opts ne err =
       [ "Attempt to redefine existing constant"
       , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo nm))
       ]
+    DataTypeKindNotClosed dname dtype ->
+      [ "Kind of data type contains free variables"
+      , "Name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Kind:"
+      , ishow dtype
+      ]
+    DataTypeParameterSort dname dsort pname ptype ->
+      [ "Universe level of parameters greater than data type sort"
+      , "Data type name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Data type sort:"
+      , PP.indent 2 $ PP.pretty (show dsort)
+      , "Parameter name:"
+      , PP.indent 2 $ PP.pretty (vnName pname)
+      , "Parameter type:"
+      , ishow ptype
+      ]
+    DataTypeIndexSort dname dsort iname itype ->
+      [ "Universe level of indices not contained in data type sort"
+      , "Data type name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Data type sort:"
+      , PP.indent 2 $ PP.pretty (show dsort)
+      , "Index name:"
+      , PP.indent 2 $ PP.pretty (vnName iname)
+      , "Index type:"
+      , ishow itype
+      , "Index sort:"
+      , tyshow itype
+      ]
+    DataTypeCtorNotClosed dname cname ctype ->
+      [ "Data constructor type contains free variables"
+      , "Data type name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Constructor name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo cname))
+      , "Constructor type:"
+      , ishow ctype
+      ]
+    DataTypeCtorSort dname dsort cname ctype ->
+      [ "Universe level of constructor not contained in data type sort"
+      , "Data type name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , "Data type sort:"
+      , PP.indent 2 $ PP.pretty (show dsort)
+      , "Constructor name:"
+      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo cname))
+      , "Constructor type:"
+      , ishow ctype
+      , "Constructor sort:"
+      , tyshow ctype
+      ]
   where
     ishow :: Term -> PPS.Doc
     ishow t = PP.indent 2 $ prettyTermWithEnv opts ne t

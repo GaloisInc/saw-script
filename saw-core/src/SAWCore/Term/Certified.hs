@@ -183,6 +183,11 @@ data TermError
   | DuplicateURI URI
   | AlreadyDefined Name
   | AscriptionNotSubtype Term Term -- expected type, body
+  | DataTypeKindNotClosed Name Term
+  | DataTypeParameterSort Name Sort VarName Term -- dt name, dt sort, param name, param type
+  | DataTypeIndexSort Name Sort VarName Term -- dt name, dt sort, index name, index type
+  | DataTypeCtorNotClosed Name Name Term -- dt name, ctor name, ctor type
+  | DataTypeCtorSort Name Sort Name Term -- dt name, dt sort, ctor name, ctor type
 
 ----------------------------------------------------------------------
 -- SAWCore Monad
@@ -816,39 +821,60 @@ data CtorSpec =
 
 -- | Define a new data type with constructors in the global context.
 -- Return the type constructor and data constructors as 'Term's.
--- Possible errors: Name already defined, mismatched parameters...
--- Other errors: Indices not contained in data type sort.
--- Other errors: Constructor argument not contained in data type sort.
--- Other errors: Constructor index not contained in data type sort.
--- Other errors: Type not closed.
+-- Throw an error if the data type declaration is not well-formed:
+-- Parameters, indices and constructor arguments must refer only to
+-- bound variables and inhabit the appropriate sorts.
 scmDefineDataType :: DataTypeSpec -> SCM (Term, [Term])
 scmDefineDataType dts =
   do dName <- scmRegisterName (dtsNameInfo dts)
+     -- Enforce that sorts of dtsParams do not exceed dtsSort
+     let checkParam (x, ty) =
+           do paramSort <- scmEnsureSortType ty
+              unless (paramSort <= sortOf (dtsSort dts)) $
+                scmError (DataTypeParameterSort dName (dtsSort dts) x ty)
+     unless (dtsSort dts == PropSort) $ mapM_ checkParam (dtsParams dts)
+     -- Enforce that sorts of dtsIndices are strictly contained in dtsSort
+     let checkIndex (x, ty) =
+           do indexSort <- scmEnsureSortType ty
+              unless (indexSort <= dtsSort dts) $
+                scmError (DataTypeIndexSort dName (dtsSort dts) x ty)
+     unless (dtsSort dts == PropSort) $ mapM_ checkIndex (dtsIndices dts)
+     -- Construct the kind of the data type
      s <- scmSort (dtsSort dts)
      dType <- scmPiList (dtsParams dts ++ dtsIndices dts) s
-     -- TODO: Enforce that dType is closed.
+     -- Enforce that dType has no free variables.
+     unless (closedTerm dType) $
+       scmError (DataTypeKindNotClosed dName dType)
      -- NOTE: We can't use 'scmConst' with 'dName' because we haven't yet
      -- registered the name with its definition in the global context.
      -- We need to use the internal function 'scmMakeTerm' instead.
      let dSortOrType = maybe (Right dType) Left (asSort dType)
      d <- scmMakeTerm IntMap.empty (Constant dName) dSortOrType
+            -- | DataTypeKindNotClosed Name Term
      params <- scmVariables (dtsParams dts)
      d_params <- scmApplyAll d params
      let ctorArgType :: CtorArg -> SCM Term
          ctorArgType (ConstArg tp) = pure tp
          ctorArgType (RecursiveArg zs ixs) =
            scmPiList zs =<< scmApplyAll d_params ixs
-     let ctorSpecType :: CtorSpec -> SCM Term
-         ctorSpecType cspec =
+     let ctorSpecType :: Name -> CtorSpec -> SCM Term
+         ctorSpecType cName cspec =
            do d_params_ixs <- scmApplyAll d_params (cspecIndices cspec)
               bs <- traverse (traverse ctorArgType) (cspecArgs cspec)
               body <- scmPiList bs d_params_ixs
+              -- Enforce that the type of body is contained in dtsSort
+              cSort <- scmEnsureSortType body
+              unless (cSort <= dtsSort dts) $
+                scmError (DataTypeCtorSort dName (dtsSort dts) cName body)
+              -- Build constructor type
               scmPiList (dtsParams dts) body
      let makeCtor :: CtorSpec -> SCM Ctor
          makeCtor cs =
            do cName <- scmRegisterName (cspecNameInfo cs)
-              cType <- ctorSpecType cs
-              -- TODO: Enforce that cType is closed.
+              cType <- ctorSpecType cName cs
+              -- Enforce that cType is closed.
+              unless (closedTerm cType) $
+                scmError (DataTypeCtorNotClosed dName cName cType)
               pure $
                 Ctor
                 { ctorName = cName
