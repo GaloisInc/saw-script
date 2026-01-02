@@ -1,6 +1,4 @@
 // Test: Arithmetic, bitwise operations.
-enable_experimental;
-
 let t1 = {{ (5 : [8]) + (3 - 3) * 2 }};
 write_rocq_term "TestArith" [] [] "" t1;
 

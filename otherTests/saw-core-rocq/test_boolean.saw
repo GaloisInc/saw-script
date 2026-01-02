@@ -1,6 +1,4 @@
 // Test: Boolean, comparison operators.
-enable_experimental;
-
 let t1 = {{ True && False || ~True == True}};
 write_rocq_term "TestBool" [] [] "" t1;
 

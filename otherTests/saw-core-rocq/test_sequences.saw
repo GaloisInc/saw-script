@@ -1,6 +1,4 @@
 // Test: Sequence operations.
-enable_experimental;
-
 let t1 = {{ [1, 2, 3, 255] : [4][8] }};
 write_rocq_term "TestSeq" [] [] "" t1;
 
