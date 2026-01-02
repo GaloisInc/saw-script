@@ -422,7 +422,6 @@ processDataDecl (PosPair p nm) param_ctx dt_tp c_decls =
   -- Step 1: type-check the parameters
   typeInferCompleteInCtx param_ctx' $ \params -> do
   let dtParams = map (\(_, v, t, _) -> (v, t)) params
-  let param_sort = maxSort (map (\(_, _, _, s) -> s) params)
   let err :: String -> TCM a
       err msg = throwTCError $ DeclError nm msg
 
@@ -437,27 +436,12 @@ processDataDecl (PosPair p nm) param_ctx dt_tp c_decls =
   let dt_ixs' = map (\(x, t) -> (Un.termVarLocalName x, t)) dt_ixs
   dt_ixs_typed <- typeInferCompleteCtx dt_ixs'
   let dtIndices = map (\(_, v, t, _) -> (v, t)) dt_ixs_typed
-      ixs_max_sort = maxSort (map (\(_, _, _, s) -> s) dt_ixs_typed)
 
-  -- Step 3: do the necessary universe inclusion checking for any predicative
-  -- (non-Prop) inductive type, which includes:
-  --
-  -- 1. All ix types must be of sort dtSort; AND
-  -- 2. All param types must be of sort dtSort+1
-  if dtSort /= propSort && param_sort > sortOf dtSort then
-    err ("Universe level of parameters should be no greater" ++
-         " than that of the datatype")
-    else return ()
-  if dtSort /= propSort && ixs_max_sort > dtSort then
-    err ("Universe level of indices should be strictly contained" ++
-         " in that of the datatype")
-    else return ()
-
-  -- Step 4: Declare d as a free variable, so we can typecheck the constructors
+  -- Step 3: Declare d as a free variable, so we can typecheck the constructors
   dtType <- liftSCM $ SC.scmPiList (dtParams ++ dtIndices) =<< SC.scmSort dtSort
   dtVarName <- liftSCM $ SC.scmFreshVarName nm
 
-  -- Step 5: typecheck the constructors, and build Ctors for them
+  -- Step 4: typecheck the constructors, and build Ctors for them
   typed_ctors <-
     withVar nm dtVarName dtType $
     mapM (\(Un.Ctor (PosPair p' c) ctx body) ->
@@ -465,29 +449,14 @@ processDataDecl (PosPair p nm) param_ctx dt_tp c_decls =
   mnm <- getModuleName
   ctors <-
     withVar nm dtVarName dtType $
-    forM typed_ctors $ \(c, typed_tp) ->
-    -- Check that the universe level of the type of each constructor
-    do case termSortOrType typed_tp of
-           Left ctor_sort
-             | dtSort /= propSort && ctor_sort > dtSort ->
-               err ("Universe level of constructors should be strictly" ++
-                    " contained in that of the datatype")
-           Left _ ->
-               return ()
-           Right ty ->
-               panic "processDecls" [
-                   "Type of the type of constructor is not a sort!",
-                   "Constructor type: " <> Text.pack (ppTermPureDefaults typed_tp),
-                   "Type of that type: " <> Text.pack (ppTermPureDefaults ty)
-               ]
-       let tp = typed_tp
-       let nmi = ModuleIdentifier (mkIdent mnm c)
+    forM typed_ctors $ \(c, tp) ->
+    do let nmi = ModuleIdentifier (mkIdent mnm c)
        let result = mkCtorSpec nmi dtVarName dtParams dtIndices tp
        case result of
          Just spec -> pure spec
          Nothing -> err ("Malformed type form constructor: " ++ show c)
 
-  -- Step 6: Declare the datatype with the given ctors
+  -- Step 5: Declare the datatype with the given ctors
   motiveName <- liftSCM $ SC.scmFreshVarName "p"
   argName <- liftSCM $ SC.scmFreshVarName "arg"
   let dts =
