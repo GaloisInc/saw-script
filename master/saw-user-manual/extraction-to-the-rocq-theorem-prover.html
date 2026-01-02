@@ -124,7 +124,7 @@
   <section class="tex2jax_ignore mathjax_ignore" id="extraction-to-the-rocq-theorem-prover">
 <h1>Extraction to the Rocq theorem prover<a class="headerlink" href="#extraction-to-the-rocq-theorem-prover" title="Link to this heading"></a></h1>
 <p>In addition to the (semi-)automatic and compositional proof modes
-already discussed above, SAW has experimental support for exporting
+already discussed above, SAW has support for exporting
 Cryptol and SAWCore values as terms to the Rocq proof assistant<a class="footnote-reference brackets" href="#id3" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>5<span class="fn-bracket">]</span></a>.
 This is intended to support more manual proof efforts for properties
 that go beyond what SAW can support (for example, proofs requiring
@@ -203,8 +203,7 @@ which can then be compiled and pulled into subsequence developments.</p>
 to generate a Rocq file named <code class="docutils literal notranslate"><span class="pre">output.v</span></code>.  We can accomplish this by
 running the following commands in saw (either directly from the <code class="docutils literal notranslate"><span class="pre">saw</span></code>
 command prompt, or via a script file)</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">enable_experimental</span><span class="p">;</span>
-<span class="n">write_rocq_cryptol_module</span><span class="w"> </span><span class="s2">&quot;source.cry&quot;</span><span class="w"> </span><span class="s2">&quot;output.v&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">[];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">write_rocq_cryptol_module</span><span class="w"> </span><span class="s2">&quot;source.cry&quot;</span><span class="w"> </span><span class="s2">&quot;output.v&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">[];</span>
 </pre></div>
 </div>
 <p>In this default mode, identifiers in the Cryptol source will be
@@ -215,7 +214,7 @@ preexisting definitions. The third argument to
 necessary by giving a list of <code class="docutils literal notranslate"><span class="pre">(in,out)</span></code> pairs of names.  The fourth
 argument is a list of source identifiers to skip translating, if
 desired.  Authoritative online documentation for this command can be
-obtained directly from the <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable via <code class="docutils literal notranslate"><span class="pre">:help</span> <span class="pre">write_rocq_cryptol_module</span></code> after <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code>.</p>
+obtained directly from the <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable via <code class="docutils literal notranslate"><span class="pre">:help</span> <span class="pre">write_rocq_cryptol_module</span></code>.</p>
 <p>The resulting “output.v” file will have some of the usual hallmarks of
 computer-generated code; it will have poor formatting and, explicit
 parenthesis and fully-qualified names.  Thankfully, once loaded into
