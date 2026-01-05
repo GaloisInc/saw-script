@@ -813,10 +813,12 @@ data CtorSpec =
     -- ^ The name of this constructor
   , cspecArgs :: [(VarName, CtorArg)]
     -- ^ The argument types of this constructor.
-    -- ^ Earlier variables and 'dtsParams' are in scope.
+    -- Earlier variables and 'dtsParams' (from the enclosing
+    -- 'DataTypeSpec') are in scope.
   , cspecIndices :: [Term]
     -- ^ The indices of the result type of this constructor.
-    -- ^ Variables from 'dtsParams' and 'csArgs' are in scope.
+    -- Variables from 'dtsParams' (in the enclosing 'DataTypeSpec')
+    -- and 'cspecArgs' are in scope.
   }
 
 -- | Define a new data type with constructors in the global context.
