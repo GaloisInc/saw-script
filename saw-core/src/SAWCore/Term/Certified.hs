@@ -56,6 +56,7 @@ module SAWCore.Term.Certified
   , scmRecordType
   , scmRecordValue
   , scmRecordSelect
+  , scmSort
   , scmSortWithFlags
   , scmNat
   , scmVector
@@ -81,8 +82,9 @@ module SAWCore.Term.Certified
   , scmFreshConstant
   , scmDefineConstant
   , scmOpaqueConstant
-  , scmBeginDataType
-  , scmCompleteDataType
+  , DataTypeSpec(..)
+  , CtorSpec(..)
+  , scmDefineDataType
   , scImportModule
   , scLoadModule
   , scmFreshName
@@ -95,7 +97,7 @@ module SAWCore.Term.Certified
   ) where
 
 import Control.Lens
-import Control.Monad (foldM, forM, forM_, join, unless, when)
+import Control.Monad (foldM, forM, join, unless, when)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), runReaderT, ask)
@@ -127,9 +129,7 @@ import qualified SAWSupport.IntRangeSet as IntRangeSet
 
 import SAWCore.Cache
 import SAWCore.Module
-  ( beginDataType
-  , completeDataType
-  , dtName
+  ( dtName
   , ctorNumParams
   , ctorName
   , emptyModuleMap
@@ -140,6 +140,7 @@ import SAWCore.Module
   , insDefInMap
   , insInjectCodeInMap
   , insImportInMap
+  , insTypeDeclInMap
   , resolvedNameType
   , requireNameInMap
   , CtorArg(..)
@@ -182,6 +183,11 @@ data TermError
   | DuplicateURI URI
   | AlreadyDefined Name
   | AscriptionNotSubtype Term Term -- expected type, body
+  | DataTypeKindNotClosed Name Term
+  | DataTypeParameterSort Name Sort VarName Term -- dt name, dt sort, param name, param type
+  | DataTypeIndexSort Name Sort VarName Term -- dt name, dt sort, index name, index type
+  | DataTypeCtorNotClosed Name Name Term -- dt name, ctor name, ctor type
+  | DataTypeCtorSort Name Sort Name Term -- dt name, dt sort, ctor name, ctor type
 
 ----------------------------------------------------------------------
 -- SAWCore Monad
@@ -764,50 +770,6 @@ scmFindDefBody vi =
        Just (ResolvedDef d) -> pure (defBody d)
        _ -> pure Nothing
 
--- | Insert an \"incomplete\" datatype, used as part of building up a
--- 'DataType' to typecheck its constructors. The constructors must be
--- registered separately with 'scCompleteDataType'.
-scmBeginDataType ::
-  Ident {- ^ The name of this datatype -} ->
-  [(VarName, Term)] {- ^ The context of parameters of this datatype -} ->
-  [(VarName, Term)] {- ^ The context of indices of this datatype -} ->
-  Sort {- ^ The universe of this datatype -} ->
-  SCM Name
-scmBeginDataType dtIdent dtParams dtIndices dtSort =
-  do dtName <- scmRegisterName (ModuleIdentifier dtIdent)
-     dtType <- scmPiList (dtParams ++ dtIndices) =<< scmSort dtSort
-     dtMotiveName <- scmFreshVarName "p"
-     dtArgName <- scmFreshVarName "arg"
-     let dt = DataType { dtCtors = [], .. }
-     sc <- scmSharedContext
-     e <-
-       liftIO $ atomicModifyIORef' (scModuleMap sc) $ \mm ->
-       case beginDataType dt mm of
-         Left nm -> (mm, Just (AlreadyDefined nm))
-         Right mm' -> (mm', Nothing)
-     maybe (pure ()) scmError e
-     scmRegisterGlobal dtIdent =<< scmConst dtName
-     pure dtName
-
--- | Complete a datatype, by adding its constructors. See also 'scmBeginDataType'.
-scmCompleteDataType :: Ident -> [Ctor] -> SCM ()
-scmCompleteDataType dtIdent ctors =
-  do sc <- scmSharedContext
-     e <-
-       liftIO $
-       atomicModifyIORef' (scModuleMap sc) $ \mm ->
-       case completeDataType dtIdent ctors mm of
-         Left nm -> (mm, Just (AlreadyDefined nm))
-         Right mm' -> (mm', Nothing)
-     maybe (pure ()) scmError e
-     forM_ ctors $ \ctor ->
-       case nameInfo (ctorName ctor) of
-         ModuleIdentifier ident ->
-           -- register constructor in scGlobalEnv if it has an Ident name
-           scmRegisterGlobal ident =<< scmConst (ctorName ctor)
-         ImportedName{} ->
-           pure ()
-
 -- | Insert an \"injectCode\" declaration to the given SAWCore module.
 -- This declaration has no logical effect within SAW; it is used to
 -- add extra code (like class instance declarations, for example) to
@@ -820,6 +782,146 @@ scInjectCode ::
   IO ()
 scInjectCode sc mnm ns txt =
   modifyIORef' (scModuleMap sc) $ insInjectCodeInMap mnm ns txt
+
+--------------------------------------------------------------------------------
+-- Data Types
+
+data DataTypeSpec =
+  DataTypeSpec
+  { dtsNameInfo :: NameInfo
+    -- ^ The name of this data type
+  , dtsParams :: [(VarName, Term)]
+    -- ^ The context of parameters of this data type.
+    -- Earlier variable names in the list are in scope.
+  , dtsIndices :: [(VarName, Term)]
+    -- ^ The context of indices of this data type.
+    -- Earlier variable names and 'dtsParams' are in scope.
+  , dtsSort :: Sort
+    -- ^ The universe of this data type.
+  , dtsCtors :: [CtorSpec]
+    -- ^ The list of constructors of this data type.
+    -- Variables from 'dtsParams' are in scope.
+  , dtsMotiveName :: VarName
+    -- ^ Variable name to use for the motive parameter of the recursor.
+  , dtsArgName :: VarName
+    -- ^ Variable name to use for the data argument of the recursor.
+  }
+
+data CtorSpec =
+  CtorSpec
+  { cspecNameInfo :: NameInfo
+    -- ^ The name of this constructor
+  , cspecArgs :: [(VarName, CtorArg)]
+    -- ^ The argument types of this constructor.
+    -- Earlier variables and 'dtsParams' (from the enclosing
+    -- 'DataTypeSpec') are in scope.
+  , cspecIndices :: [Term]
+    -- ^ The indices of the result type of this constructor.
+    -- Variables from 'dtsParams' (in the enclosing 'DataTypeSpec')
+    -- and 'cspecArgs' are in scope.
+  }
+
+-- | Define a new data type with constructors in the global context.
+-- Return the type constructor and data constructors as 'Term's.
+-- Throw an error if the data type declaration is not well-formed:
+-- Parameters, indices and constructor arguments must refer only to
+-- bound variables and inhabit the appropriate sorts.
+scmDefineDataType :: DataTypeSpec -> SCM (Term, [Term])
+scmDefineDataType dts =
+  do dName <- scmRegisterName (dtsNameInfo dts)
+     -- Enforce that sorts of dtsParams do not exceed dtsSort
+     let checkParam (x, ty) =
+           do paramSort <- scmEnsureSortType ty
+              unless (paramSort <= sortOf (dtsSort dts)) $
+                scmError (DataTypeParameterSort dName (dtsSort dts) x ty)
+     unless (dtsSort dts == PropSort) $ mapM_ checkParam (dtsParams dts)
+     -- Enforce that sorts of dtsIndices are strictly contained in dtsSort
+     let checkIndex (x, ty) =
+           do indexSort <- scmEnsureSortType ty
+              unless (indexSort <= dtsSort dts) $
+                scmError (DataTypeIndexSort dName (dtsSort dts) x ty)
+     unless (dtsSort dts == PropSort) $ mapM_ checkIndex (dtsIndices dts)
+     -- Construct the kind of the data type
+     s <- scmSort (dtsSort dts)
+     dType <- scmPiList (dtsParams dts ++ dtsIndices dts) s
+     -- Enforce that dType has no free variables.
+     unless (closedTerm dType) $
+       scmError (DataTypeKindNotClosed dName dType)
+     -- NOTE: We can't use 'scmConst' with 'dName' because we haven't yet
+     -- registered the name with its definition in the global context.
+     -- We need to use the internal function 'scmMakeTerm' instead.
+     let dSortOrType = maybe (Right dType) Left (asSort dType)
+     d <- scmMakeTerm IntMap.empty (Constant dName) dSortOrType
+            -- | DataTypeKindNotClosed Name Term
+     params <- scmVariables (dtsParams dts)
+     d_params <- scmApplyAll d params
+     let ctorArgType :: CtorArg -> SCM Term
+         ctorArgType (ConstArg tp) = pure tp
+         ctorArgType (RecursiveArg zs ixs) =
+           scmPiList zs =<< scmApplyAll d_params ixs
+     let ctorSpecType :: Name -> CtorSpec -> SCM Term
+         ctorSpecType cName cspec =
+           do d_params_ixs <- scmApplyAll d_params (cspecIndices cspec)
+              bs <- traverse (traverse ctorArgType) (cspecArgs cspec)
+              body <- scmPiList bs d_params_ixs
+              -- Enforce that the type of body is contained in dtsSort
+              cSort <- scmEnsureSortType body
+              unless (cSort <= dtsSort dts) $
+                scmError (DataTypeCtorSort dName (dtsSort dts) cName body)
+              -- Build constructor type
+              scmPiList (dtsParams dts) body
+     let makeCtor :: CtorSpec -> SCM Ctor
+         makeCtor cs =
+           do cName <- scmRegisterName (cspecNameInfo cs)
+              cType <- ctorSpecType cName cs
+              -- Enforce that cType is closed.
+              unless (closedTerm cType) $
+                scmError (DataTypeCtorNotClosed dName cName cType)
+              pure $
+                Ctor
+                { ctorName = cName
+                , ctorArgStruct =
+                  CtorArgStruct
+                  { ctorParams = dtsParams dts
+                  , ctorArgs = cspecArgs cs
+                  , ctorIndices = cspecIndices cs
+                  }
+                , ctorDataType = dName
+                , ctorType = cType
+                }
+     ctors <- traverse makeCtor (dtsCtors dts)
+     let dt =
+           DataType
+           { dtName = dName
+           , dtParams = dtsParams dts
+           , dtIndices = dtsIndices dts
+           , dtSort = dtsSort dts
+           , dtCtors = ctors
+           , dtType = dType
+           , dtMotiveName = dtsMotiveName dts
+           , dtArgName = dtsArgName dts
+           }
+     -- Register the data type in the ModuleMap.
+     sc <- scmSharedContext
+     liftIO $ modifyIORef' (scModuleMap sc) $ \mm ->
+       case insTypeDeclInMap dt mm of
+         -- This should never happen; duplicate names are detected by scRegisterName.
+         Left nm -> panic "scmDefineDataType" ["Duplicate name: " <> toAbsoluteName (nameInfo nm)]
+         Right mm' -> mm'
+     -- Register data type constant in scGlobalEnv if it has an Ident name.
+     case dtsNameInfo dts of
+       ImportedName{} -> pure ()
+       ModuleIdentifier i -> scmRegisterGlobal i d
+     -- Register constructors in scGlobalEnv if they have Ident names.
+     cs <-
+       forM ctors $ \ctor ->
+       do c <- scmConst (ctorName ctor)
+          case nameInfo (ctorName ctor) of
+            ImportedName{} -> pure ()
+            ModuleIdentifier i -> scmRegisterGlobal i c
+          pure c
+     -- Return Terms for data type and constructors.
+     pure (d, cs)
 
 --------------------------------------------------------------------------------
 -- Recursors
