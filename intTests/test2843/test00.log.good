@@ -1,0 +1,16 @@
+Loading file "test00.saw"
+Goal prove_print (goal number 0): prove
+at test00.saw:16:1-24:3
+
+(y : Bool)
+-> EqTrue
+     (ecEq Bool PEqBit
+        (ecOr Bool PLogicBit False (ecAnd Bool PLogicBit y True))
+        y)
+
+Goal prove_print (goal number 0): prove
+at test00.saw:16:1-24:3
+
+(y : Bool)
+-> EqTrue (ecEq Bool PEqBit y y)
+

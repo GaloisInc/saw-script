@@ -1,0 +1,24 @@
+// Test for simpset_union
+
+and_true_r <- prove_print z3 {{
+   \x ->
+   x && True == x
+}};
+or_false_l <- prove_print z3 {{
+   \x ->
+   False || x == x
+}};
+
+let s1 = addsimp and_true_r (empty_ss);
+let s2 = addsimp or_false_l (empty_ss);
+let s3 = simpset_union s1 s2;
+
+prove_print (do {
+   print_goal;
+   simplify s3;
+   print_goal;
+   goal_eval;
+   trivial;
+}) {{
+   \y -> False || y && True == y
+}};
