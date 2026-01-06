@@ -81,7 +81,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04]
         cabal: ["3.10.3.0"]
-        ghc: ["9.4.8", "9.6.6", "9.8.2"]
+        ghc: ["9.4.8", "9.6.7", "9.8.4"]
         haddock: [true]
         run-tests: [true]
         hpc: [false]
