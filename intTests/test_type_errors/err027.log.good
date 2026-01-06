@@ -1,23 +1,7 @@
 Loading file "err027.saw"
 err027.saw:7:10-7:11: Error: Syntax error: unexpected `]'
-Some legal inputs at this point:
-   'ProofScript'
-   'TopLevel'
-   'CrucibleSetup'
-   'CrucibleMethodSpec'
-   'LLVMSpec'
-   'JVMMethodSpec'
-   'JVMSpec'
-   'MIRSpec'
-   'Bool'
-   'Int'
-   'String'
-   'Term'
-   'Type'
-   'AIG'
-   'CFG'
-   '['
-   '('
-   '{'
-   name
+Some legal inputs at this point: 'ProofScript' 'TopLevel'
+   'CrucibleSetup' 'CrucibleMethodSpec' 'LLVMSpec' 'JVMMethodSpec'
+   'JVMSpec' 'MIRSpec' 'Bool' 'Int' 'String' 'Term' 'Type' 'AIG'
+   'CFG' '[' '(' '{' name
 FAILED

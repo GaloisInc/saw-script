@@ -1,18 +1,5 @@
 Loading file "parser013.saw"
 parser013.saw:4:1-4:1: Error: Syntax error: unexpected `end-of-file'
-Some legal inputs at this point:
-   'let'
-   'rec'
-   'do'
-   'if'
-   '['
-   '('
-   ')'
-   '{'
-   '\\'
-   string
-   code
-   ctype
-   num
-   name
+Some legal inputs at this point: 'let' 'rec' 'do' 'if' '[' '('
+   ')' '{' '\\' string code ctype num name
 FAILED

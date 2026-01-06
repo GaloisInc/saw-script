@@ -381,10 +381,12 @@ prettyParseError eofName pe = case pe of
 	      [] -> "Syntax error: unexpected" PP.<+> tstr'
 	      [p] -> "Syntax error: missing" PP.<+> PP.pretty p
 	      ps ->
+                  let ps' =
+                        "Some legal inputs at this point:" : map PP.pretty ps
+                  in
 		  PP.vsep [
                       "Syntax error: unexpected" PP.<+> tstr',
-		      "Some legal inputs at this point:",
-		      PP.vsep $ map (\p -> PP.indent 3 $ PP.pretty p) ps
+		      PP.nest 3 $ PP.group $ PP.fillSep $ ps'
 		  ]
         in
 	(optpos, doc)

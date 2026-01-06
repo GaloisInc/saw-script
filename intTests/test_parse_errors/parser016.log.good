@@ -1,18 +1,5 @@
 <stdin>:2:1-2:1: Error: Syntax error: unexpected `end-of-line'
-Some legal inputs at this point:
-   'let'
-   'rec'
-   'do'
-   'if'
-   '['
-   '('
-   ')'
-   '{'
-   '\\'
-   string
-   code
-   ctype
-   num
-   name
+Some legal inputs at this point: 'let' 'rec' 'do' 'if' '[' '('
+   ')' '{' '\\' string code ctype num name
 
 <stdin>:1:1-1:4: Unbound variable: "bar" (<stdin>:1:1-1:4)

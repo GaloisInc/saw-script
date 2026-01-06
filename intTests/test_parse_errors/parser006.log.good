@@ -1,6 +1,4 @@
 Loading file "parser006.saw"
 parser006.saw:3:5-3:15: Error: Syntax error: unexpected `rebindable'
-Some legal inputs at this point:
-   '('
-   name
+Some legal inputs at this point: '(' name
 FAILED
