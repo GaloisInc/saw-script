@@ -125,7 +125,7 @@ wrapDir dir m = do
 --
 readAny :: FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> WithMsgs a
 readAny fileName str eofName parser =
-    case lexSAW fileName str of
+    case lexSAW fileName eofName str of
         Left (_verbosity, pos, msg) ->
             Left [(pos, PP.pretty msg)]
         Right (tokens, optmsg) ->
@@ -280,7 +280,7 @@ readSchemaPure ::
     Text ->
     Schema
 readSchemaPure fakeFileName lc tyenv str =
-    let schema = readAnyPure fakeFileName str "end of input" parseSchema (Text.pack fakeFileName) in
+    let schema = readAnyPure fakeFileName str "end-of-input" parseSchema (Text.pack fakeFileName) in
     panicOnMsgs' (Text.pack fakeFileName) $ checkSchema lc tyenv schema
 
 -- | Read a schema pattern from a string. This is used by the
@@ -296,7 +296,7 @@ readSchemaPattern ::
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
     IO SchemaPattern
 readSchemaPattern _opts fileName environ rbenv avail str = do
-  pat <- readAnyIO fileName str "end of line" parseSchemaPattern
+  pat <- readAnyIO fileName str "end-of-line" parseSchemaPattern
   let Environ varenv tyenv _cryenv = environ
 
   -- XXX it should not be necessary to do this munging
@@ -328,7 +328,7 @@ readExpression opts fileName environ rbenv avail str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  expr0 <- readAnyIO fileName str "end of line" parseExpression
+  expr0 <- readAnyIO fileName str "end-of-line" parseExpression
   expr <- resolveIncludes 0{-depth-} seen incpath opts Inc.processExpr expr0
   let Environ varenv tyenv _cryenvs = environ
 
@@ -370,7 +370,7 @@ readREPLTextUnchecked opts fileName str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  stmts <- readAnyIO fileName str "end of line" parseREPLText
+  stmts <- readAnyIO fileName str "end-of-line" parseREPLText
   resolveIncludes 0{-depth-} seen incpath opts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
@@ -428,7 +428,7 @@ includeFile depth seen incpath opts fname once = do
       Cons.noteN $ "Loading file \"" <> Text.pack fname' <> "\""
       ftext <- TextIO.readFile fname'
 
-      stmts <- wrapDir current' $ readAnyIO fname ftext "end of file" parseModule
+      stmts <- wrapDir current' $ readAnyIO fname ftext "end-of-file" parseModule
       resolveIncludes (depth + 1) seen incpath' opts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as

@@ -1,0 +1,3 @@
+// unexpected EOL in :type (parses expressions)
+
+:type (foo

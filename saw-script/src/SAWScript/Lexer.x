@@ -1,9 +1,6 @@
 {
 {-# LANGUAGE OverloadedStrings #-}
-module SAWScript.Lexer
-  ( scan
-  , lexSAW
-  ) where
+module SAWScript.Lexer (lexSAW) where
 
 import SAWCentral.Options (Verbosity(..))
 import SAWScript.Token
@@ -354,8 +351,9 @@ alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar _ = panic "Lexer" ["alexInputPrevChar"]
 
 -- read the text of a file, passing in the filename for use in positions
-scanTokens :: FilePath -> Text -> LexResult
-scanTokens filename str0 = go (initialPos, str0) Normal
+-- and also the name to use for the EOF token
+scanTokens :: FilePath -> Text -> Text -> LexResult
+scanTokens filename eofName str0 = go (initialPos, str0) Normal
   where
     fillPos pos height width =
         let startLine = apLine pos
@@ -367,7 +365,7 @@ scanTokens filename str0 = go (initialPos, str0) Normal
 
     go inp@(strPos, str) s = case alexScan inp (stateToInt s) of
         AlexEOF -> let strPos' = fillPos strPos 0 0
-                       tok = [TEOF strPos' "EOF"]
+                       tok = [TEOF strPos' eofName]
                    in case s of
             Normal ->
                 Right (tok, Nothing)
@@ -415,10 +413,6 @@ type OptMsg = Maybe DiagMsg
 type LexResult = Either DiagMsg ([Token Pos], OptMsg)
 
 -- entry point
-lexSAW :: FilePath -> Text -> LexResult
-lexSAW f text = scanTokens f text
-
--- alternate monadic entry point (XXX: does this have any value?)
-scan :: Monad m => FilePath -> Text -> m LexResult
-scan f = return . lexSAW f
+lexSAW :: FilePath -> Text -> Text -> LexResult
+lexSAW f eofName text = scanTokens f eofName text
 }

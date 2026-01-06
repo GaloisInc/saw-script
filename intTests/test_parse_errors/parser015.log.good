@@ -1,0 +1,4 @@
+<stdin>:1:5-1:5: Error: Syntax error: unexpected `end-of-line'
+Some legal inputs at this point:
+   ')'
+   ','
