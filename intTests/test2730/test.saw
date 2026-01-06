@@ -1,0 +1,8 @@
+// A regression test for #2730, which ensures that SAW can handle the
+// llvm.stack{save,restore}.p0 intrinsics that recent versions of Clang are
+// prone to generate.
+
+m <- llvm_load_module "test.bc";
+f <- llvm_extract m "f";
+let thm = {{ \x -> f x == x }};
+prove_print w4 thm;

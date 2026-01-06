@@ -1796,7 +1796,7 @@ cryptolTypeOfActual mty =
     Mir.TyErased       -> Nothing
     Mir.TyInterned _   -> Nothing
     Mir.TyDynamic _    -> Nothing
-    Mir.TyCoroutine    -> Nothing
+    Mir.TyCoroutine {} -> Nothing
     Mir.TyCoroutineClosure _ -> Nothing
   where
     baseSizeType :: Mir.BaseSize -> Maybe Cryptol.Type

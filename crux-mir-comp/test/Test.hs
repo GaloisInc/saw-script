@@ -30,6 +30,7 @@ import           Text.Regex.Base ( makeRegex, matchM )
 import           Text.Regex.Posix.ByteString.Lazy ( Regex )
 
 import qualified Mir.Language as Mir
+import qualified Mir.Options as Mir
 
 import qualified Mir.Compositional as Mir
 import qualified Mir.Compositional.State as Mir

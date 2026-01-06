@@ -1430,7 +1430,7 @@ data TyView
   | TyViewForeign
   | TyViewLifetime
   | TyViewConst !Mir.ConstVal
-  | TyViewCoroutine
+  | TyViewCoroutine !CoroutineArgsView
   | TyViewCoroutineClosure [TyView]
   | TyViewErased
   | TyViewInterned Mir.TyName
@@ -1469,6 +1469,18 @@ data FnSigView = FnSigView {
   }
   deriving Eq
 
+-- | Like 'Mir.CoroutineArgs', but using 'TyView's instead of 'Mir.Ty'.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+data CoroutineArgsView = CoroutineArgsView
+  { _cavDiscrTy :: !TyView
+  , _cavUpvarTys :: ![TyView]
+  , _cavSavedTys :: ![TyView]
+  , _cavFieldMap :: !(Map (Int, Int) Int)
+  } deriving Eq
+
 -- | Convert a 'Mir.Ty' value to a 'TyView' value.
 tyView :: Mir.Ty -> TyView
 -- The two most important cases. Both sorts of integers are mapped to TyViewInt.
@@ -1495,7 +1507,7 @@ tyView Mir.TyNever = TyViewNever
 tyView Mir.TyForeign = TyViewForeign
 tyView Mir.TyLifetime = TyViewLifetime
 tyView (Mir.TyConst c) = TyViewConst c
-tyView Mir.TyCoroutine = TyViewCoroutine
+tyView (Mir.TyCoroutine ca) = TyViewCoroutine (coroutineArgsView ca)
 tyView (Mir.TyCoroutineClosure tys) = TyViewCoroutineClosure (map tyView tys)
 tyView Mir.TyErased = TyViewErased
 tyView (Mir.TyInterned nm) = TyViewInterned nm
@@ -1532,6 +1544,15 @@ substsView (Mir.Substs tys) = SubstsView (map tyView tys)
 fnSigView :: Mir.FnSig -> FnSigView
 fnSigView (Mir.FnSig argTys retTy abi) =
   FnSigView (map tyView argTys) (tyView retTy) abi
+
+-- | Convert a 'Mir.CoroutineArgs' value to a 'CoroutineArgsView' value.
+coroutineArgsView :: Mir.CoroutineArgs -> CoroutineArgsView
+coroutineArgsView (Mir.CoroutineArgs discrTy upvarTys savedTys fieldMap) =
+  CoroutineArgsView
+    (tyView discrTy)
+    (map tyView upvarTys)
+    (map tyView savedTys)
+    fieldMap
 
 -- | Allocate memory for each 'mir_alloc', 'mir_alloc_mut',
 -- 'mir_alloc_raw_ptr_const', or 'mir_alloc_raw_ptr_mut'.
