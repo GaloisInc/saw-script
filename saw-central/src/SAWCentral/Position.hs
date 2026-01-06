@@ -123,6 +123,13 @@ leadingPos pos = case pos of
    Range f l1 c1 _l2 _c2 -> Range f l1 c1 l1 c1
    _ -> pos
 
+-- Get the empty position at the end of the position of something
+-- else.
+trailingPos :: Pos -> Pos
+trailingPos pos = case pos of
+   Range f _l1 _c1 l2 c2 -> Range f l2 c2 l2 c2
+   _ -> pos
+
 -- Paste together two positions.
 --
 -- Note that pasting together inferred positions isn't meaningful.
