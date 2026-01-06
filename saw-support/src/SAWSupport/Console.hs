@@ -163,7 +163,6 @@ say msg = TextIO.putStrLn msg
 newtype DummyPos = DummyPos ()
 instance IsPosition DummyPos where
     ppPosition (DummyPos ()) = "Unknown position"
-    prettyPosition (DummyPos ()) = "Unknown position"
 dummyPos :: DummyPos
 dummyPos = DummyPos ()
 
