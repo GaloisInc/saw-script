@@ -20,9 +20,14 @@ MIR_BLOBS=$(patsubst %, %.linked-mir.json, $(MIR_SRCS))
 #    foo
 #    libfoo.mir
 #    libfoo.rlib
+# In these filenames rustc also quietly replaces any - with a _.
+# Note that the $(subst) invocation must have a space before the
+# dash (or it doesn't work) but _not_ before the underscore (or
+# it inserts spaces in the output and fails). Yay gmake :-(
+#
 MIR_TIDY_PROGS=$(MIR_SRCS)
-MIR_TIDY_MIR=$(patsubst %, lib%.mir, $(MIR_SRCS))
-MIR_TIDY_RLIB=$(patsubst %, lib%.rlib, $(MIR_SRCS))
+MIR_TIDY_MIR=$(subst -,_, $(patsubst %, lib%.mir, $(MIR_SRCS)))
+MIR_TIDY_RLIB=$(subst -,_, $(patsubst %, lib%.rlib, $(MIR_SRCS)))
 MIR_TIDY=$(MIR_TIDY_PROGS) $(MIR_TIDY_MIR) $(MIR_TIDY_RLIB)
 
 # "all" builds all blobs
