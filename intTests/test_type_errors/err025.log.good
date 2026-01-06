@@ -1,3 +1,3 @@
 Loading file "err025.saw"
-Error: err025.saw:3:9-3:14: do block must include at least one expression
+err025.saw:3:9-3:14: Error: do block must include at least one expression
 FAILED

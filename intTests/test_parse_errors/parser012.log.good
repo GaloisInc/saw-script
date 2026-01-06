@@ -1,0 +1,3 @@
+Loading file "parser012.saw"
+parser012.saw:3:29-3:30: Error: Syntax error: missing ')'
+FAILED
