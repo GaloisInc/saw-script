@@ -16,6 +16,8 @@ This release supports [version
 
 ## Changes
 
+* Binary builds have been moved up to GHC 9.6 from 9.4.
+
 * Renamed `coq` in command names to `rocq` and removed experimental status. The
   old command names will continue to work but have been deprecated.
   - `write_coq_term` is now `write_rocq_term`.
