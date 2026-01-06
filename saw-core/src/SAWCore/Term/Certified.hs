@@ -326,6 +326,9 @@ scmFreshTermIndex =
   do sc <- scmSharedContext
      liftIO $ atomicModifyIORef' (scNextTermIndex sc) (\i -> (i + 1, i))
 
+-- | Check that the given 'Term' has not been invalidated by rolling
+-- back to a saved checkpoint with 'restoreSharedContext'.
+-- Otherwise raise a 'StaleTerm' error.
 scmEnsureValidTerm :: Term -> SCM ()
 scmEnsureValidTerm t =
   do sc <- scmSharedContext
@@ -336,7 +339,8 @@ scmEnsureValidTerm t =
 -- variable typing context and type.
 -- Precondition: The 'Either' argument should never have 'Right'
 -- applied to a 'Sort'.
--- Precondition: All subterms should have been checked with 'scEnsureValidTerm'.
+-- Precondition: All subterms should have been checked with
+-- 'scmEnsureValidTerm'.
 scmMakeTerm :: IntMap Term -> TermF Term -> Either Sort Term -> SCM Term
 scmMakeTerm vt tf mty =
   do sc <- scmSharedContext
@@ -735,8 +739,9 @@ scmInsDefInMap d =
 
 -- | Internal function to extend the SAWCore global environment with a
 -- new constant, which may or may not have a definition. Not exported.
--- Assumes that the type and body (if present) are closed terms, and
--- that the body has the given type.
+-- Assumes that the type and body (if present) are closed and valid
+-- (according to 'scmEnsureValidTerm'), and that the body has the
+-- given type.
 scmDeclareDef :: Name -> DefQualifier -> Term -> Maybe Term -> SCM Term
 scmDeclareDef nm q ty body =
   do scmInsDefInMap $
@@ -756,7 +761,8 @@ scmDeclareDef nm q ty body =
 -- | Declare a SAW core primitive of the specified type.
 scmDeclarePrim :: Ident -> DefQualifier -> Term -> SCM ()
 scmDeclarePrim ident q def_tp =
-  do _ <- scmEnsureSortType def_tp
+  do scmEnsureValidTerm def_tp
+     _ <- scmEnsureSortType def_tp
      let nmi = ModuleIdentifier ident
      nm <- scmRegisterName nmi
      _ <- scmDeclareDef nm q def_tp Nothing
@@ -1721,7 +1727,8 @@ scmFreshConstant ::
   Term {- ^ The body -} ->
   SCM Term
 scmFreshConstant name rhs =
-  do nm <- scmFreshName name
+  do scmEnsureValidTerm rhs
+     nm <- scmFreshName name
      unless (closedTerm rhs) $ scmError (ConstantNotClosed nm rhs)
      ty <- scmTypeOf rhs
      scmDeclareDef nm NoQualifier ty (Just rhs)
@@ -1737,7 +1744,8 @@ scmDefineConstant ::
   Term {- ^ The body -} ->
   SCM Term
 scmDefineConstant nmi rhs =
-  do ty <- scmTypeOf rhs
+  do scmEnsureValidTerm rhs
+     ty <- scmTypeOf rhs
      nm <- scmRegisterName nmi
      unless (closedTerm rhs) $
        scmError (ConstantNotClosed nm rhs)
@@ -1753,7 +1761,8 @@ scmOpaqueConstant ::
   Term {- ^ type of the constant -} ->
   SCM Term
 scmOpaqueConstant nmi ty =
-  do _ <- scmEnsureSortType ty
+  do scmEnsureValidTerm ty
+     _ <- scmEnsureSortType ty
      nm <- scmRegisterName nmi
      scmDeclareDef nm NoQualifier ty Nothing
 
