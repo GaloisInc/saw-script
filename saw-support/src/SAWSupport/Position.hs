@@ -16,8 +16,10 @@ module SAWSupport.Position (
 
 import Data.Text (Text)
 
+import qualified SAWSupport.Pretty as PPS
 
 class IsPosition t where
     ppPosition :: t -> Text
+    prettyPosition :: t -> PPS.Doc
 
 

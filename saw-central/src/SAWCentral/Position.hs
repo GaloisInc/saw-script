@@ -331,6 +331,7 @@ instance Show Pos where
 
 instance Support.IsPosition Pos where
   ppPosition pos = Text.pack $ show pos
+  prettyPosition pos = PP.viaShow pos
 
 toW4Loc :: Text.Text -> Pos -> W4.ProgramLoc
 toW4Loc fnm =
