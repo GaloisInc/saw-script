@@ -93,6 +93,7 @@ module SAWSupport.Pretty (
     prettyTypeSig,
     replicate,
     commaSepAll,
+    squotesMatching,
     render,
     renderText,
     pShow,
@@ -275,6 +276,13 @@ commaSepAll :: [PP.Doc ann] -> PP.Doc ann
 commaSepAll ds = case ds of
   [] -> PP.emptyDoc
   _  -> foldl1 commaSepDoc ds
+
+-- | Wrap d in single quotes that match.
+--   There's a PP.squotes that uses right-quote on both sides.
+--   (There's also a PP.dquotes.)
+squotesMatching :: PP.Doc ann -> PP.Doc ann
+squotesMatching d =
+  PP.enclose "`" "'" d
 
 
 ------------------------------------------------------------
