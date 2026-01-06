@@ -2,13 +2,15 @@
 
 ## next -- TBA
 
+* Require cbor2 5.8.0 or later for a security fix.
+
 * Add a `mir_find_mangled_adt` function, which allows looking up MIR ADTs by
   their full, mangled names. `mir_find_mangled_adt`'s use is discouraged in
   favor of using `mir_find_adt` instead, but `mir_find_mangled_adt` can be
   useful in scenarios where `mir_find_adt` isn't expressive enough to look up
   particular ADTs (e.g., ADTs that use const generics).
 
-## 1.4 - release date still TBD
+## 1.4 - 2025-11-18
 
 * Require urllib 2.5.0 or later to avoid a security alert.
   This in turn requires Python 3.9, so Python 3.8 is no longer supported.
