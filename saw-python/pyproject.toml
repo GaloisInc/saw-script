@@ -17,7 +17,7 @@ BitVector = "^3.4.9"
 cryptol = "3.3" # { path = "../deps/cryptol/cryptol-remote-api/python/", develop = true }
 argo-client = ">=0.0.13"
 lmdb = "^1.6.2"
-cbor2 = "^5.4.6"
+cbor2 = "^5.8.0"
 python-dateutil = "^2.8.2"
 # Add a fake dep on urllib3 (we don't directly depend on it but
 # some of the above packages do) to add a constraint for a security
