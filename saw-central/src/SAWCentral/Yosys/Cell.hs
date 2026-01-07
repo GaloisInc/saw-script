@@ -152,30 +152,66 @@ primCellToMap sc c args =
       do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
          bvReduce False r
     CellTypeShl ->
-      do ta <- fmap cellTermTerm $ input "A"
+      do let wa = connWidthNat "A"
+         let wy = connWidthNat "Y"
+         let w = max wa wy
+         wt <- SC.scNat sc w
+         ta <- extTrunc sc w =<< input "A"
          nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvShl sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
+         res <- SC.scBvShl sc wt (cellTermTerm ta) nb
+         output (CellTerm res w (connSigned "A"))
     CellTypeShr ->
-      do ta <- fmap cellTermTerm $ input "A"
+      do let wa = connWidthNat "A"
+         let wy = connWidthNat "Y"
+         let w = max wa wy
+         wt <- SC.scNat sc w
+         ta <- extTrunc sc w =<< input "A"
          nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvShr sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
+         res <- SC.scBvShr sc wt (cellTermTerm ta) nb
+         output (CellTerm res w (connSigned "A"))
     CellTypeSshl ->
-      do ta <- fmap cellTermTerm $ input "A"
+      do let wa = connWidthNat "A"
+         let wy = connWidthNat "Y"
+         let w = max wa wy
+         wt <- SC.scNat sc w
+         ta <- extTrunc sc w =<< input "A"
          nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvShl sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
+         res <- SC.scBvShl sc wt (cellTermTerm ta) nb
+         output (CellTerm res w (connSigned "A"))
     CellTypeSshr ->
-      do ta <- fmap cellTermTerm $ input "A"
+      do let wa = connWidthNat "A"
+         let wy = connWidthNat "Y"
+         let w = max wa wy
+         wtpred <- SC.scNat sc $ w - 1
+         ta <- extTrunc sc w =<< input "A"
          nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvSShr sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
-    -- "$shift" -> _
+         res <- SC.scBvSShr sc wtpred (cellTermTerm ta) nb
+         output (CellTerm res w (connSigned "A"))
+    CellTypeShift ->
+      do let wa = connWidthNat "A"
+         let wb = connWidthNat "B"
+         let wy = connWidthNat "Y"
+         let w = max wa wy
+         wt <- SC.scNat sc w
+         wbt <- SC.scNat sc wb
+         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
+         CellTerm tb _ _ <- input "B"
+         tbn <- SC.scBvToNat sc wb tb
+         tcase <- if connSigned "A"
+                  then do wtpred <- SC.scNat sc $ w - 1
+                          SC.scBvSShr sc wtpred ta tbn
+                  else SC.scBvShr sc wt ta tbn
+         res <- if connSigned "B"
+                then do
+                  zero <- SC.scBvConst sc wb 0
+                  cond <- SC.scBvSGe sc wbt tb zero
+                  tbneg <- SC.scBvNeg sc wbt tb
+                  tbnegn <- SC.scBvToNat sc wb tbneg
+                  ecase <- SC.scBvShl sc wt ta tbnegn
+                  ty <- SC.scBitvector sc w
+                  SC.scIte sc ty cond tcase ecase
+                else pure tcase
+         output (CellTerm res w (connSigned "A"))
     CellTypeShiftx ->
       do let w = max (connWidthNat "A") (connWidthNat "B")
          wt <- SC.scNat sc w
@@ -329,7 +365,6 @@ primCellToMap sc c args =
         Just bits -> fromIntegral $ length bits
     connWidth :: Text -> IO SC.Term
     connWidth onm = SC.scNat sc $ connWidthNat onm
-    outputWidth = connWidth "Y"
 
     input :: Text -> IO CellTerm
     input inpNm =
@@ -358,8 +393,9 @@ primCellToMap sc c args =
     -- convert input to big endian
     bvUnaryOp :: (CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))
     bvUnaryOp f =
-      do t <- input "A"
-         res <- f t
+      do let w = connWidthNat "Y"
+         ta <- extTrunc sc w =<< input "A"
+         res <- f ta
          output res
     -- extend inputs to output width
     bvBinaryOp :: (CellTerm -> CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))

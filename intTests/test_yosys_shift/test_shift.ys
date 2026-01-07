@@ -1,0 +1,18 @@
+read -sv test_shift.sv
+prep -top shift_dyn_idx
+write_json shift_dyn_idx.json
+
+design -reset
+read -sv test_shift.sv
+prep -top shift_dyn_idx_signed
+write_json shift_dyn_idx_signed.json
+
+design -reset
+read -sv test_shift.sv
+prep -top shift_sshr_trunc
+write_json shift_sshr_trunc.json
+
+design -reset
+read -sv test_shift.sv
+prep -top shift_sshr_ext
+write_json shift_sshr_ext.json
