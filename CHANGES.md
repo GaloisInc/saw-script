@@ -22,6 +22,7 @@ This release supports [version
   - `external_aig_solver` -> `arbitrary_aig`
   - `external_cnf_solver` -> `arbitrary_cnf`
   - `w4_offline_smtlib2` -> `offline_w4_smtlib2`
+  - `write_smtlib2_w4` -> `write_w4_smtlib2`
 
 * Binary builds have been moved up to GHC 9.6 from 9.4.
 

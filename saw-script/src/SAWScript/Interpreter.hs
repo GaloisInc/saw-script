@@ -2355,9 +2355,9 @@ do_write_smtlib2 :: Text -> TypedTerm -> TopLevel ()
 do_write_smtlib2 f tt =
   write_smtlib2 (Text.unpack f) tt
 
-do_write_smtlib2_w4 :: Text -> TypedTerm -> TopLevel ()
-do_write_smtlib2_w4 f tt =
-  write_smtlib2_w4 (Text.unpack f) tt
+do_write_w4_smtlib2 :: Text -> TypedTerm -> TopLevel ()
+do_write_w4_smtlib2 f tt =
+  write_w4_smtlib2 (Text.unpack f) tt
 
 do_write_core :: Text -> Term -> TopLevel ()
 do_write_core f t =
@@ -5116,11 +5116,16 @@ primitives = Map.fromList $
     , "format."
     ]
 
-  , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
-    (pureVal do_write_smtlib2_w4)
+  , prim "write_w4_smtlib2"    "String -> Term -> TopLevel ()"
+    (pureVal do_write_w4_smtlib2)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2"
     , "format, using the What4 backend instead of the SBV backend."
+    ]
+  , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
+    (pureVal do_write_w4_smtlib2)
+    Current
+    [ "Legacy alternative name for 'write_w4_smtlib2'."
     ]
 
   , prim "offline_smtlib2"     "String -> ProofScript ()"

@@ -427,6 +427,7 @@ write_saig : String -> Term -> TopLevel ()
 write_saig' : String -> Term -> Int -> TopLevel ()
 write_smtlib2 : String -> Term -> TopLevel ()
 write_smtlib2_w4 : String -> Term -> TopLevel ()
+write_w4_smtlib2 : String -> Term -> TopLevel ()
 yices : ProofScript ()
 z3 : ProofScript ()
 
