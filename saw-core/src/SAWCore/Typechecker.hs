@@ -254,8 +254,11 @@ typeInferCompleteTerm uterm =
       do tp_trm <- typeInferCompleteUTerm tp
          _ <- liftSCM $ SC.scmEnsureSortType tp_trm
          vn <- liftSCM $ SC.scmFreshVarName x
+         -- Don't call typeInferCompleteUTerm with a suffix of the
+         -- original variable context, to avoid adding too many
+         -- 'withErrorUTerm' annotations.
          body <- withVar x vn tp_trm $
-           typeInferCompleteUTerm $ Un.Lambda p ctx t
+           typeInferCompleteTerm $ Un.Lambda p ctx t
          liftSCM $ SC.scmLambda vn tp_trm body
 
     Un.Pi _ [] t ->
@@ -263,8 +266,11 @@ typeInferCompleteTerm uterm =
     Un.Pi p ((Un.termVarLocalName -> x, tp) : ctx) t ->
       do tp' <- typeInferCompleteUTerm tp
          vn <- liftSCM $ SC.scmFreshVarName x
+         -- Don't call typeInferCompleteUTerm with a suffix of the
+         -- original variable context, to avoid adding too many
+         -- 'withErrorUTerm' annotations.
          body <- withVar x vn tp' $
-           typeInferCompleteUTerm $ Un.Pi p ctx t
+           typeInferCompleteTerm $ Un.Pi p ctx t
          liftSCM $ SC.scmPi vn tp' body
 
     Un.RecordValue _ elems ->
