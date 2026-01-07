@@ -16,6 +16,13 @@ This release supports [version
 
 ## Changes
 
+* The following solver builtins / proof tactics have been renamed for
+  consistency.
+  The old names remain but have been marked deprecated.
+  - `external_aig_solver` -> `arbitrary_aig`
+  - `external_cnf_solver` -> `arbitrary_cnf`
+  - `w4_offline_smtlib2` -> `offline_w4_smtlib2`
+
 * Binary builds have been moved up to GHC 9.6 from 9.4.
 
 * Renamed `coq` in command names to `rocq` and removed experimental status. The

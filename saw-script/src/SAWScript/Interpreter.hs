@@ -4327,6 +4327,16 @@ primitives = Map.fromList $
     ------------------------------------------------------------
     -- Solvers
 
+    -- The naming convention for solver commands is:
+    --   [offline_][LIBRARY_][unint_]SOLVER-OR-FORMAT[_VARIANT]
+    -- where LIBRARY is e.g. w4 or sbv
+    --       SOLVER-OR-FORMAT is e.g. abc or z3
+    --       VARIANT is things like "aiger" immediately below.
+    --
+    -- This extends also to the AIG and CNF commands that are proof
+    -- tactics (in ProofScript) but not so much to the random
+    -- selection of export/output commands in TopLevel.
+
     -- abc
 
   , prim "abc"                 "ProofScript ()"
@@ -4711,7 +4721,7 @@ primitives = Map.fromList $
   , prim "arbitrary_aig" "String -> [String] -> ProofScript ()"
     (pureVal (satArbitrary False))
     Current
-    [ "Use an external SAT solver supporting AIG to prove the current"
+    [ "Use an arbitrary SAT solver supporting AIG to prove the current"
     , "goal. The first argument is the executable name of the solver,"
     , "and the second is the list of arguments to pass to the solver."
     , "The string '%f' anywhere in the argument list will be replaced"
@@ -4772,7 +4782,7 @@ primitives = Map.fromList $
   , prim "arbitrary_cnf" "String -> [String] -> ProofScript ()"
     (pureVal (satArbitrary True))
     Current
-    [ "Use an external SAT solver supporting CNF to prove the current"
+    [ "Use an arbitrary SAT solver supporting CNF to prove the current"
     , "goal. The first argument is the executable name of the solver,"
     , "and the second is the list of arguments to pass to the solver."
     , "The string '%f' anywhere in the argument list will be replaced"
