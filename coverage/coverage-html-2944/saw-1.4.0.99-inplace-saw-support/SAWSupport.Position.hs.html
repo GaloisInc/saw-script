@@ -35,13 +35,22 @@ span.spaces    { background: white }
 <span class="lineno">   16 </span>
 <span class="lineno">   17 </span>import Data.Text (Text)
 <span class="lineno">   18 </span>
-<span class="lineno">   19 </span>import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   19 </span>import qualified Prettyprinter as PP
 <span class="lineno">   20 </span>
-<span class="lineno">   21 </span>class IsPosition t where
-<span class="lineno">   22 </span>    ppPosition :: t -&gt; Text
-<span class="lineno">   23 </span>    prettyPosition :: t -&gt; PPS.Doc
-<span class="lineno">   24 </span>
-<span class="lineno">   25 </span>
+<span class="lineno">   21 </span>import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>class IsPosition t where
+<span class="lineno">   24 </span>    ppPosition :: t -&gt; Text
+<span class="lineno">   25 </span>    prettyPosition :: t -&gt; PPS.Doc
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>    -- Either function is sufficient to define the other.
+<span class="lineno">   28 </span>    --
+<span class="lineno">   29 </span>    -- There's an implicit assumption here that the printing options
+<span class="lineno">   30 </span>    -- don't affect the way positions print. If that changes, the
+<span class="lineno">   31 </span>    -- interface should change accordingly.
+<span class="lineno">   32 </span>    <span class="decl"><span class="nottickedoff">ppPosition pos = PPS.renderText PPS.defaultOpts $ prettyPosition pos</span></span>
+<span class="lineno">   33 </span>    <span class="decl"><span class="nottickedoff">prettyPosition pos = PP.pretty $ ppPosition pos</span></span>
+<span class="lineno">   34 </span>
 
 </pre>
 </body>

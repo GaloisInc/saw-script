@@ -2459,644 +2459,646 @@ span.spaces    { background: white }
 <span class="lineno"> 2440 </span><span class="spaces">              </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">&quot;Syntax error: unexpected&quot; PP.&lt;+&gt; tstr'</span></span>
 <span class="lineno"> 2441 </span><span class="spaces">              </span><span class="istickedoff">[p] -&gt; &quot;Syntax error: missing&quot; PP.&lt;+&gt; PP.pretty p</span>
 <span class="lineno"> 2442 </span><span class="spaces">              </span><span class="istickedoff">ps -&gt;</span>
-<span class="lineno"> 2443 </span><span class="spaces">                  </span><span class="istickedoff">PP.vsep [</span>
-<span class="lineno"> 2444 </span><span class="spaces">                      </span><span class="istickedoff">&quot;Syntax error: unexpected&quot; PP.&lt;+&gt; tstr',</span>
-<span class="lineno"> 2445 </span><span class="spaces">                      </span><span class="istickedoff">&quot;Some legal inputs at this point:&quot;,</span>
-<span class="lineno"> 2446 </span><span class="spaces">                      </span><span class="istickedoff">PP.vsep $ map (\p -&gt; PP.indent 3 $ PP.pretty p) ps</span>
-<span class="lineno"> 2447 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
-<span class="lineno"> 2448 </span><span class="spaces">        </span><span class="istickedoff">in</span>
-<span class="lineno"> 2449 </span><span class="spaces">        </span><span class="istickedoff">(optpos, doc)</span>
-<span class="lineno"> 2450 </span><span class="spaces">    </span><span class="istickedoff">InvalidPattern pos e -&gt;</span>
-<span class="lineno"> 2451 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">(Just pos, &quot;Parse error: invalid pattern&quot; PP.&lt;+&gt; PPS.prettyPrec 0 e)</span></span>
-<span class="lineno"> 2452 </span><span class="spaces">    </span><span class="istickedoff">EmptyBlock pos -&gt;</span>
-<span class="lineno"> 2453 </span><span class="spaces">        </span><span class="istickedoff">(Just pos, &quot;do block must include at least one expression&quot;)</span>
-<span class="lineno"> 2454 </span><span class="spaces">    </span><span class="istickedoff">InvalidBlock pos -&gt;</span>
-<span class="lineno"> 2455 </span><span class="spaces">        </span><span class="istickedoff">(Just pos, &quot;do block must end with expression&quot;)</span></span>
-<span class="lineno"> 2456 </span>
-<span class="lineno"> 2457 </span>parseError :: [Token Pos] -&gt; [String] -&gt; Either ParseError b
-<span class="lineno"> 2458 </span><span class="decl"><span class="istickedoff">parseError toks possibles =</span>
-<span class="lineno"> 2459 </span><span class="spaces">  </span><span class="istickedoff">Left (HappyError toks possibles)</span></span>
-<span class="lineno"> 2460 </span>
-<span class="lineno"> 2461 </span>-- | Cons up an import.
-<span class="lineno"> 2462 </span>buildImport ::
-<span class="lineno"> 2463 </span>    Bool -&gt;
-<span class="lineno"> 2464 </span>    (Either FilePath P.ModName, Pos) -&gt;
-<span class="lineno"> 2465 </span>    (Maybe P.ModName, Pos) -&gt;
-<span class="lineno"> 2466 </span>    (Maybe P.ImportSpec, Pos) -&gt;
-<span class="lineno"> 2467 </span>    Import
-<span class="lineno"> 2468 </span><span class="decl"><span class="istickedoff">buildImport issub (modName, namePos) (mbAsName, asPos) (mbSpec, specPos) =</span>
-<span class="lineno"> 2469 </span><span class="spaces">  </span><span class="istickedoff">Import {</span>
-<span class="lineno"> 2470 </span><span class="spaces">    </span><span class="istickedoff">iIsSubmodule = issub,</span>
-<span class="lineno"> 2471 </span><span class="spaces">    </span><span class="istickedoff">iModule = modName,</span>
-<span class="lineno"> 2472 </span><span class="spaces">    </span><span class="istickedoff">iAs = mbAsName,</span>
-<span class="lineno"> 2473 </span><span class="spaces">    </span><span class="istickedoff">iSpec = mbSpec,</span>
-<span class="lineno"> 2474 </span><span class="spaces">    </span><span class="istickedoff">iPos = maxSpan [namePos, asPos, specPos]</span>
-<span class="lineno"> 2475 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
-<span class="lineno"> 2476 </span>
-<span class="lineno"> 2477 </span>-- | As seen by the parser, a &quot;function name&quot; is an arbitrary pattern.
-<span class="lineno"> 2478 </span>--   This is because we use the same syntax for function and value bindings:
-<span class="lineno"> 2479 </span>--   in &quot;let (a, b) = e&quot; the &quot;(a, b)&quot; can and should be an arbitrary pattern.
-<span class="lineno"> 2480 </span>--   For functions it doesn't make sense for it to be anything but a plain
-<span class="lineno"> 2481 </span>--   name, as in &quot;let f () = e&quot;. You can write &quot;let (a, b) () = e&quot; and the
-<span class="lineno"> 2482 </span>--   parser will accept it, but it won't typecheck.
-<span class="lineno"> 2483 </span>--
-<span class="lineno"> 2484 </span>--   This function extracts the actual name, if any, for annotating
-<span class="lineno"> 2485 </span>--   the lambda expressions we turn further arguments into. It will
-<span class="lineno"> 2486 </span>--   return Nothing if the name is something other than an actual
-<span class="lineno"> 2487 </span>--   name, which is fine for value bindings since the result won't be
-<span class="lineno"> 2488 </span>--   used and also fine for nonsense like &quot;let (a, b) () = e&quot; that'll
-<span class="lineno"> 2489 </span>--   be rejected by the typechecker. The annotations in question are
-<span class="lineno"> 2490 </span>--   used only at eval time.
-<span class="lineno"> 2491 </span>--
-<span class="lineno"> 2492 </span>--   Runs in the Maybe monad for convenience.
-<span class="lineno"> 2493 </span>fixFunctionName :: Maybe Pattern -&gt; Maybe Text
-<span class="lineno"> 2494 </span><span class="decl"><span class="istickedoff">fixFunctionName mname = do</span>
-<span class="lineno"> 2495 </span><span class="spaces">  </span><span class="istickedoff">name &lt;- mname</span>
-<span class="lineno"> 2496 </span><span class="spaces">  </span><span class="istickedoff">case name of</span>
-<span class="lineno"> 2497 </span><span class="spaces">      </span><span class="istickedoff">PWild {} -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno"> 2498 </span><span class="spaces">      </span><span class="istickedoff">PVar _allpos _namepos name _ty -&gt; Just name</span>
-<span class="lineno"> 2499 </span><span class="spaces">      </span><span class="istickedoff">PTuple {} -&gt; <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno"> 2500 </span>
-<span class="lineno"> 2501 </span>buildFunction :: Maybe Pattern -&gt; [Pattern] -&gt; Expr -&gt; Expr
-<span class="lineno"> 2502 </span><span class="decl"><span class="istickedoff">buildFunction mname args e =</span>
-<span class="lineno"> 2503 </span><span class="spaces">  </span><span class="istickedoff">let mname' = fixFunctionName mname</span>
-<span class="lineno"> 2504 </span><span class="spaces">      </span><span class="istickedoff">once :: Pattern -&gt; Expr -&gt; Expr</span>
-<span class="lineno"> 2505 </span><span class="spaces">      </span><span class="istickedoff">once pat e = Lambda (maxSpan' pat e) mname' pat e</span>
-<span class="lineno"> 2506 </span><span class="spaces">  </span><span class="istickedoff">in</span>
-<span class="lineno"> 2507 </span><span class="spaces">  </span><span class="istickedoff">foldr once e args</span></span>
-<span class="lineno"> 2508 </span>
-<span class="lineno"> 2509 </span>buildApplication :: [Expr] -&gt; Expr
-<span class="lineno"> 2510 </span><span class="decl"><span class="istickedoff">buildApplication es =</span>
-<span class="lineno"> 2511 </span><span class="spaces">  </span><span class="istickedoff">foldl1 (\e body -&gt; Application (maxSpan' e body) e body) es</span></span>
-<span class="lineno"> 2512 </span>
-<span class="lineno"> 2513 </span>-- | Build a let-statement.
-<span class="lineno"> 2514 </span>buildLet :: Pos -&gt; Decl -&gt; Stmt
-<span class="lineno"> 2515 </span><span class="decl"><span class="istickedoff">buildLet pos d =</span>
-<span class="lineno"> 2516 </span><span class="spaces">  </span><span class="istickedoff">StmtLet pos ReadOnlyVar (NonRecursive d)</span></span>
-<span class="lineno"> 2517 </span>
-<span class="lineno"> 2518 </span>-- | Build a rebindable let-statement.
-<span class="lineno"> 2519 </span>buildLetRB :: Pos -&gt; Decl -&gt; Stmt
-<span class="lineno"> 2520 </span><span class="decl"><span class="istickedoff">buildLetRB pos d =</span>
-<span class="lineno"> 2521 </span><span class="spaces">  </span><span class="istickedoff">StmtLet pos RebindableVar (NonRecursive d)</span></span>
-<span class="lineno"> 2522 </span>
-<span class="lineno"> 2523 </span>-- | Build a rec-statement.
-<span class="lineno"> 2524 </span>buildRec :: Pos -&gt; [Decl] -&gt; Stmt
-<span class="lineno"> 2525 </span><span class="decl"><span class="istickedoff">buildRec pos ds =</span>
-<span class="lineno"> 2526 </span><span class="spaces">  </span><span class="istickedoff">StmtLet pos ReadOnlyVar (Recursive ds)</span></span>
-<span class="lineno"> 2527 </span>
-<span class="lineno"> 2528 </span>-- | Build a variable-pattern. Discard the variable if it's _.
-<span class="lineno"> 2529 </span>--
-<span class="lineno"> 2530 </span>--   Note: it is probably more appropriate to discard all variables
-<span class="lineno"> 2531 </span>--   that _begin_ with an underscore; however, the traditional usage
-<span class="lineno"> 2532 </span>--   in ML, Haskell, and also Rust is to treat variables beginning
-<span class="lineno"> 2533 </span>--   with underscore as placeholder variables that can still be used
-<span class="lineno"> 2534 </span>--   behind your back. That's wrong; however, SAWScript is not the
-<span class="lineno"> 2535 </span>--   place to fight this battle...
-<span class="lineno"> 2536 </span>--
-<span class="lineno"> 2537 </span>buildPVar :: Pos -&gt; Pos -&gt; Text -&gt; Maybe Type -&gt; Pattern
-<span class="lineno"> 2538 </span><span class="decl"><span class="istickedoff">buildPVar allpos xpos x mty =</span>
-<span class="lineno"> 2539 </span><span class="spaces">  </span><span class="istickedoff">case x of</span>
-<span class="lineno"> 2540 </span><span class="spaces">    </span><span class="istickedoff">&quot;_&quot; -&gt; PWild allpos mty</span>
-<span class="lineno"> 2541 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; PVar allpos xpos x mty</span></span>
-<span class="lineno"> 2542 </span>
-<span class="lineno"> 2543 </span>-- | Pop off the last statement in a do-block, which is required to
-<span class="lineno"> 2544 </span>--   be a plain expression, and unpack it to an expression.
-<span class="lineno"> 2545 </span>buildBlock :: Pos -&gt; [Stmt] -&gt; Either ParseError Expr
-<span class="lineno"> 2546 </span><span class="decl"><span class="istickedoff">buildBlock pos stmts = case reverse stmts of</span>
-<span class="lineno"> 2547 </span><span class="spaces">  </span><span class="istickedoff">StmtBind _spos (PWild _patpos _noty) e : revstmts' -&gt;</span>
-<span class="lineno"> 2548 </span><span class="spaces">    </span><span class="istickedoff">Right $ Block pos (reverse revstmts', e)</span>
-<span class="lineno"> 2549 </span><span class="spaces">  </span><span class="istickedoff">[] -&gt;</span>
-<span class="lineno"> 2550 </span><span class="spaces">    </span><span class="istickedoff">Left $ EmptyBlock pos</span>
-<span class="lineno"> 2551 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 2552 </span><span class="spaces">    </span><span class="istickedoff">Left $ InvalidBlock pos</span></span>
-<span class="lineno"> 2553 </span>
-<span class="lineno"> 2554 </span>toPattern :: Expr -&gt; Either ParseError Pattern
-<span class="lineno"> 2555 </span><span class="decl"><span class="istickedoff">toPattern expr =</span>
-<span class="lineno"> 2556 </span><span class="spaces">  </span><span class="istickedoff">case expr of</span>
-<span class="lineno"> 2557 </span><span class="spaces">    </span><span class="istickedoff">Tuple pos es -&gt;</span>
-<span class="lineno"> 2558 </span><span class="spaces">        </span><span class="istickedoff">PTuple pos `fmap` mapM toPattern es</span>
-<span class="lineno"> 2559 </span><span class="spaces">    </span><span class="istickedoff">TSig pos (Var xpos x) t -&gt;</span>
-<span class="lineno"> 2560 </span><span class="spaces">        </span><span class="istickedoff">return (buildPVar pos <span class="nottickedoff">xpos</span> x (Just t))</span>
-<span class="lineno"> 2561 </span><span class="spaces">    </span><span class="istickedoff">Var pos x -&gt;</span>
-<span class="lineno"> 2562 </span><span class="spaces">        </span><span class="istickedoff">return (buildPVar pos pos x Nothing)</span>
-<span class="lineno"> 2563 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 2564 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Left (InvalidPattern (getPos expr) expr)</span></span></span>
-<span class="lineno"> 2565 </span>#define HAPPY_COERCE 1
-<span class="lineno"> 2566 </span>-- $Id: GenericTemplate.hs,v 1.26 2005/01/14 14:47:22 simonmar Exp $
-<span class="lineno"> 2567 </span>
-<span class="lineno"> 2568 </span>#if !defined(__GLASGOW_HASKELL__)
-<span class="lineno"> 2569 </span>#  error This code isn't being built with GHC.
-<span class="lineno"> 2570 </span>#endif
-<span class="lineno"> 2571 </span>
-<span class="lineno"> 2572 </span>-- Get WORDS_BIGENDIAN (if defined)
-<span class="lineno"> 2573 </span>#include &quot;MachDeps.h&quot;
-<span class="lineno"> 2574 </span>
-<span class="lineno"> 2575 </span>-- Do not remove this comment. Required to fix CPP parsing when using GCC and a clang-compiled alex.
-<span class="lineno"> 2576 </span>#define LT(n,m) ((Happy_GHC_Exts.tagToEnum# (n Happy_GHC_Exts.&lt;# m)) :: Happy_Prelude.Bool)
-<span class="lineno"> 2577 </span>#define GTE(n,m) ((Happy_GHC_Exts.tagToEnum# (n Happy_GHC_Exts.&gt;=# m)) :: Happy_Prelude.Bool)
-<span class="lineno"> 2578 </span>#define EQ(n,m) ((Happy_GHC_Exts.tagToEnum# (n Happy_GHC_Exts.==# m)) :: Happy_Prelude.Bool)
-<span class="lineno"> 2579 </span>#define PLUS(n,m) (n Happy_GHC_Exts.+# m)
-<span class="lineno"> 2580 </span>#define MINUS(n,m) (n Happy_GHC_Exts.-# m)
-<span class="lineno"> 2581 </span>#define TIMES(n,m) (n Happy_GHC_Exts.*# m)
-<span class="lineno"> 2582 </span>#define NEGATE(n) (Happy_GHC_Exts.negateInt# (n))
-<span class="lineno"> 2583 </span>
-<span class="lineno"> 2584 </span>type Happy_Int = Happy_GHC_Exts.Int#
-<span class="lineno"> 2585 </span>data Happy_IntList = HappyCons Happy_Int Happy_IntList
-<span class="lineno"> 2586 </span>
-<span class="lineno"> 2587 </span>#define INVALID_TOK -1#
-<span class="lineno"> 2588 </span>#define ERROR_TOK 0#
-<span class="lineno"> 2589 </span>#define CATCH_TOK 1#
-<span class="lineno"> 2590 </span>
-<span class="lineno"> 2591 </span>#if defined(HAPPY_COERCE)
-<span class="lineno"> 2592 </span>#  define GET_ERROR_TOKEN(x)  (case Happy_GHC_Exts.unsafeCoerce# x of { (Happy_GHC_Exts.I# i) -&gt; i })
-<span class="lineno"> 2593 </span>#  define MK_ERROR_TOKEN(i)   (Happy_GHC_Exts.unsafeCoerce# (Happy_GHC_Exts.I# i))
-<span class="lineno"> 2594 </span>#  define MK_TOKEN(x)         (happyInTok (x))
-<span class="lineno"> 2595 </span>#else
-<span class="lineno"> 2596 </span>#  define GET_ERROR_TOKEN(x)  (case x of { HappyErrorToken (Happy_GHC_Exts.I# i) -&gt; i })
-<span class="lineno"> 2597 </span>#  define MK_ERROR_TOKEN(i)   (HappyErrorToken (Happy_GHC_Exts.I# i))
-<span class="lineno"> 2598 </span>#  define MK_TOKEN(x)         (HappyTerminal (x))
-<span class="lineno"> 2599 </span>#endif
-<span class="lineno"> 2600 </span>
-<span class="lineno"> 2601 </span>#if defined(HAPPY_DEBUG)
-<span class="lineno"> 2602 </span>#  define DEBUG_TRACE(s)    (happyTrace (s)) Happy_Prelude.$
-<span class="lineno"> 2603 </span>happyTrace string expr = Happy_System_IO_Unsafe.unsafePerformIO Happy_Prelude.$ do
-<span class="lineno"> 2604 </span>    Happy_System_IO.hPutStr Happy_System_IO.stderr string
-<span class="lineno"> 2605 </span>    Happy_Prelude.return expr
-<span class="lineno"> 2606 </span>#else
-<span class="lineno"> 2607 </span>#  define DEBUG_TRACE(s)    {- nothing -}
-<span class="lineno"> 2608 </span>#endif
-<span class="lineno"> 2609 </span>
-<span class="lineno"> 2610 </span>infixr 9 `HappyStk`
-<span class="lineno"> 2611 </span>data HappyStk a = HappyStk a (HappyStk a)
-<span class="lineno"> 2612 </span>
-<span class="lineno"> 2613 </span>-----------------------------------------------------------------------------
-<span class="lineno"> 2614 </span>-- starting the parse
-<span class="lineno"> 2615 </span>
-<span class="lineno"> 2616 </span><span class="decl"><span class="istickedoff">happyDoParse start_state = happyNewToken start_state <span class="nottickedoff">notHappyAtAll</span> <span class="nottickedoff">notHappyAtAll</span></span></span>
+<span class="lineno"> 2443 </span><span class="spaces">                  </span><span class="istickedoff">let ps' =</span>
+<span class="lineno"> 2444 </span><span class="spaces">                        </span><span class="istickedoff">&quot;Some legal inputs at this point:&quot; : map PP.pretty ps</span>
+<span class="lineno"> 2445 </span><span class="spaces">                  </span><span class="istickedoff">in</span>
+<span class="lineno"> 2446 </span><span class="spaces">                  </span><span class="istickedoff">PP.vsep [</span>
+<span class="lineno"> 2447 </span><span class="spaces">                      </span><span class="istickedoff">&quot;Syntax error: unexpected&quot; PP.&lt;+&gt; tstr',</span>
+<span class="lineno"> 2448 </span><span class="spaces">                      </span><span class="istickedoff">PP.nest 3 $ PP.group $ PP.fillSep $ ps'</span>
+<span class="lineno"> 2449 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
+<span class="lineno"> 2450 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno"> 2451 </span><span class="spaces">        </span><span class="istickedoff">(optpos, doc)</span>
+<span class="lineno"> 2452 </span><span class="spaces">    </span><span class="istickedoff">InvalidPattern pos e -&gt;</span>
+<span class="lineno"> 2453 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">(Just pos, &quot;Parse error: invalid pattern&quot; PP.&lt;+&gt; PPS.prettyPrec 0 e)</span></span>
+<span class="lineno"> 2454 </span><span class="spaces">    </span><span class="istickedoff">EmptyBlock pos -&gt;</span>
+<span class="lineno"> 2455 </span><span class="spaces">        </span><span class="istickedoff">(Just pos, &quot;do block must include at least one expression&quot;)</span>
+<span class="lineno"> 2456 </span><span class="spaces">    </span><span class="istickedoff">InvalidBlock pos -&gt;</span>
+<span class="lineno"> 2457 </span><span class="spaces">        </span><span class="istickedoff">(Just pos, &quot;do block must end with expression&quot;)</span></span>
+<span class="lineno"> 2458 </span>
+<span class="lineno"> 2459 </span>parseError :: [Token Pos] -&gt; [String] -&gt; Either ParseError b
+<span class="lineno"> 2460 </span><span class="decl"><span class="istickedoff">parseError toks possibles =</span>
+<span class="lineno"> 2461 </span><span class="spaces">  </span><span class="istickedoff">Left (HappyError toks possibles)</span></span>
+<span class="lineno"> 2462 </span>
+<span class="lineno"> 2463 </span>-- | Cons up an import.
+<span class="lineno"> 2464 </span>buildImport ::
+<span class="lineno"> 2465 </span>    Bool -&gt;
+<span class="lineno"> 2466 </span>    (Either FilePath P.ModName, Pos) -&gt;
+<span class="lineno"> 2467 </span>    (Maybe P.ModName, Pos) -&gt;
+<span class="lineno"> 2468 </span>    (Maybe P.ImportSpec, Pos) -&gt;
+<span class="lineno"> 2469 </span>    Import
+<span class="lineno"> 2470 </span><span class="decl"><span class="istickedoff">buildImport issub (modName, namePos) (mbAsName, asPos) (mbSpec, specPos) =</span>
+<span class="lineno"> 2471 </span><span class="spaces">  </span><span class="istickedoff">Import {</span>
+<span class="lineno"> 2472 </span><span class="spaces">    </span><span class="istickedoff">iIsSubmodule = issub,</span>
+<span class="lineno"> 2473 </span><span class="spaces">    </span><span class="istickedoff">iModule = modName,</span>
+<span class="lineno"> 2474 </span><span class="spaces">    </span><span class="istickedoff">iAs = mbAsName,</span>
+<span class="lineno"> 2475 </span><span class="spaces">    </span><span class="istickedoff">iSpec = mbSpec,</span>
+<span class="lineno"> 2476 </span><span class="spaces">    </span><span class="istickedoff">iPos = maxSpan [namePos, asPos, specPos]</span>
+<span class="lineno"> 2477 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
+<span class="lineno"> 2478 </span>
+<span class="lineno"> 2479 </span>-- | As seen by the parser, a &quot;function name&quot; is an arbitrary pattern.
+<span class="lineno"> 2480 </span>--   This is because we use the same syntax for function and value bindings:
+<span class="lineno"> 2481 </span>--   in &quot;let (a, b) = e&quot; the &quot;(a, b)&quot; can and should be an arbitrary pattern.
+<span class="lineno"> 2482 </span>--   For functions it doesn't make sense for it to be anything but a plain
+<span class="lineno"> 2483 </span>--   name, as in &quot;let f () = e&quot;. You can write &quot;let (a, b) () = e&quot; and the
+<span class="lineno"> 2484 </span>--   parser will accept it, but it won't typecheck.
+<span class="lineno"> 2485 </span>--
+<span class="lineno"> 2486 </span>--   This function extracts the actual name, if any, for annotating
+<span class="lineno"> 2487 </span>--   the lambda expressions we turn further arguments into. It will
+<span class="lineno"> 2488 </span>--   return Nothing if the name is something other than an actual
+<span class="lineno"> 2489 </span>--   name, which is fine for value bindings since the result won't be
+<span class="lineno"> 2490 </span>--   used and also fine for nonsense like &quot;let (a, b) () = e&quot; that'll
+<span class="lineno"> 2491 </span>--   be rejected by the typechecker. The annotations in question are
+<span class="lineno"> 2492 </span>--   used only at eval time.
+<span class="lineno"> 2493 </span>--
+<span class="lineno"> 2494 </span>--   Runs in the Maybe monad for convenience.
+<span class="lineno"> 2495 </span>fixFunctionName :: Maybe Pattern -&gt; Maybe Text
+<span class="lineno"> 2496 </span><span class="decl"><span class="istickedoff">fixFunctionName mname = do</span>
+<span class="lineno"> 2497 </span><span class="spaces">  </span><span class="istickedoff">name &lt;- mname</span>
+<span class="lineno"> 2498 </span><span class="spaces">  </span><span class="istickedoff">case name of</span>
+<span class="lineno"> 2499 </span><span class="spaces">      </span><span class="istickedoff">PWild {} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno"> 2500 </span><span class="spaces">      </span><span class="istickedoff">PVar _allpos _namepos name _ty -&gt; Just name</span>
+<span class="lineno"> 2501 </span><span class="spaces">      </span><span class="istickedoff">PTuple {} -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno"> 2502 </span>
+<span class="lineno"> 2503 </span>buildFunction :: Maybe Pattern -&gt; [Pattern] -&gt; Expr -&gt; Expr
+<span class="lineno"> 2504 </span><span class="decl"><span class="istickedoff">buildFunction mname args e =</span>
+<span class="lineno"> 2505 </span><span class="spaces">  </span><span class="istickedoff">let mname' = fixFunctionName mname</span>
+<span class="lineno"> 2506 </span><span class="spaces">      </span><span class="istickedoff">once :: Pattern -&gt; Expr -&gt; Expr</span>
+<span class="lineno"> 2507 </span><span class="spaces">      </span><span class="istickedoff">once pat e = Lambda (maxSpan' pat e) mname' pat e</span>
+<span class="lineno"> 2508 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno"> 2509 </span><span class="spaces">  </span><span class="istickedoff">foldr once e args</span></span>
+<span class="lineno"> 2510 </span>
+<span class="lineno"> 2511 </span>buildApplication :: [Expr] -&gt; Expr
+<span class="lineno"> 2512 </span><span class="decl"><span class="istickedoff">buildApplication es =</span>
+<span class="lineno"> 2513 </span><span class="spaces">  </span><span class="istickedoff">foldl1 (\e body -&gt; Application (maxSpan' e body) e body) es</span></span>
+<span class="lineno"> 2514 </span>
+<span class="lineno"> 2515 </span>-- | Build a let-statement.
+<span class="lineno"> 2516 </span>buildLet :: Pos -&gt; Decl -&gt; Stmt
+<span class="lineno"> 2517 </span><span class="decl"><span class="istickedoff">buildLet pos d =</span>
+<span class="lineno"> 2518 </span><span class="spaces">  </span><span class="istickedoff">StmtLet pos ReadOnlyVar (NonRecursive d)</span></span>
+<span class="lineno"> 2519 </span>
+<span class="lineno"> 2520 </span>-- | Build a rebindable let-statement.
+<span class="lineno"> 2521 </span>buildLetRB :: Pos -&gt; Decl -&gt; Stmt
+<span class="lineno"> 2522 </span><span class="decl"><span class="istickedoff">buildLetRB pos d =</span>
+<span class="lineno"> 2523 </span><span class="spaces">  </span><span class="istickedoff">StmtLet pos RebindableVar (NonRecursive d)</span></span>
+<span class="lineno"> 2524 </span>
+<span class="lineno"> 2525 </span>-- | Build a rec-statement.
+<span class="lineno"> 2526 </span>buildRec :: Pos -&gt; [Decl] -&gt; Stmt
+<span class="lineno"> 2527 </span><span class="decl"><span class="istickedoff">buildRec pos ds =</span>
+<span class="lineno"> 2528 </span><span class="spaces">  </span><span class="istickedoff">StmtLet pos ReadOnlyVar (Recursive ds)</span></span>
+<span class="lineno"> 2529 </span>
+<span class="lineno"> 2530 </span>-- | Build a variable-pattern. Discard the variable if it's _.
+<span class="lineno"> 2531 </span>--
+<span class="lineno"> 2532 </span>--   Note: it is probably more appropriate to discard all variables
+<span class="lineno"> 2533 </span>--   that _begin_ with an underscore; however, the traditional usage
+<span class="lineno"> 2534 </span>--   in ML, Haskell, and also Rust is to treat variables beginning
+<span class="lineno"> 2535 </span>--   with underscore as placeholder variables that can still be used
+<span class="lineno"> 2536 </span>--   behind your back. That's wrong; however, SAWScript is not the
+<span class="lineno"> 2537 </span>--   place to fight this battle...
+<span class="lineno"> 2538 </span>--
+<span class="lineno"> 2539 </span>buildPVar :: Pos -&gt; Pos -&gt; Text -&gt; Maybe Type -&gt; Pattern
+<span class="lineno"> 2540 </span><span class="decl"><span class="istickedoff">buildPVar allpos xpos x mty =</span>
+<span class="lineno"> 2541 </span><span class="spaces">  </span><span class="istickedoff">case x of</span>
+<span class="lineno"> 2542 </span><span class="spaces">    </span><span class="istickedoff">&quot;_&quot; -&gt; PWild allpos mty</span>
+<span class="lineno"> 2543 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; PVar allpos xpos x mty</span></span>
+<span class="lineno"> 2544 </span>
+<span class="lineno"> 2545 </span>-- | Pop off the last statement in a do-block, which is required to
+<span class="lineno"> 2546 </span>--   be a plain expression, and unpack it to an expression.
+<span class="lineno"> 2547 </span>buildBlock :: Pos -&gt; [Stmt] -&gt; Either ParseError Expr
+<span class="lineno"> 2548 </span><span class="decl"><span class="istickedoff">buildBlock pos stmts = case reverse stmts of</span>
+<span class="lineno"> 2549 </span><span class="spaces">  </span><span class="istickedoff">StmtBind _spos (PWild _patpos _noty) e : revstmts' -&gt;</span>
+<span class="lineno"> 2550 </span><span class="spaces">    </span><span class="istickedoff">Right $ Block pos (reverse revstmts', e)</span>
+<span class="lineno"> 2551 </span><span class="spaces">  </span><span class="istickedoff">[] -&gt;</span>
+<span class="lineno"> 2552 </span><span class="spaces">    </span><span class="istickedoff">Left $ EmptyBlock pos</span>
+<span class="lineno"> 2553 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 2554 </span><span class="spaces">    </span><span class="istickedoff">Left $ InvalidBlock pos</span></span>
+<span class="lineno"> 2555 </span>
+<span class="lineno"> 2556 </span>toPattern :: Expr -&gt; Either ParseError Pattern
+<span class="lineno"> 2557 </span><span class="decl"><span class="istickedoff">toPattern expr =</span>
+<span class="lineno"> 2558 </span><span class="spaces">  </span><span class="istickedoff">case expr of</span>
+<span class="lineno"> 2559 </span><span class="spaces">    </span><span class="istickedoff">Tuple pos es -&gt;</span>
+<span class="lineno"> 2560 </span><span class="spaces">        </span><span class="istickedoff">PTuple pos `fmap` mapM toPattern es</span>
+<span class="lineno"> 2561 </span><span class="spaces">    </span><span class="istickedoff">TSig pos (Var xpos x) t -&gt;</span>
+<span class="lineno"> 2562 </span><span class="spaces">        </span><span class="istickedoff">return (buildPVar pos <span class="nottickedoff">xpos</span> x (Just t))</span>
+<span class="lineno"> 2563 </span><span class="spaces">    </span><span class="istickedoff">Var pos x -&gt;</span>
+<span class="lineno"> 2564 </span><span class="spaces">        </span><span class="istickedoff">return (buildPVar pos pos x Nothing)</span>
+<span class="lineno"> 2565 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 2566 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Left (InvalidPattern (getPos expr) expr)</span></span></span>
+<span class="lineno"> 2567 </span>#define HAPPY_COERCE 1
+<span class="lineno"> 2568 </span>-- $Id: GenericTemplate.hs,v 1.26 2005/01/14 14:47:22 simonmar Exp $
+<span class="lineno"> 2569 </span>
+<span class="lineno"> 2570 </span>#if !defined(__GLASGOW_HASKELL__)
+<span class="lineno"> 2571 </span>#  error This code isn't being built with GHC.
+<span class="lineno"> 2572 </span>#endif
+<span class="lineno"> 2573 </span>
+<span class="lineno"> 2574 </span>-- Get WORDS_BIGENDIAN (if defined)
+<span class="lineno"> 2575 </span>#include &quot;MachDeps.h&quot;
+<span class="lineno"> 2576 </span>
+<span class="lineno"> 2577 </span>-- Do not remove this comment. Required to fix CPP parsing when using GCC and a clang-compiled alex.
+<span class="lineno"> 2578 </span>#define LT(n,m) ((Happy_GHC_Exts.tagToEnum# (n Happy_GHC_Exts.&lt;# m)) :: Happy_Prelude.Bool)
+<span class="lineno"> 2579 </span>#define GTE(n,m) ((Happy_GHC_Exts.tagToEnum# (n Happy_GHC_Exts.&gt;=# m)) :: Happy_Prelude.Bool)
+<span class="lineno"> 2580 </span>#define EQ(n,m) ((Happy_GHC_Exts.tagToEnum# (n Happy_GHC_Exts.==# m)) :: Happy_Prelude.Bool)
+<span class="lineno"> 2581 </span>#define PLUS(n,m) (n Happy_GHC_Exts.+# m)
+<span class="lineno"> 2582 </span>#define MINUS(n,m) (n Happy_GHC_Exts.-# m)
+<span class="lineno"> 2583 </span>#define TIMES(n,m) (n Happy_GHC_Exts.*# m)
+<span class="lineno"> 2584 </span>#define NEGATE(n) (Happy_GHC_Exts.negateInt# (n))
+<span class="lineno"> 2585 </span>
+<span class="lineno"> 2586 </span>type Happy_Int = Happy_GHC_Exts.Int#
+<span class="lineno"> 2587 </span>data Happy_IntList = HappyCons Happy_Int Happy_IntList
+<span class="lineno"> 2588 </span>
+<span class="lineno"> 2589 </span>#define INVALID_TOK -1#
+<span class="lineno"> 2590 </span>#define ERROR_TOK 0#
+<span class="lineno"> 2591 </span>#define CATCH_TOK 1#
+<span class="lineno"> 2592 </span>
+<span class="lineno"> 2593 </span>#if defined(HAPPY_COERCE)
+<span class="lineno"> 2594 </span>#  define GET_ERROR_TOKEN(x)  (case Happy_GHC_Exts.unsafeCoerce# x of { (Happy_GHC_Exts.I# i) -&gt; i })
+<span class="lineno"> 2595 </span>#  define MK_ERROR_TOKEN(i)   (Happy_GHC_Exts.unsafeCoerce# (Happy_GHC_Exts.I# i))
+<span class="lineno"> 2596 </span>#  define MK_TOKEN(x)         (happyInTok (x))
+<span class="lineno"> 2597 </span>#else
+<span class="lineno"> 2598 </span>#  define GET_ERROR_TOKEN(x)  (case x of { HappyErrorToken (Happy_GHC_Exts.I# i) -&gt; i })
+<span class="lineno"> 2599 </span>#  define MK_ERROR_TOKEN(i)   (HappyErrorToken (Happy_GHC_Exts.I# i))
+<span class="lineno"> 2600 </span>#  define MK_TOKEN(x)         (HappyTerminal (x))
+<span class="lineno"> 2601 </span>#endif
+<span class="lineno"> 2602 </span>
+<span class="lineno"> 2603 </span>#if defined(HAPPY_DEBUG)
+<span class="lineno"> 2604 </span>#  define DEBUG_TRACE(s)    (happyTrace (s)) Happy_Prelude.$
+<span class="lineno"> 2605 </span>happyTrace string expr = Happy_System_IO_Unsafe.unsafePerformIO Happy_Prelude.$ do
+<span class="lineno"> 2606 </span>    Happy_System_IO.hPutStr Happy_System_IO.stderr string
+<span class="lineno"> 2607 </span>    Happy_Prelude.return expr
+<span class="lineno"> 2608 </span>#else
+<span class="lineno"> 2609 </span>#  define DEBUG_TRACE(s)    {- nothing -}
+<span class="lineno"> 2610 </span>#endif
+<span class="lineno"> 2611 </span>
+<span class="lineno"> 2612 </span>infixr 9 `HappyStk`
+<span class="lineno"> 2613 </span>data HappyStk a = HappyStk a (HappyStk a)
+<span class="lineno"> 2614 </span>
+<span class="lineno"> 2615 </span>-----------------------------------------------------------------------------
+<span class="lineno"> 2616 </span>-- starting the parse
 <span class="lineno"> 2617 </span>
-<span class="lineno"> 2618 </span>-----------------------------------------------------------------------------
-<span class="lineno"> 2619 </span>-- Accepting the parse
-<span class="lineno"> 2620 </span>
-<span class="lineno"> 2621 </span>-- If the current token is ERROR_TOK, it means we've just accepted a partial
-<span class="lineno"> 2622 </span>-- parse (a %partial parser).  We must ignore the saved token on the top of
-<span class="lineno"> 2623 </span>-- the stack in this case.
-<span class="lineno"> 2624 </span><span class="decl"><span class="istickedoff">happyAccept ERROR_TOK tk st sts (_ `HappyStk` ans `HappyStk` _) =</span>
-<span class="lineno"> 2625 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">happyReturn1 ans</span></span>
-<span class="lineno"> 2626 </span><span class="spaces"></span><span class="istickedoff">happyAccept j tk st sts (HappyStk ans _) =</span>
-<span class="lineno"> 2627 </span><span class="spaces">        </span><span class="istickedoff">(happyTcHack j (happyTcHack st)) (happyReturn1 ans)</span></span>
-<span class="lineno"> 2628 </span>
-<span class="lineno"> 2629 </span>-----------------------------------------------------------------------------
-<span class="lineno"> 2630 </span>-- Arrays only: do the next action
-<span class="lineno"> 2631 </span>
-<span class="lineno"> 2632 </span><span class="decl"><span class="istickedoff">happyDoAction i tk st =</span>
-<span class="lineno"> 2633 </span><span class="spaces">  </span><span class="istickedoff">DEBUG_TRACE(&quot;state: &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++</span>
-<span class="lineno"> 2634 </span><span class="spaces">              </span><span class="istickedoff">&quot;,\ttoken: &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++</span>
-<span class="lineno"> 2635 </span><span class="spaces">              </span><span class="istickedoff">&quot;,\taction: &quot;)</span>
-<span class="lineno"> 2636 </span><span class="spaces">  </span><span class="istickedoff">case happyDecodeAction (happyNextAction i st) of</span>
-<span class="lineno"> 2637 </span><span class="spaces">    </span><span class="istickedoff">HappyFail             -&gt; DEBUG_TRACE(&quot;failing.\n&quot;)</span>
-<span class="lineno"> 2638 </span><span class="spaces">                             </span><span class="istickedoff">happyFail i tk st</span>
-<span class="lineno"> 2639 </span><span class="spaces">    </span><span class="istickedoff">HappyAccept           -&gt; DEBUG_TRACE(&quot;accept.\n&quot;)</span>
-<span class="lineno"> 2640 </span><span class="spaces">                             </span><span class="istickedoff">happyAccept i <span class="nottickedoff">tk</span> st</span>
-<span class="lineno"> 2641 </span><span class="spaces">    </span><span class="istickedoff">HappyReduce rule      -&gt; DEBUG_TRACE(&quot;reduce (rule &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# rule) Happy_Prelude.++ &quot;)&quot;)</span>
-<span class="lineno"> 2642 </span><span class="spaces">                             </span><span class="istickedoff">(happyReduceArr Happy_Data_Array.! (Happy_GHC_Exts.I# rule)) i tk st</span>
-<span class="lineno"> 2643 </span><span class="spaces">    </span><span class="istickedoff">HappyShift  new_state -&gt; DEBUG_TRACE(&quot;shift, enter state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# new_state) Happy_Prelude.++ &quot;\n&quot;)</span>
-<span class="lineno"> 2644 </span><span class="spaces">                             </span><span class="istickedoff">happyShift new_state i tk st</span></span>
-<span class="lineno"> 2645 </span>
-<span class="lineno"> 2646 </span>{-# INLINE happyNextAction #-}
-<span class="lineno"> 2647 </span><span class="decl"><span class="istickedoff">happyNextAction i st = case happyIndexActionTable i st of</span>
-<span class="lineno"> 2648 </span><span class="spaces">  </span><span class="istickedoff">Happy_Prelude.Just (Happy_GHC_Exts.I# act) -&gt; act</span>
-<span class="lineno"> 2649 </span><span class="spaces">  </span><span class="istickedoff">Happy_Prelude.Nothing                      -&gt; happyIndexOffAddr happyDefActions st</span></span>
-<span class="lineno"> 2650 </span>
-<span class="lineno"> 2651 </span>{-# INLINE happyIndexActionTable #-}
-<span class="lineno"> 2652 </span><span class="decl"><span class="istickedoff">happyIndexActionTable i st</span>
-<span class="lineno"> 2653 </span><span class="spaces">  </span><span class="istickedoff">| GTE(i, 0#), GTE(off, 0#), EQ(happyIndexOffAddr happyCheck off, i)</span>
-<span class="lineno"> 2654 </span><span class="spaces">  </span><span class="istickedoff">-- i &gt;= 0:   Guard against INVALID_TOK (do the default action, which ultimately errors)</span>
-<span class="lineno"> 2655 </span><span class="spaces">  </span><span class="istickedoff">-- off &gt;= 0: Otherwise it's a default action</span>
-<span class="lineno"> 2656 </span><span class="spaces">  </span><span class="istickedoff">-- equality check: Ensure that the entry in the compressed array is owned by st</span>
-<span class="lineno"> 2657 </span><span class="spaces">  </span><span class="istickedoff">= Happy_Prelude.Just (Happy_GHC_Exts.I# (happyIndexOffAddr happyTable off))</span>
-<span class="lineno"> 2658 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">Happy_Prelude.otherwise</span></span>
-<span class="lineno"> 2659 </span><span class="spaces">  </span><span class="istickedoff">= Happy_Prelude.Nothing</span>
-<span class="lineno"> 2660 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2661 </span><span class="spaces">    </span><span class="istickedoff">off = PLUS(happyIndexOffAddr happyActOffsets st, i)             </span>
-<span class="lineno"> 2662 </span><span class="spaces"></span><span class="istickedoff"></span></span>
-<span class="lineno"> 2663 </span>data HappyAction
-<span class="lineno"> 2664 </span>  = HappyFail
-<span class="lineno"> 2665 </span>  | HappyAccept
-<span class="lineno"> 2666 </span>  | HappyReduce Happy_Int -- rule number
-<span class="lineno"> 2667 </span>  | HappyShift Happy_Int  -- new state
-<span class="lineno"> 2668 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Happy_Prelude.Show</span></span></span></span></span></span>
-<span class="lineno"> 2669 </span>
-<span class="lineno"> 2670 </span>{-# INLINE happyDecodeAction #-}
-<span class="lineno"> 2671 </span>happyDecodeAction :: Happy_Int -&gt; HappyAction
-<span class="lineno"> 2672 </span><span class="decl"><span class="istickedoff">happyDecodeAction  0#                        = HappyFail</span>
-<span class="lineno"> 2673 </span><span class="spaces"></span><span class="istickedoff">happyDecodeAction -1#                        = HappyAccept</span>
-<span class="lineno"> 2674 </span><span class="spaces"></span><span class="istickedoff">happyDecodeAction action | LT(action, 0#)    = HappyReduce NEGATE(PLUS(action, 1#))</span>
-<span class="lineno"> 2675 </span><span class="spaces">                         </span><span class="istickedoff">| <span class="tickonlytrue">Happy_Prelude.otherwise</span> = HappyShift MINUS(action, 1#)            </span>
-<span class="lineno"> 2676 </span><span class="spaces"></span><span class="istickedoff"></span></span>
-<span class="lineno"> 2677 </span>{-# INLINE happyIndexGotoTable #-}
-<span class="lineno"> 2678 </span><span class="decl"><span class="istickedoff">happyIndexGotoTable nt st = happyIndexOffAddr happyTable off</span>
-<span class="lineno"> 2679 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2680 </span><span class="spaces">    </span><span class="istickedoff">off = PLUS(happyIndexOffAddr happyGotoOffsets st, nt)             </span>
-<span class="lineno"> 2681 </span><span class="spaces"></span><span class="istickedoff"></span></span>
-<span class="lineno"> 2682 </span>{-# INLINE happyIndexOffAddr #-}
-<span class="lineno"> 2683 </span>happyIndexOffAddr :: HappyAddr -&gt; Happy_Int -&gt; Happy_Int
-<span class="lineno"> 2684 </span><span class="decl"><span class="istickedoff">happyIndexOffAddr (HappyA# arr) off =</span>
-<span class="lineno"> 2685 </span><span class="spaces"></span><span class="istickedoff">#if __GLASGOW_HASKELL__ &gt;= 901</span>
-<span class="lineno"> 2686 </span><span class="spaces">  </span><span class="istickedoff">Happy_GHC_Exts.int32ToInt# -- qualified import because it doesn't exist on older GHC's</span>
-<span class="lineno"> 2687 </span><span class="spaces"></span><span class="istickedoff">#endif</span>
-<span class="lineno"> 2688 </span><span class="spaces"></span><span class="istickedoff">#ifdef WORDS_BIGENDIAN</span>
-<span class="lineno"> 2689 </span><span class="spaces">  </span><span class="istickedoff">-- The CI of `alex` tests this code path</span>
-<span class="lineno"> 2690 </span><span class="spaces">  </span><span class="istickedoff">(Happy_GHC_Exts.word32ToInt32# (Happy_GHC_Exts.wordToWord32# (Happy_GHC_Exts.byteSwap32# (Happy_GHC_Exts.word32ToWord# (Happy_GHC_Exts.int32ToWord32#</span>
-<span class="lineno"> 2691 </span><span class="spaces"></span><span class="istickedoff">#endif</span>
-<span class="lineno"> 2692 </span><span class="spaces">  </span><span class="istickedoff">(Happy_GHC_Exts.indexInt32OffAddr# arr off)</span></span>
-<span class="lineno"> 2693 </span>#ifdef WORDS_BIGENDIAN
-<span class="lineno"> 2694 </span>  )))))
-<span class="lineno"> 2695 </span>#endif
-<span class="lineno"> 2696 </span>
-<span class="lineno"> 2697 </span>happyIndexRuleArr :: Happy_Int -&gt; (# Happy_Int, Happy_Int #)
-<span class="lineno"> 2698 </span><span class="decl"><span class="nottickedoff">happyIndexRuleArr r = (# nt, len #)</span>
-<span class="lineno"> 2699 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2700 </span><span class="spaces">    </span><span class="nottickedoff">!(Happy_GHC_Exts.I# n_starts) = happy_n_starts</span>
-<span class="lineno"> 2701 </span><span class="spaces">    </span><span class="nottickedoff">offs = TIMES(MINUS(r,n_starts),2#)</span>
-<span class="lineno"> 2702 </span><span class="spaces">    </span><span class="nottickedoff">nt = happyIndexOffAddr happyRuleArr offs</span>
-<span class="lineno"> 2703 </span><span class="spaces">    </span><span class="nottickedoff">len = happyIndexOffAddr happyRuleArr PLUS(offs,1#)             </span>
-<span class="lineno"> 2704 </span><span class="spaces"></span><span class="nottickedoff"></span></span>
-<span class="lineno"> 2705 </span>data HappyAddr = HappyA# Happy_GHC_Exts.Addr#
-<span class="lineno"> 2706 </span>
-<span class="lineno"> 2707 </span>-----------------------------------------------------------------------------
-<span class="lineno"> 2708 </span>-- Shifting a token
-<span class="lineno"> 2709 </span>
-<span class="lineno"> 2710 </span><span class="decl"><span class="istickedoff">happyShift new_state ERROR_TOK tk st sts stk@(x `HappyStk` _) =</span>
-<span class="lineno"> 2711 </span><span class="spaces">     </span><span class="istickedoff">-- See &quot;Error Fixup&quot; below</span>
-<span class="lineno"> 2712 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">let i = GET_ERROR_TOKEN(x) in</span></span>
-<span class="lineno"> 2713 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">DEBUG_TRACE(&quot;shifting the error token&quot;)</span></span>
-<span class="lineno"> 2714 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">happyDoAction i tk new_state (HappyCons st sts) stk</span></span>
-<span class="lineno"> 2715 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2716 </span><span class="spaces"></span><span class="istickedoff">happyShift new_state i tk st sts stk =</span>
-<span class="lineno"> 2717 </span><span class="spaces">     </span><span class="istickedoff">happyNewToken new_state (HappyCons st sts) (MK_TOKEN(tk) `HappyStk` stk)    </span>
-<span class="lineno"> 2718 </span><span class="spaces"></span><span class="istickedoff"></span></span>
-<span class="lineno"> 2719 </span>-- happyReduce is specialised for the common cases.
-<span class="lineno"> 2720 </span>
-<span class="lineno"> 2721 </span><span class="decl"><span class="istickedoff">happySpecReduce_0 nt fn j tk st sts stk</span>
-<span class="lineno"> 2722 </span><span class="spaces">     </span><span class="istickedoff">= happySeq <span class="nottickedoff">fn</span> (happyGoto nt j tk st (HappyCons st sts) (fn `HappyStk` stk))</span></span>
-<span class="lineno"> 2723 </span>
-<span class="lineno"> 2724 </span><span class="decl"><span class="istickedoff">happySpecReduce_1 nt fn j tk old_st sts@(HappyCons st _) (v1 `HappyStk` stk')</span>
-<span class="lineno"> 2725 </span><span class="spaces">     </span><span class="istickedoff">= let r = fn v1 in</span>
-<span class="lineno"> 2726 </span><span class="spaces">       </span><span class="istickedoff">happyTcHack old_st (happySeq <span class="nottickedoff">r</span> (happyGoto nt j tk st sts (r `HappyStk` stk')))</span></span>
-<span class="lineno"> 2727 </span>
-<span class="lineno"> 2728 </span><span class="decl"><span class="istickedoff">happySpecReduce_2 nt fn j tk old_st</span>
-<span class="lineno"> 2729 </span><span class="spaces">  </span><span class="istickedoff">(HappyCons _ sts@(HappyCons st _))</span>
-<span class="lineno"> 2730 </span><span class="spaces">  </span><span class="istickedoff">(v1 `HappyStk` v2 `HappyStk` stk')</span>
-<span class="lineno"> 2731 </span><span class="spaces">     </span><span class="istickedoff">= let r = fn v1 v2 in</span>
-<span class="lineno"> 2732 </span><span class="spaces">       </span><span class="istickedoff">happyTcHack old_st (happySeq <span class="nottickedoff">r</span> (happyGoto nt j tk st sts (r `HappyStk` stk')))</span></span>
-<span class="lineno"> 2733 </span>
-<span class="lineno"> 2734 </span><span class="decl"><span class="istickedoff">happySpecReduce_3 nt fn j tk old_st</span>
-<span class="lineno"> 2735 </span><span class="spaces">  </span><span class="istickedoff">(HappyCons _ (HappyCons _ sts@(HappyCons st _)))</span>
-<span class="lineno"> 2736 </span><span class="spaces">  </span><span class="istickedoff">(v1 `HappyStk` v2 `HappyStk` v3 `HappyStk` stk')</span>
-<span class="lineno"> 2737 </span><span class="spaces">     </span><span class="istickedoff">= let r = fn v1 v2 v3 in</span>
-<span class="lineno"> 2738 </span><span class="spaces">       </span><span class="istickedoff">happyTcHack old_st (happySeq <span class="nottickedoff">r</span> (happyGoto nt j tk st sts (r `HappyStk` stk')))</span></span>
-<span class="lineno"> 2739 </span>
-<span class="lineno"> 2740 </span><span class="decl"><span class="istickedoff">happyReduce k nt fn j tk st sts stk</span>
-<span class="lineno"> 2741 </span><span class="spaces">     </span><span class="istickedoff">= case happyDrop MINUS(k,(1# :: Happy_Int)) sts of</span>
-<span class="lineno"> 2742 </span><span class="spaces">         </span><span class="istickedoff">sts1@(HappyCons st1 _) -&gt;</span>
-<span class="lineno"> 2743 </span><span class="spaces">                </span><span class="istickedoff">let r = fn stk in -- it doesn't hurt to always seq here...</span>
-<span class="lineno"> 2744 </span><span class="spaces">                </span><span class="istickedoff">st `happyTcHack` happyDoSeq r (happyGoto nt j tk st1 sts1 r)</span></span>
-<span class="lineno"> 2745 </span>
-<span class="lineno"> 2746 </span><span class="decl"><span class="istickedoff">happyMonadReduce k nt fn j tk st sts stk =</span>
-<span class="lineno"> 2747 </span><span class="spaces">      </span><span class="istickedoff">case happyDrop k (HappyCons st sts) of</span>
-<span class="lineno"> 2748 </span><span class="spaces">        </span><span class="istickedoff">sts1@(HappyCons st1 _) -&gt;</span>
-<span class="lineno"> 2749 </span><span class="spaces">          </span><span class="istickedoff">let drop_stk = happyDropStk k stk in</span>
-<span class="lineno"> 2750 </span><span class="spaces">          </span><span class="istickedoff">j `happyTcHack` happyThen1 (fn stk <span class="nottickedoff">tk</span>)</span>
-<span class="lineno"> 2751 </span><span class="spaces">                                     </span><span class="istickedoff">(\r -&gt; happyGoto nt j tk st1 sts1 (r `HappyStk` drop_stk))</span></span>
-<span class="lineno"> 2752 </span>
-<span class="lineno"> 2753 </span><span class="decl"><span class="nottickedoff">happyMonad2Reduce k nt fn j tk st sts stk =</span>
-<span class="lineno"> 2754 </span><span class="spaces">      </span><span class="nottickedoff">case happyDrop k (HappyCons st sts) of</span>
-<span class="lineno"> 2755 </span><span class="spaces">        </span><span class="nottickedoff">sts1@(HappyCons st1 _) -&gt;</span>
-<span class="lineno"> 2756 </span><span class="spaces">          </span><span class="nottickedoff">let drop_stk = happyDropStk k stk</span>
-<span class="lineno"> 2757 </span><span class="spaces">              </span><span class="nottickedoff">off = happyIndexOffAddr happyGotoOffsets st1</span>
-<span class="lineno"> 2758 </span><span class="spaces">              </span><span class="nottickedoff">off_i = PLUS(off, nt)</span>
-<span class="lineno"> 2759 </span><span class="spaces">              </span><span class="nottickedoff">new_state = happyIndexOffAddr happyTable off_i</span>
-<span class="lineno"> 2760 </span><span class="spaces">          </span><span class="nottickedoff">in</span>
-<span class="lineno"> 2761 </span><span class="spaces">            </span><span class="nottickedoff">j `happyTcHack` happyThen1 (fn stk tk)</span>
-<span class="lineno"> 2762 </span><span class="spaces">                                       </span><span class="nottickedoff">(\r -&gt; happyNewToken new_state sts1 (r `HappyStk` drop_stk))</span></span>
-<span class="lineno"> 2763 </span>
-<span class="lineno"> 2764 </span><span class="decl"><span class="istickedoff">happyDrop 0# l               = l</span>
-<span class="lineno"> 2765 </span><span class="spaces"></span><span class="istickedoff">happyDrop n  (HappyCons _ t) = happyDrop MINUS(n,(1# :: Happy_Int)) t            </span>
-<span class="lineno"> 2766 </span><span class="spaces"></span><span class="istickedoff"></span></span>
-<span class="lineno"> 2767 </span><span class="decl"><span class="istickedoff">happyDropStk 0# l                 = l</span>
-<span class="lineno"> 2768 </span><span class="spaces"></span><span class="istickedoff">happyDropStk n  (x `HappyStk` xs) = happyDropStk MINUS(n,(1#::Happy_Int)) xs            </span>
-<span class="lineno"> 2769 </span><span class="spaces"></span><span class="istickedoff"></span></span>
-<span class="lineno"> 2770 </span>-----------------------------------------------------------------------------
-<span class="lineno"> 2771 </span>-- Moving to a new state after a reduction
-<span class="lineno"> 2772 </span>
-<span class="lineno"> 2773 </span><span class="decl"><span class="istickedoff">happyGoto nt j tk st =</span>
-<span class="lineno"> 2774 </span><span class="spaces">   </span><span class="istickedoff">DEBUG_TRACE(&quot;, goto state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# new_state) Happy_Prelude.++ &quot;\n&quot;)</span>
-<span class="lineno"> 2775 </span><span class="spaces">   </span><span class="istickedoff">happyDoAction j tk new_state</span>
-<span class="lineno"> 2776 </span><span class="spaces">  </span><span class="istickedoff">where new_state = happyIndexGotoTable nt st</span></span>
-<span class="lineno"> 2777 </span>
-<span class="lineno"> 2778 </span>{- Note [Error recovery]
-<span class="lineno"> 2779 </span>~~~~~~~~~~~~~~~~~~~~~~~~
-<span class="lineno"> 2780 </span>When there is no applicable action for the current lookahead token `tk`,
-<span class="lineno"> 2781 </span>happy enters error recovery mode. Depending on whether the grammar file
-<span class="lineno"> 2782 </span>declares the two action form `%error { abort } { report }` for
-<span class="lineno"> 2783 </span>    Resumptive Error Handling,
-<span class="lineno"> 2784 </span>it works in one (not resumptive) or two phases (resumptive):
-<span class="lineno"> 2785 </span>
-<span class="lineno"> 2786 </span> 1. Fixup mode:
-<span class="lineno"> 2787 </span>    Try to see if there is an action for the error token ERROR_TOK. If there
-<span class="lineno"> 2788 </span>    is, do *not* emit an error and pretend instead that an `error` token was
-<span class="lineno"> 2789 </span>    inserted.
-<span class="lineno"> 2790 </span>    When there is no ERROR_TOK action, report an error.
-<span class="lineno"> 2791 </span>
-<span class="lineno"> 2792 </span>    In non-resumptive error handling, calling the single error handler
-<span class="lineno"> 2793 </span>    (e.g. `happyError`) will throw an exception and abort the parser.
-<span class="lineno"> 2794 </span>    However, in resumptive error handling we enter *error resumption mode*.
-<span class="lineno"> 2795 </span>
-<span class="lineno"> 2796 </span> 2. Error resumption mode:
-<span class="lineno"> 2797 </span>    After reporting the error (with `report`), happy will attempt to find
-<span class="lineno"> 2798 </span>    a good state stack to resume parsing in.
-<span class="lineno"> 2799 </span>    For each candidate stack, it discards input until one of the candidates
-<span class="lineno"> 2800 </span>    resumes (i.e. shifts the current input).
-<span class="lineno"> 2801 </span>    If no candidate resumes before the end of input, resumption failed and
-<span class="lineno"> 2802 </span>    calls the `abort` function, to much the same effect as in non-resumptive
-<span class="lineno"> 2803 </span>    error handling.
-<span class="lineno"> 2804 </span>
-<span class="lineno"> 2805 </span>    Candidate stacks are declared by the grammar author using the special
-<span class="lineno"> 2806 </span>    `catch` terminal and called &quot;catch frames&quot;.
-<span class="lineno"> 2807 </span>    This mechanism is described in detail in Note [happyResume].
-<span class="lineno"> 2808 </span>
-<span class="lineno"> 2809 </span>The `catch` resumption mechanism (2) is what usually is associated with
-<span class="lineno"> 2810 </span>`error` in `bison` or `menhir`. Since `error` is used for the Fixup mechanism
-<span class="lineno"> 2811 </span>(1) above, we call the corresponding token `catch`.
-<span class="lineno"> 2812 </span>Furthermore, in constrast to `bison`, our implementation of `catch`
-<span class="lineno"> 2813 </span>non-deterministically considers multiple catch frames on the stack for
-<span class="lineno"> 2814 </span>resumption (See Note [Multiple catch frames]).
-<span class="lineno"> 2815 </span>
-<span class="lineno"> 2816 </span>Note [happyResume]
-<span class="lineno"> 2817 </span>~~~~~~~~~~~~~~~~~~
-<span class="lineno"> 2818 </span>`happyResume` implements the resumption mechanism from Note [Error recovery].
-<span class="lineno"> 2819 </span>It is best understood by example. Consider
-<span class="lineno"> 2820 </span>
-<span class="lineno"> 2821 </span>Exp :: { String }
-<span class="lineno"> 2822 </span>Exp : '1'                { &quot;1&quot; }
-<span class="lineno"> 2823 </span>    | catch              { &quot;catch&quot; }
-<span class="lineno"> 2824 </span>    | Exp '+' Exp %shift { $1 Happy_Prelude.++ &quot; + &quot; Happy_Prelude.++ $3 } -- %shift: associate 1 + 1 + 1 to the right
-<span class="lineno"> 2825 </span>    | '(' Exp ')'        { &quot;(&quot; Happy_Prelude.++ $2 Happy_Prelude.++ &quot;)&quot; }
-<span class="lineno"> 2826 </span>
-<span class="lineno"> 2827 </span>The idea of the use of `catch` here is that upon encountering a parse error
-<span class="lineno"> 2828 </span>during expression parsing, we can gracefully degrade using the `catch` rule,
-<span class="lineno"> 2829 </span>still producing a partial syntax tree and keep on parsing to find further
-<span class="lineno"> 2830 </span>syntax errors.
-<span class="lineno"> 2831 </span>
-<span class="lineno"> 2832 </span>Let's trace the parser state for input 11+1, which will error out after shifting 1.
-<span class="lineno"> 2833 </span>After shifting, we have the following item stack (growing downwards and omitting
-<span class="lineno"> 2834 </span>transitive closure items):
-<span class="lineno"> 2835 </span>
-<span class="lineno"> 2836 </span>  State 0: %start_parseExp -&gt; . Exp
-<span class="lineno"> 2837 </span>  State 5: Exp -&gt; '1' .
-<span class="lineno"> 2838 </span>
-<span class="lineno"> 2839 </span>(Stack as a list of state numbers: [5,0].)
-<span class="lineno"> 2840 </span>As Note [Error recovery] describes, we will first try Fixup mode.
-<span class="lineno"> 2841 </span>That fails because no production can shift the `error` token.
-<span class="lineno"> 2842 </span>Next we try Error resumption mode. This works as follows:
-<span class="lineno"> 2843 </span>
-<span class="lineno"> 2844 </span>  1. Pop off the item stack until we find an item that can shift the `catch`
-<span class="lineno"> 2845 </span>     token. (Implemented in `pop_items`.)
-<span class="lineno"> 2846 </span>       * State 5 cannot shift catch. Pop.
-<span class="lineno"> 2847 </span>       * State 0 can shift catch, which would transition into
-<span class="lineno"> 2848 </span>          State 4: Exp -&gt; catch .
-<span class="lineno"> 2849 </span>     So record the *stack* `[4,0]` after doing the shift transition.
-<span class="lineno"> 2850 </span>     We call this a *catch frame*, where the top is a *catch state*,
-<span class="lineno"> 2851 </span>     corresponding to an item in which we just shifted a `catch` token.
-<span class="lineno"> 2852 </span>     There can be multiple such catch stacks, see Note [Multiple catch frames].
-<span class="lineno"> 2853 </span>
-<span class="lineno"> 2854 </span>  2. Discard tokens from the input until the lookahead can be shifted in one
-<span class="lineno"> 2855 </span>     of the catch stacks. (Implemented in `discard_input_until_exp` and
-<span class="lineno"> 2856 </span>     `some_catch_state_shifts`.)
-<span class="lineno"> 2857 </span>       * We cannot shift the current lookahead '1' in state 4, so we discard
-<span class="lineno"> 2858 </span>       * We *can* shift the next lookahead '+' in state 4, but only after
-<span class="lineno"> 2859 </span>         reducing, which pops State 4 and goes to State 3:
-<span class="lineno"> 2860 </span>           State 3: %start_parseExp -&gt; Exp .
-<span class="lineno"> 2861 </span>                    Exp -&gt; Exp . '+' Exp
-<span class="lineno"> 2862 </span>         Here we can shift '+'.
-<span class="lineno"> 2863 </span>     As you can see, to implement this machinery we need to simulate
-<span class="lineno"> 2864 </span>     the operation of the LALR automaton, especially reduction
-<span class="lineno"> 2865 </span>     (`happySimulateReduce`).
-<span class="lineno"> 2866 </span>
-<span class="lineno"> 2867 </span>Note [Multiple catch frames]
-<span class="lineno"> 2868 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-<span class="lineno"> 2869 </span>For fewer spurious error messages, it can be beneficial to trace multiple catch
-<span class="lineno"> 2870 </span>items. Consider
-<span class="lineno"> 2871 </span>
-<span class="lineno"> 2872 </span>Exp : '1'
-<span class="lineno"> 2873 </span>    | catch
-<span class="lineno"> 2874 </span>    | Exp '+' Exp %shift
-<span class="lineno"> 2875 </span>    | '(' Exp ')'
-<span class="lineno"> 2876 </span>
-<span class="lineno"> 2877 </span>Let's trace the parser state for input (;+1, which will error out after shifting (.
-<span class="lineno"> 2878 </span>After shifting, we have the following item stack (growing downwards):
-<span class="lineno"> 2879 </span>
-<span class="lineno"> 2880 </span>  State 0: %start_parseExp -&gt; . Exp
-<span class="lineno"> 2881 </span>  State 6: Exp -&gt; '(' . Exp ')'
-<span class="lineno"> 2882 </span>
-<span class="lineno"> 2883 </span>Upon error, we want to find items in the stack which can shift a catch token.
-<span class="lineno"> 2884 </span>Note that both State 0 and State 6 can shift a catch token, transitioning into
-<span class="lineno"> 2885 </span>  State 4: Exp -&gt; catch .
-<span class="lineno"> 2886 </span>Hence we record the catch frames `[4,6,0]` and `[4,0]` for possible resumption.
-<span class="lineno"> 2887 </span>
-<span class="lineno"> 2888 </span>Which catch frame do we pick for resumption?
-<span class="lineno"> 2889 </span>Note that resuming catch frame `[4,0]` will parse as &quot;catch+1&quot;, whereas
-<span class="lineno"> 2890 </span>resuming the innermost frame `[4,6,0]` corresponds to parsing &quot;(catch+1&quot;.
-<span class="lineno"> 2891 </span>The latter would keep discarding input until the closing ')' is found.
-<span class="lineno"> 2892 </span>So we will discard + and 1, leading to a spurious syntax error at the end of
-<span class="lineno"> 2893 </span>input, aborting the parse and never producing a partial syntax tree. Bad!
-<span class="lineno"> 2894 </span>
-<span class="lineno"> 2895 </span>It is far preferable to resume with catch frame `[4,0]`, where we can resume
-<span class="lineno"> 2896 </span>successfully on input +, so that is what we do.
-<span class="lineno"> 2897 </span>
-<span class="lineno"> 2898 </span>In general, we pick the catch frame for resumption that discards the least
-<span class="lineno"> 2899 </span>amount of input for a successful shift, preferring the topmost such catch frame.
-<span class="lineno"> 2900 </span>-}
-<span class="lineno"> 2901 </span>
-<span class="lineno"> 2902 </span>-- happyFail :: Happy_Int -&gt; Token -&gt; Happy_Int -&gt; _
-<span class="lineno"> 2903 </span>-- This function triggers Note [Error recovery].
-<span class="lineno"> 2904 </span>-- If the current token is ERROR_TOK, phase (1) has failed and we might try
-<span class="lineno"> 2905 </span>-- phase (2).
-<span class="lineno"> 2906 </span><span class="decl"><span class="istickedoff">happyFail ERROR_TOK = happyFixupFailed</span>
-<span class="lineno"> 2907 </span><span class="spaces"></span><span class="istickedoff">happyFail i         = happyTryFixup i</span></span>
-<span class="lineno"> 2908 </span>
-<span class="lineno"> 2909 </span>-- Enter Error Fixup (see Note [Error recovery]):
-<span class="lineno"> 2910 </span>-- generate an error token, save the old token and carry on.
-<span class="lineno"> 2911 </span>-- When a `happyShift` accepts the error token, we will pop off the error token
-<span class="lineno"> 2912 </span>-- to resume parsing with the current lookahead `i`.
-<span class="lineno"> 2913 </span><span class="decl"><span class="istickedoff">happyTryFixup i tk action sts stk =</span>
-<span class="lineno"> 2914 </span><span class="spaces">  </span><span class="istickedoff">DEBUG_TRACE(&quot;entering `error` fixup.\n&quot;)</span>
-<span class="lineno"> 2915 </span><span class="spaces">  </span><span class="istickedoff">happyDoAction ERROR_TOK tk <span class="nottickedoff">act</span>ion sts (MK_ERROR_TOKEN(i) `HappyStk` stk)                        <span class="nottickedoff">  </span></span>
-<span class="lineno"> 2916 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff"></span></span></span>-- NB: `happyShift` will simply pop the error token and carry on with
-<span class="lineno"> 2917 </span>  --     `tk`. Hence we don't change `tk` in the call here
-<span class="lineno"> 2918 </span>
-<span class="lineno"> 2919 </span>-- See Note [Error recovery], phase (2).
-<span class="lineno"> 2920 </span>-- Enter resumption mode after reporting the error by calling `happyResume`.
-<span class="lineno"> 2921 </span><span class="decl"><span class="istickedoff">happyFixupFailed tk st sts (x `HappyStk` stk) =</span>
-<span class="lineno"> 2922 </span><span class="spaces">  </span><span class="istickedoff">let i = GET_ERROR_TOKEN(x) in</span>
-<span class="lineno"> 2923 </span><span class="spaces">  </span><span class="istickedoff">DEBUG_TRACE(&quot;`error` fixup failed.\n&quot;)</span>
-<span class="lineno"> 2924 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">resume   = happyResume i tk st sts stk</span></span>
-<span class="lineno"> 2925 </span><span class="spaces">      </span><span class="istickedoff">expected = happyExpectedTokens st <span class="nottickedoff">sts</span> in</span>
-<span class="lineno"> 2926 </span><span class="spaces">  </span><span class="istickedoff">happyReport i tk expected <span class="nottickedoff">resume</span></span></span>
-<span class="lineno"> 2927 </span>
-<span class="lineno"> 2928 </span>-- happyResume :: Happy_Int -&gt; Token -&gt; Happy_Int -&gt; _
-<span class="lineno"> 2929 </span>-- See Note [happyResume]
-<span class="lineno"> 2930 </span><span class="decl"><span class="nottickedoff">happyResume i tk st sts stk = pop_items [] st sts stk</span>
-<span class="lineno"> 2931 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2932 </span><span class="spaces">    </span><span class="nottickedoff">!(Happy_GHC_Exts.I# n_starts) = happy_n_starts   -- this is to test whether we have a start token</span>
-<span class="lineno"> 2933 </span><span class="spaces">    </span><span class="nottickedoff">!(Happy_GHC_Exts.I# eof_i) = happy_n_terms Happy_Prelude.- 1   -- this is the token number of the EOF token</span>
-<span class="lineno"> 2934 </span><span class="spaces">    </span><span class="nottickedoff">happy_list_to_list :: Happy_IntList -&gt; [Happy_Prelude.Int]</span>
-<span class="lineno"> 2935 </span><span class="spaces">    </span><span class="nottickedoff">happy_list_to_list (HappyCons st sts)</span>
-<span class="lineno"> 2936 </span><span class="spaces">      </span><span class="nottickedoff">| LT(st, n_starts)</span>
-<span class="lineno"> 2937 </span><span class="spaces">      </span><span class="nottickedoff">= [(Happy_GHC_Exts.I# st)]</span>
-<span class="lineno"> 2938 </span><span class="spaces">      </span><span class="nottickedoff">| Happy_Prelude.otherwise</span>
-<span class="lineno"> 2939 </span><span class="spaces">      </span><span class="nottickedoff">= (Happy_GHC_Exts.I# st) : happy_list_to_list sts</span>
-<span class="lineno"> 2940 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 2941 </span><span class="spaces">    </span><span class="nottickedoff">-- See (1) of Note [happyResume]</span>
-<span class="lineno"> 2942 </span><span class="spaces">    </span><span class="nottickedoff">pop_items catch_frames st sts stk</span>
-<span class="lineno"> 2943 </span><span class="spaces">      </span><span class="nottickedoff">| LT(st, n_starts)</span>
-<span class="lineno"> 2944 </span><span class="spaces">      </span><span class="nottickedoff">= DEBUG_TRACE(&quot;reached start state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;, &quot;)</span>
-<span class="lineno"> 2945 </span><span class="spaces">        </span><span class="nottickedoff">if Happy_Prelude.null catch_frames_new</span>
-<span class="lineno"> 2946 </span><span class="spaces">          </span><span class="nottickedoff">then DEBUG_TRACE(&quot;no resumption.\n&quot;)</span>
-<span class="lineno"> 2947 </span><span class="spaces">               </span><span class="nottickedoff">happyAbort</span>
-<span class="lineno"> 2948 </span><span class="spaces">          </span><span class="nottickedoff">else DEBUG_TRACE(&quot;now discard input, trying to anchor in states &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_Prelude.map (happy_list_to_list . Happy_Prelude.fst) (Happy_Prelude.reverse catch_frames_new)) Happy_Prelude.++ &quot;.\n&quot;)</span>
-<span class="lineno"> 2949 </span><span class="spaces">               </span><span class="nottickedoff">discard_input_until_exp i tk (Happy_Prelude.reverse catch_frames_new)</span>
-<span class="lineno"> 2950 </span><span class="spaces">      </span><span class="nottickedoff">| (HappyCons st1 sts1) &lt;- sts, _ `HappyStk` stk1 &lt;- stk</span>
-<span class="lineno"> 2951 </span><span class="spaces">      </span><span class="nottickedoff">= pop_items catch_frames_new st1 sts1 stk1</span>
-<span class="lineno"> 2952 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2953 </span><span class="spaces">        </span><span class="nottickedoff">!catch_frames_new</span>
-<span class="lineno"> 2954 </span><span class="spaces">          </span><span class="nottickedoff">| HappyShift new_state &lt;- happyDecodeAction (happyNextAction CATCH_TOK st)</span>
-<span class="lineno"> 2955 </span><span class="spaces">          </span><span class="nottickedoff">, DEBUG_TRACE(&quot;can shift catch token in state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;, into state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# new_state) Happy_Prelude.++ &quot;\n&quot;)</span>
-<span class="lineno"> 2956 </span><span class="spaces">            </span><span class="nottickedoff">Happy_Prelude.null (Happy_Prelude.filter (\(HappyCons _ (HappyCons h _),_) -&gt; EQ(st,h)) catch_frames)</span>
-<span class="lineno"> 2957 </span><span class="spaces">          </span><span class="nottickedoff">= (HappyCons new_state (HappyCons st sts), MK_ERROR_TOKEN(i) `HappyStk` stk):catch_frames -- MK_ERROR_TOKEN(i) is just some dummy that should not be accessed by user code</span>
-<span class="lineno"> 2958 </span><span class="spaces">          </span><span class="nottickedoff">| Happy_Prelude.otherwise</span>
-<span class="lineno"> 2959 </span><span class="spaces">          </span><span class="nottickedoff">= DEBUG_TRACE(&quot;already shifted or can't shift catch in &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;\n&quot;)</span>
-<span class="lineno"> 2960 </span><span class="spaces">            </span><span class="nottickedoff">catch_frames</span>
-<span class="lineno"> 2961 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 2962 </span><span class="spaces">    </span><span class="nottickedoff">-- See (2) of Note [happyResume]</span>
-<span class="lineno"> 2963 </span><span class="spaces">    </span><span class="nottickedoff">discard_input_until_exp i tk catch_frames</span>
-<span class="lineno"> 2964 </span><span class="spaces">      </span><span class="nottickedoff">| Happy_Prelude.Just (HappyCons st (HappyCons catch_st sts), catch_frame) &lt;- some_catch_state_shifts i catch_frames</span>
-<span class="lineno"> 2965 </span><span class="spaces">      </span><span class="nottickedoff">= DEBUG_TRACE(&quot;found expected token in state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot; after shifting from &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# catch_st) Happy_Prelude.++ &quot;: &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++ &quot;\n&quot;)</span>
-<span class="lineno"> 2966 </span><span class="spaces">        </span><span class="nottickedoff">happyDoAction i tk st (HappyCons catch_st sts) catch_frame</span>
-<span class="lineno"> 2967 </span><span class="spaces">      </span><span class="nottickedoff">| EQ(i,eof_i) -- is i EOF?</span>
-<span class="lineno"> 2968 </span><span class="spaces">      </span><span class="nottickedoff">= DEBUG_TRACE(&quot;reached EOF, cannot resume. abort parse :(\n&quot;)</span>
-<span class="lineno"> 2969 </span><span class="spaces">        </span><span class="nottickedoff">happyAbort</span>
-<span class="lineno"> 2970 </span><span class="spaces">      </span><span class="nottickedoff">| Happy_Prelude.otherwise</span>
-<span class="lineno"> 2971 </span><span class="spaces">      </span><span class="nottickedoff">= DEBUG_TRACE(&quot;discard token &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++ &quot;\n&quot;)</span>
-<span class="lineno"> 2972 </span><span class="spaces">        </span><span class="nottickedoff">happyLex (\eof_tk -&gt; discard_input_until_exp eof_i eof_tk catch_frames) -- eof</span>
-<span class="lineno"> 2973 </span><span class="spaces">                 </span><span class="nottickedoff">(\i tk   -&gt; discard_input_until_exp i tk catch_frames)         -- not eof</span>
-<span class="lineno"> 2974 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 2975 </span><span class="spaces">    </span><span class="nottickedoff">some_catch_state_shifts _ [] = DEBUG_TRACE(&quot;no catch state could shift.\n&quot;) Happy_Prelude.Nothing</span>
-<span class="lineno"> 2976 </span><span class="spaces">    </span><span class="nottickedoff">some_catch_state_shifts i catch_frames@(((HappyCons st sts),_):_) = try_head i st sts catch_frames</span>
-<span class="lineno"> 2977 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2978 </span><span class="spaces">        </span><span class="nottickedoff">try_head i st sts catch_frames = -- PRECONDITION: head catch_frames = (HappyCons st sts)</span>
-<span class="lineno"> 2979 </span><span class="spaces">          </span><span class="nottickedoff">DEBUG_TRACE(&quot;trying token &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++ &quot; in state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;: &quot;)</span>
-<span class="lineno"> 2980 </span><span class="spaces">          </span><span class="nottickedoff">case happyDecodeAction (happyNextAction i st) of</span>
-<span class="lineno"> 2981 </span><span class="spaces">            </span><span class="nottickedoff">HappyFail     -&gt; DEBUG_TRACE(&quot;fail.\n&quot;)   some_catch_state_shifts i (Happy_Prelude.tail catch_frames)</span>
-<span class="lineno"> 2982 </span><span class="spaces">            </span><span class="nottickedoff">HappyAccept   -&gt; DEBUG_TRACE(&quot;accept.\n&quot;) Happy_Prelude.Just (Happy_Prelude.head catch_frames)</span>
-<span class="lineno"> 2983 </span><span class="spaces">            </span><span class="nottickedoff">HappyShift _  -&gt; DEBUG_TRACE(&quot;shift.\n&quot;)  Happy_Prelude.Just (Happy_Prelude.head catch_frames)</span>
-<span class="lineno"> 2984 </span><span class="spaces">            </span><span class="nottickedoff">HappyReduce r -&gt; case happySimulateReduce r st sts of</span>
-<span class="lineno"> 2985 </span><span class="spaces">              </span><span class="nottickedoff">(HappyCons st1 sts1) -&gt; try_head i st1 sts1 catch_frames</span></span>
-<span class="lineno"> 2986 </span>
-<span class="lineno"> 2987 </span><span class="decl"><span class="nottickedoff">happySimulateReduce r st sts =</span>
-<span class="lineno"> 2988 </span><span class="spaces">  </span><span class="nottickedoff">DEBUG_TRACE(&quot;simulate reduction of rule &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# r) Happy_Prelude.++ &quot;, &quot;)</span>
-<span class="lineno"> 2989 </span><span class="spaces">  </span><span class="nottickedoff">let (# nt, len #) = happyIndexRuleArr r in</span>
-<span class="lineno"> 2990 </span><span class="spaces">  </span><span class="nottickedoff">DEBUG_TRACE(&quot;nt &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# nt) Happy_Prelude.++ &quot;, len: &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# len) Happy_Prelude.++ &quot;, new_st &quot;)</span>
-<span class="lineno"> 2991 </span><span class="spaces">  </span><span class="nottickedoff">let !(sts1@(HappyCons st1 _)) = happyDrop len (HappyCons st sts)</span>
-<span class="lineno"> 2992 </span><span class="spaces">      </span><span class="nottickedoff">new_st = happyIndexGotoTable nt st1 in</span>
-<span class="lineno"> 2993 </span><span class="spaces">  </span><span class="nottickedoff">DEBUG_TRACE(Happy_Prelude.show (Happy_GHC_Exts.I# new_st) Happy_Prelude.++ &quot;.\n&quot;)</span>
-<span class="lineno"> 2994 </span><span class="spaces">  </span><span class="nottickedoff">(HappyCons new_st sts1)</span></span>
-<span class="lineno"> 2995 </span>
-<span class="lineno"> 2996 </span>happyTokenToString :: Happy_Prelude.Int -&gt; Happy_Prelude.String
-<span class="lineno"> 2997 </span><span class="decl"><span class="istickedoff">happyTokenToString i = happyTokenStrings Happy_Prelude.!! (i Happy_Prelude.- 2)</span></span> -- 2: errorTok, catchTok
-<span class="lineno"> 2998 </span>
-<span class="lineno"> 2999 </span>happyExpectedTokens :: Happy_Int -&gt; Happy_IntList -&gt; [Happy_Prelude.String]
-<span class="lineno"> 3000 </span>-- Upon a parse error, we want to suggest tokens that are expected in that
-<span class="lineno"> 3001 </span>-- situation. This function computes such tokens.
-<span class="lineno"> 3002 </span>-- It works by examining the top of the state stack.
-<span class="lineno"> 3003 </span>-- For every token number that does a shift transition, record that token number.
-<span class="lineno"> 3004 </span>-- For every token number that does a reduce transition, simulate that reduction
-<span class="lineno"> 3005 </span>-- on the state state stack and repeat.
-<span class="lineno"> 3006 </span>-- The recorded token numbers are then formatted with 'happyTokenToString' and
-<span class="lineno"> 3007 </span>-- returned.
-<span class="lineno"> 3008 </span><span class="decl"><span class="istickedoff">happyExpectedTokens st sts =</span>
-<span class="lineno"> 3009 </span><span class="spaces">  </span><span class="istickedoff">DEBUG_TRACE(&quot;constructing expected tokens.\n&quot;)</span>
-<span class="lineno"> 3010 </span><span class="spaces">  </span><span class="istickedoff">Happy_Prelude.map happyTokenToString (search_shifts st <span class="nottickedoff">sts</span> [])</span>
-<span class="lineno"> 3011 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 3012 </span><span class="spaces">    </span><span class="istickedoff">search_shifts st sts shifts = Happy_Prelude.foldr (add_action st <span class="nottickedoff">sts</span>) shifts (distinct_actions st)</span>
-<span class="lineno"> 3013 </span><span class="spaces">    </span><span class="istickedoff">add_action st sts (Happy_GHC_Exts.I# i, Happy_GHC_Exts.I# act) shifts =</span>
-<span class="lineno"> 3014 </span><span class="spaces">      </span><span class="istickedoff">DEBUG_TRACE(&quot;found action in state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;, input &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++ &quot;, &quot; Happy_Prelude.++ Happy_Prelude.show (happyDecodeAction act) Happy_Prelude.++ &quot;\n&quot;)</span>
-<span class="lineno"> 3015 </span><span class="spaces">      </span><span class="istickedoff">case happyDecodeAction act of</span>
-<span class="lineno"> 3016 </span><span class="spaces">        </span><span class="istickedoff">HappyFail     -&gt; shifts</span>
-<span class="lineno"> 3017 </span><span class="spaces">        </span><span class="istickedoff">HappyAccept   -&gt; <span class="nottickedoff">shifts</span> -- This would always be %eof or error... Not helpful</span>
-<span class="lineno"> 3018 </span><span class="spaces">        </span><span class="istickedoff">HappyShift _  -&gt; Happy_Prelude.insert (Happy_GHC_Exts.I# i) shifts</span>
-<span class="lineno"> 3019 </span><span class="spaces">        </span><span class="istickedoff">HappyReduce r -&gt; <span class="nottickedoff">case happySimulateReduce r st sts of</span></span>
-<span class="lineno"> 3020 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">(HappyCons st1 sts1) -&gt; search_shifts st1 sts1 shifts</span></span>
-<span class="lineno"> 3021 </span><span class="spaces">    </span><span class="istickedoff">distinct_actions st</span>
-<span class="lineno"> 3022 </span><span class="spaces">      </span><span class="istickedoff">-- The (token number, action) pairs of all actions in the given state</span>
-<span class="lineno"> 3023 </span><span class="spaces">      </span><span class="istickedoff">= ((-1), (Happy_GHC_Exts.I# (happyIndexOffAddr happyDefActions st)))</span>
-<span class="lineno"> 3024 </span><span class="spaces">      </span><span class="istickedoff">: [ (i, act) | i &lt;- [begin_i..happy_n_terms], act &lt;- get_act row_off i ]</span>
-<span class="lineno"> 3025 </span><span class="spaces">      </span><span class="istickedoff">where</span>
-<span class="lineno"> 3026 </span><span class="spaces">        </span><span class="istickedoff">row_off = happyIndexOffAddr happyActOffsets st</span>
-<span class="lineno"> 3027 </span><span class="spaces">        </span><span class="istickedoff">begin_i = 2 -- +2: errorTok,catchTok</span>
-<span class="lineno"> 3028 </span><span class="spaces">    </span><span class="istickedoff">get_act off (Happy_GHC_Exts.I# i) -- happyIndexActionTable with cached row offset</span>
-<span class="lineno"> 3029 </span><span class="spaces">      </span><span class="istickedoff">| let off_i = PLUS(off,i)</span>
-<span class="lineno"> 3030 </span><span class="spaces">      </span><span class="istickedoff">, GTE(off_i,0#)</span>
-<span class="lineno"> 3031 </span><span class="spaces">      </span><span class="istickedoff">, EQ(happyIndexOffAddr happyCheck off_i,i)</span>
-<span class="lineno"> 3032 </span><span class="spaces">      </span><span class="istickedoff">= [(Happy_GHC_Exts.I# (happyIndexOffAddr happyTable off_i))]</span>
-<span class="lineno"> 3033 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">Happy_Prelude.otherwise</span></span>
-<span class="lineno"> 3034 </span><span class="spaces">      </span><span class="istickedoff">= []</span></span>
-<span class="lineno"> 3035 </span>
-<span class="lineno"> 3036 </span>-- Internal happy errors:
+<span class="lineno"> 2618 </span><span class="decl"><span class="istickedoff">happyDoParse start_state = happyNewToken start_state <span class="nottickedoff">notHappyAtAll</span> <span class="nottickedoff">notHappyAtAll</span></span></span>
+<span class="lineno"> 2619 </span>
+<span class="lineno"> 2620 </span>-----------------------------------------------------------------------------
+<span class="lineno"> 2621 </span>-- Accepting the parse
+<span class="lineno"> 2622 </span>
+<span class="lineno"> 2623 </span>-- If the current token is ERROR_TOK, it means we've just accepted a partial
+<span class="lineno"> 2624 </span>-- parse (a %partial parser).  We must ignore the saved token on the top of
+<span class="lineno"> 2625 </span>-- the stack in this case.
+<span class="lineno"> 2626 </span><span class="decl"><span class="istickedoff">happyAccept ERROR_TOK tk st sts (_ `HappyStk` ans `HappyStk` _) =</span>
+<span class="lineno"> 2627 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">happyReturn1 ans</span></span>
+<span class="lineno"> 2628 </span><span class="spaces"></span><span class="istickedoff">happyAccept j tk st sts (HappyStk ans _) =</span>
+<span class="lineno"> 2629 </span><span class="spaces">        </span><span class="istickedoff">(happyTcHack j (happyTcHack st)) (happyReturn1 ans)</span></span>
+<span class="lineno"> 2630 </span>
+<span class="lineno"> 2631 </span>-----------------------------------------------------------------------------
+<span class="lineno"> 2632 </span>-- Arrays only: do the next action
+<span class="lineno"> 2633 </span>
+<span class="lineno"> 2634 </span><span class="decl"><span class="istickedoff">happyDoAction i tk st =</span>
+<span class="lineno"> 2635 </span><span class="spaces">  </span><span class="istickedoff">DEBUG_TRACE(&quot;state: &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++</span>
+<span class="lineno"> 2636 </span><span class="spaces">              </span><span class="istickedoff">&quot;,\ttoken: &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++</span>
+<span class="lineno"> 2637 </span><span class="spaces">              </span><span class="istickedoff">&quot;,\taction: &quot;)</span>
+<span class="lineno"> 2638 </span><span class="spaces">  </span><span class="istickedoff">case happyDecodeAction (happyNextAction i st) of</span>
+<span class="lineno"> 2639 </span><span class="spaces">    </span><span class="istickedoff">HappyFail             -&gt; DEBUG_TRACE(&quot;failing.\n&quot;)</span>
+<span class="lineno"> 2640 </span><span class="spaces">                             </span><span class="istickedoff">happyFail i tk st</span>
+<span class="lineno"> 2641 </span><span class="spaces">    </span><span class="istickedoff">HappyAccept           -&gt; DEBUG_TRACE(&quot;accept.\n&quot;)</span>
+<span class="lineno"> 2642 </span><span class="spaces">                             </span><span class="istickedoff">happyAccept i <span class="nottickedoff">tk</span> st</span>
+<span class="lineno"> 2643 </span><span class="spaces">    </span><span class="istickedoff">HappyReduce rule      -&gt; DEBUG_TRACE(&quot;reduce (rule &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# rule) Happy_Prelude.++ &quot;)&quot;)</span>
+<span class="lineno"> 2644 </span><span class="spaces">                             </span><span class="istickedoff">(happyReduceArr Happy_Data_Array.! (Happy_GHC_Exts.I# rule)) i tk st</span>
+<span class="lineno"> 2645 </span><span class="spaces">    </span><span class="istickedoff">HappyShift  new_state -&gt; DEBUG_TRACE(&quot;shift, enter state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# new_state) Happy_Prelude.++ &quot;\n&quot;)</span>
+<span class="lineno"> 2646 </span><span class="spaces">                             </span><span class="istickedoff">happyShift new_state i tk st</span></span>
+<span class="lineno"> 2647 </span>
+<span class="lineno"> 2648 </span>{-# INLINE happyNextAction #-}
+<span class="lineno"> 2649 </span><span class="decl"><span class="istickedoff">happyNextAction i st = case happyIndexActionTable i st of</span>
+<span class="lineno"> 2650 </span><span class="spaces">  </span><span class="istickedoff">Happy_Prelude.Just (Happy_GHC_Exts.I# act) -&gt; act</span>
+<span class="lineno"> 2651 </span><span class="spaces">  </span><span class="istickedoff">Happy_Prelude.Nothing                      -&gt; happyIndexOffAddr happyDefActions st</span></span>
+<span class="lineno"> 2652 </span>
+<span class="lineno"> 2653 </span>{-# INLINE happyIndexActionTable #-}
+<span class="lineno"> 2654 </span><span class="decl"><span class="istickedoff">happyIndexActionTable i st</span>
+<span class="lineno"> 2655 </span><span class="spaces">  </span><span class="istickedoff">| GTE(i, 0#), GTE(off, 0#), EQ(happyIndexOffAddr happyCheck off, i)</span>
+<span class="lineno"> 2656 </span><span class="spaces">  </span><span class="istickedoff">-- i &gt;= 0:   Guard against INVALID_TOK (do the default action, which ultimately errors)</span>
+<span class="lineno"> 2657 </span><span class="spaces">  </span><span class="istickedoff">-- off &gt;= 0: Otherwise it's a default action</span>
+<span class="lineno"> 2658 </span><span class="spaces">  </span><span class="istickedoff">-- equality check: Ensure that the entry in the compressed array is owned by st</span>
+<span class="lineno"> 2659 </span><span class="spaces">  </span><span class="istickedoff">= Happy_Prelude.Just (Happy_GHC_Exts.I# (happyIndexOffAddr happyTable off))</span>
+<span class="lineno"> 2660 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">Happy_Prelude.otherwise</span></span>
+<span class="lineno"> 2661 </span><span class="spaces">  </span><span class="istickedoff">= Happy_Prelude.Nothing</span>
+<span class="lineno"> 2662 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2663 </span><span class="spaces">    </span><span class="istickedoff">off = PLUS(happyIndexOffAddr happyActOffsets st, i)             </span>
+<span class="lineno"> 2664 </span><span class="spaces"></span><span class="istickedoff"></span></span>
+<span class="lineno"> 2665 </span>data HappyAction
+<span class="lineno"> 2666 </span>  = HappyFail
+<span class="lineno"> 2667 </span>  | HappyAccept
+<span class="lineno"> 2668 </span>  | HappyReduce Happy_Int -- rule number
+<span class="lineno"> 2669 </span>  | HappyShift Happy_Int  -- new state
+<span class="lineno"> 2670 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Happy_Prelude.Show</span></span></span></span></span></span>
+<span class="lineno"> 2671 </span>
+<span class="lineno"> 2672 </span>{-# INLINE happyDecodeAction #-}
+<span class="lineno"> 2673 </span>happyDecodeAction :: Happy_Int -&gt; HappyAction
+<span class="lineno"> 2674 </span><span class="decl"><span class="istickedoff">happyDecodeAction  0#                        = HappyFail</span>
+<span class="lineno"> 2675 </span><span class="spaces"></span><span class="istickedoff">happyDecodeAction -1#                        = HappyAccept</span>
+<span class="lineno"> 2676 </span><span class="spaces"></span><span class="istickedoff">happyDecodeAction action | LT(action, 0#)    = HappyReduce NEGATE(PLUS(action, 1#))</span>
+<span class="lineno"> 2677 </span><span class="spaces">                         </span><span class="istickedoff">| <span class="tickonlytrue">Happy_Prelude.otherwise</span> = HappyShift MINUS(action, 1#)            </span>
+<span class="lineno"> 2678 </span><span class="spaces"></span><span class="istickedoff"></span></span>
+<span class="lineno"> 2679 </span>{-# INLINE happyIndexGotoTable #-}
+<span class="lineno"> 2680 </span><span class="decl"><span class="istickedoff">happyIndexGotoTable nt st = happyIndexOffAddr happyTable off</span>
+<span class="lineno"> 2681 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2682 </span><span class="spaces">    </span><span class="istickedoff">off = PLUS(happyIndexOffAddr happyGotoOffsets st, nt)             </span>
+<span class="lineno"> 2683 </span><span class="spaces"></span><span class="istickedoff"></span></span>
+<span class="lineno"> 2684 </span>{-# INLINE happyIndexOffAddr #-}
+<span class="lineno"> 2685 </span>happyIndexOffAddr :: HappyAddr -&gt; Happy_Int -&gt; Happy_Int
+<span class="lineno"> 2686 </span><span class="decl"><span class="istickedoff">happyIndexOffAddr (HappyA# arr) off =</span>
+<span class="lineno"> 2687 </span><span class="spaces"></span><span class="istickedoff">#if __GLASGOW_HASKELL__ &gt;= 901</span>
+<span class="lineno"> 2688 </span><span class="spaces">  </span><span class="istickedoff">Happy_GHC_Exts.int32ToInt# -- qualified import because it doesn't exist on older GHC's</span>
+<span class="lineno"> 2689 </span><span class="spaces"></span><span class="istickedoff">#endif</span>
+<span class="lineno"> 2690 </span><span class="spaces"></span><span class="istickedoff">#ifdef WORDS_BIGENDIAN</span>
+<span class="lineno"> 2691 </span><span class="spaces">  </span><span class="istickedoff">-- The CI of `alex` tests this code path</span>
+<span class="lineno"> 2692 </span><span class="spaces">  </span><span class="istickedoff">(Happy_GHC_Exts.word32ToInt32# (Happy_GHC_Exts.wordToWord32# (Happy_GHC_Exts.byteSwap32# (Happy_GHC_Exts.word32ToWord# (Happy_GHC_Exts.int32ToWord32#</span>
+<span class="lineno"> 2693 </span><span class="spaces"></span><span class="istickedoff">#endif</span>
+<span class="lineno"> 2694 </span><span class="spaces">  </span><span class="istickedoff">(Happy_GHC_Exts.indexInt32OffAddr# arr off)</span></span>
+<span class="lineno"> 2695 </span>#ifdef WORDS_BIGENDIAN
+<span class="lineno"> 2696 </span>  )))))
+<span class="lineno"> 2697 </span>#endif
+<span class="lineno"> 2698 </span>
+<span class="lineno"> 2699 </span>happyIndexRuleArr :: Happy_Int -&gt; (# Happy_Int, Happy_Int #)
+<span class="lineno"> 2700 </span><span class="decl"><span class="nottickedoff">happyIndexRuleArr r = (# nt, len #)</span>
+<span class="lineno"> 2701 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2702 </span><span class="spaces">    </span><span class="nottickedoff">!(Happy_GHC_Exts.I# n_starts) = happy_n_starts</span>
+<span class="lineno"> 2703 </span><span class="spaces">    </span><span class="nottickedoff">offs = TIMES(MINUS(r,n_starts),2#)</span>
+<span class="lineno"> 2704 </span><span class="spaces">    </span><span class="nottickedoff">nt = happyIndexOffAddr happyRuleArr offs</span>
+<span class="lineno"> 2705 </span><span class="spaces">    </span><span class="nottickedoff">len = happyIndexOffAddr happyRuleArr PLUS(offs,1#)             </span>
+<span class="lineno"> 2706 </span><span class="spaces"></span><span class="nottickedoff"></span></span>
+<span class="lineno"> 2707 </span>data HappyAddr = HappyA# Happy_GHC_Exts.Addr#
+<span class="lineno"> 2708 </span>
+<span class="lineno"> 2709 </span>-----------------------------------------------------------------------------
+<span class="lineno"> 2710 </span>-- Shifting a token
+<span class="lineno"> 2711 </span>
+<span class="lineno"> 2712 </span><span class="decl"><span class="istickedoff">happyShift new_state ERROR_TOK tk st sts stk@(x `HappyStk` _) =</span>
+<span class="lineno"> 2713 </span><span class="spaces">     </span><span class="istickedoff">-- See &quot;Error Fixup&quot; below</span>
+<span class="lineno"> 2714 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">let i = GET_ERROR_TOKEN(x) in</span></span>
+<span class="lineno"> 2715 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">DEBUG_TRACE(&quot;shifting the error token&quot;)</span></span>
+<span class="lineno"> 2716 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">happyDoAction i tk new_state (HappyCons st sts) stk</span></span>
+<span class="lineno"> 2717 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2718 </span><span class="spaces"></span><span class="istickedoff">happyShift new_state i tk st sts stk =</span>
+<span class="lineno"> 2719 </span><span class="spaces">     </span><span class="istickedoff">happyNewToken new_state (HappyCons st sts) (MK_TOKEN(tk) `HappyStk` stk)    </span>
+<span class="lineno"> 2720 </span><span class="spaces"></span><span class="istickedoff"></span></span>
+<span class="lineno"> 2721 </span>-- happyReduce is specialised for the common cases.
+<span class="lineno"> 2722 </span>
+<span class="lineno"> 2723 </span><span class="decl"><span class="istickedoff">happySpecReduce_0 nt fn j tk st sts stk</span>
+<span class="lineno"> 2724 </span><span class="spaces">     </span><span class="istickedoff">= happySeq <span class="nottickedoff">fn</span> (happyGoto nt j tk st (HappyCons st sts) (fn `HappyStk` stk))</span></span>
+<span class="lineno"> 2725 </span>
+<span class="lineno"> 2726 </span><span class="decl"><span class="istickedoff">happySpecReduce_1 nt fn j tk old_st sts@(HappyCons st _) (v1 `HappyStk` stk')</span>
+<span class="lineno"> 2727 </span><span class="spaces">     </span><span class="istickedoff">= let r = fn v1 in</span>
+<span class="lineno"> 2728 </span><span class="spaces">       </span><span class="istickedoff">happyTcHack old_st (happySeq <span class="nottickedoff">r</span> (happyGoto nt j tk st sts (r `HappyStk` stk')))</span></span>
+<span class="lineno"> 2729 </span>
+<span class="lineno"> 2730 </span><span class="decl"><span class="istickedoff">happySpecReduce_2 nt fn j tk old_st</span>
+<span class="lineno"> 2731 </span><span class="spaces">  </span><span class="istickedoff">(HappyCons _ sts@(HappyCons st _))</span>
+<span class="lineno"> 2732 </span><span class="spaces">  </span><span class="istickedoff">(v1 `HappyStk` v2 `HappyStk` stk')</span>
+<span class="lineno"> 2733 </span><span class="spaces">     </span><span class="istickedoff">= let r = fn v1 v2 in</span>
+<span class="lineno"> 2734 </span><span class="spaces">       </span><span class="istickedoff">happyTcHack old_st (happySeq <span class="nottickedoff">r</span> (happyGoto nt j tk st sts (r `HappyStk` stk')))</span></span>
+<span class="lineno"> 2735 </span>
+<span class="lineno"> 2736 </span><span class="decl"><span class="istickedoff">happySpecReduce_3 nt fn j tk old_st</span>
+<span class="lineno"> 2737 </span><span class="spaces">  </span><span class="istickedoff">(HappyCons _ (HappyCons _ sts@(HappyCons st _)))</span>
+<span class="lineno"> 2738 </span><span class="spaces">  </span><span class="istickedoff">(v1 `HappyStk` v2 `HappyStk` v3 `HappyStk` stk')</span>
+<span class="lineno"> 2739 </span><span class="spaces">     </span><span class="istickedoff">= let r = fn v1 v2 v3 in</span>
+<span class="lineno"> 2740 </span><span class="spaces">       </span><span class="istickedoff">happyTcHack old_st (happySeq <span class="nottickedoff">r</span> (happyGoto nt j tk st sts (r `HappyStk` stk')))</span></span>
+<span class="lineno"> 2741 </span>
+<span class="lineno"> 2742 </span><span class="decl"><span class="istickedoff">happyReduce k nt fn j tk st sts stk</span>
+<span class="lineno"> 2743 </span><span class="spaces">     </span><span class="istickedoff">= case happyDrop MINUS(k,(1# :: Happy_Int)) sts of</span>
+<span class="lineno"> 2744 </span><span class="spaces">         </span><span class="istickedoff">sts1@(HappyCons st1 _) -&gt;</span>
+<span class="lineno"> 2745 </span><span class="spaces">                </span><span class="istickedoff">let r = fn stk in -- it doesn't hurt to always seq here...</span>
+<span class="lineno"> 2746 </span><span class="spaces">                </span><span class="istickedoff">st `happyTcHack` happyDoSeq r (happyGoto nt j tk st1 sts1 r)</span></span>
+<span class="lineno"> 2747 </span>
+<span class="lineno"> 2748 </span><span class="decl"><span class="istickedoff">happyMonadReduce k nt fn j tk st sts stk =</span>
+<span class="lineno"> 2749 </span><span class="spaces">      </span><span class="istickedoff">case happyDrop k (HappyCons st sts) of</span>
+<span class="lineno"> 2750 </span><span class="spaces">        </span><span class="istickedoff">sts1@(HappyCons st1 _) -&gt;</span>
+<span class="lineno"> 2751 </span><span class="spaces">          </span><span class="istickedoff">let drop_stk = happyDropStk k stk in</span>
+<span class="lineno"> 2752 </span><span class="spaces">          </span><span class="istickedoff">j `happyTcHack` happyThen1 (fn stk <span class="nottickedoff">tk</span>)</span>
+<span class="lineno"> 2753 </span><span class="spaces">                                     </span><span class="istickedoff">(\r -&gt; happyGoto nt j tk st1 sts1 (r `HappyStk` drop_stk))</span></span>
+<span class="lineno"> 2754 </span>
+<span class="lineno"> 2755 </span><span class="decl"><span class="nottickedoff">happyMonad2Reduce k nt fn j tk st sts stk =</span>
+<span class="lineno"> 2756 </span><span class="spaces">      </span><span class="nottickedoff">case happyDrop k (HappyCons st sts) of</span>
+<span class="lineno"> 2757 </span><span class="spaces">        </span><span class="nottickedoff">sts1@(HappyCons st1 _) -&gt;</span>
+<span class="lineno"> 2758 </span><span class="spaces">          </span><span class="nottickedoff">let drop_stk = happyDropStk k stk</span>
+<span class="lineno"> 2759 </span><span class="spaces">              </span><span class="nottickedoff">off = happyIndexOffAddr happyGotoOffsets st1</span>
+<span class="lineno"> 2760 </span><span class="spaces">              </span><span class="nottickedoff">off_i = PLUS(off, nt)</span>
+<span class="lineno"> 2761 </span><span class="spaces">              </span><span class="nottickedoff">new_state = happyIndexOffAddr happyTable off_i</span>
+<span class="lineno"> 2762 </span><span class="spaces">          </span><span class="nottickedoff">in</span>
+<span class="lineno"> 2763 </span><span class="spaces">            </span><span class="nottickedoff">j `happyTcHack` happyThen1 (fn stk tk)</span>
+<span class="lineno"> 2764 </span><span class="spaces">                                       </span><span class="nottickedoff">(\r -&gt; happyNewToken new_state sts1 (r `HappyStk` drop_stk))</span></span>
+<span class="lineno"> 2765 </span>
+<span class="lineno"> 2766 </span><span class="decl"><span class="istickedoff">happyDrop 0# l               = l</span>
+<span class="lineno"> 2767 </span><span class="spaces"></span><span class="istickedoff">happyDrop n  (HappyCons _ t) = happyDrop MINUS(n,(1# :: Happy_Int)) t            </span>
+<span class="lineno"> 2768 </span><span class="spaces"></span><span class="istickedoff"></span></span>
+<span class="lineno"> 2769 </span><span class="decl"><span class="istickedoff">happyDropStk 0# l                 = l</span>
+<span class="lineno"> 2770 </span><span class="spaces"></span><span class="istickedoff">happyDropStk n  (x `HappyStk` xs) = happyDropStk MINUS(n,(1#::Happy_Int)) xs            </span>
+<span class="lineno"> 2771 </span><span class="spaces"></span><span class="istickedoff"></span></span>
+<span class="lineno"> 2772 </span>-----------------------------------------------------------------------------
+<span class="lineno"> 2773 </span>-- Moving to a new state after a reduction
+<span class="lineno"> 2774 </span>
+<span class="lineno"> 2775 </span><span class="decl"><span class="istickedoff">happyGoto nt j tk st =</span>
+<span class="lineno"> 2776 </span><span class="spaces">   </span><span class="istickedoff">DEBUG_TRACE(&quot;, goto state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# new_state) Happy_Prelude.++ &quot;\n&quot;)</span>
+<span class="lineno"> 2777 </span><span class="spaces">   </span><span class="istickedoff">happyDoAction j tk new_state</span>
+<span class="lineno"> 2778 </span><span class="spaces">  </span><span class="istickedoff">where new_state = happyIndexGotoTable nt st</span></span>
+<span class="lineno"> 2779 </span>
+<span class="lineno"> 2780 </span>{- Note [Error recovery]
+<span class="lineno"> 2781 </span>~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="lineno"> 2782 </span>When there is no applicable action for the current lookahead token `tk`,
+<span class="lineno"> 2783 </span>happy enters error recovery mode. Depending on whether the grammar file
+<span class="lineno"> 2784 </span>declares the two action form `%error { abort } { report }` for
+<span class="lineno"> 2785 </span>    Resumptive Error Handling,
+<span class="lineno"> 2786 </span>it works in one (not resumptive) or two phases (resumptive):
+<span class="lineno"> 2787 </span>
+<span class="lineno"> 2788 </span> 1. Fixup mode:
+<span class="lineno"> 2789 </span>    Try to see if there is an action for the error token ERROR_TOK. If there
+<span class="lineno"> 2790 </span>    is, do *not* emit an error and pretend instead that an `error` token was
+<span class="lineno"> 2791 </span>    inserted.
+<span class="lineno"> 2792 </span>    When there is no ERROR_TOK action, report an error.
+<span class="lineno"> 2793 </span>
+<span class="lineno"> 2794 </span>    In non-resumptive error handling, calling the single error handler
+<span class="lineno"> 2795 </span>    (e.g. `happyError`) will throw an exception and abort the parser.
+<span class="lineno"> 2796 </span>    However, in resumptive error handling we enter *error resumption mode*.
+<span class="lineno"> 2797 </span>
+<span class="lineno"> 2798 </span> 2. Error resumption mode:
+<span class="lineno"> 2799 </span>    After reporting the error (with `report`), happy will attempt to find
+<span class="lineno"> 2800 </span>    a good state stack to resume parsing in.
+<span class="lineno"> 2801 </span>    For each candidate stack, it discards input until one of the candidates
+<span class="lineno"> 2802 </span>    resumes (i.e. shifts the current input).
+<span class="lineno"> 2803 </span>    If no candidate resumes before the end of input, resumption failed and
+<span class="lineno"> 2804 </span>    calls the `abort` function, to much the same effect as in non-resumptive
+<span class="lineno"> 2805 </span>    error handling.
+<span class="lineno"> 2806 </span>
+<span class="lineno"> 2807 </span>    Candidate stacks are declared by the grammar author using the special
+<span class="lineno"> 2808 </span>    `catch` terminal and called &quot;catch frames&quot;.
+<span class="lineno"> 2809 </span>    This mechanism is described in detail in Note [happyResume].
+<span class="lineno"> 2810 </span>
+<span class="lineno"> 2811 </span>The `catch` resumption mechanism (2) is what usually is associated with
+<span class="lineno"> 2812 </span>`error` in `bison` or `menhir`. Since `error` is used for the Fixup mechanism
+<span class="lineno"> 2813 </span>(1) above, we call the corresponding token `catch`.
+<span class="lineno"> 2814 </span>Furthermore, in constrast to `bison`, our implementation of `catch`
+<span class="lineno"> 2815 </span>non-deterministically considers multiple catch frames on the stack for
+<span class="lineno"> 2816 </span>resumption (See Note [Multiple catch frames]).
+<span class="lineno"> 2817 </span>
+<span class="lineno"> 2818 </span>Note [happyResume]
+<span class="lineno"> 2819 </span>~~~~~~~~~~~~~~~~~~
+<span class="lineno"> 2820 </span>`happyResume` implements the resumption mechanism from Note [Error recovery].
+<span class="lineno"> 2821 </span>It is best understood by example. Consider
+<span class="lineno"> 2822 </span>
+<span class="lineno"> 2823 </span>Exp :: { String }
+<span class="lineno"> 2824 </span>Exp : '1'                { &quot;1&quot; }
+<span class="lineno"> 2825 </span>    | catch              { &quot;catch&quot; }
+<span class="lineno"> 2826 </span>    | Exp '+' Exp %shift { $1 Happy_Prelude.++ &quot; + &quot; Happy_Prelude.++ $3 } -- %shift: associate 1 + 1 + 1 to the right
+<span class="lineno"> 2827 </span>    | '(' Exp ')'        { &quot;(&quot; Happy_Prelude.++ $2 Happy_Prelude.++ &quot;)&quot; }
+<span class="lineno"> 2828 </span>
+<span class="lineno"> 2829 </span>The idea of the use of `catch` here is that upon encountering a parse error
+<span class="lineno"> 2830 </span>during expression parsing, we can gracefully degrade using the `catch` rule,
+<span class="lineno"> 2831 </span>still producing a partial syntax tree and keep on parsing to find further
+<span class="lineno"> 2832 </span>syntax errors.
+<span class="lineno"> 2833 </span>
+<span class="lineno"> 2834 </span>Let's trace the parser state for input 11+1, which will error out after shifting 1.
+<span class="lineno"> 2835 </span>After shifting, we have the following item stack (growing downwards and omitting
+<span class="lineno"> 2836 </span>transitive closure items):
+<span class="lineno"> 2837 </span>
+<span class="lineno"> 2838 </span>  State 0: %start_parseExp -&gt; . Exp
+<span class="lineno"> 2839 </span>  State 5: Exp -&gt; '1' .
+<span class="lineno"> 2840 </span>
+<span class="lineno"> 2841 </span>(Stack as a list of state numbers: [5,0].)
+<span class="lineno"> 2842 </span>As Note [Error recovery] describes, we will first try Fixup mode.
+<span class="lineno"> 2843 </span>That fails because no production can shift the `error` token.
+<span class="lineno"> 2844 </span>Next we try Error resumption mode. This works as follows:
+<span class="lineno"> 2845 </span>
+<span class="lineno"> 2846 </span>  1. Pop off the item stack until we find an item that can shift the `catch`
+<span class="lineno"> 2847 </span>     token. (Implemented in `pop_items`.)
+<span class="lineno"> 2848 </span>       * State 5 cannot shift catch. Pop.
+<span class="lineno"> 2849 </span>       * State 0 can shift catch, which would transition into
+<span class="lineno"> 2850 </span>          State 4: Exp -&gt; catch .
+<span class="lineno"> 2851 </span>     So record the *stack* `[4,0]` after doing the shift transition.
+<span class="lineno"> 2852 </span>     We call this a *catch frame*, where the top is a *catch state*,
+<span class="lineno"> 2853 </span>     corresponding to an item in which we just shifted a `catch` token.
+<span class="lineno"> 2854 </span>     There can be multiple such catch stacks, see Note [Multiple catch frames].
+<span class="lineno"> 2855 </span>
+<span class="lineno"> 2856 </span>  2. Discard tokens from the input until the lookahead can be shifted in one
+<span class="lineno"> 2857 </span>     of the catch stacks. (Implemented in `discard_input_until_exp` and
+<span class="lineno"> 2858 </span>     `some_catch_state_shifts`.)
+<span class="lineno"> 2859 </span>       * We cannot shift the current lookahead '1' in state 4, so we discard
+<span class="lineno"> 2860 </span>       * We *can* shift the next lookahead '+' in state 4, but only after
+<span class="lineno"> 2861 </span>         reducing, which pops State 4 and goes to State 3:
+<span class="lineno"> 2862 </span>           State 3: %start_parseExp -&gt; Exp .
+<span class="lineno"> 2863 </span>                    Exp -&gt; Exp . '+' Exp
+<span class="lineno"> 2864 </span>         Here we can shift '+'.
+<span class="lineno"> 2865 </span>     As you can see, to implement this machinery we need to simulate
+<span class="lineno"> 2866 </span>     the operation of the LALR automaton, especially reduction
+<span class="lineno"> 2867 </span>     (`happySimulateReduce`).
+<span class="lineno"> 2868 </span>
+<span class="lineno"> 2869 </span>Note [Multiple catch frames]
+<span class="lineno"> 2870 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="lineno"> 2871 </span>For fewer spurious error messages, it can be beneficial to trace multiple catch
+<span class="lineno"> 2872 </span>items. Consider
+<span class="lineno"> 2873 </span>
+<span class="lineno"> 2874 </span>Exp : '1'
+<span class="lineno"> 2875 </span>    | catch
+<span class="lineno"> 2876 </span>    | Exp '+' Exp %shift
+<span class="lineno"> 2877 </span>    | '(' Exp ')'
+<span class="lineno"> 2878 </span>
+<span class="lineno"> 2879 </span>Let's trace the parser state for input (;+1, which will error out after shifting (.
+<span class="lineno"> 2880 </span>After shifting, we have the following item stack (growing downwards):
+<span class="lineno"> 2881 </span>
+<span class="lineno"> 2882 </span>  State 0: %start_parseExp -&gt; . Exp
+<span class="lineno"> 2883 </span>  State 6: Exp -&gt; '(' . Exp ')'
+<span class="lineno"> 2884 </span>
+<span class="lineno"> 2885 </span>Upon error, we want to find items in the stack which can shift a catch token.
+<span class="lineno"> 2886 </span>Note that both State 0 and State 6 can shift a catch token, transitioning into
+<span class="lineno"> 2887 </span>  State 4: Exp -&gt; catch .
+<span class="lineno"> 2888 </span>Hence we record the catch frames `[4,6,0]` and `[4,0]` for possible resumption.
+<span class="lineno"> 2889 </span>
+<span class="lineno"> 2890 </span>Which catch frame do we pick for resumption?
+<span class="lineno"> 2891 </span>Note that resuming catch frame `[4,0]` will parse as &quot;catch+1&quot;, whereas
+<span class="lineno"> 2892 </span>resuming the innermost frame `[4,6,0]` corresponds to parsing &quot;(catch+1&quot;.
+<span class="lineno"> 2893 </span>The latter would keep discarding input until the closing ')' is found.
+<span class="lineno"> 2894 </span>So we will discard + and 1, leading to a spurious syntax error at the end of
+<span class="lineno"> 2895 </span>input, aborting the parse and never producing a partial syntax tree. Bad!
+<span class="lineno"> 2896 </span>
+<span class="lineno"> 2897 </span>It is far preferable to resume with catch frame `[4,0]`, where we can resume
+<span class="lineno"> 2898 </span>successfully on input +, so that is what we do.
+<span class="lineno"> 2899 </span>
+<span class="lineno"> 2900 </span>In general, we pick the catch frame for resumption that discards the least
+<span class="lineno"> 2901 </span>amount of input for a successful shift, preferring the topmost such catch frame.
+<span class="lineno"> 2902 </span>-}
+<span class="lineno"> 2903 </span>
+<span class="lineno"> 2904 </span>-- happyFail :: Happy_Int -&gt; Token -&gt; Happy_Int -&gt; _
+<span class="lineno"> 2905 </span>-- This function triggers Note [Error recovery].
+<span class="lineno"> 2906 </span>-- If the current token is ERROR_TOK, phase (1) has failed and we might try
+<span class="lineno"> 2907 </span>-- phase (2).
+<span class="lineno"> 2908 </span><span class="decl"><span class="istickedoff">happyFail ERROR_TOK = happyFixupFailed</span>
+<span class="lineno"> 2909 </span><span class="spaces"></span><span class="istickedoff">happyFail i         = happyTryFixup i</span></span>
+<span class="lineno"> 2910 </span>
+<span class="lineno"> 2911 </span>-- Enter Error Fixup (see Note [Error recovery]):
+<span class="lineno"> 2912 </span>-- generate an error token, save the old token and carry on.
+<span class="lineno"> 2913 </span>-- When a `happyShift` accepts the error token, we will pop off the error token
+<span class="lineno"> 2914 </span>-- to resume parsing with the current lookahead `i`.
+<span class="lineno"> 2915 </span><span class="decl"><span class="istickedoff">happyTryFixup i tk action sts stk =</span>
+<span class="lineno"> 2916 </span><span class="spaces">  </span><span class="istickedoff">DEBUG_TRACE(&quot;entering `error` fixup.\n&quot;)</span>
+<span class="lineno"> 2917 </span><span class="spaces">  </span><span class="istickedoff">happyDoAction ERROR_TOK tk <span class="nottickedoff">act</span>ion sts (MK_ERROR_TOKEN(i) `HappyStk` stk)                        <span class="nottickedoff">  </span></span>
+<span class="lineno"> 2918 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff"></span></span></span>-- NB: `happyShift` will simply pop the error token and carry on with
+<span class="lineno"> 2919 </span>  --     `tk`. Hence we don't change `tk` in the call here
+<span class="lineno"> 2920 </span>
+<span class="lineno"> 2921 </span>-- See Note [Error recovery], phase (2).
+<span class="lineno"> 2922 </span>-- Enter resumption mode after reporting the error by calling `happyResume`.
+<span class="lineno"> 2923 </span><span class="decl"><span class="istickedoff">happyFixupFailed tk st sts (x `HappyStk` stk) =</span>
+<span class="lineno"> 2924 </span><span class="spaces">  </span><span class="istickedoff">let i = GET_ERROR_TOKEN(x) in</span>
+<span class="lineno"> 2925 </span><span class="spaces">  </span><span class="istickedoff">DEBUG_TRACE(&quot;`error` fixup failed.\n&quot;)</span>
+<span class="lineno"> 2926 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">resume   = happyResume i tk st sts stk</span></span>
+<span class="lineno"> 2927 </span><span class="spaces">      </span><span class="istickedoff">expected = happyExpectedTokens st <span class="nottickedoff">sts</span> in</span>
+<span class="lineno"> 2928 </span><span class="spaces">  </span><span class="istickedoff">happyReport i tk expected <span class="nottickedoff">resume</span></span></span>
+<span class="lineno"> 2929 </span>
+<span class="lineno"> 2930 </span>-- happyResume :: Happy_Int -&gt; Token -&gt; Happy_Int -&gt; _
+<span class="lineno"> 2931 </span>-- See Note [happyResume]
+<span class="lineno"> 2932 </span><span class="decl"><span class="nottickedoff">happyResume i tk st sts stk = pop_items [] st sts stk</span>
+<span class="lineno"> 2933 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2934 </span><span class="spaces">    </span><span class="nottickedoff">!(Happy_GHC_Exts.I# n_starts) = happy_n_starts   -- this is to test whether we have a start token</span>
+<span class="lineno"> 2935 </span><span class="spaces">    </span><span class="nottickedoff">!(Happy_GHC_Exts.I# eof_i) = happy_n_terms Happy_Prelude.- 1   -- this is the token number of the EOF token</span>
+<span class="lineno"> 2936 </span><span class="spaces">    </span><span class="nottickedoff">happy_list_to_list :: Happy_IntList -&gt; [Happy_Prelude.Int]</span>
+<span class="lineno"> 2937 </span><span class="spaces">    </span><span class="nottickedoff">happy_list_to_list (HappyCons st sts)</span>
+<span class="lineno"> 2938 </span><span class="spaces">      </span><span class="nottickedoff">| LT(st, n_starts)</span>
+<span class="lineno"> 2939 </span><span class="spaces">      </span><span class="nottickedoff">= [(Happy_GHC_Exts.I# st)]</span>
+<span class="lineno"> 2940 </span><span class="spaces">      </span><span class="nottickedoff">| Happy_Prelude.otherwise</span>
+<span class="lineno"> 2941 </span><span class="spaces">      </span><span class="nottickedoff">= (Happy_GHC_Exts.I# st) : happy_list_to_list sts</span>
+<span class="lineno"> 2942 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2943 </span><span class="spaces">    </span><span class="nottickedoff">-- See (1) of Note [happyResume]</span>
+<span class="lineno"> 2944 </span><span class="spaces">    </span><span class="nottickedoff">pop_items catch_frames st sts stk</span>
+<span class="lineno"> 2945 </span><span class="spaces">      </span><span class="nottickedoff">| LT(st, n_starts)</span>
+<span class="lineno"> 2946 </span><span class="spaces">      </span><span class="nottickedoff">= DEBUG_TRACE(&quot;reached start state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;, &quot;)</span>
+<span class="lineno"> 2947 </span><span class="spaces">        </span><span class="nottickedoff">if Happy_Prelude.null catch_frames_new</span>
+<span class="lineno"> 2948 </span><span class="spaces">          </span><span class="nottickedoff">then DEBUG_TRACE(&quot;no resumption.\n&quot;)</span>
+<span class="lineno"> 2949 </span><span class="spaces">               </span><span class="nottickedoff">happyAbort</span>
+<span class="lineno"> 2950 </span><span class="spaces">          </span><span class="nottickedoff">else DEBUG_TRACE(&quot;now discard input, trying to anchor in states &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_Prelude.map (happy_list_to_list . Happy_Prelude.fst) (Happy_Prelude.reverse catch_frames_new)) Happy_Prelude.++ &quot;.\n&quot;)</span>
+<span class="lineno"> 2951 </span><span class="spaces">               </span><span class="nottickedoff">discard_input_until_exp i tk (Happy_Prelude.reverse catch_frames_new)</span>
+<span class="lineno"> 2952 </span><span class="spaces">      </span><span class="nottickedoff">| (HappyCons st1 sts1) &lt;- sts, _ `HappyStk` stk1 &lt;- stk</span>
+<span class="lineno"> 2953 </span><span class="spaces">      </span><span class="nottickedoff">= pop_items catch_frames_new st1 sts1 stk1</span>
+<span class="lineno"> 2954 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2955 </span><span class="spaces">        </span><span class="nottickedoff">!catch_frames_new</span>
+<span class="lineno"> 2956 </span><span class="spaces">          </span><span class="nottickedoff">| HappyShift new_state &lt;- happyDecodeAction (happyNextAction CATCH_TOK st)</span>
+<span class="lineno"> 2957 </span><span class="spaces">          </span><span class="nottickedoff">, DEBUG_TRACE(&quot;can shift catch token in state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;, into state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# new_state) Happy_Prelude.++ &quot;\n&quot;)</span>
+<span class="lineno"> 2958 </span><span class="spaces">            </span><span class="nottickedoff">Happy_Prelude.null (Happy_Prelude.filter (\(HappyCons _ (HappyCons h _),_) -&gt; EQ(st,h)) catch_frames)</span>
+<span class="lineno"> 2959 </span><span class="spaces">          </span><span class="nottickedoff">= (HappyCons new_state (HappyCons st sts), MK_ERROR_TOKEN(i) `HappyStk` stk):catch_frames -- MK_ERROR_TOKEN(i) is just some dummy that should not be accessed by user code</span>
+<span class="lineno"> 2960 </span><span class="spaces">          </span><span class="nottickedoff">| Happy_Prelude.otherwise</span>
+<span class="lineno"> 2961 </span><span class="spaces">          </span><span class="nottickedoff">= DEBUG_TRACE(&quot;already shifted or can't shift catch in &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;\n&quot;)</span>
+<span class="lineno"> 2962 </span><span class="spaces">            </span><span class="nottickedoff">catch_frames</span>
+<span class="lineno"> 2963 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2964 </span><span class="spaces">    </span><span class="nottickedoff">-- See (2) of Note [happyResume]</span>
+<span class="lineno"> 2965 </span><span class="spaces">    </span><span class="nottickedoff">discard_input_until_exp i tk catch_frames</span>
+<span class="lineno"> 2966 </span><span class="spaces">      </span><span class="nottickedoff">| Happy_Prelude.Just (HappyCons st (HappyCons catch_st sts), catch_frame) &lt;- some_catch_state_shifts i catch_frames</span>
+<span class="lineno"> 2967 </span><span class="spaces">      </span><span class="nottickedoff">= DEBUG_TRACE(&quot;found expected token in state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot; after shifting from &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# catch_st) Happy_Prelude.++ &quot;: &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++ &quot;\n&quot;)</span>
+<span class="lineno"> 2968 </span><span class="spaces">        </span><span class="nottickedoff">happyDoAction i tk st (HappyCons catch_st sts) catch_frame</span>
+<span class="lineno"> 2969 </span><span class="spaces">      </span><span class="nottickedoff">| EQ(i,eof_i) -- is i EOF?</span>
+<span class="lineno"> 2970 </span><span class="spaces">      </span><span class="nottickedoff">= DEBUG_TRACE(&quot;reached EOF, cannot resume. abort parse :(\n&quot;)</span>
+<span class="lineno"> 2971 </span><span class="spaces">        </span><span class="nottickedoff">happyAbort</span>
+<span class="lineno"> 2972 </span><span class="spaces">      </span><span class="nottickedoff">| Happy_Prelude.otherwise</span>
+<span class="lineno"> 2973 </span><span class="spaces">      </span><span class="nottickedoff">= DEBUG_TRACE(&quot;discard token &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++ &quot;\n&quot;)</span>
+<span class="lineno"> 2974 </span><span class="spaces">        </span><span class="nottickedoff">happyLex (\eof_tk -&gt; discard_input_until_exp eof_i eof_tk catch_frames) -- eof</span>
+<span class="lineno"> 2975 </span><span class="spaces">                 </span><span class="nottickedoff">(\i tk   -&gt; discard_input_until_exp i tk catch_frames)         -- not eof</span>
+<span class="lineno"> 2976 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2977 </span><span class="spaces">    </span><span class="nottickedoff">some_catch_state_shifts _ [] = DEBUG_TRACE(&quot;no catch state could shift.\n&quot;) Happy_Prelude.Nothing</span>
+<span class="lineno"> 2978 </span><span class="spaces">    </span><span class="nottickedoff">some_catch_state_shifts i catch_frames@(((HappyCons st sts),_):_) = try_head i st sts catch_frames</span>
+<span class="lineno"> 2979 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2980 </span><span class="spaces">        </span><span class="nottickedoff">try_head i st sts catch_frames = -- PRECONDITION: head catch_frames = (HappyCons st sts)</span>
+<span class="lineno"> 2981 </span><span class="spaces">          </span><span class="nottickedoff">DEBUG_TRACE(&quot;trying token &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++ &quot; in state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;: &quot;)</span>
+<span class="lineno"> 2982 </span><span class="spaces">          </span><span class="nottickedoff">case happyDecodeAction (happyNextAction i st) of</span>
+<span class="lineno"> 2983 </span><span class="spaces">            </span><span class="nottickedoff">HappyFail     -&gt; DEBUG_TRACE(&quot;fail.\n&quot;)   some_catch_state_shifts i (Happy_Prelude.tail catch_frames)</span>
+<span class="lineno"> 2984 </span><span class="spaces">            </span><span class="nottickedoff">HappyAccept   -&gt; DEBUG_TRACE(&quot;accept.\n&quot;) Happy_Prelude.Just (Happy_Prelude.head catch_frames)</span>
+<span class="lineno"> 2985 </span><span class="spaces">            </span><span class="nottickedoff">HappyShift _  -&gt; DEBUG_TRACE(&quot;shift.\n&quot;)  Happy_Prelude.Just (Happy_Prelude.head catch_frames)</span>
+<span class="lineno"> 2986 </span><span class="spaces">            </span><span class="nottickedoff">HappyReduce r -&gt; case happySimulateReduce r st sts of</span>
+<span class="lineno"> 2987 </span><span class="spaces">              </span><span class="nottickedoff">(HappyCons st1 sts1) -&gt; try_head i st1 sts1 catch_frames</span></span>
+<span class="lineno"> 2988 </span>
+<span class="lineno"> 2989 </span><span class="decl"><span class="nottickedoff">happySimulateReduce r st sts =</span>
+<span class="lineno"> 2990 </span><span class="spaces">  </span><span class="nottickedoff">DEBUG_TRACE(&quot;simulate reduction of rule &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# r) Happy_Prelude.++ &quot;, &quot;)</span>
+<span class="lineno"> 2991 </span><span class="spaces">  </span><span class="nottickedoff">let (# nt, len #) = happyIndexRuleArr r in</span>
+<span class="lineno"> 2992 </span><span class="spaces">  </span><span class="nottickedoff">DEBUG_TRACE(&quot;nt &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# nt) Happy_Prelude.++ &quot;, len: &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# len) Happy_Prelude.++ &quot;, new_st &quot;)</span>
+<span class="lineno"> 2993 </span><span class="spaces">  </span><span class="nottickedoff">let !(sts1@(HappyCons st1 _)) = happyDrop len (HappyCons st sts)</span>
+<span class="lineno"> 2994 </span><span class="spaces">      </span><span class="nottickedoff">new_st = happyIndexGotoTable nt st1 in</span>
+<span class="lineno"> 2995 </span><span class="spaces">  </span><span class="nottickedoff">DEBUG_TRACE(Happy_Prelude.show (Happy_GHC_Exts.I# new_st) Happy_Prelude.++ &quot;.\n&quot;)</span>
+<span class="lineno"> 2996 </span><span class="spaces">  </span><span class="nottickedoff">(HappyCons new_st sts1)</span></span>
+<span class="lineno"> 2997 </span>
+<span class="lineno"> 2998 </span>happyTokenToString :: Happy_Prelude.Int -&gt; Happy_Prelude.String
+<span class="lineno"> 2999 </span><span class="decl"><span class="istickedoff">happyTokenToString i = happyTokenStrings Happy_Prelude.!! (i Happy_Prelude.- 2)</span></span> -- 2: errorTok, catchTok
+<span class="lineno"> 3000 </span>
+<span class="lineno"> 3001 </span>happyExpectedTokens :: Happy_Int -&gt; Happy_IntList -&gt; [Happy_Prelude.String]
+<span class="lineno"> 3002 </span>-- Upon a parse error, we want to suggest tokens that are expected in that
+<span class="lineno"> 3003 </span>-- situation. This function computes such tokens.
+<span class="lineno"> 3004 </span>-- It works by examining the top of the state stack.
+<span class="lineno"> 3005 </span>-- For every token number that does a shift transition, record that token number.
+<span class="lineno"> 3006 </span>-- For every token number that does a reduce transition, simulate that reduction
+<span class="lineno"> 3007 </span>-- on the state state stack and repeat.
+<span class="lineno"> 3008 </span>-- The recorded token numbers are then formatted with 'happyTokenToString' and
+<span class="lineno"> 3009 </span>-- returned.
+<span class="lineno"> 3010 </span><span class="decl"><span class="istickedoff">happyExpectedTokens st sts =</span>
+<span class="lineno"> 3011 </span><span class="spaces">  </span><span class="istickedoff">DEBUG_TRACE(&quot;constructing expected tokens.\n&quot;)</span>
+<span class="lineno"> 3012 </span><span class="spaces">  </span><span class="istickedoff">Happy_Prelude.map happyTokenToString (search_shifts st <span class="nottickedoff">sts</span> [])</span>
+<span class="lineno"> 3013 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 3014 </span><span class="spaces">    </span><span class="istickedoff">search_shifts st sts shifts = Happy_Prelude.foldr (add_action st <span class="nottickedoff">sts</span>) shifts (distinct_actions st)</span>
+<span class="lineno"> 3015 </span><span class="spaces">    </span><span class="istickedoff">add_action st sts (Happy_GHC_Exts.I# i, Happy_GHC_Exts.I# act) shifts =</span>
+<span class="lineno"> 3016 </span><span class="spaces">      </span><span class="istickedoff">DEBUG_TRACE(&quot;found action in state &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# st) Happy_Prelude.++ &quot;, input &quot; Happy_Prelude.++ Happy_Prelude.show (Happy_GHC_Exts.I# i) Happy_Prelude.++ &quot;, &quot; Happy_Prelude.++ Happy_Prelude.show (happyDecodeAction act) Happy_Prelude.++ &quot;\n&quot;)</span>
+<span class="lineno"> 3017 </span><span class="spaces">      </span><span class="istickedoff">case happyDecodeAction act of</span>
+<span class="lineno"> 3018 </span><span class="spaces">        </span><span class="istickedoff">HappyFail     -&gt; shifts</span>
+<span class="lineno"> 3019 </span><span class="spaces">        </span><span class="istickedoff">HappyAccept   -&gt; <span class="nottickedoff">shifts</span> -- This would always be %eof or error... Not helpful</span>
+<span class="lineno"> 3020 </span><span class="spaces">        </span><span class="istickedoff">HappyShift _  -&gt; Happy_Prelude.insert (Happy_GHC_Exts.I# i) shifts</span>
+<span class="lineno"> 3021 </span><span class="spaces">        </span><span class="istickedoff">HappyReduce r -&gt; <span class="nottickedoff">case happySimulateReduce r st sts of</span></span>
+<span class="lineno"> 3022 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">(HappyCons st1 sts1) -&gt; search_shifts st1 sts1 shifts</span></span>
+<span class="lineno"> 3023 </span><span class="spaces">    </span><span class="istickedoff">distinct_actions st</span>
+<span class="lineno"> 3024 </span><span class="spaces">      </span><span class="istickedoff">-- The (token number, action) pairs of all actions in the given state</span>
+<span class="lineno"> 3025 </span><span class="spaces">      </span><span class="istickedoff">= ((-1), (Happy_GHC_Exts.I# (happyIndexOffAddr happyDefActions st)))</span>
+<span class="lineno"> 3026 </span><span class="spaces">      </span><span class="istickedoff">: [ (i, act) | i &lt;- [begin_i..happy_n_terms], act &lt;- get_act row_off i ]</span>
+<span class="lineno"> 3027 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno"> 3028 </span><span class="spaces">        </span><span class="istickedoff">row_off = happyIndexOffAddr happyActOffsets st</span>
+<span class="lineno"> 3029 </span><span class="spaces">        </span><span class="istickedoff">begin_i = 2 -- +2: errorTok,catchTok</span>
+<span class="lineno"> 3030 </span><span class="spaces">    </span><span class="istickedoff">get_act off (Happy_GHC_Exts.I# i) -- happyIndexActionTable with cached row offset</span>
+<span class="lineno"> 3031 </span><span class="spaces">      </span><span class="istickedoff">| let off_i = PLUS(off,i)</span>
+<span class="lineno"> 3032 </span><span class="spaces">      </span><span class="istickedoff">, GTE(off_i,0#)</span>
+<span class="lineno"> 3033 </span><span class="spaces">      </span><span class="istickedoff">, EQ(happyIndexOffAddr happyCheck off_i,i)</span>
+<span class="lineno"> 3034 </span><span class="spaces">      </span><span class="istickedoff">= [(Happy_GHC_Exts.I# (happyIndexOffAddr happyTable off_i))]</span>
+<span class="lineno"> 3035 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">Happy_Prelude.otherwise</span></span>
+<span class="lineno"> 3036 </span><span class="spaces">      </span><span class="istickedoff">= []</span></span>
 <span class="lineno"> 3037 </span>
-<span class="lineno"> 3038 </span>notHappyAtAll :: a
-<span class="lineno"> 3039 </span><span class="decl"><span class="nottickedoff">notHappyAtAll = Happy_Prelude.error &quot;Internal Happy parser panic. This is not supposed to happen! Please open a bug report at https://github.com/haskell/happy/issues.\n&quot;</span></span>
-<span class="lineno"> 3040 </span>
-<span class="lineno"> 3041 </span>-----------------------------------------------------------------------------
-<span class="lineno"> 3042 </span>-- Hack to get the typechecker to accept our action functions
-<span class="lineno"> 3043 </span>
-<span class="lineno"> 3044 </span>happyTcHack :: Happy_Int -&gt; a -&gt; a
-<span class="lineno"> 3045 </span><span class="decl"><span class="istickedoff">happyTcHack x y = y</span></span>
-<span class="lineno"> 3046 </span>{-# INLINE happyTcHack #-}
-<span class="lineno"> 3047 </span>
-<span class="lineno"> 3048 </span>-----------------------------------------------------------------------------
-<span class="lineno"> 3049 </span>-- Seq-ing.  If the --strict flag is given, then Happy emits
-<span class="lineno"> 3050 </span>--      happySeq = happyDoSeq
-<span class="lineno"> 3051 </span>-- otherwise it emits
-<span class="lineno"> 3052 </span>--      happySeq = happyDontSeq
-<span class="lineno"> 3053 </span>
-<span class="lineno"> 3054 </span>happyDoSeq, happyDontSeq :: a -&gt; b -&gt; b
-<span class="lineno"> 3055 </span><span class="decl"><span class="istickedoff">happyDoSeq   a b = a `Happy_GHC_Exts.seq` b</span></span>
-<span class="lineno"> 3056 </span><span class="decl"><span class="istickedoff">happyDontSeq a b = b</span></span>
-<span class="lineno"> 3057 </span>
-<span class="lineno"> 3058 </span>-----------------------------------------------------------------------------
-<span class="lineno"> 3059 </span>-- Don't inline any functions from the template.  GHC has a nasty habit
-<span class="lineno"> 3060 </span>-- of deciding to inline happyGoto everywhere, which increases the size of
-<span class="lineno"> 3061 </span>-- the generated parser quite a bit.
-<span class="lineno"> 3062 </span>
-<span class="lineno"> 3063 </span>{-# NOINLINE happyDoAction #-}
-<span class="lineno"> 3064 </span>{-# NOINLINE happyTable #-}
-<span class="lineno"> 3065 </span>{-# NOINLINE happyCheck #-}
-<span class="lineno"> 3066 </span>{-# NOINLINE happyActOffsets #-}
-<span class="lineno"> 3067 </span>{-# NOINLINE happyGotoOffsets #-}
-<span class="lineno"> 3068 </span>{-# NOINLINE happyDefActions #-}
-<span class="lineno"> 3069 </span>
-<span class="lineno"> 3070 </span>{-# NOINLINE happyShift #-}
-<span class="lineno"> 3071 </span>{-# NOINLINE happySpecReduce_0 #-}
-<span class="lineno"> 3072 </span>{-# NOINLINE happySpecReduce_1 #-}
-<span class="lineno"> 3073 </span>{-# NOINLINE happySpecReduce_2 #-}
-<span class="lineno"> 3074 </span>{-# NOINLINE happySpecReduce_3 #-}
-<span class="lineno"> 3075 </span>{-# NOINLINE happyReduce #-}
-<span class="lineno"> 3076 </span>{-# NOINLINE happyMonadReduce #-}
-<span class="lineno"> 3077 </span>{-# NOINLINE happyGoto #-}
-<span class="lineno"> 3078 </span>{-# NOINLINE happyFail #-}
-<span class="lineno"> 3079 </span>
-<span class="lineno"> 3080 </span>-- end of Happy Template.
+<span class="lineno"> 3038 </span>-- Internal happy errors:
+<span class="lineno"> 3039 </span>
+<span class="lineno"> 3040 </span>notHappyAtAll :: a
+<span class="lineno"> 3041 </span><span class="decl"><span class="nottickedoff">notHappyAtAll = Happy_Prelude.error &quot;Internal Happy parser panic. This is not supposed to happen! Please open a bug report at https://github.com/haskell/happy/issues.\n&quot;</span></span>
+<span class="lineno"> 3042 </span>
+<span class="lineno"> 3043 </span>-----------------------------------------------------------------------------
+<span class="lineno"> 3044 </span>-- Hack to get the typechecker to accept our action functions
+<span class="lineno"> 3045 </span>
+<span class="lineno"> 3046 </span>happyTcHack :: Happy_Int -&gt; a -&gt; a
+<span class="lineno"> 3047 </span><span class="decl"><span class="istickedoff">happyTcHack x y = y</span></span>
+<span class="lineno"> 3048 </span>{-# INLINE happyTcHack #-}
+<span class="lineno"> 3049 </span>
+<span class="lineno"> 3050 </span>-----------------------------------------------------------------------------
+<span class="lineno"> 3051 </span>-- Seq-ing.  If the --strict flag is given, then Happy emits
+<span class="lineno"> 3052 </span>--      happySeq = happyDoSeq
+<span class="lineno"> 3053 </span>-- otherwise it emits
+<span class="lineno"> 3054 </span>--      happySeq = happyDontSeq
+<span class="lineno"> 3055 </span>
+<span class="lineno"> 3056 </span>happyDoSeq, happyDontSeq :: a -&gt; b -&gt; b
+<span class="lineno"> 3057 </span><span class="decl"><span class="istickedoff">happyDoSeq   a b = a `Happy_GHC_Exts.seq` b</span></span>
+<span class="lineno"> 3058 </span><span class="decl"><span class="istickedoff">happyDontSeq a b = b</span></span>
+<span class="lineno"> 3059 </span>
+<span class="lineno"> 3060 </span>-----------------------------------------------------------------------------
+<span class="lineno"> 3061 </span>-- Don't inline any functions from the template.  GHC has a nasty habit
+<span class="lineno"> 3062 </span>-- of deciding to inline happyGoto everywhere, which increases the size of
+<span class="lineno"> 3063 </span>-- the generated parser quite a bit.
+<span class="lineno"> 3064 </span>
+<span class="lineno"> 3065 </span>{-# NOINLINE happyDoAction #-}
+<span class="lineno"> 3066 </span>{-# NOINLINE happyTable #-}
+<span class="lineno"> 3067 </span>{-# NOINLINE happyCheck #-}
+<span class="lineno"> 3068 </span>{-# NOINLINE happyActOffsets #-}
+<span class="lineno"> 3069 </span>{-# NOINLINE happyGotoOffsets #-}
+<span class="lineno"> 3070 </span>{-# NOINLINE happyDefActions #-}
+<span class="lineno"> 3071 </span>
+<span class="lineno"> 3072 </span>{-# NOINLINE happyShift #-}
+<span class="lineno"> 3073 </span>{-# NOINLINE happySpecReduce_0 #-}
+<span class="lineno"> 3074 </span>{-# NOINLINE happySpecReduce_1 #-}
+<span class="lineno"> 3075 </span>{-# NOINLINE happySpecReduce_2 #-}
+<span class="lineno"> 3076 </span>{-# NOINLINE happySpecReduce_3 #-}
+<span class="lineno"> 3077 </span>{-# NOINLINE happyReduce #-}
+<span class="lineno"> 3078 </span>{-# NOINLINE happyMonadReduce #-}
+<span class="lineno"> 3079 </span>{-# NOINLINE happyGoto #-}
+<span class="lineno"> 3080 </span>{-# NOINLINE happyFail #-}
+<span class="lineno"> 3081 </span>
+<span class="lineno"> 3082 </span>-- end of Happy Template.
 
 </pre>
 </body>
