@@ -1,0 +1,8 @@
+// Even though happy apparently thinks semicolon is the only legal
+// input after enable_experimental, that's not actually true.
+//
+// Currently reports a missing semicolon at the start of the second
+// line.
+
+enable_experimental fnord
+import "foo.cry";

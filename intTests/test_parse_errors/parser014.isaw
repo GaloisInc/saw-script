@@ -1,0 +1,3 @@
+// unexpected EOL in search (parses schema patterns)
+
+:search (foo

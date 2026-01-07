@@ -1,0 +1,7 @@
+// The example from #2935 with missing semicolons.
+//
+// Currently reports a missing semicolon at the start of the second
+// line.
+
+enable_experimental
+import "foo.cry"

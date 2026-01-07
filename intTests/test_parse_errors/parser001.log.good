@@ -1,3 +1,4 @@
 Loading file "parser001.saw"
-Error: Parse error at parser001.saw:2:13-2:23: Unexpected `rebindable'
+parser001.saw:2:13-2:23: Error: Syntax error: unexpected `rebindable'
+Some legal inputs at this point: '(' name
 FAILED

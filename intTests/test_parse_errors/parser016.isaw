@@ -1,0 +1,4 @@
+// unexpected EOL in REPL input
+
+foo (
+bar;

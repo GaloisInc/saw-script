@@ -1,4 +1,4 @@
-// This fails with an unexpected } after the comment is processed.
+// This fails with a missing ; after the comment is processed.
 let x = 3 // {{
 }} *
 + 5;

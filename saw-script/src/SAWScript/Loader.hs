@@ -20,6 +20,7 @@ import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.IORef as IORef
 import Data.IORef (IORef)
+import Data.List (uncons)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -27,8 +28,11 @@ import qualified Data.Map as Map
 import System.Directory
 import System.FilePath (normalise, takeDirectory)
 
+import qualified Prettyprinter as PP
+
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
+import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.Position as PosSupport
 import qualified SAWSupport.Console as Cons
 
@@ -40,7 +44,7 @@ import SAWCentral.AST
 import SAWCentral.Value (Environ(..), RebindableEnv)
 
 import SAWScript.Panic (HasCallStack, panic)
-import SAWScript.Token (Token)
+import SAWScript.Token (Token, tokPos)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
 import SAWScript.Include as Inc
@@ -56,7 +60,11 @@ import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
 --   The position is a Maybe because errors from the parser come back
 --   with a position already stuffed into the message text, and we would
 --   like to not print another vacuous one along with it.
-type WithMsgs a = Either [(Maybe Pos, Text)] ([(Maybe Pos, Text)], a)
+--
+--   The text is a Doc because we've improved the parser so it sometimes
+--   prints tabular messages.
+--
+type WithMsgs a = Either [(Pos, PPS.Doc)] ([(Pos, PPS.Doc)], a)
 
 -- | Type shorthand for an include path.
 --
@@ -103,30 +111,50 @@ wrapDir dir m = do
 -- | Read some SAWScript text, using the selected parser entry point.
 --
 --   Returns only in Either; caller is responsible for handling the
---   resulting warnings and errors.
+--   resulting warnings and errors. We need it to be this way because
+--   processing the builtin table at startup has to be pure.
 --
 --   The FilePath argument is the name of the file the text comes
 --   from. If the text didn't come from a file, it should have a
 --   suitable placeholder string; that's what ends up in the source
 --   positions in the results.
 --
-readAny :: FilePath -> Text -> ([Token Pos] -> Either ParseError a) -> WithMsgs a
-readAny fileName str parser =
-    case lexSAW fileName str of
+--   The second text argument (which goes with the parser function) is
+--   the EOF token name passed to `prettyParseError`, which should
+--   generally be either "end of line" or "end of file".
+--
+readAny :: FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> WithMsgs a
+readAny fileName str eofName parser =
+    case lexSAW fileName eofName str of
         Left (_verbosity, pos, msg) ->
-            Left [(Just pos, msg)]
+            Left [(pos, PP.pretty msg)]
         Right (tokens, optmsg) ->
             let msgs = case optmsg of
                   Nothing -> []
                   Just (Options.Error, _, _) ->
                       panic "readAny" ["Lexer returned an error in the warning slot"]
                   Just (_verbosity, pos, msg) ->
-                      [(Just pos, msg)]
+                      [(pos, PP.pretty msg)]
             in
             case parser tokens of
                 Left err ->
-                    let err' = Text.pack (show err) in
-                    Left (msgs ++ [(Nothing, err')])
+                    let (optpos, err') = prettyParseError eofName err
+                        pos = case optpos of
+                            Nothing ->
+                                -- Happy is unable to provide the
+                                -- position of an error at EOF. Here
+                                -- we have the input token list, so we
+                                -- can pick up after it. Use the
+                                -- trailing edge of the last token.
+                                case uncons (reverse tokens) of
+                                    Nothing ->
+                                        Range fileName 1 1 1 1
+                                    Just (t, _) ->
+                                        Pos.trailingPos $ tokPos t
+                            Just p ->
+                                p
+                    in
+                    Left (msgs ++ [(pos, err')])
                 Right tree ->
                     -- Note: there's no such things as warnings in a
                     -- Happy parser, so there are no more messages to
@@ -142,9 +170,9 @@ panicOnMsgs whoAmI result =
   -- `IO` here because we're part of initializing the builtins table.
   -- Do it by hand instead. I don't think it's worth adding extra
   -- stuff to SAWConsole just to avoid needing this code.
-  let pp (mpos, msg) = case mpos of
-        Nothing -> msg
-        Just pos -> PosSupport.ppPosition pos <> ": " <> msg
+  let pp (pos, msg) =
+        let msg' = PP.pretty (PosSupport.ppPosition pos) <> ":" PP.<+> msg in
+        PPS.renderText PPS.defaultOpts msg'
   in
   case result of
    Left errs ->
@@ -177,18 +205,12 @@ dispatchMsgs :: HasCallStack => WithMsgs a -> IO a
 dispatchMsgs result =
     case result of
         Left errs -> do
-            -- FUTURE: might be possible to remove this glop with a
-            -- sufficiently clever IsPosition instance for Maybe a.
-            let pp (mpos, msg) = case mpos of
-                  Nothing -> Cons.errDN msg
-                  Just pos -> Cons.errDP pos msg
+            let pp (pos, msg) = Cons.errDP' pos msg
             mapM_ pp errs
             Cons.checkFail
             panic "dispatchMsgs" ["checkFail didn't fail"]
         Right (msgs, tree) -> do
-            let pp (mpos, msg) = case mpos of
-                  Nothing -> Cons.warnN msg
-                  Just pos -> Cons.warnP pos msg
+            let pp (pos, msg) = Cons.warnP' pos msg
             mapM_ pp msgs
             pure tree
 
@@ -209,14 +231,14 @@ dispatchMsgs' (errs_or_result, warns) = do
             pure tree
 
 -- | Call `readAny` then `panicOnMsgs`.
-readAnyPure :: FilePath -> Text -> ([Token Pos] -> Either ParseError a) -> Text -> a
-readAnyPure fileName str parser whoAmI =
-    panicOnMsgs whoAmI $ readAny fileName str parser
+readAnyPure :: FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> Text -> a
+readAnyPure fileName str eofName parser whoAmI =
+    panicOnMsgs whoAmI $ readAny fileName str eofName parser
 
 -- | Call `readAny` then `dispatchMsgs`.
-readAnyIO :: FilePath -> Text -> ([Token Pos] -> Either ParseError a) -> IO a
-readAnyIO fileName str parser =
-    dispatchMsgs $ readAny fileName str parser
+readAnyIO :: FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> IO a
+readAnyIO fileName str eofName parser =
+    dispatchMsgs $ readAny fileName str eofName parser
 
 -- | Run the readAny result through the `Include` module to resolve
 --   @include@ statements.
@@ -258,7 +280,7 @@ readSchemaPure ::
     Text ->
     Schema
 readSchemaPure fakeFileName lc tyenv str =
-    let schema = readAnyPure fakeFileName str parseSchema (Text.pack fakeFileName) in
+    let schema = readAnyPure fakeFileName str "end-of-input" parseSchema (Text.pack fakeFileName) in
     panicOnMsgs' (Text.pack fakeFileName) $ checkSchema lc tyenv schema
 
 -- | Read a schema pattern from a string. This is used by the
@@ -274,7 +296,7 @@ readSchemaPattern ::
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
     IO SchemaPattern
 readSchemaPattern _opts fileName environ rbenv avail str = do
-  pat <- readAnyIO fileName str parseSchemaPattern
+  pat <- readAnyIO fileName str "end-of-line" parseSchemaPattern
   let Environ varenv tyenv _cryenv = environ
 
   -- XXX it should not be necessary to do this munging
@@ -306,7 +328,7 @@ readExpression opts fileName environ rbenv avail str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  expr0 <- readAnyIO fileName str parseExpression
+  expr0 <- readAnyIO fileName str "end-of-line" parseExpression
   expr <- resolveIncludes 0{-depth-} seen incpath opts Inc.processExpr expr0
   let Environ varenv tyenv _cryenvs = environ
 
@@ -348,7 +370,7 @@ readREPLTextUnchecked opts fileName str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  stmts <- readAnyIO fileName str parseREPLText
+  stmts <- readAnyIO fileName str "end-of-line" parseREPLText
   resolveIncludes 0{-depth-} seen incpath opts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
@@ -406,7 +428,7 @@ includeFile depth seen incpath opts fname once = do
       Cons.noteN $ "Loading file \"" <> Text.pack fname' <> "\""
       ftext <- TextIO.readFile fname'
 
-      stmts <- wrapDir current' $ readAnyIO fname ftext parseModule
+      stmts <- wrapDir current' $ readAnyIO fname ftext "end-of-file" parseModule
       resolveIncludes (depth + 1) seen incpath' opts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as

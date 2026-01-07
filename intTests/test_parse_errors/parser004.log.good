@@ -1,3 +1,3 @@
 Loading file "parser004.saw"
-Error: Parse error at parser004.saw:2:22-2:24: Unexpected `in'
+parser004.saw:2:22-2:24: Error: Syntax error: missing ';'
 FAILED

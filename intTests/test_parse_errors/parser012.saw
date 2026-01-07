@@ -1,0 +1,4 @@
+// another less trivial example with a missing close-paren
+
+import "foo.cry" as foo (bar;
+enable_experimental;

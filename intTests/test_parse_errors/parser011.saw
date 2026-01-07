@@ -1,0 +1,7 @@
+// another less trivial example with a missing semicolon
+//
+// this also seems to think only semicolon is legal at the end
+// of the first line, which isn't true.
+
+import "foo.cry" as foo
+enable_experimental;
