@@ -1918,7 +1918,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1899 </span>--
 <span class="lineno"> 1900 </span>-- &gt; bvTrunc : (m n : Nat) -&gt; Vec (addNat m n) Bool -&gt; Vec n Bool;
 <span class="lineno"> 1901 </span>scBvTrunc :: SharedContext -&gt; Term -&gt; Term -&gt; Term -&gt; IO Term
-<span class="lineno"> 1902 </span><span class="decl"><span class="nottickedoff">scBvTrunc sc n m x = scGlobalApply sc &quot;Prelude.bvTrunc&quot; [n,m,x]</span></span>
+<span class="lineno"> 1902 </span><span class="decl"><span class="istickedoff">scBvTrunc sc n m x = scGlobalApply sc &quot;Prelude.bvTrunc&quot; [n,m,x]</span></span>
 <span class="lineno"> 1903 </span>
 <span class="lineno"> 1904 </span>-- | Create a term applying the @updNatFun@ primitive, which satisfies the
 <span class="lineno"> 1905 </span>-- following laws:
