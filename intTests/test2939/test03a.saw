@@ -1,0 +1,14 @@
+enable_experimental;
+
+and_true_r <- prove_print z3 {{
+   \x ->
+   x && True == x
+}};
+
+prove_print (do {
+   simplify (addsimp and_true_r empty_ss);
+   goal_normalize [];
+   trivial;
+}) {{
+   \y -> y && True == y
+}};

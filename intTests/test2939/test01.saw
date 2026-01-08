@@ -1,0 +1,16 @@
+enable_experimental;
+
+and_true_r <- prove_print z3 {{
+   \x ->
+   x && True == x
+}};
+print "Lemma:";
+print and_true_r;
+print "======";
+
+prove_print (do {
+   print_goal;
+   goal_apply and_true_r;
+}) {{
+   \y -> y && True == y
+}};

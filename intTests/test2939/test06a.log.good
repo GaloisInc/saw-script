@@ -1,0 +1,10 @@
+Loading file "test06a.saw"
+Stack trace:
+   (builtin) in z3
+   test06a.saw:1:13-1:15 in (callback)
+   (builtin) in prove_print
+   test06a.saw:1:1-1:34 (at top level)
+sequentToSATQuery: expected first order type or assertion:
+isort 0
+
+FAILED

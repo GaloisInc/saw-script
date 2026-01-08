@@ -1,0 +1,12 @@
+Loading file "test05b.saw"
+Stack trace:
+   (builtin) in trivial
+   test05b.saw:14:4-14:11 in (callback)
+   (builtin) in prove_print
+   test05b.saw:8:1-17:3 (at top level)
+The trivial tactic cannot prove this equality
+(y : Bool)
+-> Eq Bool (ite Bool y y (not y)) True
+
+
+FAILED

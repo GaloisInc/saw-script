@@ -1,0 +1,9 @@
+Loading file "test04.saw"
+Stack trace:
+   (builtin) in unfolding
+   test04.saw:9:4-9:27 in (callback)
+   (builtin) in prove_print
+   test04.saw:6:1-13:3 (at top level)
+Could not resolve name: PEqBit.eq
+
+FAILED
