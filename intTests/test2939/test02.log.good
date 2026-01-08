@@ -1,0 +1,12 @@
+Loading file "test02.saw"
+Stack trace:
+   (builtin) in trivial
+   test02.saw:8:4-8:11 in (callback)
+   (builtin) in prove_print
+   test02.saw:6:1-11:3 (at top level)
+The trivial tactic cannot prove this equality
+(y : Bool)
+-> EqTrue (ecEq Bool PEqBit y y)
+
+
+FAILED

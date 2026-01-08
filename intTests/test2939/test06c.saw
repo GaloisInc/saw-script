@@ -1,0 +1,23 @@
+enable_experimental;
+
+and_true_r <- prove_print z3 {{
+   \x ->
+   x && True == x
+}};
+eq_refl_bool <- prove_print z3 {{
+   \(x: Bool) ->
+   x == x
+}};
+
+print "eq_refl_bool:";
+print eq_refl_bool;
+print "======";
+
+prove_print (do {
+   simplify (addsimp and_true_r empty_ss);
+   print_goal;
+   goal_apply eq_refl_bool;
+   trivial;
+}) {{
+   \y -> y && True == y
+}};

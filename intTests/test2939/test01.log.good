@@ -1,0 +1,19 @@
+Loading file "test01.saw"
+Lemma:
+Theorem ((x : Bool)
+-> EqTrue (ecEq Bool PEqBit (ecAnd Bool PLogicBit x True) x))
+======
+Goal prove_print (goal number 0): prove
+at test01.saw:11:1-16:3
+
+(y : Bool)
+-> EqTrue (ecEq Bool PEqBit (ecAnd Bool PLogicBit y True) y)
+
+Stack trace:
+   (builtin) in goal_apply
+   test01.saw:13:4-13:25 in (callback)
+   (builtin) in prove_print
+   test01.saw:11:1-16:3 (at top level)
+apply tactic failed: no match
+
+FAILED

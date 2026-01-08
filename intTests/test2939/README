@@ -1,0 +1,7 @@
+These are all the cases in the initial post of #2939.
+
+It's probable as we sort out what's going on with them that we don't
+actually want to keep them all in the long run. Or maybe any of them.
+
+Probably the plan should be to migrate cases to tests for other more
+concrete issues as those are identified.

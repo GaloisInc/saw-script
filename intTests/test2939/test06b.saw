@@ -1,0 +1,17 @@
+and_true_r <- prove_print z3 {{
+   \x ->
+   x && True == x
+}};
+eq_refl_bool <- prove_print z3 {{
+   \(x: Bool) ->
+   x == x
+}};
+
+prove_print (do {
+   simplify (addsimp and_true_r empty_ss);
+   simplify (addsimp eq_refl_bool empty_ss);
+   trivial;
+}) {{
+   \y -> y && True == y
+}};
+

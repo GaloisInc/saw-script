@@ -1,0 +1,1 @@
+prove_print z3 {{ \x -> x == x }};
