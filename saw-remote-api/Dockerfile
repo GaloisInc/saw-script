@@ -37,7 +37,7 @@ RUN case ${TARGETPLATFORM} in \
         exit 1 ;; \
     esac && \
     mkdir -p /home/saw/ghcup-download/bin && \
-    curl -L https://downloads.haskell.org/~ghcup/0.1.19.5/${GHCUP_ARCH}-linux-ghcup-0.1.19.5 -o /home/saw/ghcup-download/bin/ghcup && \
+    curl -L https://downloads.haskell.org/~ghcup/0.1.50.2/${GHCUP_ARCH}-linux-ghcup-0.1.50.2 -o /home/saw/ghcup-download/bin/ghcup && \
     chmod +x /home/saw/ghcup-download/bin/ghcup
 RUN mkdir -p /home/saw/.ghcup && \
     ghcup --version && \
