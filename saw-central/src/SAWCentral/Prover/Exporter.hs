@@ -29,7 +29,7 @@ module SAWCentral.Prover.Exporter
   , writeSMTLib2
   , writeSMTLib2What4
   , write_smtlib2
-  , write_smtlib2_w4
+  , write_w4_smtlib2
   , writeRocqCryptolPrimitivesForSAWCore
   , writeRocqCryptolModule
   , writeRocqSAWCorePrelude
@@ -294,8 +294,8 @@ write_smtlib2 f (TypedTerm schema t) = do
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
 -- is to pass the term through as directly as possible, so we interpret
 -- it as an existential. This version uses What4 instead of SBV.
-write_smtlib2_w4 :: FilePath -> TypedTerm -> TopLevel ()
-write_smtlib2_w4 f (TypedTerm schema t) = do
+write_w4_smtlib2 :: FilePath -> TypedTerm -> TopLevel ()
+write_w4_smtlib2 f (TypedTerm schema t) = do
   sc <- getSharedContext
   io $ checkBooleanSchema sc schema
   satq <- io $ predicateToSATQuery sc mempty t

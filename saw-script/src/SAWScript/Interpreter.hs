@@ -2355,9 +2355,9 @@ do_write_smtlib2 :: Text -> TypedTerm -> TopLevel ()
 do_write_smtlib2 f tt =
   write_smtlib2 (Text.unpack f) tt
 
-do_write_smtlib2_w4 :: Text -> TypedTerm -> TopLevel ()
-do_write_smtlib2_w4 f tt =
-  write_smtlib2_w4 (Text.unpack f) tt
+do_write_w4_smtlib2 :: Text -> TypedTerm -> TopLevel ()
+do_write_w4_smtlib2 f tt =
+  write_w4_smtlib2 (Text.unpack f) tt
 
 do_write_core :: Text -> Term -> TopLevel ()
 do_write_core f t =
@@ -2437,9 +2437,9 @@ do_offline_smtlib2 :: Text -> ProofScript ()
 do_offline_smtlib2 path =
   offline_smtlib2 (Text.unpack path)
 
-do_w4_offline_smtlib2 :: Text -> ProofScript ()
-do_w4_offline_smtlib2 path =
-  w4_offline_smtlib2 (Text.unpack path)
+do_offline_w4_smtlib2 :: Text -> ProofScript ()
+do_offline_w4_smtlib2 path =
+  offline_w4_smtlib2 (Text.unpack path)
 
 do_offline_unint_smtlib2 :: [Text] -> Text -> ProofScript ()
 do_offline_unint_smtlib2 unints path =
@@ -4327,6 +4327,16 @@ primitives = Map.fromList $
     ------------------------------------------------------------
     -- Solvers
 
+    -- The naming convention for solver commands is:
+    --   [offline_][LIBRARY_][unint_]SOLVER-OR-FORMAT[_VARIANT]
+    -- where LIBRARY is e.g. w4 or sbv
+    --       SOLVER-OR-FORMAT is e.g. abc or z3
+    --       VARIANT is things like "aiger" immediately below.
+    --
+    -- This extends also to the AIG and CNF commands that are proof
+    -- tactics (in ProofScript) but not so much to the random
+    -- selection of export/output commands in TopLevel.
+
     -- abc
 
   , prim "abc"                 "ProofScript ()"
@@ -4708,15 +4718,21 @@ primitives = Map.fromList $
     , "command."
     ]
 
-  , prim "external_aig_solver" "String -> [String] -> ProofScript ()"
-    (pureVal (satExternal False))
+  , prim "arbitrary_aig" "String -> [String] -> ProofScript ()"
+    (pureVal (satArbitrary False))
     Current
-    [ "Use an external SAT solver supporting AIG to prove the current"
+    [ "Use an arbitrary SAT solver supporting AIG to prove the current"
     , "goal. The first argument is the executable name of the solver,"
     , "and the second is the list of arguments to pass to the solver."
     , "The string '%f' anywhere in the argument list will be replaced"
     , "with the name of the temporary file holding the AIG version of"
     , "the formula."
+    ]
+  , prim "external_aig_solver" "String -> [String] -> ProofScript ()"
+    (pureVal (satArbitrary False))
+    WarnDeprecated
+    [ "Deprecated old name for arbitrary_aig."
+    , "Expected to be hidden by default in SAW 1.6."
     ]
 
   , prim "offline_aig"         "String -> ProofScript ()"
@@ -4763,15 +4779,21 @@ primitives = Map.fromList $
     , "Uses ABC and an intermediate Verilog file."
     ]
 
-  , prim "external_cnf_solver" "String -> [String] -> ProofScript ()"
-    (pureVal (satExternal True))
+  , prim "arbitrary_cnf" "String -> [String] -> ProofScript ()"
+    (pureVal (satArbitrary True))
     Current
-    [ "Use an external SAT solver supporting CNF to prove the current"
+    [ "Use an arbitrary SAT solver supporting CNF to prove the current"
     , "goal. The first argument is the executable name of the solver,"
     , "and the second is the list of arguments to pass to the solver."
     , "The string '%f' anywhere in the argument list will be replaced"
     , "with the name of the temporary file holding the CNF version of"
     , "the formula."
+    ]
+  , prim "external_cnf_solver" "String -> [String] -> ProofScript ()"
+    (pureVal (satArbitrary True))
+    WarnDeprecated
+    [ "Deprecated old name for arbitrary_cnf."
+    , "Expected to be hidden by default in SAW 1.6."
     ]
 
     ------------------------------------------------------------
@@ -5094,11 +5116,16 @@ primitives = Map.fromList $
     , "format."
     ]
 
-  , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
-    (pureVal do_write_smtlib2_w4)
+  , prim "write_w4_smtlib2"    "String -> Term -> TopLevel ()"
+    (pureVal do_write_w4_smtlib2)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2"
     , "format, using the What4 backend instead of the SBV backend."
+    ]
+  , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
+    (pureVal do_write_w4_smtlib2)
+    Current
+    [ "Legacy alternative name for 'write_w4_smtlib2'."
     ]
 
   , prim "offline_smtlib2"     "String -> ProofScript ()"
@@ -5106,10 +5133,18 @@ primitives = Map.fromList $
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
-  , prim "w4_offline_smtlib2"  "String -> ProofScript ()"
-    (pureVal do_w4_offline_smtlib2)
+  , prim "offline_w4_smtlib2"  "String -> ProofScript ()"
+    (pureVal do_offline_w4_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
+  , prim "w4_offline_smtlib2"  "String -> ProofScript ()"
+    (pureVal do_offline_w4_smtlib2)
+    WarnDeprecated
+    [ "Write the current goal to the given file in SMT-Lib2 format."
+    , ""
+    , "Deprecated old name for offline_w4_smtlib2."
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript ()"
     (pureVal do_offline_unint_smtlib2)

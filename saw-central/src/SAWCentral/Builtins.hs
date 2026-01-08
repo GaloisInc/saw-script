@@ -868,8 +868,13 @@ proveABC = do
   SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
   wrapProver [AIG] [] (Prover.proveABC proxy) Set.empty
 
-satExternal :: Bool -> Text -> [Text] -> ProofScript ()
-satExternal doCNF execName args =
+-- | Run an arbitrary SAT solver.
+--
+-- XXX: `abcSatExternal` does not imply the use of ABC. This should
+-- get renamed.
+--
+satArbitrary :: Bool -> Text -> [Text] -> ProofScript ()
+satArbitrary doCNF execName args =
   execTactic $ tacticSolve $ \g ->
     do SV.AIGProxy proxy <- SV.getProxy
        sc <- SV.getSharedContext
@@ -1152,8 +1157,8 @@ offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".ext
 offline_smtlib2 :: FilePath -> ProofScript ()
 offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2 mempty path "." ".smt2"
 
-w4_offline_smtlib2 :: FilePath -> ProofScript ()
-w4_offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2What4 mempty path "." ".smt2"
+offline_w4_smtlib2 :: FilePath -> ProofScript ()
+offline_w4_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2What4 mempty path "." ".smt2"
 
 offline_unint_smtlib2 :: [Text] -> FilePath -> ProofScript ()
 offline_unint_smtlib2 unints path =
