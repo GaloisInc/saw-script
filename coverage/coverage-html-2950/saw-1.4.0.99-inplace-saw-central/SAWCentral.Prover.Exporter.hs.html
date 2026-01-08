@@ -48,7 +48,7 @@ span.spaces    { background: white }
 <span class="lineno">   29 </span>  , writeSMTLib2
 <span class="lineno">   30 </span>  , writeSMTLib2What4
 <span class="lineno">   31 </span>  , write_smtlib2
-<span class="lineno">   32 </span>  , write_smtlib2_w4
+<span class="lineno">   32 </span>  , write_w4_smtlib2
 <span class="lineno">   33 </span>  , writeRocqCryptolPrimitivesForSAWCore
 <span class="lineno">   34 </span>  , writeRocqCryptolModule
 <span class="lineno">   35 </span>  , writeRocqSAWCorePrelude
@@ -162,9 +162,9 @@ span.spaces    { background: white }
 <span class="lineno">  143 </span><span class="decl"><span class="istickedoff">writeAIG_SAT f satq =</span>
 <span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">do AIGProxy proxy &lt;- getProxy</span>
 <span class="lineno">  145 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  146 </span><span class="spaces">     </span><span class="istickedoff">io $ BBSim.withBitBlastedSATQuery <span class="nottickedoff">proxy</span> sc mempty satq $ <span class="nottickedoff">\g l vars -&gt;</span></span>
-<span class="lineno">  147 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do AIG.writeAiger f (AIG.Network g [l])</span></span>
-<span class="lineno">  148 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">return vars</span></span></span>
+<span class="lineno">  146 </span><span class="spaces">     </span><span class="istickedoff">io $ BBSim.withBitBlastedSATQuery <span class="nottickedoff">proxy</span> sc mempty satq $ \g l vars -&gt;</span>
+<span class="lineno">  147 </span><span class="spaces">         </span><span class="istickedoff">do AIG.writeAiger f (AIG.Network g [l])</span>
+<span class="lineno">  148 </span><span class="spaces">            </span><span class="istickedoff">return vars</span></span>
 <span class="lineno">  149 </span>
 <span class="lineno">  150 </span>-- | Write a @Term@ representing a an arbitrary function to an AIG file.
 <span class="lineno">  151 </span>writeAIG :: FilePath -&gt; Term -&gt; TopLevel ()
@@ -313,8 +313,8 @@ span.spaces    { background: white }
 <span class="lineno">  294 </span>-- function returning a boolean) to an SMT-Lib version 2 file. The goal
 <span class="lineno">  295 </span>-- is to pass the term through as directly as possible, so we interpret
 <span class="lineno">  296 </span>-- it as an existential. This version uses What4 instead of SBV.
-<span class="lineno">  297 </span>write_smtlib2_w4 :: FilePath -&gt; TypedTerm -&gt; TopLevel ()
-<span class="lineno">  298 </span><span class="decl"><span class="nottickedoff">write_smtlib2_w4 f (TypedTerm schema t) = do</span>
+<span class="lineno">  297 </span>write_w4_smtlib2 :: FilePath -&gt; TypedTerm -&gt; TopLevel ()
+<span class="lineno">  298 </span><span class="decl"><span class="nottickedoff">write_w4_smtlib2 f (TypedTerm schema t) = do</span>
 <span class="lineno">  299 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno">  300 </span><span class="spaces">  </span><span class="nottickedoff">io $ checkBooleanSchema sc schema</span>
 <span class="lineno">  301 </span><span class="spaces">  </span><span class="nottickedoff">satq &lt;- io $ predicateToSATQuery sc mempty t</span>
@@ -355,56 +355,56 @@ span.spaces    { background: white }
 <span class="lineno">  336 </span><span class="decl"><span class="nottickedoff">write_verilog sc path t = io $ writeVerilog sc path t</span></span>
 <span class="lineno">  337 </span>
 <span class="lineno">  338 </span>writeVerilogSAT :: FilePath -&gt; SATQuery -&gt; TopLevel [(VarName, FiniteType)]
-<span class="lineno">  339 </span><span class="decl"><span class="nottickedoff">writeVerilogSAT path satq = getSharedContext &gt;&gt;= \sc -&gt; io $</span>
-<span class="lineno">  340 </span><span class="spaces">  </span><span class="nottickedoff">do sym &lt;- newSAWCoreExprBuilder sc False</span>
-<span class="lineno">  341 </span><span class="spaces">     </span><span class="nottickedoff">-- For SAT checking, we don't care what order the variables are in,</span>
-<span class="lineno">  342 </span><span class="spaces">     </span><span class="nottickedoff">-- but only that we can correctly keep track of the connection</span>
-<span class="lineno">  343 </span><span class="spaces">     </span><span class="nottickedoff">-- between inputs and assignments.</span>
-<span class="lineno">  344 </span><span class="spaces">     </span><span class="nottickedoff">let varList  = Map.toList (satVariables satq)</span>
-<span class="lineno">  345 </span><span class="spaces">     </span><span class="nottickedoff">let argNames = map fst varList</span>
-<span class="lineno">  346 </span><span class="spaces">     </span><span class="nottickedoff">let argTys = map snd varList</span>
-<span class="lineno">  347 </span><span class="spaces">     </span><span class="nottickedoff">(vars, bvals) &lt;- W.w4Solve sym sc satq</span>
-<span class="lineno">  348 </span><span class="spaces">     </span><span class="nottickedoff">bval &lt;- W4.andAllOf sym traverse bvals</span>
-<span class="lineno">  349 </span><span class="spaces">     </span><span class="nottickedoff">let f fot = case toFiniteType fot of</span>
-<span class="lineno">  350 </span><span class="spaces">                   </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;writeVerilogSAT: Unsupported argument type &quot; ++ show fot</span>
-<span class="lineno">  351 </span><span class="spaces">                   </span><span class="nottickedoff">Just ft -&gt; return ft</span>
-<span class="lineno">  352 </span><span class="spaces">     </span><span class="nottickedoff">let argSValues = map (snd . snd) vars</span>
-<span class="lineno">  353 </span><span class="spaces">     </span><span class="nottickedoff">let argSValueNames = zip argSValues (map vnName argNames)</span>
-<span class="lineno">  354 </span><span class="spaces">     </span><span class="nottickedoff">argTys' &lt;- traverse f argTys</span>
-<span class="lineno">  355 </span><span class="spaces">     </span><span class="nottickedoff">let mkInput (v, nm) = map (,nm) &lt;$&gt; flattenSValue sym v</span>
-<span class="lineno">  356 </span><span class="spaces">     </span><span class="nottickedoff">ins &lt;- concat &lt;$&gt; mapM mkInput argSValueNames</span>
-<span class="lineno">  357 </span><span class="spaces">     </span><span class="nottickedoff">edoc &lt;- runExceptT $ exprsVerilog sym ins [Some bval] &quot;f&quot;</span>
-<span class="lineno">  358 </span><span class="spaces">     </span><span class="nottickedoff">case edoc of</span>
-<span class="lineno">  359 </span><span class="spaces">       </span><span class="nottickedoff">Left err -&gt; fail $ &quot;Failed to translate to Verilog: &quot; ++ err</span>
-<span class="lineno">  360 </span><span class="spaces">       </span><span class="nottickedoff">Right doc -&gt; do</span>
-<span class="lineno">  361 </span><span class="spaces">         </span><span class="nottickedoff">h &lt;- openFile path WriteMode</span>
-<span class="lineno">  362 </span><span class="spaces">         </span><span class="nottickedoff">hPutDoc h doc</span>
-<span class="lineno">  363 </span><span class="spaces">         </span><span class="nottickedoff">hPutStrLn h &quot;&quot;</span>
-<span class="lineno">  364 </span><span class="spaces">         </span><span class="nottickedoff">hClose h</span>
-<span class="lineno">  365 </span><span class="spaces">     </span><span class="nottickedoff">return (zip argNames argTys')</span></span>
+<span class="lineno">  339 </span><span class="decl"><span class="istickedoff">writeVerilogSAT path satq = getSharedContext &gt;&gt;= \sc -&gt; io $</span>
+<span class="lineno">  340 </span><span class="spaces">  </span><span class="istickedoff">do sym &lt;- newSAWCoreExprBuilder <span class="nottickedoff">sc</span> False</span>
+<span class="lineno">  341 </span><span class="spaces">     </span><span class="istickedoff">-- For SAT checking, we don't care what order the variables are in,</span>
+<span class="lineno">  342 </span><span class="spaces">     </span><span class="istickedoff">-- but only that we can correctly keep track of the connection</span>
+<span class="lineno">  343 </span><span class="spaces">     </span><span class="istickedoff">-- between inputs and assignments.</span>
+<span class="lineno">  344 </span><span class="spaces">     </span><span class="istickedoff">let varList  = Map.toList (satVariables satq)</span>
+<span class="lineno">  345 </span><span class="spaces">     </span><span class="istickedoff">let argNames = map fst varList</span>
+<span class="lineno">  346 </span><span class="spaces">     </span><span class="istickedoff">let argTys = map snd varList</span>
+<span class="lineno">  347 </span><span class="spaces">     </span><span class="istickedoff">(vars, bvals) &lt;- W.w4Solve sym sc satq</span>
+<span class="lineno">  348 </span><span class="spaces">     </span><span class="istickedoff">bval &lt;- W4.andAllOf sym traverse bvals</span>
+<span class="lineno">  349 </span><span class="spaces">     </span><span class="istickedoff">let f fot = case toFiniteType fot of</span>
+<span class="lineno">  350 </span><span class="spaces">                   </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;writeVerilogSAT: Unsupported argument type &quot; ++ show fot</span></span>
+<span class="lineno">  351 </span><span class="spaces">                   </span><span class="istickedoff">Just ft -&gt; return <span class="nottickedoff">ft</span></span>
+<span class="lineno">  352 </span><span class="spaces">     </span><span class="istickedoff">let argSValues = map (snd . snd) vars</span>
+<span class="lineno">  353 </span><span class="spaces">     </span><span class="istickedoff">let argSValueNames = zip argSValues (map vnName argNames)</span>
+<span class="lineno">  354 </span><span class="spaces">     </span><span class="istickedoff">argTys' &lt;- traverse f argTys</span>
+<span class="lineno">  355 </span><span class="spaces">     </span><span class="istickedoff">let mkInput (v, nm) = map (,nm) &lt;$&gt; flattenSValue <span class="nottickedoff">sym</span> v</span>
+<span class="lineno">  356 </span><span class="spaces">     </span><span class="istickedoff">ins &lt;- concat &lt;$&gt; mapM mkInput argSValueNames</span>
+<span class="lineno">  357 </span><span class="spaces">     </span><span class="istickedoff">edoc &lt;- runExceptT $ exprsVerilog <span class="nottickedoff">sym</span> ins [Some bval] &quot;f&quot;</span>
+<span class="lineno">  358 </span><span class="spaces">     </span><span class="istickedoff">case edoc of</span>
+<span class="lineno">  359 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail $ &quot;Failed to translate to Verilog: &quot; ++ err</span></span>
+<span class="lineno">  360 </span><span class="spaces">       </span><span class="istickedoff">Right doc -&gt; do</span>
+<span class="lineno">  361 </span><span class="spaces">         </span><span class="istickedoff">h &lt;- openFile path WriteMode</span>
+<span class="lineno">  362 </span><span class="spaces">         </span><span class="istickedoff">hPutDoc h doc</span>
+<span class="lineno">  363 </span><span class="spaces">         </span><span class="istickedoff">hPutStrLn h &quot;&quot;</span>
+<span class="lineno">  364 </span><span class="spaces">         </span><span class="istickedoff">hClose h</span>
+<span class="lineno">  365 </span><span class="spaces">     </span><span class="istickedoff">return (zip argNames argTys')</span></span>
 <span class="lineno">  366 </span>
 <span class="lineno">  367 </span>flattenSValue :: IsSymExprBuilder sym =&gt; sym -&gt; W4Sim.SValue sym -&gt; IO [Some (W4.SymExpr sym)]
-<span class="lineno">  368 </span><span class="decl"><span class="nottickedoff">flattenSValue _ (Sim.VBool b) = return [Some b]</span>
-<span class="lineno">  369 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue _ (Sim.VWord (W4Sim.DBV w)) = return [Some w]</span>
-<span class="lineno">  370 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue sym (Sim.VPair l r) =</span>
-<span class="lineno">  371 </span><span class="spaces">  </span><span class="nottickedoff">do lv &lt;- Sim.force l</span>
-<span class="lineno">  372 </span><span class="spaces">     </span><span class="nottickedoff">rv &lt;- Sim.force r</span>
-<span class="lineno">  373 </span><span class="spaces">     </span><span class="nottickedoff">ls &lt;- flattenSValue sym lv</span>
-<span class="lineno">  374 </span><span class="spaces">     </span><span class="nottickedoff">rs &lt;- flattenSValue sym rv</span>
-<span class="lineno">  375 </span><span class="spaces">     </span><span class="nottickedoff">return (ls ++ rs)</span>
-<span class="lineno">  376 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue sym (Sim.VVector ts) =</span>
-<span class="lineno">  377 </span><span class="spaces">  </span><span class="nottickedoff">do vs &lt;- mapM Sim.force ts</span>
-<span class="lineno">  378 </span><span class="spaces">     </span><span class="nottickedoff">let getBool (Sim.VBool b) = Just b</span>
-<span class="lineno">  379 </span><span class="spaces">         </span><span class="nottickedoff">getBool _ = Nothing</span>
-<span class="lineno">  380 </span><span class="spaces">         </span><span class="nottickedoff">mbs = V.map getBool vs</span>
-<span class="lineno">  381 </span><span class="spaces">     </span><span class="nottickedoff">case sequence mbs of</span>
-<span class="lineno">  382 </span><span class="spaces">       </span><span class="nottickedoff">Just bs -&gt;</span>
-<span class="lineno">  383 </span><span class="spaces">         </span><span class="nottickedoff">do w &lt;- W4Sim.bvPackBE sym bs</span>
-<span class="lineno">  384 </span><span class="spaces">            </span><span class="nottickedoff">case w of</span>
-<span class="lineno">  385 </span><span class="spaces">              </span><span class="nottickedoff">W4Sim.DBV bv -&gt; return [Some bv]</span>
-<span class="lineno">  386 </span><span class="spaces">              </span><span class="nottickedoff">W4Sim.ZBV -&gt; return []</span>
-<span class="lineno">  387 </span><span class="spaces">       </span><span class="nottickedoff">Nothing -&gt; concat &lt;$&gt; mapM (flattenSValue sym) vs</span>
-<span class="lineno">  388 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue _ sval = fail $ &quot;write_verilog: unsupported result type: &quot; ++ show sval</span></span>
+<span class="lineno">  368 </span><span class="decl"><span class="istickedoff">flattenSValue _ (Sim.VBool b) = <span class="nottickedoff">return [Some b]</span></span>
+<span class="lineno">  369 </span><span class="spaces"></span><span class="istickedoff">flattenSValue _ (Sim.VWord (W4Sim.DBV w)) = return [Some w]</span>
+<span class="lineno">  370 </span><span class="spaces"></span><span class="istickedoff">flattenSValue sym (Sim.VPair l r) =</span>
+<span class="lineno">  371 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do lv &lt;- Sim.force l</span></span>
+<span class="lineno">  372 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">rv &lt;- Sim.force r</span></span>
+<span class="lineno">  373 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">ls &lt;- flattenSValue sym lv</span></span>
+<span class="lineno">  374 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">rs &lt;- flattenSValue sym rv</span></span>
+<span class="lineno">  375 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">return (ls ++ rs)</span></span>
+<span class="lineno">  376 </span><span class="spaces"></span><span class="istickedoff">flattenSValue sym (Sim.VVector ts) =</span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">do vs &lt;- mapM Sim.force ts</span>
+<span class="lineno">  378 </span><span class="spaces">     </span><span class="istickedoff">let getBool (Sim.VBool b) = <span class="nottickedoff">Just b</span></span>
+<span class="lineno">  379 </span><span class="spaces">         </span><span class="istickedoff">getBool _ = Nothing</span>
+<span class="lineno">  380 </span><span class="spaces">         </span><span class="istickedoff">mbs = V.map getBool vs</span>
+<span class="lineno">  381 </span><span class="spaces">     </span><span class="istickedoff">case sequence mbs of</span>
+<span class="lineno">  382 </span><span class="spaces">       </span><span class="istickedoff">Just bs -&gt;</span>
+<span class="lineno">  383 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do w &lt;- W4Sim.bvPackBE sym bs</span></span>
+<span class="lineno">  384 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case w of</span></span>
+<span class="lineno">  385 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">W4Sim.DBV bv -&gt; return [Some bv]</span></span>
+<span class="lineno">  386 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">W4Sim.ZBV -&gt; return []</span></span>
+<span class="lineno">  387 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; concat &lt;$&gt; mapM (flattenSValue <span class="nottickedoff">sym</span>) vs</span>
+<span class="lineno">  388 </span><span class="spaces"></span><span class="istickedoff">flattenSValue _ sval = <span class="nottickedoff">fail $ &quot;write_verilog: unsupported result type: &quot; ++ show sval</span></span></span>
 <span class="lineno">  389 </span>
 <span class="lineno">  390 </span>writeVerilog :: SharedContext -&gt; FilePath -&gt; Term -&gt; IO ()
 <span class="lineno">  391 </span><span class="decl"><span class="nottickedoff">writeVerilog sc path t = do</span>

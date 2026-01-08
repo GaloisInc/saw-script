@@ -2576,7 +2576,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2557 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
 <span class="lineno"> 2558 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
 <span class="lineno"> 2559 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_points_to_bitfield&quot;</span>
-<span class="lineno"> 2560 </span><span class="spaces">     </span><span class="istickedoff">Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -&gt; Crucible.withPtrWidth <span class="nottickedoff">wptr</span> $</span>
+<span class="lineno"> 2560 </span><span class="spaces">     </span><span class="istickedoff">Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -&gt; Crucible.withPtrWidth wptr $</span>
 <span class="lineno"> 2561 </span><span class="spaces">       </span><span class="istickedoff">do let fieldName' = Text.unpack fieldName</span>
 <span class="lineno"> 2562 </span><span class="spaces">          </span><span class="istickedoff">st &lt;- get</span>
 <span class="lineno"> 2563 </span><span class="spaces">          </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
