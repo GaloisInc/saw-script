@@ -271,22 +271,30 @@ reverseBaseTypeInfo dibt =
    Dwarf.DW_ATE_boolean -> Just $ L.PrimType $ L.Integer 1
 
    Dwarf.DW_ATE_float ->
+     
      case L.dibtSize dibt of
-       16  -> Just $ L.PrimType $ L.FloatType $ L.Half
-       32  -> Just $ L.PrimType $ L.FloatType $ L.Float
-       64  -> Just $ L.PrimType $ L.FloatType $ L.Double
-       80  -> Just $ L.PrimType $ L.FloatType $ L.X86_fp80
-       128 -> Just $ L.PrimType $ L.FloatType $ L.Fp128
+       Just (L.ValMdValue (L.Typed _ (L.ValInteger sz))) ->
+         (case sz of
+           16  -> Just $ L.PrimType $ L.FloatType $ L.Half
+           32  -> Just $ L.PrimType $ L.FloatType $ L.Float
+           64  -> Just $ L.PrimType $ L.FloatType $ L.Double
+           80  -> Just $ L.PrimType $ L.FloatType $ L.X86_fp80
+           128 -> Just $ L.PrimType $ L.FloatType $ L.Fp128
+           _   -> Nothing)
        _   -> Nothing
 
    Dwarf.DW_ATE_signed ->
-     Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))
+     case L.dibtSize dibt of 
+         Just (L.ValMdValue (L.Typed _ (L.ValInteger sz))) -> Just $ L.PrimType $ L.Integer (fromIntegral sz)
+         _ -> Nothing
 
    Dwarf.DW_ATE_signed_char ->
      Just $ L.PrimType $ L.Integer 8
 
    Dwarf.DW_ATE_unsigned ->
-     Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))
+     case L.dibtSize dibt of 
+        Just (L.ValMdValue (L.Typed _ (L.ValInteger sz))) -> Just $ L.PrimType $ L.Integer (fromIntegral sz)
+        _ -> Nothing
 
    Dwarf.DW_ATE_unsigned_char ->
      Just $ L.PrimType $ L.Integer 8
