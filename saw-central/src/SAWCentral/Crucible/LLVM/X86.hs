@@ -909,7 +909,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
 
        -- check that the produced term is type-correct
        tp <- scTypeOf sc inv
-       ok <- scConvertible sc True tp =<< scBoolType sc
+       ok <- scConvertible sc tp =<< scBoolType sc
        unless ok $ do
          -- TODO, get ppOpts from the right place
          tp' <- ppTerm sc PPS.defaultOpts tp

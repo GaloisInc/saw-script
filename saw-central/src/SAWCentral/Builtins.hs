@@ -279,7 +279,7 @@ replacePrim pat replace t = do
   io $ do
     ty1 <- scTypeOf sc tpat
     ty2 <- scTypeOf sc trepl
-    c <- scConvertible sc False ty1 ty2
+    c <- scConvertible sc ty1 ty2
     unless c $ fail $ unlines
       [ "terms do not have convertible types", show tpat, show ty1, show trepl, show ty2 ]
 
@@ -289,7 +289,7 @@ replacePrim pat replace t = do
   io $ do
     ty  <- scTypeOf sc (ttTerm t)
     ty' <- scTypeOf sc t'
-    c' <- scConvertible sc False ty ty'
+    c' <- scConvertible sc ty ty'
     unless c' $ fail $ unlines
       [ "term does not have the same type after replacement", show ty, show ty' ]
 
@@ -304,7 +304,7 @@ hoistIfsPrim t = do
   io $ do
     ty  <- scTypeOf sc (ttTerm t)
     ty' <- scTypeOf sc t'
-    c' <- scConvertible sc False ty ty'
+    c' <- scConvertible sc ty ty'
     unless c' $ fail $ unlines
       [ "term does not have the same type after hoisting ifs", show ty, show ty' ]
 
@@ -313,7 +313,7 @@ hoistIfsPrim t = do
 isConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel Bool
 isConvertiblePrim x y = do
    sc <- getSharedContext
-   io $ scConvertible sc False (ttTerm x) (ttTerm y)
+   io $ scConvertible sc (ttTerm x) (ttTerm y)
 
 checkConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel ()
 checkConvertiblePrim x y = do
@@ -1597,7 +1597,7 @@ check_term tt = do
       TypedTermSchema schema -> io $ importSchemaCEnv sc cenv schema
       TypedTermKind k -> io $ Cryptol.importKind sc k
       TypedTermOther ty' -> pure ty'
-  convertible <- io $ scConvertible sc True ty expectedTy
+  convertible <- io $ scConvertible sc ty expectedTy
   ty' <- liftIO $ ppTerm sc opts ty
   unless convertible $ do
     expectedTy' <- liftIO $ ppTerm sc opts expectedTy
