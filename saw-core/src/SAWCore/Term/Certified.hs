@@ -112,7 +112,7 @@ import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
 import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef',writeIORef)
-import Data.List (find)
+import Data.List (elemIndex, find)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -1312,9 +1312,8 @@ scmWhnf t0 = go [] t0
           Just (t : ts, xs')
     splitApps _ _ = Nothing
 
--- | Test if two terms are convertible up to a given evaluation procedure. In
--- practice, this procedure is usually 'scWhnf', possibly combined with some
--- rewriting.
+-- | Test if two terms are convertible up to the reductions performed
+-- by 'scmWhnf'.
 scmConvertible ::
   Bool {- ^ Should constants be unfolded during this check? -} ->
   Term ->
@@ -1322,58 +1321,66 @@ scmConvertible ::
   SCM Bool
 scmConvertible unfoldConst tm1 tm2 =
   do c <- newIntCache
-     go c IntMap.empty tm1 tm2
+     go c [] [] tm1 tm2
 
   where
     whnf :: IntCache SCM Term -> Term -> SCM (TermF Term)
     whnf c t@STApp{stAppIndex = idx} =
       unwrapTermF <$> useIntCache c idx (scmWhnf t)
 
-    go :: IntCache SCM Term -> IntMap VarIndex -> Term -> Term -> SCM Bool
-    go _c vm (STApp{stAppIndex = idx1, stAppVarTypes = vt1}) (STApp{stAppIndex = idx2})
-      | IntMap.disjoint vt1 vm && idx1 == idx2 = pure True   -- succeed early case
-    go c vm t1 t2 = join (goF c vm <$> whnf c t1 <*> whnf c t2)
+    go :: IntCache SCM Term -> [VarName] -> [VarName] -> Term -> Term -> SCM Bool
+    go c env1 env2 t1 t2
+      | closedTerm t1 && termIndex t1 == termIndex t2 = pure True -- succeed early case
+      | otherwise =
+        do tf1 <- whnf c t1
+           tf2 <- whnf c t2
+           goF c env1 env2 tf1 tf2
 
-    goF :: IntCache SCM Term -> IntMap VarIndex -> TermF Term -> TermF Term -> SCM Bool
+    goF :: IntCache SCM Term -> [VarName] -> [VarName] -> TermF Term -> TermF Term -> SCM Bool
 
-    goF _c _vm (Constant nx) (Constant ny) | nameIndex nx == nameIndex ny = pure True
-    goF c vm (Constant nx) y
-        | unfoldConst =
-          do mx <- scmFindDefBody (nameIndex nx)
-             case mx of
-               Just x -> join (goF c vm <$> whnf c x <*> return y)
-               Nothing -> pure False
-    goF c vm x (Constant ny)
-        | unfoldConst =
-          do my <- scmFindDefBody (nameIndex ny)
-             case my of
-               Just y -> join (goF c vm <$> return x <*> whnf c y)
-               Nothing -> pure False
+    goF _c _env1 _env2 (Constant nm1) (Constant nm2)
+      | nameIndex nm1 == nameIndex nm2 = pure True
+    goF c env1 env2 (Constant nx) y
+      | unfoldConst =
+        do mx <- scmFindDefBody (nameIndex nx)
+           case mx of
+             Just x -> join (goF c env1 env2 <$> whnf c x <*> pure y)
+             Nothing -> pure False
+    goF c env1 env2 x (Constant ny)
+      | unfoldConst =
+        do my <- scmFindDefBody (nameIndex ny)
+           case my of
+             Just y -> join (goF c env1 env2 <$> pure x <*> whnf c y)
+             Nothing -> pure False
 
-    goF c vm (FTermF ftf1) (FTermF ftf2) =
-            case zipWithFlatTermF (go c vm) ftf1 ftf2 of
-              Nothing -> return False
-              Just zipped -> Fold.and <$> traverse id zipped
+    goF c env1 env2 (FTermF ftf1) (FTermF ftf2) =
+      case zipWithFlatTermF (go c env1 env2) ftf1 ftf2 of
+        Nothing -> pure False
+        Just zipped -> Fold.and <$> traverse id zipped
 
-    goF c vm (App f1 x1) (App f2 x2) =
-           pure (&&) <*> go c vm f1 f2 <*> go c vm x1 x2
+    goF c env1 env2 (App f1 u1) (App f2 u2) =
+      do a <- go c env1 env2 f1 f2
+         b <- go c env1 env2 u1 u2
+         pure (a && b)
 
-    goF c vm (Lambda (vnIndex -> i1) ty1 body1) (Lambda (vnIndex -> i2) ty2 body2) =
-      pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
-        where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
+    goF c env1 env2 (Lambda x1 ty1 body1) (Lambda x2 ty2 body2) =
+      do a <- go c env1 env2 ty1 ty2
+         b <- go c (x1 : env1) (x2 : env2) body1 body2
+         pure (a && b)
 
-    goF c vm (Pi (vnIndex -> i1) ty1 body1) (Pi (vnIndex -> i2) ty2 body2) =
-      pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
-        where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
+    goF c env1 env2 (Pi x1 ty1 body1) (Pi x2 ty2 body2) =
+      do a <- go c env1 env2 ty1 ty2
+         b <- go c (x1 : env1) (x2 : env2) body1 body2
+         pure (a && b)
 
-    goF c vm (Variable x1 t1) (Variable x2 t2)
-      | i' == vnIndex x2 = go c vm t1 t2
-        where i' = case IntMap.lookup (vnIndex x1) vm of
-                     Nothing -> vnIndex x1
-                     Just i -> i
+    goF c env1 env2 (Variable x1 t1) (Variable x2 t2) =
+      case (elemIndex x1 env1, elemIndex x2 env2) of
+        (Just i1, Just i2) | i1 == i2 -> pure True
+        (Nothing, Nothing) | x1 == x2 -> go c env1 env2 t1 t2
+        _ -> pure False
 
     -- final catch-all case
-    goF _c _vm _x _y = pure False
+    goF _c _env1 _env2 _t1 _t2 = pure False
 
 -- | Check whether one type is a subtype of another: Either they are
 -- convertible, or they are both Pi types with convertible argument
