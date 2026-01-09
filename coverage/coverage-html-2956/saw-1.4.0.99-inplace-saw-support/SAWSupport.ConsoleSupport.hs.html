@@ -1,0 +1,224 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>{- |
+<span class="lineno">    3 </span>Module      : SAWSupport.ConsoleSupport
+<span class="lineno">    4 </span>Description : Backend support for console messages
+<span class="lineno">    5 </span>License     : BSD3
+<span class="lineno">    6 </span>Maintainer  : saw@galois.com
+<span class="lineno">    7 </span>Stability   : provisional
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>This module contains infrastructure for use by _implementations_ of
+<span class="lineno">   10 </span>the material in SAWSupport.Console.
+<span class="lineno">   11 </span>-}
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>module SAWSupport.ConsoleSupport (
+<span class="lineno">   14 </span>    Fatal(..),
+<span class="lineno">   15 </span>    unimplementedMessage,
+<span class="lineno">   16 </span>    errN, errP,
+<span class="lineno">   17 </span>    warnN, warnP,
+<span class="lineno">   18 </span>    noteN, noteP,
+<span class="lineno">   19 </span>    errN', errP',
+<span class="lineno">   20 </span>    warnN', warnP',
+<span class="lineno">   21 </span>    noteN', noteP'
+<span class="lineno">   22 </span>  )
+<span class="lineno">   23 </span>  where
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>import Control.Exception (Exception)
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>import Data.Maybe (fromMaybe)
+<span class="lineno">   28 </span>import qualified Data.Text as Text
+<span class="lineno">   29 </span>import Data.Text (Text)
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import qualified SAWVersion.GitRev as GitRev
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>import SAWSupport.Position (IsPosition(..))
+<span class="lineno">   34 </span>import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>-- | Exception thrown by fatal errors.
+<span class="lineno">   38 </span>--
+<span class="lineno">   39 </span>-- The boolean argument is called @needTrace@; if it is true, a stack
+<span class="lineno">   40 </span>-- trace was requested but has not been printed. This is temporary
+<span class="lineno">   41 </span>-- scaffolding to work around things the `IO` instance of `SAWConsole`
+<span class="lineno">   42 </span>-- can't do properly. See `SAWCentral.Value`.
+<span class="lineno">   43 </span>--
+<span class="lineno">   44 </span>-- The `Show` instance is required to be an `Exception`; however,
+<span class="lineno">   45 </span>-- ideally, the `Show` text should never be seen. (It contains a real
+<span class="lineno">   46 </span>-- message rather than being &quot;&quot; to avoid confusion in the event it
+<span class="lineno">   47 </span>-- _does_ get printed at some point.)
+<span class="lineno">   48 </span>--
+<span class="lineno">   49 </span>-- This exception is thrown after an error message has already been
+<span class="lineno">   50 </span>-- posted (or more than one) and no further printing is needed. To
+<span class="lineno">   51 </span>-- accomplish this, it's caught at strategic points:
+<span class="lineno">   52 </span>--    - in the REPL, it rolls back the operation that was in progress
+<span class="lineno">   53 </span>--      and continues;
+<span class="lineno">   54 </span>--    - when executing SAWScript straight from a file, it just exits;
+<span class="lineno">   55 </span>--    - in the remote API it results in a failed action.
+<span class="lineno">   56 </span>--
+<span class="lineno">   57 </span>data Fatal = Fatal Bool
+<span class="lineno">   58 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Fatal</span></span></span></span> where <span class="decl"><span class="nottickedoff">show (Fatal _) = &quot;Encountered an error.&quot;</span></span>
+<span class="lineno">   59 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Exception Fatal</span></span></span></span></span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>-- | Type for the printer functions used below
+<span class="lineno">   62 </span>type SayFunc m = Text -&gt; m ()
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>-- | Fetch the version info from `GitRev`.
+<span class="lineno">   65 </span>--   XXX: this is pasted from PanicSupport and should be shared.
+<span class="lineno">   66 </span>{-# Noinline unimplementedRevision #-}
+<span class="lineno">   67 </span>unimplementedRevision :: (Text, Text)
+<span class="lineno">   68 </span><span class="decl"><span class="nottickedoff">unimplementedRevision =</span>
+<span class="lineno">   69 </span><span class="spaces">    </span><span class="nottickedoff">if GitRev.foundGit then</span>
+<span class="lineno">   70 </span><span class="spaces">        </span><span class="nottickedoff">let hash = fromMaybe &quot;(unknown revision)&quot; GitRev.hash </span>
+<span class="lineno">   71 </span><span class="spaces">            </span><span class="nottickedoff">branch = fromMaybe &quot;(unknown branch)&quot; GitRev.branch</span>
+<span class="lineno">   72 </span><span class="spaces">        </span><span class="nottickedoff">in</span>
+<span class="lineno">   73 </span><span class="spaces">        </span><span class="nottickedoff">(Text.pack hash, Text.pack branch)</span>
+<span class="lineno">   74 </span><span class="spaces">    </span><span class="nottickedoff">else</span>
+<span class="lineno">   75 </span><span class="spaces">        </span><span class="nottickedoff">(&quot;(VCS-less build)&quot;, &quot;(VCS-less build)&quot;)</span></span>
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>-- | Generate the message to be used for &quot;unimplemented&quot;, which is
+<span class="lineno">   78 </span>--   intentionally like what `panic` produces.
+<span class="lineno">   79 </span>unimplementedMessage :: Text -&gt; Text -&gt; [Text]
+<span class="lineno">   80 </span><span class="decl"><span class="nottickedoff">unimplementedMessage loc msg =</span>
+<span class="lineno">   81 </span><span class="spaces">    </span><span class="nottickedoff">let (revision, branch) = unimplementedRevision in</span>
+<span class="lineno">   82 </span><span class="spaces">    </span><span class="nottickedoff">[</span>
+<span class="lineno">   83 </span><span class="spaces">        </span><span class="nottickedoff">&quot;You have encountered a limitation in SAW.&quot;,</span>
+<span class="lineno">   84 </span><span class="spaces">        </span><span class="nottickedoff">&quot;If you need this functionality, please create an issue at&quot;,</span>
+<span class="lineno">   85 </span><span class="spaces">        </span><span class="nottickedoff">&quot;https://github.com/GaloisInc/saw-script/issues&quot;,</span>
+<span class="lineno">   86 </span><span class="spaces">        </span><span class="nottickedoff">&quot;&quot;,</span>
+<span class="lineno">   87 </span><span class="spaces">        </span><span class="nottickedoff">&quot;%&lt; ---------------------------------------------------&quot;,</span>
+<span class="lineno">   88 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Revision:  &quot; &lt;&gt; revision,</span>
+<span class="lineno">   89 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Branch:    &quot; &lt;&gt; branch,</span>
+<span class="lineno">   90 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Location:  &quot; &lt;&gt; loc,</span>
+<span class="lineno">   91 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Message:   &quot; &lt;&gt; msg,</span>
+<span class="lineno">   92 </span><span class="spaces">        </span><span class="nottickedoff">&quot;%&lt; ---------------------------------------------------&quot;</span>
+<span class="lineno">   93 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>-- | Backend for `errN` and `errDN` in `SAWConsole` in terms of a
+<span class="lineno">   97 </span>--   function `say` for issuing a single message. Note: the
+<span class="lineno">   98 </span>--   `SAWConsole` implementation is still responsible for bailing
+<span class="lineno">   99 </span>--   out or recording that there was an error, respectively.
+<span class="lineno">  100 </span>errN :: SayFunc m -&gt; Text -&gt; m ()
+<span class="lineno">  101 </span><span class="decl"><span class="istickedoff">errN say msg =</span>
+<span class="lineno">  102 </span><span class="spaces">    </span><span class="istickedoff">say $ &quot;Error: &quot; &lt;&gt; msg</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>-- | Backend for `errP`, `errDP`, `errX`, and `errDX` in `SAWConsole`
+<span class="lineno">  105 </span>--   in terms of a function `say` for issuing a single message. Note:
+<span class="lineno">  106 </span>--   the `SAWConsole` implementation is still responsible for bailing
+<span class="lineno">  107 </span>--   out or recording that there was an error, as appropriate.
+<span class="lineno">  108 </span>errP :: IsPosition pos =&gt; SayFunc m -&gt; pos -&gt; Text -&gt; m ()
+<span class="lineno">  109 </span><span class="decl"><span class="istickedoff">errP say pos msg = do</span>
+<span class="lineno">  110 </span><span class="spaces">    </span><span class="istickedoff">let pos' = ppPosition pos</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="istickedoff">say $ pos' &lt;&gt; &quot;: Error: &quot; &lt;&gt; msg</span></span>
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>-- | Backend for `warnN` in `SAWConsole` in terms of a function `say`
+<span class="lineno">  114 </span>--   for issuing a single message.
+<span class="lineno">  115 </span>warnN :: SayFunc m -&gt; Text -&gt; m ()
+<span class="lineno">  116 </span><span class="decl"><span class="nottickedoff">warnN say msg =</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="nottickedoff">say $ &quot;Warning: &quot; &lt;&gt; msg</span></span>
+<span class="lineno">  118 </span>
+<span class="lineno">  119 </span>-- | Backend for `warnP` and `warnX` in `SAWConsole` in terms of a
+<span class="lineno">  120 </span>--   function `say` for issuing a single message.
+<span class="lineno">  121 </span>warnP :: IsPosition pos =&gt; SayFunc m -&gt; pos -&gt; Text -&gt; m ()
+<span class="lineno">  122 </span><span class="decl"><span class="istickedoff">warnP say pos msg = do</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">let pos' = ppPosition pos</span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">say $ pos' &lt;&gt; &quot;: Warning: &quot; &lt;&gt; msg</span></span>
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>-- | Backend for `noteN` in `SAWConsole` in terms of a function `say`
+<span class="lineno">  127 </span>--   for issuing a single message.
+<span class="lineno">  128 </span>noteN :: SayFunc m -&gt; Text -&gt; m ()
+<span class="lineno">  129 </span><span class="decl"><span class="istickedoff">noteN say msg =</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: it is probably good to insert &quot;Notice:&quot; as I'd planned...</span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: but not quite yet: it creates a huge test footprint.</span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">--say $ &quot;Notice: &quot; &lt;&gt; msg</span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">say msg</span></span>
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>-- | Backend for `noteP` and `noteX` in `SAWConsole` in terms of a
+<span class="lineno">  136 </span>--   function `say` for issuing a single message.
+<span class="lineno">  137 </span>noteP :: IsPosition pos =&gt; SayFunc m -&gt; pos -&gt; Text -&gt; m ()
+<span class="lineno">  138 </span><span class="decl"><span class="nottickedoff">noteP say pos msg = do</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="nottickedoff">let pos' = ppPosition pos</span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="nottickedoff">say $ pos' &lt;&gt; &quot;: Notice: &quot; &lt;&gt; msg</span></span>
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>-- | Backend for `errN'` and `errDN'` in `SAWConsole` in terms of a
+<span class="lineno">  143 </span>--   function `say` for issuing a single message. Note: the
+<span class="lineno">  144 </span>--   `SAWConsole` implementation is still responsible for bailing out
+<span class="lineno">  145 </span>--   or recording that there was an error, respectively.
+<span class="lineno">  146 </span>--
+<span class="lineno">  147 </span>--   XXX: this will do to start with but ideally it should
+<span class="lineno">  148 </span>--      - account for the width of the &quot;Error: &quot; prefix when rendering
+<span class="lineno">  149 </span>--      - indent second and subsequent lines so long messages are visually
+<span class="lineno">  150 </span>--        distinct
+<span class="lineno">  151 </span>--
+<span class="lineno">  152 </span>--   Alternatively it's possible that we should just have a SayFunc'
+<span class="lineno">  153 </span>--   type that takes a Doc and leave all that to the implementation,
+<span class="lineno">  154 </span>--   which might want to, for example, accumulate all errors as Doc
+<span class="lineno">  155 </span>--   rather then Text.
+<span class="lineno">  156 </span>--
+<span class="lineno">  157 </span>errN' :: SayFunc m -&gt; PPS.Opts -&gt; PPS.Doc -&gt; m ()
+<span class="lineno">  158 </span><span class="decl"><span class="nottickedoff">errN' say opts msg = errN say $ PPS.renderText opts msg</span></span>
+<span class="lineno">  159 </span>
+<span class="lineno">  160 </span>-- | Backend for `errP'`, `errDP'`, `errX'`, and `errDX'` in
+<span class="lineno">  161 </span>--   `SAWConsole` in terms of a function `say` for issuing a single
+<span class="lineno">  162 </span>--   message. Note: the `SAWConsole` implementation is still
+<span class="lineno">  163 </span>--   responsible for bailing out or recording that there was an error,
+<span class="lineno">  164 </span>--   as appropriate.
+<span class="lineno">  165 </span>--
+<span class="lineno">  166 </span>--   XXX: as in errN'
+<span class="lineno">  167 </span>--
+<span class="lineno">  168 </span>errP' :: IsPosition pos =&gt; SayFunc m -&gt; PPS.Opts -&gt; pos -&gt; PPS.Doc -&gt; m ()
+<span class="lineno">  169 </span><span class="decl"><span class="istickedoff">errP' say opts pos msg = errP say pos $ PPS.renderText opts msg</span></span>
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>-- | Backend for `warnN'` in `SAWConsole` in terms of a function `say`
+<span class="lineno">  172 </span>--   for issuing a single message.
+<span class="lineno">  173 </span>--
+<span class="lineno">  174 </span>--   XXX: as in errN'
+<span class="lineno">  175 </span>--
+<span class="lineno">  176 </span>warnN' :: SayFunc m -&gt; PPS.Opts -&gt; PPS.Doc -&gt; m ()
+<span class="lineno">  177 </span><span class="decl"><span class="nottickedoff">warnN' say opts msg = warnN say $ PPS.renderText opts msg</span></span>
+<span class="lineno">  178 </span>
+<span class="lineno">  179 </span>-- | Backend for `warnP'` and `warnX'` in `SAWConsole` in terms of a
+<span class="lineno">  180 </span>--   function `say` for issuing a single message.
+<span class="lineno">  181 </span>--
+<span class="lineno">  182 </span>--   XXX: as in errN'
+<span class="lineno">  183 </span>--
+<span class="lineno">  184 </span>warnP' :: IsPosition pos =&gt; SayFunc m -&gt; PPS.Opts -&gt; pos -&gt; PPS.Doc -&gt; m ()
+<span class="lineno">  185 </span><span class="decl"><span class="istickedoff">warnP' say opts pos msg = warnP say pos $ PPS.renderText opts msg</span></span>
+<span class="lineno">  186 </span>
+<span class="lineno">  187 </span>-- | Backend for `noteN` in `SAWConsole` in terms of a function `say`
+<span class="lineno">  188 </span>--   for issuing a single message.
+<span class="lineno">  189 </span>--
+<span class="lineno">  190 </span>--   XXX: as in errN'
+<span class="lineno">  191 </span>--
+<span class="lineno">  192 </span>noteN' :: SayFunc m -&gt; PPS.Opts -&gt; PPS.Doc -&gt; m ()
+<span class="lineno">  193 </span><span class="decl"><span class="nottickedoff">noteN' say opts msg = noteN say $ PPS.renderText opts msg</span></span>
+<span class="lineno">  194 </span>
+<span class="lineno">  195 </span>-- | Backend for `noteP` and `noteX` in `SAWConsole` in terms of a
+<span class="lineno">  196 </span>--   function `say` for issuing a single message.
+<span class="lineno">  197 </span>--
+<span class="lineno">  198 </span>--   XXX: as in errN'
+<span class="lineno">  199 </span>--
+<span class="lineno">  200 </span>noteP' :: IsPosition pos =&gt; SayFunc m -&gt; PPS.Opts -&gt; pos -&gt; PPS.Doc -&gt; m ()
+<span class="lineno">  201 </span><span class="decl"><span class="nottickedoff">noteP' say opts pos msg = noteP say pos $ PPS.renderText opts msg</span></span>
+
+</pre>
+</body>
+</html>
