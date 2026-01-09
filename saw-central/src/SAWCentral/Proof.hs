@@ -619,7 +619,7 @@ sequentConstantSet sqt = foldr (\p m -> Map.union (getConstantSet (unProp p)) m)
 convertibleProps :: SharedContext -> [Prop] -> [Prop] -> IO Bool
 convertibleProps _sc [] [] = return True
 convertibleProps sc (p1:ps1) (p2:ps2) =
-  do ok1 <- scConvertible sc True (unProp p1) (unProp p2)
+  do ok1 <- scConvertible sc (unProp p1) (unProp p2)
      ok2 <- convertibleProps sc ps1 ps2
      return (ok1 && ok2)
 convertibleProps _sc _ _ = return False
@@ -1379,7 +1379,7 @@ propsSubset sc ps1 ps2 =
 -- exists y in ps where x == y
 propsElem :: SharedContext -> Prop -> [Prop] -> IO Bool
 propsElem sc x ps =
-  or <$> sequence [ scConvertible sc True (unProp x) (unProp y) | y <- ps ]
+  or <$> sequence [ scConvertible sc (unProp x) (unProp y) | y <- ps ]
 
 -- | Test if a sequent is an instance of the sequent calculus axiom.
 --   This occurs precisely when some hypothesis is convertible
@@ -1387,7 +1387,7 @@ propsElem sc x ps =
 sequentIsAxiom :: SharedContext -> Sequent -> IO Bool
 sequentIsAxiom sc sqt =
   do let RawSequent hs gs = sequentToRawSequent sqt
-     or <$> sequence [ scConvertible sc True (unProp x) (unProp y) | x <- hs, y <- gs ]
+     or <$> sequence [ scConvertible sc (unProp x) (unProp y) | x <- hs, y <- gs ]
 
 -- | Test if the first given sequent subsumes the
 --   second given sequent. This is a shallow syntactic
@@ -1575,7 +1575,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         case sequentState sqt of
           ConclFocus (Prop ptm) _ ->
             do ty <- scTypeOf sc tm
-               ok <- scConvertible sc True ptm ty
+               ok <- scConvertible sc ptm ty
                unless ok $ do
                    ptm' <- ppTerm sc PPS.defaultOpts ptm
                    tm' <- ppTerm sc PPS.defaultOpts tm
@@ -1632,7 +1632,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
             case genericDrop n hs of
               (h:_) ->
                 do (d,sy,p') <- checkApply nenv (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2)) h es
-                   ok <- scConvertible sc False (unProp g) p'
+                   ok <- scConvertible sc (unProp g) p'
                    unless ok $ do
                        g' <- ppTerm sc PPS.defaultOpts (unProp g)
                        p'' <- ppTerm sc PPS.defaultOpts p'
@@ -1656,7 +1656,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         case sequentState sqt of
           ConclFocus p mkSqt ->
             do (d,sy,p') <- checkApply nenv mkSqt (thmProp thm) es
-               ok <- scConvertible sc False (unProp p) p'
+               ok <- scConvertible sc (unProp p) p'
                unless ok $ do
                    sp <- ppTerm sc PPS.defaultOpts (unProp p)
                    sp' <- ppTerm sc PPS.defaultOpts p'
@@ -1759,7 +1759,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                   ptm' <- ppTerm sc PPS.defaultOpts ptm
                   fail $ unlines ["Intro evidence expected function prop", ptm']
               Just (nm, ty, body) ->
-                do ok <- scConvertible sc False ty xty
+                do ok <- scConvertible sc ty xty
                    unless ok $ do
                        xty' <- ppTerm sc PPS.defaultOpts xty
                        ty' <- ppTerm sc PPS.defaultOpts ty
@@ -1924,7 +1924,7 @@ predicateToSATQuery sc unintSet tm0 =
           -- TODO: check that the type is a boolean
         Nothing ->
           do ty <- scTypeOf sc tm
-             ok <- scConvertible sc True ty =<< scBoolType sc
+             ok <- scConvertible sc ty =<< scBoolType sc
              unless ok $ do
                ty' <- ppTerm sc PPS.defaultOpts ty
                tm0' <- ppTerm sc PPS.defaultOpts tm0
@@ -2270,7 +2270,7 @@ tacticTrivial sc = Tactic \goal ->
         Right pf ->
            do let gp = unProp g
               ty <- liftIO $ scTypeOf sc pf
-              ok <- liftIO $ scConvertible sc True gp ty
+              ok <- liftIO $ scConvertible sc gp ty
               unless ok $ do
                   gp' <- liftIO $ ppTerm sc PPS.defaultOpts gp
                   fail $ unlines [
@@ -2288,7 +2288,7 @@ tacticExact sc tm = Tactic \goal ->
     ConclFocus g _ ->
       do let gp = unProp g
          ty <- liftIO $ scTypeOf sc tm
-         ok <- liftIO $ scConvertible sc True gp ty
+         ok <- liftIO $ scConvertible sc gp ty
          unless ok $ do
              gp' <- liftIO $ ppTerm sc PPS.defaultOpts gp
              tm' <- liftIO $ ppTerm sc PPS.defaultOpts tm

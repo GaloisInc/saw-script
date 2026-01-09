@@ -97,7 +97,7 @@ module SAWCore.Term.Certified
   ) where
 
 import Control.Lens
-import Control.Monad (foldM, forM, join, unless, when)
+import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), runReaderT, ask)
@@ -768,14 +768,6 @@ scmDeclarePrim ident q def_tp =
      _ <- scmDeclareDef nm q def_tp Nothing
      pure ()
 
--- Internal function
-scmFindDefBody :: VarIndex -> SCM (Maybe Term)
-scmFindDefBody vi =
-  do mm <- scmGetModuleMap
-     case lookupVarIndexInMap vi mm of
-       Just (ResolvedDef d) -> pure (defBody d)
-       _ -> pure Nothing
-
 -- | Insert an \"injectCode\" declaration to the given SAWCore module.
 -- This declaration has no logical effect within SAW; it is used to
 -- add extra code (like class instance declarations, for example) to
@@ -1315,11 +1307,10 @@ scmWhnf t0 = go [] t0
 -- | Test if two terms are convertible up to the reductions performed
 -- by 'scmWhnf'.
 scmConvertible ::
-  Bool {- ^ Should constants be unfolded during this check? -} ->
   Term ->
   Term ->
   SCM Bool
-scmConvertible unfoldConst tm1 tm2 =
+scmConvertible tm1 tm2 =
   do c <- newIntCache
      go c [] [] tm1 tm2
 
@@ -1340,18 +1331,6 @@ scmConvertible unfoldConst tm1 tm2 =
 
     goF _c _env1 _env2 (Constant nm1) (Constant nm2)
       | nameIndex nm1 == nameIndex nm2 = pure True
-    goF c env1 env2 (Constant nx) y
-      | unfoldConst =
-        do mx <- scmFindDefBody (nameIndex nx)
-           case mx of
-             Just x -> join (goF c env1 env2 <$> whnf c x <*> pure y)
-             Nothing -> pure False
-    goF c env1 env2 x (Constant ny)
-      | unfoldConst =
-        do my <- scmFindDefBody (nameIndex ny)
-           case my of
-             Just y -> join (goF c env1 env2 <$> pure x <*> whnf c y)
-             Nothing -> pure False
 
     goF c env1 env2 (FTermF ftf1) (FTermF ftf2) =
       case zipWithFlatTermF (go c env1 env2) ftf1 ftf2 of
@@ -1396,15 +1375,15 @@ scmSubtype t1 t2
            pure (s1 <= s2)
          (unwrapTermF -> Pi x1 a1 b1, unwrapTermF -> Pi x2 a2 b2)
            | x1 == x2 ->
-             (&&) <$> scmConvertible True a1 a2 <*> scmSubtype b1 b2
+             (&&) <$> scmConvertible a1 a2 <*> scmSubtype b1 b2
            | otherwise ->
-             do conv1 <- scmConvertible True a1 a2
+             do conv1 <- scmConvertible a1 a2
                 var1 <- scmVariable x1 a1
                 b2' <- scmInstantiate (IntMap.singleton (vnIndex x2) var1) b2
                 conv2 <- scmSubtype b1 b2'
                 pure (conv1 && conv2)
          _ ->
-           scmConvertible True t1' t2'
+           scmConvertible t1' t2'
 
 
 --------------------------------------------------------------------------------
