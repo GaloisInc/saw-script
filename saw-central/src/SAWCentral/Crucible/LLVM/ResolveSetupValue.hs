@@ -271,16 +271,15 @@ reverseBaseTypeInfo dibt =
    Dwarf.DW_ATE_boolean -> Just $ L.PrimType $ L.Integer 1
 
    Dwarf.DW_ATE_float ->
-     
      case L.dibtSize dibt of
        Just (L.ValMdValue (L.Typed _ (L.ValInteger sz))) ->
-         (case sz of
+         case sz of
            16  -> Just $ L.PrimType $ L.FloatType $ L.Half
            32  -> Just $ L.PrimType $ L.FloatType $ L.Float
            64  -> Just $ L.PrimType $ L.FloatType $ L.Double
            80  -> Just $ L.PrimType $ L.FloatType $ L.X86_fp80
            128 -> Just $ L.PrimType $ L.FloatType $ L.Fp128
-           _   -> Nothing)
+           _   -> Nothing
        _   -> Nothing
 
    Dwarf.DW_ATE_signed ->
