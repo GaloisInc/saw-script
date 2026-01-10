@@ -210,6 +210,7 @@ tasty +unix
 unix
 unix-compat
 unix-time
+zlib -bundled-c-zlib +non-blocking-ffi +pkg-config
 ```
 
 ## Acknowledgements
