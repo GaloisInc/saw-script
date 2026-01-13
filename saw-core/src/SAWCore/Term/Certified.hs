@@ -566,7 +566,8 @@ scmEnsureNotFreeInContext x body =
 scmUnifyVarTypes :: Text -> IntMap Term -> IntMap Term -> SCM (IntMap Term)
 scmUnifyVarTypes msg ctx1 ctx2 =
   do let check i t1 t2 =
-           unless (t1 == t2) $ scmError (VariableContextMismatch msg i t1 t2)
+           unless (termIndex t1 == termIndex t2) $
+           scmError (VariableContextMismatch msg i t1 t2)
      sequence_ (IntMap.intersectionWithKey check ctx1 ctx2)
      pure (IntMap.union ctx1 ctx2)
 
