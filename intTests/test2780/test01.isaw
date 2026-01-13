@@ -1,0 +1,6 @@
+:type prove_print
+:type prove_print z3
+:type (prove_print z3)
+:help prove_print
+:help prove_print z3
+:help (prove_print z3)

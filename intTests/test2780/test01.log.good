@@ -1,0 +1,13 @@
+ProofScript () -> Term -> TopLevel Theorem
+Term -> TopLevel Theorem
+Term -> TopLevel Theorem
+Description
+-----------
+
+    prove_print : ProofScript () -> Term -> TopLevel Theorem
+
+Use the given proof script to attempt to prove that a term is
+valid (true for all inputs). Returns a Theorem if successful,
+and fails if unsuccessful.
+The command :help takes only one argument
+The command :help takes only one argument
