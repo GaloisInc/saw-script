@@ -32,7 +32,6 @@ import Data.Hashable
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
-import Data.List (elemIndex)
 
 import Instances.TH.Lift () -- for instance TH.Lift Text
 
@@ -142,26 +141,29 @@ equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1, stAppType = 
 -- 'VarName's in 'Lambda' and 'Pi' expressions).
 -- The types of the terms are not inspected.
 alphaEquiv :: Term -> Term -> Bool
-alphaEquiv = term [] []
+alphaEquiv = term emptyVarCtx emptyVarCtx
   where
-    term :: [VarName] -> [VarName] -> Term -> Term -> Bool
-    term env1 env2
+    term :: VarCtx -> VarCtx -> Term -> Term -> Bool
+    term env1@(VarCtx _ m1) env2@(VarCtx _ m2)
       (STApp{stAppIndex = i1, stAppTermF = tf1, stAppVarTypes = vt1})
-      (STApp{stAppIndex = i2, stAppTermF = tf2}) =
-      (i1 == i2 && IntMap.null vt1) || termf env1 env2 tf1 tf2
+      (STApp{stAppIndex = i2, stAppTermF = tf2, stAppVarTypes = vt2}) =
+      -- succeed early for equal terms, but only if all bound
+      -- variables refer to the same de Bruijn indices
+      (i1 == i2 && IntMap.intersection m1 vt1 == IntMap.intersection m2 vt2) ||
+      termf env1 env2 tf1 tf2
 
-    termf :: [VarName] -> [VarName] -> TermF Term -> TermF Term -> Bool
+    termf :: VarCtx -> VarCtx -> TermF Term -> TermF Term -> Bool
     termf env1 env2 (FTermF ftf1) (FTermF ftf2) =
       ftermf env1 env2 ftf1 ftf2
     termf env1 env2 (App t1 u1) (App t2 u2) =
       term env1 env2 t1 t2 && term env1 env2 u1 u2
     termf env1 env2 (Lambda x1 t1 u1) (Lambda x2 t2 u2) =
-      term env1 env2 t1 t2 && term (x1 : env1) (x2 : env2) u1 u2
+      term env1 env2 t1 t2 && term (consVarCtx x1 env1) (consVarCtx x2 env2) u1 u2
     termf env1 env2 (Pi x1 t1 u1) (Pi x2 t2 u2) =
-      term env1 env2 t1 t2 && term (x1 : env1) (x2 : env2) u1 u2
+      term env1 env2 t1 t2 && term (consVarCtx x1 env1) (consVarCtx x2 env2) u1 u2
     termf _env1 _env2 (Constant x1) (Constant x2) = x1 == x2
     termf env1 env2 (Variable x1 ty1) (Variable x2 ty2) =
-      case (elemIndex x1 env1, elemIndex x2 env2) of
+      case (lookupVarCtx x1 env1, lookupVarCtx x2 env2) of
         (Just i1, Just i2) -> i1 == i2
         (Nothing, Nothing) -> x1 == x2 && term env1 env2 ty1 ty2
         _ -> False
@@ -172,7 +174,7 @@ alphaEquiv = term [] []
     termf _ _ Constant{} _ = False
     termf _ _ Variable{} _ = False
 
-    ftermf :: [VarName] -> [VarName] -> FlatTermF Term -> FlatTermF Term -> Bool
+    ftermf :: VarCtx -> VarCtx -> FlatTermF Term -> FlatTermF Term -> Bool
     ftermf env1 env2 ftf1 ftf2 =
       case zipWithFlatTermF (term env1 env2) ftf1 ftf2 of
         Nothing -> False
