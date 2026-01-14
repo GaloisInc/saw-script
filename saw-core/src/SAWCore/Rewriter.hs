@@ -222,7 +222,7 @@ scMatch ::
 scMatch sc ctxt pat term =
   runMaybeT $
   do -- lift $ putStrLn $ "********** scMatch **********"
-     MatchState inst cs <- match [] [] pat term emptyMatchState
+     MatchState inst cs <- match emptyVarCtx emptyVarCtx [] pat term emptyMatchState
      mapM_ (check inst) cs
      return inst
   where
@@ -246,7 +246,7 @@ scMatch sc ctxt pat term =
     -- Check if a term is a higher-order variable pattern, i.e., a free variable
     -- (meaning one that can match anything) applied to 0 or more bound variable
     -- arguments.
-    asVarPat :: [VarName] -> Term -> Maybe (VarIndex, [Int])
+    asVarPat :: VarCtx -> Term -> Maybe (VarIndex, [Int])
     asVarPat locals = go []
       where
         go js t =
@@ -255,7 +255,7 @@ scMatch sc ctxt pat term =
               | IntSet.member (vnIndex x) ixs -> Just (vnIndex x, js)
               | otherwise  -> Nothing
             App t1 (unwrapTermF -> Variable x _) ->
-              case List.elemIndex x locals of
+              case lookupVarCtx x locals of
                 Just j -> go (j : js) t1
                 Nothing -> Nothing
             _ -> Nothing
@@ -264,10 +264,15 @@ scMatch sc ctxt pat term =
     -- to the free variables of x to make it equal to y.
     -- The IntMap contains the VarIndexes of locally bound variables.
     -- The first two arguments are the bound variable contexts of x and y, respectively.
-    match :: [VarName] -> [(VarName, Term)] -> Term -> Term -> MatchState -> MaybeT IO MatchState
-    match _ _ x y s
-      | closedTerm x && termIndex x == termIndex y = pure s
-    match xenv yenv x y s@(MatchState m cs) =
+    match ::
+      VarCtx -> VarCtx -> [(VarName, Term)] ->
+      Term -> Term -> MatchState -> MaybeT IO MatchState
+    match (VarCtx _ xm) (VarCtx _ ym) _ x y s
+      | termIndex x == termIndex y &&
+        -- bound variables must also refer to the same de Bruijn indices
+        IntMap.intersection xm (varTypes x) ==
+        IntMap.intersection ym (varTypes y) = pure s
+    match xenv yenv ybinds x y s@(MatchState m cs) =
       -- (lift $ putStrLn $ "matching (lhs): " ++ ppTermPure PPS.defaultOpts x) >>
       -- (lift $ putStrLn $ "matching (rhs): " ++ ppTermPure PPS.defaultOpts y) >>
       case asVarPat xenv x of
@@ -280,11 +285,12 @@ scMatch sc ctxt pat term =
         Just (i, js) ->
           do -- ensure parameter variables are distinct
              guard (Set.size (Set.fromList js) == length js)
-             let vs = map (yenv !!) js
-             -- ensure y mentions no local variables not in vs
-             let vset = IntSet.fromList (map (vnIndex . fst) vs)
-             let locals = IntSet.fromList (map (vnIndex . fst) yenv)
-             guard (IntSet.disjoint (IntSet.difference locals vset) (freeVars y))
+             -- ensure y mentions no local variables not in js
+             let VarCtx ysize ym = yenv
+             let ks = map (ysize -) $ IntMap.elems $ IntMap.intersection ym (varTypes y)
+             -- ks must be a subset of js
+             guard (IntSet.isSubsetOf (IntSet.fromList ks) (IntSet.fromList js))
+             let vs = map (ybinds !!) js
              y2 <- lift $ scLambdaList sc vs y
              let (my3, m') = insertLookup i y2 m
              case my3 of
@@ -294,17 +300,20 @@ scMatch sc ctxt pat term =
           case (unwrapTermF x, unwrapTermF y) of
             -- check that neither x nor y contains bound variables less than `depth`
             (FTermF xf, FTermF yf) ->
-              case zipWithFlatTermF (match xenv yenv) xf yf of
+              case zipWithFlatTermF (match xenv yenv ybinds) xf yf of
                 Nothing -> mzero
                 Just zf -> Foldable.foldl (>=>) return zf s
             (App x1 x2, App y1 y2) ->
-              match xenv yenv x1 y1 s >>= match xenv yenv x2 y2
+              do s' <- match xenv yenv ybinds x1 y1 s
+                 match xenv yenv ybinds x2 y2 s'
             (Lambda xv xt xbody, Lambda yv yt ybody) ->
-              match xenv yenv xt yt s >>= match (xv : xenv) ((yv, yt) : yenv) xbody ybody
+              do s' <- match xenv yenv ybinds xt yt s
+                 match (consVarCtx xv xenv) (consVarCtx yv yenv) ((yv, yt) : ybinds) xbody ybody s'
             (Pi xv x1 x2, Pi yv y1 y2) ->
-              match xenv yenv x1 y1 s >>= match (xv : xenv) ((yv, y1) : yenv) x2 y2
+              do s' <- match xenv yenv ybinds x1 y1 s
+                 match (consVarCtx xv xenv) (consVarCtx yv yenv) ((yv, y1) : ybinds) x2 y2 s'
             (Variable xv _, Variable yv _) ->
-              case (List.elemIndex xv xenv, List.elemIndex yv (map fst yenv)) of
+              case (lookupVarCtx xv xenv, lookupVarCtx yv yenv) of
                 (Just xj, Just yj) | xj == yj -> pure s
                 (Nothing, Nothing) | xv == yv -> pure s
                 _ -> mzero
