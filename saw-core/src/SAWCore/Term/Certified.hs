@@ -112,7 +112,7 @@ import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
 import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef',writeIORef)
-import Data.List (elemIndex, find)
+import Data.List (find)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -1312,22 +1312,25 @@ scmConvertible ::
   SCM Bool
 scmConvertible tm1 tm2 =
   do c <- newIntCache
-     go c [] [] tm1 tm2
+     go c emptyVarCtx emptyVarCtx tm1 tm2
 
   where
     whnf :: IntCache SCM Term -> Term -> SCM (TermF Term)
     whnf c t@STApp{stAppIndex = idx} =
       unwrapTermF <$> useIntCache c idx (scmWhnf t)
 
-    go :: IntCache SCM Term -> [VarName] -> [VarName] -> Term -> Term -> SCM Bool
-    go c env1 env2 t1 t2
-      | closedTerm t1 && termIndex t1 == termIndex t2 = pure True -- succeed early case
+    go :: IntCache SCM Term -> VarCtx -> VarCtx -> Term -> Term -> SCM Bool
+    go c env1@(VarCtx _ m1) env2@(VarCtx _ m2) t1 t2
+      | termIndex t1 == termIndex t2 &&
+        -- bound variables must also refer to the same de Bruijn indices
+        IntMap.intersection m1 (varTypes t1) ==
+        IntMap.intersection m2 (varTypes t2) = pure True -- succeed early case
       | otherwise =
         do tf1 <- whnf c t1
            tf2 <- whnf c t2
            goF c env1 env2 tf1 tf2
 
-    goF :: IntCache SCM Term -> [VarName] -> [VarName] -> TermF Term -> TermF Term -> SCM Bool
+    goF :: IntCache SCM Term -> VarCtx -> VarCtx -> TermF Term -> TermF Term -> SCM Bool
 
     goF _c _env1 _env2 (Constant nm1) (Constant nm2)
       | nameIndex nm1 == nameIndex nm2 = pure True
@@ -1344,16 +1347,16 @@ scmConvertible tm1 tm2 =
 
     goF c env1 env2 (Lambda x1 ty1 body1) (Lambda x2 ty2 body2) =
       do a <- go c env1 env2 ty1 ty2
-         b <- go c (x1 : env1) (x2 : env2) body1 body2
+         b <- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2
          pure (a && b)
 
     goF c env1 env2 (Pi x1 ty1 body1) (Pi x2 ty2 body2) =
       do a <- go c env1 env2 ty1 ty2
-         b <- go c (x1 : env1) (x2 : env2) body1 body2
+         b <- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2
          pure (a && b)
 
     goF c env1 env2 (Variable x1 t1) (Variable x2 t2) =
-      case (elemIndex x1 env1, elemIndex x2 env2) of
+      case (lookupVarCtx x1 env1, lookupVarCtx x2 env2) of
         (Just i1, Just i2) | i1 == i2 -> pure True
         (Nothing, Nothing) | x1 == x2 -> go c env1 env2 t1 t2
         _ -> pure False
