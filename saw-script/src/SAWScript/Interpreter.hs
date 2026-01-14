@@ -2704,11 +2704,11 @@ primitives = Map.fromList $
 
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
-    WarnDeprecated
+    HideDeprecated
     [ "Print all SAWScript values in scope."
     , "Deprecated; use the :env REPL command instead."
     , ""
-    , "Expected to be hidden by default in SAW 1.5."
+    , "Expected to be removed in SAW 1.6."
     ]
 
   , prim "show"                "{a} a -> String"
@@ -3874,25 +3874,6 @@ primitives = Map.fromList $
     Current
     [ "Merge two simplification sets into one." ]
 
-  , prim "addsimp'"            "Term -> Simpset -> Simpset"
-    (funVal2 addsimp')
-    HideDeprecated
-    [ "Add an arbitrary equality term to a simplification rule set."
-    , "Deprecated; use 'admit' or 'core_axiom' and 'addsimp' instead."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
-    (funVal2 addsimps')
-    HideDeprecated
-    [ "Add multiple arbitrary equality terms to a simplification rule"
-    , "set. Deprecated; use 'admit' or 'core_axiom' and 'addsimps'"
-    , "instead."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
   , prim "basic_ss"            "Simpset"
     (bicVal $ \bic _ -> toValue "basic_ss" $ biBasicSS bic)
     Current
@@ -5017,6 +4998,7 @@ primitives = Map.fromList $
     (pureVal do_write_rocq_term)
     WarnDeprecated
     [ "Legacy alternative name for 'write_rocq_term'."
+    , "Expected to be hidden by default in SAW 1.6."
     ]
 
   , prim "write_rocq_cryptol_module" ("String -> String -> " <>
@@ -5044,6 +5026,7 @@ primitives = Map.fromList $
     (pureVal do_write_rocq_cryptol_module)
     WarnDeprecated
     [ "Legacy alternative name for 'write_rocq_cryptol_module'."
+    , "Expected to be hidden by default in SAW 1.6."
     ]
 
   , prim "write_rocq_sawcore_prelude" ("String -> [(String, String)] -> " <>
@@ -5067,6 +5050,7 @@ primitives = Map.fromList $
     (pureVal do_write_rocq_sawcore_prelude)
     WarnDeprecated
     [ "Legacy alternative name for 'write_rocq_sawcore_prelude'."
+    , "Expected to be hidden by default in SAW 1.6."
     ]
 
   , prim "write_rocq_cryptol_primitives_for_sawcore"
@@ -5091,6 +5075,7 @@ primitives = Map.fromList $
     (pureVal do_write_rocq_cryptol_primitives_for_sawcore)
     WarnDeprecated
     [ "Legacy alternative name for 'write_rocq_cryptol_primitives_for_sawcore'."
+    , "Expected to be hidden by default in SAW 1.6."
     ]
 
   , prim "offline_rocq" "String -> ProofScript ()"
@@ -5104,6 +5089,7 @@ primitives = Map.fromList $
     (pureVal do_offline_rocq)
     WarnDeprecated
     [ "Legacy alternative name for 'offline_rocq'."
+    , "Expected to be hidden by default in SAW 1.6."
     ]
 
     ------------------------------------------------------------
@@ -5261,7 +5247,7 @@ primitives = Map.fromList $
     , "If you are trying to create a struct type from its contents, you"
     , "want llvm_struct_type."
     , ""
-    , "Expected to be hidden by default in SAW 1.5."
+    , "Expected to be hidden by default in SAW 1.6."
     ]
 
   , prim "llvm_struct_type"
@@ -5416,17 +5402,6 @@ primitives = Map.fromList $
     [ "Cast the type of the given LLVM value, which must be a pointer."
     , "The resulting value will be a pointer to the same location,"
     , "treated as a pointer to the provided type."
-    ]
-
-  , prim "crucible_setup_val_to_term"
-    " LLVMValue -> TopLevel Term"
-    (pureVal crucible_setup_val_to_typed_term)
-    HideDeprecated
-    [ "Convert from a setup value to a typed term. This can only be"
-    , "done for a subset of setup values. Fails if a setup value is a"
-    , "global, variable, or null."
-    , ""
-    , "Expected to be removed in SAW 1.5."
     ]
 
     ------------------------------------------------------------

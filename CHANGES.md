@@ -16,6 +16,17 @@ This release supports [version
 
 ## Changes
 
+* The following deprecated SAWScript builtins have been removed:
+  - `addsimp'`
+  - `addsimps'`
+  - `crucible_setup_val_to_term`
+
+* The following deprecated SAWScript builtins are now hidden by default:
+  - `env`
+
+  `llvm_struct` was also scheduled to be hidden in 1.5; this has been
+  postponed to 1.6 for internal reasons.
+
 * The following solver builtins / proof tactics have been renamed for
   consistency.
   The old names remain but have been marked deprecated.

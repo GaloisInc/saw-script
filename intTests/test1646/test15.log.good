@@ -105,7 +105,6 @@ enable_lax_loads_and_stores : TopLevel ()
 enable_lax_pointer_ordering : TopLevel ()
 enable_smt_array_memory_model : TopLevel ()
 enable_what4_hash_consing : TopLevel ()
-env : TopLevel ()
 eval_bool : Term -> Bool
 eval_int : Term -> Int
 eval_list : Term -> [Term]
