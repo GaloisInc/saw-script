@@ -359,7 +359,6 @@ completeReplCommand text cursor =
                         ExprArg _   -> completeSAWScriptValue (last args) cursor
                         TypeArgs _  -> completeSAWScriptType (last args) cursor
                         FilenameArg _ -> completeFilename cursor
-                        ShellArg _    -> completeFilename cursor
                         NoArg       _ -> return (cursorLeftRaw cursor, [])
 
 -- | Top-level completion for the REPL.

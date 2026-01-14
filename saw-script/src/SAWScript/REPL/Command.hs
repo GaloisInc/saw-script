@@ -319,7 +319,6 @@ data CommandBody
   = ExprArg     (Text     -> REPL ())
   | TypeArgs    (Text     -> REPL ())
   | FilenameArg (FilePath -> REPL ())
-  | ShellArg    (Text     -> REPL ())
   | NoArg       (REPL ())
 
 type CommandMap = Trie CommandDescr
@@ -463,8 +462,6 @@ executeReplCommand cmd args0 =
         FilenameArg action -> do
             args' <- mapM expandHome args0
             onearg action args'
-        ShellArg action ->
-            onearg action args0
         NoArg action ->
             noargs action args0
 
