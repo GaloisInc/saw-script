@@ -141,38 +141,42 @@ equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1, stAppType = 
 -- 'VarName's in 'Lambda' and 'Pi' expressions).
 -- The types of the terms are not inspected.
 alphaEquiv :: Term -> Term -> Bool
-alphaEquiv = term IntMap.empty
+alphaEquiv = term emptyVarCtx emptyVarCtx
   where
-    term :: IntMap VarIndex -> Term -> Term -> Bool
-    term vm
+    term :: VarCtx -> VarCtx -> Term -> Term -> Bool
+    term env1@(VarCtx _ m1) env2@(VarCtx _ m2)
       (STApp{stAppIndex = i1, stAppTermF = tf1, stAppVarTypes = vt1})
-      (STApp{stAppIndex = i2, stAppTermF = tf2}) =
-      (IntMap.disjoint vt1 vm && i1 == i2) || termf vm tf1 tf2
+      (STApp{stAppIndex = i2, stAppTermF = tf2, stAppVarTypes = vt2}) =
+      -- succeed early for equal terms, but only if all bound
+      -- variables refer to the same de Bruijn indices
+      (i1 == i2 && IntMap.intersection m1 vt1 == IntMap.intersection m2 vt2) ||
+      termf env1 env2 tf1 tf2
 
-    termf :: IntMap VarIndex -> TermF Term -> TermF Term -> Bool
-    termf vm (FTermF ftf1) (FTermF ftf2) = ftermf vm ftf1 ftf2
-    termf vm (App t1 u1) (App t2 u2) = term vm t1 t2 && term vm u1 u2
-    termf vm (Lambda (vnIndex -> i1) t1 u1) (Lambda (vnIndex -> i2) t2 u2) =
-      let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
-      in term vm t1 t2 && term vm' u1 u2
-    termf vm (Pi (vnIndex -> i1) t1 u1) (Pi (vnIndex -> i2) t2 u2) =
-      let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
-      in term vm t1 t2 && term vm' u1 u2
-    termf _vm (Constant x1) (Constant x2) = x1 == x2
-    termf vm (Variable x1 _t1) (Variable x2 _t2) =
-      case IntMap.lookup (vnIndex x1) vm of
-        Just i -> vnIndex x2 == i
-        Nothing -> x1 == x2
-    termf _ FTermF{}   _ = False
-    termf _ App{}      _ = False
-    termf _ Lambda{}   _ = False
-    termf _ Pi{}       _ = False
-    termf _ Constant{} _ = False
-    termf _ Variable{} _ = False
+    termf :: VarCtx -> VarCtx -> TermF Term -> TermF Term -> Bool
+    termf env1 env2 (FTermF ftf1) (FTermF ftf2) =
+      ftermf env1 env2 ftf1 ftf2
+    termf env1 env2 (App t1 u1) (App t2 u2) =
+      term env1 env2 t1 t2 && term env1 env2 u1 u2
+    termf env1 env2 (Lambda x1 t1 u1) (Lambda x2 t2 u2) =
+      term env1 env2 t1 t2 && term (consVarCtx x1 env1) (consVarCtx x2 env2) u1 u2
+    termf env1 env2 (Pi x1 t1 u1) (Pi x2 t2 u2) =
+      term env1 env2 t1 t2 && term (consVarCtx x1 env1) (consVarCtx x2 env2) u1 u2
+    termf _env1 _env2 (Constant x1) (Constant x2) = x1 == x2
+    termf env1 env2 (Variable x1 ty1) (Variable x2 ty2) =
+      case (lookupVarCtx x1 env1, lookupVarCtx x2 env2) of
+        (Just i1, Just i2) -> i1 == i2
+        (Nothing, Nothing) -> x1 == x2 && term env1 env2 ty1 ty2
+        _ -> False
+    termf _ _ FTermF{}   _ = False
+    termf _ _ App{}      _ = False
+    termf _ _ Lambda{}   _ = False
+    termf _ _ Pi{}       _ = False
+    termf _ _ Constant{} _ = False
+    termf _ _ Variable{} _ = False
 
-    ftermf :: IntMap Int -> FlatTermF Term -> FlatTermF Term -> Bool
-    ftermf vm ftf1 ftf2 =
-      case zipWithFlatTermF (term vm) ftf1 ftf2 of
+    ftermf :: VarCtx -> VarCtx -> FlatTermF Term -> FlatTermF Term -> Bool
+    ftermf env1 env2 ftf1 ftf2 =
+      case zipWithFlatTermF (term env1 env2) ftf1 ftf2 of
         Nothing -> False
         Just ftf3 -> Foldable.and ftf3
 

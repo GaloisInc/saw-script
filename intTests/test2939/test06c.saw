@@ -17,7 +17,6 @@ prove_print (do {
    simplify (addsimp and_true_r empty_ss);
    print_goal;
    goal_apply eq_refl_bool;
-   trivial;
 }) {{
    \y -> y && True == y
 }};

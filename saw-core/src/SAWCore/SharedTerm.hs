@@ -1030,12 +1030,11 @@ scWhnf sc t = execSCM sc (scmWhnf t)
 -- by 'scWhnf'.
 scConvertible ::
   SharedContext ->
-  Bool {- ^ Should constants be unfolded during this check? -} ->
   Term ->
   Term ->
   IO Bool
-scConvertible sc unfoldConst t1 t2 =
-  execSCM sc (scmConvertible unfoldConst t1 t2)
+scConvertible sc t1 t2 =
+  execSCM sc (scmConvertible t1 t2)
 
 -- | Check whether one type is a subtype of another: Either they are
 -- convertible, or they are both Pi types with convertible argument

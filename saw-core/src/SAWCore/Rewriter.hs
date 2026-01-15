@@ -222,7 +222,7 @@ scMatch ::
 scMatch sc ctxt pat term =
   runMaybeT $
   do -- lift $ putStrLn $ "********** scMatch **********"
-     MatchState inst cs <- match IntSet.empty pat term emptyMatchState
+     MatchState inst cs <- match emptyVarCtx emptyVarCtx [] pat term emptyMatchState
      mapM_ (check inst) cs
      return inst
   where
@@ -246,40 +246,51 @@ scMatch sc ctxt pat term =
     -- Check if a term is a higher-order variable pattern, i.e., a free variable
     -- (meaning one that can match anything) applied to 0 or more bound variable
     -- arguments.
-    asVarPat :: IntSet -> Term -> Maybe (VarIndex, [(VarName, Term)])
+    asVarPat :: VarCtx -> Term -> Maybe (VarIndex, [Int])
     asVarPat locals = go []
       where
-        go js x =
-          case unwrapTermF x of
-            Variable nm _tp
-              | IntSet.member (vnIndex nm) ixs -> Just (vnIndex nm, js)
+        go js t =
+          case unwrapTermF t of
+            Variable x _tp
+              | IntSet.member (vnIndex x) ixs -> Just (vnIndex x, js)
               | otherwise  -> Nothing
-            App t (unwrapTermF -> Variable nm tp)
-              | IntSet.member (vnIndex nm) locals -> go ((nm, tp) : js) t
+            App t1 (unwrapTermF -> Variable x _) ->
+              case lookupVarCtx x locals of
+                Just j -> go (j : js) t1
+                Nothing -> Nothing
             _ -> Nothing
 
     -- Test if term y matches pattern x, meaning whether there is a substitution
     -- to the free variables of x to make it equal to y.
-    -- The IntSet contains the VarIndexes named variables that are locally bound.
-    match :: IntSet -> Term -> Term -> MatchState -> MaybeT IO MatchState
-    match _ x y s
-      | closedTerm x && termIndex x == termIndex y = pure s
-    match locals x y s@(MatchState m cs) =
+    -- The IntMap contains the VarIndexes of locally bound variables.
+    -- The first two arguments are the bound variable contexts of x and y, respectively.
+    match ::
+      VarCtx -> VarCtx -> [(VarName, Term)] ->
+      Term -> Term -> MatchState -> MaybeT IO MatchState
+    match (VarCtx _ xm) (VarCtx _ ym) _ x y s
+      | termIndex x == termIndex y &&
+        -- bound variables must also refer to the same de Bruijn indices
+        IntMap.intersection xm (varTypes x) ==
+        IntMap.intersection ym (varTypes y) = pure s
+    match xenv yenv ybinds x y s@(MatchState m cs) =
       -- (lift $ putStrLn $ "matching (lhs): " ++ ppTermPure PPS.defaultOpts x) >>
       -- (lift $ putStrLn $ "matching (rhs): " ++ ppTermPure PPS.defaultOpts y) >>
-      case asVarPat locals x of
+      case asVarPat xenv x of
         -- If the lhs pattern is of the form (?u b1..bk) where ?u is a
         -- unification variable and b1..bk are all locally bound
         -- variables: First check whether the rhs contains any locally
         -- bound variables *not* in the list b1..bk. If it contains any
         -- others, then there is no match. If it only uses a subset of
         -- b1..bk, then we can instantiate ?u to (\b1..bk -> rhs).
-        Just (i, vs) ->
+        Just (i, js) ->
           do -- ensure parameter variables are distinct
-             guard (Set.size (Set.fromList vs) == length vs)
-             -- ensure y mentions only variables that are in vs
-             let vset = IntSet.fromList (map (vnIndex . fst) vs)
-             guard (IntSet.disjoint (IntSet.difference locals vset) (freeVars y))
+             guard (Set.size (Set.fromList js) == length js)
+             -- ensure y mentions no local variables not in js
+             let VarCtx ysize ym = yenv
+             let ks = map (ysize -) $ IntMap.elems $ IntMap.intersection ym (varTypes y)
+             -- ks must be a subset of js
+             guard (IntSet.isSubsetOf (IntSet.fromList ks) (IntSet.fromList js))
+             let vs = map (ybinds !!) js
              y2 <- lift $ scLambdaList sc vs y
              let (my3, m') = insertLookup i y2 m
              case my3 of
@@ -289,18 +300,26 @@ scMatch sc ctxt pat term =
           case (unwrapTermF x, unwrapTermF y) of
             -- check that neither x nor y contains bound variables less than `depth`
             (FTermF xf, FTermF yf) ->
-              case zipWithFlatTermF (match locals) xf yf of
+              case zipWithFlatTermF (match xenv yenv ybinds) xf yf of
                 Nothing -> mzero
                 Just zf -> Foldable.foldl (>=>) return zf s
             (App x1 x2, App y1 y2) ->
-              match locals x1 y1 s >>= match locals x2 y2
-            (Lambda nm t1 x1, Lambda _ t2 x2) ->
-              match locals t1 t2 s >>= match (IntSet.insert (vnIndex nm) locals) x1 x2
-            (Pi nm t1 x1, Pi _ t2 x2) ->
-              match locals t1 t2 s >>= match (IntSet.insert (vnIndex nm) locals) x1 x2
+              do s' <- match xenv yenv ybinds x1 y1 s
+                 match xenv yenv ybinds x2 y2 s'
+            (Lambda xv xt xbody, Lambda yv yt ybody) ->
+              do s' <- match xenv yenv ybinds xt yt s
+                 match (consVarCtx xv xenv) (consVarCtx yv yenv) ((yv, yt) : ybinds) xbody ybody s'
+            (Pi xv x1 x2, Pi yv y1 y2) ->
+              do s' <- match xenv yenv ybinds x1 y1 s
+                 match (consVarCtx xv xenv) (consVarCtx yv yenv) ((yv, y1) : ybinds) x2 y2 s'
+            (Variable xv _, Variable yv _) ->
+              case (lookupVarCtx xv xenv, lookupVarCtx yv yenv) of
+                (Just xj, Just yj) | xj == yj -> pure s
+                (Nothing, Nothing) | xv == yv -> pure s
+                _ -> mzero
             (_, _) ->
-              -- other possible matches are local vars and constants
-              if x == y then return s else mzero
+              -- other possible matches include constants
+              if x == y then pure s else mzero
 
 ----------------------------------------------------------------------
 -- Building rewrite rules

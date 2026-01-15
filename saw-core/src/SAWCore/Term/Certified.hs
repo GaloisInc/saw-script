@@ -97,7 +97,7 @@ module SAWCore.Term.Certified
   ) where
 
 import Control.Lens
-import Control.Monad (foldM, forM, join, unless, when)
+import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), runReaderT, ask)
@@ -768,14 +768,6 @@ scmDeclarePrim ident q def_tp =
      _ <- scmDeclareDef nm q def_tp Nothing
      pure ()
 
--- Internal function
-scmFindDefBody :: VarIndex -> SCM (Maybe Term)
-scmFindDefBody vi =
-  do mm <- scmGetModuleMap
-     case lookupVarIndexInMap vi mm of
-       Just (ResolvedDef d) -> pure (defBody d)
-       _ -> pure Nothing
-
 -- | Insert an \"injectCode\" declaration to the given SAWCore module.
 -- This declaration has no logical effect within SAW; it is used to
 -- add extra code (like class instance declarations, for example) to
@@ -1312,68 +1304,65 @@ scmWhnf t0 = go [] t0
           Just (t : ts, xs')
     splitApps _ _ = Nothing
 
--- | Test if two terms are convertible up to a given evaluation procedure. In
--- practice, this procedure is usually 'scWhnf', possibly combined with some
--- rewriting.
+-- | Test if two terms are convertible up to the reductions performed
+-- by 'scmWhnf'.
 scmConvertible ::
-  Bool {- ^ Should constants be unfolded during this check? -} ->
   Term ->
   Term ->
   SCM Bool
-scmConvertible unfoldConst tm1 tm2 =
+scmConvertible tm1 tm2 =
   do c <- newIntCache
-     go c IntMap.empty tm1 tm2
+     go c emptyVarCtx emptyVarCtx tm1 tm2
 
   where
     whnf :: IntCache SCM Term -> Term -> SCM (TermF Term)
     whnf c t@STApp{stAppIndex = idx} =
       unwrapTermF <$> useIntCache c idx (scmWhnf t)
 
-    go :: IntCache SCM Term -> IntMap VarIndex -> Term -> Term -> SCM Bool
-    go _c vm (STApp{stAppIndex = idx1, stAppVarTypes = vt1}) (STApp{stAppIndex = idx2})
-      | IntMap.disjoint vt1 vm && idx1 == idx2 = pure True   -- succeed early case
-    go c vm t1 t2 = join (goF c vm <$> whnf c t1 <*> whnf c t2)
+    go :: IntCache SCM Term -> VarCtx -> VarCtx -> Term -> Term -> SCM Bool
+    go c env1@(VarCtx _ m1) env2@(VarCtx _ m2) t1 t2
+      | termIndex t1 == termIndex t2 &&
+        -- bound variables must also refer to the same de Bruijn indices
+        IntMap.intersection m1 (varTypes t1) ==
+        IntMap.intersection m2 (varTypes t2) = pure True -- succeed early case
+      | otherwise =
+        do tf1 <- whnf c t1
+           tf2 <- whnf c t2
+           goF c env1 env2 tf1 tf2
 
-    goF :: IntCache SCM Term -> IntMap VarIndex -> TermF Term -> TermF Term -> SCM Bool
+    goF :: IntCache SCM Term -> VarCtx -> VarCtx -> TermF Term -> TermF Term -> SCM Bool
 
-    goF _c _vm (Constant nx) (Constant ny) | nameIndex nx == nameIndex ny = pure True
-    goF c vm (Constant nx) y
-        | unfoldConst =
-          do mx <- scmFindDefBody (nameIndex nx)
-             case mx of
-               Just x -> join (goF c vm <$> whnf c x <*> return y)
-               Nothing -> pure False
-    goF c vm x (Constant ny)
-        | unfoldConst =
-          do my <- scmFindDefBody (nameIndex ny)
-             case my of
-               Just y -> join (goF c vm <$> return x <*> whnf c y)
-               Nothing -> pure False
+    goF _c _env1 _env2 (Constant nm1) (Constant nm2)
+      | nameIndex nm1 == nameIndex nm2 = pure True
 
-    goF c vm (FTermF ftf1) (FTermF ftf2) =
-            case zipWithFlatTermF (go c vm) ftf1 ftf2 of
-              Nothing -> return False
-              Just zipped -> Fold.and <$> traverse id zipped
+    goF c env1 env2 (FTermF ftf1) (FTermF ftf2) =
+      case zipWithFlatTermF (go c env1 env2) ftf1 ftf2 of
+        Nothing -> pure False
+        Just zipped -> Fold.and <$> traverse id zipped
 
-    goF c vm (App f1 x1) (App f2 x2) =
-           pure (&&) <*> go c vm f1 f2 <*> go c vm x1 x2
+    goF c env1 env2 (App f1 u1) (App f2 u2) =
+      do a <- go c env1 env2 f1 f2
+         b <- go c env1 env2 u1 u2
+         pure (a && b)
 
-    goF c vm (Lambda (vnIndex -> i1) ty1 body1) (Lambda (vnIndex -> i2) ty2 body2) =
-      pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
-        where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
+    goF c env1 env2 (Lambda x1 ty1 body1) (Lambda x2 ty2 body2) =
+      do a <- go c env1 env2 ty1 ty2
+         b <- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2
+         pure (a && b)
 
-    goF c vm (Pi (vnIndex -> i1) ty1 body1) (Pi (vnIndex -> i2) ty2 body2) =
-      pure (&&) <*> go c vm ty1 ty2 <*> go c vm' body1 body2
-        where vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
+    goF c env1 env2 (Pi x1 ty1 body1) (Pi x2 ty2 body2) =
+      do a <- go c env1 env2 ty1 ty2
+         b <- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2
+         pure (a && b)
 
-    goF c vm (Variable x1 t1) (Variable x2 t2)
-      | i' == vnIndex x2 = go c vm t1 t2
-        where i' = case IntMap.lookup (vnIndex x1) vm of
-                     Nothing -> vnIndex x1
-                     Just i -> i
+    goF c env1 env2 (Variable x1 t1) (Variable x2 t2) =
+      case (lookupVarCtx x1 env1, lookupVarCtx x2 env2) of
+        (Just i1, Just i2) | i1 == i2 -> pure True
+        (Nothing, Nothing) | x1 == x2 -> go c env1 env2 t1 t2
+        _ -> pure False
 
     -- final catch-all case
-    goF _c _vm _x _y = pure False
+    goF _c _env1 _env2 _t1 _t2 = pure False
 
 -- | Check whether one type is a subtype of another: Either they are
 -- convertible, or they are both Pi types with convertible argument
@@ -1389,15 +1378,15 @@ scmSubtype t1 t2
            pure (s1 <= s2)
          (unwrapTermF -> Pi x1 a1 b1, unwrapTermF -> Pi x2 a2 b2)
            | x1 == x2 ->
-             (&&) <$> scmConvertible True a1 a2 <*> scmSubtype b1 b2
+             (&&) <$> scmConvertible a1 a2 <*> scmSubtype b1 b2
            | otherwise ->
-             do conv1 <- scmConvertible True a1 a2
+             do conv1 <- scmConvertible a1 a2
                 var1 <- scmVariable x1 a1
                 b2' <- scmInstantiate (IntMap.singleton (vnIndex x2) var1) b2
                 conv2 <- scmSubtype b1 b2'
                 pure (conv1 && conv2)
          _ ->
-           scmConvertible True t1' t2'
+           scmConvertible t1' t2'
 
 
 --------------------------------------------------------------------------------

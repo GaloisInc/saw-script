@@ -40,6 +40,10 @@ module SAWCore.Name
     -- * VarName
   , VarName(..)
   , wildcardVarName
+  , VarCtx(..)
+  , emptyVarCtx
+  , consVarCtx
+  , lookupVarCtx
     -- * Display Name Environments
   , DisplayNameEnv(..)
   , emptyDisplayNameEnv
@@ -302,6 +306,33 @@ instance Hashable VarName where
 -- | A wildcard variable name consisting of an underscore "_".
 wildcardVarName :: VarName
 wildcardVarName = VarName 0 "_"
+
+-- | A data type representing a context of bound 'VarName's.
+-- It maps each 'VarName' to a de Bruijn index.
+data VarCtx =
+  VarCtx
+  !Int -- ^ Context size
+  !(IntMap Int) -- ^ Mapping from VarIndex to (size - de Bruijn index)
+
+-- | The empty 'VarName' context.
+emptyVarCtx :: VarCtx
+emptyVarCtx = VarCtx 0 IntMap.empty
+
+-- | Extend a 'VarCtx' with a new bound 'VarName'.
+-- The new name has de Bruijn index 0; the index of each previous name
+-- is incremented by one.
+consVarCtx :: VarName -> VarCtx -> VarCtx
+consVarCtx x (VarCtx size m) =
+  let size' = size + 1
+  in VarCtx size' (IntMap.insert (vnIndex x) size' m)
+
+-- | Look up the de Bruijn index of the given 'VarName' in a 'VarCtx'.
+-- Return 'Nothing' if the name is not present in the context.
+lookupVarCtx :: VarName -> VarCtx -> Maybe Int
+lookupVarCtx x (VarCtx size m) =
+  case IntMap.lookup (vnIndex x) m of
+    Just i -> Just (size - i)
+    Nothing -> Nothing
 
 
 -- Display Name Environments --------------------------------------------------------
