@@ -704,7 +704,7 @@ library saw-server
 
   build-depends:
     -- upstream packages from hackage
-    base >=4.11.1.0 && <4.20,
+    base >=4.11.1.0 && <4.22,
     aeson >= 1.4.2 && < 2.3,
     base64-bytestring,
     bytestring,
@@ -815,7 +815,7 @@ executable saw-remote-api
 
   build-depends:
     -- upstream packages from hackage
-    base >=4.11.1.0 && <4.20,
+    base >=4.11.1.0 && <4.22,
     aeson >= 1.4.2 && < 2.3,
     base64-bytestring,
     bytestring,
