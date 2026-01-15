@@ -24,7 +24,7 @@ USER saw
 WORKDIR /home/saw
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
-COPY cabal.GHC-9.6.7.config cabal.project.freeze
+COPY cabal.GHC-9.10.3.config cabal.project.freeze
 ENV PATH=/home/saw/ghcup-download/bin:/home/saw/.ghcup/bin:$PATH
 ARG TARGETPLATFORM
 RUN case ${TARGETPLATFORM} in \
@@ -42,8 +42,8 @@ RUN case ${TARGETPLATFORM} in \
 RUN mkdir -p /home/saw/.ghcup && \
     ghcup --version && \
     ghcup install cabal 3.10.3.0 && \
-    ghcup install ghc 9.6.7 && \
-    ghcup set ghc 9.6.7
+    ghcup install ghc 9.10.3 && \
+    ghcup set ghc 9.10.3
 
 # Make sure GitRev.hs exists in case it wasn't created outside the
 # container and copied in. Since we don't have .git in here, this will
