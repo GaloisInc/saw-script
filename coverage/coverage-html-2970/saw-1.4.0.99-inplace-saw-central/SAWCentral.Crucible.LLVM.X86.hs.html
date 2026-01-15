@@ -928,7 +928,7 @@ span.spaces    { background: white }
 <span class="lineno">  909 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  910 </span><span class="spaces">       </span><span class="nottickedoff">-- check that the produced term is type-correct</span>
 <span class="lineno">  911 </span><span class="spaces">       </span><span class="nottickedoff">tp &lt;- scTypeOf sc inv</span>
-<span class="lineno">  912 </span><span class="spaces">       </span><span class="nottickedoff">ok &lt;- scConvertible sc True tp =&lt;&lt; scBoolType sc</span>
+<span class="lineno">  912 </span><span class="spaces">       </span><span class="nottickedoff">ok &lt;- scConvertible sc tp =&lt;&lt; scBoolType sc</span>
 <span class="lineno">  913 </span><span class="spaces">       </span><span class="nottickedoff">unless ok $ do</span>
 <span class="lineno">  914 </span><span class="spaces">         </span><span class="nottickedoff">-- TODO, get ppOpts from the right place</span>
 <span class="lineno">  915 </span><span class="spaces">         </span><span class="nottickedoff">tp' &lt;- ppTerm sc PPS.defaultOpts tp</span>

@@ -298,7 +298,7 @@ span.spaces    { background: white }
 <span class="lineno">  279 </span><span class="spaces">  </span><span class="nottickedoff">io $ do</span>
 <span class="lineno">  280 </span><span class="spaces">    </span><span class="nottickedoff">ty1 &lt;- scTypeOf sc tpat</span>
 <span class="lineno">  281 </span><span class="spaces">    </span><span class="nottickedoff">ty2 &lt;- scTypeOf sc trepl</span>
-<span class="lineno">  282 </span><span class="spaces">    </span><span class="nottickedoff">c &lt;- scConvertible sc False ty1 ty2</span>
+<span class="lineno">  282 </span><span class="spaces">    </span><span class="nottickedoff">c &lt;- scConvertible sc ty1 ty2</span>
 <span class="lineno">  283 </span><span class="spaces">    </span><span class="nottickedoff">unless c $ fail $ unlines</span>
 <span class="lineno">  284 </span><span class="spaces">      </span><span class="nottickedoff">[ &quot;terms do not have convertible types&quot;, show tpat, show ty1, show trepl, show ty2 ]</span>
 <span class="lineno">  285 </span><span class="spaces"></span><span class="nottickedoff"></span>
@@ -308,7 +308,7 @@ span.spaces    { background: white }
 <span class="lineno">  289 </span><span class="spaces">  </span><span class="nottickedoff">io $ do</span>
 <span class="lineno">  290 </span><span class="spaces">    </span><span class="nottickedoff">ty  &lt;- scTypeOf sc (ttTerm t)</span>
 <span class="lineno">  291 </span><span class="spaces">    </span><span class="nottickedoff">ty' &lt;- scTypeOf sc t'</span>
-<span class="lineno">  292 </span><span class="spaces">    </span><span class="nottickedoff">c' &lt;- scConvertible sc False ty ty'</span>
+<span class="lineno">  292 </span><span class="spaces">    </span><span class="nottickedoff">c' &lt;- scConvertible sc ty ty'</span>
 <span class="lineno">  293 </span><span class="spaces">    </span><span class="nottickedoff">unless c' $ fail $ unlines</span>
 <span class="lineno">  294 </span><span class="spaces">      </span><span class="nottickedoff">[ &quot;term does not have the same type after replacement&quot;, show ty, show ty' ]</span>
 <span class="lineno">  295 </span><span class="spaces"></span><span class="nottickedoff"></span>
@@ -323,7 +323,7 @@ span.spaces    { background: white }
 <span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">io $ do</span>
 <span class="lineno">  305 </span><span class="spaces">    </span><span class="nottickedoff">ty  &lt;- scTypeOf sc (ttTerm t)</span>
 <span class="lineno">  306 </span><span class="spaces">    </span><span class="nottickedoff">ty' &lt;- scTypeOf sc t'</span>
-<span class="lineno">  307 </span><span class="spaces">    </span><span class="nottickedoff">c' &lt;- scConvertible sc False ty ty'</span>
+<span class="lineno">  307 </span><span class="spaces">    </span><span class="nottickedoff">c' &lt;- scConvertible sc ty ty'</span>
 <span class="lineno">  308 </span><span class="spaces">    </span><span class="nottickedoff">unless c' $ fail $ unlines</span>
 <span class="lineno">  309 </span><span class="spaces">      </span><span class="nottickedoff">[ &quot;term does not have the same type after hoisting ifs&quot;, show ty, show ty' ]</span>
 <span class="lineno">  310 </span><span class="spaces"></span><span class="nottickedoff"></span>
@@ -332,7 +332,7 @@ span.spaces    { background: white }
 <span class="lineno">  313 </span>isConvertiblePrim :: TypedTerm -&gt; TypedTerm -&gt; TopLevel Bool
 <span class="lineno">  314 </span><span class="decl"><span class="nottickedoff">isConvertiblePrim x y = do</span>
 <span class="lineno">  315 </span><span class="spaces">   </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  316 </span><span class="spaces">   </span><span class="nottickedoff">io $ scConvertible sc False (ttTerm x) (ttTerm y)</span></span>
+<span class="lineno">  316 </span><span class="spaces">   </span><span class="nottickedoff">io $ scConvertible sc (ttTerm x) (ttTerm y)</span></span>
 <span class="lineno">  317 </span>
 <span class="lineno">  318 </span>checkConvertiblePrim :: TypedTerm -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno">  319 </span><span class="decl"><span class="nottickedoff">checkConvertiblePrim x y = do</span>
@@ -1616,7 +1616,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1597 </span><span class="spaces">      </span><span class="istickedoff">TypedTermSchema schema -&gt; io $ importSchemaCEnv sc cenv schema</span>
 <span class="lineno"> 1598 </span><span class="spaces">      </span><span class="istickedoff">TypedTermKind k -&gt; <span class="nottickedoff">io $ Cryptol.importKind sc k</span></span>
 <span class="lineno"> 1599 </span><span class="spaces">      </span><span class="istickedoff">TypedTermOther ty' -&gt; <span class="nottickedoff">pure ty'</span></span>
-<span class="lineno"> 1600 </span><span class="spaces">  </span><span class="istickedoff">convertible &lt;- io $ scConvertible sc <span class="nottickedoff">True</span> ty expectedTy</span>
+<span class="lineno"> 1600 </span><span class="spaces">  </span><span class="istickedoff">convertible &lt;- io $ scConvertible sc ty expectedTy</span>
 <span class="lineno"> 1601 </span><span class="spaces">  </span><span class="istickedoff">ty' &lt;- liftIO $ ppTerm sc opts ty</span>
 <span class="lineno"> 1602 </span><span class="spaces">  </span><span class="istickedoff">unless convertible $ <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1603 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">expectedTy' &lt;- liftIO $ ppTerm sc opts expectedTy</span></span>

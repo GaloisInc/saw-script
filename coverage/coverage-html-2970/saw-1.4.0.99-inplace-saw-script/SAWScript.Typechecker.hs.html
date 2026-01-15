@@ -2020,8 +2020,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2001 </span>-- The first two arguments are the starting variable and typedef
 <span class="lineno"> 2002 </span>-- environments to use.
 <span class="lineno"> 2003 </span>checkDecl :: Set PrimitiveLifecycle -&gt; VarEnv -&gt; TyEnv -&gt; Decl -&gt; Result Decl
-<span class="lineno"> 2004 </span><span class="decl"><span class="nottickedoff">checkDecl avail env tenv decl =</span>
-<span class="lineno"> 2005 </span><span class="spaces">    </span><span class="nottickedoff">evalTIWithEnv avail env tenv (inferDecl ReadOnlyVar decl)</span></span>
+<span class="lineno"> 2004 </span><span class="decl"><span class="istickedoff">checkDecl avail env tenv decl =</span>
+<span class="lineno"> 2005 </span><span class="spaces">    </span><span class="istickedoff">evalTIWithEnv avail env tenv (inferDecl <span class="nottickedoff">ReadOnlyVar</span> decl)</span></span>
 <span class="lineno"> 2006 </span>
 <span class="lineno"> 2007 </span>-- | Check a found type (first argument) against an expected type
 <span class="lineno"> 2008 </span>--   (second argument) and return True if they can be unified.

@@ -638,7 +638,7 @@ span.spaces    { background: white }
 <span class="lineno">  619 </span>convertibleProps :: SharedContext -&gt; [Prop] -&gt; [Prop] -&gt; IO Bool
 <span class="lineno">  620 </span><span class="decl"><span class="nottickedoff">convertibleProps _sc [] [] = return True</span>
 <span class="lineno">  621 </span><span class="spaces"></span><span class="nottickedoff">convertibleProps sc (p1:ps1) (p2:ps2) =</span>
-<span class="lineno">  622 </span><span class="spaces">  </span><span class="nottickedoff">do ok1 &lt;- scConvertible sc True (unProp p1) (unProp p2)</span>
+<span class="lineno">  622 </span><span class="spaces">  </span><span class="nottickedoff">do ok1 &lt;- scConvertible sc (unProp p1) (unProp p2)</span>
 <span class="lineno">  623 </span><span class="spaces">     </span><span class="nottickedoff">ok2 &lt;- convertibleProps sc ps1 ps2</span>
 <span class="lineno">  624 </span><span class="spaces">     </span><span class="nottickedoff">return (ok1 &amp;&amp; ok2)</span>
 <span class="lineno">  625 </span><span class="spaces"></span><span class="nottickedoff">convertibleProps _sc _ _ = return False</span></span>
@@ -1398,7 +1398,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1379 </span>-- exists y in ps where x == y
 <span class="lineno"> 1380 </span>propsElem :: SharedContext -&gt; Prop -&gt; [Prop] -&gt; IO Bool
 <span class="lineno"> 1381 </span><span class="decl"><span class="istickedoff">propsElem sc x ps =</span>
-<span class="lineno"> 1382 </span><span class="spaces">  </span><span class="istickedoff">or &lt;$&gt; sequence [ scConvertible sc <span class="nottickedoff">True</span> (unProp x) (unProp y) | y &lt;- ps ]</span></span>
+<span class="lineno"> 1382 </span><span class="spaces">  </span><span class="istickedoff">or &lt;$&gt; sequence [ scConvertible sc (unProp x) (unProp y) | y &lt;- ps ]</span></span>
 <span class="lineno"> 1383 </span>
 <span class="lineno"> 1384 </span>-- | Test if a sequent is an instance of the sequent calculus axiom.
 <span class="lineno"> 1385 </span>--   This occurs precisely when some hypothesis is convertible
@@ -1406,7 +1406,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1387 </span>sequentIsAxiom :: SharedContext -&gt; Sequent -&gt; IO Bool
 <span class="lineno"> 1388 </span><span class="decl"><span class="nottickedoff">sequentIsAxiom sc sqt =</span>
 <span class="lineno"> 1389 </span><span class="spaces">  </span><span class="nottickedoff">do let RawSequent hs gs = sequentToRawSequent sqt</span>
-<span class="lineno"> 1390 </span><span class="spaces">     </span><span class="nottickedoff">or &lt;$&gt; sequence [ scConvertible sc True (unProp x) (unProp y) | x &lt;- hs, y &lt;- gs ]</span></span>
+<span class="lineno"> 1390 </span><span class="spaces">     </span><span class="nottickedoff">or &lt;$&gt; sequence [ scConvertible sc (unProp x) (unProp y) | x &lt;- hs, y &lt;- gs ]</span></span>
 <span class="lineno"> 1391 </span>
 <span class="lineno"> 1392 </span>-- | Test if the first given sequent subsumes the
 <span class="lineno"> 1393 </span>--   second given sequent. This is a shallow syntactic
@@ -1594,7 +1594,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1575 </span><span class="spaces">        </span><span class="istickedoff">case sequentState sqt of</span>
 <span class="lineno"> 1576 </span><span class="spaces">          </span><span class="istickedoff">ConclFocus (Prop ptm) _ -&gt;</span>
 <span class="lineno"> 1577 </span><span class="spaces">            </span><span class="istickedoff">do ty &lt;- scTypeOf <span class="nottickedoff">sc</span> tm</span>
-<span class="lineno"> 1578 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible sc <span class="nottickedoff">True</span> ptm ty</span>
+<span class="lineno"> 1578 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible sc ptm ty</span>
 <span class="lineno"> 1579 </span><span class="spaces">               </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1580 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">ptm' &lt;- ppTerm sc PPS.defaultOpts ptm</span></span>
 <span class="lineno"> 1581 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">tm' &lt;- ppTerm sc PPS.defaultOpts tm</span></span>
@@ -1651,7 +1651,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1632 </span><span class="spaces">            </span><span class="istickedoff">case genericDrop n hs of</span>
 <span class="lineno"> 1633 </span><span class="spaces">              </span><span class="istickedoff">(h:_) -&gt;</span>
 <span class="lineno"> 1634 </span><span class="spaces">                </span><span class="istickedoff">do (d,sy,p') &lt;- checkApply <span class="nottickedoff">nenv</span> <span class="nottickedoff">(\g' -&gt; ConclFocusedSequent hs (FB gs1 g' gs2))</span> h es</span>
-<span class="lineno"> 1635 </span><span class="spaces">                   </span><span class="istickedoff">ok &lt;- scConvertible <span class="nottickedoff">sc</span> <span class="nottickedoff">False</span> (unProp g) p'</span>
+<span class="lineno"> 1635 </span><span class="spaces">                   </span><span class="istickedoff">ok &lt;- scConvertible <span class="nottickedoff">sc</span> (unProp g) p'</span>
 <span class="lineno"> 1636 </span><span class="spaces">                   </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1637 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">g' &lt;- ppTerm sc PPS.defaultOpts (unProp g)</span></span>
 <span class="lineno"> 1638 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">p'' &lt;- ppTerm sc PPS.defaultOpts p'</span></span>
@@ -1675,7 +1675,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1656 </span><span class="spaces">        </span><span class="istickedoff">case sequentState sqt of</span>
 <span class="lineno"> 1657 </span><span class="spaces">          </span><span class="istickedoff">ConclFocus p mkSqt -&gt;</span>
 <span class="lineno"> 1658 </span><span class="spaces">            </span><span class="istickedoff">do (d,sy,p') &lt;- checkApply <span class="nottickedoff">nenv</span> mkSqt (thmProp thm) es</span>
-<span class="lineno"> 1659 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible <span class="nottickedoff">sc</span> <span class="nottickedoff">False</span> (unProp p) p'</span>
+<span class="lineno"> 1659 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible sc (unProp p) p'</span>
 <span class="lineno"> 1660 </span><span class="spaces">               </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1661 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">sp &lt;- ppTerm sc PPS.defaultOpts (unProp p)</span></span>
 <span class="lineno"> 1662 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">sp' &lt;- ppTerm sc PPS.defaultOpts p'</span></span>
@@ -1778,7 +1778,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1759 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">ptm' &lt;- ppTerm sc PPS.defaultOpts ptm</span></span>
 <span class="lineno"> 1760 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [&quot;Intro evidence expected function prop&quot;, ptm']</span></span>
 <span class="lineno"> 1761 </span><span class="spaces">              </span><span class="istickedoff">Just (nm, ty, body) -&gt;</span>
-<span class="lineno"> 1762 </span><span class="spaces">                </span><span class="istickedoff">do ok &lt;- scConvertible <span class="nottickedoff">sc</span> <span class="nottickedoff">False</span> ty xty</span>
+<span class="lineno"> 1762 </span><span class="spaces">                </span><span class="istickedoff">do ok &lt;- scConvertible <span class="nottickedoff">sc</span> ty xty</span>
 <span class="lineno"> 1763 </span><span class="spaces">                   </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1764 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">xty' &lt;- ppTerm sc PPS.defaultOpts xty</span></span>
 <span class="lineno"> 1765 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc PPS.defaultOpts ty</span></span>
@@ -1943,7 +1943,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1924 </span><span class="spaces">          </span><span class="istickedoff">-- TODO: check that the type is a boolean</span>
 <span class="lineno"> 1925 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 1926 </span><span class="spaces">          </span><span class="istickedoff">do ty &lt;- scTypeOf <span class="nottickedoff">sc</span> tm</span>
-<span class="lineno"> 1927 </span><span class="spaces">             </span><span class="istickedoff">ok &lt;- scConvertible <span class="nottickedoff">sc</span> <span class="nottickedoff">True</span> ty =&lt;&lt; scBoolType sc</span>
+<span class="lineno"> 1927 </span><span class="spaces">             </span><span class="istickedoff">ok &lt;- scConvertible <span class="nottickedoff">sc</span> ty =&lt;&lt; scBoolType sc</span>
 <span class="lineno"> 1928 </span><span class="spaces">             </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1929 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc PPS.defaultOpts ty</span></span>
 <span class="lineno"> 1930 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">tm0' &lt;- ppTerm sc PPS.defaultOpts tm0</span></span>
@@ -2065,7 +2065,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2046 </span><span class="decl"><span class="istickedoff">propApply sc rule goal = applyFirst (asPiLists (unProp rule))</span>
 <span class="lineno"> 2047 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 2048 </span><span class="spaces">    </span><span class="istickedoff">applyFirst :: [([(VarName, Term)], Term)] -&gt; IO (Maybe [Either Term Prop])</span>
-<span class="lineno"> 2049 </span><span class="spaces">    </span><span class="istickedoff">applyFirst [] = pure Nothing</span>
+<span class="lineno"> 2049 </span><span class="spaces">    </span><span class="istickedoff">applyFirst [] = <span class="nottickedoff">pure Nothing</span></span>
 <span class="lineno"> 2050 </span><span class="spaces">    </span><span class="istickedoff">applyFirst ((ruleArgs, ruleConcl) : rest) =</span>
 <span class="lineno"> 2051 </span><span class="spaces">      </span><span class="istickedoff">do result &lt;- scMatch <span class="nottickedoff">sc</span> ruleArgs ruleConcl (unProp goal)</span>
 <span class="lineno"> 2052 </span><span class="spaces">         </span><span class="istickedoff">case result of</span>
@@ -2200,7 +2200,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2181 </span><span class="spaces">    </span><span class="istickedoff">HypFocus _ _ -&gt; <span class="nottickedoff">fail &quot;apply tactic: cannot apply in a hypothesis&quot;</span></span>
 <span class="lineno"> 2182 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus gl mkSqt -&gt;</span>
 <span class="lineno"> 2183 </span><span class="spaces">      </span><span class="istickedoff">liftIO (propApply sc (thmProp thm) gl) &gt;&gt;= \case</span>
-<span class="lineno"> 2184 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; fail &quot;apply tactic failed: no match&quot;</span>
+<span class="lineno"> 2184 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;apply tactic failed: no match&quot;</span></span>
 <span class="lineno"> 2185 </span><span class="spaces">        </span><span class="istickedoff">Just newterms -&gt;</span>
 <span class="lineno"> 2186 </span><span class="spaces">          </span><span class="istickedoff">let newgoals =</span>
 <span class="lineno"> 2187 </span><span class="spaces">                </span><span class="istickedoff">[ goal{ goalSequent = mkSqt p, goalType = <span class="nottickedoff">goalType goal ++ &quot;.subgoal&quot; ++ show i</span> }</span>
@@ -2289,7 +2289,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2270 </span><span class="spaces">        </span><span class="istickedoff">Right pf -&gt;</span>
 <span class="lineno"> 2271 </span><span class="spaces">           </span><span class="istickedoff">do let gp = unProp g</span>
 <span class="lineno"> 2272 </span><span class="spaces">              </span><span class="istickedoff">ty &lt;- liftIO $ scTypeOf <span class="nottickedoff">sc</span> pf</span>
-<span class="lineno"> 2273 </span><span class="spaces">              </span><span class="istickedoff">ok &lt;- liftIO $ scConvertible sc True gp ty</span>
+<span class="lineno"> 2273 </span><span class="spaces">              </span><span class="istickedoff">ok &lt;- liftIO $ scConvertible sc gp ty</span>
 <span class="lineno"> 2274 </span><span class="spaces">              </span><span class="istickedoff">unless ok $ do</span>
 <span class="lineno"> 2275 </span><span class="spaces">                  </span><span class="istickedoff">gp' &lt;- liftIO $ ppTerm sc PPS.defaultOpts gp</span>
 <span class="lineno"> 2276 </span><span class="spaces">                  </span><span class="istickedoff">fail $ unlines [</span>
@@ -2307,7 +2307,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2288 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocus g _ -&gt;</span>
 <span class="lineno"> 2289 </span><span class="spaces">      </span><span class="nottickedoff">do let gp = unProp g</span>
 <span class="lineno"> 2290 </span><span class="spaces">         </span><span class="nottickedoff">ty &lt;- liftIO $ scTypeOf sc tm</span>
-<span class="lineno"> 2291 </span><span class="spaces">         </span><span class="nottickedoff">ok &lt;- liftIO $ scConvertible sc True gp ty</span>
+<span class="lineno"> 2291 </span><span class="spaces">         </span><span class="nottickedoff">ok &lt;- liftIO $ scConvertible sc gp ty</span>
 <span class="lineno"> 2292 </span><span class="spaces">         </span><span class="nottickedoff">unless ok $ do</span>
 <span class="lineno"> 2293 </span><span class="spaces">             </span><span class="nottickedoff">gp' &lt;- liftIO $ ppTerm sc PPS.defaultOpts gp</span>
 <span class="lineno"> 2294 </span><span class="spaces">             </span><span class="nottickedoff">tm' &lt;- liftIO $ ppTerm sc PPS.defaultOpts tm</span>

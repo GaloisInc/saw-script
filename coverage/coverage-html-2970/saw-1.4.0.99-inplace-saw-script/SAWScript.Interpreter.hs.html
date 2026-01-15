@@ -2544,7 +2544,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2525 </span>  = Primitive
 <span class="lineno"> 2526 </span>    { <span class="istickedoff"><span class="decl"><span class="istickedoff">primitiveType</span></span></span> :: SS.Schema
 <span class="lineno"> 2527 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">primitiveLife</span></span></span> :: PrimitiveLifecycle
-<span class="lineno"> 2528 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">primitiveDoc</span></span></span>  :: [Text]
+<span class="lineno"> 2528 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">primitiveDoc</span></span></span>  :: [Text]
 <span class="lineno"> 2529 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">primitiveFn</span></span></span>   :: Options -&gt; BuiltinContext -&gt; Value
 <span class="lineno"> 2530 </span>    }
 <span class="lineno"> 2531 </span>
@@ -3745,10 +3745,10 @@ span.spaces    { background: white }
 <span class="lineno"> 3726 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;prove_print&quot;         &quot;ProofScript () -&gt; Term -&gt; TopLevel Theorem&quot;</span>
 <span class="lineno"> 3727 </span><span class="spaces">    </span><span class="istickedoff">(pureVal provePrintPrim)</span>
 <span class="lineno"> 3728 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 3729 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Use the given proof script to attempt to prove that a term is&quot;</span></span>
-<span class="lineno"> 3730 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;valid (true for all inputs). Returns a Theorem if successful,&quot;</span></span>
-<span class="lineno"> 3731 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;and fails if unsuccessful.&quot;</span></span>
-<span class="lineno"> 3732 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 3729 </span><span class="spaces">    </span><span class="istickedoff">[ &quot;Use the given proof script to attempt to prove that a term is&quot;</span>
+<span class="lineno"> 3730 </span><span class="spaces">    </span><span class="istickedoff">, &quot;valid (true for all inputs). Returns a Theorem if successful,&quot;</span>
+<span class="lineno"> 3731 </span><span class="spaces">    </span><span class="istickedoff">, &quot;and fails if unsuccessful.&quot;</span>
+<span class="lineno"> 3732 </span><span class="spaces">    </span><span class="istickedoff">]</span>
 <span class="lineno"> 3733 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3734 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;prove_extcore&quot;         &quot;ProofScript () -&gt; Term -&gt; TopLevel Theorem&quot;</span>
 <span class="lineno"> 3735 </span><span class="spaces">    </span><span class="istickedoff">(pureVal provePropPrim)</span>
@@ -7244,7 +7244,7 @@ span.spaces    { background: white }
 <span class="lineno"> 7225 </span><span class="spaces">         </span><span class="istickedoff">-&gt; (SS.Name, Primitive)</span>
 <span class="lineno"> 7226 </span><span class="spaces">    </span><span class="istickedoff">prim name ty fn lc doc = (name, Primitive</span>
 <span class="lineno"> 7227 </span><span class="spaces">                                     </span><span class="istickedoff">{ primitiveType = ty'</span>
-<span class="lineno"> 7228 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveDoc  = <span class="nottickedoff">doc</span></span>
+<span class="lineno"> 7228 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveDoc  = doc</span>
 <span class="lineno"> 7229 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveFn   = fn name</span>
 <span class="lineno"> 7230 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveLife = lc</span>
 <span class="lineno"> 7231 </span><span class="spaces">                                     </span><span class="istickedoff">})</span>
@@ -7335,26 +7335,26 @@ span.spaces    { background: white }
 <span class="lineno"> 7316 </span>   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
 <span class="lineno"> 7317 </span><span class="decl"><span class="istickedoff">primValueEnv opts bic = Map.mapWithKey extract primitives</span>
 <span class="lineno"> 7318 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 7319 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">header = [</span></span>
-<span class="lineno"> 7320 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Description&quot;,</span></span>
-<span class="lineno"> 7321 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;-----------&quot;,</span></span>
-<span class="lineno"> 7322 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 7323 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7324 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">tag p = case primitiveLife p of</span></span>
-<span class="lineno"> 7325 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Current -&gt; []</span></span>
-<span class="lineno"> 7326 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">WarnDeprecated -&gt; [&quot;DEPRECATED AND WILL WARN&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 7327 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated -&gt; [&quot;DEPRECATED AND UNAVAILABLE BY DEFAULT&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 7328 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Experimental -&gt; [&quot;EXPERIMENTAL&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 7329 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">name n p = [</span></span>
-<span class="lineno"> 7330 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;    &quot; &lt;&gt; n &lt;&gt; &quot; : &quot; &lt;&gt; PPS.pShowText (primitiveType p),</span></span>
-<span class="lineno"> 7331 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 7332 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7333 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">doc n p =</span></span>
-<span class="lineno"> 7334 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">header &lt;&gt; tag p &lt;&gt; name n p &lt;&gt; primitiveDoc p</span></span>
+<span class="lineno"> 7319 </span><span class="spaces">      </span><span class="istickedoff">header = [</span>
+<span class="lineno"> 7320 </span><span class="spaces">          </span><span class="istickedoff">&quot;Description&quot;,</span>
+<span class="lineno"> 7321 </span><span class="spaces">          </span><span class="istickedoff">&quot;-----------&quot;,</span>
+<span class="lineno"> 7322 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
+<span class="lineno"> 7323 </span><span class="spaces">       </span><span class="istickedoff">]</span>
+<span class="lineno"> 7324 </span><span class="spaces">      </span><span class="istickedoff">tag p = case primitiveLife p of</span>
+<span class="lineno"> 7325 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; []</span>
+<span class="lineno"> 7326 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND WILL WARN&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 7327 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND UNAVAILABLE BY DEFAULT&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 7328 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; <span class="nottickedoff">[&quot;EXPERIMENTAL&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 7329 </span><span class="spaces">      </span><span class="istickedoff">name n p = [</span>
+<span class="lineno"> 7330 </span><span class="spaces">          </span><span class="istickedoff">&quot;    &quot; &lt;&gt; n &lt;&gt; &quot; : &quot; &lt;&gt; PPS.pShowText (primitiveType p),</span>
+<span class="lineno"> 7331 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
+<span class="lineno"> 7332 </span><span class="spaces">       </span><span class="istickedoff">]</span>
+<span class="lineno"> 7333 </span><span class="spaces">      </span><span class="istickedoff">doc n p =</span>
+<span class="lineno"> 7334 </span><span class="spaces">          </span><span class="istickedoff">header &lt;&gt; tag p &lt;&gt; name n p &lt;&gt; primitiveDoc p</span>
 <span class="lineno"> 7335 </span><span class="spaces">      </span><span class="istickedoff">extract n p =</span>
 <span class="lineno"> 7336 </span><span class="spaces">          </span><span class="istickedoff">let pos = SS.PosInternal &quot;&lt;&lt;builtin&gt;&gt;&quot; in</span>
 <span class="lineno"> 7337 </span><span class="spaces">          </span><span class="istickedoff">(pos, primitiveLife p, primitiveType p,</span>
-<span class="lineno"> 7338 </span><span class="spaces">           </span><span class="istickedoff">(primitiveFn p) opts bic, <span class="nottickedoff">Just $ doc n p</span>)</span></span>
+<span class="lineno"> 7338 </span><span class="spaces">           </span><span class="istickedoff">(primitiveFn p) opts bic, Just $ doc n p)</span></span>
 <span class="lineno"> 7339 </span>
 <span class="lineno"> 7340 </span>primEnviron :: Options -&gt; BuiltinContext -&gt; CryptolEnvStack -&gt; Environ
 <span class="lineno"> 7341 </span><span class="decl"><span class="istickedoff">primEnviron opts bic cryenvs =</span>

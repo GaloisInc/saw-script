@@ -124,22 +124,22 @@ span.spaces    { background: white }
 <span class="lineno">  105 </span><span class="spaces">      </span><span class="istickedoff">sequence_ $ intersperse blankline $ map printscope scopes</span></span>
 <span class="lineno">  106 </span>
 <span class="lineno">  107 </span>helpCmd :: Text -&gt; REPL ()
-<span class="lineno">  108 </span><span class="decl"><span class="nottickedoff">helpCmd cmd</span>
-<span class="lineno">  109 </span><span class="spaces">  </span><span class="nottickedoff">| Text.null cmd = liftIO (mapM_ TextIO.putStrLn genericHelp)</span>
-<span class="lineno">  110 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
-<span class="lineno">  111 </span><span class="spaces">    </span><span class="nottickedoff">do rw &lt;- getTopLevelRW</span>
-<span class="lineno">  112 </span><span class="spaces">       </span><span class="nottickedoff">-- Note: there's no rebindable builtins and thus no way to</span>
-<span class="lineno">  113 </span><span class="spaces">       </span><span class="nottickedoff">-- attach help text to anything rebindable, so we can ignore</span>
-<span class="lineno">  114 </span><span class="spaces">       </span><span class="nottickedoff">-- the rebindables.</span>
-<span class="lineno">  115 </span><span class="spaces">       </span><span class="nottickedoff">let Environ varenv _tyenv _cryenvs = rwEnviron rw</span>
-<span class="lineno">  116 </span><span class="spaces">       </span><span class="nottickedoff">case ScopedMap.lookup cmd varenv of</span>
-<span class="lineno">  117 </span><span class="spaces">         </span><span class="nottickedoff">Just (_pos, _lc, _ty, _v, Just doc) -&gt;</span>
-<span class="lineno">  118 </span><span class="spaces">           </span><span class="nottickedoff">liftIO $ mapM_ TextIO.putStrLn doc</span>
-<span class="lineno">  119 </span><span class="spaces">         </span><span class="nottickedoff">Just (_pos, _lc, _ty, _v, Nothing) -&gt; do</span>
-<span class="lineno">  120 </span><span class="spaces">           </span><span class="nottickedoff">liftIO $ putStrLn $ &quot;// No documentation is available.&quot;</span>
-<span class="lineno">  121 </span><span class="spaces">           </span><span class="nottickedoff">typeOfCmd cmd</span>
-<span class="lineno">  122 </span><span class="spaces">         </span><span class="nottickedoff">Nothing -&gt;</span>
-<span class="lineno">  123 </span><span class="spaces">           </span><span class="nottickedoff">liftIO $ putStrLn &quot;// No such command.&quot;</span></span>
+<span class="lineno">  108 </span><span class="decl"><span class="istickedoff">helpCmd cmd</span>
+<span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">Text.null cmd</span> = <span class="nottickedoff">liftIO (mapM_ TextIO.putStrLn genericHelp)</span></span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno">  112 </span><span class="spaces">       </span><span class="istickedoff">-- Note: there's no rebindable builtins and thus no way to</span>
+<span class="lineno">  113 </span><span class="spaces">       </span><span class="istickedoff">-- attach help text to anything rebindable, so we can ignore</span>
+<span class="lineno">  114 </span><span class="spaces">       </span><span class="istickedoff">-- the rebindables.</span>
+<span class="lineno">  115 </span><span class="spaces">       </span><span class="istickedoff">let Environ varenv _tyenv _cryenvs = rwEnviron rw</span>
+<span class="lineno">  116 </span><span class="spaces">       </span><span class="istickedoff">case ScopedMap.lookup cmd varenv of</span>
+<span class="lineno">  117 </span><span class="spaces">         </span><span class="istickedoff">Just (_pos, _lc, _ty, _v, Just doc) -&gt;</span>
+<span class="lineno">  118 </span><span class="spaces">           </span><span class="istickedoff">liftIO $ mapM_ TextIO.putStrLn doc</span>
+<span class="lineno">  119 </span><span class="spaces">         </span><span class="istickedoff">Just (_pos, _lc, _ty, _v, Nothing) -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  120 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">liftIO $ putStrLn $ &quot;// No documentation is available.&quot;</span></span>
+<span class="lineno">  121 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">typeOfCmd cmd</span></span>
+<span class="lineno">  122 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  123 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">liftIO $ putStrLn &quot;// No such command.&quot;</span></span></span>
 <span class="lineno">  124 </span>-- FIXME? can we restore the ability to lookup doc strings from Cryptol?
 <span class="lineno">  125 </span>--  | Just (ec,_) &lt;- lookup cmd builtIns =
 <span class="lineno">  126 </span>--                liftIO $ print $ helpDoc ec
@@ -303,12 +303,12 @@ span.spaces    { background: white }
 <span class="lineno">  284 </span><span class="spaces">     </span><span class="istickedoff">ro &lt;- getTopLevelRO</span>
 <span class="lineno">  285 </span><span class="spaces">     </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
 <span class="lineno">  286 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">opts = roOptions ro</span></span>
-<span class="lineno">  287 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">environ = rwEnviron rw</span></span>
-<span class="lineno">  288 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">rebindables = rwRebindables rw</span></span>
-<span class="lineno">  289 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">avail = rwPrimsAvail rw</span></span>
+<span class="lineno">  287 </span><span class="spaces">         </span><span class="istickedoff">environ = rwEnviron rw</span>
+<span class="lineno">  288 </span><span class="spaces">         </span><span class="istickedoff">rebindables = rwRebindables rw</span>
+<span class="lineno">  289 </span><span class="spaces">         </span><span class="istickedoff">avail = rwPrimsAvail rw</span>
 <span class="lineno">  290 </span><span class="spaces">     </span><span class="istickedoff">(schema, _expr) &lt;- liftIO $</span>
-<span class="lineno">  291 </span><span class="spaces">         </span><span class="istickedoff">Loader.readExpression <span class="nottickedoff">opts</span> replFileName <span class="nottickedoff">environ</span> <span class="nottickedoff">rebindables</span> <span class="nottickedoff">avail</span> str</span>
-<span class="lineno">  292 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">liftIO $ TextIO.putStrLn $ PPS.pShowText schema</span></span></span>
+<span class="lineno">  291 </span><span class="spaces">         </span><span class="istickedoff">Loader.readExpression <span class="nottickedoff">opts</span> replFileName environ rebindables avail str</span>
+<span class="lineno">  292 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ TextIO.putStrLn $ PPS.pShowText schema</span></span>
 <span class="lineno">  293 </span>
 <span class="lineno">  294 </span>
 <span class="lineno">  295 </span>------------------------------------------------------------
@@ -335,11 +335,11 @@ span.spaces    { background: white }
 <span class="lineno">  316 </span>-- XXX: should maybe also distinguish &quot;multiple args of this type&quot;
 <span class="lineno">  317 </span>-- from &quot;one arg of this type&quot;.
 <span class="lineno">  318 </span>data CommandBody
-<span class="lineno">  319 </span>  = ExprArg     (Text     -&gt; REPL ())
-<span class="lineno">  320 </span>  | TypeArgs    (Text     -&gt; REPL ())
-<span class="lineno">  321 </span>  | FilenameArg (FilePath -&gt; REPL ())
-<span class="lineno">  322 </span>  | ShellArg    (Text     -&gt; REPL ())
-<span class="lineno">  323 </span>  | NoArg       (REPL ())
+<span class="lineno">  319 </span>  = ExprArg       (Text     -&gt; REPL ())
+<span class="lineno">  320 </span>  | SymbolNameArg (Text     -&gt; REPL ())
+<span class="lineno">  321 </span>  | TypeArgs      (Text     -&gt; REPL ())
+<span class="lineno">  322 </span>  | FilenameArg   (FilePath -&gt; REPL ())
+<span class="lineno">  323 </span>  | NoArg         (REPL ())
 <span class="lineno">  324 </span>
 <span class="lineno">  325 </span>type CommandMap = Trie CommandDescr
 <span class="lineno">  326 </span>
@@ -367,9 +367,9 @@ span.spaces    { background: white }
 <span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display the current sawscript type environment&quot;</span></span>
 <span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:type&quot; [&quot;:t&quot;]  (ExprArg typeOfCmd)</span>
 <span class="lineno">  350 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;check the type of an expression&quot;</span></span>
-<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:?&quot;    []      <span class="nottickedoff">(ExprArg helpCmd)</span></span>
+<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:?&quot;    []      <span class="nottickedoff">(SymbolNameArg helpCmd)</span></span>
 <span class="lineno">  352 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display a brief description about a built-in operator&quot;</span></span>
-<span class="lineno">  353 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:help&quot; []      <span class="nottickedoff">(ExprArg helpCmd)</span></span>
+<span class="lineno">  353 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:help&quot; []      (SymbolNameArg helpCmd)</span>
 <span class="lineno">  354 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display a brief description about a built-in operator&quot;</span></span>
 <span class="lineno">  355 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
 <span class="lineno">  356 </span>
@@ -469,21 +469,21 @@ span.spaces    { background: white }
 <span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">let onearg action args = case args of</span>
 <span class="lineno">  451 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">action &quot;&quot;</span></span>
 <span class="lineno">  452 </span><span class="spaces">          </span><span class="istickedoff">[arg] -&gt; action arg</span>
-<span class="lineno">  453 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  454 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">let msg = &quot;The command &quot; &lt;&gt; cName cmd &lt;&gt;</span></span>
-<span class="lineno">  455 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot; takes only one argument&quot;</span></span>
-<span class="lineno">  456 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">liftIO $ TextIO.putStrLn msg</span></span>
+<span class="lineno">  453 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; do</span>
+<span class="lineno">  454 </span><span class="spaces">              </span><span class="istickedoff">let msg = &quot;The command &quot; &lt;&gt; cName cmd &lt;&gt;</span>
+<span class="lineno">  455 </span><span class="spaces">                        </span><span class="istickedoff">&quot; takes only one argument&quot;</span>
+<span class="lineno">  456 </span><span class="spaces">              </span><span class="istickedoff">liftIO $ TextIO.putStrLn msg</span>
 <span class="lineno">  457 </span><span class="spaces">    </span><span class="istickedoff">in</span>
 <span class="lineno">  458 </span><span class="spaces">    </span><span class="istickedoff">exceptionProtect $ case cBody cmd of</span>
 <span class="lineno">  459 </span><span class="spaces">        </span><span class="istickedoff">ExprArg action -&gt;</span>
-<span class="lineno">  460 </span><span class="spaces">            </span><span class="istickedoff">onearg action args0</span>
-<span class="lineno">  461 </span><span class="spaces">        </span><span class="istickedoff">TypeArgs action -&gt;</span>
-<span class="lineno">  462 </span><span class="spaces">            </span><span class="istickedoff">action (Text.intercalate &quot; &quot; args0)</span>
-<span class="lineno">  463 </span><span class="spaces">        </span><span class="istickedoff">FilenameArg action -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  464 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">args' &lt;- mapM expandHome args0</span></span>
-<span class="lineno">  465 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">onearg action args'</span></span>
-<span class="lineno">  466 </span><span class="spaces">        </span><span class="istickedoff">ShellArg action -&gt;</span>
-<span class="lineno">  467 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">onearg action args0</span></span>
+<span class="lineno">  460 </span><span class="spaces">            </span><span class="istickedoff">action (Text.intercalate &quot; &quot; args0)</span>
+<span class="lineno">  461 </span><span class="spaces">        </span><span class="istickedoff">SymbolNameArg action -&gt;</span>
+<span class="lineno">  462 </span><span class="spaces">            </span><span class="istickedoff">onearg action args0</span>
+<span class="lineno">  463 </span><span class="spaces">        </span><span class="istickedoff">TypeArgs action -&gt;</span>
+<span class="lineno">  464 </span><span class="spaces">            </span><span class="istickedoff">action (Text.intercalate &quot; &quot; args0)</span>
+<span class="lineno">  465 </span><span class="spaces">        </span><span class="istickedoff">FilenameArg action -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  466 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">args' &lt;- mapM expandHome args0</span></span>
+<span class="lineno">  467 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">onearg action args'</span></span>
 <span class="lineno">  468 </span><span class="spaces">        </span><span class="istickedoff">NoArg action -&gt;</span>
 <span class="lineno">  469 </span><span class="spaces">            </span><span class="istickedoff">noargs action args0</span></span>
 <span class="lineno">  470 </span>

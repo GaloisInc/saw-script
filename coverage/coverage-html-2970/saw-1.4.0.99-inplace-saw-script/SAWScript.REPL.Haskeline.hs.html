@@ -375,11 +375,11 @@ span.spaces    { background: white }
 <span class="lineno">  356 </span><span class="spaces">                    </span><span class="nottickedoff">-- but you can only actually give it one. Should</span>
 <span class="lineno">  357 </span><span class="spaces">                    </span><span class="nottickedoff">-- strengthen the argument schema.</span>
 <span class="lineno">  358 </span><span class="spaces">                    </span><span class="nottickedoff">case cBody cmd of</span>
-<span class="lineno">  359 </span><span class="spaces">                        </span><span class="nottickedoff">ExprArg _   -&gt; completeSAWScriptValue (last args) cursor</span>
-<span class="lineno">  360 </span><span class="spaces">                        </span><span class="nottickedoff">TypeArgs _  -&gt; completeSAWScriptType (last args) cursor</span>
-<span class="lineno">  361 </span><span class="spaces">                        </span><span class="nottickedoff">FilenameArg _ -&gt; completeFilename cursor</span>
-<span class="lineno">  362 </span><span class="spaces">                        </span><span class="nottickedoff">ShellArg _    -&gt; completeFilename cursor</span>
-<span class="lineno">  363 </span><span class="spaces">                        </span><span class="nottickedoff">NoArg       _ -&gt; return (cursorLeftRaw cursor, [])</span></span>
+<span class="lineno">  359 </span><span class="spaces">                        </span><span class="nottickedoff">ExprArg _       -&gt; completeSAWScriptValue (last args) cursor</span>
+<span class="lineno">  360 </span><span class="spaces">                        </span><span class="nottickedoff">SymbolNameArg _ -&gt; completeSAWScriptValue (last args) cursor</span>
+<span class="lineno">  361 </span><span class="spaces">                        </span><span class="nottickedoff">TypeArgs _      -&gt; completeSAWScriptType (last args) cursor</span>
+<span class="lineno">  362 </span><span class="spaces">                        </span><span class="nottickedoff">FilenameArg _   -&gt; completeFilename cursor</span>
+<span class="lineno">  363 </span><span class="spaces">                        </span><span class="nottickedoff">NoArg       _   -&gt; return (cursorLeftRaw cursor, [])</span></span>
 <span class="lineno">  364 </span>
 <span class="lineno">  365 </span>-- | Top-level completion for the REPL.
 <span class="lineno">  366 </span>--

@@ -165,7 +165,7 @@ span.spaces    { background: white }
 <span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">return tree'</span></span>
 <span class="lineno">  147 </span>
 <span class="lineno">  148 </span>processExpr :: Reader -&gt; Expr -&gt; IO Expr
-<span class="lineno">  149 </span><span class="decl"><span class="nottickedoff">processExpr reader e = process reader incs'expr e</span></span>
+<span class="lineno">  149 </span><span class="decl"><span class="istickedoff">processExpr reader e = process <span class="nottickedoff">reader</span> incs'expr e</span></span>
 <span class="lineno">  150 </span>
 <span class="lineno">  151 </span>processStmts :: Reader -&gt; [Stmt] -&gt; IO [Stmt]
 <span class="lineno">  152 </span><span class="decl"><span class="istickedoff">processStmts reader stmts = process reader incs'stmts stmts</span></span>

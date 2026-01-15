@@ -348,36 +348,36 @@ span.spaces    { background: white }
 <span class="lineno">  329 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">incpath = (&quot;.&quot;, Options.importPath opts)</span></span>
 <span class="lineno">  330 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  331 </span><span class="spaces">  </span><span class="istickedoff">expr0 &lt;- readAnyIO fileName str &quot;end-of-line&quot; parseExpression</span>
-<span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">expr &lt;- <span class="nottickedoff">resolveIncludes 0{-depth-} seen incpath opts Inc.processExpr expr0</span></span>
-<span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">let Environ varenv tyenv _cryenvs = <span class="nottickedoff">environ</span></span>
+<span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">expr &lt;- resolveIncludes <span class="nottickedoff">0</span>{-depth-} <span class="nottickedoff">seen</span> <span class="nottickedoff">incpath</span> <span class="nottickedoff">opts</span> Inc.processExpr expr0</span>
+<span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">let Environ varenv tyenv _cryenvs = environ</span>
 <span class="lineno">  334 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">-- XXX it should not be necessary to do this munging</span>
-<span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)</span></span>
-<span class="lineno">  337 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span></span>
+<span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">let squash (defpos, lc, ty, _val, _doc) = (<span class="nottickedoff">defpos</span>, lc, <span class="nottickedoff">ReadOnlyVar</span>, ty)</span>
+<span class="lineno">  337 </span><span class="spaces">      </span><span class="istickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span>
 <span class="lineno">  338 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)</span></span>
-<span class="lineno">  339 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">rbenv' = Map.map rbsquash rbenv</span></span>
-<span class="lineno">  340 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">varenv'' = Map.union varenv' rbenv'</span></span>
-<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">varenv''' = ScopedMap.seed varenv''</span></span>
+<span class="lineno">  339 </span><span class="spaces">      </span><span class="istickedoff">rbenv' = Map.map <span class="nottickedoff">rbsquash</span> rbenv</span>
+<span class="lineno">  340 </span><span class="spaces">      </span><span class="istickedoff">varenv'' = Map.union varenv' rbenv'</span>
+<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff">varenv''' = ScopedMap.seed varenv''</span>
 <span class="lineno">  342 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">-- XXX: also it shouldn't be necessary to do this wrappery</span>
 <span class="lineno">  344 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">pos = Pos.getPos expr</span></span>
-<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">decl = Decl pos (PWild pos Nothing) Nothing expr</span></span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">decl = Decl <span class="nottickedoff">pos</span> (PWild <span class="nottickedoff">pos</span> Nothing) <span class="nottickedoff">Nothing</span> expr</span>
 <span class="lineno">  346 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  347 </span><span class="spaces">  </span><span class="istickedoff">decl' &lt;- <span class="nottickedoff">dispatchMsgs' $ checkDecl avail varenv''' tyenv decl</span></span>
+<span class="lineno">  347 </span><span class="spaces">  </span><span class="istickedoff">decl' &lt;- dispatchMsgs' $ checkDecl avail varenv''' tyenv decl</span>
 <span class="lineno">  348 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">expr' = dDef decl'</span></span>
-<span class="lineno">  350 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">schema = case dType decl' of</span></span>
-<span class="lineno">  351 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just sch -&gt; sch</span></span>
-<span class="lineno">  352 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
-<span class="lineno">  353 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- If the typechecker didn't insert a type, it's bust,</span></span>
-<span class="lineno">  354 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- so panic. Not much point in printing the expression</span></span>
-<span class="lineno">  355 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- or position in panic, since it's what the user just</span></span>
-<span class="lineno">  356 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- typed.</span></span>
+<span class="lineno">  350 </span><span class="spaces">      </span><span class="istickedoff">schema = case dType decl' of</span>
+<span class="lineno">  351 </span><span class="spaces">        </span><span class="istickedoff">Just sch -&gt; sch</span>
+<span class="lineno">  352 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  353 </span><span class="spaces">            </span><span class="istickedoff">-- If the typechecker didn't insert a type, it's bust,</span>
+<span class="lineno">  354 </span><span class="spaces">            </span><span class="istickedoff">-- so panic. Not much point in printing the expression</span>
+<span class="lineno">  355 </span><span class="spaces">            </span><span class="istickedoff">-- or position in panic, since it's what the user just</span>
+<span class="lineno">  356 </span><span class="spaces">            </span><span class="istickedoff">-- typed.</span>
 <span class="lineno">  357 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;readExpressionChecked&quot; [</span></span>
 <span class="lineno">  358 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Typechecker failed to produce a type&quot;</span></span>
 <span class="lineno">  359 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  360 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  361 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">pure (schema, expr')</span></span></span>
+<span class="lineno">  361 </span><span class="spaces">  </span><span class="istickedoff">pure (schema, <span class="nottickedoff">expr'</span>)</span></span>
 <span class="lineno">  362 </span>
 <span class="lineno">  363 </span>-- | Read statements from a string. This is used by the REPL evaluator.
 <span class="lineno">  364 </span>--   Doesn't run the typechecker (yet).
