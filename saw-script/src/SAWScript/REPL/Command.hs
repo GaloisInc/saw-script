@@ -316,11 +316,11 @@ instance Eq CommandDescr where
 -- XXX: should maybe also distinguish "multiple args of this type"
 -- from "one arg of this type".
 data CommandBody
-  = ExprArg     (Text     -> REPL ())
-  | TypeArgs    (Text     -> REPL ())
-  | FilenameArg (FilePath -> REPL ())
-  | ShellArg    (Text     -> REPL ())
-  | NoArg       (REPL ())
+  = ExprArg       (Text     -> REPL ())
+  | SymbolNameArg (Text     -> REPL ())
+  | TypeArgs      (Text     -> REPL ())
+  | FilenameArg   (FilePath -> REPL ())
+  | NoArg         (REPL ())
 
 type CommandMap = Trie CommandDescr
 
@@ -348,9 +348,9 @@ nbCommandList  =
     "display the current sawscript type environment"
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
-  , CommandDescr ":?"    []      (ExprArg helpCmd)
+  , CommandDescr ":?"    []      (SymbolNameArg helpCmd)
     "display a brief description about a built-in operator"
-  , CommandDescr ":help" []      (ExprArg helpCmd)
+  , CommandDescr ":help" []      (SymbolNameArg helpCmd)
     "display a brief description about a built-in operator"
   ]
 
@@ -457,14 +457,14 @@ executeReplCommand cmd args0 =
     in
     exceptionProtect $ case cBody cmd of
         ExprArg action ->
+            action (Text.intercalate " " args0)
+        SymbolNameArg action ->
             onearg action args0
         TypeArgs action ->
             action (Text.intercalate " " args0)
         FilenameArg action -> do
             args' <- mapM expandHome args0
             onearg action args'
-        ShellArg action ->
-            onearg action args0
         NoArg action ->
             noargs action args0
 

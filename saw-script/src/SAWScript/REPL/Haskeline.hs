@@ -356,11 +356,11 @@ completeReplCommand text cursor =
                     -- but you can only actually give it one. Should
                     -- strengthen the argument schema.
                     case cBody cmd of
-                        ExprArg _   -> completeSAWScriptValue (last args) cursor
-                        TypeArgs _  -> completeSAWScriptType (last args) cursor
-                        FilenameArg _ -> completeFilename cursor
-                        ShellArg _    -> completeFilename cursor
-                        NoArg       _ -> return (cursorLeftRaw cursor, [])
+                        ExprArg _       -> completeSAWScriptValue (last args) cursor
+                        SymbolNameArg _ -> completeSAWScriptValue (last args) cursor
+                        TypeArgs _      -> completeSAWScriptType (last args) cursor
+                        FilenameArg _   -> completeFilename cursor
+                        NoArg       _   -> return (cursorLeftRaw cursor, [])
 
 -- | Top-level completion for the REPL.
 --
