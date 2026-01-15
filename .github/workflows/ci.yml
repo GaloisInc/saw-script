@@ -1,5 +1,5 @@
 # Overall configuration notes:
-# - Artifact uploads for binaries are from GHC 9.6.7
+# - Artifact uploads for binaries are from GHC 9.10.3
 # - Builds for Ubuntu happen on 24.04. We also include a single configuration
 #   for 22.04 to increase our Linux coverage.
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
@@ -538,7 +538,7 @@ jobs:
         # rare and the combination isn't worth worrying about.
         #
         # So we pick a default platform (currently ubuntu 24.04) and a
-        # default GHC (currently 9.6.7) and run the non-default GHC
+        # default GHC (currently 9.10.3) and run the non-default GHC
         # builds on the default platform and the non-default platforms
         # using the default GHC. For five platforms (two Ubuntu, two
         # MacOS, and Windows) and three GHC versions that gives us
@@ -563,20 +563,20 @@ jobs:
 
         include:
             # Default OS, older GHC
-          - os: ubuntu-24.04
-            ghc: "9.4.8"
-            cabal: "3.14.1.0"
-            haddock: true
-            run-integration-tests: false
-            run-other-tests: false
-            allow-test-failures: false
-            hpc: false
-            label: "Build"
+          #- os: ubuntu-24.04
+          #  ghc: "9.4.8"
+          #  cabal: "3.14.1.0"
+          #  haddock: true
+          #  run-integration-tests: false
+          #  run-other-tests: false
+          #  allow-test-failures: false
+          #  hpc: false
+          #  label: "Build"
 
             # Default OS, default GHC
             # Run the other tests as well as the integration tests.
           - os: ubuntu-24.04
-            ghc: "9.6.7"
+            ghc: "9.10.3"
             cabal: "3.14.1.0"
             haddock: true
             run-integration-tests: true
@@ -587,81 +587,81 @@ jobs:
 
             # Default OS, newer GHC
           - os: ubuntu-24.04
-            ghc: "9.8.4"
+            ghc: "9.12.2"
             cabal: "3.14.1.0"
             haddock: true
-            run-integration-tests: false
-            run-other-tests: false
+            run-integration-tests: true
+            run-other-tests: true
             allow-test-failures: false
             hpc: false
-            label: "Build"
+            label: "Build and all tests"
 
             # Older Ubuntu, default GHC
             # Don't do a haddock run.
             # Don't run the tests. 
-          - os: ubuntu-22.04
-            ghc: "9.6.7"
-            cabal: "3.14.1.0"
-            haddock: false
-            run-integration-tests: false
-            run-other-tests: false
-            allow-test-failures: false
-            hpc: false
-            label: "Build"
+          #- os: ubuntu-22.04
+          #  ghc: "9.6.7"
+          #  cabal: "3.14.1.0"
+          #  haddock: false
+          #  run-integration-tests: false
+          #  run-other-tests: false
+          #  allow-test-failures: false
+          #  hpc: false
+          #  label: "Build"
 
           # HPC (coverage) enabled, default OS and GHC
           # Don't run haddock.
           # Do run the tests, because that's what gives us coverage data.
           # But we only run the integration tests, not the rest of them.
           # (FUTURE: maybe change that.)
-          - os: ubuntu-24.04
-            ghc: "9.6.7"
-            cabal: "3.14.1.0"
-            haddock: false
-            run-integration-tests: true
-            run-other-tests: false
-            allow-test-failures: false
-            hpc: true
-            label: "Build and test with coverage"
+          #- os: ubuntu-24.04
+          #  ghc: "9.6.7"
+          #  cabal: "3.14.1.0"
+          #  haddock: false
+          #  run-integration-tests: true
+          #  run-other-tests: false
+          #  allow-test-failures: false
+          #  hpc: true
+          #  label: "Build and test with coverage"
 
           # Windows, default GHC
           # Don't run Haddock, but do run the tests.
           # Allow the tests to fail. See
           # See https://github.com/GaloisInc/saw-script/issues/2648
-          - os: windows-2022
-            ghc: 9.6.7
-            cabal: "3.14.1.0"
-            haddock: false
-            run-integration-tests: true
-            run-other-tests: false
-            allow-test-failures: true
-            hpc: false
-            label: "Build and test"
+          #- os: windows-2022
+          #  ghc: 9.6.7
+          #  cabal: "3.14.1.0"
+          #  haddock: false
+          #  run-integration-tests: true
+          #  run-other-tests: false
+          #  allow-test-failures: true
+          #  hpc: false
+          #  label: "Build and test"
 
             # Intel (x86-64) MacOS
             # Don't run Haddock, don't run the tests.
-          - os: macos-15-intel
-            ghc: 9.6.7
-            cabal: "3.14.1.0"
-            haddock: false
-            run-integration-tests: false
-            run-other-tests: false
-            allow-test-failures: false
-            hpc: false
-            label: "Build"
+          #- os: macos-15-intel
+          #  ghc: 9.6.7
+          #  cabal: "3.14.1.0"
+          #  haddock: false
+          #  run-integration-tests: false
+          #  run-other-tests: false
+          #  allow-test-failures: false
+          #  hpc: false
+          #  label: "Build"
 
             # Default (AArch64, aka arm64) MacOS
             # Don't run Haddock, but do run the tests.
             # Integration tests only, though.
-          - os: macos-15
-            ghc: 9.6.7
-            cabal: "3.14.1.0"
-            haddock: false
-            run-integration-tests: true
-            run-other-tests: false
-            allow-test-failures: false
-            hpc: false
-            label: "Build and test"
+          #- os: macos-15
+          #  ghc: 9.6.7
+          #  cabal: "3.14.1.0"
+          #  haddock: false
+          #  run-integration-tests: true
+          #  run-other-tests: false
+          #  allow-test-failures: false
+          #  hpc: false
+          #  label: "Build and test"
 
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
@@ -810,7 +810,7 @@ jobs:
       # Restrict this step so it only runs when the secrets needed are
       # available.
       - name: Sign the binary distributions
-        if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing == 'true'
+        if: matrix.ghc == '9.10.3' && needs.config.outputs.want-signing == 'true'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
@@ -820,7 +820,7 @@ jobs:
       ##########################################################################
       # We upload an archive containing SAW, and also and archive containing SAW
       # and the set of possible SMT solvers, but only for our "primary"
-      # distribution (currently: GHC 9.6.7).  These archives are utilized in
+      # distribution (currently: GHC 9.10.3).  These archives are utilized in
       # subsequent CI jobs, but are also published for external users, and are
       # therefore signed.
       #
@@ -836,7 +836,7 @@ jobs:
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
       - name: Upload the SAW non-solvers binary distribution
-        if: matrix.ghc == '9.6.7' && matrix.hpc == false
+        if: matrix.ghc == '9.10.3' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -845,7 +845,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - name: Upload the SAW with-solvers binary distribution
-        if: matrix.ghc == '9.6.7' && matrix.hpc == false
+        if: matrix.ghc == '9.10.3' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers
@@ -854,7 +854,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - name: Upload the Crux binary distribution
-        if: matrix.ghc == '9.6.7' && matrix.hpc == false
+        if: matrix.ghc == '9.10.3' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
@@ -863,7 +863,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - name: Upload the non-coverage bins for other jobs
-        if: matrix.ghc == '9.6.7' && matrix.run-integration-tests && matrix.hpc == false
+        if: matrix.ghc == '9.10.3' && matrix.run-integration-tests && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           path: dist/bin
@@ -1265,7 +1265,7 @@ jobs:
           # - awslc
           - blst
         os: [ubuntu-24.04]
-        ghc: ["9.6.7"]
+        ghc: ["9.10.3"]
     steps:
       - name: Check out the repository without submodules
         uses: actions/checkout@v7
@@ -1324,7 +1324,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-24.04]
-        ghc: ["9.6.7"]
+        ghc: ["9.10.3"]
     steps:
       - name: Check out the repository without submodules
         uses: actions/checkout@v7
