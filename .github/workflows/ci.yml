@@ -80,7 +80,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04]
-        cabal: ["3.10.3.0"]
+        cabal: ["3.14.1.0"]
         #ghc: ["9.4.8", "9.6.7", "9.8.4"]
         ghc: ["9.10.3", "9.12.2"]
         haddock: [true]
@@ -92,14 +92,14 @@ jobs:
           # tests with the newest LTS release, we won't bother testing this one.
           #- os: ubuntu-22.04
           #  ghc: "9.6.7"
-          #  cabal: "3.10.3.0"
+          #  cabal: "3.14.1.0"
           #  haddock: false
           #  run-tests: false
           #  hpc: false
           # Include one job with HPC enabled
           - os: ubuntu-24.04
             ghc: "9.10.3"
-            cabal: "3.10.3.0"
+            cabal: "3.14.1.0"
             haddock: false
             run-tests: true
             hpc: true
