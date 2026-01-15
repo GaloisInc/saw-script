@@ -49,3 +49,7 @@ semaphore: true
 -- and boomerang doesn't permit GHC 9.12's template-haskell
 allow-newer: ring-buffer:base
 allow-newer: boomerang:template-haskell
+
+-- hgmp doesn't allow either GHC 9.10 or 9.12's base
+allow-newer: hgmp:base
+allow-newer: hgmp:ghc-prim
