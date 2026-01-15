@@ -41,7 +41,7 @@ RUN case ${TARGETPLATFORM} in \
     chmod +x /home/saw/ghcup-download/bin/ghcup
 RUN mkdir -p /home/saw/.ghcup && \
     ghcup --version && \
-    ghcup install cabal 3.10.3.0 && \
+    ghcup install cabal 3.14.1.0 && \
     ghcup install ghc 9.10.3 && \
     ghcup set ghc 9.10.3
 RUN cabal v2-update
