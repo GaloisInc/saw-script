@@ -45,3 +45,5 @@ packages:
 -- enable ghc >= 9.8's additional build parallelism
 semaphore: true
 
+-- there is no ring-buffer that permits GHC 9.12's base version
+allow-newer: ring-buffer:base
