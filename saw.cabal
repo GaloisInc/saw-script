@@ -704,11 +704,11 @@ library saw-server
 
   build-depends:
     -- upstream packages from hackage
-    base >=4.11.1.0 && <4.20,
+    base >=4.11.1.0 && <4.22,
     aeson >= 1.4.2 && < 2.3,
     base64-bytestring,
     bytestring,
-    containers >= 0.6 && < 0.7,
+    containers >= 0.6 && < 0.8,
     cryptonite,
     cryptonite-conduit,
     directory,
@@ -815,11 +815,11 @@ executable saw-remote-api
 
   build-depends:
     -- upstream packages from hackage
-    base >=4.11.1.0 && <4.20,
+    base >=4.11.1.0 && <4.22,
     aeson >= 1.4.2 && < 2.3,
     base64-bytestring,
     bytestring,
-    containers >= 0.6 && < 0.7,
+    containers >= 0.6 && < 0.8,
     cryptonite,
     cryptonite-conduit,
     directory,
