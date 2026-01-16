@@ -114,10 +114,32 @@ termPat t = termFPat (unwrapTermF t)
 termFPat :: TermF Term -> Net.Pat
 termFPat tf =
   case tf of
-    Constant nm               -> Net.Atom (toShortName (nameInfo nm))
-    App t1 t2                 -> Net.App (termPat t1) (termPat t2)
-    FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
-    _                         -> Net.Var
+    Constant nm  -> Net.Atom (toShortName (nameInfo nm))
+    App t1 t2    -> Net.App (termPat t1) (termPat t2)
+    Lambda{}     -> Net.Var
+    Pi{}         -> Net.Var
+    Variable{}   -> Net.Var
+    FTermF ftf ->
+      case ftf of
+        UnitValue       -> Net.Atom "()"
+        UnitType        -> Net.Atom "#()"
+        PairValue t1 t2 -> Net.App (Net.App (Net.Atom "(,)") (termPat t1)) (termPat t2)
+        PairType t1 t2  -> Net.App (Net.App (Net.Atom "#(,)") (termPat t1)) (termPat t2)
+        PairLeft t1     -> Net.App (Net.Atom ".1") (termPat t1)
+        PairRight t1    -> Net.App (Net.Atom ".2") (termPat t1)
+        Recursor crec   -> Net.Atom (toShortName (nameInfo (recursorDataType crec)) <> "#rec")
+        RecordType fs ->
+          foldl Net.App
+          (Net.Atom ("#{" <> Text.intercalate "," (map fst fs) <> "}"))
+          (map (termPat . snd) fs)
+        RecordValue fs ->
+          foldl Net.App
+          (Net.Atom ("{" <> Text.intercalate "," (map fst fs) <> "}"))
+          (map (termPat . snd) fs)
+        RecordProj t1 f  -> Net.App (Net.Atom ("." <> f)) (termPat t1)
+        Sort s _         -> Net.Atom (Text.pack ('*' : show s))
+        ArrayValue t1 ts -> foldl Net.App (Net.Atom "[]") (termPat t1 : map termPat (V.toList ts))
+        StringLit str    -> Net.Atom (Text.pack (show str))
 
 ----------------------------------------------------------------------
 -- Matchers for terms
