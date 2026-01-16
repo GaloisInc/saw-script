@@ -175,7 +175,6 @@ data SolverBackend = What4
                    | ABC
                    | Boolector
                    | Bitwuzla
-                   | CVC4
                    | CVC5
                    | DReal -- NOTE: Not currently supported by SAW
                    | MathSAT
@@ -204,7 +203,6 @@ sbvBackends conf = [SBV, cvtSolver $ SBV.name $ SBV.solver conf]
   where cvtSolver SBV.ABC       = ABC
         cvtSolver SBV.Boolector = Boolector
         cvtSolver SBV.Bitwuzla  = Bitwuzla
-        cvtSolver SBV.CVC4      = CVC4
         cvtSolver SBV.CVC5      = CVC5
         cvtSolver SBV.DReal     = DReal
         cvtSolver SBV.MathSAT   = MathSAT

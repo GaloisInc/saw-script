@@ -34,7 +34,6 @@ getSolverVersion s =
         SBV.ABC       -> (["s", "-q", "version;quit"], "UC Berkeley, ABC ")
         SBV.Boolector -> (["--version"]              , "")
         SBV.Bitwuzla  -> (["--version"]              , "")
-        SBV.CVC4      -> (["--version"]              , "This is CVC4 version ")
         SBV.CVC5      -> (["--version"]              , "This is cvc5 version ")
         SBV.DReal     -> (["--version"]              , "dReal v")
         SBV.MathSAT   -> (["-version"]               , "MathSAT5 version ")
@@ -61,7 +60,6 @@ getSolverBackendVersion backend = case backend of
   ABC       -> getSolverVersion SBV.ABC
   Bitwuzla  -> getSolverVersion SBV.Bitwuzla
   Boolector -> getSolverVersion SBV.Boolector
-  CVC4      -> getSolverVersion SBV.CVC4
   CVC5      -> getSolverVersion SBV.CVC5
   DReal     -> getSolverVersion SBV.DReal
   MathSAT   -> getSolverVersion SBV.MathSAT
