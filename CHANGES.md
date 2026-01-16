@@ -125,7 +125,9 @@ This release supports [version
 * Fix a bug that would cause the `offline_w4_unint_yices` proof script to
   always throw an error.
 
-## Deprecations
+## Removals / Deprecations
+
+* Support for CVC4 has been removed. Use CVC5.
 
 * As noted above, `prove_extcore` is deprecated in favor of just using
   `prove_print`.

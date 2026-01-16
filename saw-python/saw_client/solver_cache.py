@@ -18,7 +18,6 @@ SolverBackend = Union[
   Literal["ABC"],
   Literal["Boolector"],
   Literal["Bitwuzla"],
-  Literal["CVC4"],
   Literal["CVC5"],
   Literal["DReal"], # NOTE: Not currently supported by SAW
   Literal["MathSAT"],
