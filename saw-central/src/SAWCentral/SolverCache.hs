@@ -175,7 +175,7 @@ data SolverBackend = What4
                    | ABC
                    | Boolector
                    | Bitwuzla
-                   | CVC4
+                   | CVC4 -- NOTE: Not supported by SAW anymore
                    | CVC5
                    | DReal -- NOTE: Not currently supported by SAW
                    | MathSAT

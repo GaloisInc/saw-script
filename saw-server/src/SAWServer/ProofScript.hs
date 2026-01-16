@@ -57,7 +57,6 @@ data Prover
   | SBV_ABC_SMTLib
   | SBV_Bitwuzla [Text]
   | SBV_Boolector [Text]
-  | SBV_CVC4 [Text]
   | SBV_CVC5 [Text]
   | SBV_MathSAT [Text]
   | SBV_Yices [Text]
@@ -66,7 +65,6 @@ data Prover
   | W4_ABC_Verilog
   | W4_Bitwuzla [Text]
   | W4_Boolector [Text]
-  | W4_CVC4 [Text]
   | W4_CVC5 [Text]
   | W4_Yices [Text]
   | W4_Z3 [Text]
@@ -92,14 +90,12 @@ instance FromJSON Prover where
         "abc"            -> pure W4_ABC_SMTLib
         "bitwuzla"       -> SBV_Bitwuzla <$> unints
         "boolector"      -> SBV_Boolector <$> unints
-        "cvc4"           -> SBV_CVC4  <$> unints
         "cvc5"           -> SBV_CVC5  <$> unints
         "mathsat"        -> SBV_MathSAT <$> unints
         "rme"            -> pure RME
         "sbv-abc"        -> pure SBV_ABC_SMTLib
         "sbv-bitwuzla"   -> SBV_Bitwuzla <$> unints
         "sbv-boolector"  -> SBV_Boolector <$> unints
-        "sbv-cvc4"       -> SBV_CVC4  <$> unints
         "sbv-cvc5"       -> SBV_CVC5  <$> unints
         "sbv-mathsat"    -> SBV_MathSAT <$> unints
         "sbv-yices"      -> SBV_Yices <$> unints
@@ -108,7 +104,6 @@ instance FromJSON Prover where
         "w4-abc-verilog" -> pure W4_ABC_Verilog
         "w4-bitwuzla"    -> W4_Bitwuzla <$> unints
         "w4-boolector"   -> W4_Boolector <$> unints
-        "w4-cvc4"        -> W4_CVC4   <$> unints
         "w4-cvc5"        -> W4_CVC5   <$> unints
         "w4-yices"       -> W4_Yices  <$> unints
         "w4-z3"          -> W4_Z3     <$> unints
@@ -290,7 +285,6 @@ interpretProofScript (ProofScript ts) = go ts
             SBV_ABC_SMTLib        -> return $ SB.proveABC_SBV
             SBV_Bitwuzla unints   -> return $ SB.proveUnintBitwuzla unints
             SBV_Boolector unints  -> return $ SB.proveUnintBoolector unints
-            SBV_CVC4 unints       -> return $ SB.proveUnintCVC4 unints
             SBV_CVC5 unints       -> return $ SB.proveUnintCVC5 unints
             SBV_MathSAT unints    -> return $ SB.proveUnintMathSAT unints
             SBV_Yices unints      -> return $ SB.proveUnintYices unints
@@ -299,7 +293,6 @@ interpretProofScript (ProofScript ts) = go ts
             W4_ABC_Verilog        -> return $ SB.w4_abc_verilog
             W4_Bitwuzla unints    -> return $ SB.w4_unint_bitwuzla unints
             W4_Boolector unints   -> return $ SB.w4_unint_boolector unints
-            W4_CVC4 unints        -> return $ SB.w4_unint_cvc4 unints
             W4_CVC5 unints        -> return $ SB.w4_unint_cvc5 unints
             W4_Yices unints       -> return $ SB.w4_unint_yices unints
             W4_Z3 unints          -> return $ SB.w4_unint_z3 unints
