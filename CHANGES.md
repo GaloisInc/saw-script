@@ -14,6 +14,10 @@ This release supports [version
 * SAW no longer spuriously rejects `mir_array_value`s that use a signed integer
   type (e.g., `mir_i32`) as an element type.
 
+## Removals / Deprecations
+
+* Support for CVC4 has been removed. Use CVC5.
+
 # 1.5 -- 2026-01-31
 
 This release supports [version

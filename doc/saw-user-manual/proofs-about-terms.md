@@ -58,7 +58,7 @@ sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Sat: [x = 0]
 :::
 
-In addition to these, the `bitwuzla`, `boolector`, `cvc4`, `cvc5`, `mathsat`,
+In addition to these, the `bitwuzla`, `boolector`, `cvc5`, `mathsat`,
 and `yices` provers are available. The internal decision procedure `rme`, short
 for Reed-Muller Expansion, is an automated prover that works particularly well
 on the Galois field operations that show up, for example, in AES.
@@ -126,8 +126,6 @@ named subterms should be represented as uninterpreted functions.
 
 - `unint_bitwuzla : [String] -> ProofScript ()`
 
-- `unint_cvc4 : [String] -> ProofScript ()`
-
 - `unint_cvc5 : [String] -> ProofScript ()`
 
 - `unint_yices : [String] -> ProofScript ()`
@@ -149,8 +147,6 @@ library to represent and solve SMT queries:
 
 - `sbv_unint_bitwuzla : [String] -> ProofScript ()`
 
-- `sbv_unint_cvc4 : [String] -> ProofScript ()`
-
 - `sbv_unint_cvc5 : [String] -> ProofScript ()`
 
 - `sbv_unint_yices : [String] -> ProofScript ()`
@@ -160,8 +156,6 @@ library to represent and solve SMT queries:
 The `w4_`-prefixed tactics make use of the What4 library instead of SBV:
 
 - `w4_unint_bitwuzla : [String] -> ProofScript ()`
-
-- `w4_unint_cvc4 : [String] -> ProofScript ()`
 
 - `w4_unint_cvc5 : [String] -> ProofScript ()`
 
@@ -184,7 +178,7 @@ proof development and CI, where the same proof scripts are often run repeatedly
 without changes.
 
 This caching is available for all tactics which call out to automated provers
-at runtime: `abc`, `boolector`, `cvc4`, `cvc5`, `mathsat`, `yices`, `z3`,
+at runtime: `abc`, `boolector`, `cvc5`, `mathsat`, `yices`, `z3`,
 `rme`, and the family of `unint` tactics described in the previous section.
 
 When solver caching is enabled and one of the tactics mentioned above is

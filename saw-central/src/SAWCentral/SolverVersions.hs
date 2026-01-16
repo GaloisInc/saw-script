@@ -40,7 +40,7 @@ getSolverVersion s =
         SBV.ABC       -> (["s", "-q", "version;quit"], "UC Berkeley, ABC ")
         SBV.Boolector -> (["--version"]              , "")
         SBV.Bitwuzla  -> (["--version"]              , "")
-        SBV.CVC4      -> (["--version"]              , "This is CVC4 version ")
+        SBV.CVC4      -> nope "CVC4"
         SBV.CVC5      -> (["--version"]              , "This is cvc5 version ")
         SBV.DReal     -> (["--version"]              , "dReal v")
         SBV.MathSAT   -> (["-version"]               , "MathSAT5 version ")
