@@ -108,6 +108,22 @@ instance Show Conversion where
 ----------------------------------------------------------------------
 -- TermNet Patterns
 
+-- | Given a 'Term', compute a pattern of type 'Net.Pat' for use with
+-- a 'Net.Net' data structure.
+--
+-- There is a "matches" relation on type 'Net.Pat', where 'Net.Atom'
+-- matches only itself, 'Net.App' matches other 'Net.App's iff the
+-- corresponding subpatterns match, and 'Net.Var' matches anything.
+--
+-- There is a similar "matches" relation on type 'Term': @t1@ matches
+-- @t2@ if the free variables of term @t1@ can be instantiated to
+-- yield term @t2@.
+--
+-- Function 'termPat' should satisfy the following property: If @t1@
+-- matches @t2@, then @termPat t1@ must match @termPat t2@.
+-- This ensures that a lookup in a term net will always yield all
+-- potential matches for any given term.
+
 termPat :: Term -> Net.Pat
 termPat t = termFPat (unwrapTermF t)
 
