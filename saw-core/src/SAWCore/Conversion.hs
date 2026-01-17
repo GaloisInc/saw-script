@@ -130,11 +130,11 @@ termPat t = termFPat (unwrapTermF t)
 termFPat :: TermF Term -> Net.Pat
 termFPat tf =
   case tf of
-    Constant nm  -> Net.Atom (toShortName (nameInfo nm))
-    App t1 t2    -> Net.App (termPat t1) (termPat t2)
-    Lambda{}     -> Net.Var
-    Pi{}         -> Net.Var
-    Variable{}   -> Net.Var
+    Constant nm    -> Net.Atom (toShortName (nameInfo nm))
+    App t1 t2      -> Net.App (termPat t1) (termPat t2)
+    Lambda _ t1 t2 -> Net.App (Net.App (Net.Atom "\\") (termPat t1)) (termPat t2)
+    Pi _ t1 t2     -> Net.App (Net.App (Net.Atom "->") (termPat t1)) (termPat t2)
+    Variable{}     -> Net.Var
     FTermF ftf ->
       case ftf of
         UnitValue       -> Net.Atom "()"
