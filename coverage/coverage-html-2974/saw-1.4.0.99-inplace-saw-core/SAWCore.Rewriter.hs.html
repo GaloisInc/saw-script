@@ -326,8 +326,8 @@ span.spaces    { background: white }
 <span class="lineno">  307 </span><span class="spaces">              </span><span class="istickedoff">do s' &lt;- match xenv yenv <span class="nottickedoff">ybinds</span> x1 y1 s</span>
 <span class="lineno">  308 </span><span class="spaces">                 </span><span class="istickedoff">match xenv yenv <span class="nottickedoff">ybinds</span> x2 y2 s'</span>
 <span class="lineno">  309 </span><span class="spaces">            </span><span class="istickedoff">(Lambda xv xt xbody, Lambda yv yt ybody) -&gt;</span>
-<span class="lineno">  310 </span><span class="spaces">              </span><span class="istickedoff">do s' &lt;- match xenv yenv <span class="nottickedoff">ybinds</span> xt yt s</span>
-<span class="lineno">  311 </span><span class="spaces">                 </span><span class="istickedoff">match (consVarCtx xv xenv) (consVarCtx yv yenv) <span class="nottickedoff">((yv, yt) : ybinds)</span> xbody ybody s'</span>
+<span class="lineno">  310 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">do s' &lt;- match xenv yenv ybinds xt yt s</span></span>
+<span class="lineno">  311 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">match (consVarCtx xv xenv) (consVarCtx yv yenv) ((yv, yt) : ybinds) xbody ybody s'</span></span>
 <span class="lineno">  312 </span><span class="spaces">            </span><span class="istickedoff">(Pi xv x1 x2, Pi yv y1 y2) -&gt;</span>
 <span class="lineno">  313 </span><span class="spaces">              </span><span class="istickedoff">do s' &lt;- match xenv yenv <span class="nottickedoff">ybinds</span> x1 y1 s</span>
 <span class="lineno">  314 </span><span class="spaces">                 </span><span class="istickedoff">match (consVarCtx xv xenv) (consVarCtx yv yenv) <span class="nottickedoff">((yv, y1) : ybinds)</span> x2 y2 s'</span>
