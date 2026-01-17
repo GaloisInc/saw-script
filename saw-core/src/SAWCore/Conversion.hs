@@ -108,16 +108,54 @@ instance Show Conversion where
 ----------------------------------------------------------------------
 -- TermNet Patterns
 
+-- | Given a 'Term', compute a pattern of type 'Net.Pat' for use with
+-- a 'Net.Net' data structure.
+--
+-- There is a "matches" relation on type 'Net.Pat', where 'Net.Atom'
+-- matches only itself, 'Net.App' matches other 'Net.App's iff the
+-- corresponding subpatterns match, and 'Net.Var' matches anything.
+--
+-- There is a similar "matches" relation on type 'Term': @t1@ matches
+-- @t2@ if the free variables of term @t1@ can be instantiated to
+-- yield term @t2@.
+--
+-- Function 'termPat' should satisfy the following property: If @t1@
+-- matches @t2@, then @termPat t1@ must match @termPat t2@.
+-- This ensures that a lookup in a term net will always yield all
+-- potential matches for any given term.
+
 termPat :: Term -> Net.Pat
 termPat t = termFPat (unwrapTermF t)
 
 termFPat :: TermF Term -> Net.Pat
 termFPat tf =
   case tf of
-    Constant nm               -> Net.Atom (toShortName (nameInfo nm))
-    App t1 t2                 -> Net.App (termPat t1) (termPat t2)
-    FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
-    _                         -> Net.Var
+    Constant nm    -> Net.Atom (toShortName (nameInfo nm))
+    App t1 t2      -> Net.App (termPat t1) (termPat t2)
+    Lambda _ t1 t2 -> Net.App (Net.App (Net.Atom "\\") (termPat t1)) (termPat t2)
+    Pi _ t1 t2     -> Net.App (Net.App (Net.Atom "->") (termPat t1)) (termPat t2)
+    Variable{}     -> Net.Var
+    FTermF ftf ->
+      case ftf of
+        UnitValue       -> Net.Atom "()"
+        UnitType        -> Net.Atom "#()"
+        PairValue t1 t2 -> Net.App (Net.App (Net.Atom "(,)") (termPat t1)) (termPat t2)
+        PairType t1 t2  -> Net.App (Net.App (Net.Atom "#(,)") (termPat t1)) (termPat t2)
+        PairLeft t1     -> Net.App (Net.Atom ".1") (termPat t1)
+        PairRight t1    -> Net.App (Net.Atom ".2") (termPat t1)
+        Recursor crec   -> Net.Atom (toShortName (nameInfo (recursorDataType crec)) <> "#rec")
+        RecordType fs ->
+          foldl Net.App
+          (Net.Atom ("#{" <> Text.intercalate "," (map fst fs) <> "}"))
+          (map (termPat . snd) fs)
+        RecordValue fs ->
+          foldl Net.App
+          (Net.Atom ("{" <> Text.intercalate "," (map fst fs) <> "}"))
+          (map (termPat . snd) fs)
+        RecordProj t1 f  -> Net.App (Net.Atom ("." <> f)) (termPat t1)
+        Sort s _         -> Net.Atom (Text.pack ('*' : show s))
+        ArrayValue t1 ts -> foldl Net.App (Net.Atom "[]") (termPat t1 : map termPat (V.toList ts))
+        StringLit str    -> Net.Atom (Text.pack (show str))
 
 ----------------------------------------------------------------------
 -- Matchers for terms
