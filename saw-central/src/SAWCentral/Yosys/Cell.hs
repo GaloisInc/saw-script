@@ -244,31 +244,13 @@ primCellToMap sc c args =
       do ta <- cellTermTerm <$> input "A"
          tb <- cellTermTerm <$> input "B"
          ts <- cellTermTerm <$> input "S"
-
          width <- connWidth "A"
          widthBv <- SC.scBitvector sc $ connWidthNat "A"
          swidth <- connWidth "S"
          bool <- SC.scBoolType sc
-         nat <- SC.scNatType sc
          splitb <- SC.scSplit sc swidth width bool tb
-         zero <- SC.scNat sc 0
-         accTy <- SC.scPairType sc nat widthBv
-         defaultAcc <- SC.scPairValue sc zero ta
-
-         bit <- SC.scFreshVariable sc "bit" bool
-         acc <- SC.scFreshVariable sc "acc" accTy
-         body <-
-           do idx <- SC.scPairLeft sc acc
-              aval <- SC.scPairRight sc acc
-              bval <- SC.scAtWithDefault sc swidth widthBv aval splitb idx
-              newidx <- SC.scAddNat sc idx width
-              newval <- SC.scIte sc widthBv bit bval aval
-              SC.scPairValue sc newidx newval
-         fun <- SC.scAbstractTerms sc [bit, acc] body
-
-         scFoldr <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "foldr"
-         resPair <- SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]
-         res <- SC.scPairRight sc resPair
+         scPmux <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "pmux"
+         res <- SC.scApplyAll sc scPmux [swidth, widthBv, ts, splitb, ta]
          output $ CellTerm res (connWidthNat "A") (connSigned "Y")
     CellTypeBmux ->
       do ia <- input "A"
