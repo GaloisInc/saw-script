@@ -236,7 +236,7 @@ span.spaces    { background: white }
 <span class="lineno">  217 </span>
 <span class="lineno">  218 </span>zipRec :: CompiledRecursor -&gt; CompiledRecursor -&gt; Maybe CompiledRecursor
 <span class="lineno">  219 </span><span class="decl"><span class="istickedoff">zipRec (CompiledRecursor d1 s1 ps1 n1 ord1) (CompiledRecursor d2 s2 _ n2 ord2)</span>
-<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">| n1 == n2 &amp;&amp; s1 == s2</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">n1 == n2 &amp;&amp; s1 == s2</span></span>
 <span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">= do d &lt;- zipName d1 d2</span>
 <span class="lineno">  222 </span><span class="spaces">       </span><span class="istickedoff">ord &lt;- <span class="nottickedoff">sequence (zipWith zipName ord1 ord2)</span></span>
 <span class="lineno">  223 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">pure $ CompiledRecursor</span></span>
@@ -245,7 +245,7 @@ span.spaces    { background: white }
 <span class="lineno">  226 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ps1</span></span>
 <span class="lineno">  227 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">n1</span></span>
 <span class="lineno">  228 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ord</span></span>
-<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
+<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  230 </span>
 <span class="lineno">  231 </span>-- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
 <span class="lineno">  232 </span>-- pointwise to immediate subterms, if the two 'FlatTermF's are the same
@@ -271,14 +271,14 @@ span.spaces    { background: white }
 <span class="lineno">  252 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- <span class="nottickedoff">alistAllFields (map fst elems1) elems2</span> =</span>
 <span class="lineno">  253 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just $ RecordValue $ zipWith (\(fld,x) y -&gt; (fld, f x y)) elems1 vals2</span></span>
 <span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">go (RecordProj e1 fld1) (RecordProj e2 fld2)</span>
-<span class="lineno">  255 </span><span class="spaces">      </span><span class="istickedoff">| fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1</span>
+<span class="lineno">  255 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">fld1 == fld2</span> = Just $ RecordProj (f e1 e2) fld1</span>
 <span class="lineno">  256 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (sortFlagsLift2 <span class="nottickedoff">(&amp;&amp;)</span> hx hy))</span>
 <span class="lineno">  258 </span><span class="spaces">         </span><span class="istickedoff">-- /\ NB, it's not entirely clear how the flags should be propagated</span>
 <span class="lineno">  259 </span><span class="spaces">    </span><span class="istickedoff">go (StringLit s) (StringLit t) | <span class="nottickedoff">s == t</span> = <span class="nottickedoff">Just (StringLit s)</span></span>
 <span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">go (ArrayValue tx vx) (ArrayValue ty vy)</span>
-<span class="lineno">  261 </span><span class="spaces">      </span><span class="istickedoff">| V.length vx == V.length vy</span>
-<span class="lineno">  262 </span><span class="spaces">      </span><span class="istickedoff">= Just $ ArrayValue (f tx ty) (V.zipWith <span class="nottickedoff">f</span> vx vy)</span>
+<span class="lineno">  261 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">V.length vx == V.length vy</span></span>
+<span class="lineno">  262 </span><span class="spaces">      </span><span class="istickedoff">= <span class="nottickedoff">Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)</span></span>
 <span class="lineno">  263 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff">go UnitValue      _ = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  265 </span><span class="spaces">    </span><span class="istickedoff">go UnitType       _ = <span class="nottickedoff">Nothing</span></span>
@@ -289,9 +289,9 @@ span.spaces    { background: white }
 <span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">go Recursor{}     _ = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">go RecordType{}   _ = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">go RecordValue{}  _ = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">go RecordProj{}   _ = Nothing</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">go RecordProj{}   _ = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">go Sort{}         _ = Nothing</span>
-<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">go ArrayValue{}   _ = Nothing</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">go ArrayValue{}   _ = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff">go StringLit{}    _ = <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  277 </span>
 <span class="lineno">  278 </span>

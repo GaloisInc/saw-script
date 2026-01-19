@@ -320,14 +320,14 @@ span.spaces    { background: white }
 <span class="lineno">  301 </span><span class="spaces">            </span><span class="istickedoff">-- check that neither x nor y contains bound variables less than `depth`</span>
 <span class="lineno">  302 </span><span class="spaces">            </span><span class="istickedoff">(FTermF xf, FTermF yf) -&gt;</span>
 <span class="lineno">  303 </span><span class="spaces">              </span><span class="istickedoff">case zipWithFlatTermF (match xenv yenv <span class="nottickedoff">ybinds</span>) xf yf of</span>
-<span class="lineno">  304 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; mzero</span>
+<span class="lineno">  304 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">mzero</span></span>
 <span class="lineno">  305 </span><span class="spaces">                </span><span class="istickedoff">Just zf -&gt; Foldable.foldl (&gt;=&gt;) return zf s</span>
 <span class="lineno">  306 </span><span class="spaces">            </span><span class="istickedoff">(App x1 x2, App y1 y2) -&gt;</span>
 <span class="lineno">  307 </span><span class="spaces">              </span><span class="istickedoff">do s' &lt;- match xenv yenv <span class="nottickedoff">ybinds</span> x1 y1 s</span>
 <span class="lineno">  308 </span><span class="spaces">                 </span><span class="istickedoff">match xenv yenv <span class="nottickedoff">ybinds</span> x2 y2 s'</span>
 <span class="lineno">  309 </span><span class="spaces">            </span><span class="istickedoff">(Lambda xv xt xbody, Lambda yv yt ybody) -&gt;</span>
-<span class="lineno">  310 </span><span class="spaces">              </span><span class="istickedoff">do s' &lt;- match xenv yenv <span class="nottickedoff">ybinds</span> xt yt s</span>
-<span class="lineno">  311 </span><span class="spaces">                 </span><span class="istickedoff">match (consVarCtx xv xenv) (consVarCtx yv yenv) <span class="nottickedoff">((yv, yt) : ybinds)</span> xbody ybody s'</span>
+<span class="lineno">  310 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">do s' &lt;- match xenv yenv ybinds xt yt s</span></span>
+<span class="lineno">  311 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">match (consVarCtx xv xenv) (consVarCtx yv yenv) ((yv, yt) : ybinds) xbody ybody s'</span></span>
 <span class="lineno">  312 </span><span class="spaces">            </span><span class="istickedoff">(Pi xv x1 x2, Pi yv y1 y2) -&gt;</span>
 <span class="lineno">  313 </span><span class="spaces">              </span><span class="istickedoff">do s' &lt;- match xenv yenv <span class="nottickedoff">ybinds</span> x1 y1 s</span>
 <span class="lineno">  314 </span><span class="spaces">                 </span><span class="istickedoff">match (consVarCtx xv xenv) (consVarCtx yv yenv) <span class="nottickedoff">((yv, y1) : ybinds)</span> x2 y2 s'</span>
@@ -480,7 +480,7 @@ span.spaces    { background: white }
 <span class="lineno">  461 </span><span class="spaces">    </span><span class="istickedoff">(R.asRecordValue -&gt; Just m) -&gt;</span>
 <span class="lineno">  462 </span><span class="spaces">      </span><span class="istickedoff">do let mkRule (k, x) =</span>
 <span class="lineno">  463 </span><span class="spaces">               </span><span class="istickedoff">do l &lt;- scRecordSelect sc lhs k</span>
-<span class="lineno">  464 </span><span class="spaces">                  </span><span class="istickedoff">return (mkRewriteRule ctxt l x shallow convFlag ann)</span>
+<span class="lineno">  464 </span><span class="spaces">                  </span><span class="istickedoff">return (mkRewriteRule ctxt l x shallow <span class="nottickedoff">convFlag</span> ann)</span>
 <span class="lineno">  465 </span><span class="spaces">         </span><span class="istickedoff">Just &lt;$&gt; traverse mkRule (Map.assocs m)</span>
 <span class="lineno">  466 </span><span class="spaces">    </span><span class="istickedoff">(R.asApplyAll -&gt;</span>
 <span class="lineno">  467 </span><span class="spaces">     </span><span class="istickedoff">(R.asRecursorApp -&gt; Just (r, crec),</span>
@@ -521,7 +521,7 @@ span.spaces    { background: white }
 <span class="lineno">  502 </span><span class="spaces">                  </span><span class="istickedoff">rhs2 &lt;- scApplyAll <span class="nottickedoff">sc</span> rhs1 more'</span>
 <span class="lineno">  503 </span><span class="spaces">                  </span><span class="istickedoff">rhs3 &lt;- betaReduce rhs2</span>
 <span class="lineno">  504 </span><span class="spaces">                  </span><span class="istickedoff">-- re-fold recursive occurrences of the original rhs</span>
-<span class="lineno">  505 </span><span class="spaces">                  </span><span class="istickedoff">let ss = addRule (mkRewriteRule <span class="nottickedoff">ctxt</span> rhs lhs <span class="nottickedoff">shallow</span> convFlag <span class="nottickedoff">Nothing</span>) emptySimpset</span>
+<span class="lineno">  505 </span><span class="spaces">                  </span><span class="istickedoff">let ss = addRule (mkRewriteRule <span class="nottickedoff">ctxt</span> rhs lhs <span class="nottickedoff">shallow</span> <span class="nottickedoff">convFlag</span> <span class="nottickedoff">Nothing</span>) emptySimpset</span>
 <span class="lineno">  506 </span><span class="spaces">                  </span><span class="istickedoff">(_,rhs') &lt;- rewriteSharedTerm sc (ss :: Simpset ()) rhs3</span>
 <span class="lineno">  507 </span><span class="spaces">                  </span><span class="istickedoff">return (mkRewriteRule ctxt' lhs' rhs' shallow convFlag ann)</span>
 <span class="lineno">  508 </span><span class="spaces">         </span><span class="istickedoff">let d = recursorDataType crec</span>
@@ -791,8 +791,8 @@ span.spaces    { background: white }
 <span class="lineno">  772 </span><span class="spaces">          </span><span class="istickedoff">PairRight{}      -&gt; traverse (rewriteAll convertibleFlag) ftf</span>
 <span class="lineno">  773 </span><span class="spaces">          </span><span class="istickedoff">Recursor{}       -&gt; return ftf</span>
 <span class="lineno">  774 </span><span class="spaces">          </span><span class="istickedoff">RecordType{}     -&gt; <span class="nottickedoff">traverse (rewriteAll convertibleFlag) ftf</span></span>
-<span class="lineno">  775 </span><span class="spaces">          </span><span class="istickedoff">RecordValue{}    -&gt; traverse (rewriteAll convertibleFlag) ftf</span>
-<span class="lineno">  776 </span><span class="spaces">          </span><span class="istickedoff">RecordProj{}     -&gt; traverse (rewriteAll convertibleFlag) ftf</span>
+<span class="lineno">  775 </span><span class="spaces">          </span><span class="istickedoff">RecordValue{}    -&gt; traverse (rewriteAll <span class="nottickedoff">convertibleFlag</span>) ftf</span>
+<span class="lineno">  776 </span><span class="spaces">          </span><span class="istickedoff">RecordProj{}     -&gt; traverse (rewriteAll <span class="nottickedoff">convertibleFlag</span>) ftf</span>
 <span class="lineno">  777 </span><span class="spaces">          </span><span class="istickedoff">Sort{}           -&gt; return ftf</span>
 <span class="lineno">  778 </span><span class="spaces">          </span><span class="istickedoff">ArrayValue t es  -&gt; ArrayValue t &lt;$&gt; traverse (rewriteAll convertibleFlag) es -- specifically NOT rewriting type, only elts</span>
 <span class="lineno">  779 </span><span class="spaces">          </span><span class="istickedoff">StringLit{}      -&gt; return ftf</span>
