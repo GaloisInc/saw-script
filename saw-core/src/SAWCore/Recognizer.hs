@@ -71,8 +71,6 @@ module SAWCore.Recognizer
 import Control.Lens
 import Control.Monad
 import Data.List (foldl')
-import Data.Map (Map)
-import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
@@ -228,18 +226,18 @@ asTupleSelector t = do
     PairRight y -> do (x, i) <- asTupleSelector y; return (x, i+1)
     _           -> Nothing
 
-asRecordType :: Recognizer Term (Map FieldName Term)
+asRecordType :: Recognizer Term [(FieldName, Term)]
 asRecordType t = do
   ftf <- asFTermF t
   case ftf of
-    RecordType elems -> return $ Map.fromList elems
+    RecordType elems -> Just elems
     _                -> Nothing
 
-asRecordValue :: Recognizer Term (Map FieldName Term)
+asRecordValue :: Recognizer Term [(FieldName, Term)]
 asRecordValue t = do
   ftf <- asFTermF t
   case ftf of
-    RecordValue elems -> return $ Map.fromList elems
+    RecordValue elems -> Just elems
     _                 -> Nothing
 
 asRecordSelector :: Recognizer Term (Term, FieldName)

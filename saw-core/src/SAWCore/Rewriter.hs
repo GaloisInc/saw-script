@@ -462,7 +462,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow convFlag ann) =
       do let mkRule (k, x) =
                do l <- scRecordSelect sc lhs k
                   return (mkRewriteRule ctxt l x shallow convFlag ann)
-         Just <$> traverse mkRule (Map.assocs m)
+         Just <$> traverse mkRule m
     (R.asApplyAll ->
      (R.asRecursorApp -> Just (r, crec),
       splitAt (recursorNumParams crec) ->
@@ -634,7 +634,7 @@ asRecordRedex :: R.Recognizer Term Term
 asRecordRedex t =
     do (x, i) <- R.asRecordSelector t
        ts <- R.asRecordValue x
-       case Map.lookup i ts of
+       case lookup i ts of
          Just t' -> return t'
          Nothing -> fail "Record field not found"
 

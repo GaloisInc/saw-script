@@ -83,7 +83,6 @@ import Control.Lens (view, _1, _2)
 import Control.Monad (guard, liftM2, (>=>), (<=<))
 import Data.Bits
 import qualified Data.Text as Text
-import Data.Map (Map)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
@@ -269,11 +268,11 @@ asTupleSelector :: Matcher a -> Matcher (a, Int)
 asTupleSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asTupleSelector t
 
 -- | Matches record values, and returns fields.
-asAnyRecordValue :: Matcher (Map FieldName Term)
+asAnyRecordValue :: Matcher [(FieldName, Term)]
 asAnyRecordValue = asVar R.asRecordValue
 
 -- | Matches record types, and returns fields.
-asAnyRecordType :: Matcher (Map FieldName Term)
+asAnyRecordType :: Matcher [(FieldName, Term)]
 asAnyRecordType = asVar R.asRecordType
 
 -- | Matches
