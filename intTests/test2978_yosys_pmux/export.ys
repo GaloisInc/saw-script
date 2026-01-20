@@ -1,0 +1,25 @@
+# export.ys
+
+#####
+
+read_verilog ex_ite.v
+
+hierarchy -top ex_ite
+flatten -noscopeinfo
+proc
+memory_map
+setundef -zero
+
+write_json ex_ite.json
+
+#####
+
+read_verilog ex_case.v
+
+hierarchy -top ex_case
+flatten -noscopeinfo
+proc
+memory_map
+setundef -zero
+
+write_json ex_case.json

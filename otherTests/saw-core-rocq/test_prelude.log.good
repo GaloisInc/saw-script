@@ -725,6 +725,8 @@ Definition joinLittleEndian : forall (m : Init.Datatypes.nat), forall (n : Init.
 Definition splitLittleEndian : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.mulNat m n) a), SAWCoreVectorsAsRocqVectors.Vec m (SAWCoreVectorsAsRocqVectors.Vec n a) :=
   fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.mulNat m n) a) => reverse m (SAWCoreVectorsAsRocqVectors.Vec n a) (split m n a v).
 
+(* "Prelude.pmux" was skipped *)
+
 (* "Prelude.appendString" was skipped *)
 
 Axiom bytesToString : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n (SAWCoreVectorsAsRocqVectors.Vec (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) Init.Datatypes.bool)), Stdlib.Strings.String.string .
