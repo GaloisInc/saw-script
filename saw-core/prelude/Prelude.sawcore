@@ -1577,7 +1577,7 @@ splitLittleEndian m n a v = reverse m (Vec n a) (split m n a v);
 -- position where the select bit is true.
 -- Return the default value if all select bits are false.
 -- Example:
--- pmux 3 a [c0, c1, c2] [x1, x2, x3] y = ite a c0 x0 (ite a c1 x1 (ite a c2 x2 y))
+-- pmux 3 a [c0, c1, c2] [x0, x1, x2] y = ite a c0 x0 (ite a c1 x1 (ite a c2 x2 y))
 
 pmux : (n : Nat) -> (a : sort 0) -> Vec n Bool -> Vec n a -> a -> a;
 pmux n a conds xs default =
