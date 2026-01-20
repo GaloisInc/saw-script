@@ -83,35 +83,6 @@ primitive error : (a : isort 1) -> String -> a;
 
 
 --------------------------------------------------------------------------------
--- Record types
-
--- The empty record
-data EmptyType : sort 0 where {
-  Empty : EmptyType;
-}
-
--- The recursor for the empty type at sort 0
-EmptyType__rec : (p : EmptyType -> sort 0) -> p Empty ->
-                  (emp : EmptyType) -> p emp;
-EmptyType__rec p f1 emp = EmptyType#rec p f1 emp;
-
--- Add a named field to a record type
-data RecordType (s:String) (a b :sort 0) : sort 0 where {
-  RecordValue : a -> b -> RecordType s a b;
-}
-
--- The recursor for record types at sort 0
-RecordType__rec
-  (s : String)
-  (a b :sort 0)
-  (p : RecordType s a b -> sort 1)
-  (f1 : (x:a) -> (y:b) -> p (RecordValue s a b x y))
-  (r : RecordType s a b)
-  : p r
-  = RecordType#rec1 s a b p f1 r;
-
-
---------------------------------------------------------------------------------
 -- The Void type
 
 data Void : sort 0 where { }
@@ -304,6 +275,59 @@ piCong1 r x y eq =
     (\ (y': sort 0) -> \ (eq': Eq (sort 0) x y') ->
        Eq (sort 0) (r -> x) (r -> y'))
     (Refl (sort 0) (r -> x)) y eq;
+
+
+--------------------------------------------------------------------------------
+-- Record types
+
+-- The empty record
+data EmptyType : sort 0 where {
+  Empty : EmptyType;
+}
+
+-- The recursor for the empty type at sort 0
+EmptyType__rec : (p : EmptyType -> sort 0) -> p Empty ->
+                  (emp : EmptyType) -> p emp;
+EmptyType__rec p f1 emp = EmptyType#rec p f1 emp;
+
+-- Add a named field to a record type
+data RecordType (s:String) (a b :sort 0) : sort 0 where {
+  RecordValue : a -> b -> RecordType s a b;
+}
+
+-- The recursor for record types at sort 0
+RecordType__rec
+  (s : String)
+  (a b :sort 0)
+  (p : RecordType s a b -> sort 1)
+  (f1 : (x:a) -> (y:b) -> p (RecordValue s a b x y))
+  (r : RecordType s a b)
+  : p r
+  = RecordType#rec1 s a b p f1 r;
+
+headRecord : (s : String) -> (a b : sort 0) -> RecordType s a b -> a;
+headRecord s a b =
+  RecordType#rec s a b
+  (\ (_ : RecordType s a b) -> a)
+  (\ (x : a) (y : b) -> x);
+
+tailRecord : (s : String) -> (a b : sort 0) -> RecordType s a b -> b;
+tailRecord s a b =
+  RecordType#rec s a b
+  (\ (_ : RecordType s a b) -> b)
+  (\ (x : a) (y : b) -> y);
+
+headRecord_RecordValue :
+  (s : String) -> (a b : sort 0) ->
+  (x : a) -> (y : b) ->
+  Eq a (headRecord s a b (RecordValue s a b x y)) x;
+headRecord_RecordValue s a b x y = Refl a x;
+
+tailRecord_RecordValue :
+  (s : String) -> (a b : sort 0) ->
+  (x : a) -> (y : b) ->
+  Eq b (tailRecord s a b (RecordValue s a b x y)) y;
+tailRecord_RecordValue s a b x y = Refl b y;
 
 
 --------------------------------------------------------------------------------
