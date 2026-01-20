@@ -1567,39 +1567,54 @@ scmVecType n e = scmGlobalApply preludeVecIdent [n, e]
 
 -- | Create a record term from a list of record fields.
 scmRecordValue :: [(FieldName, Term)] -> SCM Term
-scmRecordValue fields =
-  do mapM_ (scmEnsureValidTerm . snd) fields
-     vt <- foldM (scmUnifyVarTypes "scRecord") IntMap.empty (map (varTypes . snd) fields)
-     let tf = FTermF (RecordValue fields)
-     field_tys <- traverse (traverse (scmTypeOf)) fields
-     ty <- scmRecordType field_tys
-     scmMakeTerm vt tf (Right ty)
+scmRecordValue [] =
+  scmGlobalDef "Prelude.Empty"
+scmRecordValue ((fname, x) : fields) =
+  do s <- scmString fname
+     a <- scmTypeOf x
+     y <- scmRecordValue fields
+     b <- scmTypeOf y
+     scmGlobalApply "Prelude.RecordValue" [s, a, b, x, y]
 
 -- | Create a record field access term from a 'Term' representing a record and
 -- a 'FieldName'.
 scmRecordSelect :: Term -> FieldName -> SCM Term
-scmRecordSelect t fname =
-  do scmEnsureValidTerm t
-     let vt = varTypes t
-     let tf = FTermF (RecordProj t fname)
-     ty <- scmTypeOf t
-     field_tys <- scmEnsureRecognizer (NotRecord t) asRecordType ty
-     case lookup fname field_tys of
-       Nothing -> scmError (FieldNotFound t fname)
-       Just ty' -> scmMakeTerm vt tf (Right ty')
+scmRecordSelect t0 fname =
+  do ty0 <- scmTypeOf t0
+     go t0 ty0
+  where
+    go :: Term -> Term -> SCM Term
+    go t ty =
+      do result <- scmEnsureRecognizer (NotRecord t0) asRecordTy ty
+         case result of
+           Nothing -> scmError (FieldNotFound t0 fname)
+           Just (f, s, a, b)
+             | f == fname ->
+               scmGlobalApply "Prelude.headRecord" [s, a, b, t]
+             | otherwise ->
+               do y <- scmGlobalApply "Prelude.tailRecord" [s, a, b, t]
+                  go y b
+    asRecordTy :: Term -> Maybe (Maybe (Text, Term, Term, Term))
+    asRecordTy t =
+      case isGlobalDef "Prelude.EmptyType" t of
+        Just () -> Just Nothing
+        Nothing ->
+          do (t1, b) <- asApp t
+             (t2, a) <- asApp t1
+             (t3, s) <- asApp t2
+             f <- asStringLit s
+             () <- isGlobalDef "Prelude.RecordType" t3
+             Just (Just (f, s, a, b))
 
 -- | Create a term representing the type of a record from a list associating
 -- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
 -- the given list is irrelevant, as record fields are not ordered.
 scmRecordType :: [(FieldName, Term)] -> SCM Term
-scmRecordType field_tys =
-  do mapM_ (scmEnsureValidTerm . snd) field_tys
-     vt <- foldM (scmUnifyVarTypes "scRecordType") IntMap.empty (map (varTypes . snd) field_tys)
-     let tf = FTermF (RecordType field_tys)
-     let field_sort (_, t) = scmEnsureSortType t
-     sorts <- traverse field_sort field_tys
-     let s = foldl max (mkSort 0) sorts
-     scmMakeTerm vt tf (Left s)
+scmRecordType [] = scmGlobalDef "Prelude.EmptyType"
+scmRecordType ((fname, a) : fields) =
+  do s <- scmString fname
+     b <- scmRecordType fields
+     scmGlobalApply "Prelude.RecordType" [s, a, b]
 
 -- | Create a unit-valued term.
 scmUnitValue :: SCM Term
@@ -1760,8 +1775,8 @@ scmOpaqueConstant nmi ty =
 -- arguments (as 'Term's).
 scmGlobalApply :: Ident -> [Term] -> SCM Term
 scmGlobalApply i ts =
-    do c <- scmGlobalDef i
-       scmApplyAll c ts
+  do c <- scmGlobalDef i
+     scmApplyAll c ts
 
 
 ------------------------------------------------------------
