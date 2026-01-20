@@ -1125,8 +1125,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1106 </span><span class="spaces">             </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.eListSel&quot; [a', n', e', i']</span>
 <span class="lineno"> 1107 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1108 </span><span class="spaces">    </span><span class="istickedoff">C.ESet _ e1 sel e2 -&gt;</span>
-<span class="lineno"> 1109 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case sel of</span></span>
-<span class="lineno"> 1110 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TupleSel i _maybeLen -&gt;</span></span>
+<span class="lineno"> 1109 </span><span class="spaces">      </span><span class="istickedoff">case sel of</span>
+<span class="lineno"> 1110 </span><span class="spaces">        </span><span class="istickedoff">C.TupleSel i _maybeLen -&gt;</span>
 <span class="lineno"> 1111 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do e1' &lt;- importExpr sc env e1</span></span>
 <span class="lineno"> 1112 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">e2' &lt;- importExpr sc env e2</span></span>
 <span class="lineno"> 1113 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let t1 = fastTypeOf (envC env) e1</span></span>
@@ -1142,25 +1142,25 @@ span.spaces    { background: white }
 <span class="lineno"> 1123 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">f &lt;- scGlobalApply sc &quot;Cryptol.const&quot; [t2', t2', e2']</span></span>
 <span class="lineno"> 1124 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">g &lt;- tupleUpdate sc f i ts'</span></span>
 <span class="lineno"> 1125 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">scApply sc g e1'</span></span>
-<span class="lineno"> 1126 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.RecordSel x _ -&gt;</span></span>
-<span class="lineno"> 1127 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do e1' &lt;- importExpr sc env e1</span></span>
-<span class="lineno"> 1128 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">e2' &lt;- importExpr sc env e2</span></span>
-<span class="lineno"> 1129 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let t1 = fastTypeOf (envC env) e1</span></span>
-<span class="lineno"> 1130 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">case C.tIsRec t1 of</span></span>
-<span class="lineno"> 1131 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
+<span class="lineno"> 1126 </span><span class="spaces">        </span><span class="istickedoff">C.RecordSel x _ -&gt;</span>
+<span class="lineno"> 1127 </span><span class="spaces">          </span><span class="istickedoff">do e1' &lt;- importExpr sc env e1</span>
+<span class="lineno"> 1128 </span><span class="spaces">             </span><span class="istickedoff">e2' &lt;- importExpr sc env e2</span>
+<span class="lineno"> 1129 </span><span class="spaces">             </span><span class="istickedoff">let t1 = fastTypeOf (envC env) e1</span>
+<span class="lineno"> 1130 </span><span class="spaces">             </span><span class="istickedoff">case C.tIsRec t1 of</span>
+<span class="lineno"> 1131 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 1132 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importExpr&quot; [</span></span>
 <span class="lineno"> 1133 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;ESet/RecordSel: not a record type&quot;,</span></span>
 <span class="lineno"> 1134 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;Type: &quot; &lt;&gt; Text.pack (pretty t1)</span></span>
 <span class="lineno"> 1135 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1136 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Just tm -&gt;</span></span>
-<span class="lineno"> 1137 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">do i &lt;- the (&quot;Expected a field &quot; &lt;&gt; Text.pack (show x) &lt;&gt; &quot; RecordSel&quot;)</span></span>
-<span class="lineno"> 1138 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">(elemIndex x (map fst (C.canonicalFields tm)))</span></span>
-<span class="lineno"> 1139 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">ts' &lt;- traverse (importType sc env . snd) (C.canonicalFields tm)</span></span>
-<span class="lineno"> 1140 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">let t2' = ts' !! i</span></span>
-<span class="lineno"> 1141 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">f &lt;- scGlobalApply sc &quot;Cryptol.const&quot; [t2', t2', e2']</span></span>
-<span class="lineno"> 1142 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">g &lt;- tupleUpdate sc f i ts'</span></span>
-<span class="lineno"> 1143 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">scApply sc g e1'</span></span>
-<span class="lineno"> 1144 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.ListSel _i _maybeLen -&gt;</span></span>
+<span class="lineno"> 1136 </span><span class="spaces">               </span><span class="istickedoff">Just tm -&gt;</span>
+<span class="lineno"> 1137 </span><span class="spaces">                 </span><span class="istickedoff">do i &lt;- the <span class="nottickedoff">(&quot;Expected a field &quot; &lt;&gt; Text.pack (show x) &lt;&gt; &quot; RecordSel&quot;)</span></span>
+<span class="lineno"> 1138 </span><span class="spaces">                      </span><span class="istickedoff">(elemIndex x (map fst (C.canonicalFields tm)))</span>
+<span class="lineno"> 1139 </span><span class="spaces">                    </span><span class="istickedoff">ts' &lt;- traverse (importType sc <span class="nottickedoff">env</span> . snd) (C.canonicalFields tm)</span>
+<span class="lineno"> 1140 </span><span class="spaces">                    </span><span class="istickedoff">let t2' = ts' !! i</span>
+<span class="lineno"> 1141 </span><span class="spaces">                    </span><span class="istickedoff">f &lt;- scGlobalApply sc &quot;Cryptol.const&quot; [t2', t2', e2']</span>
+<span class="lineno"> 1142 </span><span class="spaces">                    </span><span class="istickedoff">g &lt;- tupleUpdate sc f i ts'</span>
+<span class="lineno"> 1143 </span><span class="spaces">                    </span><span class="istickedoff">scApply sc g e1'</span>
+<span class="lineno"> 1144 </span><span class="spaces">        </span><span class="istickedoff">C.ListSel _i _maybeLen -&gt;</span>
 <span class="lineno"> 1145 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importExpr&quot; [</span></span>
 <span class="lineno"> 1146 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;ListSel is unsupported in ESet:&quot;,</span></span>
 <span class="lineno"> 1147 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;   &quot; &lt;&gt; Text.pack (pretty expr)</span></span>
@@ -1368,7 +1368,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1349 </span><span class="spaces">    </span><span class="istickedoff">C.ECase     {} -&gt; fallback</span>
 <span class="lineno"> 1350 </span><span class="spaces">    </span><span class="istickedoff">C.EList     {} -&gt; fallback</span>
 <span class="lineno"> 1351 </span><span class="spaces">    </span><span class="istickedoff">C.ESel      {} -&gt; fallback</span>
-<span class="lineno"> 1352 </span><span class="spaces">    </span><span class="istickedoff">C.ESet      {} -&gt; <span class="nottickedoff">fallback</span></span>
+<span class="lineno"> 1352 </span><span class="spaces">    </span><span class="istickedoff">C.ESet      {} -&gt; fallback</span>
 <span class="lineno"> 1353 </span><span class="spaces">    </span><span class="istickedoff">C.EComp     {} -&gt; fallback</span>
 <span class="lineno"> 1354 </span><span class="spaces">    </span><span class="istickedoff">C.EVar      {} -&gt; fallback</span>
 <span class="lineno"> 1355 </span><span class="spaces">    </span><span class="istickedoff">C.EApp      {} -&gt; fallback</span>
@@ -1392,15 +1392,15 @@ span.spaces    { background: white }
 <span class="lineno"> 1373 </span><span class="spaces">         </span><span class="istickedoff">coerceTerm sc env t1 t2 expr'</span></span>
 <span class="lineno"> 1374 </span>
 <span class="lineno"> 1375 </span>tupleUpdate :: SharedContext -&gt; Term -&gt; Int -&gt; [Term] -&gt; IO Term
-<span class="lineno"> 1376 </span><span class="decl"><span class="nottickedoff">tupleUpdate _ f 0 [_] = return f</span>
-<span class="lineno"> 1377 </span><span class="spaces"></span><span class="nottickedoff">tupleUpdate sc f 0 (a : ts) =</span>
-<span class="lineno"> 1378 </span><span class="spaces">  </span><span class="nottickedoff">do b &lt;- scTupleType sc ts</span>
-<span class="lineno"> 1379 </span><span class="spaces">     </span><span class="nottickedoff">scGlobalApply sc &quot;Cryptol.updFst&quot; [a, b, f]</span>
-<span class="lineno"> 1380 </span><span class="spaces"></span><span class="nottickedoff">tupleUpdate sc f n (a : ts) =</span>
-<span class="lineno"> 1381 </span><span class="spaces">  </span><span class="nottickedoff">do g &lt;- tupleUpdate sc f (n - 1) ts</span>
-<span class="lineno"> 1382 </span><span class="spaces">     </span><span class="nottickedoff">b &lt;- scTupleType sc ts</span>
-<span class="lineno"> 1383 </span><span class="spaces">     </span><span class="nottickedoff">scGlobalApply sc &quot;Cryptol.updSnd&quot; [a, b, g]</span>
-<span class="lineno"> 1384 </span><span class="spaces"></span><span class="nottickedoff">tupleUpdate _ _ _ [] = panic &quot;tupleUpdate&quot; [&quot;empty tuple&quot;]</span></span>
+<span class="lineno"> 1376 </span><span class="decl"><span class="istickedoff">tupleUpdate _ f 0 [_] = return f</span>
+<span class="lineno"> 1377 </span><span class="spaces"></span><span class="istickedoff">tupleUpdate sc f 0 (a : ts) =</span>
+<span class="lineno"> 1378 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do b &lt;- scTupleType sc ts</span></span>
+<span class="lineno"> 1379 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Cryptol.updFst&quot; [a, b, f]</span></span>
+<span class="lineno"> 1380 </span><span class="spaces"></span><span class="istickedoff">tupleUpdate sc f n (a : ts) =</span>
+<span class="lineno"> 1381 </span><span class="spaces">  </span><span class="istickedoff">do g &lt;- tupleUpdate sc f (n - 1) ts</span>
+<span class="lineno"> 1382 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- scTupleType sc ts</span>
+<span class="lineno"> 1383 </span><span class="spaces">     </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.updSnd&quot; [a, b, g]</span>
+<span class="lineno"> 1384 </span><span class="spaces"></span><span class="istickedoff">tupleUpdate _ _ _ [] = <span class="nottickedoff">panic &quot;tupleUpdate&quot; [&quot;empty tuple&quot;]</span></span></span>
 <span class="lineno"> 1385 </span>
 <span class="lineno"> 1386 </span>-- | Apply a substitution to a type *without* simplifying
 <span class="lineno"> 1387 </span>-- constraints like @Ring [n]a@ to @Ring a@. (This is in contrast to
@@ -2093,16 +2093,16 @@ span.spaces    { background: white }
 <span class="lineno"> 2074 </span>
 <span class="lineno"> 2075 </span>exportRecordValue :: [(C.Ident, TV.TValue)] -&gt; SC.CValue -&gt; [(C.Ident, V.Eval V.Value)]
 <span class="lineno"> 2076 </span><span class="decl"><span class="istickedoff">exportRecordValue fields v =</span>
-<span class="lineno"> 2077 </span><span class="spaces">  </span><span class="istickedoff">case (fields, <span class="nottickedoff">v</span>) of</span>
+<span class="lineno"> 2077 </span><span class="spaces">  </span><span class="istickedoff">case (fields, v) of</span>
 <span class="lineno"> 2078 </span><span class="spaces">    </span><span class="istickedoff">([]         , SC.VUnit    ) -&gt; <span class="nottickedoff">[]</span></span>
 <span class="lineno"> 2079 </span><span class="spaces">    </span><span class="istickedoff">([(n, t)]   , _           ) -&gt; [(n, exportValue t v)]</span>
-<span class="lineno"> 2080 </span><span class="spaces">    </span><span class="istickedoff">((n, t) : ts, SC.VPair x y) -&gt; <span class="nottickedoff">(n, exportValue t (run x)) : exportRecordValue ts (run y)</span></span>
+<span class="lineno"> 2080 </span><span class="spaces">    </span><span class="istickedoff">((n, t) : ts, SC.VPair x y) -&gt; (n, exportValue t (run x)) : exportRecordValue ts (run y)</span>
 <span class="lineno"> 2081 </span><span class="spaces">    </span><span class="istickedoff">(_, SC.VRecordValue (alistAllFields</span>
 <span class="lineno"> 2082 </span><span class="spaces">                         </span><span class="istickedoff">(map (C.identText . fst) fields) -&gt; Just ths)) -&gt;</span>
 <span class="lineno"> 2083 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">zipWith (\(n,t) x -&gt; (n, exportValue t (run x))) fields ths</span></span>
 <span class="lineno"> 2084 </span><span class="spaces">    </span><span class="istickedoff">_                              -&gt; <span class="nottickedoff">error $ &quot;exportValue: expected record&quot;</span></span>
 <span class="lineno"> 2085 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2086 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">run = SC.runIdentity . force</span></span></span>
+<span class="lineno"> 2086 </span><span class="spaces">    </span><span class="istickedoff">run = SC.runIdentity . force</span></span>
 <span class="lineno"> 2087 </span>
 <span class="lineno"> 2088 </span>--------------------------------------------------------------------------------
 <span class="lineno"> 2089 </span>-- Supporting Nominal Types:
