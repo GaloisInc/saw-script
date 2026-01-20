@@ -16,6 +16,18 @@ This release supports [version
 
 ## Changes
 
+* The (by now extremely old) `crucible_*` alternate names for the `llvm_*`
+  primitives have been marked deprecated and will now warn.
+  They are expected to be hidden by default in SAW 1.6.
+
+  Some of these had been previously still marked experimental; they
+  have been marked deprecated and hidden by default.
+  They are expected to be removed in SAW 1.6.
+
+  Relatedly, the type `SetupValue` has been replaced by `LLVMValue`.
+  However, because this change is comparatively recent, uses of
+  `SetupValue` will _not_ warn yet in this release.
+
 * The `boolector` and `cvc4` solver command families have been marked
   deprecated.
   Boolector has been replaced upstream by Bitwuzla, and CVC4 is an

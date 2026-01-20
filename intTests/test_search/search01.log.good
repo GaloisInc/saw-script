@@ -1,7 +1,7 @@
 --------------------------------
 -- (LLVMSpec -> _)
-crucible_spec_size : LLVMSpec -> Int
-crucible_spec_solvers : LLVMSpec -> [String]
+crucible_spec_size : LLVMSpec -> Int  (DEPRECATED AND WILL WARN)
+crucible_spec_solvers : LLVMSpec -> [String]  (DEPRECATED AND WILL WARN)
 llvm_spec_size : LLVMSpec -> Int
 llvm_spec_solvers : LLVMSpec -> [String]
 --------------------------------
