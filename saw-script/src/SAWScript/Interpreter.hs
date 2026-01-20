@@ -4399,13 +4399,29 @@ primitives = Map.fromList $
 
   , prim "boolector"           "ProofScript ()"
     (pureVal proveBoolector)
-    Current
-    [ "Use the Boolector theorem prover to prove the current goal." ]
+    WarnDeprecated
+    [ "Use the Boolector theorem prover to prove the current goal."
+    , ""
+    , "Boolector has been replaced upstream by Bitwuzla. You should"
+    , "update accordingly: change \"boolector\" to \"bitwuzla\"."
+    , ""
+    , "We expect to mark the Boolector commands hidden by default when"
+    , "we remove Boolector from what4-solvers, which could be as early"
+    , "as SAW 1.6."
+    ]
 
   , prim "sbv_boolector"       "ProofScript ()"
     (pureVal proveBoolector)
-    Current
-    [ "Use the Boolector theorem prover to prove the current goal." ]
+    WarnDeprecated
+    [ "Use the Boolector theorem prover to prove the current goal."
+    , ""
+    , "Boolector has been replaced upstream by Bitwuzla. You should"
+    , "update accordingly: change \"sbv_boolector\" to \"sbv_bitwuzla\"."
+    , ""
+    , "We expect to mark the Boolector commands hidden by default when"
+    , "we remove Boolector from what4-solvers, which could be as early"
+    , "as SAW 1.6."
+    ]
 
     -- cvc4/5
 

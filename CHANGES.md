@@ -16,6 +16,11 @@ This release supports [version
 
 ## Changes
 
+* The `boolector` solver commands have been marked deprecated.
+  Boolector has been replaced upstream by Bitwuzla.
+  If you encounter a proof that works with Boolector and not Bitwuzla,
+  please file an issue.
+
 * The following deprecated SAWScript builtins have been removed:
   - `addsimp'`
   - `addsimps'`
