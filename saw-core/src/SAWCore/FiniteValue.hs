@@ -332,8 +332,8 @@ asFiniteType sc t = do
       -> FTVec n <$> asFiniteType sc tp
     (R.asTupleType -> Just ts)
       -> FTTuple <$> traverse (asFiniteType sc) ts
-    (R.asRecordType -> Just tm)
-      -> FTRec <$> traverse (asFiniteType sc) tm
+    (R.asRecordType -> Just fs)
+      -> FTRec <$> traverse (asFiniteType sc) (Map.fromList fs)
     _ -> do
         t'' <- ppTerm sc PPS.defaultOpts t'
         fail $ "asFiniteType: unsupported argument type: " ++ t''
@@ -364,8 +364,8 @@ asFirstOrderTypeMaybe sc t =
          return $ FOTArray tp1' tp2'
        (R.asTupleType -> Just ts)
          -> FOTTuple <$> traverse (asFirstOrderTypeMaybe sc) ts
-       (R.asRecordType -> Just tm)
-         -> FOTRec <$> traverse (asFirstOrderTypeMaybe sc) tm
+       (R.asRecordType -> Just fs)
+         -> FOTRec <$> traverse (asFirstOrderTypeMaybe sc) (Map.fromList fs)
        _ -> mzero
 
 
@@ -375,7 +375,7 @@ asFiniteTypePure t =
     (R.asBoolType -> Just ()) -> Just FTBit
     (R.isVecType return -> Just (n R.:*: tp)) -> FTVec n <$> asFiniteTypePure tp
     (R.asTupleType -> Just ts) -> FTTuple <$> traverse asFiniteTypePure ts
-    (R.asRecordType -> Just tm) -> FTRec <$> traverse asFiniteTypePure tm
+    (R.asRecordType -> Just fs) -> FTRec <$> traverse asFiniteTypePure (Map.fromList fs)
     _ -> Nothing
 
 -- The definitions of the next two functions depend on the encoding of

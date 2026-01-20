@@ -1244,7 +1244,7 @@ scmWhnf t0 = go [] t0
     go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (vn, _, body))  = betaReduce xs [(vn, x)] body
     go (ElimPair i : xs)      (asPairValue -> Just (a, b))      = go xs (if i then b else a)
-    go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case Map.lookup fld elems of
+    go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case lookup fld elems of
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
@@ -1584,7 +1584,7 @@ scmRecordSelect t fname =
      let tf = FTermF (RecordProj t fname)
      ty <- scmTypeOf t
      field_tys <- scmEnsureRecognizer (NotRecord t) asRecordType ty
-     case Map.lookup fname field_tys of
+     case lookup fname field_tys of
        Nothing -> scmError (FieldNotFound t fname)
        Just ty' -> scmMakeTerm vt tf (Right ty')
 
