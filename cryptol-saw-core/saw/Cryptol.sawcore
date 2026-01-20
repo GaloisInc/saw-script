@@ -331,6 +331,30 @@ pair_cong2 : (a : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
 pair_cong2 a b b' eq_b =
   (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> (a * x)));
 
+record_cong :
+  (s : String) -> (a a' b b' : sort 0) ->
+  Eq (sort 0) a a' -> Eq (sort 0) b b' ->
+  Eq (sort 0) (RecordType s a b) (RecordType s a' b');
+record_cong s a a' b b' eq_a eq_b =
+  trans
+    (sort 0) (RecordType s a b) (RecordType s a' b) (RecordType s a' b')
+    (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> RecordType s x b))
+    (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> RecordType s a' x));
+
+record_cong1 :
+  (s : String) -> (a a' b : sort 0) ->
+  Eq (sort 0) a a' ->
+  Eq (sort 0) (RecordType s a b) (RecordType s a' b);
+record_cong1 s a a' b eq_a =
+  eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> RecordType s x b);
+
+record_cong2 :
+  (s : String) -> (a b b' : sort 0) ->
+  Eq (sort 0) b b' ->
+  Eq (sort 0) (RecordType s a b) (RecordType s a b');
+record_cong2 s a b b' eq_b =
+  eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> RecordType s a x);
+
 axiom unsafeAssert_same_Num :
   (n : Num) -> Eq (Eq Num n n) (unsafeAssert Num n n) (Refl Num n);
 
@@ -474,6 +498,27 @@ pairBinary : (a b : sort 0) -> (a -> a -> a) -> (b -> b -> b)
 pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12),
                               g (snd a b x12) (snd a b y12));
 
+emptyUnary : #{} -> #{};
+emptyUnary _ = {};
+
+emptyBinary : #{} -> #{} -> #{};
+emptyBinary _ _ = {};
+
+recordUnary :
+  (s : String) -> (a b : sort 0) ->
+  (a -> a) -> (b -> b) -> RecordType s a b -> RecordType s a b;
+recordUnary s a b f g x =
+  RecordValue s a b (f (headRecord s a b x)) (g (tailRecord s a b x));
+
+recordBinary :
+  (s : String) -> (a b : sort 0) ->
+  (a -> a -> a) -> (b -> b -> b) ->
+  RecordType s a b -> RecordType s a b -> RecordType s a b;
+recordBinary s a b f g x y =
+  RecordValue s a b
+  (f (headRecord s a b x) (headRecord s a b y))
+  (g (tailRecord s a b x) (tailRecord s a b y));
+
 funBinary : (a b : sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
 
@@ -539,6 +584,43 @@ pairLt :
 pairLt a b f g x y =
   f (fst a b x) (fst a b y) (g (snd a b x) (snd a b y));
 
+emptyCmp : #{} -> #{} -> Bool -> Bool;
+emptyCmp _ _ k = k;
+
+emptyLe : #{} -> #{} -> Bool;
+emptyLe _ _ = True;
+
+emptyLt : #{} -> #{} -> Bool;
+emptyLt _ _ = False;
+
+recordEq :
+  (s : String) -> (a b : sort 0) ->
+  (a -> a -> Bool) ->
+  (b -> b -> Bool) ->
+  RecordType s a b -> RecordType s a b -> Bool;
+recordEq s a b f g x y =
+  and
+  (f (headRecord s a b x) (headRecord s a b y))
+  (g (tailRecord s a b x) (tailRecord s a b y));
+
+recordCmp :
+  (s : String) -> (a b : sort 0) ->
+  (a -> a -> Bool -> Bool) ->
+  (b -> b -> Bool -> Bool) ->
+  RecordType s a b -> RecordType s a b -> Bool -> Bool;
+recordCmp s a b f g x y k =
+  f (headRecord s a b x) (headRecord s a b y)
+  (g (tailRecord s a b x) (tailRecord s a b y) k);
+
+recordLt :
+  (s : String) -> (a b : sort 0) ->
+  (a -> a -> Bool -> Bool) ->
+  (b -> b -> Bool) ->
+  RecordType s a b -> RecordType s a b -> Bool;
+recordLt s a b f g x y =
+  f (headRecord s a b x) (headRecord s a b y)
+  (g (tailRecord s a b x) (tailRecord s a b y));
+
 --------------------------------------------------------------------------------
 -- Dictionaries and overloading
 
@@ -588,6 +670,12 @@ PEqUnit = { eq = \ (x y : #()) -> True };
 
 PEqPair : (a b : sort 0) -> PEq a -> PEq b -> PEq (a * b);
 PEqPair a b pa pb = { eq = pairEq a b pa.eq pb.eq };
+
+PEqEmpty : PEq #{};
+PEqEmpty = { eq = \ (x y : #{}) -> True };
+
+PEqRecord : (s : String) -> (a b : sort 0) -> PEq a -> PEq b -> PEq (RecordType s a b);
+PEqRecord s a b pa pb = { eq = recordEq s a b pa.eq pb.eq };
 
 
 -- Cmp class
@@ -646,6 +734,17 @@ PCmpPair a b pa pb =
   , lt = pairLt a b pa.cmp pb.lt
   };
 
+PCmpEmpty : PCmp #{};
+PCmpEmpty = { cmpEq = PEqEmpty, cmp = emptyCmp, le = emptyLe, lt = emptyLt };
+
+PCmpRecord : (s : String) -> (a b : sort 0) -> PCmp a -> PCmp b -> PCmp (RecordType s a b);
+PCmpRecord s a b pa pb =
+  { cmpEq  = PEqRecord s a b pa.cmpEq pb.cmpEq
+  , cmp = recordCmp s a b pa.cmp pb.cmp
+  , le = recordLt s a b pa.cmp pb.le
+  , lt = recordLt s a b pa.cmp pb.lt
+  };
+
 -- SignedCmp class
 
 -- `scmp x y k` computes `if k then sle x y else slt x y`
@@ -691,6 +790,19 @@ PSignedCmpPair a b pa pb =
   , scmp = pairCmp a b pa.scmp pb.scmp
   , sle = pairLt a b pa.scmp pb.sle
   , slt = pairLt a b pa.scmp pb.slt
+  };
+
+PSignedCmpEmpty : PSignedCmp #{};
+PSignedCmpEmpty = { signedCmpEq = PEqEmpty, scmp = emptyCmp, sle = emptyLe, slt = emptyLt };
+
+PSignedCmpRecord :
+  (s : String) -> (a b : sort 0) ->
+  PSignedCmp a -> PSignedCmp b -> PSignedCmp (RecordType s a b);
+PSignedCmpRecord s a b pa pb =
+  { signedCmpEq = PEqRecord s a b pa.signedCmpEq pb.signedCmpEq
+  , scmp = recordCmp s a b pa.scmp pb.scmp
+  , sle = recordLt s a b pa.scmp pb.sle
+  , slt = recordLt s a b pa.scmp pb.slt
   };
 
 
@@ -813,6 +925,26 @@ PLogicPair a b pa pb =
   , not  = pairUnary a b pa.not pb.not
   };
 
+PLogicEmpty : PLogic #{};
+PLogicEmpty =
+  { logicZero = {}
+  , and  = emptyBinary
+  , or   = emptyBinary
+  , xor  = emptyBinary
+  , not  = emptyUnary
+  };
+
+PLogicRecord :
+  (s : String) -> (a b : sort 0) ->
+  PLogic a -> PLogic b -> PLogic (RecordType s a b);
+PLogicRecord s a b pa pb =
+  { logicZero = RecordValue s a b pa.logicZero pb.logicZero
+  , and  = recordBinary s a b pa.and pb.and
+  , or   = recordBinary s a b pa.or  pb.or
+  , xor  = recordBinary s a b pa.xor pb.xor
+  , not  = recordUnary s a b pa.not pb.not
+  };
+
 -- Ring class
 
 PRing : sort 0 -> sort 0;
@@ -931,6 +1063,26 @@ PRingPair a b pa pb =
   , mul = pairBinary a b pa.mul pb.mul
   , neg = pairUnary a b pa.neg pb.neg
   , int = \ (i : Integer) -> (pa.int i, pb.int i)
+  };
+
+PRingEmpty : PRing #{};
+PRingEmpty =
+  { ringZero = {}
+  , add = emptyBinary
+  , sub = emptyBinary
+  , mul = emptyBinary
+  , neg = emptyUnary
+  , int = \ (i : Integer) -> {}
+  };
+
+PRingRecord : (s : String) -> (a b : sort 0) -> PRing a -> PRing b -> PRing (RecordType s a b);
+PRingRecord s a b pa pb =
+  { ringZero = RecordValue s a b pa.ringZero pb.ringZero
+  , add = recordBinary s a b pa.add pb.add
+  , sub = recordBinary s a b pa.sub pb.sub
+  , mul = recordBinary s a b pa.mul pb.mul
+  , neg = recordUnary s a b pa.neg pb.neg
+  , int = \ (i : Integer) -> RecordValue s a b (pa.int i) (pb.int i)
   };
 
 -- Integral class
