@@ -544,7 +544,7 @@ pairLt a b f g x y =
 
 -- Eq class
 
-PEq : sort 0 -> sort 1;
+PEq : sort 0 -> sort 0;
 PEq a = #{ eq : a -> a -> Bool };
 
 PEqBit : PEq Bool;
@@ -593,7 +593,7 @@ PEqPair a b pa pb = { eq = pairEq a b pa.eq pb.eq };
 -- Cmp class
 
 -- `cmp x y k` computes `if k then x <= y else x < y`
-PCmp : sort 0 -> sort 1;
+PCmp : sort 0 -> sort 0;
 PCmp a =
   #{ cmpEq : PEq a
    , cmp : a -> a -> Bool -> Bool
@@ -649,7 +649,7 @@ PCmpPair a b pa pb =
 -- SignedCmp class
 
 -- `scmp x y k` computes `if k then sle x y else slt x y`
-PSignedCmp : sort 0 -> sort 1;
+PSignedCmp : sort 0 -> sort 0;
 PSignedCmp a =
    #{ signedCmpEq : PEq a
     , scmp : a -> a -> Bool -> Bool
@@ -729,7 +729,7 @@ PZeroFun a b pb = (\(_ : a) -> pb);
 
 -- Logic class
 
-PLogic : sort 0 -> sort 1;
+PLogic : sort 0 -> sort 0;
 PLogic a =
   #{ logicZero : PZero a
    , and  : a -> a -> a
@@ -815,7 +815,7 @@ PLogicPair a b pa pb =
 
 -- Ring class
 
-PRing : sort 0 -> sort 1;
+PRing : sort 0 -> sort 0;
 PRing a =
   #{ ringZero : PZero a
    , add  : a -> a -> a
@@ -935,17 +935,13 @@ PRingPair a b pa pb =
 
 -- Integral class
 
-PIntegral : sort 0 -> sort 1;
+PIntegral : sort 0 -> sort 0;
 PIntegral a =
   #{ integralRing : PRing a
    , div  : a -> a -> a
    , mod  : a -> a -> a
    , toInt : a -> Integer
-   , posNegCases :
-        (r : sort 0) ->
-        (Nat -> r) ->
-        (Nat -> r) ->
-        a -> r
+   , posneg : a -> Either Nat Nat
    };
 
 PIntegralInteger : PIntegral Integer;
@@ -954,9 +950,15 @@ PIntegralInteger =
    , div = intDiv
    , mod = intMod
    , toInt = \(i:Integer) -> i
-   , posNegCases = \ (r:sort 0) -> \ (pos neg:Nat -> r) -> \ (i:Integer) ->
-        ite r (intLe (natToInt 0) i) (pos (intToNat i)) (neg (intToNat (intNeg i)))
+   , posneg =
+     \ (i:Integer) ->
+     ite (Either Nat Nat) (intLe (natToInt 0) i)
+     (Left Nat Nat (intToNat i))
+     (Right Nat Nat (intToNat (intNeg i)))
    };
+
+posNegCases : (a : sort 0) -> PIntegral a -> (r : sort 0) -> (Nat -> r) -> (Nat -> r) -> a -> r;
+posNegCases a p r pos neg x = either Nat Nat r pos neg (p.posneg x);
 
 PIntegralWord : (n : Nat) -> PIntegral (Vec n Bool);
 PIntegralWord n =
@@ -964,9 +966,8 @@ PIntegralWord n =
    , div = bvUDiv n
    , mod = bvURem n
    , toInt = bvToInt n
-
-     -- words are always considered non-negative
-   , posNegCases = \ (r:sort 0) -> \ (pos neg:Nat -> r) -> \(i:Vec n Bool) -> pos (bvToNat n i)
+   -- words are always considered non-negative
+   , posneg = \ (x : Vec n Bool) -> Left Nat Nat (bvToNat n x)
    };
 
 PIntegralSeqBool : (n : Num) -> PIntegral (seq n Bool);
@@ -979,7 +980,7 @@ PIntegralSeqBool n =
 
 -- Field class
 
-PField : sort 0 -> sort 1;
+PField : sort 0 -> sort 0;
 PField a =
   #{ fieldRing : PRing a
    , recip     : a -> a
@@ -1010,7 +1011,7 @@ PFieldIntModNum num =
 
 -- Round class
 
-PRound : sort 0 -> sort 1;
+PRound : sort 0 -> sort 0;
 PRound a =
   #{ roundField  : PField a
    , roundCmp    : PCmp a
@@ -1112,7 +1113,7 @@ ecMod a pi = pi.mod;
 
 ecExp : (a b: sort 0) -> PRing a -> PIntegral b -> a -> b -> a;
 ecExp a b pa pi x =
-  pi.posNegCases a
+  posNegCases b pi a
     (expByNat a (pa.int (natToInt 1)) pa.mul x)
     (\ (_:Nat) -> pa.int (natToInt 1));
     -- (error (Nat -> a) "ecExp : negative exponent");
@@ -1231,14 +1232,14 @@ ecShiftL m =
 
     -- Case for (TCNum m)
     (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec m a) ->
-        pix.posNegCases (Vec m a)
+        posNegCases ix pix (Vec m a)
           (shiftL m a (ecZero a pz) xs)
           (shiftR m a (ecZero a pz) xs))
 
     -- Case for (infinity)
     (\ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) ->
        \ (xs:Stream a) ->
-        pix.posNegCases (Stream a)
+        posNegCases ix pix (Stream a)
           (streamShiftL a xs)
           (streamShiftR a pz xs))
     m;
@@ -1251,13 +1252,13 @@ ecShiftR m =
 
     -- Case for (TCNum m)
     (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec m a) ->
-        pix.posNegCases (Vec m a)
+        posNegCases ix pix (Vec m a)
           (shiftR m a (ecZero a pz) xs)
           (shiftL m a (ecZero a pz) xs))
 
     -- Case for (infinity)
     (\ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Stream a) ->
-        pix.posNegCases (Stream a)
+        posNegCases ix pix (Stream a)
           (streamShiftR a pz xs)
           (streamShiftL a xs))
     m;
@@ -1272,7 +1273,7 @@ ecSShiftR =
               (\ (w : Nat) -> Vec w Bool -> ix -> Vec w Bool)
               (\ (xs : Vec 0 Bool) -> \ (_ : ix) -> xs)
               (\ (w : Nat) -> \ (xs : Vec (Succ w) Bool) ->
-                   pix.posNegCases (Vec (Succ w) Bool)
+                   posNegCases ix pix (Vec (Succ w) Bool)
                      (bvSShr w xs)
                      (bvShl (Succ w) xs))
               n));
@@ -1282,7 +1283,7 @@ ecRotL =
   finNumRec
     (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a)
     (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
-      pix.posNegCases (Vec m a)
+      posNegCases ix pix (Vec m a)
         (rotateL m a xs)
         (rotateR m a xs));
 
@@ -1291,7 +1292,7 @@ ecRotR =
   finNumRec
     (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a)
     (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
-      pix.posNegCases (Vec m a)
+      posNegCases ix pix (Vec m a)
         (rotateR m a xs)
         (rotateL m a xs));
 
@@ -1435,12 +1436,12 @@ ecAt n =
   Num#rec1
     (\ (n:Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a)
     (\ (n:Nat) -> \ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
-          pix.posNegCases a
+          posNegCases ix pix a
             (at n a xs)
             (\ (_:Nat) -> at n a xs 0))
             -- (error (Nat -> a) "ecAt : negative index"))
     (\ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Stream a) ->
-          pix.posNegCases a
+          posNegCases ix pix a
             (streamGet a xs)
             (\ (_:Nat) -> streamGet a xs 0))
 --          (error (Nat -> a) "ecAt : negative index"))
@@ -1774,12 +1775,12 @@ ecUpdate n =
     (\ (n:Num) -> (a:isort 0) -> (ix : sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a)
     (\ (n:Nat) -> \ (a:isort 0) -> \ (ix : sort 0) -> \ (pix:PIntegral ix) -> \ (xs : Vec n a) ->
        -- Case for (TCNum n, TCNum w)
-       pix.posNegCases (a -> Vec n a)
+       posNegCases ix pix (a -> Vec n a)
          (upd n a xs)
          (\ (_:Nat) -> \ (_:a) -> xs))
          -- (error (Nat -> a -> Vec n a) "ecUpdate: negative index"))
     (\ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs : Stream a) ->
-       pix.posNegCases (a -> Stream a)
+       posNegCases ix pix (a -> Stream a)
          (streamUpd a xs)
          (\ (_:Nat) -> \ (_:a) -> xs))
          --(error (Nat -> a -> Stream a) "ecUpdate: negative index"))
@@ -1791,7 +1792,7 @@ ecUpdateEnd =
   finNumRec
     (\ (n:Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a)
     (\ (n:Nat) -> \ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
-       pix.posNegCases (a -> Vec n a)
+       posNegCases ix pix (a -> Vec n a)
          (\ (i:Nat) -> upd n a xs (subNat (subNat n 1) i))
          (\ (_:Nat) -> \ (_:a) -> xs));
          -- (error (Nat -> a -> Vec n a) "ecUpdateEnd: negative index"))
