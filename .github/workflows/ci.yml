@@ -38,7 +38,7 @@ env:
   # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20251112"
+  SOLVER_PKG_VERSION: "snapshot-20260119"
 
 jobs:
   config:
