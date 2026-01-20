@@ -1,0 +1,12 @@
+// verify.saw
+enable_experimental;
+
+m1 <- yosys_import_sequential "ex_ite" "ex_ite.json";
+f1 <- yosys_extract_sequential_raw m1;
+
+m2 <- yosys_import_sequential "ex_case" "ex_case.json";
+f2 <- yosys_extract_sequential_raw m2;
+
+print {{ f1 x where x = { zero | reset_n = [True] } }};
+print {{ f2 x where x = { zero | reset_n = [True] } }};
+prove_print z3 {{ \x -> f1 x == f2 x }};
