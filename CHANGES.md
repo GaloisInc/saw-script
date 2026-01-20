@@ -16,10 +16,12 @@ This release supports [version
 
 ## Changes
 
-* The `boolector` solver commands have been marked deprecated.
-  Boolector has been replaced upstream by Bitwuzla.
+* The `boolector` and `cvc4` solver command families have been marked
+  deprecated.
+  Boolector has been replaced upstream by Bitwuzla, and CVC4 is an
+  outdated version of CVC5, and proofs should be updated accordingly.
   If you encounter a proof that works with Boolector and not Bitwuzla,
-  please file an issue.
+  or with CVC4 and not CVC5, please file an issue.
 
 * The following deprecated SAWScript builtins have been removed:
   - `addsimp'`

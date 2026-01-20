@@ -4427,8 +4427,12 @@ primitives = Map.fromList $
 
   , prim "cvc4"                "ProofScript ()"
     (pureVal proveCVC4)
-    Current
-    [ "Use the CVC4 theorem prover to prove the current goal." ]
+    WarnDeprecated
+    [ "Use the CVC4 theorem prover to prove the current goal."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
+    ]
 
   , prim "cvc5"                "ProofScript ()"
     (pureVal proveCVC5)
@@ -4437,9 +4441,12 @@ primitives = Map.fromList $
 
   , prim "unint_cvc4"            "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
-    Current
+    WarnDeprecated
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
     ]
 
   , prim "unint_cvc5"            "[String] -> ProofScript ()"
@@ -4451,8 +4458,12 @@ primitives = Map.fromList $
 
   , prim "sbv_cvc4"            "ProofScript ()"
     (pureVal proveCVC4)
-    Current
-    [ "Use the CVC4 theorem prover to prove the current goal." ]
+    WarnDeprecated
+    [ "Use the CVC4 theorem prover to prove the current goal."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
+    ]
 
   , prim "sbv_cvc5"            "ProofScript ()"
     (pureVal proveCVC5)
@@ -4461,9 +4472,12 @@ primitives = Map.fromList $
 
   , prim "sbv_unint_cvc4"        "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
-    Current
+    WarnDeprecated
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
     ]
 
   , prim "sbv_unint_cvc5"        "[String] -> ProofScript ()"
@@ -4475,9 +4489,12 @@ primitives = Map.fromList $
 
   , prim "w4_unint_cvc4"         "[String] -> ProofScript ()"
     (pureVal w4_unint_cvc4)
-    Current
+    WarnDeprecated
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
     , "given list of names as uninterpreted."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
     ]
 
   , prim "w4_unint_cvc5"         "[String] -> ProofScript ()"
@@ -4489,10 +4506,13 @@ primitives = Map.fromList $
 
   , prim "offline_w4_unint_cvc4"  "[String] -> String -> ProofScript ()"
     (pureVal do_offline_w4_unint_cvc4)
-    Current
+    WarnDeprecated
     [ "Write the current goal to the given file using What4 (CVC4"
     , "backend) in SMT-Lib2 format. Leave the given list of names"
     , "uninterpreted."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
     ]
 
   , prim "offline_w4_unint_cvc5"  "[String] -> String -> ProofScript ()"
