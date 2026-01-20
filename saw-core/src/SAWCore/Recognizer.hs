@@ -227,23 +227,48 @@ asTupleSelector t = do
     _           -> Nothing
 
 asRecordType :: Recognizer Term [(FieldName, Term)]
-asRecordType t = do
-  ftf <- asFTermF t
-  case ftf of
-    RecordType elems -> Just elems
-    _                -> Nothing
+asRecordType t =
+  case isGlobalDef "Prelude.EmptyType" t of
+    Just () -> Just []
+    Nothing ->
+      do (t1, b) <- asApp t
+         (t2, a) <- asApp t1
+         (t3, s) <- asApp t2
+         () <- isGlobalDef "Prelude.RecordType" t3
+         fname <- asStringLit s
+         fields <- asRecordType b
+         Just ((fname, a) : fields)
 
 asRecordValue :: Recognizer Term [(FieldName, Term)]
-asRecordValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    RecordValue elems -> Just elems
-    _                 -> Nothing
+asRecordValue t0 =
+  case isGlobalDef "Prelude.Empty" t0 of
+    Just () -> Just []
+    Nothing ->
+      do (t1, y) <- asApp t0
+         (t2, x) <- asApp t1
+         (t3, _b) <- asApp t2
+         (t4, _a) <- asApp t3
+         (t5, s) <- asApp t4
+         () <- isGlobalDef "Prelude.RecordValue" t5
+         fname <- asStringLit s
+         fields <- asRecordValue y
+         Just ((fname, x) : fields)
 
 asRecordSelector :: Recognizer Term (Term, FieldName)
-asRecordSelector t = do
-  RecordProj u s <- asFTermF t
-  return (u, s)
+asRecordSelector t0 =
+  do (t1, r) <- asApp t0
+     (t2, _b) <- asApp t1
+     (t3, _a) <- asApp t2
+     (t4, s) <- asApp t3
+     () <- isGlobalDef "Prelude.headRecord" t4
+     fname <- asStringLit s
+     Just (go r, fname)
+  where
+    go :: Term -> Term
+    go t =
+      case asGlobalApply "Prelude.tailRecord" t of
+        Just [_s, _a, _b, t'] -> go t'
+        _ -> t
 
 asRecursorApp :: Recognizer Term (Term, CompiledRecursor)
 asRecursorApp t =
