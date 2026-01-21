@@ -36,6 +36,7 @@ env:
   RUST_TOOLCHAIN: "nightly-2025-09-14"
 
   # Solver package snapshot date - also update in the following locations:
+  # ./crux-mir-comp/Dockerfile
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
   SOLVER_PKG_VERSION: "snapshot-20260119"
