@@ -22,7 +22,7 @@ This function will return `ANSWER`, i.e., `42`. We can write a spec that says
 as much:
 
 :::{literalinclude} code/statics.saw
-:lines: 5-9
+:lines: 3-7
 :language: sawscript
 :::
 
@@ -41,7 +41,7 @@ In this case, `mir_static_initializer "statics::ANSWER"` is equivalent to
 writing `mir_term {{ 42 : [32] }}`, so this spec is also valid:
 
 :::{literalinclude} code/statics.saw
-:lines: 14-18
+:lines: 12-16
 :language: sawscript
 :::
 
@@ -69,7 +69,7 @@ item (which `mir_static` computes) rather than the _value_ of a static item
 A spec for this function would look like this:
 
 :::{literalinclude} code/statics.saw
-:lines: 23-27
+:lines: 21-25
 :language: sawscript
 :::
 
@@ -97,7 +97,7 @@ for `answer_to_the_ultimate_question` over to its mutable static counterpart,
 `mut_answer_to_the_ultimate_question`:
 
 :::{literalinclude} code/statics-fail.saw
-:lines: 5-9
+:lines: 3-7
 :language: sawscript
 :::
 
@@ -127,7 +127,7 @@ The solution to this problem is to perform this initialization explicitly using
 spec:
 
 :::{literalinclude} code/statics.saw
-:lines: 32-40
+:lines: 30-38
 :language: sawscript
 :::
 
@@ -136,7 +136,7 @@ for `MUT_ANSWER`, however. This spec, which uses `27` as the starting value, is
 equally valid:
 
 :::{literalinclude} code/statics.saw
-:lines: 45-52
+:lines: 43-50
 :language: sawscript
 :::
 
@@ -184,7 +184,7 @@ item `A` that is shared between `side_effect` and `foo`. We could potentially
 write SAW specs for `side_effect` and `foo` like these:
 
 :::{literalinclude} code/statics-compositional-fail.saw
-:lines: 5-20
+:lines: 3-18
 :language: sawscript
 :::
 
@@ -212,14 +212,14 @@ To repair this proof, add a `mir_points_to` statement in the postconditions of
 `side_effect_spec`:
 
 :::{literalinclude} code/statics-compositional.saw
-:lines: 7-13
+:lines: 5-11
 :language: sawscript
 :::
 
 And then correct the behavior of `foo_spec`:
 
 :::{literalinclude} code/statics-compositional.saw
-:lines: 15-22
+:lines: 13-20
 :language: sawscript
 :::
 

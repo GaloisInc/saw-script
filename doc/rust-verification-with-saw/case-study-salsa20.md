@@ -227,11 +227,11 @@ which is approximately 4.6 megabytes when uncompressed.
 ## Getting started with SAW
 
 Now that we've built the `salsa20` crate, it's time to start writing some
-proofs! Let's start a new `code/salsa20/salsa20.saw` file as fill it in with
+proofs! Let's start a new `code/salsa20/salsa20.saw` file and fill it in with
 the usual preamble:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 1-3
+:lines: 1
 :language: sawscript
 :::
 
@@ -242,7 +242,7 @@ SAW allows you to import standalone Cryptol `.cry` files by using the `import`
 command:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 4
+:lines: 2
 :language: sawscript
 :::
 
@@ -299,7 +299,7 @@ have to figure out how to make it fit.
 Let's start filling out the SAW spec for `quarter_round`:
 
 :::{literalinclude} code/salsa20/salsa20-quarter_round-fail1.saw
-:lines: 6
+:lines: 4
 :language: sawscript
 :::
 
@@ -307,7 +307,7 @@ We are going to need some fresh variables for the `a`, `b`, `c`, and `d`
 arguments:
 
 :::{literalinclude} code/salsa20/salsa20-quarter_round-fail1.saw
-:lines: 7-10
+:lines: 5-8
 :language: sawscript
 :::
 
@@ -315,14 +315,14 @@ We will also need to allocate a reference for the `state` argument. The
 reference's underlying type is `STATE_WORDS` (`16`) elements long:
 
 :::{literalinclude} code/salsa20/salsa20-quarter_round-fail1.saw
-:lines: 11-13
+:lines: 9-11
 :language: sawscript
 :::
 
 Finally, we will need to pass these arguments to the function:
 
 :::{literalinclude} code/salsa20/salsa20-quarter_round-fail1.saw
-:lines: 15-21
+:lines: 13-19
 :language: sawscript
 :::
 
@@ -352,7 +352,7 @@ the Rust code, but not in the SAW file itself. Let's fix that by adding this
 line to `salsa20.saw`:
 
 :::{literalinclude} code/salsa20/salsa20-quarter_round-fail2.saw
-:lines: 6
+:lines: 4
 :language: sawscript
 :::
 
@@ -365,7 +365,7 @@ is defined in the `salsa20` crate and in the `core.rs` file, so we would expect
 the identifier to be named `salsa20::core::quarter_round`:
 
 :::{literalinclude} code/salsa20/salsa20-quarter_round-fail2.saw
-:lines: 25-26
+:lines: 23-24
 :language: sawscript
 :::
 
@@ -387,7 +387,7 @@ up](https://github.com/GaloisInc/saw-script/issues/1980) more easily.)
 Once we change the identifier:
 
 :::{literalinclude} code/salsa20/salsa20-quarter_round-fail3.saw
-:lines: 25-26
+:lines: 23-24
 :language: sawscript
 :::
 
@@ -414,7 +414,7 @@ In practice, however, the only values of `a`/`b`/`c`/`d` that we will use are
 less than 16. We can express this fact as a precondition:
 
 :::{literalinclude} code/salsa20/salsa20-quarter_round-fail4.saw
-:lines: 13-16
+:lines: 11-14
 :language: sawscript
 :::
 
@@ -439,7 +439,7 @@ and one can perform in-place array updates using the `updates` function.
 This translates into a postcondition that looks like this:
 
 :::{literalinclude} code/salsa20/salsa20-quarter_round-fail4.saw
-:lines: 28-30
+:lines: 26-28
 :language: sawscript
 :::
 
@@ -483,7 +483,7 @@ constrain the possible set of values for `a`/`b`/`c`/`d`. The latest iteration
 of the `quarter_round_spec` is now:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 10-28
+:lines: 8-26
 :language: sawscript
 :::
 
@@ -515,7 +515,7 @@ reason, it can be helpful to temporarily turn this use of `mir_verify` into a
 `mir_unsafe_assume_spec`:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 40-44
+:lines: 38-42
 :language: sawscript
 :::
 
@@ -568,7 +568,7 @@ Alright, enough chatter—time to start writing a proof. First, let's look up th
 its identifier becomes `salsa20::rounds::R8`:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
-:lines: 46
+:lines: 44
 :language: sawscript
 :::
 
@@ -576,7 +576,7 @@ Next, we need to look up the `PhantomData<R8>` ADT, which is used in the
 `rounds` field of the `Core<R8>` struct. This is defined in `core::marker`:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
-:lines: 47
+:lines: 45
 :language: sawscript
 :::
 
@@ -584,7 +584,7 @@ Finally, we must look up `Core<R8>` itself. Like `quarter_round`, the `Core`
 struct is defined in `salsa20::core#1`:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
-:lines: 48
+:lines: 46
 :language: sawscript
 :::
 
@@ -593,7 +593,7 @@ Now that we have the necessary prerequisites, let's write a spec for the
 argument:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
-:lines: 50-51
+:lines: 48-49
 :language: sawscript
 :::
 
@@ -602,14 +602,14 @@ which `self_ref` will point to. The `self.state` field will be a fresh array,
 and the `self.rounds` field will be a simple, empty struct value:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
-:lines: 52-53
+:lines: 50-51
 :language: sawscript
 :::
 
 Finally, putting all of the `self` values together:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
-:lines: 54-55
+:lines: 52-53
 :language: sawscript
 :::
 
@@ -618,14 +618,14 @@ field in `Core`). This is handled much the same as it was in
 `quarter_round_spec`:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
-:lines: 57-59
+:lines: 55-57
 :language: sawscript
 :::
 
 Lastly, we cap it off with a call to `mir_execute_func`:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
-:lines: 61-62
+:lines: 59-60
 :language: sawscript
 :::
 
@@ -646,7 +646,7 @@ future](https://github.com/GaloisInc/saw-script/issues/1980)), but it turns out
 that the identifier for `rounds::<R8>` is this:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
-:lines: 64-65
+:lines: 62-63
 :language: sawscript
 :::
 
@@ -664,7 +664,7 @@ reveals that the `self` argument is never modified at all, so that part is
 easy:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-2.saw
-:lines: 63
+:lines: 61
 :language: sawscript
 :::
 
@@ -674,7 +674,7 @@ we need. Because we are instantiating `rounds` at type `R8`, we must explicitly
 state that we are using 8 rounds:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-2.saw
-:lines: 64
+:lines: 62
 :language: sawscript
 :::
 
@@ -688,7 +688,7 @@ this into a function that, depending on the user input, will look up `R8`,
 `R12`, or `R20`:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
-:lines: 46
+:lines: 44
 :language: sawscript
 :::
 
@@ -702,7 +702,7 @@ String -> String -> String
 We also want to parameterize `phantom_data_adt` and `core_adt`:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
-:lines: 47-48
+:lines: 45-46
 :language: sawscript
 :::
 
@@ -712,7 +712,7 @@ preconditions side, we must pass the number of rounds to the relevant
 functions:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
-:lines: 50-56
+:lines: 48-54
 :language: sawscript
 :::
 
@@ -720,7 +720,7 @@ And on the postconditions side, we must pass the number of rounds to the
 Cryptol `Salsa20_rounds` function:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
-:lines: 66-67
+:lines: 64-65
 :language: sawscript
 :::
 
@@ -728,7 +728,7 @@ Finally, we must adjust the call to `rounds_spec` in the context of
 `mir_verify` so that we pick `8` as the number of rounds:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
-:lines: 69-70
+:lines: 67-68
 :language: sawscript
 :::
 
@@ -737,7 +737,7 @@ things correctly, we can also verify the same function at `R20` instead of
 `R8`:
 
 :::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
-:lines: 71-72
+:lines: 69-70
 :language: sawscript
 :::
 
@@ -801,7 +801,7 @@ Returning to `salsa20.saw`, we must now make use of our new Cryptol file by
 `import`ing it at the top:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 5
+:lines: 3
 :language: sawscript
 :::
 
@@ -810,7 +810,7 @@ a spec for the Rust `counter_setup` function. There's not too much to remark
 on here, as the spec proves relatively straightforward to write:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 74-90
+:lines: 72-88
 :language: sawscript
 :::
 
@@ -818,7 +818,7 @@ We can now verify `counter_setup` against `counter_setup_spec` at lengths `8`
 and `20`:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 92-95
+:lines: 90-93
 :language: sawscript
 :::
 
@@ -901,7 +901,7 @@ reference `BLOCK_SIZE` when talking about the `output`-related parts of the
 spec, so make sure to define `BLOCK_SIZE` at the top of the `.saw` file:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 8
+:lines: 6
 :language: sawscript
 :::
 
@@ -909,7 +909,7 @@ First, we need to declare all of our arguments, which proceeds as you would
 expect:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 120-136
+:lines: 118-134
 :language: sawscript
 :::
 
@@ -921,7 +921,7 @@ called. This means that after the `apply_keystream` function has returned,
 function:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 138-140
+:lines: 136-138
 :language: sawscript
 :::
 
@@ -930,7 +930,7 @@ function:
 calling the Cryptol `apply_keystream` function that we just defined:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 141-142
+:lines: 139-140
 :language: sawscript
 :::
 
@@ -938,7 +938,7 @@ Finally, we can put this all together and verify `apply_keystream` against
 `apply_keystream_spec` at lengths `8` and `20`:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 144-148
+:lines: 142-146
 :language: sawscript
 :::
 
@@ -1041,7 +1041,7 @@ implementation of `new_raw`, not `Salsa20_expansion`.
 Alright, time to write a SAW spec. The first part of the spec is straightforward:
 
 :::{literalinclude} code/salsa20/salsa20-new_raw-fail1.saw
-:lines: 97-106
+:lines: 95-104
 :language: sawscript
 :::
 
@@ -1050,14 +1050,14 @@ the behavior of `new_raw` will roughly coincide with the `Salsa20_init`
 function, so let's try that first:
 
 :::{literalinclude} code/salsa20/salsa20-new_raw-fail1.saw
-:lines: 108-112
+:lines: 106-110
 :language: sawscript
 :::
 
 If we attempt to verify this using `mir_verify`:
 
 :::{literalinclude} code/salsa20/salsa20-new_raw-fail1.saw
-:lines: 115-118
+:lines: 113-116
 :language: sawscript
 :::
 
@@ -1108,7 +1108,7 @@ Where `zero : [8][8]` is a Cryptol expression that returns all zeroes, and
 update `new_raw_spec` to reflect this:
 
 :::{literalinclude} code/salsa20/salsa20-new_raw-fail2.saw
-:lines: 109
+:lines: 107
 :language: sawscript
 :::
 
@@ -1148,7 +1148,7 @@ the Cryptol equivalent of `[u32; 16]`. As such, this is exactly the function
 that we need to resolve the differences in types:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 109
+:lines: 107
 :language: sawscript
 :::
 
@@ -1236,7 +1236,7 @@ behavior of `apply_keystream` corresponds exactly to that of
 alternative SAW spec for `apply_keystream`:
 
 :::{literalinclude} code/salsa20/salsa20-apply_keystream_alt-fail1.saw
-:lines: 149-160
+:lines: 147-158
 :language: sawscript
 :::
 
@@ -1255,7 +1255,7 @@ earlier `apply_keystream_spec`:
 The parts of the spec relating to `output` remain unchanged:
 
 :::{literalinclude} code/salsa20/salsa20-apply_keystream_alt-fail1.saw
-:lines: 162-167
+:lines: 160-165
 :language: sawscript
 :::
 
@@ -1264,7 +1264,7 @@ the parts relating to `self_ref` remain unchanged, we now have `output_ref`
 point to the results of calling `Salsa20_encrypt_with_offset`:
 
 :::{literalinclude} code/salsa20/salsa20-apply_keystream_alt-fail1.saw
-:lines: 169-172
+:lines: 167-170
 :language: sawscript
 :::
 
@@ -1272,7 +1272,7 @@ Tying this all together, we call `mir_verify`, making sure to use compositional
 overrides involving `counter_setup` and `rounds`:
 
 :::{literalinclude} code/salsa20/salsa20-apply_keystream_alt-fail1.saw
-:lines: 175-178
+:lines: 173-176
 :language: sawscript
 :::
 
@@ -1310,11 +1310,11 @@ both Z3 and Yices. In order to switch from Z3 to Yices, swap out the `z3` proof
 script with `yices`:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
-:lines: 175-178
+:lines: 173-176
 :language: sawscript
 :::
 
-After doing this, SAW is leverage Yices to solve the proof goals almost
+After doing this, SAW leverages Yices to solve the proof goals almost
 immediately:
 
 :::{code-block} console
