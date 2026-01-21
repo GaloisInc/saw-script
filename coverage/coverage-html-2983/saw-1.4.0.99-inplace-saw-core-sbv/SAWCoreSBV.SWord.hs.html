@@ -84,7 +84,7 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span><span class="decl"><span class="nottickedoff">forallSInteger nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) KUnbounded (Just nm)</span></span>
 <span class="lineno">   66 </span>
 <span class="lineno">   67 </span>existsSInteger :: String -&gt; Symbolic SInteger
-<span class="lineno">   68 </span><span class="decl"><span class="nottickedoff">existsSInteger nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just EX)) KUnbounded (Just nm)</span></span>
+<span class="lineno">   68 </span><span class="decl"><span class="istickedoff">existsSInteger nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just <span class="nottickedoff">EX</span>)) KUnbounded (Just nm)</span></span>
 <span class="lineno">   69 </span>
 <span class="lineno">   70 </span>forallSInteger_ :: Symbolic SInteger
 <span class="lineno">   71 </span><span class="decl"><span class="nottickedoff">forallSInteger_ = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) KUnbounded Nothing</span></span>
