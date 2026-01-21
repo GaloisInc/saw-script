@@ -415,7 +415,8 @@ prettyPairType prec x y = prettyParensPrec prec PrecProd (x <+> pretty '*' <+> y
 prettyRecord :: Bool -> [(FieldName, PPS.Doc)] -> PPS.Doc
 prettyRecord type_p alist =
   (if type_p then (pretty '#' <>) else id) $
-  encloseSep lbrace rbrace comma $ map ppField alist
+  group $
+  encloseSep (flatAlt "{ " "{") (flatAlt " }" "}") ", " $ map ppField alist
   where
     ppField (fld, rhs) = group (nest 2 (vsep [pretty fld <+> op_str, rhs]))
     op_str = if type_p then ":" else "="
