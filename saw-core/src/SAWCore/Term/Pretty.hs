@@ -393,7 +393,7 @@ prettyLetBlock defs body =
       vcat
         [ "let" <+> lbrace <+> lets
         , indent 4 rbrace
-        , " in" <+> body
+        , " in" <+> hang 0 body
         ]
   where
     ppEqn (var,d) =
