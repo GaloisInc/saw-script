@@ -1,0 +1,166 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE DeriveDataTypeable #-}
+<span class="lineno">    2 </span>{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+<span class="lineno">    3 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    4 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">    5 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    6 </span>{-# LANGUAGE PatternGuards #-}
+<span class="lineno">    7 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">    8 </span>{-# LANGUAGE StandaloneDeriving #-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>{- |
+<span class="lineno">   11 </span>Module      : SAWScript.REPL.Data
+<span class="lineno">   12 </span>Description :
+<span class="lineno">   13 </span>License     : BSD3
+<span class="lineno">   14 </span>Maintainer  : saw@galois.com
+<span class="lineno">   15 </span>Stability   : provisional
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>Data extraction supporting REPL commands.
+<span class="lineno">   18 </span>-}
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>module SAWScript.REPL.Data (
+<span class="lineno">   21 </span>    getCryptolExprNames,
+<span class="lineno">   22 </span>    getCryptolTypeNames,
+<span class="lineno">   23 </span>    getSAWScriptValueNames,
+<span class="lineno">   24 </span>    getSAWScriptTypeNames,
+<span class="lineno">   25 </span>    getSAWScriptVarEnv,
+<span class="lineno">   26 </span>    getSAWScriptTypeEnv,
+<span class="lineno">   27 </span> ) where
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>import Data.Maybe (mapMaybe)
+<span class="lineno">   30 </span>import qualified Data.Set as Set
+<span class="lineno">   31 </span>import qualified Data.Map as Map
+<span class="lineno">   32 </span>--import Data.Map (Map)
+<span class="lineno">   33 </span>import qualified Data.Text as Text
+<span class="lineno">   34 </span>import Data.Text (Text)
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>import qualified Cryptol.ModuleSystem.NamingEnv as MN
+<span class="lineno">   37 </span>import Cryptol.Utils.Ident (Namespace(..))
+<span class="lineno">   38 </span>import Cryptol.Utils.PP
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>import qualified SAWSupport.ScopedMap as ScopedMap
+<span class="lineno">   41 </span>import CryptolSAWCore.CryptolEnv
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>import qualified SAWCentral.AST as AST
+<span class="lineno">   44 </span>import SAWCentral.Value (TopLevelRW(..), Environ(..))
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>import SAWScript.REPL.Monad
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>-- | Get visible Cryptol variable names.
+<span class="lineno">   50 </span>getCryptolExprNames :: REPL [Text]
+<span class="lineno">   51 </span><span class="decl"><span class="nottickedoff">getCryptolExprNames =</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="nottickedoff">do fNames &lt;- fmap getNamingEnv getCryptolEnv</span>
+<span class="lineno">   53 </span><span class="spaces">     </span><span class="nottickedoff">let keys = Map.keys (MN.namespaceMap NSValue fNames)</span>
+<span class="lineno">   54 </span><span class="spaces">     </span><span class="nottickedoff">return (map (Text.pack . show . pp) keys)</span></span>
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>-- | Get visible Cryptol type names.
+<span class="lineno">   57 </span>getCryptolTypeNames :: REPL [Text]
+<span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">getCryptolTypeNames =</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">do fNames &lt;- fmap getNamingEnv getCryptolEnv</span>
+<span class="lineno">   60 </span><span class="spaces">     </span><span class="nottickedoff">let keys = Map.keys (MN.namespaceMap NSType fNames)</span>
+<span class="lineno">   61 </span><span class="spaces">     </span><span class="nottickedoff">return (map (Text.pack . show . pp) keys)</span></span>
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>-- | Get visible variable names for Haskeline completion.
+<span class="lineno">   64 </span>getSAWScriptValueNames :: REPL [Text]
+<span class="lineno">   65 </span><span class="decl"><span class="nottickedoff">getSAWScriptValueNames = do</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="nottickedoff">let avail = rwPrimsAvail rw</span>
+<span class="lineno">   68 </span><span class="spaces">      </span><span class="nottickedoff">visible (_, lc, _, _, _) = Set.member lc avail</span>
+<span class="lineno">   69 </span><span class="spaces">      </span><span class="nottickedoff">Environ valenv _tyenv _cryenv = rwEnviron rw</span>
+<span class="lineno">   70 </span><span class="spaces">      </span><span class="nottickedoff">rbenv = rwRebindables rw</span>
+<span class="lineno">   71 </span><span class="spaces">  </span><span class="nottickedoff">let rnames1 = ScopedMap.allKeys $ ScopedMap.filter visible valenv</span>
+<span class="lineno">   72 </span><span class="spaces">      </span><span class="nottickedoff">rnames2 = Map.keys rbenv</span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="nottickedoff">return (rnames1 ++ rnames2)</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>-- | Get visible type names for Haskeline completion.
+<span class="lineno">   76 </span>getSAWScriptTypeNames :: REPL [Text]
+<span class="lineno">   77 </span><span class="decl"><span class="nottickedoff">getSAWScriptTypeNames = do</span>
+<span class="lineno">   78 </span><span class="spaces">  </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">   79 </span><span class="spaces">  </span><span class="nottickedoff">let avail = rwPrimsAvail rw</span>
+<span class="lineno">   80 </span><span class="spaces">      </span><span class="nottickedoff">visible (lc, _) = Set.member lc avail</span>
+<span class="lineno">   81 </span><span class="spaces">      </span><span class="nottickedoff">Environ _valenv tyenv _cryenv = rwEnviron rw</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="nottickedoff">let rnames = ScopedMap.allKeys $ ScopedMap.filter visible tyenv</span>
+<span class="lineno">   83 </span><span class="spaces">  </span><span class="nottickedoff">return rnames</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>-- Type shorthand for list of pairs of names and types.
+<span class="lineno">   86 </span>type VarEnvList = [(Text, AST.Schema)]
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>-- | Get names and printed types from the SAWScript variable
+<span class="lineno">   89 </span>--   environment.
+<span class="lineno">   90 </span>--
+<span class="lineno">   91 </span>--   Returns the rebindable environment and a list of scopes, with the
+<span class="lineno">   92 </span>--   innermost scope last. (That's the normal print order.)
+<span class="lineno">   93 </span>--
+<span class="lineno">   94 </span>getSAWScriptVarEnv :: REPL (VarEnvList, [VarEnvList])
+<span class="lineno">   95 </span><span class="decl"><span class="istickedoff">getSAWScriptVarEnv = do</span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">   97 </span><span class="spaces">  </span><span class="istickedoff">let Environ varenv _tyenv _cryenv = rwEnviron rw</span>
+<span class="lineno">   98 </span><span class="spaces">      </span><span class="istickedoff">rbenv = rwRebindables rw</span>
+<span class="lineno">   99 </span><span class="spaces">      </span><span class="istickedoff">avail = rwPrimsAvail rw</span>
+<span class="lineno">  100 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  101 </span><span class="spaces">  </span><span class="istickedoff">-- Get the rebindable globals. These are always visible.</span>
+<span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">let extractRB (x, (_pos, ty, _v)) = (x, ty)</span>
+<span class="lineno">  103 </span><span class="spaces">      </span><span class="istickedoff">rebindables = map extractRB $ Map.assocs rbenv</span>
+<span class="lineno">  104 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  105 </span><span class="spaces">  </span><span class="istickedoff">-- Get the scopes.</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="istickedoff">-- Reverse the list so the innermost is last, because that's what</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="istickedoff">-- people will expect to see when it's printed.</span>
+<span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">let extractVar (x, (_pos, lc, ty, _v, _doc)) =</span>
+<span class="lineno">  111 </span><span class="spaces">        </span><span class="istickedoff">if Set.member lc avail then Just (x, ty)</span>
+<span class="lineno">  112 </span><span class="spaces">        </span><span class="istickedoff">else Nothing</span>
+<span class="lineno">  113 </span><span class="spaces">      </span><span class="istickedoff">extractScope entries = mapMaybe extractVar entries</span>
+<span class="lineno">  114 </span><span class="spaces">      </span><span class="istickedoff">scopes = map extractScope $ reverse $ ScopedMap.scopedAssocs varenv</span>
+<span class="lineno">  115 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">return (rebindables, scopes)</span></span>
+<span class="lineno">  117 </span>
+<span class="lineno">  118 </span>-- Type shorthand for list of pairs of names and type expansions.
+<span class="lineno">  119 </span>type TypeEnvList = [(Text, AST.NamedType)]
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>-- | Get names and printed types from the SAWScript type environment.
+<span class="lineno">  122 </span>--
+<span class="lineno">  123 </span>--   Returns a list of scopes, with the innermost scope last. (That's
+<span class="lineno">  124 </span>--   the normal print order.)
+<span class="lineno">  125 </span>--
+<span class="lineno">  126 </span>getSAWScriptTypeEnv :: REPL [TypeEnvList]
+<span class="lineno">  127 </span><span class="decl"><span class="nottickedoff">getSAWScriptTypeEnv = do</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="nottickedoff">let Environ _varenv tyenv _cryenv = rwEnviron rw</span>
+<span class="lineno">  130 </span><span class="spaces">      </span><span class="nottickedoff">avail = rwPrimsAvail rw</span>
+<span class="lineno">  131 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="nottickedoff">-- Get the scopes.</span>
+<span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">--</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="nottickedoff">-- Reverse the list so the innermost is last, because that's what</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">-- people will expect to see when it's printed.</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="nottickedoff">--</span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="nottickedoff">let extractTyVar (x, (lc, ty)) =</span>
+<span class="lineno">  138 </span><span class="spaces">        </span><span class="nottickedoff">if Set.member lc avail then Just (x, ty)</span>
+<span class="lineno">  139 </span><span class="spaces">        </span><span class="nottickedoff">else Nothing</span>
+<span class="lineno">  140 </span><span class="spaces">      </span><span class="nottickedoff">extractScope entries = mapMaybe extractTyVar entries</span>
+<span class="lineno">  141 </span><span class="spaces">      </span><span class="nottickedoff">scopes = map extractScope $ reverse $ ScopedMap.scopedAssocs tyenv</span>
+<span class="lineno">  142 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="nottickedoff">return scopes</span></span>
+
+</pre>
+</body>
+</html>
