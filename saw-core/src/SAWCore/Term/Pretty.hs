@@ -426,8 +426,8 @@ prettyProj :: FieldName -> PPS.Doc -> PPS.Doc
 prettyProj sel doc = doc <> pretty '.' <> pretty sel
 
 -- | Pretty-print an array value @[v1, ..., vn]@
-prettyArrayvalue :: [PPS.Doc] -> PPS.Doc
-prettyArrayvalue = list
+prettyArrayValue :: [PPS.Doc] -> PPS.Doc
+prettyArrayValue = list
 
 -- | Pretty-print a lambda abstraction as @\(x :: tp) -> body@, where the
 -- variable name to use for @x@ is bundled with @body@
@@ -482,7 +482,7 @@ prettyFlatTermF prec tf =
         else
           return $ pretty ("0b" ++ map (\b -> if b then '1' else '0') bits)
     ArrayValue _ args   ->
-      prettyArrayvalue <$> mapM (prettyTerm' PrecTerm) (V.toList args)
+      prettyArrayValue <$> mapM (prettyTerm' PrecTerm) (V.toList args)
     StringLit s -> return $ viaShow s
 
 -- | Pretty-print a big endian list of bit values as a hexadecimal number
