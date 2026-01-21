@@ -453,9 +453,6 @@ scmFlatTermF ftf =
     PairLeft t -> scmPairLeft t
     PairRight t -> scmPairRight t
     Recursor crec -> scmRecursor (recursorDataType crec) (recursorSort crec)
-    RecordType fs -> scmRecordType fs
-    RecordValue fs -> scmRecordValue fs
-    RecordProj t fname -> scmRecordSelect t fname
     Sort s flags -> scmSortWithFlags s flags
     ArrayValue t ts -> scmVector t (V.toList ts)
     StringLit s -> scmString s

@@ -143,15 +143,6 @@ termFPat tf =
         PairLeft t1     -> Net.App (Net.Atom ".1") (termPat t1)
         PairRight t1    -> Net.App (Net.Atom ".2") (termPat t1)
         Recursor crec   -> Net.Atom (toShortName (nameInfo (recursorDataType crec)) <> "#rec")
-        RecordType fs ->
-          foldl Net.App
-          (Net.Atom ("#{" <> Text.intercalate "," (map fst fs) <> "}"))
-          (map (termPat . snd) fs)
-        RecordValue fs ->
-          foldl Net.App
-          (Net.Atom ("{" <> Text.intercalate "," (map fst fs) <> "}"))
-          (map (termPat . snd) fs)
-        RecordProj t1 f  -> Net.App (Net.Atom ("." <> f)) (termPat t1)
         Sort s _         -> Net.Atom (Text.pack ('*' : show s))
         ArrayValue t1 ts -> foldl Net.App (Net.Atom "[]") (termPat t1 : map termPat (V.toList ts))
         StringLit str    -> Net.Atom (Text.pack (show str))
