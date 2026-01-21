@@ -2079,7 +2079,7 @@ checkSchema contextLC tyenv schema = do
   let avail = Set.fromList $ case contextLC of
           Current -> [Current]
           WarnDeprecated -> [Current, WarnDeprecated]
-          HideDeprecated -> [Current, WarnDeprecated, HideDeprecated]
+          HideDeprecated -> [Current, WarnDeprecated, HideDeprecated, Experimental]
           Experimental -> [Current, Experimental]
   evalTIWithEnv avail ScopedMap.empty tyenv check
 
