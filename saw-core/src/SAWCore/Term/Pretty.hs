@@ -534,13 +534,25 @@ prettyTermF _ (Variable vn _tp) = annotate PPS.VariableStyle <$> prettyVarName v
 
 -- | Internal function to recursively pretty-print a term
 prettyTerm' :: Prec -> Term -> PPM PPS.Doc
-prettyTerm' prec = atNextDepthM "..." . prettyTerm'' where
-  prettyTerm'' (asNat -> Just n) = prettyNat <$> asks ppOpts <*> pure (toInteger n)
-  prettyTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
-    do maybe_memo_var <- memoLookupM idx
-       case maybe_memo_var of
-         Just memo_var -> prettyMemoVar memo_var
-         Nothing -> prettyTermF prec tf
+prettyTerm' prec = atNextDepthM "..." . prettyTerm''
+  where
+    prettyTerm'' :: Term -> PPM PPS.Doc
+    prettyTerm'' t =
+      do maybe_memo_var <- memoLookupM (termIndex t)
+         case maybe_memo_var of
+           Just memo_var -> prettyMemoVar memo_var
+           Nothing ->
+             case t of
+               (asNat -> Just n) ->
+                 prettyNat <$> asks ppOpts <*> pure (toInteger n)
+               (asRecordType -> Just alist) ->
+                 prettyRecord True <$> traverse (traverse (prettyTerm' PrecTerm)) alist
+               (asRecordValue -> Just alist) ->
+                 prettyRecord False <$> traverse (traverse (prettyTerm' PrecTerm)) alist
+               (asRecordSelector -> Just (e, fname)) ->
+                 prettyProj fname <$> prettyTerm' PrecArg e
+               _ ->
+                 prettyTermF prec (unwrapTermF t)
 
 
 --------------------------------------------------------------------------------
