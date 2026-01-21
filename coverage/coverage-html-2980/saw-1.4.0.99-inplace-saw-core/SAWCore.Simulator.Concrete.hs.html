@@ -149,7 +149,7 @@ span.spaces    { background: white }
 <span class="lineno">  130 </span><span class="decl"><span class="istickedoff">pure2 f x y = pure (f x y)</span></span>
 <span class="lineno">  131 </span>
 <span class="lineno">  132 </span>pure3 :: Applicative f =&gt; (a -&gt; b -&gt; c -&gt; d) -&gt; a -&gt; b -&gt; c -&gt; f d
-<span class="lineno">  133 </span><span class="decl"><span class="nottickedoff">pure3 f x y z = pure (f x y z)</span></span>
+<span class="lineno">  133 </span><span class="decl"><span class="istickedoff">pure3 f x y z = pure (f x y z)</span></span>
 <span class="lineno">  134 </span>
 <span class="lineno">  135 </span>divOp :: (a -&gt; b -&gt; Maybe c) -&gt; a -&gt; b -&gt; Identity c
 <span class="lineno">  136 </span><span class="decl"><span class="istickedoff">divOp f x y = maybe <span class="nottickedoff">Prim.divideByZero</span> pure (f x y)</span></span>
@@ -168,7 +168,7 @@ span.spaces    { background: white }
 <span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLit   = pure2 Prim.bv</span>
 <span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSize  = <span class="nottickedoff">Prim.width</span></span>
 <span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = pure2 (Prim.append_bv <span class="nottickedoff">undefined</span> <span class="nottickedoff">undefined</span> <span class="nottickedoff">undefined</span>)</span>
-<span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = <span class="nottickedoff">pure3 (\m n x -&gt; Prim.slice_bv () m n (Prim.width x - m - n) x)</span></span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = pure3 (\m n x -&gt; Prim.slice_bv <span class="nottickedoff">()</span> <span class="nottickedoff">m</span> n (Prim.width x - m - n) x)</span>
 <span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">-- Conditionals</span>
 <span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxBool  = <span class="nottickedoff">pure3 ite</span></span>
 <span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = <span class="nottickedoff">pure3 ite</span></span>
