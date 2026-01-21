@@ -282,10 +282,14 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Records
   ++
-  [ ("EmptyType",       skip)
+  [ ("EmptyType",       mapsTo sawDefinitionsModule "RecordTypeNil")
+  , ("Empty",           mapsTo sawDefinitionsModule "RecordNil")
   , ("EmptyType__rec",  skip)
-  , ("RecordType",      skip)
+  , ("RecordType",      mapsTo sawDefinitionsModule "RecordTypeCons")
+  , ("RecordValue",     mapsToExpl sawDefinitionsModule "RecordCons")
   , ("RecordType__rec", skip)
+  , ("headRecord",      mapsToExpl sawDefinitionsModule "recordHead")
+  , ("tailRecord",      mapsToExpl sawDefinitionsModule "recordTail")
   ]
 
   -- Void
