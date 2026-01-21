@@ -219,7 +219,7 @@ span.spaces    { background: white }
 <span class="lineno">  200 </span><span class="spaces">               </span><span class="istickedoff">Current -&gt; <span class="nottickedoff">oops</span></span>
 <span class="lineno">  201 </span><span class="spaces">               </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">oops</span></span>
 <span class="lineno">  202 </span><span class="spaces">               </span><span class="istickedoff">HideDeprecated -&gt;</span>
-<span class="lineno">  203 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">(vis, ex, Map.insert name (lc, ty) dep)</span></span>
+<span class="lineno">  203 </span><span class="spaces">                 </span><span class="istickedoff">(vis, ex, Map.insert name <span class="nottickedoff">(lc, ty)</span> dep)</span>
 <span class="lineno">  204 </span><span class="spaces">               </span><span class="istickedoff">Experimental -&gt;</span>
 <span class="lineno">  205 </span><span class="spaces">                 </span><span class="istickedoff">(vis, Map.insert name (lc, ty) ex, dep)</span>
 <span class="lineno">  206 </span><span class="spaces">             </span><span class="istickedoff">where</span>
@@ -236,7 +236,7 @@ span.spaces    { background: white }
 <span class="lineno">  217 </span><span class="spaces">           </span><span class="istickedoff">let ty' = PPS.pShowText ty</span>
 <span class="lineno">  218 </span><span class="spaces">               </span><span class="istickedoff">lc' = case lc of</span>
 <span class="lineno">  219 </span><span class="spaces">                   </span><span class="istickedoff">Current -&gt; &quot;&quot;</span>
-<span class="lineno">  220 </span><span class="spaces">                   </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">&quot;  (DEPRECATED AND WILL WARN)&quot;</span></span>
+<span class="lineno">  220 </span><span class="spaces">                   </span><span class="istickedoff">WarnDeprecated -&gt; &quot;  (DEPRECATED AND WILL WARN)&quot;</span>
 <span class="lineno">  221 </span><span class="spaces">                   </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">&quot;  (DEPRECATED AND UNAVAILABLE BY DEFAULT)&quot;</span></span>
 <span class="lineno">  222 </span><span class="spaces">                   </span><span class="istickedoff">Experimental -&gt; &quot;  (EXPERIMENTAL)&quot;</span>
 <span class="lineno">  223 </span><span class="spaces">           </span><span class="istickedoff">TextIO.putStrLn (name &lt;&gt; &quot; : &quot; &lt;&gt; ty' &lt;&gt; lc')</span>
@@ -245,7 +245,7 @@ span.spaces    { background: white }
 <span class="lineno">  226 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  227 </span><span class="spaces">         </span><span class="istickedoff">moreMatches matches =</span>
 <span class="lineno">  228 </span><span class="spaces">             </span><span class="istickedoff">let n = Map.size matches in</span>
-<span class="lineno">  229 </span><span class="spaces">             </span><span class="istickedoff">if <span class="tickonlyfalse">n == 1</span> then <span class="nottickedoff">&quot;1 more match&quot;</span></span>
+<span class="lineno">  229 </span><span class="spaces">             </span><span class="istickedoff">if n == 1 then &quot;1 more match&quot;</span>
 <span class="lineno">  230 </span><span class="spaces">             </span><span class="istickedoff">else show n ++ &quot; more matches&quot;</span>
 <span class="lineno">  231 </span><span class="spaces">         </span><span class="istickedoff">alsoExperimental =</span>
 <span class="lineno">  232 </span><span class="spaces">             </span><span class="istickedoff">if not (Map.null expMatches) then</span>
@@ -255,10 +255,10 @@ span.spaces    { background: white }
 <span class="lineno">  236 </span><span class="spaces">             </span><span class="istickedoff">else</span>
 <span class="lineno">  237 </span><span class="spaces">                 </span><span class="istickedoff">pure <span class="nottickedoff">()</span></span>
 <span class="lineno">  238 </span><span class="spaces">         </span><span class="istickedoff">alsoDeprecated =</span>
-<span class="lineno">  239 </span><span class="spaces">             </span><span class="istickedoff">if <span class="tickonlyfalse">not (Map.null depMatches)</span> then</span>
-<span class="lineno">  240 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">liftIO $ putStrLn $ moreMatches depMatches ++ &quot; tagged &quot; ++</span></span>
-<span class="lineno">  241 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">&quot;deprecated; use enable_deprecated to &quot; ++</span></span>
-<span class="lineno">  242 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">&quot;see them&quot;</span></span>
+<span class="lineno">  239 </span><span class="spaces">             </span><span class="istickedoff">if not (Map.null depMatches) then</span>
+<span class="lineno">  240 </span><span class="spaces">                 </span><span class="istickedoff">liftIO $ putStrLn $ moreMatches depMatches ++ &quot; tagged &quot; ++</span>
+<span class="lineno">  241 </span><span class="spaces">                                 </span><span class="istickedoff">&quot;deprecated; use enable_deprecated to &quot; ++</span>
+<span class="lineno">  242 </span><span class="spaces">                                 </span><span class="istickedoff">&quot;see them&quot;</span>
 <span class="lineno">  243 </span><span class="spaces">             </span><span class="istickedoff">else</span>
 <span class="lineno">  244 </span><span class="spaces">                 </span><span class="istickedoff">pure <span class="nottickedoff">()</span></span>
 <span class="lineno">  245 </span><span class="spaces"></span><span class="istickedoff"></span>

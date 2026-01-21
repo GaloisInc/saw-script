@@ -134,7 +134,7 @@ span.spaces    { background: white }
 <span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpTrue   = svTrue</span>
 <span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = svFalse</span>
 <span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = pure1 svNot</span>
-<span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = pure2 svAnd</span>
+<span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = <span class="nottickedoff">pure2 svAnd</span></span>
 <span class="lineno">  119 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = <span class="nottickedoff">pure2 svOr</span></span>
 <span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">pure2 svXOr</span></span>
 <span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = <span class="nottickedoff">pure2 svEqual</span></span>
@@ -178,14 +178,14 @@ span.spaces    { background: white }
 <span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvCountTrailingZeros = <span class="nottickedoff">pure1 svCountTrailingZeros</span></span>
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvForall = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bvForall&quot;</span></span>
 <span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">-- Integer operations</span>
-<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntAdd = pure2 svPlus</span>
-<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntSub = pure2 svMinus</span>
-<span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMul = pure2 svTimes</span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntAdd = <span class="nottickedoff">pure2 svPlus</span></span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntSub = <span class="nottickedoff">pure2 svMinus</span></span>
+<span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMul = <span class="nottickedoff">pure2 svTimes</span></span>
 <span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntDiv = <span class="nottickedoff">pure2 svIntDiv</span></span>
 <span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMod = <span class="nottickedoff">pure2 svIntMod</span></span>
 <span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntNeg = <span class="nottickedoff">pure1 svUNeg</span></span>
 <span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntAbs = <span class="nottickedoff">pure1 svAbs</span></span>
-<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntEq  = pure2 svEqual</span>
+<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntEq  = <span class="nottickedoff">pure2 svEqual</span></span>
 <span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLe  = <span class="nottickedoff">pure2 svLessEq</span></span>
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLt  = <span class="nottickedoff">pure2 svLessThan</span></span>
 <span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMin = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpIntMin&quot;</span></span>
@@ -309,7 +309,7 @@ span.spaces    { background: white }
 <span class="lineno">  290 </span><span class="decl"><span class="nottickedoff">vBool l = VBool l</span></span>
 <span class="lineno">  291 </span>
 <span class="lineno">  292 </span>vInteger :: SInteger -&gt; SValue
-<span class="lineno">  293 </span><span class="decl"><span class="istickedoff">vInteger x = VInt x</span></span>
+<span class="lineno">  293 </span><span class="decl"><span class="nottickedoff">vInteger x = VInt x</span></span>
 <span class="lineno">  294 </span>
 <span class="lineno">  295 </span>------------------------------------------------------------
 <span class="lineno">  296 </span>-- Function constructors
@@ -792,7 +792,7 @@ span.spaces    { background: white }
 <span class="lineno">  773 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt;</span>
 <span class="lineno">  774 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (BoolLabel s, vBool &lt;$&gt; existsSBool s)</span></span>
 <span class="lineno">  775 </span><span class="spaces">    </span><span class="istickedoff">FOTInt -&gt;</span>
-<span class="lineno">  776 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (<span class="nottickedoff">IntegerLabel s</span>, vInteger &lt;$&gt; existsSInteger s)</span>
+<span class="lineno">  776 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (IntegerLabel s, vInteger &lt;$&gt; existsSInteger s)</span></span>
 <span class="lineno">  777 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt;</span>
 <span class="lineno">  778 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (IntegerLabel s, VIntMod n &lt;$&gt; existsSInteger s)</span></span>
 <span class="lineno">  779 </span><span class="spaces">    </span><span class="istickedoff">FOTVec 0 FOTBit -&gt;</span>
@@ -806,9 +806,9 @@ span.spaces    { background: white }
 <span class="lineno">  787 </span><span class="spaces">    </span><span class="istickedoff">FOTArray{} -&gt;</span>
 <span class="lineno">  788 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail &quot;FOTArray unimplemented for backend&quot;</span></span>
 <span class="lineno">  789 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt;</span>
-<span class="lineno">  790 </span><span class="spaces">      </span><span class="istickedoff">do let f i t = newVars (nm ++ &quot;.&quot; ++ show i) t</span>
-<span class="lineno">  791 </span><span class="spaces">         </span><span class="istickedoff">(labels, vals) &lt;- V.unzip &lt;$&gt; V.imapM f (V.fromList ts)</span>
-<span class="lineno">  792 </span><span class="spaces">         </span><span class="istickedoff">pure (<span class="nottickedoff">TupleLabel labels</span>, vTuple &lt;$&gt; traverse (fmap ready) (V.toList vals))</span>
+<span class="lineno">  790 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let f i t = newVars (nm ++ &quot;.&quot; ++ show i) t</span></span>
+<span class="lineno">  791 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(labels, vals) &lt;- V.unzip &lt;$&gt; V.imapM f (V.fromList ts)</span></span>
+<span class="lineno">  792 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (TupleLabel labels, vTuple &lt;$&gt; traverse (fmap ready) (V.toList vals))</span></span>
 <span class="lineno">  793 </span><span class="spaces">    </span><span class="istickedoff">FOTRec tm -&gt;</span>
 <span class="lineno">  794 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let f k t = newVars (nm ++ &quot;.&quot; ++ Text.unpack k) t</span></span>
 <span class="lineno">  795 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(labels, vals) &lt;- unzipMap &lt;$&gt; (Map.traverseWithKey f tm)</span></span>

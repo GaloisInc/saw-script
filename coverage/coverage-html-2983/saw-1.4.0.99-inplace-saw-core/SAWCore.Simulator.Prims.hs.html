@@ -251,7 +251,7 @@ span.spaces    { background: white }
 <span class="lineno">  232 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvForall</span></span></span>             :: Natural -&gt; (VWord l -&gt; MBool l) -&gt; MBool l
 <span class="lineno">  233 </span>    -- Integer operations
 <span class="lineno">  234 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpIntAdd</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
-<span class="lineno">  235 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpIntSub</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
+<span class="lineno">  235 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpIntSub</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  236 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpIntMul</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  237 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpIntDiv</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  238 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpIntMod</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
@@ -350,7 +350,7 @@ span.spaces    { background: white }
 <span class="lineno">  331 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
 <span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.Integer&quot;, PrimValue (TValue VIntType))</span>
 <span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intAdd&quot;, intBinOp (bpIntAdd bp))</span>
-<span class="lineno">  334 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intSub&quot;, intBinOp (bpIntSub bp))</span>
+<span class="lineno">  334 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intSub&quot;, <span class="nottickedoff">intBinOp (bpIntSub bp)</span>)</span>
 <span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intMul&quot;, intBinOp (bpIntMul bp))</span>
 <span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intDiv&quot;, <span class="nottickedoff">intBinOp (bpIntDiv bp)</span>)</span>
 <span class="lineno">  337 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intMod&quot;, intBinOp (bpIntMod bp))</span>

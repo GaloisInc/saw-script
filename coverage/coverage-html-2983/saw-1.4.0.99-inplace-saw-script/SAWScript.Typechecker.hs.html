@@ -2091,8 +2091,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2072 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2073 </span><span class="spaces">  </span><span class="istickedoff">let avail = Set.fromList $ case contextLC of</span>
 <span class="lineno"> 2074 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; [Current]</span>
-<span class="lineno"> 2075 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">[Current, WarnDeprecated]</span></span>
-<span class="lineno"> 2076 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">[Current, WarnDeprecated, HideDeprecated, Experimental]</span></span>
+<span class="lineno"> 2075 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; [Current, WarnDeprecated]</span>
+<span class="lineno"> 2076 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; [Current, WarnDeprecated, HideDeprecated, Experimental]</span>
 <span class="lineno"> 2077 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; [Current, Experimental]</span>
 <span class="lineno"> 2078 </span><span class="spaces">  </span><span class="istickedoff">evalTIWithEnv avail <span class="nottickedoff">ScopedMap.empty</span> tyenv check</span></span>
 <span class="lineno"> 2079 </span>
