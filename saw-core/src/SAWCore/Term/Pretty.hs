@@ -469,11 +469,6 @@ prettyFlatTermF prec tf =
          return $
            annotate PPS.RecursorStyle (nm <> suffix)
 
-    RecordType alist ->
-      prettyRecord True <$> mapM (\(fld,t) -> (fld,) <$> prettyTerm' PrecTerm t) alist
-    RecordValue alist ->
-      prettyRecord False <$> mapM (\(fld,t) -> (fld,) <$> prettyTerm' PrecTerm t) alist
-    RecordProj e fld -> prettyProj fld <$> prettyTerm' PrecArg e
     Sort s h -> return (viaShow h <> viaShow s)
     ArrayValue (asBoolType -> Just _) args
       | Just bits <- mapM asBool $ V.toList args ->

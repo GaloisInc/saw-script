@@ -337,6 +337,7 @@ asFiniteTypeTValue v =
     VRecordType elem_tps ->
       FTRec <$> Map.fromList <$>
       mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeTValue tp) elem_tps
+    -- FIXME: Recognize new encoding of record types
     _ -> Nothing
 
 asFirstOrderTypeValue :: Value l -> Maybe FirstOrderType

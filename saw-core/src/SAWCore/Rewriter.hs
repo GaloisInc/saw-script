@@ -771,9 +771,6 @@ rewriteSharedTerm sc ss t0 =
           PairLeft{}       -> traverse (rewriteAll convertibleFlag) ftf
           PairRight{}      -> traverse (rewriteAll convertibleFlag) ftf
           Recursor{}       -> return ftf
-          RecordType{}     -> traverse (rewriteAll convertibleFlag) ftf
-          RecordValue{}    -> traverse (rewriteAll convertibleFlag) ftf
-          RecordProj{}     -> traverse (rewriteAll convertibleFlag) ftf
           Sort{}           -> return ftf
           ArrayValue t es  -> ArrayValue t <$> traverse (rewriteAll convertibleFlag) es -- specifically NOT rewriting type, only elts
           StringLit{}      -> return ftf
