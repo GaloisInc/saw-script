@@ -62,7 +62,7 @@ Abort due to assertion failure:
 Clearly, SAW didn't like what we gave it. The reason this happens is although
 we allocated memory for the reference `r`, we never told SAW what value should
 live in that memory. When SAW simulated the `read_ref` function, it attempted
-to dereference `r`, which pointed to uninitialized memory. This is constitutes
+to dereference `r`, which pointed to uninitialized memory. This constitutes
 an error in SAW, which is what this "`attempted to read empty mux tree`"
 business is about.
 

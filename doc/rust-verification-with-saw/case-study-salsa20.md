@@ -227,7 +227,7 @@ which is approximately 4.6 megabytes when uncompressed.
 ## Getting started with SAW
 
 Now that we've built the `salsa20` crate, it's time to start writing some
-proofs! Let's start a new `code/salsa20/salsa20.saw` file as fill it in with
+proofs! Let's start a new `code/salsa20/salsa20.saw` file and fill it in with
 the usual preamble:
 
 :::{literalinclude} code/salsa20/salsa20-reference.saw
@@ -1314,7 +1314,7 @@ script with `yices`:
 :language: sawscript
 :::
 
-After doing this, SAW is leverage Yices to solve the proof goals almost
+After doing this, SAW leverages Yices to solve the proof goals almost
 immediately:
 
 :::{code-block} console
