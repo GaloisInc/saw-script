@@ -3,12 +3,12 @@ enable_experimental;
 m <- llvm_load_module "test.bc";
 
 let precondtest_setup = do {
-  x <- crucible_fresh_var "x" (llvm_int 64);
-  crucible_precond {{ x < 10 }};
-  llvm_execute_func [crucible_term x];
-  x' <- crucible_fresh_var "x'" (llvm_int 64);
-  crucible_return (crucible_term x');
-  crucible_postcond {{ x' < 10 }};
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_precond {{ x < 10 }};
+  llvm_execute_func [llvm_term x];
+  x' <- llvm_fresh_var "x'" (llvm_int 64);
+  llvm_return (llvm_term x');
+  llvm_postcond {{ x' < 10 }};
 };
 
 llvm_verify_x86 m "./precondtest" "precondtest" [] false precondtest_setup w4;
