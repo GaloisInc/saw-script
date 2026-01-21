@@ -20,7 +20,7 @@ example, here is a specification that captures the intended behavior of
 `id_u8`:
 
 :::{literalinclude} code/saw-basics.saw
-:lines: 3-7
+:lines: 1-5
 :language: sawscript
 :::
 
@@ -59,7 +59,7 @@ actually adheres to the spec. To do so, we need to load the MIR JSON version of
 `id_u8` into SAW, which is done with the `mir_load_module` command:
 
 :::{literalinclude} code/saw-basics.saw
-:lines: 9
+:lines: 7
 :language: sawscript
 :::
 
@@ -68,7 +68,7 @@ defined in the program. We can then pass `m` to the `mir_verify` command, which
 actually verifies that `id_u8` behaves according to `id_u8_spec`:
 
 :::{literalinclude} code/saw-basics.saw
-:lines: 11
+:lines: 9
 :language: sawscript
 :::
 
@@ -138,7 +138,7 @@ but it would be nice for SAW to check this.
 Let's write a specification for the `times_two` function:
 
 :::{literalinclude} code/times-two.saw
-:lines: 3-7
+:lines: 1-5
 :language: sawscript
 :::
 
@@ -162,7 +162,7 @@ the function against a spec that is as simple and readable as possible.
 Our full SAW file is:
 
 :::{literalinclude} code/times-two.saw
-:lines: 1-11
+:lines: 1-9
 :language: sawscript
 :::
 
@@ -252,7 +252,7 @@ It seems like we should be able to verify this `times_two_ref` function using
 the same spec that we used for `times_two`:
 
 :::{literalinclude} code/times-two-ref-fail.saw
-:lines: 11
+:lines: 9
 :language: sawscript
 :::
 
@@ -314,7 +314,7 @@ assumption in SAW by adding a _precondition_. To do so, we write a slightly
 modified version of `times_two_spec`:
 
 :::{literalinclude} code/times-two.saw
-:lines: 13-18
+:lines: 11-16
 :language: sawscript
 :::
 
@@ -330,7 +330,7 @@ By doing this, we have limited the range of the function from `0` to `2^^31 -
 defined. SAW will confirm this if we run it:
 
 :::{literalinclude} code/times-two.saw
-:lines: 20
+:lines: 18
 :language: sawscript
 :::
 
@@ -346,7 +346,7 @@ only want to verify `times_two_ref` for positive integers, we could add an
 additional assumption:
 
 :::{literalinclude} code/times-two.saw
-:lines: 22-28
+:lines: 20-26
 :language: sawscript
 :::
 
@@ -363,7 +363,7 @@ should be the case that the return value should be strictly greater than the
 argument value. We can check for this using `mir_postcond` like so:
 
 :::{literalinclude} code/times-two.saw
-:lines: 32-39
+:lines: 30-37
 :language: sawscript
 :::
 
@@ -379,7 +379,7 @@ For example, we can rewrite `times_two_ref_positive_postcond_spec` to use
 `mir_assert`s like so:
 
 :::{literalinclude} code/times-two.saw
-:lines: 43-50
+:lines: 41-48
 :language: sawscript
 :::
 

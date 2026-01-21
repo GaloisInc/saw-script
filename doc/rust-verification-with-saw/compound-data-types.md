@@ -25,7 +25,7 @@ SAW is suited to checking for these sorts of out-of-bound accesses. Let's write
 an incorrect spec for `index` to illustrate this:
 
 :::{literalinclude} code/arrays-fail.saw
-:lines: 3-14
+:lines: 1-12
 :language: sawscript
 :::
 
@@ -64,7 +64,7 @@ Proof failed.
 We can repair this spec by adding some preconditions:
 
 :::{literalinclude} code/arrays.saw
-:lines: 3-12
+:lines: 1-10
 :language: sawscript
 :::
 
@@ -81,7 +81,7 @@ Here, the `MIRType` argument represents the element type, and the list of
 `index_spec` using `mir_array_value` like so:
 
 :::{literalinclude} code/arrays.saw
-:lines: 18-30
+:lines: 16-28
 :language: sawscript
 :::
 
@@ -123,7 +123,7 @@ tuple types whose fields can be indexed with `.0`, `.1`, etc. Here is a spec
 for `flip` that makes use of all these features:
 
 :::{literalinclude} code/tuples.saw
-:lines: 3-9
+:lines: 1-7
 :language: sawscript
 :::
 
@@ -185,7 +185,7 @@ parameters to the struct (more on this in a bit).
 As an example, we can look up the `S` and `T` structs from above like so:
 
 :::{literalinclude} code/structs.saw
-:lines: 3-6
+:lines: 1-4
 :language: sawscript
 :::
 
@@ -213,7 +213,7 @@ Then this function instantiates `Foo`'s `A` type parameter with `u32` and the
 particular instantiation of `Foo` like so:
 
 :::{literalinclude} code/structs.saw
-:lines: 7
+:lines: 5
 :language: sawscript
 :::
 
@@ -225,7 +225,7 @@ Having looked up `Foo<u32, u64>` using `mir_find_adt`, let's use the resulting
 `MIRAdt` in a spec:
 
 :::{literalinclude} code/structs.saw
-:lines: 9-18
+:lines: 7-16
 :language: sawscript
 :::
 
@@ -249,7 +249,7 @@ do this is to write a SAW spec that constructs a struct value whose fields are
 themselves symbolic:
 
 :::{literalinclude} code/structs.saw
-:lines: 20-38
+:lines: 18-36
 :language: sawscript
 :::
 
@@ -270,7 +270,7 @@ As an example, a much shorter way to write the spec above using
 `mir_fresh_expanded_value` is:
 
 :::{literalinclude} code/structs.saw
-:lines: 42-48
+:lines: 40-46
 :language: sawscript
 :::
 
@@ -331,7 +331,7 @@ Let's now verify some enum-related code with SAW. First, we must look up the
 `Option<u32>` ADT, which works just as if you had a struct type:
 
 :::{literalinclude} code/enums.saw
-:lines: 5
+:lines: 3
 :language: sawscript
 :::
 
@@ -339,7 +339,7 @@ Next, we can use this ADT to construct enum values. We shall use
 `mir_enum_value` to create a `Some` value in the spec for `i_found_something`:
 
 :::{literalinclude} code/enums.saw
-:lines: 7-16
+:lines: 5-14
 :language: sawscript
 :::
 
@@ -352,7 +352,7 @@ Similarly, we can also write a spec for `i_got_nothing`, which uses the `None`
 variant:
 
 :::{literalinclude} code/enums.saw
-:lines: 18-25
+:lines: 16-23
 :language: sawscript
 :::
 
@@ -377,7 +377,7 @@ We can write a spec for this function that considers all possible `Option<u32>`
 values like so:
 
 :::{literalinclude} code/enums.saw
-:lines: 27-33
+:lines: 25-31
 :language: sawscript
 :::
 
@@ -443,7 +443,7 @@ Let's use `mir_slice_value` to write a spec for `sum_of_prefix` when the slice
 argument is backed by an array of length two:
 
 :::{literalinclude} code/slices.saw
-:lines: 5-15
+:lines: 3-13
 :language: sawscript
 :::
 
@@ -459,7 +459,7 @@ different lengths. Here is a slight modification to this spec that declares it
 to take a slice of length 5 rather than a slice of length 2:
 
 :::{literalinclude} code/slices.saw
-:lines: 19-29
+:lines: 17-27
 :language: sawscript
 :::
 
@@ -486,7 +486,7 @@ For example, here is how to write a spec for `sum_of_prefix` where the slice is
 a length-2 subset of the original array:
 
 :::{literalinclude} code/slices.saw
-:lines: 33-43
+:lines: 31-41
 :language: sawscript
 :::
 

@@ -57,7 +57,7 @@ The first step of compositional verification is to prove a spec for `g`, the
 callee function:
 
 :::{literalinclude} code/overrides.saw
-:lines: 5-13
+:lines: 3-11
 :language: sawscript
 :::
 
@@ -70,7 +70,7 @@ The next step is to write a spec for `f`. Since `g` adds `1` to its argument,
 `f` will add `3` to its argument:
 
 :::{literalinclude} code/overrides.saw
-:lines: 15-21
+:lines: 13-19
 :language: sawscript
 :::
 
@@ -78,7 +78,7 @@ Again, nothing too surprising. Now let's prove `f` against `f_spec` by using
 `g_ov` as a compositional override:
 
 :::{literalinclude} code/overrides.saw
-:lines: 23
+:lines: 21
 :language: sawscript
 :::
 
@@ -136,7 +136,7 @@ For example, let's suppose that we wrote different `g` specs, one where the
 argument to `g` is even, and another where the argument to `g` is odd:
 
 :::{literalinclude} code/overrides.saw
-:lines: 25-44
+:lines: 23-42
 :language: sawscript
 :::
 
@@ -144,7 +144,7 @@ We can then prove `f` compositionally by passing both of the `g` overrides to
 `mir_verify`:
 
 :::{literalinclude} code/overrides.saw
-:lines: 45
+:lines: 43
 :language: sawscript
 :::
 
@@ -166,7 +166,7 @@ override, then the verification will fail. For instance, consider what would
 happen if you tried proving `f` like so:
 
 :::{literalinclude} code/overrides-fail.saw
-:lines: 33
+:lines: 31
 :language: sawscript
 :::
 
@@ -229,7 +229,7 @@ Now let's make a first attempt at verifying `foo` using compositional
 verification. First, we will write a spec for `side_effect`:
 
 :::{literalinclude} code/overrides-mut-fail.saw
-:lines: 5-10
+:lines: 3-8
 :language: sawscript
 :::
 
@@ -241,14 +241,14 @@ what the behavior of the function is. Indeed, SAW will successfully verify this
 spec using `mir_verify`:
 
 :::{literalinclude} code/overrides-mut-fail.saw
-:lines: 18
+:lines: 16
 :language: sawscript
 :::
 
 Next, let's try to write a spec for `foo`:
 
 :::{literalinclude} code/overrides-mut-fail.saw
-:lines: 12-16
+:lines: 10-14
 :language: sawscript
 :::
 
@@ -258,7 +258,7 @@ return `0`! This looks wrong, but consider what would happen if you tried to
 verify this compositionally using our `side_effect_ov` override:
 
 :::{literalinclude} code/overrides-mut-fail.saw
-:lines: 19
+:lines: 17
 :language: sawscript
 :::
 
@@ -287,7 +287,7 @@ The line of code that SAW points to in the "`State of memory ...`" error
 message is:
 
 :::{literalinclude} code/overrides-mut-fail.saw
-:lines: 6
+:lines: 4
 :language: sawscript
 :::
 
@@ -304,14 +304,14 @@ Thankfully, repairing this spec is relatively straightforward. Simply add a
 `mir_points_to` statement in the postconditions of `side_effect_spec`:
 
 :::{literalinclude} code/overrides-mut.saw
-:lines: 5-13
+:lines: 3-11
 :language: sawscript
 :::
 
 Then use the correct return value in `foo_spec`:
 
 :::{literalinclude} code/overrides-mut.saw
-:lines: 15-21
+:lines: 13-19
 :language: sawscript
 :::
 
@@ -358,7 +358,7 @@ For example, here is how one can unsafely assume `g_spec` and use it in a
 compositional proof of `f_spec`:
 
 :::{literalinclude} code/overrides-unsafe.saw
-:lines: 21-22
+:lines: 19-20
 :language: sawscript
 :::
 

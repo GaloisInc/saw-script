@@ -32,7 +32,7 @@ embed the result of a call to `mir_alloc` in a Cryptol expression.
 attempt at writing a spec for `read_ref` using `mir_alloc`:
 
 :::{literalinclude} code/ref-basics-fail.saw
-:lines: 3-11
+:lines: 1-9
 :language: sawscript
 :::
 
@@ -80,7 +80,7 @@ to. In our spec for `read_ref`, we can declare that the reference should point
 to a symbolic `u32` value like so:
 
 :::{literalinclude} code/ref-basics.saw
-:lines: 3-9
+:lines: 1-7
 :language: sawscript
 :::
 
@@ -108,7 +108,7 @@ memory, as seen in this `swap` function:
 A corresponding spec for `swap` is:
 
 :::{literalinclude} code/ref-basics.saw
-:lines: 15-28
+:lines: 13-26
 :language: sawscript
 :::
 
