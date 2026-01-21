@@ -2565,7 +2565,7 @@ primTypes = foldl doadd Map.empty
   , abstype "Theorem" Current
   , abstype "YosysSequential" Experimental
   , abstype "YosysTheorem" Experimental
-  , conctype "SetupValue" "LLVMValue" Current
+  , conctype "SetupValue" "LLVMValue" Current -- XXX: deprecate in 1.6
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
@@ -4399,20 +4399,40 @@ primitives = Map.fromList $
 
   , prim "boolector"           "ProofScript ()"
     (pureVal proveBoolector)
-    Current
-    [ "Use the Boolector theorem prover to prove the current goal." ]
+    WarnDeprecated
+    [ "Use the Boolector theorem prover to prove the current goal."
+    , ""
+    , "Boolector has been replaced upstream by Bitwuzla. You should"
+    , "update accordingly: change \"boolector\" to \"bitwuzla\"."
+    , ""
+    , "We expect to mark the Boolector commands hidden by default when"
+    , "we remove Boolector from what4-solvers, which could be as early"
+    , "as SAW 1.6."
+    ]
 
   , prim "sbv_boolector"       "ProofScript ()"
     (pureVal proveBoolector)
-    Current
-    [ "Use the Boolector theorem prover to prove the current goal." ]
+    WarnDeprecated
+    [ "Use the Boolector theorem prover to prove the current goal."
+    , ""
+    , "Boolector has been replaced upstream by Bitwuzla. You should"
+    , "update accordingly: change \"sbv_boolector\" to \"sbv_bitwuzla\"."
+    , ""
+    , "We expect to mark the Boolector commands hidden by default when"
+    , "we remove Boolector from what4-solvers, which could be as early"
+    , "as SAW 1.6."
+    ]
 
     -- cvc4/5
 
   , prim "cvc4"                "ProofScript ()"
     (pureVal proveCVC4)
-    Current
-    [ "Use the CVC4 theorem prover to prove the current goal." ]
+    WarnDeprecated
+    [ "Use the CVC4 theorem prover to prove the current goal."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
+    ]
 
   , prim "cvc5"                "ProofScript ()"
     (pureVal proveCVC5)
@@ -4421,9 +4441,12 @@ primitives = Map.fromList $
 
   , prim "unint_cvc4"            "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
-    Current
+    WarnDeprecated
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
     ]
 
   , prim "unint_cvc5"            "[String] -> ProofScript ()"
@@ -4435,8 +4458,12 @@ primitives = Map.fromList $
 
   , prim "sbv_cvc4"            "ProofScript ()"
     (pureVal proveCVC4)
-    Current
-    [ "Use the CVC4 theorem prover to prove the current goal." ]
+    WarnDeprecated
+    [ "Use the CVC4 theorem prover to prove the current goal."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
+    ]
 
   , prim "sbv_cvc5"            "ProofScript ()"
     (pureVal proveCVC5)
@@ -4445,9 +4472,12 @@ primitives = Map.fromList $
 
   , prim "sbv_unint_cvc4"        "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
-    Current
+    WarnDeprecated
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
     ]
 
   , prim "sbv_unint_cvc5"        "[String] -> ProofScript ()"
@@ -4459,9 +4489,12 @@ primitives = Map.fromList $
 
   , prim "w4_unint_cvc4"         "[String] -> ProofScript ()"
     (pureVal w4_unint_cvc4)
-    Current
+    WarnDeprecated
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
     , "given list of names as uninterpreted."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
     ]
 
   , prim "w4_unint_cvc5"         "[String] -> ProofScript ()"
@@ -4473,10 +4506,13 @@ primitives = Map.fromList $
 
   , prim "offline_w4_unint_cvc4"  "[String] -> String -> ProofScript ()"
     (pureVal do_offline_w4_unint_cvc4)
-    Current
+    WarnDeprecated
     [ "Write the current goal to the given file using What4 (CVC4"
     , "backend) in SMT-Lib2 format. Leave the given list of names"
     , "uninterpreted."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    , "CVC4 is very obsolete and proofs should be migrated to CVC5."
     ]
 
   , prim "offline_w4_unint_cvc5"  "[String] -> String -> ProofScript ()"
@@ -5166,13 +5202,19 @@ primitives = Map.fromList $
   , prim "llvm_declare_ghost_state"
     "String -> TopLevel Ghost"
     (pureVal declare_ghost_state)
-    Current
-    [ "Legacy alternative name for 'declare_ghost_state'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'declare_ghost_state'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
     (pureVal declare_ghost_state)
-    Current
-    [ "Legacy alternative name for 'declare_ghost_state'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'declare_ghost_state'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_ghost_value"
     "Ghost -> Term -> LLVMSetup ()"
@@ -5184,8 +5226,11 @@ primitives = Map.fromList $
   , prim "crucible_ghost_value"
     "Ghost -> Term -> LLVMSetup ()"
     (pureVal llvm_ghost_value)
-    Current
-    [ "Legacy alternative name for 'llvm_ghost_value'."]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_ghost_value'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "jvm_ghost_value"
     "Ghost -> Term -> JVMSetup ()"
@@ -5280,8 +5325,11 @@ primitives = Map.fromList $
   , prim "crucible_null"
     "LLVMValue"
     (pureVal CIR.anySetupNull)
-    Current
-    [ "Legacy alternative name for 'llvm_null'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_null'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_term"
     "Term -> LLVMValue"
@@ -5291,8 +5339,11 @@ primitives = Map.fromList $
   , prim "crucible_term"
     "Term -> LLVMValue"
     (pureVal CIR.anySetupTerm)
-    Current
-    [ "Legacy alternative name for 'llvm_term'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_term'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_array_value"
     "[LLVMValue] -> LLVMValue"
@@ -5304,8 +5355,11 @@ primitives = Map.fromList $
   , prim "crucible_array"
     "[LLVMValue] -> LLVMValue"
     (pureVal CIR.anySetupArray)
-    Current
-    [ "Legacy alternative name for 'llvm_array_value'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_array_value'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_elem"
     "LLVMValue -> Int -> LLVMValue"
@@ -5317,8 +5371,11 @@ primitives = Map.fromList $
   , prim "crucible_elem"
     "LLVMValue -> Int -> LLVMValue"
     (pureVal CIR.anySetupElem)
-    Current
-    [ "Legacy alternative name for 'llvm_elem'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_elem'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_struct_value"
     "[LLVMValue] -> LLVMValue"
@@ -5330,8 +5387,11 @@ primitives = Map.fromList $
   , prim "crucible_struct"
     "[LLVMValue] -> LLVMValue"
     (pureVal (CIR.anySetupStruct False))
-    Current
-    [ "Legacy alternative name for 'llvm_struct_value'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_struct_value'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_packed_struct_value"
     "[LLVMValue] -> LLVMValue"
@@ -5343,8 +5403,11 @@ primitives = Map.fromList $
   , prim "crucible_packed_struct"
     "[LLVMValue] -> LLVMValue"
     (pureVal (CIR.anySetupStruct True))
-    Current
-    [ "Legacy alternative name for 'llvm_packed_struct_value'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_packed_struct_value'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_field"
     "LLVMValue -> String -> LLVMValue"
@@ -5357,8 +5420,11 @@ primitives = Map.fromList $
   , prim "crucible_field"
     "LLVMValue -> String -> LLVMValue"
     (pureVal CIR.anySetupField)
-    Current
-    [ "Legacy alternative name for 'llvm_field'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_field'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_union"
     "LLVMValue -> String -> LLVMValue"
@@ -5380,8 +5446,11 @@ primitives = Map.fromList $
   , prim "crucible_global"
     "String -> LLVMValue"
     (pureVal CIR.anySetupGlobal)
-    Current
-    [ "Legacy alternative name for 'llvm_global'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_global'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_global_initializer"
     "String -> LLVMValue"
@@ -5393,8 +5462,11 @@ primitives = Map.fromList $
   , prim "crucible_global_initializer"
     "String -> LLVMValue"
     (pureVal CIR.anySetupGlobalInitializer)
-    Current
-    [ "Legacy alternative name for 'llvm_global_initializer'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_global_initializer'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_cast_pointer" "LLVMValue -> LLVMType -> LLVMValue"
     (pureVal llvm_cast_pointer)
@@ -5415,8 +5487,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_fresh_var" "String -> LLVMType -> LLVMSetup Term"
     (pureVal llvm_fresh_var)
-    Current
-    [ "Legacy alternative name for 'llvm_fresh_var'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_fresh_var'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_fresh_cryptol_var" "String -> Type -> LLVMSetup Term"
     (pureVal llvm_fresh_cryptol_var)
@@ -5429,8 +5504,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_fresh_cryptol_var" "String -> Type -> LLVMSetup Term"
     (pureVal llvm_fresh_cryptol_var)
-    Experimental
-    [ "Legacy alternative name for 'llvm_fresh_cryptol_var'." ]
+    HideDeprecated
+    [ "Legacy alternative name for 'llvm_fresh_cryptol_var'."
+    , ""
+    , "Expected to be removed in SAW 1.6."
+    ]
 
   , prim "llvm_fresh_pointer" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_fresh_pointer)
@@ -5441,8 +5519,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_fresh_pointer" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_fresh_pointer)
-    Current
-    [ "Legacy alternative name for 'llvm_fresh_pointer'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_fresh_pointer'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_fresh_expanded_val" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_fresh_expanded_val)
@@ -5454,8 +5535,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_fresh_expanded_val" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_fresh_expanded_val)
-    Current
-    [ "Legacy alternative name for 'llvm_fresh_expanded_val'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_fresh_expanded_val'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
     ------------------------------------------------------------
     -- LLVM allocation
@@ -5471,8 +5555,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_alloc" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc)
-    Current
-    [ "Legacy alternative name for 'llvm_alloc'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_alloc'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_alloc_aligned" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_aligned)
@@ -5484,8 +5571,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_alloc_aligned" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_aligned)
-    Current
-    [ "Legacy alternative name for 'llvm_alloc_aligned'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_alloc_aligned'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_alloc_readonly" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_readonly)
@@ -5498,8 +5588,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_alloc_readonly" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_readonly)
-    Current
-    [ "Legacy alternative name for 'llvm_alloc_readonly'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_alloc_readonly'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_alloc_readonly_aligned" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_readonly_aligned)
@@ -5516,8 +5609,11 @@ primitives = Map.fromList $
   , prim "crucible_alloc_readonly_aligned" ("Int -> LLVMType -> " <>
                                             "LLVMSetup LLVMValue")
     (pureVal llvm_alloc_readonly_aligned)
-    Current
-    [ "Legacy alternative name for 'llvm_alloc_readonly_aligned'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_alloc_readonly_aligned'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_alloc_with_size" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_with_size)
@@ -5529,8 +5625,11 @@ primitives = Map.fromList $
 
   , prim "crucible_alloc_with_size" "Int -> LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_with_size)
-    Experimental
-    [ "Legacy alternative name for 'llvm_alloc_with_size'." ]
+    HideDeprecated
+    [ "Legacy alternative name for 'llvm_alloc_with_size'."
+    , ""
+    , "Expected to be removed in SAW 1.6."
+    ]
 
   , prim "llvm_alloc_sym_init" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_alloc_sym_init)
@@ -5550,8 +5649,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup LLVMValue"
     (pureVal llvm_symbolic_alloc)
-    Current
-    [ "Legacy alternative name for 'llvm_symbolic_alloc'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_symbolic_alloc'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_alloc_global" "String -> LLVMSetup ()"
     (pureVal llvm_alloc_global)
@@ -5563,8 +5665,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_alloc_global" "String -> LLVMSetup ()"
     (pureVal llvm_alloc_global)
-    Current
-    [ "Legacy alternative name for 'llvm_alloc_global'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_alloc_global'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
     ------------------------------------------------------------
     -- LLVM assertions
@@ -5577,8 +5682,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_precond" "Term -> LLVMSetup ()"
     (pureVal llvm_precond)
-    Current
-    [ "Legacy alternative name for 'llvm_precond'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_precond'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_postcond" "Term -> LLVMSetup ()"
     (pureVal llvm_postcond)
@@ -5588,8 +5696,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_postcond" "Term -> LLVMSetup ()"
     (pureVal llvm_postcond)
-    Current
-    [ "Legacy alternative name for 'llvm_postcond'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_postcond'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_assert" "Term -> LLVMSetup ()"
     (pureVal llvm_assert)
@@ -5609,8 +5720,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_equal" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal llvm_equal)
-    Current
-    [ "Legacy alternative name for 'llvm_equal'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_equal'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_points_to" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to True))
@@ -5626,8 +5740,11 @@ primitives = Map.fromList $
     ]
     , prim "crucible_points_to" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to True))
-    Current
-    [ "Legacy alternative name for 'llvm_points_to'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_points_to'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_conditional_points_to" ("Term -> LLVMValue -> LLVMValue -> " <>
                                        "LLVMSetup ()")
@@ -5646,8 +5763,11 @@ primitives = Map.fromList $
   , prim "crucible_conditional_points_to" ("Term -> LLVMValue -> " <>
                                            "LLVMValue -> LLVMSetup ()")
     (pureVal (llvm_conditional_points_to True))
-    Current
-    [ "Legacy alternative name for 'llvm_conditional_points_to'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_conditional_points_to'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_points_to_at_type" ("LLVMValue -> LLVMType -> LLVMValue -> " <>
                                    "LLVMSetup ()")
@@ -5678,8 +5798,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_points_to_untyped" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to False))
-    Current
-    [ "Legacy alternative name for 'llvm_points_to'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_points_to'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_conditional_points_to_untyped" ("Term -> LLVMValue -> " <>
                                                "LLVMValue -> LLVMSetup ()")
@@ -5693,8 +5816,11 @@ primitives = Map.fromList $
   , prim "crucible_conditional_points_to_untyped" ("Term -> LLVMValue -> " <>
                                                    "LLVMValue -> LLVMSetup ()")
     (pureVal (llvm_conditional_points_to False))
-    Current
-    [ "Legacy alternative name for 'llvm_conditional_points_to'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_conditional_points_to'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_points_to_array_prefix" ("LLVMValue -> Term -> Term -> " <>
                                         "LLVMSetup ()")
@@ -5713,8 +5839,11 @@ primitives = Map.fromList $
   , prim "crucible_points_to_array_prefix" ("LLVMValue -> Term -> Term -> " <>
                                             "LLVMSetup ()")
     (pureVal llvm_points_to_array_prefix)
-    Experimental
-    [ "Legacy alternative name for 'llvm_points_to_array_prefix'." ]
+    HideDeprecated
+    [ "Legacy alternative name for 'llvm_points_to_array_prefix'."
+    , ""
+    , "Expected to be removed in SAW 1.6."
+    ]
 
   , prim "llvm_points_to_bitfield" ("LLVMValue -> String -> LLVMValue -> " <>
                                     "LLVMSetup ()")
@@ -5751,8 +5880,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_execute_func" "[LLVMValue] -> LLVMSetup ()"
     (pureVal llvm_execute_func)
-    Current
-    [ "Legacy alternative name for 'llvm_execute_func'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_execute_func'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_return" "LLVMValue -> LLVMSetup ()"
     (pureVal llvm_return)
@@ -5763,8 +5895,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_return" "LLVMValue -> LLVMSetup ()"
     (pureVal llvm_return)
-    Current
-    [ "Legacy alternative name for 'llvm_return'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_return'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
     ------------------------------------------------------------
     -- LLVM modules
@@ -5816,8 +5951,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_llvm_extract"  "LLVMModule -> String -> TopLevel Term"
     (pureVal llvm_extract)
-    Current
-    [ "Legacy alternative name for 'llvm_extract'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_extract'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_compositional_extract"
     ("LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> " <>
@@ -5851,8 +5989,11 @@ primitives = Map.fromList $
     ("LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> " <>
      "LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec")
     (pureVal llvm_compositional_extract)
-    Experimental
-    [ "Legacy alternative name for 'llvm_compositional_extract'." ]
+    HideDeprecated
+    [ "Legacy alternative name for 'llvm_compositional_extract'."
+    , ""
+    , "Expected to be removed in SAW 1.6."
+    ]
 
   , prim "llvm_verify"
     ("LLVMModule -> String -> [LLVMSpec] -> Bool -> " <>
@@ -5872,8 +6013,11 @@ primitives = Map.fromList $
     ("LLVMModule -> String -> [LLVMSpec] -> Bool -> " <>
      "LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec")
     (pureVal llvm_verify)
-    Current
-    [ "Legacy alternative name for 'llvm_verify'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_verify'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_refine_spec"
     ("LLVMModule -> String -> [LLVMSpec] -> " <>
@@ -5899,8 +6043,11 @@ primitives = Map.fromList $
   , prim "crucible_llvm_unsafe_assume_spec"
     "LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec"
     (pureVal llvm_unsafe_assume_spec)
-    Current
-    [ "Legacy alternative name for 'llvm_unsafe_assume_spec'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_unsafe_assume_spec'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_array_size_profile"
     ("LLVMModule -> String -> [LLVMSpec] -> " <>
@@ -5918,8 +6065,11 @@ primitives = Map.fromList $
     ("LLVMModule -> String -> [LLVMSpec] -> " <>
      "LLVMSetup () -> TopLevel [(String, [FunctionProfile])]")
     (pureVal $ llvm_array_size_profile assumeUnsat)
-    Experimental
-    [ "Legacy alternative name for 'llvm_array_size_profile'." ]
+    HideDeprecated
+    [ "Legacy alternative name for 'llvm_array_size_profile'."
+    , ""
+    , "Expected to be removed in SAW 1.6."
+    ]
 
   , prim "llvm_spec_solvers"  "LLVMSpec -> [String]"
     (pureVal llvm_spec_solvers)
@@ -5929,8 +6079,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_spec_solvers"  "LLVMSpec -> [String]"
     (pureVal llvm_spec_solvers)
-    Current
-    [ "Legacy alternative name for 'llvm_spec_solvers'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_spec_solvers'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "llvm_spec_size"  "LLVMSpec -> Int"
     (pureVal llvm_spec_size)
@@ -5940,8 +6093,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_spec_size"  "LLVMSpec -> Int"
     (pureVal llvm_spec_size)
-    Current
-    [ "Legacy alternative name for 'llvm_spec_size'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'llvm_spec_size'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
     ------------------------------------------------------------
     -- LLVM x86 verification
@@ -5966,8 +6122,14 @@ primitives = Map.fromList $
     ("LLVMModule -> String -> String -> [(String, Int)] -> Bool -> " <>
      "LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec")
     (pureVal do_llvm_verify_x86)
+    -- XXX: this should have been deprecated in 1.5 with the other
+    -- crucible_* names, but the AWS proofs apparently use it.
     Experimental
-    [ "Legacy alternative name for 'llvm_verify_x86'." ]
+    --HideDeprecated
+    [ "Legacy alternative name for 'llvm_verify_x86'."
+    --, ""
+    --, "Expected to be removed in SAW 1.7."
+    ]
 
   , prim "llvm_verify_fixpoint_x86"
     ("LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> " <>
@@ -6134,7 +6296,7 @@ primitives = Map.fromList $
     (pureVal skeleton_guess_arg_sizes)
     Experimental
     [ "Update the sizes of all arguments of the given module skeleton"
-    , "using data obtained from 'crucible_llvm_array_size_profile'."
+    , "using data obtained from 'llvm_array_size_profile'."
     ]
 
   , prim "skeleton_globals_pre" "ModuleSkeleton -> LLVMSetup ()"
@@ -6498,8 +6660,11 @@ primitives = Map.fromList $
     ]
   , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
     (pureVal CJ.jvm_extract)
-    Current
-    [ "Legacy alternative name for 'jvm_extract'." ]
+    WarnDeprecated
+    [ "Legacy alternative name for 'jvm_extract'."
+    , ""
+    , "Expected to be hidden by default in SAW 1.6."
+    ]
 
   , prim "jvm_verify"
     ("JavaClass -> String -> [JVMSpec] -> Bool -> " <>
