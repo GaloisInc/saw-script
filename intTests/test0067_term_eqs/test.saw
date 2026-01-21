@@ -2,19 +2,19 @@ m <- llvm_load_module "test.bc";
 
 let f_spec = do {
   x <- llvm_fresh_var "x" (llvm_int 32);
-  llvm_execute_func [(crucible_term {{ x - 1 }}), (crucible_term x), (crucible_term {{ x + 1 }})];
-  crucible_return (crucible_term {{ 3 * x }});
+  llvm_execute_func [(llvm_term {{ x - 1 }}), (llvm_term x), (llvm_term {{ x + 1 }})];
+  llvm_return (llvm_term {{ 3 * x }});
 };
 
 let f_false_spec = do {
   x <- llvm_fresh_var "x" (llvm_int 32);
-  llvm_execute_func [(crucible_term {{ x - 1 }}), (crucible_term {{ x + 0 }}), (crucible_term {{ x + 1 }})];
-  crucible_return (crucible_term {{ 3 * x }});
+  llvm_execute_func [(llvm_term {{ x - 1 }}), (llvm_term {{ x + 0 }}), (llvm_term {{ x + 1 }})];
+  llvm_return (llvm_term {{ 3 * x }});
 };
 
 let test_spec = do {
   llvm_execute_func [];
-  crucible_return (crucible_term {{ 0:[32] }});
+  llvm_return (llvm_term {{ 0:[32] }});
 };
 
 f_ov <- llvm_unsafe_assume_spec m "f" f_spec;

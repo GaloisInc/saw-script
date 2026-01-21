@@ -3,26 +3,26 @@ m <- llvm_load_module "test.bc";
 let f_spec = do {
   xp <- llvm_alloc (llvm_int 64);
   x <- llvm_fresh_var "x" (llvm_int 64);
-  llvm_points_to xp (crucible_term x);
+  llvm_points_to xp (llvm_term x);
   llvm_execute_func [xp];
-  llvm_points_to xp (crucible_term {{ 6*x }});
+  llvm_points_to xp (llvm_term {{ 6*x }});
 };
 
 let g_spec = do {
   xp <- llvm_alloc (llvm_int 64);
   x <- llvm_fresh_var "x" (llvm_int 64);
-  llvm_points_to xp (crucible_term x);
+  llvm_points_to xp (llvm_term x);
   llvm_execute_func [xp];
-  llvm_points_to xp (crucible_term {{(2*x):[64]}});
+  llvm_points_to xp (llvm_term {{(2*x):[64]}});
 };
 
 let h_spec = do {
   xp <- llvm_alloc (llvm_int 64);
   x <- llvm_fresh_var "x" (llvm_int 64);
-  llvm_points_to xp (crucible_term {{x}});
+  llvm_points_to xp (llvm_term {{x}});
   llvm_precond {{ x > 1 }};
   llvm_execute_func [xp];
-  llvm_points_to xp (crucible_term {{(3*x):[64]}});
+  llvm_points_to xp (llvm_term {{(3*x):[64]}});
 };
 
 g_ov <- llvm_verify m "g" [] false g_spec z3;
