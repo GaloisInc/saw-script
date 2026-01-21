@@ -134,7 +134,9 @@ have a notion of reference values, but <code class="docutils literal notranslate
 embed the result of a call to <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> in a Cryptol expression.</p>
 <p><code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> must be used with some care. Here is a first, not-quite-correct
 attempt at writing a spec for <code class="docutils literal notranslate"><span class="pre">read_ref</span></code> using <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">r</span><span class="p">];</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">read_ref_fail_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">r</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">r</span><span class="p">];</span>
 <span class="w">  </span><span class="c c-Singleline">// mir_return ??;</span>
 <span class="p">};</span>
 
@@ -167,7 +169,7 @@ if we verify this as-is:</p>
 <p>Clearly, SAW didn’t like what we gave it. The reason this happens is although
 we allocated memory for the reference <code class="docutils literal notranslate"><span class="pre">r</span></code>, we never told SAW what value should
 live in that memory. When SAW simulated the <code class="docutils literal notranslate"><span class="pre">read_ref</span></code> function, it attempted
-to dereference <code class="docutils literal notranslate"><span class="pre">r</span></code>, which pointed to uninitialized memory. This is constitutes
+to dereference <code class="docutils literal notranslate"><span class="pre">r</span></code>, which pointed to uninitialized memory. This constitutes
 an error in SAW, which is what this “<code class="docutils literal notranslate"><span class="pre">attempted</span> <span class="pre">to</span> <span class="pre">read</span> <span class="pre">empty</span> <span class="pre">mux</span> <span class="pre">tree</span></code>”
 business is about.</p>
 <p>SAW provides a <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> command to declare what value a reference should
@@ -180,13 +182,13 @@ point to:</p>
 second <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> argument represents the value that the reference should point
 to. In our spec for <code class="docutils literal notranslate"><span class="pre">read_ref</span></code>, we can declare that the reference should point
 to a symbolic <code class="docutils literal notranslate"><span class="pre">u32</span></code> value like so:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">r_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;r_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">read_ref_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">r_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">r_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;r_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">r_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">r_val</span><span class="p">);</span>
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">r_ref</span><span class="p">];</span>
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">r_val</span><span class="p">);</span>
 <span class="p">};</span>
-
-<span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_load_module</span><span class="w"> </span><span class="s2">&quot;ref-basics.linked-mir.json&quot;</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>We have renamed <code class="docutils literal notranslate"><span class="pre">r</span></code> to <code class="docutils literal notranslate"><span class="pre">r_ref</span></code> in this revised spec to more easily distinguish
@@ -212,7 +214,9 @@ memory, as seen in this <code class="docutils literal notranslate"><span class="
 </pre></div>
 </div>
 <p>A corresponding spec for <code class="docutils literal notranslate"><span class="pre">swap</span></code> is:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">swap_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">a_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
+<span class="w">  </span><span class="n">a_val</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_fresh_var</span><span class="w"> </span><span class="s2">&quot;a_val&quot;</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 
 <span class="w">  </span><span class="n">b_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_alloc_mut</span><span class="w"> </span><span class="n">mir_u32</span><span class="p">;</span>
@@ -224,8 +228,6 @@ memory, as seen in this <code class="docutils literal notranslate"><span class="
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">a_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">b_val</span><span class="p">);</span>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">b_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">a_val</span><span class="p">);</span>
 <span class="p">};</span>
-
-<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;ref_basics::swap&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">swap_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
 <p>There are two interesting things worth calling out in this spec:</p>

@@ -32,7 +32,7 @@ embed the result of a call to `mir_alloc` in a Cryptol expression.
 attempt at writing a spec for `read_ref` using `mir_alloc`:
 
 :::{literalinclude} code/ref-basics-fail.saw
-:lines: 3-11
+:lines: 1-9
 :language: sawscript
 :::
 
@@ -62,7 +62,7 @@ Abort due to assertion failure:
 Clearly, SAW didn't like what we gave it. The reason this happens is although
 we allocated memory for the reference `r`, we never told SAW what value should
 live in that memory. When SAW simulated the `read_ref` function, it attempted
-to dereference `r`, which pointed to uninitialized memory. This is constitutes
+to dereference `r`, which pointed to uninitialized memory. This constitutes
 an error in SAW, which is what this "`attempted to read empty mux tree`"
 business is about.
 
@@ -80,7 +80,7 @@ to. In our spec for `read_ref`, we can declare that the reference should point
 to a symbolic `u32` value like so:
 
 :::{literalinclude} code/ref-basics.saw
-:lines: 3-9
+:lines: 1-7
 :language: sawscript
 :::
 
@@ -108,7 +108,7 @@ memory, as seen in this `swap` function:
 A corresponding spec for `swap` is:
 
 :::{literalinclude} code/ref-basics.saw
-:lines: 15-28
+:lines: 13-26
 :language: sawscript
 :::
 
