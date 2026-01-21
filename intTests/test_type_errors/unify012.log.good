@@ -1,8 +1,8 @@
 Loading file "unify012.saw"
-unify012.saw:14:2-14:14: Warning: Monadic bind with the wrong monad; found LLVMSetup but expected TopLevel
-unify012.saw:14:2-14:14: Warning: This creates the action but does not execute it; if you meant to do that, prefix the expression with return
-unify012.saw:14:2-14:14: Warning: This will become an error in a future release of SAW
-unify012.saw:14:13-14:14: Type mismatch.
+Type errors:
+  unify012.saw:14:2-14:14: Monadic bind with the wrong monad; found LLVMSetup but expected TopLevel
+  unify012.saw:14:2-14:14: This creates the action but does not execute it; if you meant to do that, prefix the expression with return
+  unify012.saw:14:13-14:14: Type mismatch.
     Mismatch of type constructors. Expected: () but got <Block>
     unify012.saw:14:6-14:8: The type () arises from this type annotation
     unify012.saw:14:2-14:14: The type LLVMSetup () arises from this type annotation
@@ -11,5 +11,6 @@ unify012.saw:14:13-14:14: Type mismatch.
     Found:    LLVMSetup ()
 
     within "<toplevel>" (unify012.saw:14:2-14:14)
+
 
 FAILED
