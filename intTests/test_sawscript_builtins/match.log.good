@@ -7,5 +7,5 @@ caseProofResult:
       x@2 = seq x@1 Bool;
     }
  in (x : x@2)
--> EqTrue (ecEq x@2 (PEqSeqBool x@1) x x)))
+    -> EqTrue (ecEq x@2 (PEqSeqBool x@1) x x)))
 ("Counterexample",bvNat 8 0)
