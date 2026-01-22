@@ -27,6 +27,16 @@ updFst a b f x = (f x.(1), x.(2));
 updSnd : (a b : sort 0) -> (b -> b) -> (a * b) -> (a * b);
 updSnd a b f x = (x.(1), f x.(2));
 
+updHeadRecord :
+  (s : String) -> (a b : sort 0) -> (a -> a) -> RecordType s a b -> RecordType s a b;
+updHeadRecord s a b f x =
+  RecordValue s a b (f (headRecord s a b x)) (tailRecord s a b x);
+
+updTailRecord :
+  (s : String) -> (a b : sort 0) -> (b -> b) -> RecordType s a b -> RecordType s a b;
+updTailRecord s a b f x =
+  RecordValue s a b (headRecord s a b x) (f (tailRecord s a b x));
+
 --------------------------------------------------------------------------------
 -- Extended natural numbers
 
