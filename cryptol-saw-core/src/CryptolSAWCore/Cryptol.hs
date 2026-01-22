@@ -43,7 +43,6 @@ import Control.Monad (foldM, forM, zipWithM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
-import Data.List (elemIndex)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromMaybe)
 import qualified Data.IntTrie as IntTrie
@@ -1130,12 +1129,12 @@ importExpr sc env expr =
                         "Type: " <> Text.pack (pretty t1)
                     ]
                Just tm ->
-                 do i <- the ("Expected a field " <> Text.pack (show x) <> " RecordSel")
-                      (elemIndex x (map fst (C.canonicalFields tm)))
-                    ts' <- traverse (importType sc env . snd) (C.canonicalFields tm)
-                    let t2' = ts' !! i
+                 do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields tm)
+                    fields' <- traverse (traverse (importType sc env)) fields
+                    let x' = C.identText x
+                    t2' <- the "field name not found" (lookup x' fields')
                     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
-                    g <- tupleUpdate sc f i ts'
+                    g <- recordUpdate sc f x' fields'
                     scApply sc g e1'
         C.ListSel _i _maybeLen ->
           panic "importExpr" [
@@ -1379,6 +1378,19 @@ tupleUpdate sc f n (a : ts) =
      b <- scTupleType sc ts
      scGlobalApply sc "Cryptol.updSnd" [a, b, g]
 tupleUpdate _ _ _ [] = panic "tupleUpdate" ["empty tuple"]
+
+recordUpdate :: SharedContext -> Term -> FieldName -> [(FieldName, Term)] -> IO Term
+recordUpdate _ _ _ [] = panic "recordUpdate" ["field not found"]
+recordUpdate sc f fname ((fname', a) : fields)
+  | fname == fname' =
+    do s <- scString sc fname'
+       b <- scRecordType sc fields
+       scGlobalApply sc "Cryptol.updHeadRecord" [s, a, b, f]
+  | otherwise =
+    do s <- scString sc fname'
+       b <- scRecordType sc fields
+       g <- recordUpdate sc f fname fields
+       scGlobalApply sc "Cryptol.updTailRecord" [s, a, b, g]
 
 -- | Apply a substitution to a type *without* simplifying
 -- constraints like @Ring [n]a@ to @Ring a@. (This is in contrast to
