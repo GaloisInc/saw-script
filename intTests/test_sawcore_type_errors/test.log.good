@@ -131,11 +131,19 @@ Stack trace:
 While typechecking term:
   #{foo : Bool, bar : False}
 .:1:0:
-Type of term is not a sort
+Argument type not subtype of expected type
+Expected:
+  sort 0
+Actual:
+  Bool
 For term:
   False
+Passed to function:
+  RecordType "bar"
 With type:
-  Bool
+  (a : sort 0)
+  -> (b : sort 0)
+  -> sort 0
 
 Disallowed propositional elimination
 == Anticipated failure message ==
@@ -225,9 +233,9 @@ While typechecking term:
 .:1:0:
 No such record field: c
 For term:
-  {a = True,b = False}
+  {a = True, b = False}
 With type:
-  #{a : Bool,b : Bool}
+  #{a : Bool, b : Bool}
 
 Inferred type not a subtype of expected type
 == Anticipated failure message ==
