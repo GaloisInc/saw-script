@@ -53,6 +53,7 @@ module SAWCore.Simulator.Value
   -- * Recognizers
   , asFiniteTypeValue
   , asFirstOrderTypeValue
+  , asFirstOrderTypeTValue
   , suffixTValue
   -- * Re-exports
   , module SAWCore.Simulator.MonadLazy

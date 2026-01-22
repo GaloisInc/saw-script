@@ -1365,31 +1365,8 @@ argTypes v =
 --
 -- Convert a saw-core type expression to a FirstOrder type expression
 --
-vAsFirstOrderType :: forall sym. IsSymExprBuilder sym => TValue (What4 sym) -> Maybe FirstOrderType
-vAsFirstOrderType v =
-  case v of
-    VBoolType
-      -> return FOTBit
-    VIntType
-      -> return FOTInt
-    VIntModType n
-      -> return (FOTIntMod n)
-    VVecType n v2
-      -> FOTVec n <$> vAsFirstOrderType v2
-    VArrayType iv ev
-      -> FOTArray <$> vAsFirstOrderType iv <*> vAsFirstOrderType ev
-    VUnitType
-      -> return (FOTTuple [])
-    VPairType v1 v2
-      -> do t1 <- vAsFirstOrderType v1
-            t2 <- vAsFirstOrderType v2
-            case t2 of
-              FOTTuple ts -> return (FOTTuple (t1 : ts))
-              _ -> return (FOTTuple [t1, t2])
-    VRecordType tps
-      -> (FOTRec <$> Map.fromList <$>
-          mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
-    _ -> Nothing
+vAsFirstOrderType :: IsSymExprBuilder sym => TValue (What4 sym) -> Maybe FirstOrderType
+vAsFirstOrderType v = asFirstOrderTypeTValue v
 
 valueAsBaseType :: IsSymExprBuilder sym => TValue (What4 sym) -> Maybe (Some W.BaseTypeRepr)
 valueAsBaseType v = fotToBaseType =<< vAsFirstOrderType v
