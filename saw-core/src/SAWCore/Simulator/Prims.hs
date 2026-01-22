@@ -377,6 +377,13 @@ constMap bp = Map.fromList
   , ("Prelude.appendString", appendStringOp)
   , ("Prelude.bytesToString", bytesToStringOp bp)
   , ("Prelude.equalString", equalStringOp bp)
+  -- Records
+  , ("Prelude.EmptyType", PrimValue (TValue VEmptyRecordType))
+  , ("Prelude.Empty", PrimValue VEmptyRecord)
+  , ("Prelude.RecordType", recordTypeOp)
+  , ("Prelude.RecordValue", recordValueOp)
+  , ("Prelude.headRecord", headRecordOp)
+  , ("Prelude.tailRecord", tailRecordOp)
 
   -- Overloaded
   , ("Prelude.ite", iteOp bp)
@@ -803,6 +810,45 @@ equalStringOp bp =
   stringFun $ \x ->
   stringFun $ \y ->
     Prim (VBool <$> bpBool bp (x == y))
+
+--------------------------------------------------------------------------------
+-- Records
+
+recordTypeOp :: VMonad l => Prim l
+recordTypeOp =
+  stringFun $ \s ->
+  tvalFun $ \a ->
+  tvalFun $ \b ->
+  PrimValue (TValue (VRecordType s a b))
+
+recordValueOp :: VMonad l => Prim l
+recordValueOp =
+  stringFun $ \s ->
+  constFun $ -- a
+  constFun $ -- b
+  primFun $ \x ->
+  strictFun $ \y ->
+  PrimValue (VRecordValue s x y)
+
+headRecordOp :: VMonad l => Prim l
+headRecordOp =
+  constFun $ -- s
+  constFun $ -- a
+  constFun $ -- b
+  strictFun $ \v ->
+  case v of
+    VRecordValue _ x _ -> Prim (force x)
+    _ -> panic "headRecord" ["Expected record value"]
+
+tailRecordOp :: VMonad l => Prim l
+tailRecordOp =
+  constFun $ -- s
+  constFun $ -- a
+  constFun $ -- b
+  strictFun $ \v ->
+  case v of
+    VRecordValue _ _ y -> PrimValue y
+    _ -> panic "headRecord" ["Expected record value"]
 
 --------------------------------------------------------------------------------
 
@@ -1372,14 +1418,11 @@ muxValue bp b = value
     value (VPair x1 x2) (VPair y1 y2) =
       VPair <$> thunk x1 y1 <*> thunk x2 y2
 
-    value (VRecordValue elems1) (VRecordValue elems2) =
-      do let em2 = Map.fromList elems2
-         let build (fname, v1) =
-               case Map.lookup fname em2 of
-                 Just v2 -> do v <- thunk v1 v2
-                               pure (fname, v)
-                 Nothing -> panic "muxValue" ["Record field missing: " <> fname]
-         VRecordValue <$> traverse build elems1
+    value VEmptyRecord VEmptyRecord = pure VEmptyRecord
+    value (VRecordValue f1 t1 v1) (VRecordValue f2 t2 v2) =
+      do unless (f1 == f2) $
+           panic "muxValue" ["Mismatched record field names: " <> f1 <> ", " <> f2]
+         VRecordValue f1 <$> thunk t1 t2 <*> value v1 v2
 
     value (VCtorApp i itv ps xv) (VCtorApp j jtv _ yv)
       | i == j = VCtorApp i itv ps <$> ctorArgs itv ps xv yv

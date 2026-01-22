@@ -72,7 +72,7 @@ import qualified Cryptol.ModuleSystem.Name as C
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..)
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
-  , identText, interactiveName
+  , identText, interactiveName, mkIdent
   , ModPath(..), modPathSplit, ogModule, ogFromParam, Namespace(NSValue)
   , modNameChunksText
   )
@@ -2020,10 +2020,16 @@ scCryptolType sc t =
         | s == mkSort 0 -> return (Left C.KType)
         | otherwise     -> Nothing
 
+      SC.VEmptyRecordType -> Just (Right (C.tRec (C.recordFromFields [])))
+      SC.VRecordType s v1 v2 ->
+        do Right t1 <- asCryptolTypeValue v1
+           Right t2 <- asCryptolTypeValue v2
+           ts <- C.canonicalFields <$> C.tIsRec t2
+           Just (Right (C.tRec (C.recordFromFields ((C.mkIdent s, t1) : ts))))
+
       -- TODO?
       SC.VPiType _v1 (SC.VDependentPi _) -> Nothing
       SC.VStringType -> Nothing
-      SC.VRecordType{} -> Nothing
       SC.VTyTerm{} -> Nothing
 
 --------------------------------------------------------------------------------
@@ -2106,10 +2112,10 @@ exportRecordValue fields v =
     ([]         , SC.VUnit    ) -> []
     ([(n, t)]   , _           ) -> [(n, exportValue t v)]
     ((n, t) : ts, SC.VPair x y) -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
-    (_, SC.VRecordValue (alistAllFields
-                         (map (C.identText . fst) fields) -> Just ths)) ->
-      zipWith (\(n,t) x -> (n, exportValue t (run x))) fields ths
-    _                              -> error $ "exportValue: expected record"
+    ([], SC.VEmptyRecord)       -> []
+    ((n, t) : ts, SC.VRecordValue f x y) | C.identText n == f
+                                -> (n, exportValue t (run x)) : exportRecordValue ts y
+    _                           -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
 

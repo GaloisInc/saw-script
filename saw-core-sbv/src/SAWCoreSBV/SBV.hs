@@ -45,7 +45,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 
 import Data.Traversable as T
-import Control.Monad ((<=<), (>=>), foldM, unless, void)
+import Control.Monad ((>=>), foldM, unless, void)
 import Control.Monad.IO.Class
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
@@ -264,10 +264,10 @@ flattenSValue nm v = do
         VPair x y                 -> do (xs, sx) <- flattenSValue nm =<< force x
                                         (ys, sy) <- flattenSValue nm =<< force y
                                         return (xs ++ ys, sx ++ sy)
-        VRecordValue elems        -> do (xss, sxs) <-
-                                          unzip <$>
-                                          mapM (flattenSValue nm <=< force . snd) elems
-                                        return (concat xss, concat sxs)
+        VEmptyRecord              -> pure ([], "")
+        VRecordValue _ x y        -> do (xs, sx) <- flattenSValue nm =<< force x
+                                        (ys, sy) <- flattenSValue nm y
+                                        pure (xs ++ ys, sx ++ sy)
         VVector (V.toList -> ts)  -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
                                         return (concat xss, concat ss)
         VBool sb                  -> return ([sb], "")
@@ -684,11 +684,12 @@ parseUninterpreted cws nm ty =
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             return (VPair (ready x1) (ready x2))
 
-    (VRecordType elem_tps)
-      -> (VRecordValue <$>
-          mapM (\(f,tp) ->
-                 (f,) <$> ready <$>
-                 parseUninterpreted cws (nm ++ "." ++ Text.unpack f) tp) elem_tps)
+    VEmptyRecordType
+      -> pure VEmptyRecord
+    (VRecordType f ty1 ty2)
+      -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack f) ty1
+            x2 <- parseUninterpreted cws nm ty2
+            pure (VRecordValue f (ready x1) x2)
 
     _ -> fail $ "could not create uninterpreted type for " ++ show ty
 
@@ -949,15 +950,15 @@ sbvSetOutput checkSz (FOTTuple (t:ts)) (VPair l r) i = do
 sbvSetOutput _checkSz (FOTRec fs) VUnit i | Map.null fs = do
    return i
 
-sbvSetOutput _checkSz (FOTRec fs) (VRecordValue []) i | Map.null fs = return i
+sbvSetOutput _checkSz (FOTRec fs) VEmptyRecord i | Map.null fs = return i
 
-sbvSetOutput checkSz (FOTRec fs) (VRecordValue ((fn,x):rest)) i = do
+sbvSetOutput checkSz (FOTRec fs) (VRecordValue fn x rest) i = do
    x' <- liftIO $ force x
    case Map.lookup fn fs of
      Just t -> do
        let fs' = Map.delete fn fs
        sbvSetOutput checkSz t x' i >>=
-         sbvSetOutput checkSz (FOTRec fs') (VRecordValue rest)
+         sbvSetOutput checkSz (FOTRec fs') rest
      Nothing -> fail "sbvCodeGen: type mismatch when setting record output value"
 
 sbvSetOutput _checkSz _ft _v _i = do
