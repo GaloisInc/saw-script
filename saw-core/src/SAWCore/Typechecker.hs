@@ -384,7 +384,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
        do body' <- typeInferCompleteUTerm body
           body_ty <- liftSCM $ SC.scmTypeOf body'
           ok <- liftIO $ scSubtype sc body_ty req_body_tp
-          unless ok $ throwTCError (TermError (SC.ApplyNotSubtype req_body_tp body')) -- FIXME: Wrong error
+          unless ok $ throwTCError (TermError (SC.AscriptionNotSubtype req_body_tp body'))
           let vts = map (\(_, v, t) -> (v, t)) ctx
           result <- liftIO $ scLambdaList sc vts body'
           liftSCM $ SC.scmAscribe result def_tp

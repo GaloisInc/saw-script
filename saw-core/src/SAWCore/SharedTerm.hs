@@ -356,7 +356,7 @@ prettyTermError opts ne err =
       , tyshow f
       , "To argument:"
       , ishow arg ]
-    ApplyNotSubtype expected arg ->
+    ApplyNotSubtype f expected arg ->
       [ "Argument type not subtype of expected type"
       , "Expected:"
       , ishow expected
@@ -364,6 +364,10 @@ prettyTermError opts ne err =
       , tyshow arg
       , "For term:"
       , ishow arg
+      , "Passed to function:"
+      , ishow f
+      , "With type:"
+      , tyshow f
       ]
     VectorNotSubtype expected arg ->
       [ "Vector element type not subtype of expected type"
