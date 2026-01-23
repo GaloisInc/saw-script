@@ -2132,37 +2132,29 @@ processSHA2_512 n x =
 --------------------------------------------------------------------------------
 -- Prime-EC Primitives
 
+ProjectivePoint : Num -> sort 0;
+ProjectivePoint p = #{x : IntModNum p, y : IntModNum p, z : IntModNum p};
+
 ec_double :
-  (p : Num) ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p;
+  (p : Num) -> ProjectivePoint p -> ProjectivePoint p;
 ec_double p x =
-  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_double";
+  error (ProjectivePoint p) "Unimplemented: ec_double";
 
 ec_add_nonzero :
-  (p : Num) ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p;
+  (p : Num) -> ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
 ec_add_nonzero p x y =
-  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_add_nonzero";
+  error (ProjectivePoint p) "Unimplemented: ec_add_nonzero";
 
 ec_mult :
-  (p : Num) ->
-  IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p;
+  (p : Num) -> IntModNum p -> ProjectivePoint p -> ProjectivePoint p;
 ec_mult p x y =
-  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_mult";
+  error (ProjectivePoint p) "Unimplemented: ec_mult";
 
 ec_twin_mult :
-  (p : Num) ->
-  IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p;
+  (p : Num) -> IntModNum p ->
+  ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
 ec_twin_mult p x y z =
-  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_twin_mult";
+  error (ProjectivePoint p) "Unimplemented: ec_twin_mult";
 
 --------------------------------------------------------------------------------
 -- Rewrite rules
