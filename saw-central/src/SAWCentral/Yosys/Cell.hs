@@ -170,22 +170,13 @@ primCellToMap sc c args =
          w <- outputWidth
          res <- SC.scBvShl sc w ta nb
          output (CellTerm res (connWidthNat "Y") (connSigned "A"))
-    CellTypeSshr
-      | connWidthNat "A" > connWidthNat "Y" ->
-      do let wa = connWidthNat "A"
-             wy = connWidthNat "Y"
-         wat <- SC.scNat sc (wa - 1) -- signed shift wants size-1
-         CellTerm ta _ _ <- input "A"
-         nb <- cellTermNat sc =<< input "B"
-         shifted <- SC.scBvSShr sc wat ta nb
-         output =<< extTrunc sc wy (CellTerm shifted (connWidthNat "A") True)
-      | otherwise ->
+    CellTypeSshr ->
       do let w = max (connWidthNat "A") (connWidthNat "Y")
          wt1 <- SC.scNat sc (w - 1) -- signed shift wants size-1
          CellTerm ta _ _ <- extTrunc sc w =<< input "A"
          nb <- cellTermNat sc =<< input "B"
          res <- SC.scBvSShr sc wt1 ta nb
-         output (CellTerm res (connWidthNat "Y") True)
+         output (CellTerm res w True)
     -- "$shift" -> _
     CellTypeShiftx ->
       do let w = max (connWidthNat "A") (connWidthNat "B")
