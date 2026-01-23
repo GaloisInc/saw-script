@@ -1059,7 +1059,7 @@ ctxReduceRecursor r elimf c_args CtorArgStruct{..}
   | length c_args /= length ctorArgs = panic "ctxReduceRecursor" ["Wrong number of constructor arguments"]
   | otherwise =
     do args <- mk_args IntMap.empty (zip c_args ctorArgs)
-       scmWhnf =<< scmApplyAll elimf args
+       scmApplyAllBeta elimf args
   where
     mk_args :: IntMap Term ->  -- already processed parameters/arguments
                [(Term, (VarName, CtorArg))] ->
