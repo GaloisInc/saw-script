@@ -375,14 +375,16 @@ span.spaces    { background: white }
 <span class="lineno">  356 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">scFoldr &lt;- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span></span>
 <span class="lineno">  357 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">bit &lt;- SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]</span></span>
 <span class="lineno">  358 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">outputBit bit</span></span>
-<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">-- extend input A to max(A_WIDTH, Y_WIDTH)</span>
-<span class="lineno">  360 </span><span class="spaces">    </span><span class="istickedoff">bvShiftOp :: (CellTerm -&gt; CellTerm -&gt; IO CellTerm) -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  361 </span><span class="spaces">    </span><span class="istickedoff">bvShiftOp f =</span>
-<span class="lineno">  362 </span><span class="spaces">      </span><span class="istickedoff">do let w = max (connWidthNat &quot;A&quot;) (connWidthNat &quot;Y&quot;)</span>
-<span class="lineno">  363 </span><span class="spaces">         </span><span class="istickedoff">a &lt;- extTrunc sc w =&lt;&lt; input &quot;A&quot;</span>
-<span class="lineno">  364 </span><span class="spaces">         </span><span class="istickedoff">b &lt;- input &quot;B&quot;</span>
-<span class="lineno">  365 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- f a b</span>
-<span class="lineno">  366 </span><span class="spaces">         </span><span class="istickedoff">output res</span></span>
+<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">bvShiftOp :: (CellTerm -&gt; CellTerm -&gt; IO CellTerm) -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  360 </span><span class="spaces">    </span><span class="istickedoff">bvShiftOp f =</span>
+<span class="lineno">  361 </span><span class="spaces">      </span><span class="istickedoff">-- If A_WIDTH &lt; Y_WIDTH, then extend A and do the shift at size Y_WIDTH.</span>
+<span class="lineno">  362 </span><span class="spaces">      </span><span class="istickedoff">-- If Y_WIDTH &lt; A_WIDTH, then shift at size A_WIDTH and truncate to</span>
+<span class="lineno">  363 </span><span class="spaces">      </span><span class="istickedoff">-- Y_WIDTH afterward (truncation performed by function 'output').</span>
+<span class="lineno">  364 </span><span class="spaces">      </span><span class="istickedoff">do let w = max (connWidthNat &quot;A&quot;) (connWidthNat &quot;Y&quot;)</span>
+<span class="lineno">  365 </span><span class="spaces">         </span><span class="istickedoff">a &lt;- extTrunc sc w =&lt;&lt; input &quot;A&quot;</span>
+<span class="lineno">  366 </span><span class="spaces">         </span><span class="istickedoff">b &lt;- input &quot;B&quot;</span>
+<span class="lineno">  367 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- f a b</span>
+<span class="lineno">  368 </span><span class="spaces">         </span><span class="istickedoff">output res</span></span>
 
 </pre>
 </body>
