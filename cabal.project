@@ -45,3 +45,11 @@ packages:
 -- enable ghc >= 9.8's additional build parallelism
 semaphore: true
 
+-- there is no ring-buffer that permits GHC 9.12's base version
+-- and boomerang doesn't permit GHC 9.12's template-haskell
+allow-newer: ring-buffer:base
+allow-newer: boomerang:template-haskell
+
+-- hgmp doesn't allow either GHC 9.10 or 9.12's base
+allow-newer: hgmp:base
+allow-newer: hgmp:ghc-prim
