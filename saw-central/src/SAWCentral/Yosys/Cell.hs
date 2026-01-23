@@ -162,8 +162,7 @@ primCellToMap sc c args =
          nb <- cellTermNat sc =<< input "B"
          w <- SC.scNat sc wa
          res <- SC.scBvShr sc w ta nb
-         let wy = connWidthNat "Y"
-         output =<< extTrunc sc wy (CellTerm res (connWidthNat "A") (connSigned "A"))
+         output (CellTerm res (connWidthNat "A") (connSigned "A"))
     CellTypeSshl ->
       do CellTerm ta _ _ <- extTrunc sc (connWidthNat "Y") =<< input "A"
          nb <- cellTermNat sc =<< input "B"
@@ -323,21 +322,17 @@ primCellToMap sc c args =
         Nothing -> panic "cellToTerm" [nm <> " missing input " <> inpNm]
         Just a -> pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)
 
+    -- | Extend or truncate a cell term as needed to fit the output @Y@ port.
     output :: CellTerm -> IO (Maybe (Map Text SC.Term))
-    output (CellTerm ct cw _) =
-      do let res = CellTerm ct cw (connSigned "Y")
-         CellTerm t _ _ <- extTrunc sc (connWidthNat "Y") res
-         pure . Just $ Map.fromList
-           [ ("Y", t)
-           ]
+    output res =
+      do CellTerm t _ _ <- extTrunc sc (connWidthNat "Y") res
+         pure (Just (Map.singleton "Y" t))
 
     outputBit :: SC.Term -> IO (Maybe (Map Text SC.Term))
     outputBit res =
       do bool <- SC.scBoolType sc
          vres <- SC.scSingle sc bool res
-         pure . Just $ Map.fromList
-           [ ("Y", vres)
-           ]
+         pure (Just (Map.singleton "Y" vres))
 
     -- convert input to big endian
     bvUnaryOp :: (CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))
