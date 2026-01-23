@@ -2082,7 +2082,7 @@ exportValue ty v = case ty of
 
   -- records
   TV.TVRec fields ->
-      pure . V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v
+    pure . V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v
 
   -- functions
   TV.TVFun _aty _bty ->
@@ -2109,9 +2109,6 @@ exportTupleValue tys v =
 exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
   case (fields, v) of
-    ([]         , SC.VUnit    ) -> []
-    ([(n, t)]   , _           ) -> [(n, exportValue t v)]
-    ((n, t) : ts, SC.VPair x y) -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
     ([], SC.VEmptyRecord)       -> []
     ((n, t) : ts, SC.VRecordValue f x y) | C.identText n == f
                                 -> (n, exportValue t (run x)) : exportRecordValue ts y
