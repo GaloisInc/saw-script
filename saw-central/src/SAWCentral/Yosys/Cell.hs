@@ -90,6 +90,16 @@ liftBinary sc f c1@(CellTerm { cellTermTerm = t1 }) (CellTerm { cellTermTerm = t
      res <- f wt t1 t2
      pure $ c1 { cellTermTerm = res }
 
+liftShift ::
+  SC.SharedContext ->
+  (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> -- (w : Nat) -> [w] -> Nat -> [w]
+  CellTerm -> CellTerm -> IO CellTerm
+liftShift sc f a b =
+  do wt <- SC.scNat sc $ cellTermWidth a
+     nb <- cellTermNat sc b
+     res <- f wt (cellTermTerm a) nb
+     pure $ a { cellTermTerm = res }
+
 liftBinaryCmp ::
   SC.SharedContext ->
   (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> -- (w : Nat) -> [w] -> [w] -> Bool
@@ -151,30 +161,10 @@ primCellToMap sc c args =
     CellTypeReduceBool ->
       do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
          bvReduce False r
-    CellTypeShl ->
-      do ta <- fmap cellTermTerm $ input "A"
-         nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvShl sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
-    CellTypeShr ->
-      do ta <- fmap cellTermTerm $ input "A"
-         nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvShr sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
-    CellTypeSshl ->
-      do ta <- fmap cellTermTerm $ input "A"
-         nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvShl sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
-    CellTypeSshr ->
-      do ta <- fmap cellTermTerm $ input "A"
-         nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvSShr sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
+    CellTypeShl -> bvShiftOp $ liftShift sc (SC.scBvShl sc)
+    CellTypeShr -> bvShiftOp $ liftShift sc (SC.scBvShr sc)
+    CellTypeSshl -> bvShiftOp $ liftShift sc (SC.scBvShl sc)
+    CellTypeSshr -> bvShiftOp $ liftShift sc (SC.scBvSShr sc)
     -- "$shift" -> _
     CellTypeShiftx ->
       do let w = max (connWidthNat "A") (connWidthNat "B")
@@ -311,7 +301,6 @@ primCellToMap sc c args =
         Just bits -> fromIntegral $ length bits
     connWidth :: Text -> IO SC.Term
     connWidth onm = SC.scNat sc $ connWidthNat onm
-    outputWidth = connWidth "Y"
 
     input :: Text -> IO CellTerm
     input inpNm =
@@ -367,3 +356,13 @@ primCellToMap sc c args =
          scFoldr <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "foldr"
          bit <- SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
          outputBit bit
+    bvShiftOp :: (CellTerm -> CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))
+    bvShiftOp f =
+      -- If A_WIDTH < Y_WIDTH, then extend A and do the shift at size Y_WIDTH.
+      -- If Y_WIDTH < A_WIDTH, then shift at size A_WIDTH and truncate to
+      -- Y_WIDTH afterward (truncation performed by function 'output').
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
+         a <- extTrunc sc w =<< input "A"
+         b <- input "B"
+         res <- f a b
+         output res
