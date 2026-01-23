@@ -168,7 +168,7 @@ data TermError
   = StaleTerm Term IntRangeSet
   | VariableContextMismatch Text VarIndex Term Term
   | ApplyNotPiType Term Term -- function, argument
-  | ApplyNotSubtype Term Term -- expected, arg
+  | ApplyNotSubtype Term Term Term -- function, expected, arg
   | VariableFreeInContext VarName Term
   | NotType Term
   | NotPairType Term
@@ -480,7 +480,7 @@ scmApply t1 t2 =
             (x, ty1a, ty1b) <- scmEnsureRecognizer (ApplyNotPiType t1 t2) asPi ty1
             ty2 <- scmTypeOf t2
             ok <- scmSubtype ty2 ty1a
-            unless ok $ scmError (ApplyNotSubtype ty1a t2)
+            unless ok $ scmError (ApplyNotSubtype t1 ty1a t2)
             -- Computing the result type with scmInstantiateBeta may
             -- lead to other calls to scApply, but these should be at
             -- simpler types, so it should always terminate.
