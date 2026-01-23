@@ -248,6 +248,11 @@ Actual:
   Nat
 For term:
   5
+Passed to function:
+  \(x : Bool) -> implies x False
+With type:
+  (x : Bool)
+  -> Bool
 
 Empty vector literal
 == Anticipated failure message ==
