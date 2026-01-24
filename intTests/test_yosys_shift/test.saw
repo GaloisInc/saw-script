@@ -1,19 +1,26 @@
 enable_experimental;
 
-/*
-m1 <- yosys_import "shift_dyn_idx.json";
-let spec1 = {{ \(x : {idx : [4]}) -> { out = 1 << x.idx : [8] } }};
-yosys_verify {{ m1.shift_dyn_idx }} [] spec1 [] z3;
+do {
+m <- yosys_import "shift_dyn_idx.json";
+let spec = {{ \(x : {idx : [3]}) -> { out = 1 << x.idx : [8] } }};
+yosys_verify {{ m.shift_dyn_idx }} [] spec [] z3;
+};
 
-m2 <- yosys_import "shift_dyn_idx_signed.json";
-// For signed 4-bit index:
-// If MSB (bit 0) is 1, it's negative -> out of bounds -> result 0.
-// If MSB is 0, it's 0..7 -> valid index -> result 1 << idx.
-let spec2 = {{ \(x : {idx : [4]}) -> { out = if x.idx @ 0 then 0 else 1 << x.idx : [8] } }};
-yosys_verify {{ m2.shift_dyn_idx_signed }} [] spec2 [] z3;
-*/
+do {
+m <- yosys_import "shift_dyn_idx_signed.json";
+let spec = {{ \(x : {idx : [4]}) -> { out = 1 << x.idx : [8] } }};
+yosys_verify {{ m.shift_dyn_idx_signed }} [] spec [] do { unfolding ["shift_dyn_idx_signed"]; print_goal; z3; };
+};
 
-// sshr
+// sshr - corresponds to >>> operator
+
+do {
+// Verilog defines >>> on unsigned numbers to do a *logical* shift!
+// The >> in the Cryptol specification is not a mistake.
+m <- yosys_import "shift_sshr_unsigned.json";
+let shift_sshr_unsigned = {{ \(x : {a : [8], b : [4]}) -> { out = x.a >> x.b } }};
+yosys_verify {{ m.shift_sshr_unsigned }} [] shift_sshr_unsigned [] z3;
+};
 
 do {
 m <- yosys_import "shift_sshr_trunc.json";

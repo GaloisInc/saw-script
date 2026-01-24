@@ -12,7 +12,7 @@ Stability   : experimental
 
 module SAWCentral.Yosys.Cell where
 
-import Control.Lens ((^.))
+import Control.Lens ((^.), (.~))
 
 import qualified Data.Aeson as Aeson
 import Data.Char (digitToInt)
@@ -123,7 +123,12 @@ primCellToMap sc c args =
     CellTypePos ->
       do res <- input "A"
          output res
-    CellTypeNeg -> bvUnaryOp . liftUnary sc $ SC.scBvNeg sc
+    CellTypeNeg ->
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
+         CellTerm t _ _ <- extTrunc sc w =<< input "A"
+         wt <- SC.scNat sc w
+         res <- SC.scBvNeg sc wt t
+         output (CellTerm res w True)
     CellTypeAnd -> bvBinaryOp . liftBinary sc $ SC.scBvAnd sc
     CellTypeOr -> bvBinaryOp . liftBinary sc $ SC.scBvOr sc
     CellTypeXor -> bvBinaryOp . liftBinary sc $ SC.scBvXor sc
@@ -169,16 +174,42 @@ primCellToMap sc c args =
          w <- outputWidth
          res <- SC.scBvShl sc w ta nb
          output (CellTerm res (connWidthNat "Y") (connSigned "A"))
-    CellTypeSshr ->
+    CellTypeSshr
+      | connSigned "A" ->
       do let w = max (connWidthNat "A") (connWidthNat "Y")
          wt1 <- SC.scNat sc (w - 1) -- signed shift wants size-1
          CellTerm ta _ _ <- extTrunc sc w =<< input "A"
          nb <- cellTermNat sc =<< input "B"
          res <- SC.scBvSShr sc wt1 ta nb
          output (CellTerm res w True)
-    -- "$shift" -> _
+      | otherwise ->
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
+         wt <- SC.scNat sc w
+         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
+         nb <- cellTermNat sc =<< input "B"
+         res <- SC.scBvShr sc wt ta nb
+         output (CellTerm res w True)
+    CellTypeShift
+      | connSigned "B" ->
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
+         let wb = connWidthNat "B"
+         wbt <- SC.scNat sc wb
+         wt <- SC.scNat sc w
+         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
+         CellTerm tb _ _ <- input "B"
+         zero <- SC.scBvConst sc wb 0
+         tbn <- SC.scBvToNat sc wb tb
+         tbneg <- SC.scBvNeg sc wbt tb
+         tbnegn <- SC.scBvToNat sc wb tbneg
+         cond <- SC.scBvSGe sc wbt tb zero
+         tcase <- SC.scBvShr sc wt ta tbn
+         ecase <- SC.scBvShl sc wt ta tbnegn
+         ty <- SC.scBitvector sc w
+         res <- SC.scIte sc ty cond tcase ecase
+         output (CellTerm res w (connSigned "A"))
+      | otherwise -> primCellToMap sc (cellType .~ CellTypeShr $ c) args
     CellTypeShiftx ->
-      do let w = max (connWidthNat "A") (connWidthNat "B")
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
          wt <- SC.scNat sc w
          CellTerm ta _ _ <- extTrunc sc w =<< input "A"
          CellTerm tb _ _ <- extTrunc sc w =<< input "B"

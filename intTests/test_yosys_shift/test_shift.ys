@@ -9,6 +9,10 @@ prep -top shift_dyn_idx_signed
 write_json shift_dyn_idx_signed.json
 
 design -load mydesign
+prep -top shift_sshr_unsigned
+write_json shift_sshr_unsigned.json
+
+design -load mydesign
 prep -top shift_sshr_trunc
 write_json shift_sshr_trunc.json
 

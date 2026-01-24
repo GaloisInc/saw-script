@@ -113,6 +113,7 @@ textToPrimitiveCellType = Map.fromList
   , ("$shr"         , CellTypeShr)
   , ("$sshl"        , CellTypeSshl)
   , ("$sshr"        , CellTypeSshr)
+  , ("$shift"       , CellTypeShift)
   , ("$shiftx"      , CellTypeShiftx)
   , ("$lt"          , CellTypeLt)
   , ("$le"          , CellTypeLe)
@@ -165,6 +166,7 @@ data CellType
   | CellTypeShr
   | CellTypeSshl
   | CellTypeSshr
+  | CellTypeShift
   | CellTypeShiftx
   | CellTypeLt
   | CellTypeLe

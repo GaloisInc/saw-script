@@ -1,9 +1,9 @@
 module shift_dyn_idx (
-    input  logic [3:0]   idx,
+    input  logic [2:0]   idx,
     output logic [7:0]   out
 );
     always_comb begin
-        out = '0;
+        out = 8'h00;
         out[idx] = '1;
     end
 endmodule
@@ -16,6 +16,22 @@ module shift_dyn_idx_signed (
         out = '0;
         out[idx] = '1;
     end
+endmodule
+
+module shift_dyn (
+    input  signed [4:0]  idx,
+    input  logic [7:0]   inp,
+    output logic [7:0]   out
+);
+    assign out = inp >>> $signed(idx);
+endmodule
+
+module shift_sshr_unsigned (
+    input  logic [7:0] a,
+    input  [3:0] b,
+    output logic [7:0] out
+);
+    assign out = a >>> b;
 endmodule
 
 module shift_sshr_trunc (
@@ -48,14 +64,6 @@ module shift_shr_ext (
     output logic [7:0] out
 );
     assign out = a >> b;
-endmodule
-
-module shift_dyn (
-    input  signed [4:0]  idx,
-    input  logic [7:0]   inp,
-    output logic [7:0]   out
-);
-    assign out = inp >>> $signed(idx);
 endmodule
 
 module shift_sshl_trunc (

@@ -5,7 +5,7 @@
       "attributes": {
         "hdlname": "shift_shr_trunc",
         "top": "00000000000000000000000000000001",
-        "src": "test_shift.sv:37.1-43.10"
+        "src": "test_shift.sv:53.1-59.10"
       },
       "ports": {
         "a": {
@@ -22,7 +22,7 @@
         }
       },
       "cells": {
-        "$shr$test_shift.sv:42$23": {
+        "$shr$test_shift.sv:58$24": {
           "hide_name": 1,
           "type": "$shr",
           "parameters": {
@@ -33,7 +33,7 @@
             "Y_WIDTH": "00000000000000000000000000001000"
           },
           "attributes": {
-            "src": "test_shift.sv:42.18-42.24"
+            "src": "test_shift.sv:58.18-58.24"
           },
           "port_directions": {
             "A": "input",
@@ -52,21 +52,21 @@
           "hide_name": 0,
           "bits": [ 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 ],
           "attributes": {
-            "src": "test_shift.sv:38.25-38.26"
+            "src": "test_shift.sv:54.25-54.26"
           }
         },
         "b": {
           "hide_name": 0,
           "bits": [ 18, 19, 20, 21 ],
           "attributes": {
-            "src": "test_shift.sv:39.18-39.19"
+            "src": "test_shift.sv:55.18-55.19"
           }
         },
         "out": {
           "hide_name": 0,
           "bits": [ 22, 23, 24, 25, 26, 27, 28, 29 ],
           "attributes": {
-            "src": "test_shift.sv:40.24-40.27"
+            "src": "test_shift.sv:56.24-56.27"
           }
         }
       }
