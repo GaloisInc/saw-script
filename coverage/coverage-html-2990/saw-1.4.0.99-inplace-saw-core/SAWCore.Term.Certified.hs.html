@@ -187,7 +187,7 @@ span.spaces    { background: white }
 <span class="lineno">  168 </span>  = StaleTerm Term IntRangeSet
 <span class="lineno">  169 </span>  | VariableContextMismatch Text VarIndex Term Term
 <span class="lineno">  170 </span>  | ApplyNotPiType Term Term -- function, argument
-<span class="lineno">  171 </span>  | ApplyNotSubtype Term Term -- expected, arg
+<span class="lineno">  171 </span>  | ApplyNotSubtype Term Term Term -- function, expected, arg
 <span class="lineno">  172 </span>  | VariableFreeInContext VarName Term
 <span class="lineno">  173 </span>  | NotType Term
 <span class="lineno">  174 </span>  | NotPairType Term
@@ -499,7 +499,7 @@ span.spaces    { background: white }
 <span class="lineno">  480 </span><span class="spaces">            </span><span class="istickedoff">(x, ty1a, ty1b) &lt;- scmEnsureRecognizer (ApplyNotPiType t1 t2) asPi ty1</span>
 <span class="lineno">  481 </span><span class="spaces">            </span><span class="istickedoff">ty2 &lt;- scmTypeOf t2</span>
 <span class="lineno">  482 </span><span class="spaces">            </span><span class="istickedoff">ok &lt;- scmSubtype ty2 ty1a</span>
-<span class="lineno">  483 </span><span class="spaces">            </span><span class="istickedoff">unless ok $ scmError (ApplyNotSubtype ty1a t2)</span>
+<span class="lineno">  483 </span><span class="spaces">            </span><span class="istickedoff">unless ok $ scmError (ApplyNotSubtype t1 ty1a t2)</span>
 <span class="lineno">  484 </span><span class="spaces">            </span><span class="istickedoff">-- Computing the result type with scmInstantiateBeta may</span>
 <span class="lineno">  485 </span><span class="spaces">            </span><span class="istickedoff">-- lead to other calls to scApply, but these should be at</span>
 <span class="lineno">  486 </span><span class="spaces">            </span><span class="istickedoff">-- simpler types, so it should always terminate.</span>
