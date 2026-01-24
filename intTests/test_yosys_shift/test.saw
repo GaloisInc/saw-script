@@ -1,0 +1,77 @@
+enable_experimental;
+
+do {
+m <- yosys_import "shift_dyn_idx.json";
+let spec = {{ \(x : {idx : [3]}) -> { out = 1 << x.idx : [8] } }};
+yosys_verify {{ m.shift_dyn_idx }} [] spec [] z3;
+};
+
+do {
+m <- yosys_import "shift_dyn_idx_signed.json";
+let spec = {{ \(x : {idx : [4]}) -> { out = 1 << x.idx : [8] } }};
+yosys_verify {{ m.shift_dyn_idx_signed }} [] spec [] do { unfolding ["shift_dyn_idx_signed"]; print_goal; z3; };
+};
+
+// sshr - corresponds to >>> operator
+
+do {
+// Verilog defines >>> on unsigned numbers to do a *logical* shift!
+// The >> in the Cryptol specification is not a mistake.
+m <- yosys_import "shift_sshr_unsigned.json";
+let shift_sshr_unsigned = {{ \(x : {a : [8], b : [4]}) -> { out = x.a >> x.b } }};
+yosys_verify {{ m.shift_sshr_unsigned }} [] shift_sshr_unsigned [] z3;
+};
+
+do {
+m <- yosys_import "shift_sshr_trunc.json";
+let shift_sshr_trunc = {{ \(x : {a : [16], b : [4]}) -> { out = drop`{8} (x.a >>$ x.b) } }};
+yosys_verify {{ m.shift_sshr_trunc }} [] shift_sshr_trunc [] z3;
+};
+
+do {
+m <- yosys_import "shift_sshr_ext.json";
+let shift_sshr_ext = {{ \(x : {a : [4], b : [4]}) -> { out = (sext x.a : [8]) >>$ x.b } }};
+yosys_verify {{ m.shift_sshr_ext }} [] shift_sshr_ext [] z3;
+};
+
+// shr
+
+do {
+m <- yosys_import "shift_shr_trunc.json";
+let shift_shr_trunc = {{ \(x : {a : [16], b : [4]}) -> { out = drop`{8} (x.a >> x.b) } }};
+yosys_verify {{ m.shift_shr_trunc }} [] shift_shr_trunc [] z3;
+};
+
+do {
+m <- yosys_import "shift_shr_ext.json";
+let shift_shr_ext = {{ \(x : {a : [4], b : [4]}) -> { out = (zext x.a : [8]) >> x.b } }};
+yosys_verify {{ m.shift_shr_ext }} [] shift_shr_ext [] z3;
+};
+
+// sshl
+
+do {
+m <- yosys_import "shift_sshl_trunc.json";
+let shift_sshl_trunc = {{ \(x : {a : [16], b : [4]}) -> { out = drop`{8} (x.a << x.b) } }};
+yosys_verify {{ m.shift_sshl_trunc }} [] shift_sshl_trunc [] z3;
+};
+
+do {
+m <- yosys_import "shift_sshl_ext.json";
+let shift_sshl_ext = {{ \(x : {a : [4], b : [4]}) -> { out = (sext x.a : [8]) << x.b } }};
+yosys_verify {{ m.shift_sshl_ext }} [] shift_sshl_ext [] z3;
+};
+
+// shl
+
+do {
+m <- yosys_import "shift_shl_trunc.json";
+let shift_shl_trunc = {{ \(x : {a : [16], b : [4]}) -> { out = drop`{8} (x.a << x.b) } }};
+yosys_verify {{ m.shift_shl_trunc }} [] shift_shl_trunc [] z3;
+};
+
+do {
+m <- yosys_import "shift_shl_ext.json";
+let shift_shl_ext = {{ \(x : {a : [4], b : [4]}) -> { out = (zext x.a : [8]) << x.b } }};
+yosys_verify {{ m.shift_shl_ext }} [] shift_shl_ext [] z3;
+};

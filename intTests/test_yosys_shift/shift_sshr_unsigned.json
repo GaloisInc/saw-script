@@ -1,0 +1,75 @@
+{
+  "creator": "Yosys 0.61 (git sha1 5ae48ee25f298f7b3c8c0de30bd2f85a94133031, clang++ 17.0.0 -fPIC -O3)",
+  "modules": {
+    "shift_sshr_unsigned": {
+      "attributes": {
+        "hdlname": "shift_sshr_unsigned",
+        "top": "00000000000000000000000000000001",
+        "src": "test_shift.sv:29.1-35.10"
+      },
+      "ports": {
+        "a": {
+          "direction": "input",
+          "bits": [ 2, 3, 4, 5, 6, 7, 8, 9 ]
+        },
+        "b": {
+          "direction": "input",
+          "bits": [ 10, 11, 12, 13 ]
+        },
+        "out": {
+          "direction": "output",
+          "bits": [ 14, 15, 16, 17, 18, 19, 20, 21 ]
+        }
+      },
+      "cells": {
+        "$sshr$test_shift.sv:34$21": {
+          "hide_name": 1,
+          "type": "$sshr",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000001000",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000000100",
+            "Y_WIDTH": "00000000000000000000000000001000"
+          },
+          "attributes": {
+            "src": "test_shift.sv:34.18-34.25"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 2, 3, 4, 5, 6, 7, 8, 9 ],
+            "B": [ 10, 11, 12, 13 ],
+            "Y": [ 14, 15, 16, 17, 18, 19, 20, 21 ]
+          }
+        }
+      },
+      "netnames": {
+        "a": {
+          "hide_name": 0,
+          "bits": [ 2, 3, 4, 5, 6, 7, 8, 9 ],
+          "attributes": {
+            "src": "test_shift.sv:30.24-30.25"
+          }
+        },
+        "b": {
+          "hide_name": 0,
+          "bits": [ 10, 11, 12, 13 ],
+          "attributes": {
+            "src": "test_shift.sv:31.18-31.19"
+          }
+        },
+        "out": {
+          "hide_name": 0,
+          "bits": [ 14, 15, 16, 17, 18, 19, 20, 21 ],
+          "attributes": {
+            "src": "test_shift.sv:32.24-32.27"
+          }
+        }
+      }
+    }
+  }
+}

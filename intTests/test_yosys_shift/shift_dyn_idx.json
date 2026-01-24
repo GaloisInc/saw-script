@@ -1,0 +1,92 @@
+{
+  "creator": "Yosys 0.61 (git sha1 5ae48ee25f298f7b3c8c0de30bd2f85a94133031, clang++ 17.0.0 -fPIC -O3)",
+  "modules": {
+    "shift_dyn_idx": {
+      "attributes": {
+        "hdlname": "shift_dyn_idx",
+        "top": "00000000000000000000000000000001",
+        "src": "test_shift.sv:1.1-9.10"
+      },
+      "ports": {
+        "idx": {
+          "direction": "input",
+          "bits": [ 2, 3, 4 ]
+        },
+        "out": {
+          "direction": "output",
+          "bits": [ 5, 6, 7, 8, 9, 10, 11, 12 ]
+        }
+      },
+      "cells": {
+        "$neg$test_shift.sv:7$8": {
+          "hide_name": 1,
+          "type": "$neg",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000011",
+            "Y_WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "test_shift.sv:7.9-7.22"
+          },
+          "port_directions": {
+            "A": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 2, 3, 4 ],
+            "Y": [ 13, 14, 15, 16 ]
+          }
+        },
+        "$shift$test_shift.sv:7$9": {
+          "hide_name": 1,
+          "type": "$shift",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000001",
+            "B_SIGNED": "00000000000000000000000000000001",
+            "B_WIDTH": "00000000000000000000000000000100",
+            "Y_WIDTH": "00000000000000000000000000001000"
+          },
+          "attributes": {
+            "src": "test_shift.sv:7.9-7.22"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ "1" ],
+            "B": [ 13, 14, 15, 16 ],
+            "Y": [ 5, 6, 7, 8, 9, 10, 11, 12 ]
+          }
+        }
+      },
+      "netnames": {
+        "$neg$test_shift.sv:7$8_Y": {
+          "hide_name": 1,
+          "bits": [ 13, 14, 15, 16 ],
+          "signed": 1,
+          "attributes": {
+            "src": "test_shift.sv:7.9-7.22"
+          }
+        },
+        "idx": {
+          "hide_name": 0,
+          "bits": [ 2, 3, 4 ],
+          "attributes": {
+            "src": "test_shift.sv:2.26-2.29"
+          }
+        },
+        "out": {
+          "hide_name": 0,
+          "bits": [ 5, 6, 7, 8, 9, 10, 11, 12 ],
+          "attributes": {
+            "src": "test_shift.sv:3.26-3.29"
+          }
+        }
+      }
+    }
+  }
+}

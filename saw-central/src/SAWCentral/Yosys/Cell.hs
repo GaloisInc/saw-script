@@ -12,7 +12,7 @@ Stability   : experimental
 
 module SAWCentral.Yosys.Cell where
 
-import Control.Lens ((^.))
+import Control.Lens ((^.), (.~))
 
 import qualified Data.Aeson as Aeson
 import Data.Char (digitToInt)
@@ -123,7 +123,12 @@ primCellToMap sc c args =
     CellTypePos ->
       do res <- input "A"
          output res
-    CellTypeNeg -> bvUnaryOp . liftUnary sc $ SC.scBvNeg sc
+    CellTypeNeg ->
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
+         CellTerm t _ _ <- extTrunc sc w =<< input "A"
+         wt <- SC.scNat sc w
+         res <- SC.scBvNeg sc wt t
+         output (CellTerm res w True)
     CellTypeAnd -> bvBinaryOp . liftBinary sc $ SC.scBvAnd sc
     CellTypeOr -> bvBinaryOp . liftBinary sc $ SC.scBvOr sc
     CellTypeXor -> bvBinaryOp . liftBinary sc $ SC.scBvXor sc
@@ -152,32 +157,59 @@ primCellToMap sc c args =
       do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
          bvReduce False r
     CellTypeShl ->
-      do ta <- fmap cellTermTerm $ input "A"
+      do CellTerm ta _ _ <- extTrunc sc (connWidthNat "Y") =<< input "A"
          nb <- cellTermNat sc =<< input "B"
          w <- outputWidth
          res <- SC.scBvShl sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
+         output (CellTerm res (connWidthNat "Y") (connSigned "A"))
     CellTypeShr ->
-      do ta <- fmap cellTermTerm $ input "A"
+      do CellTerm ta wa _ <- input "A"
          nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
+         w <- SC.scNat sc wa
          res <- SC.scBvShr sc w ta nb
          output (CellTerm res (connWidthNat "A") (connSigned "A"))
     CellTypeSshl ->
-      do ta <- fmap cellTermTerm $ input "A"
+      do CellTerm ta _ _ <- extTrunc sc (connWidthNat "Y") =<< input "A"
          nb <- cellTermNat sc =<< input "B"
          w <- outputWidth
          res <- SC.scBvShl sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
-    CellTypeSshr ->
-      do ta <- fmap cellTermTerm $ input "A"
+         output (CellTerm res (connWidthNat "Y") (connSigned "A"))
+    CellTypeSshr
+      | connSigned "A" ->
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
+         wt1 <- SC.scNat sc (w - 1) -- signed shift wants size-1
+         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
          nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvSShr sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
-    -- "$shift" -> _
+         res <- SC.scBvSShr sc wt1 ta nb
+         output (CellTerm res w True)
+      | otherwise ->
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
+         wt <- SC.scNat sc w
+         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
+         nb <- cellTermNat sc =<< input "B"
+         res <- SC.scBvShr sc wt ta nb
+         output (CellTerm res w True)
+    CellTypeShift
+      | connSigned "B" ->
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
+         let wb = connWidthNat "B"
+         wbt <- SC.scNat sc wb
+         wt <- SC.scNat sc w
+         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
+         CellTerm tb _ _ <- input "B"
+         zero <- SC.scBvConst sc wb 0
+         tbn <- SC.scBvToNat sc wb tb
+         tbneg <- SC.scBvNeg sc wbt tb
+         tbnegn <- SC.scBvToNat sc wb tbneg
+         cond <- SC.scBvSGe sc wbt tb zero
+         tcase <- SC.scBvShr sc wt ta tbn
+         ecase <- SC.scBvShl sc wt ta tbnegn
+         ty <- SC.scBitvector sc w
+         res <- SC.scIte sc ty cond tcase ecase
+         output (CellTerm res w (connSigned "A"))
+      | otherwise -> primCellToMap sc (cellType .~ CellTypeShr $ c) args
     CellTypeShiftx ->
-      do let w = max (connWidthNat "A") (connWidthNat "B")
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
          wt <- SC.scNat sc w
          CellTerm ta _ _ <- extTrunc sc w =<< input "A"
          CellTerm tb _ _ <- extTrunc sc w =<< input "B"
@@ -321,21 +353,17 @@ primCellToMap sc c args =
         Nothing -> panic "cellToTerm" [nm <> " missing input " <> inpNm]
         Just a -> pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)
 
+    -- | Extend or truncate a cell term as needed to fit the output @Y@ port.
     output :: CellTerm -> IO (Maybe (Map Text SC.Term))
-    output (CellTerm ct cw _) =
-      do let res = CellTerm ct cw (connSigned "Y")
-         CellTerm t _ _ <- extTrunc sc (connWidthNat "Y") res
-         pure . Just $ Map.fromList
-           [ ("Y", t)
-           ]
+    output res =
+      do CellTerm t _ _ <- extTrunc sc (connWidthNat "Y") res
+         pure (Just (Map.singleton "Y" t))
 
     outputBit :: SC.Term -> IO (Maybe (Map Text SC.Term))
     outputBit res =
       do bool <- SC.scBoolType sc
          vres <- SC.scSingle sc bool res
-         pure . Just $ Map.fromList
-           [ ("Y", vres)
-           ]
+         pure (Just (Map.singleton "Y" vres))
 
     -- convert input to big endian
     bvUnaryOp :: (CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))

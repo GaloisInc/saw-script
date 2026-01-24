@@ -1,0 +1,45 @@
+read -sv test_shift.sv
+
+design -save mydesign
+prep -top shift_dyn_idx
+write_json shift_dyn_idx.json
+
+design -load mydesign
+prep -top shift_dyn_idx_signed
+write_json shift_dyn_idx_signed.json
+
+design -load mydesign
+prep -top shift_sshr_unsigned
+write_json shift_sshr_unsigned.json
+
+design -load mydesign
+prep -top shift_sshr_trunc
+write_json shift_sshr_trunc.json
+
+design -load mydesign
+prep -top shift_sshr_ext
+write_json shift_sshr_ext.json
+
+design -load mydesign
+prep -top shift_shr_trunc
+write_json shift_shr_trunc.json
+
+design -load mydesign
+prep -top shift_shr_ext
+write_json shift_shr_ext.json
+
+design -load mydesign
+prep -top shift_sshl_trunc
+write_json shift_sshl_trunc.json
+
+design -load mydesign
+prep -top shift_sshl_ext
+write_json shift_sshl_ext.json
+
+design -load mydesign
+prep -top shift_shl_trunc
+write_json shift_shl_trunc.json
+
+design -load mydesign
+prep -top shift_shl_ext
+write_json shift_shl_ext.json
