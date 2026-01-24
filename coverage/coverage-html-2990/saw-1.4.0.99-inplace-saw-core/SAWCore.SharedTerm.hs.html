@@ -1735,7 +1735,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1716 </span>-- bitvector.
 <span class="lineno"> 1717 </span>-- &gt; bvNeg : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool;
 <span class="lineno"> 1718 </span>scBvNeg :: SharedContext -&gt; Term -&gt; Term -&gt; IO Term
-<span class="lineno"> 1719 </span><span class="decl"><span class="nottickedoff">scBvNeg sc n x = scGlobalApply sc &quot;Prelude.bvNeg&quot; [n, x]</span></span>
+<span class="lineno"> 1719 </span><span class="decl"><span class="istickedoff">scBvNeg sc n x = scGlobalApply sc &quot;Prelude.bvNeg&quot; [n, x]</span></span>
 <span class="lineno"> 1720 </span>
 <span class="lineno"> 1721 </span>-- | Create a term applying the bitvector addition primitive.
 <span class="lineno"> 1722 </span>--
@@ -1865,7 +1865,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1846 </span>--
 <span class="lineno"> 1847 </span>-- &gt; bvsge : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Bool;
 <span class="lineno"> 1848 </span>scBvSGe :: SharedContext -&gt; Term -&gt; Term -&gt; Term -&gt; IO Term
-<span class="lineno"> 1849 </span><span class="decl"><span class="nottickedoff">scBvSGe sc n x y = scGlobalApply sc &quot;Prelude.bvsge&quot; [n, x, y]</span></span>
+<span class="lineno"> 1849 </span><span class="decl"><span class="istickedoff">scBvSGe sc n x y = scGlobalApply sc &quot;Prelude.bvsge&quot; [n, x, y]</span></span>
 <span class="lineno"> 1850 </span>
 <span class="lineno"> 1851 </span>-- | Create a term applying the bitvector (signed) less-than-or-equal
 <span class="lineno"> 1852 </span>-- primitive.

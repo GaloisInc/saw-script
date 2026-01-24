@@ -144,7 +144,7 @@ span.spaces    { background: white }
 <span class="lineno">  125 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvOr   = <span class="nottickedoff">pure2 svOr</span></span>
 <span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvXor  = <span class="nottickedoff">pure2 svXOr</span></span>
 <span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector arithmetic</span>
-<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNeg  = <span class="nottickedoff">pure1 svUNeg</span></span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNeg  = pure1 svUNeg</span>
 <span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = pure2 svPlus</span>
 <span class="lineno">  130 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSub  = <span class="nottickedoff">pure2 svMinus</span></span>
 <span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvMul  = pure2 svTimes</span>
@@ -159,7 +159,7 @@ span.spaces    { background: white }
 <span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvslt  = <span class="nottickedoff">\x y -&gt; pure (svLessThan (svSign x) (svSign y))</span></span>
 <span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvule  = <span class="nottickedoff">pure2 svLessEq</span></span>
 <span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvult  = pure2 svLessThan</span>
-<span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsge  = <span class="nottickedoff">\x y -&gt; pure (svGreaterEq (svSign x) (svSign y))</span></span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsge  = \x y -&gt; pure (svGreaterEq (svSign x) (svSign y))</span>
 <span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsgt  = <span class="nottickedoff">\x y -&gt; pure (svGreaterThan (svSign x) (svSign y))</span></span>
 <span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvuge  = <span class="nottickedoff">pure2 svGreaterEq</span></span>
 <span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvugt  = <span class="nottickedoff">pure2 svGreaterThan</span></span>
