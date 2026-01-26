@@ -12,7 +12,7 @@ Stability   : experimental
 
 module SAWCentral.Yosys.Cell where
 
-import Control.Lens ((^.), (.~))
+import Control.Lens ((^.))
 
 import qualified Data.Aeson as Aeson
 import Data.Char (digitToInt)
@@ -98,6 +98,69 @@ liftBinaryCmp sc f c1@(CellTerm { cellTermTerm = t1 }) (CellTerm { cellTermTerm 
   do wt <- SC.scNat sc $ cellTermWidth c1
      f wt t1 t2
 
+-- | Perform a two's complement negation of a bit vector.
+bvneg :: SC.SharedContext -> CellTerm -> IO CellTerm
+bvneg sc a =
+  do w <- SC.scNat sc (cellTermWidth a)
+     res <- SC.scBvNeg sc w (cellTermTerm a)
+     pure $ a {cellTermTerm = res}
+
+-- | Given an input and a shift amount, perform a logical left shift.
+shl :: SC.SharedContext -> CellTerm -> CellTerm -> IO CellTerm
+shl sc a b =
+  do w <- SC.scNat sc (cellTermWidth a)
+     nb <- cellTermNat sc b
+     res <- SC.scBvShl sc w (cellTermTerm a) nb
+     pure $ a {cellTermTerm = res}
+
+-- | Given an input and a shift amount, perform a logical right shift.
+shr :: SC.SharedContext -> CellTerm -> CellTerm -> IO CellTerm
+shr sc a b =
+  do w <- SC.scNat sc (cellTermWidth a)
+     nb <- cellTermNat sc b
+     res <- SC.scBvShr sc w (cellTermTerm a) nb
+     pure $ a {cellTermTerm = res}
+
+-- | Given an input and a shift amount, perform an signed right shift
+-- if the input is signed, and a logical right shift if not.
+sshr :: SC.SharedContext -> CellTerm -> CellTerm -> IO CellTerm
+sshr sc a b
+  | cellTermSigned a =
+    do wt1 <- SC.scNat sc (cellTermWidth a - 1)
+       nb <- cellTermNat sc b
+       res <- SC.scBvSShr sc wt1 (cellTermTerm a) nb
+       pure $ a {cellTermTerm = res}
+  | otherwise =
+    shr sc a b
+
+-- | Given an input and a shift amount, perform a logical left shift
+-- if the shift amount is negative, and a logical right shift if the
+-- shift amount is positive or unsigned.
+shift :: SC.SharedContext -> CellTerm -> CellTerm -> IO CellTerm
+shift sc a b
+  | cellTermSigned b =
+    -- If the shift amount is signed, then shift right by b if b >= 0
+    -- and left by -b otherwise.
+    do let wa = cellTermWidth a
+       let ta = cellTermTerm a
+       let wb = cellTermWidth b
+       let tb = cellTermTerm b
+       wt <- SC.scNat sc wa
+       wbt <- SC.scNat sc wb
+       zero <- SC.scBvConst sc wb 0
+       tbn <- SC.scBvToNat sc wb tb
+       tbneg <- SC.scBvNeg sc wbt tb
+       tbnegn <- SC.scBvToNat sc wb tbneg
+       cond <- SC.scBvSGe sc wbt tb zero
+       tcase <- SC.scBvShr sc wt ta tbn
+       ecase <- SC.scBvShl sc wt ta tbnegn
+       ty <- SC.scBitvector sc wa
+       res <- SC.scIte sc ty cond tcase ecase
+       pure $ a {cellTermTerm = res}
+  | otherwise =
+    -- If the shift amount is unsigned, then unconditionally shift right.
+    shr sc a b
+
 -- | Given a primitive Yosys cell and a map of terms for its
 -- arguments, construct a record term representing the output. If the
 -- provided cell is not a primitive, return Nothing.
@@ -124,11 +187,11 @@ primCellToMap sc c args =
       do res <- input "A"
          output res
     CellTypeNeg ->
-      do let w = max (connWidthNat "A") (connWidthNat "Y")
-         CellTerm t _ _ <- extTrunc sc w =<< input "A"
-         wt <- SC.scNat sc w
-         res <- SC.scBvNeg sc wt t
-         output (CellTerm res w True)
+      -- If output size is larger, then we must extend before negating
+      -- to compute the high bits correctly.
+      -- If output size is smaller, truncating first is safe.
+      do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
+         output =<< bvneg sc a
     CellTypeAnd -> bvBinaryOp . liftBinary sc $ SC.scBvAnd sc
     CellTypeOr -> bvBinaryOp . liftBinary sc $ SC.scBvOr sc
     CellTypeXor -> bvBinaryOp . liftBinary sc $ SC.scBvXor sc
@@ -157,75 +220,51 @@ primCellToMap sc c args =
       do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
          bvReduce False r
     CellTypeShl ->
-      do CellTerm ta _ _ <- extTrunc sc (connWidthNat "Y") =<< input "A"
-         nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvShl sc w ta nb
-         output (CellTerm res (connWidthNat "Y") (connSigned "A"))
+      -- If output size is larger, then we must extend before shifting
+      -- to avoid losing high bits.
+      -- If output size is smaller, truncating first is safe.
+      do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
+         b <- input "B"
+         output =<< shl sc a b
     CellTypeShr ->
-      do CellTerm ta wa _ <- input "A"
-         nb <- cellTermNat sc =<< input "B"
-         w <- SC.scNat sc wa
-         res <- SC.scBvShr sc w ta nb
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
+      -- If output size is larger, we must extend before shifting to
+      -- compute high bits correctly.
+      -- If output size is smaller, we must shift before truncating.
+      do let w = max (connWidthNat "A") (connWidthNat "Y")
+         a <- extTrunc sc w =<< input "A"
+         b <- input "B"
+         output =<< shr sc a b
     CellTypeSshl ->
-      do CellTerm ta _ _ <- extTrunc sc (connWidthNat "Y") =<< input "A"
-         nb <- cellTermNat sc =<< input "B"
-         w <- outputWidth
-         res <- SC.scBvShl sc w ta nb
-         output (CellTerm res (connWidthNat "Y") (connSigned "A"))
-    CellTypeSshr
-      | connSigned "A" ->
+      -- If output size is larger, then we must extend before shifting
+      -- to avoid losing high bits.
+      -- If output size is smaller, truncating first is safe.
+      do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
+         b <- input "B"
+         output =<< shl sc a b
+    CellTypeSshr ->
+      -- If output size is larger, we must extend before shifting to
+      -- compute high bits correctly.
+      -- If output size is smaller, we must shift before truncating.
       do let w = max (connWidthNat "A") (connWidthNat "Y")
-         wt1 <- SC.scNat sc (w - 1) -- signed shift wants size-1
-         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
-         nb <- cellTermNat sc =<< input "B"
-         res <- SC.scBvSShr sc wt1 ta nb
-         output (CellTerm res w True)
-      | otherwise ->
+         a <- extTrunc sc w =<< input "A"
+         b <- input "B"
+         output =<< sshr sc a b
+    CellTypeShift ->
+      -- If output size is larger, we must extend before shifting to
+      -- compute high bits correctly.
+      -- If output size is smaller, we must shift before truncating.
       do let w = max (connWidthNat "A") (connWidthNat "Y")
-         wt <- SC.scNat sc w
-         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
-         nb <- cellTermNat sc =<< input "B"
-         res <- SC.scBvShr sc wt ta nb
-         output (CellTerm res w True)
-    CellTypeShift
-      | connSigned "B" ->
-      do let w = max (connWidthNat "A") (connWidthNat "Y")
-         let wb = connWidthNat "B"
-         wbt <- SC.scNat sc wb
-         wt <- SC.scNat sc w
-         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
-         CellTerm tb _ _ <- input "B"
-         zero <- SC.scBvConst sc wb 0
-         tbn <- SC.scBvToNat sc wb tb
-         tbneg <- SC.scBvNeg sc wbt tb
-         tbnegn <- SC.scBvToNat sc wb tbneg
-         cond <- SC.scBvSGe sc wbt tb zero
-         tcase <- SC.scBvShr sc wt ta tbn
-         ecase <- SC.scBvShl sc wt ta tbnegn
-         ty <- SC.scBitvector sc w
-         res <- SC.scIte sc ty cond tcase ecase
-         output (CellTerm res w (connSigned "A"))
-      | otherwise -> primCellToMap sc (cellType .~ CellTypeShr $ c) args
+         a <- extTrunc sc w =<< input "A"
+         b <- input "B"
+         output =<< shift sc a b
     CellTypeShiftx ->
+      -- $shiftx is like $shift, but shifts in x bits instead of 0s.
+      -- For SAW, we model x bits as 0 bits, so we translate the two
+      -- cell types identically.
       do let w = max (connWidthNat "A") (connWidthNat "Y")
-         wt <- SC.scNat sc w
-         CellTerm ta _ _ <- extTrunc sc w =<< input "A"
-         CellTerm tb _ _ <- extTrunc sc w =<< input "B"
-         zero <- SC.scBvConst sc w 0
-         tbn <- SC.scBvToNat sc w tb
-         tbneg <- SC.scBvNeg sc wt tb
-         tbnegn <- SC.scBvToNat sc w tbneg
-         cond <- SC.scBvSGe sc wt tb zero
-         tcase <- SC.scBvShr sc wt ta tbn
-         ecase <- SC.scBvShl sc wt ta tbnegn
-         ty <- SC.scBitvector sc $ connWidthNat "A"
-         res <-
-           if connSigned "B"
-           then SC.scIte sc ty cond tcase ecase
-           else pure tcase
-         output (CellTerm res (connWidthNat "A") (connSigned "A"))
+         a <- extTrunc sc w =<< input "A"
+         b <- input "B"
+         output =<< shift sc a b
     CellTypeLt -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULt sc
     CellTypeLe -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULe sc
     CellTypeGt -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGt sc
@@ -343,7 +382,6 @@ primCellToMap sc c args =
         Just bits -> fromIntegral $ length bits
     connWidth :: Text -> IO SC.Term
     connWidth onm = SC.scNat sc $ connWidthNat onm
-    outputWidth = connWidth "Y"
 
     input :: Text -> IO CellTerm
     input inpNm =
