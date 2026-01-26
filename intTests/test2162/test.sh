@@ -23,12 +23,8 @@ if [ $R1 != 0 ]; then
     echo "*** test1.saw failed (exit $R1) ***"
     EX=1
 fi
-#if [ $R2 == 0 ]; then
-#    echo "*** test2.saw did not fail (exit $R2) ***"
-#    EX=1
-#fi
-if [ $R2 != 0 ]; then
-    echo "*** test2.saw failed (exit $R2) ***"
+if [ $R2 == 0 ]; then
+    echo "*** test2.saw did not fail (exit $R2) ***"
     EX=1
 fi
 if [ $R3 == 0 ]; then

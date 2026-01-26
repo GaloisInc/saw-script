@@ -1321,23 +1321,21 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
             -- However, historically when at the syntactic top level
             -- (only), the monad type was left off, meaning that
             -- various incorrect forms were silently accepted. Fixing
-            -- this in Dec 2024 triggered a lot of fallout, so for the
-            -- time being we want to check for, warn about, and allow
-            -- the following cases. (Again, only when at the syntactic
-            -- top level. Which is not when in the TopLevel monad.)
+            -- this in Dec 2024 triggered a lot of fallout, so we want
+            -- to specifically check for the following cases. (Again,
+            -- only when at the syntactic top level. Which is not when
+            -- in the TopLevel monad.)
             --    x <- e for non-monadic e
             --    x <- e for e in the wrong monad
             --
-            -- These should be made errors again at some point, but
-            -- definitely no earlier than the _second_ release after
-            -- December 2024, as the first such release should include
-            -- the warning behavior. Probably the explicit messages
-            -- should then in turn not be removed for at least one
-            -- further release. See #2167 and #2162.
+            -- These are now errors again, but the explicit messages
+            -- should be kept for at least one further release. See
+            -- #2167 and #2162. They are warnings in SAW 1.5; they
+            -- will be errors in 1.6; they can be removed in 1.7.
             --
             -- To accomplish this, call inferExpr to get a type for
             -- the expression, and examine it. If the special cases
-            -- apply, issue special-case warnings with explanations,
+            -- apply, issue special-case errors with explanations,
             -- unify the type with only the pattern type, and patch up
             -- the expression by wrapping it in "return".  (The latter
             -- will restore the old behavior for both cases, so we
@@ -1358,25 +1356,21 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
 
             -- The special case for non-monadic values
             let allowNonMonadic = do
-                  recordWarning spos $ "Monadic bind of non-monadic value; " ++
-                                       "rewrite as let-binding or use return"
-                  recordWarning spos $ "This will become an error in a " ++
-                                       "future release of SAW"
+                  recordError spos $ "Monadic bind of non-monadic value; " ++
+                                     "rewrite as let-binding or use return"
                   unify cname pty (getPos e') ty
                   -- Wrap the expression in "return" to correct the type
                   return $ wrapReturn e'
 
             -- The special case for the wrong monad
             let allowWrongMonad ctx' valty' = do
-                  recordWarning spos $ "Monadic bind with the wrong monad; " ++
-                                       "found " ++ pShow ctx' ++
-                                       " but expected " ++ pShow ctx
-                  recordWarning spos $ "This creates the action but does " ++
-                                       "not execute it; if you meant to do " ++
-                                       "that, prefix the " ++
-                                       "expression with return"
-                  recordWarning spos $ "This will become an error in a " ++
-                                       "future release of SAW"
+                  recordError spos $ "Monadic bind with the wrong monad; " ++
+                                     "found " ++ pShow ctx' ++
+                                     " but expected " ++ pShow ctx
+                  recordError spos $ "This creates the action but does " ++
+                                     "not execute it; if you meant to do " ++
+                                     "that, prefix the " ++
+                                     "expression with return"
 
                   -- The historic behavior is that the pattern gets bound
                   -- to a value of type m t instead of type t. This means:
