@@ -1,0 +1,29 @@
+let f_2_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 mir_u8);
+    a_ref <- mir_ref_of (mir_term a_array);
+    mir_execute_func [mir_slice_value a_ref];
+};
+
+let f_5_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u8);
+    a_ref <- mir_ref_of (mir_term a_array);
+    mir_execute_func [mir_slice_range_value a_ref 0 2];
+};
+
+let g_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 mir_u8);
+    mir_execute_func [mir_term a_array];
+};
+
+let h_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u8);
+    b_array <- mir_fresh_var "b_array" (mir_array 2 mir_u8);
+    mir_execute_func [mir_term a_array, mir_term b_array];
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+f_2_ov <- mir_verify m "test::f" [] false f_2_spec z3;
+f_5_ov <- mir_verify m "test::f" [] false f_5_spec z3;
+mir_verify m "test::g" [f_2_ov] false g_spec z3;
+mir_verify m "test::h" [f_2_ov, f_5_ov] false h_spec z3;
