@@ -572,22 +572,24 @@ scTermCountAux :: Bool -> [Term] -> State OccurrenceMap ()
 scTermCountAux doBinders = go
   where go :: [Term] -> State OccurrenceMap ()
         go [] = return ()
-        go (t:r) =
-          case t of
-            STApp{ stAppIndex = i } -> do
-              m <- get
-              case IntMap.lookup i m of
-                Just (_, n) -> do
-                  put $ n `seq` IntMap.insert i (t, n+1) m
-                  go r
-                Nothing -> do
-                  put (IntMap.insert i (t, 1) m)
-                  recurse
-          where
-            recurse = go (r ++ argsAndSubterms t)
+        go (t : ts) =
+          do m <- get
+             let i = termIndex t
+             case IntMap.lookup i m of
+               Just (_, n) ->
+                 do put $ n `seq` IntMap.insert i (t, n+1) m
+                    go ts
+               Nothing ->
+                 do put (IntMap.insert i (t, 1) m)
+                    go (ts ++ argsAndSubterms t)
 
         argsAndSubterms :: Term -> [Term]
-        argsAndSubterms (asApplyAll -> (f, args)) | not (null args) = f : args
+        -- Skip type arguments in record syntax
+        argsAndSubterms (asRecordSelector -> Just (t1, _)) = [t1]
+        argsAndSubterms (asRecordValue -> Just fields) = map snd fields
+        -- Skip partially-applied function terms
+        argsAndSubterms (asApp -> Just (t1@(asApp -> Just _), t2)) =
+          argsAndSubterms t1 ++ [t2]
         argsAndSubterms h =
           case unwrapTermF h of
             Lambda _ t1 _ | not doBinders  -> [t1]
