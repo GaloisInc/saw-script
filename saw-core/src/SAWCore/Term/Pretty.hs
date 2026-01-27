@@ -623,14 +623,14 @@ shouldMemoizeTerm t =
 prettyTermWithMemoTable :: Prec -> Bool -> Term -> PPM PPS.Doc
 prettyTermWithMemoTable prec global_p trm = do
      min_occs <- PPS.ppMinSharing <$> ppOpts <$> ask
-     let occPairs = IntMap.assocs $ filterOccurenceMap min_occs global_p $ scTermCount global_p trm
+     let occPairs = IntMap.assocs $ filterOccurrenceMap min_occs global_p $ scTermCount global_p trm
      prettyLets global_p occPairs [] (prettyTerm' prec trm)
 
 -- Filter an occurrence map, filtering out terms that only occur
 -- once, that are "too small" to memoize, and, for the global table, terms
 -- that are not closed
-filterOccurenceMap :: Int -> Bool -> OccurrenceMap -> OccurrenceMap
-filterOccurenceMap min_occs global_p =
+filterOccurrenceMap :: Int -> Bool -> OccurrenceMap -> OccurrenceMap
+filterOccurrenceMap min_occs global_p =
     IntMap.filter
       (\(t,cnt) ->
         cnt >= min_occs && shouldMemoizeTerm t &&
@@ -742,7 +742,7 @@ prettyTermContainerWithEnv prettyContainer opts ne trms =
   let min_occs = PPS.ppMinSharing opts
       global_p = True
       occPairs = IntMap.assocs $
-                   filterOccurenceMap min_occs global_p $
+                   filterOccurrenceMap min_occs global_p $
                    flip execState mempty $
                    traverse (\t -> scTermCountAux global_p [t]) $
                    trms
