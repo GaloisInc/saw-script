@@ -1107,10 +1107,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1088 </span><span class="spaces">        </span><span class="istickedoff">Just (_prevpos, lc, _rebindable, Forall as t)</span>
 <span class="lineno"> 1089 </span><span class="spaces">         </span><span class="istickedoff">| Set.member lc avail -&gt; do</span>
 <span class="lineno"> 1090 </span><span class="spaces">          </span><span class="istickedoff">when (isDeprecated lc) $</span>
-<span class="lineno"> 1091 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">case t of</span></span>
-<span class="lineno"> 1092 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">TyCon _typos FunCon _args -&gt;</span></span>
-<span class="lineno"> 1093 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">recordWarning pos $ &quot;Function is deprecated: &quot; &lt;&gt; show x</span></span>
-<span class="lineno"> 1094 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">_ -&gt;</span></span>
+<span class="lineno"> 1091 </span><span class="spaces">              </span><span class="istickedoff">case t of</span>
+<span class="lineno"> 1092 </span><span class="spaces">                  </span><span class="istickedoff">TyCon _typos FunCon _args -&gt;</span>
+<span class="lineno"> 1093 </span><span class="spaces">                      </span><span class="istickedoff">recordWarning pos $ &quot;Function is deprecated: &quot; &lt;&gt; show x</span>
+<span class="lineno"> 1094 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno"> 1095 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">recordWarning pos $ &quot;Value is deprecated: &quot; &lt;&gt; show x</span></span>
 <span class="lineno"> 1096 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1097 </span><span class="spaces">          </span><span class="istickedoff">-- get a fresh tyvar for each quantifier binding, convert</span>
@@ -2098,7 +2098,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2079 </span><span class="spaces">  </span><span class="istickedoff">let avail = Set.fromList $ case contextLC of</span>
 <span class="lineno"> 2080 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; [Current]</span>
 <span class="lineno"> 2081 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; [Current, WarnDeprecated]</span>
-<span class="lineno"> 2082 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; [Current, WarnDeprecated, HideDeprecated]</span>
+<span class="lineno"> 2082 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; [Current, WarnDeprecated, HideDeprecated, Experimental]</span>
 <span class="lineno"> 2083 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; [Current, Experimental]</span>
 <span class="lineno"> 2084 </span><span class="spaces">  </span><span class="istickedoff">evalTIWithEnv avail <span class="nottickedoff">ScopedMap.empty</span> tyenv check</span></span>
 <span class="lineno"> 2085 </span>

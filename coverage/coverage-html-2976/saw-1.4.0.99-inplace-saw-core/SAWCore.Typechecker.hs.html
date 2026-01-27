@@ -403,7 +403,7 @@ span.spaces    { background: white }
 <span class="lineno">  384 </span><span class="spaces">       </span><span class="istickedoff">do body' &lt;- typeInferCompleteUTerm body</span>
 <span class="lineno">  385 </span><span class="spaces">          </span><span class="istickedoff">body_ty &lt;- liftSCM $ SC.scmTypeOf body'</span>
 <span class="lineno">  386 </span><span class="spaces">          </span><span class="istickedoff">ok &lt;- liftIO $ scSubtype sc body_ty req_body_tp</span>
-<span class="lineno">  387 </span><span class="spaces">          </span><span class="istickedoff">unless ok $ <span class="nottickedoff">throwTCError (TermError (SC.ApplyNotSubtype req_body_tp body'))</span> -- FIXME: Wrong error</span>
+<span class="lineno">  387 </span><span class="spaces">          </span><span class="istickedoff">unless ok $ <span class="nottickedoff">throwTCError (TermError (SC.AscriptionNotSubtype req_body_tp body'))</span></span>
 <span class="lineno">  388 </span><span class="spaces">          </span><span class="istickedoff">let vts = map (\(_, v, t) -&gt; (v, t)) ctx</span>
 <span class="lineno">  389 </span><span class="spaces">          </span><span class="istickedoff">result &lt;- liftIO $ scLambdaList sc vts body'</span>
 <span class="lineno">  390 </span><span class="spaces">          </span><span class="istickedoff">liftSCM $ SC.scmAscribe result def_tp</span>

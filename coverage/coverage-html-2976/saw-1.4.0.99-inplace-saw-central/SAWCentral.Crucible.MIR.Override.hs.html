@@ -1180,7 +1180,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1161 </span><span class="spaces">    </span><span class="istickedoff">= do sym &lt;- Ov.getSymInterface</span>
 <span class="lineno"> 1162 </span><span class="spaces">         </span><span class="istickedoff">(tval', expectedTerm') &lt;-</span>
 <span class="lineno"> 1163 </span><span class="spaces">           </span><span class="istickedoff">applyProjToTerm sym <span class="nottickedoff">fail_</span> projStack tval (ttTerm expectedTT)</span>
-<span class="lineno"> 1164 </span><span class="spaces">         </span><span class="istickedoff">realTerm &lt;- valueToSC sym <span class="nottickedoff">fail_</span> tval' actual</span>
+<span class="lineno"> 1164 </span><span class="spaces">         </span><span class="istickedoff">realTerm &lt;- valueToSC sym fail_ tval' actual</span>
 <span class="lineno"> 1165 </span><span class="spaces">         </span><span class="istickedoff">matchTerm sc md prepost realTerm expectedTerm'</span>
 <span class="lineno"> 1166 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1167 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
@@ -1962,63 +1962,67 @@ span.spaces    { background: white }
 <span class="lineno"> 1943 </span><span class="spaces">              </span><span class="istickedoff">\_off _sz shp' val' tval' -&gt; valueToSC sym <span class="nottickedoff">fail_</span> tval' (MIRVal shp' val')</span>
 <span class="lineno"> 1944 </span><span class="spaces">            </span><span class="istickedoff">liftIO (scTupleReduced sc terms)</span>
 <span class="lineno"> 1945 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz elemShp len)</span>
-<span class="lineno"> 1946 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">toInteger len == n</span></span>
-<span class="lineno"> 1947 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do terms &lt;- accessMirAggregateArray <span class="nottickedoff">sym</span> elemSz elemShp len val $</span>
-<span class="lineno"> 1948 </span><span class="spaces">              </span><span class="istickedoff">\_off val' -&gt; valueToSC sym <span class="nottickedoff">fail_</span> cryty (MIRVal elemShp val')</span>
-<span class="lineno"> 1949 </span><span class="spaces">            </span><span class="istickedoff">t &lt;- shapeToTerm sc elemShp</span>
-<span class="lineno"> 1950 </span><span class="spaces">            </span><span class="istickedoff">liftIO (scVectorReduced sc t terms)</span>
-<span class="lineno"> 1951 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 1952 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail_</span></span>
-<span class="lineno"> 1953 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1954 </span><span class="spaces">    </span><span class="istickedoff">st = sym ^. W4.userState</span>
-<span class="lineno"> 1955 </span><span class="spaces">    </span><span class="istickedoff">sc = saw_ctx st</span></span>
-<span class="lineno"> 1956 </span>
-<span class="lineno"> 1957 </span>-- | Apply a stack of projections to a 'Term'.
-<span class="lineno"> 1958 </span>applyProjToTerm ::
-<span class="lineno"> 1959 </span>  Sym -&gt;
-<span class="lineno"> 1960 </span>  (forall a. OverrideMatcher MIR w a) {- ^ what to do on failure -} -&gt;
-<span class="lineno"> 1961 </span>  [MatchProj] {- ^ stack of projections -} -&gt;
-<span class="lineno"> 1962 </span>  Cryptol.TValue {- ^ Cryptol type of the term argument -} -&gt;
-<span class="lineno"> 1963 </span>  Term -&gt;
-<span class="lineno"> 1964 </span>  OverrideMatcher MIR w (Cryptol.TValue, Term)
-<span class="lineno"> 1965 </span>    -- ^ result term and its Cryptol type
-<span class="lineno"> 1966 </span><span class="decl"><span class="istickedoff">applyProjToTerm sym fail_ projStack tp term =</span>
-<span class="lineno"> 1967 </span><span class="spaces">  </span><span class="istickedoff">case projStack of</span>
-<span class="lineno"> 1968 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt; pure (tp, term)</span>
-<span class="lineno"> 1969 </span><span class="spaces">    </span><span class="istickedoff">MatchIndex i : restProjStack -&gt;</span>
-<span class="lineno"> 1970 </span><span class="spaces">      </span><span class="istickedoff">case tp of</span>
-<span class="lineno"> 1971 </span><span class="spaces">        </span><span class="istickedoff">Cryptol.TVSeq sz elemTp</span>
-<span class="lineno"> 1972 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">i &gt;= 0 &amp;&amp; fromIntegral i &lt; sz</span> -&gt; do</span>
-<span class="lineno"> 1973 </span><span class="spaces">            </span><span class="istickedoff">doIndex &lt;- liftIO $ indexSeqTerm sym (sz, elemTp) term</span>
-<span class="lineno"> 1974 </span><span class="spaces">            </span><span class="istickedoff">term' &lt;- liftIO $ doIndex i</span>
-<span class="lineno"> 1975 </span><span class="spaces">            </span><span class="istickedoff">applyProjToTerm sym <span class="nottickedoff">fail_</span> restProjStack elemTp term'</span>
-<span class="lineno"> 1976 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail_</span></span></span>
-<span class="lineno"> 1977 </span>
-<span class="lineno"> 1978 </span>-- | Apply a stack of projections to a 'MIRVal'.
-<span class="lineno"> 1979 </span>applyProjToMIRVal ::
-<span class="lineno"> 1980 </span>  MonadIO m =&gt;
-<span class="lineno"> 1981 </span>  Sym -&gt;
-<span class="lineno"> 1982 </span>  [MatchProj] {- ^ stack of projections -} -&gt;
-<span class="lineno"> 1983 </span>  MIRVal -&gt;
-<span class="lineno"> 1984 </span>  MaybeT m MIRVal
-<span class="lineno"> 1985 </span><span class="decl"><span class="istickedoff">applyProjToMIRVal _ [] mv = pure mv</span>
-<span class="lineno"> 1986 </span><span class="spaces"></span><span class="istickedoff">applyProjToMIRVal sym (MatchIndex i : projStack) (MIRVal shp vec) =</span>
-<span class="lineno"> 1987 </span><span class="spaces">  </span><span class="istickedoff">case shp of</span>
-<span class="lineno"> 1988 </span><span class="spaces">    </span><span class="istickedoff">ArrayShape _ _ elemSz elemShp _ -&gt;</span>
-<span class="lineno"> 1989 </span><span class="spaces">      </span><span class="istickedoff">applyProjToMIRVal <span class="nottickedoff">sym</span> projStack =&lt;&lt; indexMirArray <span class="nottickedoff">sym</span> i elemSz elemShp vec</span>
-<span class="lineno"> 1990 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 1991 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Applicative.empty</span></span></span>
-<span class="lineno"> 1992 </span>
-<span class="lineno"> 1993 </span>-- | Apply a stack of projections to a 'SetupValue'. Does not actually extract
-<span class="lineno"> 1994 </span>-- anything from the given 'SetupValue', but rather just applies projection
-<span class="lineno"> 1995 </span>-- 'SetupValue' constructors to it.
-<span class="lineno"> 1996 </span>reapplyProjToSetupValue ::
-<span class="lineno"> 1997 </span>  [MatchProj] {- ^ stack of projections -}-&gt;
-<span class="lineno"> 1998 </span>  SetupValue -&gt;
-<span class="lineno"> 1999 </span>  SetupValue
-<span class="lineno"> 2000 </span><span class="decl"><span class="istickedoff">reapplyProjToSetupValue = flip (foldl projToCtor)</span>
-<span class="lineno"> 2001 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2002 </span><span class="spaces">    </span><span class="istickedoff">projToCtor sv (MatchIndex i) = MS.SetupElem MirIndexIntoVal sv i</span></span>
+<span class="lineno"> 1946 </span><span class="spaces">      </span><span class="istickedoff">-- When matching against the backing array of a slice, the length in the</span>
+<span class="lineno"> 1947 </span><span class="spaces">      </span><span class="istickedoff">-- TypeShape might differ from the actual length of the RegValue, so we</span>
+<span class="lineno"> 1948 </span><span class="spaces">      </span><span class="istickedoff">-- need to check both.</span>
+<span class="lineno"> 1949 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">toInteger len == n</span></span>
+<span class="lineno"> 1950 </span><span class="spaces">      </span><span class="istickedoff">, length (Mir.mirAggregate_entries <span class="nottickedoff">sym</span> val) == fromIntegral len</span>
+<span class="lineno"> 1951 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do terms &lt;- accessMirAggregateArray <span class="nottickedoff">sym</span> elemSz elemShp len val $</span>
+<span class="lineno"> 1952 </span><span class="spaces">              </span><span class="istickedoff">\_off val' -&gt; valueToSC sym <span class="nottickedoff">fail_</span> cryty (MIRVal elemShp val')</span>
+<span class="lineno"> 1953 </span><span class="spaces">            </span><span class="istickedoff">t &lt;- shapeToTerm sc elemShp</span>
+<span class="lineno"> 1954 </span><span class="spaces">            </span><span class="istickedoff">liftIO (scVectorReduced sc t terms)</span>
+<span class="lineno"> 1955 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 1956 </span><span class="spaces">      </span><span class="istickedoff">fail_</span>
+<span class="lineno"> 1957 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1958 </span><span class="spaces">    </span><span class="istickedoff">st = sym ^. W4.userState</span>
+<span class="lineno"> 1959 </span><span class="spaces">    </span><span class="istickedoff">sc = saw_ctx st</span></span>
+<span class="lineno"> 1960 </span>
+<span class="lineno"> 1961 </span>-- | Apply a stack of projections to a 'Term'.
+<span class="lineno"> 1962 </span>applyProjToTerm ::
+<span class="lineno"> 1963 </span>  Sym -&gt;
+<span class="lineno"> 1964 </span>  (forall a. OverrideMatcher MIR w a) {- ^ what to do on failure -} -&gt;
+<span class="lineno"> 1965 </span>  [MatchProj] {- ^ stack of projections -} -&gt;
+<span class="lineno"> 1966 </span>  Cryptol.TValue {- ^ Cryptol type of the term argument -} -&gt;
+<span class="lineno"> 1967 </span>  Term -&gt;
+<span class="lineno"> 1968 </span>  OverrideMatcher MIR w (Cryptol.TValue, Term)
+<span class="lineno"> 1969 </span>    -- ^ result term and its Cryptol type
+<span class="lineno"> 1970 </span><span class="decl"><span class="istickedoff">applyProjToTerm sym fail_ projStack tp term =</span>
+<span class="lineno"> 1971 </span><span class="spaces">  </span><span class="istickedoff">case projStack of</span>
+<span class="lineno"> 1972 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt; pure (tp, term)</span>
+<span class="lineno"> 1973 </span><span class="spaces">    </span><span class="istickedoff">MatchIndex i : restProjStack -&gt;</span>
+<span class="lineno"> 1974 </span><span class="spaces">      </span><span class="istickedoff">case tp of</span>
+<span class="lineno"> 1975 </span><span class="spaces">        </span><span class="istickedoff">Cryptol.TVSeq sz elemTp</span>
+<span class="lineno"> 1976 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">i &gt;= 0 &amp;&amp; fromIntegral i &lt; sz</span> -&gt; do</span>
+<span class="lineno"> 1977 </span><span class="spaces">            </span><span class="istickedoff">doIndex &lt;- liftIO $ indexSeqTerm sym (sz, elemTp) term</span>
+<span class="lineno"> 1978 </span><span class="spaces">            </span><span class="istickedoff">term' &lt;- liftIO $ doIndex i</span>
+<span class="lineno"> 1979 </span><span class="spaces">            </span><span class="istickedoff">applyProjToTerm sym <span class="nottickedoff">fail_</span> restProjStack elemTp term'</span>
+<span class="lineno"> 1980 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail_</span></span></span>
+<span class="lineno"> 1981 </span>
+<span class="lineno"> 1982 </span>-- | Apply a stack of projections to a 'MIRVal'.
+<span class="lineno"> 1983 </span>applyProjToMIRVal ::
+<span class="lineno"> 1984 </span>  MonadIO m =&gt;
+<span class="lineno"> 1985 </span>  Sym -&gt;
+<span class="lineno"> 1986 </span>  [MatchProj] {- ^ stack of projections -} -&gt;
+<span class="lineno"> 1987 </span>  MIRVal -&gt;
+<span class="lineno"> 1988 </span>  MaybeT m MIRVal
+<span class="lineno"> 1989 </span><span class="decl"><span class="istickedoff">applyProjToMIRVal _ [] mv = pure mv</span>
+<span class="lineno"> 1990 </span><span class="spaces"></span><span class="istickedoff">applyProjToMIRVal sym (MatchIndex i : projStack) (MIRVal shp vec) =</span>
+<span class="lineno"> 1991 </span><span class="spaces">  </span><span class="istickedoff">case shp of</span>
+<span class="lineno"> 1992 </span><span class="spaces">    </span><span class="istickedoff">ArrayShape _ _ elemSz elemShp _ -&gt;</span>
+<span class="lineno"> 1993 </span><span class="spaces">      </span><span class="istickedoff">applyProjToMIRVal <span class="nottickedoff">sym</span> projStack =&lt;&lt; indexMirArray <span class="nottickedoff">sym</span> i elemSz elemShp vec</span>
+<span class="lineno"> 1994 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 1995 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Applicative.empty</span></span></span>
+<span class="lineno"> 1996 </span>
+<span class="lineno"> 1997 </span>-- | Apply a stack of projections to a 'SetupValue'. Does not actually extract
+<span class="lineno"> 1998 </span>-- anything from the given 'SetupValue', but rather just applies projection
+<span class="lineno"> 1999 </span>-- 'SetupValue' constructors to it.
+<span class="lineno"> 2000 </span>reapplyProjToSetupValue ::
+<span class="lineno"> 2001 </span>  [MatchProj] {- ^ stack of projections -}-&gt;
+<span class="lineno"> 2002 </span>  SetupValue -&gt;
+<span class="lineno"> 2003 </span>  SetupValue
+<span class="lineno"> 2004 </span><span class="decl"><span class="istickedoff">reapplyProjToSetupValue = flip (foldl projToCtor)</span>
+<span class="lineno"> 2005 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2006 </span><span class="spaces">    </span><span class="istickedoff">projToCtor sv (MatchIndex i) = MS.SetupElem MirIndexIntoVal sv i</span></span>
 
 </pre>
 </body>
