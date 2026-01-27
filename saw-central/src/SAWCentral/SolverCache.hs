@@ -163,10 +163,25 @@ decodeHex s = BS.pack <$> go s
 -- type is most often used in a list (@[SolverBackend]@), since at least one
 -- other backend is always used along with 'What4' or 'SBV' (e.g. 'SBV' with
 -- 'Z3' or 'W4' with 'AIG' and 'ABC').
--- NOTE: This definition includes all backends supported by SBV, even though not
--- all of them are currently supported by SAW (namely, 'Bitwuzla' and 'DReal').
--- This is to ensure the system for keeping track of solver backend versions
--- is not silently broken if support for these backends is ever added to SAW.
+--
+-- NOTE: This definition includes all backends supported by SBV, even
+-- though not all of them are currently supported by SAW (namely,
+-- 'CVC4', 'Bitwuzla' and 'DReal'). It must also include all backends
+-- ever supported by SAW, even if (like 'CVC4') they are no longer
+-- supported.
+--
+-- This enumeration appears in the on-disk solver cache as part of the
+-- value side of the LMDB database and must therefore be stable. I
+-- think the database ends up storing the enumeration values as
+-- constructor name strings rather than numbers. However, to be safe:
+--    - Do not rename the constructors
+--    - Do not reorder the constructors
+--    - Add new constructors only at the end
+--
+-- XXX: it does not make sense to treat SBV and What4 as the same kind
+-- of thing as z3 and CVC5. Given the above considerations, however,
+-- reorganizing will take some work and needs to be done carefully.
+--
 data SolverBackend = What4
                    | SBV
                    | AIG
@@ -175,14 +190,32 @@ data SolverBackend = What4
                    | ABC
                    | Boolector
                    | Bitwuzla
-                   | CVC4
+                   | CVC4 -- NOTE: Not supported by SAW anymore
                    | CVC5
                    | DReal -- NOTE: Not currently supported by SAW
                    | MathSAT
                    | OpenSMT -- NOTE: Not currently supported by SAW
                    | Yices
                    | Z3
-                   deriving (Eq, Ord, Enum, Bounded, Show, Generic)
+                   deriving (Eq, Ord, Enum, Show, Generic)
+
+-- | The list of all available 'SolverBackend's
+--
+--   This should not include solvers we don't support, because that
+--   will result in trying to query their version.
+allBackends :: [SolverBackend]
+allBackends = [
+    SBV,
+    AIG,
+    RME,
+    ABC,
+    Boolector,
+    Bitwuzla,
+    CVC5,
+    MathSAT,
+    Yices,
+    Z3
+ ]
 
 instance FromJSON SolverBackend where
   parseJSON = JSON.genericParseJSON JSON.defaultOptions
@@ -193,10 +226,6 @@ instance FromJSONKey SolverBackend where
   fromJSONKey = JSON.genericFromJSONKey JSON.defaultJSONKeyOptions
 instance ToJSONKey SolverBackend where
   toJSONKey = JSON.genericToJSONKey JSON.defaultJSONKeyOptions
-
--- | The list of all available 'SolverBackend's
-allBackends :: [SolverBackend]
-allBackends = [minBound..]
 
 -- | Given an 'SBV.SMTConfig', return the list of corresponding 'SolverBackend's
 sbvBackends :: SBV.SMTConfig -> [SolverBackend]
