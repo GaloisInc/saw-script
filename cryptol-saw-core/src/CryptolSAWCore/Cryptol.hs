@@ -412,9 +412,6 @@ importPropsType sc env (prop : props) ty
 nameToLocalName :: C.Name -> LocalName
 nameToLocalName = C.identText . C.nameIdent
 
-nameToFieldName :: C.Name -> FieldName
-nameToFieldName = C.identText . C.nameIdent
-
 tparamToLocalName :: C.TParam -> LocalName
 tparamToLocalName tp =
   maybe (Text.pack ("u" ++ show (C.tpUnique tp)))
@@ -1479,10 +1476,16 @@ importName cnm =
               uri       = cryptolURI nmParts Nothing
            in pure (ImportedName uri aliases)
 
+-- | Extract all components from a tuple term of the specified size.
+scTupleComponents :: SharedContext -> Term -> Int -> IO [Term]
+scTupleComponents sc t n =
+  -- NOTE: scTupleSelector expects a 1-based index.
+  traverse (\i -> scTupleSelector sc t i n) [1..n]
+
 -- | Currently this imports declaration groups by inlining all the
--- definitions. (With subterm sharing, this is not as bad as it might
--- seem.) We might want to think about generating let or where
--- expressions instead.
+-- definitions.
+-- (With subterm sharing, this is not as bad as it might seem.)
+-- The drawback with this approach is that we lose the local names.
 --
 -- For Cryptol @foreign@ declarations, we import them as regular
 -- Cryptol expressions if a Cryptol implementation exists, and as an
@@ -1526,28 +1529,32 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                     }
 
     -- - A group of mutually-recursive declarations -
-    -- We handle this by "tupling up" all the declarations using a record and
-    -- taking the fixpoint at this record type.  The desired declarations are
-    -- then achieved by projecting the field names from this record.
+    -- We handle this by "tupling up" all the declaration bodies and
+    -- taking the fixpoint at this tuple type.
+    -- Note that this requires a higher-rank tuple type, because the
+    -- declarations may have polymorphic types that inhabit sort 1.
+    -- The desired declarations are then achieved by projecting the
+    -- components from this tuple.
     _ -> do
       -- build the environment for the declaration bodies
       let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
       -- the types of the declarations
-      tm <- traverse (importSchema sc env0 . C.dSignature) dm
+      ts <- traverse (importSchema sc env0 . C.dSignature) decls
 
-      -- the type of the recursive record
-      rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
+      -- the type of the recursive tuple
+      rect <- scTupleType sc ts
 
-      -- grab a reference to the outermost variable; this will be the record
+      -- grab a reference to the outermost variable; this will be the tuple
       -- in the body of the lambda we build later
-      v0 <- scFreshVariable sc "fixRecord" rect
+      v0 <- scFreshVariable sc "fixTuple" rect
 
-      -- build a list of projections from a record variable
-      vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
+      -- build a list of projections from the tuple variable
+      vs <- scTupleComponents sc v0 (length decls)
+      let vm = Map.fromList (zip (map C.dName decls) vs)
 
       -- the raw imported bodies of the declarations
-      em <- do
+      es <- do
             let
                 -- | In env2 the names of the recursively-defined
                 -- functions/values are bound to projections from the
@@ -1574,30 +1581,29 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                       , "   " <> Text.pack (pretty decl)
                       ]
 
-            traverse extractDeclExpr dm
+            traverse extractDeclExpr decls
 
-      -- the body of the recursive record
-      recv <- scRecord sc (Map.mapKeys nameToFieldName em)
+      -- the body of the recursive tuple
+      recv <- scTuple sc es
 
       -- build a lambda from the record body...
       f <- scAbstractTerms sc [v0] recv
 
       -- and take its fixpoint
       rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
+      rs <- scTupleComponents sc rhs (length decls)
 
       -- finally, build projections from the fixed record to shove
       -- into the environment if toplevel, then wrap each binding with
       -- a Constant constructor
-      let mkRhs d t =
-            do let s = nameToFieldName (C.dName d)
-               r <- scRecordSelect sc rhs s
-               case declOpts of
-                 TopLevelDeclGroup _ ->
-                   do nmi <- importName (C.dName d)
-                      r' <- scAscribe sc r t
-                      scDefineConstant sc nmi r'
-                 NestedDeclGroup -> return r
-      rhss <- sequence (Map.intersectionWith mkRhs dm tm)
+      let mkRhs d r t =
+            case declOpts of
+              TopLevelDeclGroup _ ->
+                do nmi <- importName (C.dName d)
+                   r' <- scAscribe sc r t
+                   scDefineConstant sc nmi r'
+              NestedDeclGroup -> pure r
+      rhss <- sequence (Map.fromList (zip (map C.dName decls) (zipWith3 mkRhs decls rs ts)))
 
      -- NOTE: The envE fields of env2 and the following Env
      -- are different.  The same names bound in env2 are now bound to
