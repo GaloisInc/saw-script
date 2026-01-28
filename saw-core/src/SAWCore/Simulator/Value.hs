@@ -109,7 +109,7 @@ data Value l
   | VArray (VArray l)
   | VString !Text
   | VEmptyRecord
-  | VRecordValue !FieldName !(Thunk l) !(Value l) -- strict in spine of record
+  | VRecordValue !FieldName (Thunk l) !(Value l) -- strict in spine of record
   | VExtra (Extra l)
   | TValue (TValue l)
 
