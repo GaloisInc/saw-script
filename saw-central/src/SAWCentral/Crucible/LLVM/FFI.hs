@@ -46,7 +46,7 @@ import           Control.Monad.Trans
 import           Data.Bits                            (finiteBitSize)
 import           Data.Foldable
 import           Data.Functor                         ((<&>))
-import           Data.List                            (elemIndex, intercalate)
+import           Data.List                            (intercalate)
 import           Data.List.NonEmpty                   (NonEmpty (..))
 import qualified Data.List.NonEmpty                   as NE
 import qualified Data.Map                             as Map
@@ -230,6 +230,7 @@ setupInArg :: Ctx => TypeEnv -> Text -> FFIType ->
   LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
 setupInArg tenv = go
   where
+  go :: Text -> FFIType -> LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
   go name ffiType =
     case ffiType of
       FFIBool ->
@@ -245,11 +246,13 @@ setupInArg tenv = go
       FFITuple ffiTypes ->
         tupleInArgs <$> setupTupleArgs go name ffiTypes
       FFIRecord ffiTypeMap ->
-        tupleInArgs <$> setupRecordArgs go name ffiTypeMap
+        recordInArgs <$> setupRecordArgs go name ffiTypeMap
     where
+    valueInArg :: FFITypeInfo -> LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
     valueInArg ffiTypeInfo = do
       (x, cryTerm) <- singleInArg ffiTypeInfo
       pure (cryTerm, [anySetupTerm x])
+    singleInArg :: FFITypeInfo -> LLVMCrucibleSetupM (TypedTerm, OpenTerm)
     singleInArg FFITypeInfo {..} = do
       x <- llvm_fresh_var name ffiLLVMType
       let ox = typedToOpenTerm x
@@ -260,8 +263,20 @@ setupInArg tenv = go
             pure $ ffiToCry ox
           Nothing -> pure ox
       pure (x, cryTerm)
+    tupleInArgs ::
+      [(OpenTerm, [AllLLVM SetupValue])] ->
+      (OpenTerm, [AllLLVM SetupValue])
     tupleInArgs (unzip -> (terms, inArgss)) =
       (OT.tuple' terms, concat inArgss)
+    recordInArgs ::
+      RecordMap Cry.Ident (OpenTerm, [AllLLVM SetupValue]) ->
+      (OpenTerm, [AllLLVM SetupValue])
+    recordInArgs rm =
+      -- The FFI passes record elements by display order, while SAW
+      -- represents records by tuples in canonical order.
+      let terms = [ (Cry.identText i, t) | (i, t) <- canonicalFields (fmap fst rm) ]
+          inArgss = displayElements (fmap snd rm)
+      in (OT.record terms, concat inArgss)
 
 -- | Do setup for the return value, returning a list of output arguments to pass
 -- to the LLVM function and a function that asserts functional correctness given
@@ -289,10 +304,14 @@ setupRet tenv ffiType =
 -- function, returning a list of output arguments to pass to the LLVM function
 -- and a function that asserts functional correctness given the Cryptol
 -- result.
-setupOutArg :: Ctx => TypeEnv -> FFIType ->
+setupOutArg ::
+  Ctx => TypeEnv -> FFIType ->
   LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
 setupOutArg tenv = go "out"
   where
+  go ::
+    Text -> FFIType ->
+    LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
   go name ffiType =
     case ffiType of
       FFIBool ->
@@ -312,21 +331,19 @@ setupOutArg tenv = go "out"
       FFIRecord ffiTypeMap -> do
         -- The FFI passes record elements by display order, while SAW
         -- represents records by tuples in canonical order
-        (outArgss, posts) <- unzip <$> setupRecordArgs go name ffiTypeMap
-        let canonFields = map fst $ canonicalFields ffiTypeMap
-            len = fromIntegral $ length canonFields
-            post ret = zipWithM_
-              (\field p -> do
-                let ix = fromIntegral
-                      case elemIndex field canonFields of
-                        Just i -> i
-                        Nothing -> panic "setupOutArg"
-                          ["Bad record field access"]
-                p (OT.projTuple' len ix ret))
-              (displayOrder ffiTypeMap)
+        rm <- setupRecordArgs go name ffiTypeMap
+        let outArgss = displayElements (fmap fst rm)
+        let posts = fmap snd rm
+        let post ret =
+              void $
+              traverseRecordMap
+              (\field p -> p (OT.projRecord ret (identText field)))
               posts
         pure (concat outArgss, post)
     where
+    singleOutArg ::
+      FFITypeInfo ->
+      LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
     singleOutArg FFITypeInfo {..} = do
       ptr <- llvm_alloc ffiLLVMType
       let post cryRet =
@@ -370,12 +387,13 @@ setupTupleArgs setup name =
 
 -- | Call the given setup function on subparts of the record, naming them by
 -- field name.
-setupRecordArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
-  Text -> RecordMap Cry.Ident FFIType -> LLVMCrucibleSetupM [a]
-setupRecordArgs setup name ffiTypeMap =
-  traverse
-    (\(field, ty) -> setup (name <> "." <> identText field) ty)
-    (displayFields ffiTypeMap)
+setupRecordArgs ::
+  (Text -> FFIType -> LLVMCrucibleSetupM a) ->
+  Text ->
+  RecordMap Cry.Ident FFIType ->
+  LLVMCrucibleSetupM (RecordMap Cry.Ident a)
+setupRecordArgs setup name =
+  traverseRecordMap $ \field ty -> setup (name <> "." <> identText field) ty
 
 -- | Type info for 'FFIBool'.
 boolTypeInfo :: Ctx => FFITypeInfo
