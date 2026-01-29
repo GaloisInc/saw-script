@@ -82,6 +82,8 @@ import SAWCore.Parser.Lexer
   'axiom'       { PosPair _ (TKey "axiom") }
   'primitive'   { PosPair _ (TKey "primitive") }
   'injectCode'  { PosPair _ (TKey "injectCode") }
+  'let'         { PosPair _ (TKey "let") }
+  'in'          { PosPair _ (TKey "in") }
 
   nat           { PosPair _ (TNat _) }
   bvlit         { PosPair _ (TBitvector _) }
@@ -164,6 +166,9 @@ VarCtxItem :: { [(UTermVar, UTerm)] } :
 CtorDecl :: { CtorDecl } :
   Ident VarCtx ':' LTerm ';'                    { Ctor $1 $2 $4 }
 
+LetBind :: { (UTermVar, UTerm) } :
+  TermVar '=' LTerm                   { ($1,$3) }
+
 -- Full term (possibly including a type annotation)
 Term :: { UTerm } :
     LTerm                                       { $1 }
@@ -174,6 +179,7 @@ LTerm :: { UTerm } :
     ProdTerm                                    { $1 }
   | ProdTerm '->' LTerm                         { Pi (pos $2) (mkPiArg $1) $3 }
   | '\\' VarCtx '->' LTerm                      { Lambda (pos $1) $2 $4 }
+  | 'let' '{' sepBy(LetBind, ';') '}' 'in' LTerm { Let (pos $1) $3 $6 }
 
 -- Term formed from infix product type operator (right-associative)
 ProdTerm :: { UTerm } :

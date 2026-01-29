@@ -261,6 +261,22 @@ typeInferCompleteTerm uterm =
            typeInferCompleteTerm $ Un.Lambda p ctx t
          liftSCM $ SC.scmLambda vn tp_trm body
 
+    Un.Let _ [] t ->
+      typeInferCompleteUTerm t
+    Un.Let _ binds t -> go IntMap.empty binds
+      where
+        go env [] =
+          do t' <- typeInferCompleteUTerm t
+             liftSCM $ SC.scmInstantiateBeta env t'
+        go env ((Un.termVarLocalName -> x, def) : bs) =
+          do vn <- liftSCM $ SC.scmFreshVarName x
+             def_trm <- typeInferCompleteUTerm def
+             def_trm' <- liftSCM $ SC.scmInstantiateBeta env def_trm
+             def_tp <- liftSCM $ SC.scmTypeOf def_trm'
+             let env' = IntMap.insert (vnIndex vn) def_trm' env
+             withVar x vn def_tp $
+               go env' bs
+
     Un.Pi _ [] t ->
       typeInferCompleteUTerm t
     Un.Pi p ((Un.termVarLocalName -> x, tp) : ctx) t ->

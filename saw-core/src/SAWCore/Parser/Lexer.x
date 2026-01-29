@@ -77,13 +77,13 @@ $cntrl     = [A-Z \@\[\\\]\^\_]
 @hex       = $hexit+
 $idfirst   = [$alpha \_]
 $idchar    = [$alpha $digit $unidigit $unitick \' \_]
-@ident     = $idfirst $idchar*
+@ident     = $idfirst $idchar* | $alpha $idchar* \@ @num
 
 @punct = "#" | "," | "->" | "." | ";" | ":" | "=" | "*"
        | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"
 @keywords = "data" | "hiding" | "import" | "module" | "injectCode"
           | "sort" | "isort" | "qsort" | "qisort"
-          | "Prop" | "where" | "primitive" | "axiom"
+          | "Prop" | "where" | "primitive" | "axiom" | "let" | "in"
 @key = @punct | @keywords
 
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hex)
