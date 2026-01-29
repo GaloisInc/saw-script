@@ -291,15 +291,18 @@ vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = foldr (\(f, t) -> VRecordValue f t) VEmptyRecord (Map.assocs m)
 
 valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> FieldName -> MValue l
-valRecordProj (VRecordValue f t v) fld
-  | fld == f = force t
-  | otherwise = valRecordProj v fld
-valRecordProj VEmptyRecord fld =
-  panic "valRecordProj" [
-      "Record field " <> Text.pack (show fld) <> " not found"
-  ]
-valRecordProj v _ =
-  panic "valRecordProj" ["Not a record value: " <> Text.pack (show v)]
+valRecordProj v fld = go v
+  where
+    go (VRecordValue fld1 t1 v1)
+      | fld == fld1 = force t1
+      | otherwise = go v1
+    go VEmptyRecord =
+      panic "valRecordProj"
+      [ "Record field " <> Text.pack (show fld) <> " not found in value: " <>
+        Text.pack (show v)
+      ]
+    go _ =
+      panic "valRecordProj" ["Not a record value: " <> Text.pack (show v)]
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
