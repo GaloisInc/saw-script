@@ -280,6 +280,25 @@ piCong1 r x y eq =
 --------------------------------------------------------------------------------
 -- Record types
 
+-- SAWCore record type syntax is desugared into nested applications of
+-- types 'EmptyType' and 'RecordType'.
+--
+-- For example, type #{a : Bool, b : Nat, c : Nat} desugars to:
+--
+-- RecordType "a" Bool (RecordType "b" Nat (RecordType "c" Nat EmptyType))
+--
+-- SAWCore record value syntax is desugared into nested applications of
+-- constructors 'Empty' and 'RecordValue'.
+--
+-- For example, {a = True, b = 2, c = 3} desugars to:
+--
+-- RecordValue "a" _ _ True (RecordValue "b" _ _ 2 (RecordValue "c" _ _ 3 Empty)
+--
+-- Or including all the type arguments:
+--
+-- RecordValue "a" Bool #{b : Nat, c : Nat} True
+--   (RecordValue "b" Nat #{c : Nat} 2 (RecordValue "c" Nat #{} 3 Empty))
+
 -- The empty record
 data EmptyType : sort 0 where {
   Empty : EmptyType;
@@ -304,6 +323,19 @@ RecordType__rec
   (r : RecordType s a b)
   : p r
   = RecordType#rec1 s a b p f1 r;
+
+-- Record selector syntax is desugared as nested applications of the
+-- 'headRecord' and 'tailRecord' functions.
+--
+-- For example, if x has type #{a : Bool, b : Nat, c : Nat},
+-- x.c desugars to:
+--
+-- headRecord "c" _ _ (tailRecord "b" _ _ (tailRecord "a" _ _ x))
+--
+-- or including all type arguments:
+--
+-- headRecord "c" Nat #{}
+--  (tailRecord "b" Nat #{c : Nat} (tailRecord "a" Bool #{b : Nat, c : Nat} x))
 
 headRecord : (s : String) -> (a b : sort 0) -> RecordType s a b -> a;
 headRecord s a b =
