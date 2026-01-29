@@ -1104,6 +1104,10 @@ PIntegral a =
    , mod  : a -> a -> a
    , toInt : a -> Integer
    , posneg : a -> Either Nat Nat
+   -- 'Left n' means non-negative, 'Right n' means negative.
+   -- NOTE: 'posneg' could be computed from 'toInt', but keeping it
+   -- separate makes it possible to convert from e.g. 'Vec n Bool' to
+   -- 'Nat' without a symbolic comparison at type 'Integer'.
    };
 
 PIntegralInteger : PIntegral Integer;
