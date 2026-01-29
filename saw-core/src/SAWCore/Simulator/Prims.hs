@@ -838,7 +838,7 @@ headRecordOp =
   strictFun $ \v ->
   case v of
     VRecordValue _ x _ -> Prim (force x)
-    _ -> panic "headRecord" ["Expected record value"]
+    _ -> panic "headRecordOp" ["Expected record value"]
 
 tailRecordOp :: VMonad l => Prim l
 tailRecordOp =
@@ -848,7 +848,7 @@ tailRecordOp =
   strictFun $ \v ->
   case v of
     VRecordValue _ _ y -> PrimValue y
-    _ -> panic "headRecord" ["Expected record value"]
+    _ -> panic "tailRecordOp" ["Expected record value"]
 
 --------------------------------------------------------------------------------
 
