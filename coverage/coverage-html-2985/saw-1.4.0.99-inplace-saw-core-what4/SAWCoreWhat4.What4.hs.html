@@ -1158,10 +1158,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1139 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1140 </span><span class="spaces">    </span><span class="nottickedoff">VEmptyRecordType</span>
 <span class="lineno"> 1141 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; pure VEmptyRecord</span>
-<span class="lineno"> 1142 </span><span class="spaces">    </span><span class="nottickedoff">VRecordType f ty1 ty2</span>
+<span class="lineno"> 1142 </span><span class="spaces">    </span><span class="nottickedoff">VRecordType fname ty1 ty2</span>
 <span class="lineno"> 1143 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; do x1 &lt;- parseUninterpreted' sym ref app ty1</span>
 <span class="lineno"> 1144 </span><span class="spaces">            </span><span class="nottickedoff">x2 &lt;- parseUninterpreted' sym ref app ty2</span>
-<span class="lineno"> 1145 </span><span class="spaces">            </span><span class="nottickedoff">pure (VRecordValue f (ready x1) x2)</span>
+<span class="lineno"> 1145 </span><span class="spaces">            </span><span class="nottickedoff">pure (VRecordValue fname (ready x1) x2)</span>
 <span class="lineno"> 1146 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1147 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;could not create uninterpreted symbol of type &quot; ++ show ty</span>
 <span class="lineno"> 1148 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
@@ -1823,12 +1823,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1804 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1805 </span><span class="spaces">    </span><span class="istickedoff">VEmptyRecordType</span>
 <span class="lineno"> 1806 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">pure VEmptyRecord</span></span>
-<span class="lineno"> 1807 </span><span class="spaces">    </span><span class="istickedoff">VRecordType f ty1 ty2</span>
-<span class="lineno"> 1808 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">do let trm1 = ArgTermRecordSelect trm f</span></span>
-<span class="lineno"> 1809 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let suffix = &quot;_&quot; ++ Text.unpack f</span></span>
+<span class="lineno"> 1807 </span><span class="spaces">    </span><span class="istickedoff">VRecordType fname ty1 ty2</span>
+<span class="lineno"> 1808 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">do let trm1 = ArgTermRecordSelect trm fname</span></span>
+<span class="lineno"> 1809 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let suffix = &quot;_&quot; ++ Text.unpack fname</span></span>
 <span class="lineno"> 1810 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">x1 &lt;- parseUninterpretedSAW sym st sc ref trm1 (suffixUnintApp suffix app) ty1</span></span>
 <span class="lineno"> 1811 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">x2 &lt;- parseUninterpretedSAW sym st sc ref trm app ty2</span></span>
-<span class="lineno"> 1812 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">pure (VRecordValue f (ready x1) x2)</span></span>
+<span class="lineno"> 1812 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">pure (VRecordValue fname (ready x1) x2)</span></span>
 <span class="lineno"> 1813 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1814 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;could not create uninterpreted symbol of type &quot; ++ show ty</span></span></span>
 <span class="lineno"> 1815 </span>
@@ -1916,17 +1916,17 @@ span.spaces    { background: white }
 <span class="lineno"> 1897 </span><span class="spaces">        </span><span class="istickedoff">ArgTermEmpty -&gt;</span>
 <span class="lineno"> 1898 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do x &lt;- scRecordValue sc []</span></span>
 <span class="lineno"> 1899 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts0)</span></span>
-<span class="lineno"> 1900 </span><span class="spaces">        </span><span class="istickedoff">ArgTermRecord f at1 at2 -&gt;</span>
-<span class="lineno"> 1901 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do s &lt;- scString sc f</span></span>
+<span class="lineno"> 1900 </span><span class="spaces">        </span><span class="istickedoff">ArgTermRecord fname at1 at2 -&gt;</span>
+<span class="lineno"> 1901 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do s &lt;- scString sc fname</span></span>
 <span class="lineno"> 1902 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x1, ts1) &lt;- parse at1 ts0</span></span>
 <span class="lineno"> 1903 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x2, ts2) &lt;- parse at2 ts1</span></span>
 <span class="lineno"> 1904 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">ty1 &lt;- scTypeOf sc x1</span></span>
 <span class="lineno"> 1905 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">ty2 &lt;- scTypeOf sc x2</span></span>
 <span class="lineno"> 1906 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scGlobalApply sc &quot;Prelude.RecordValue&quot; [s, ty1, ty2, x1, x2]</span></span>
 <span class="lineno"> 1907 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts2)</span></span>
-<span class="lineno"> 1908 </span><span class="spaces">        </span><span class="istickedoff">ArgTermRecordSelect at1 f -&gt;</span>
+<span class="lineno"> 1908 </span><span class="spaces">        </span><span class="istickedoff">ArgTermRecordSelect at1 fname -&gt;</span>
 <span class="lineno"> 1909 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
-<span class="lineno"> 1910 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scRecordSelect sc x1 f</span></span>
+<span class="lineno"> 1910 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scRecordSelect sc x1 fname</span></span>
 <span class="lineno"> 1911 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts1)</span></span>
 <span class="lineno"> 1912 </span><span class="spaces">        </span><span class="istickedoff">ArgTermConst x -&gt;</span>
 <span class="lineno"> 1913 </span><span class="spaces">          </span><span class="istickedoff">do return (x, ts0)</span>
@@ -1988,10 +1988,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1969 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermPair x1 x2)</span>
 <span class="lineno"> 1970 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1971 </span><span class="spaces">    </span><span class="nottickedoff">(VEmptyRecordType, VEmptyRecord) -&gt; pure ArgTermEmpty</span>
-<span class="lineno"> 1972 </span><span class="spaces">    </span><span class="nottickedoff">(VRecordType f ty1 ty2, VRecordValue f' v1 v2) | f == f' -&gt;</span>
+<span class="lineno"> 1972 </span><span class="spaces">    </span><span class="nottickedoff">(VRecordType fname ty1 ty2, VRecordValue fname' v1 v2) | fname == fname' -&gt;</span>
 <span class="lineno"> 1973 </span><span class="spaces">      </span><span class="nottickedoff">do x1 &lt;- mkArgTerm sc ty1 =&lt;&lt; force v1</span>
 <span class="lineno"> 1974 </span><span class="spaces">         </span><span class="nottickedoff">x2 &lt;- mkArgTerm sc ty2 v2</span>
-<span class="lineno"> 1975 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermRecord f x1 x2)</span>
+<span class="lineno"> 1975 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermRecord fname x1 x2)</span>
 <span class="lineno"> 1976 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1977 </span><span class="spaces">    </span><span class="nottickedoff">(_, VCtorApp i _ ps vv) -&gt;</span>
 <span class="lineno"> 1978 </span><span class="spaces">      </span><span class="nottickedoff">do mm &lt;- scGetModuleMap sc</span>
@@ -2034,11 +2034,11 @@ span.spaces    { background: white }
 <span class="lineno"> 2015 </span><span class="spaces">            </span><span class="istickedoff">b' &lt;- termOfTValue sc b</span>
 <span class="lineno"> 2016 </span><span class="spaces">            </span><span class="istickedoff">scPairType sc a' b'</span>
 <span class="lineno"> 2017 </span><span class="spaces">    </span><span class="istickedoff">VEmptyRecordType -&gt; <span class="nottickedoff">scRecordType sc []</span></span>
-<span class="lineno"> 2018 </span><span class="spaces">    </span><span class="istickedoff">VRecordType f a b</span>
-<span class="lineno"> 2019 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">do f' &lt;- scString sc f</span></span>
+<span class="lineno"> 2018 </span><span class="spaces">    </span><span class="istickedoff">VRecordType fname a b</span>
+<span class="lineno"> 2019 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">do fname' &lt;- scString sc fname</span></span>
 <span class="lineno"> 2020 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">a' &lt;- termOfTValue sc a</span></span>
 <span class="lineno"> 2021 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- termOfTValue sc b</span></span>
-<span class="lineno"> 2022 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Prelude.RecordType&quot; [f', a', b']</span></span>
+<span class="lineno"> 2022 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Prelude.RecordType&quot; [fname', a', b']</span></span>
 <span class="lineno"> 2023 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;termOfTValue: &quot; ++ show val</span></span></span>
 <span class="lineno"> 2024 </span>
 <span class="lineno"> 2025 </span>termOfSValue :: SharedContext -&gt; SValue sym -&gt; IO Term
