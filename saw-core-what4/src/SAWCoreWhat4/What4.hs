@@ -1139,10 +1139,10 @@ parseUninterpreted' sym ref app ty =
 
     VEmptyRecordType
       -> pure VEmptyRecord
-    VRecordType f ty1 ty2
+    VRecordType fname ty1 ty2
       -> do x1 <- parseUninterpreted' sym ref app ty1
             x2 <- parseUninterpreted' sym ref app ty2
-            pure (VRecordValue f (ready x1) x2)
+            pure (VRecordValue fname (ready x1) x2)
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
   where
@@ -1804,12 +1804,12 @@ parseUninterpretedSAW sym st sc ref trm app ty =
 
     VEmptyRecordType
       -> pure VEmptyRecord
-    VRecordType f ty1 ty2
-      -> do let trm1 = ArgTermRecordSelect trm f
-            let suffix = "_" ++ Text.unpack f
+    VRecordType fname ty1 ty2
+      -> do let trm1 = ArgTermRecordSelect trm fname
+            let suffix = "_" ++ Text.unpack fname
             x1 <- parseUninterpretedSAW sym st sc ref trm1 (suffixUnintApp suffix app) ty1
             x2 <- parseUninterpretedSAW sym st sc ref trm app ty2
-            pure (VRecordValue f (ready x1) x2)
+            pure (VRecordValue fname (ready x1) x2)
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
 
@@ -1897,17 +1897,17 @@ reconstructArgTerm atrm sc ts =
         ArgTermEmpty ->
           do x <- scRecordValue sc []
              pure (x, ts0)
-        ArgTermRecord f at1 at2 ->
-          do s <- scString sc f
+        ArgTermRecord fname at1 at2 ->
+          do s <- scString sc fname
              (x1, ts1) <- parse at1 ts0
              (x2, ts2) <- parse at2 ts1
              ty1 <- scTypeOf sc x1
              ty2 <- scTypeOf sc x2
              x <- scGlobalApply sc "Prelude.RecordValue" [s, ty1, ty2, x1, x2]
              pure (x, ts2)
-        ArgTermRecordSelect at1 f ->
+        ArgTermRecordSelect at1 fname ->
           do (x1, ts1) <- parse at1 ts0
-             x <- scRecordSelect sc x1 f
+             x <- scRecordSelect sc x1 fname
              pure (x, ts1)
         ArgTermConst x ->
           do return (x, ts0)
@@ -1969,10 +1969,10 @@ mkArgTerm sc ty val =
          return (ArgTermPair x1 x2)
 
     (VEmptyRecordType, VEmptyRecord) -> pure ArgTermEmpty
-    (VRecordType f ty1 ty2, VRecordValue f' v1 v2) | f == f' ->
+    (VRecordType fname ty1 ty2, VRecordValue fname' v1 v2) | fname == fname' ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
          x2 <- mkArgTerm sc ty2 v2
-         pure (ArgTermRecord f x1 x2)
+         pure (ArgTermRecord fname x1 x2)
 
     (_, VCtorApp i _ ps vv) ->
       do mm <- scGetModuleMap sc
@@ -2015,11 +2015,11 @@ termOfTValue sc val =
             b' <- termOfTValue sc b
             scPairType sc a' b'
     VEmptyRecordType -> scRecordType sc []
-    VRecordType f a b
-      -> do f' <- scString sc f
+    VRecordType fname a b
+      -> do fname' <- scString sc fname
             a' <- termOfTValue sc a
             b' <- termOfTValue sc b
-            scGlobalApply sc "Prelude.RecordType" [f', a', b']
+            scGlobalApply sc "Prelude.RecordType" [fname', a', b']
     _ -> fail $ "termOfTValue: " ++ show val
 
 termOfSValue :: SharedContext -> SValue sym -> IO Term
