@@ -127,8 +127,11 @@ flattenBValue (VPair x y) = do
   vx <- flattenBValue =<< force x
   vy <- flattenBValue =<< force y
   return $ AIG.concat [vx, vy]
-flattenBValue (VRecordValue elems) = do
-  AIG.concat <$> mapM (flattenBValue <=< force . snd) elems
+flattenBValue VEmptyRecord = pure $ AIG.concat []
+flattenBValue (VRecordValue _ x y) =
+  do vx <- flattenBValue =<< force x
+     vy <- flattenBValue y
+     pure $ AIG.concat [vx, vy]
 flattenBValue _ = error $ unwords ["SAWCoreAIG.BitBlast.flattenBValue: unsupported value"]
 
 ------------------------------------------------------------

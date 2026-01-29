@@ -453,9 +453,6 @@ scmFlatTermF ftf =
     PairLeft t -> scmPairLeft t
     PairRight t -> scmPairRight t
     Recursor crec -> scmRecursor (recursorDataType crec) (recursorSort crec)
-    RecordType fs -> scmRecordType fs
-    RecordValue fs -> scmRecordValue fs
-    RecordProj t fname -> scmRecordSelect t fname
     Sort s flags -> scmSortWithFlags s flags
     ArrayValue t ts -> scmVector t (V.toList ts)
     StringLit s -> scmString s
@@ -1062,7 +1059,7 @@ ctxReduceRecursor r elimf c_args CtorArgStruct{..}
   | length c_args /= length ctorArgs = panic "ctxReduceRecursor" ["Wrong number of constructor arguments"]
   | otherwise =
     do args <- mk_args IntMap.empty (zip c_args ctorArgs)
-       scmWhnf =<< scmApplyAll elimf args
+       scmApplyAllBeta elimf args
   where
     mk_args :: IntMap Term ->  -- already processed parameters/arguments
                [(Term, (VarName, CtorArg))] ->
@@ -1244,7 +1241,7 @@ scmWhnf t0 = go [] t0
     go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (vn, _, body))  = betaReduce xs [(vn, x)] body
     go (ElimPair i : xs)      (asPairValue -> Just (a, b))      = go xs (if i then b else a)
-    go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case Map.lookup fld elems of
+    go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case lookup fld elems of
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
@@ -1567,39 +1564,54 @@ scmVecType n e = scmGlobalApply preludeVecIdent [n, e]
 
 -- | Create a record term from a list of record fields.
 scmRecordValue :: [(FieldName, Term)] -> SCM Term
-scmRecordValue fields =
-  do mapM_ (scmEnsureValidTerm . snd) fields
-     vt <- foldM (scmUnifyVarTypes "scRecord") IntMap.empty (map (varTypes . snd) fields)
-     let tf = FTermF (RecordValue fields)
-     field_tys <- traverse (traverse (scmTypeOf)) fields
-     ty <- scmRecordType field_tys
-     scmMakeTerm vt tf (Right ty)
+scmRecordValue [] =
+  scmGlobalDef "Prelude.Empty"
+scmRecordValue ((fname, x) : fields) =
+  do s <- scmString fname
+     a <- scmTypeOf x
+     y <- scmRecordValue fields
+     b <- scmTypeOf y
+     scmGlobalApply "Prelude.RecordValue" [s, a, b, x, y]
 
 -- | Create a record field access term from a 'Term' representing a record and
 -- a 'FieldName'.
 scmRecordSelect :: Term -> FieldName -> SCM Term
-scmRecordSelect t fname =
-  do scmEnsureValidTerm t
-     let vt = varTypes t
-     let tf = FTermF (RecordProj t fname)
-     ty <- scmTypeOf t
-     field_tys <- scmEnsureRecognizer (NotRecord t) asRecordType ty
-     case Map.lookup fname field_tys of
-       Nothing -> scmError (FieldNotFound t fname)
-       Just ty' -> scmMakeTerm vt tf (Right ty')
+scmRecordSelect t0 fname =
+  do ty0 <- scmTypeOf t0
+     go t0 ty0
+  where
+    go :: Term -> Term -> SCM Term
+    go t ty =
+      do result <- scmEnsureRecognizer (NotRecord t0) asRecordTy ty
+         case result of
+           Nothing -> scmError (FieldNotFound t0 fname)
+           Just (f, s, a, b)
+             | f == fname ->
+               scmGlobalApply "Prelude.headRecord" [s, a, b, t]
+             | otherwise ->
+               do y <- scmGlobalApply "Prelude.tailRecord" [s, a, b, t]
+                  go y b
+    asRecordTy :: Term -> Maybe (Maybe (Text, Term, Term, Term))
+    asRecordTy t =
+      case isGlobalDef "Prelude.EmptyType" t of
+        Just () -> Just Nothing
+        Nothing ->
+          do (t1, b) <- asApp t
+             (t2, a) <- asApp t1
+             (t3, s) <- asApp t2
+             f <- asStringLit s
+             () <- isGlobalDef "Prelude.RecordType" t3
+             Just (Just (f, s, a, b))
 
 -- | Create a term representing the type of a record from a list associating
 -- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
 -- the given list is irrelevant, as record fields are not ordered.
 scmRecordType :: [(FieldName, Term)] -> SCM Term
-scmRecordType field_tys =
-  do mapM_ (scmEnsureValidTerm . snd) field_tys
-     vt <- foldM (scmUnifyVarTypes "scRecordType") IntMap.empty (map (varTypes . snd) field_tys)
-     let tf = FTermF (RecordType field_tys)
-     let field_sort (_, t) = scmEnsureSortType t
-     sorts <- traverse field_sort field_tys
-     let s = foldl max (mkSort 0) sorts
-     scmMakeTerm vt tf (Left s)
+scmRecordType [] = scmGlobalDef "Prelude.EmptyType"
+scmRecordType ((fname, a) : fields) =
+  do s <- scmString fname
+     b <- scmRecordType fields
+     scmGlobalApply "Prelude.RecordType" [s, a, b]
 
 -- | Create a unit-valued term.
 scmUnitValue :: SCM Term
@@ -1760,8 +1772,8 @@ scmOpaqueConstant nmi ty =
 -- arguments (as 'Term's).
 scmGlobalApply :: Ident -> [Term] -> SCM Term
 scmGlobalApply i ts =
-    do c <- scmGlobalDef i
-       scmApplyAll c ts
+  do c <- scmGlobalDef i
+     scmApplyAll c ts
 
 
 ------------------------------------------------------------
