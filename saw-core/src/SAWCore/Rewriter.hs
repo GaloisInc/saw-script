@@ -630,13 +630,25 @@ asPairRedex t =
        (x, y) <- R.asPairValue u
        return (if b then y else x)
 
+-- | Return @Just x@ if @t@ has the form
+-- @headRecord _ _ _ (RecordValue _ _ _ x _)@.
+-- Return @Just y@ if @t@ has the form
+-- @tailRecord _ _ _ (RecordValue _ _ _ _ y)@.
+-- Return @Nothing@ otherwise.
 asRecordRedex :: R.Recognizer Term Term
 asRecordRedex t =
-    do (x, i) <- R.asRecordSelector t
-       ts <- R.asRecordValue x
-       case lookup i ts of
-         Just t' -> return t'
-         Nothing -> fail "Record field not found"
+  do let wild = const (Just ())
+     -- match t to pattern "t1 _ _ _ t2"
+     t1 R.:*: t2 <- (pure R.<@ wild R.<@ wild R.<@ wild R.<@> pure) t
+     -- match t2 to pattern "RecordValue _ _ _ x y"
+     let rv = R.isGlobalDef "Prelude.RecordValue"
+     x R.:*: y <- (rv R.@> wild R.@> wild R.@> wild R.@> pure R.<@> pure) t2
+     case R.isGlobalDef "Prelude.headRecord" t1 of
+       Just () -> Just x
+       Nothing ->
+         case R.isGlobalDef "Prelude.tailRecord" t1 of
+           Just () -> Just y
+           Nothing -> Nothing
 
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
