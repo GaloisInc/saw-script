@@ -167,7 +167,7 @@ CtorDecl :: { CtorDecl } :
   Ident VarCtx ':' LTerm ';'                    { Ctor $1 $2 $4 }
 
 LetBind :: { (UTermVar, UTerm) } :
-  TermVar '=' LTerm                   { ($1,$3) }
+  TermVar '=' LTerm ';'                         { ($1,$3) }
 
 -- Full term (possibly including a type annotation)
 Term :: { UTerm } :
@@ -179,7 +179,7 @@ LTerm :: { UTerm } :
     ProdTerm                                    { $1 }
   | ProdTerm '->' LTerm                         { Pi (pos $2) (mkPiArg $1) $3 }
   | '\\' VarCtx '->' LTerm                      { Lambda (pos $1) $2 $4 }
-  | 'let' '{' sepBy(LetBind, ';') '}' 'in' LTerm { Let (pos $1) $3 $6 }
+  | 'let' '{' list(LetBind) '}' 'in' LTerm      { Let (pos $1) $3 $6 }
 
 -- Term formed from infix product type operator (right-associative)
 ProdTerm :: { UTerm } :

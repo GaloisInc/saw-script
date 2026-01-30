@@ -196,9 +196,10 @@ inferResolveName n =
      mm <- liftIO $ scGetModuleMap sc
      let ident = mkIdent mnm n
      case (Map.lookup n nctx, resolveNameInMap mm ident) of
-       (Just (vn, t, is_def), _) -> case is_def of
-         True -> return t
-         False -> liftSCM $ SC.scmVariable vn t
+       (Just (vn, t, is_def), _) ->
+         case is_def of
+           True -> return t
+           False -> liftSCM $ SC.scmVariable vn t
        (_, Just rn) ->
          do let c = resolvedNameName rn
             liftSCM $ SC.scmConst c
@@ -270,7 +271,7 @@ typeInferCompleteTerm uterm =
       do vn <- liftSCM $ SC.scmFreshVarName x
          def' <- typeInferCompleteUTerm def
          withDefinedVar x vn def' $
-           typeInferCompleteUTerm $ Un.Let p bs t
+           typeInferCompleteTerm $ Un.Let p bs t
 
     Un.Pi _ [] t ->
       typeInferCompleteUTerm t
@@ -529,7 +530,6 @@ matchPiWithNames (var : vars) tp =
          (ctx, body) <- matchPiWithNames vars body_tp
          pure ((var, vn, arg_tp) : ctx, body)
 
-
 withVar' :: LocalName -> VarName -> Term -> Bool -> TCM a -> TCM a
 withVar' x vn tp b (TCM m) =
   TCM $
@@ -540,6 +540,8 @@ withVar' x vn tp b (TCM m) =
 withVar :: LocalName -> VarName -> Term -> TCM a -> TCM a
 withVar x vn tp f = withVar' x vn tp False f
 
+-- | Run a type-checking computation in a typing context extended with a new
+-- variable with the given name and definition.
 withDefinedVar :: LocalName -> VarName -> Term -> TCM a -> TCM a
 withDefinedVar x vn tp f = withVar' x vn tp True f
 

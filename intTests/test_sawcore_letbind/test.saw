@@ -25,8 +25,8 @@ let roundtrip_prelude s = do {
   roundtrip' t;
 };
 
-roundtrip "let { x = Prop; y = (Eq Nat 1 1 : x) } in y";
-roundtrip "let { x = Prop; y = let { z = x } in (Eq Nat 1 1 : z) } in y";
+roundtrip "let { x = Prop; y = (Eq Nat 1 1 : x); } in y";
+roundtrip "let { x = Prop; y = let { z = x; } in (Eq Nat 1 1 : z); } in y";
 
 roundtrip "(x : Pos) -> Eq Pos (posInc (Bit1 x)) (Bit0 (posInc x))";
 roundtrip "(x y : Pos) -> Eq Pos (posAdd (Bit1 x) (Bit1 y)) (Bit0 (posInc (posAdd x y)))";

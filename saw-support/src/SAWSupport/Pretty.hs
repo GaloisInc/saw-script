@@ -289,14 +289,14 @@ squotesMatching d =
 prettyLetBlock :: [(PP.Doc ann, PP.Doc ann)] -> PP.Doc ann -> PP.Doc ann
 prettyLetBlock defs body =
   let lets = PP.align $
-        (PP.concatWith (\x y -> x <> ";" <> PP.hardline <> y))
+        (PP.concatWith (\x y -> x <> PP.hardline <> y))
           (map ppEqn defs)
   in PP.group $ PP.vcat
         [ "let" PP.<+> PP.align (PP.lbrace PP.<+> lets <> PP.line <> PP.rbrace)
         , " in" PP.<+> body
         ]
   where
-    ppEqn (var,d) = var PP.<+> "=" PP.<+> d
+    ppEqn (var,d) = var PP.<+> "=" PP.<+> d <> ";"
 
 ------------------------------------------------------------
 -- Render documents
