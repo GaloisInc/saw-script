@@ -236,6 +236,7 @@ make_source_distribution() {
 
 output() { echo "::set-output name=$1::$2"; }
 ver() { grep '^Version' saw.cabal | awk '{print $2}'; }
+crux_ver() { grep '^version' crux-mir-comp/crux-mir-comp.cabal | awk '{print $2}'; }
 set_version() { output saw-version "$(ver)"; }
 set_files() { output changed-files "$(files_since "$1" "$2")"; }
 files_since() {
