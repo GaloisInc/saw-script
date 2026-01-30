@@ -89,6 +89,7 @@ import SAWCore.Parser.Lexer
   bvlit         { PosPair _ (TBitvector _) }
   '_'           { PosPair _ (TIdent "_") }
   rawident      { PosPair _ (TIdent _) }
+  rawletident   { PosPair _ (TLetIdent _) }
   rawidentrec   { PosPair _ (TRecursor _) }
   rawidentind   { PosPair _ (TInductor _) }
   string        { PosPair _ (TString _) }
@@ -167,7 +168,8 @@ CtorDecl :: { CtorDecl } :
   Ident VarCtx ':' LTerm ';'                    { Ctor $1 $2 $4 }
 
 LetBind :: { (UTermVar, UTerm) } :
-  TermVar '=' LTerm ';'                         { ($1,$3) }
+    TermVar '=' LTerm ';'                       { ($1,$3) }
+  | LetIdent '=' LTerm ';'                      { (TermVar $1,$3) }
 
 -- Full term (possibly including a type annotation)
 Term :: { UTerm } :
@@ -197,6 +199,7 @@ AtomTerm :: { UTerm } :
   | bvlit                                       { BVLit (pos $1) (tokBits (val $1)) }
   | string                                      { mkString $1 }
   | Ident                                       { Name $1 }
+  | LetIdent                                    { Name $1 }
   | IdentRec                                    { Recursor (fmap fst $1) (mkSort (snd (val $1))) }
   | IdentInd                                    { Recursor $1 propSort }
   | 'Prop'                                      { Sort (pos $1) propSort noFlags }
@@ -213,6 +216,10 @@ AtomTerm :: { UTerm } :
 -- Identifier (wrapper to extract the text)
 Ident :: { PosPair Text } :
   rawident                                      { fmap (Text.pack . tokIdent) $1 }
+
+-- Let-binding identifier (wrapper to extract the text)
+LetIdent :: { PosPair Text } :
+  rawletident                                   { fmap (Text.pack . tokLetIdent) $1 }
 
 -- Recursor identifier (wrapper to extract the text)
 IdentRec :: { PosPair (Text, Natural) } :
