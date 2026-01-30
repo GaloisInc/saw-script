@@ -10,7 +10,7 @@ let {{
   pad b = { Y = zero # [b] }
 
   reduce : (Bit -> Bit -> Bit) -> [2] -> Bit
-  reduce f a = f (a @ 0) (a @ 1)
+  reduce f [a, b] = f a b
 
   toBool : [2] -> Bit
   toBool = reduce (||)
