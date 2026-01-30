@@ -69,7 +69,7 @@ jobs:
           set -x
           .github/ci.sh output name saw-$(.github/ci.sh ver)
           .github/ci.sh output version $(.github/ci.sh ver)
-          .github/ci.sh output crux-version $(.github/ci.sh crux-ver)
+          .github/ci.sh output crux-version $(.github/ci.sh crux_ver)
           .github/ci.sh output tag $EVENT_TAG
           .github/ci.sh output schedule $EVENT_SCHEDULE
           .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
