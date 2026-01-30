@@ -260,7 +260,7 @@ span.spaces    { background: white }
 <span class="lineno">  241 </span>
 <span class="lineno">  242 </span>-- | A cell within an HDL module.
 <span class="lineno">  243 </span>data Cell bs = Cell
-<span class="lineno">  244 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellHideName</span></span></span> :: Bool -- ^ Whether the cell's name is human-readable
+<span class="lineno">  244 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellHideName</span></span></span> :: Bool -- ^ Whether the cell's name is human-readable (default: False)
 <span class="lineno">  245 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellType</span></span></span> :: CellType -- ^ The cell type
 <span class="lineno">  246 </span>    -- NB: Yosys's documentation for write_json doesn't impose any restrictions
 <span class="lineno">  247 </span>    -- on what type parameter values may take on, so we opt to be as permissive
@@ -277,117 +277,115 @@ span.spaces    { background: white }
 <span class="lineno">  258 </span>
 <span class="lineno">  259 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON (Cell [Bitrep])</span></span></span></span> where
 <span class="lineno">  260 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;cell&quot;</span> $ \o -&gt; do</span>
-<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">_cellHideName &lt;- o Aeson..:? &quot;hide_name&quot; &gt;&gt;= \case</span>
-<span class="lineno">  262 </span><span class="spaces">      </span><span class="istickedoff">Just (Aeson.Number 1) -&gt; pure <span class="nottickedoff">True</span></span>
-<span class="lineno">  263 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; pure <span class="nottickedoff">False</span></span>
-<span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff">_cellType &lt;- o Aeson..: &quot;type&quot;</span>
-<span class="lineno">  265 </span><span class="spaces">    </span><span class="istickedoff">_cellParameters &lt;- o Aeson..: &quot;parameters&quot;</span>
-<span class="lineno">  266 </span><span class="spaces">    </span><span class="istickedoff">_cellAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
-<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">_cellPortDirections &lt;- o Aeson..: &quot;port_directions&quot;</span>
-<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">_cellConnections &lt;- o Aeson..: &quot;connections&quot;</span>
-<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">pure Cell{<span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">..</span></span></span></span>}</span></span>
-<span class="lineno">  270 </span>
-<span class="lineno">  271 </span>-- | A description of a named internal signal within a module.
-<span class="lineno">  272 </span>data Netname =
-<span class="lineno">  273 </span>  Netname
-<span class="lineno">  274 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameHideName</span></span></span> :: Bool
-<span class="lineno">  275 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameBits</span></span></span> :: [Bitrep]
-<span class="lineno">  276 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
-<span class="lineno">  277 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">_cellHideName &lt;- <span class="nottickedoff">Maybe.maybe False (/= (0::Int))</span> &lt;$&gt; o Aeson..:? &quot;hide_name&quot;</span>
+<span class="lineno">  262 </span><span class="spaces">    </span><span class="istickedoff">_cellType &lt;- o Aeson..: &quot;type&quot;</span>
+<span class="lineno">  263 </span><span class="spaces">    </span><span class="istickedoff">_cellParameters &lt;- o Aeson..: &quot;parameters&quot;</span>
+<span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff">_cellAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
+<span class="lineno">  265 </span><span class="spaces">    </span><span class="istickedoff">_cellPortDirections &lt;- o Aeson..: &quot;port_directions&quot;</span>
+<span class="lineno">  266 </span><span class="spaces">    </span><span class="istickedoff">_cellConnections &lt;- o Aeson..: &quot;connections&quot;</span>
+<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">pure Cell{<span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">..</span></span></span></span>}</span></span>
+<span class="lineno">  268 </span>
+<span class="lineno">  269 </span>-- | A description of a named internal signal within a module.
+<span class="lineno">  270 </span>data Netname =
+<span class="lineno">  271 </span>  Netname
+<span class="lineno">  272 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameHideName</span></span></span> :: Bool -- ^ Whether the net's name is human-readable (default: False)
+<span class="lineno">  273 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameBits</span></span></span> :: [Bitrep]
+<span class="lineno">  274 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
+<span class="lineno">  275 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  276 </span>
+<span class="lineno">  277 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Netname</span></span></span></span></span></span></span></span></span></span></span>
 <span class="lineno">  278 </span>
-<span class="lineno">  279 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Netname</span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  280 </span>
-<span class="lineno">  281 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Netname</span></span></span></span> where
-<span class="lineno">  282 </span>  <span class="decl"><span class="istickedoff">parseJSON =</span>
-<span class="lineno">  283 </span><span class="spaces">    </span><span class="istickedoff">Aeson.withObject <span class="nottickedoff">&quot;netname&quot;</span> $ \o -&gt;</span>
-<span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">do _netnameHideName &lt;- Maybe.maybe <span class="nottickedoff">False</span> (/= (0::Int)) &lt;$&gt; o Aeson..:? &quot;hide_name&quot;</span>
-<span class="lineno">  285 </span><span class="spaces">       </span><span class="istickedoff">_netnameBits &lt;- o Aeson..: &quot;bits&quot;</span>
-<span class="lineno">  286 </span><span class="spaces">       </span><span class="istickedoff">_netnameAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
-<span class="lineno">  287 </span><span class="spaces">       </span><span class="istickedoff">pure Netname{<span class="nottickedoff">..</span>}</span></span>
-<span class="lineno">  288 </span>
-<span class="lineno">  289 </span>-- | A single HDL module.
-<span class="lineno">  290 </span>data Module = Module
-<span class="lineno">  291 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
-<span class="lineno">  292 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modulePorts</span></span></span> :: Map Text Port
-<span class="lineno">  293 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleCells</span></span></span> :: Map Text (Cell [Bitrep])
-<span class="lineno">  294 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleNetnames</span></span></span> :: Map Text Netname
-<span class="lineno">  295 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  279 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Netname</span></span></span></span> where
+<span class="lineno">  280 </span>  <span class="decl"><span class="istickedoff">parseJSON =</span>
+<span class="lineno">  281 </span><span class="spaces">    </span><span class="istickedoff">Aeson.withObject <span class="nottickedoff">&quot;netname&quot;</span> $ \o -&gt;</span>
+<span class="lineno">  282 </span><span class="spaces">    </span><span class="istickedoff">do _netnameHideName &lt;- Maybe.maybe <span class="nottickedoff">False</span> (/= (0::Int)) &lt;$&gt; o Aeson..:? &quot;hide_name&quot;</span>
+<span class="lineno">  283 </span><span class="spaces">       </span><span class="istickedoff">_netnameBits &lt;- o Aeson..: &quot;bits&quot;</span>
+<span class="lineno">  284 </span><span class="spaces">       </span><span class="istickedoff">_netnameAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
+<span class="lineno">  285 </span><span class="spaces">       </span><span class="istickedoff">pure Netname{<span class="nottickedoff">..</span>}</span></span>
+<span class="lineno">  286 </span>
+<span class="lineno">  287 </span>-- | A single HDL module.
+<span class="lineno">  288 </span>data Module = Module
+<span class="lineno">  289 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
+<span class="lineno">  290 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modulePorts</span></span></span> :: Map Text Port
+<span class="lineno">  291 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleCells</span></span></span> :: Map Text (Cell [Bitrep])
+<span class="lineno">  292 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleNetnames</span></span></span> :: Map Text Netname
+<span class="lineno">  293 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  294 </span>
+<span class="lineno">  295 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Module</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
 <span class="lineno">  296 </span>
-<span class="lineno">  297 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Module</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  298 </span>
-<span class="lineno">  299 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Module</span></span></span></span> where
-<span class="lineno">  300 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;module&quot;</span> $ \o -&gt; do</span>
-<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">_moduleAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
-<span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff">_modulePorts &lt;- Maybe.fromMaybe mempty &lt;$&gt; o Aeson..:? &quot;ports&quot;</span>
-<span class="lineno">  303 </span><span class="spaces">    </span><span class="istickedoff">_moduleCells &lt;- Maybe.fromMaybe <span class="nottickedoff">mempty</span> &lt;$&gt; o Aeson..:? &quot;cells&quot;</span>
-<span class="lineno">  304 </span><span class="spaces">    </span><span class="istickedoff">_moduleNetnames &lt;- Maybe.fromMaybe <span class="nottickedoff">mempty</span> &lt;$&gt; o Aeson..:? &quot;netnames&quot;</span>
-<span class="lineno">  305 </span><span class="spaces">    </span><span class="istickedoff">pure Module{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
-<span class="lineno">  306 </span>
-<span class="lineno">  307 </span>-- | A collection of multiple HDL modules (possibly with dependencies on each other).
-<span class="lineno">  308 </span>data YosysIR = YosysIR
-<span class="lineno">  309 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysCreator</span></span></span> :: Text
-<span class="lineno">  310 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysModules</span></span></span> :: Map Text Module
-<span class="lineno">  311 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  297 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Module</span></span></span></span> where
+<span class="lineno">  298 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;module&quot;</span> $ \o -&gt; do</span>
+<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">_moduleAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">_modulePorts &lt;- Maybe.fromMaybe mempty &lt;$&gt; o Aeson..:? &quot;ports&quot;</span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">_moduleCells &lt;- Maybe.fromMaybe <span class="nottickedoff">mempty</span> &lt;$&gt; o Aeson..:? &quot;cells&quot;</span>
+<span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff">_moduleNetnames &lt;- Maybe.fromMaybe <span class="nottickedoff">mempty</span> &lt;$&gt; o Aeson..:? &quot;netnames&quot;</span>
+<span class="lineno">  303 </span><span class="spaces">    </span><span class="istickedoff">pure Module{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
+<span class="lineno">  304 </span>
+<span class="lineno">  305 </span>-- | A collection of multiple HDL modules (possibly with dependencies on each other).
+<span class="lineno">  306 </span>data YosysIR = YosysIR
+<span class="lineno">  307 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysCreator</span></span></span> :: Text
+<span class="lineno">  308 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysModules</span></span></span> :: Map Text Module
+<span class="lineno">  309 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  310 </span>
+<span class="lineno">  311 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''YosysIR</span></span></span></span></span></span></span>
 <span class="lineno">  312 </span>
-<span class="lineno">  313 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''YosysIR</span></span></span></span></span></span></span>
-<span class="lineno">  314 </span>
-<span class="lineno">  315 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON YosysIR</span></span></span></span> where
-<span class="lineno">  316 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;yosys&quot;</span> $ \o -&gt; do</span>
-<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">_yosysCreator &lt;- <span class="nottickedoff">Maybe.fromMaybe mempty</span> &lt;$&gt; o Aeson..:? &quot;creator&quot;</span>
-<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">_yosysModules &lt;- Maybe.fromMaybe mempty &lt;$&gt; o Aeson..:? &quot;modules&quot;</span>
-<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">pure YosysIR{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
-<span class="lineno">  320 </span>
-<span class="lineno">  321 </span>-- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
-<span class="lineno">  322 </span>loadYosysIR :: FilePath -&gt; IO YosysIR
-<span class="lineno">  323 </span><span class="decl"><span class="istickedoff">loadYosysIR p = Aeson.eitherDecodeFileStrict p &gt;&gt;= \case</span>
-<span class="lineno">  324 </span><span class="spaces">  </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throw . YosysError $ Text.pack err</span></span>
-<span class="lineno">  325 </span><span class="spaces">  </span><span class="istickedoff">Right ir -&gt; pure ir</span></span>
-<span class="lineno">  326 </span>
-<span class="lineno">  327 </span>-- | Return the patterns for all of the input ports of a module
-<span class="lineno">  328 </span>moduleInputPorts :: Module -&gt; Map Text [Bitrep]
-<span class="lineno">  329 </span><span class="decl"><span class="istickedoff">moduleInputPorts m =</span>
-<span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
-<span class="lineno">  331 </span><span class="spaces">  </span><span class="istickedoff">. Maybe.mapMaybe</span>
-<span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">( \(nm, ip) -&gt;</span>
-<span class="lineno">  333 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout</span>
-<span class="lineno">  334 </span><span class="spaces">      </span><span class="istickedoff">then Just (nm, ip ^. portBits)</span>
-<span class="lineno">  335 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
-<span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">)</span>
-<span class="lineno">  337 </span><span class="spaces">  </span><span class="istickedoff">. Map.assocs</span>
-<span class="lineno">  338 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
-<span class="lineno">  339 </span>
-<span class="lineno">  340 </span>-- | Return the patterns for all of the output ports of a module
-<span class="lineno">  341 </span>moduleOutputPorts :: Module -&gt; Map Text [Bitrep]
-<span class="lineno">  342 </span><span class="decl"><span class="istickedoff">moduleOutputPorts m =</span>
-<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
-<span class="lineno">  344 </span><span class="spaces">  </span><span class="istickedoff">. Maybe.mapMaybe</span>
-<span class="lineno">  345 </span><span class="spaces">  </span><span class="istickedoff">( \(nm, ip) -&gt;</span>
-<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout</span>
-<span class="lineno">  347 </span><span class="spaces">      </span><span class="istickedoff">then Just (nm, ip ^. portBits)</span>
-<span class="lineno">  348 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">)</span>
-<span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">. Map.assocs</span>
-<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
-<span class="lineno">  352 </span>
-<span class="lineno">  353 </span>-- | Return the patterns for all of the input connections of a cell
-<span class="lineno">  354 </span>cellInputConnections :: Cell [b] -&gt; Map Text [b]
-<span class="lineno">  355 </span><span class="decl"><span class="istickedoff">cellInputConnections c = Map.intersection (c ^. cellConnections) inp</span>
-<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  357 </span><span class="spaces">    </span><span class="istickedoff">inp = Map.filter (\d -&gt; d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections</span></span>
-<span class="lineno">  358 </span>
-<span class="lineno">  359 </span>-- | Return the patterns for all of the output connections of a cell
-<span class="lineno">  360 </span>cellOutputConnections :: Ord b =&gt; Cell [b] -&gt; Map Text [b]
-<span class="lineno">  361 </span><span class="decl"><span class="istickedoff">cellOutputConnections c = Map.intersection (c ^. cellConnections) out</span>
-<span class="lineno">  362 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  363 </span><span class="spaces">    </span><span class="istickedoff">out = Map.filter (\d -&gt; d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections</span></span>
-<span class="lineno">  364 </span>
-<span class="lineno">  365 </span>-- | Test whether a 'Cell' is a state element ('CellTypeDff' or 'CellTypeFf').
-<span class="lineno">  366 </span>cellIsRegister :: Cell bs -&gt; Bool
-<span class="lineno">  367 </span><span class="decl"><span class="istickedoff">cellIsRegister c =</span>
-<span class="lineno">  368 </span><span class="spaces">  </span><span class="istickedoff">case c ^. cellType of</span>
-<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDff -&gt; True</span>
-<span class="lineno">  370 </span><span class="spaces">    </span><span class="istickedoff">CellTypeFf -&gt; <span class="nottickedoff">True</span></span>
-<span class="lineno">  371 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; False</span></span>
+<span class="lineno">  313 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON YosysIR</span></span></span></span> where
+<span class="lineno">  314 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;yosys&quot;</span> $ \o -&gt; do</span>
+<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">_yosysCreator &lt;- <span class="nottickedoff">Maybe.fromMaybe mempty</span> &lt;$&gt; o Aeson..:? &quot;creator&quot;</span>
+<span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">_yosysModules &lt;- Maybe.fromMaybe mempty &lt;$&gt; o Aeson..:? &quot;modules&quot;</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">pure YosysIR{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
+<span class="lineno">  318 </span>
+<span class="lineno">  319 </span>-- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
+<span class="lineno">  320 </span>loadYosysIR :: FilePath -&gt; IO YosysIR
+<span class="lineno">  321 </span><span class="decl"><span class="istickedoff">loadYosysIR p = Aeson.eitherDecodeFileStrict p &gt;&gt;= \case</span>
+<span class="lineno">  322 </span><span class="spaces">  </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throw . YosysError $ Text.pack err</span></span>
+<span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">Right ir -&gt; pure ir</span></span>
+<span class="lineno">  324 </span>
+<span class="lineno">  325 </span>-- | Return the patterns for all of the input ports of a module
+<span class="lineno">  326 </span>moduleInputPorts :: Module -&gt; Map Text [Bitrep]
+<span class="lineno">  327 </span><span class="decl"><span class="istickedoff">moduleInputPorts m =</span>
+<span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
+<span class="lineno">  329 </span><span class="spaces">  </span><span class="istickedoff">. Maybe.mapMaybe</span>
+<span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">( \(nm, ip) -&gt;</span>
+<span class="lineno">  331 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout</span>
+<span class="lineno">  332 </span><span class="spaces">      </span><span class="istickedoff">then Just (nm, ip ^. portBits)</span>
+<span class="lineno">  333 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
+<span class="lineno">  334 </span><span class="spaces">  </span><span class="istickedoff">)</span>
+<span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">. Map.assocs</span>
+<span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
+<span class="lineno">  337 </span>
+<span class="lineno">  338 </span>-- | Return the patterns for all of the output ports of a module
+<span class="lineno">  339 </span>moduleOutputPorts :: Module -&gt; Map Text [Bitrep]
+<span class="lineno">  340 </span><span class="decl"><span class="istickedoff">moduleOutputPorts m =</span>
+<span class="lineno">  341 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
+<span class="lineno">  342 </span><span class="spaces">  </span><span class="istickedoff">. Maybe.mapMaybe</span>
+<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">( \(nm, ip) -&gt;</span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout</span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">then Just (nm, ip ^. portBits)</span>
+<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
+<span class="lineno">  347 </span><span class="spaces">  </span><span class="istickedoff">)</span>
+<span class="lineno">  348 </span><span class="spaces">  </span><span class="istickedoff">. Map.assocs</span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
+<span class="lineno">  350 </span>
+<span class="lineno">  351 </span>-- | Return the patterns for all of the input connections of a cell
+<span class="lineno">  352 </span>cellInputConnections :: Cell [b] -&gt; Map Text [b]
+<span class="lineno">  353 </span><span class="decl"><span class="istickedoff">cellInputConnections c = Map.intersection (c ^. cellConnections) inp</span>
+<span class="lineno">  354 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff">inp = Map.filter (\d -&gt; d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections</span></span>
+<span class="lineno">  356 </span>
+<span class="lineno">  357 </span>-- | Return the patterns for all of the output connections of a cell
+<span class="lineno">  358 </span>cellOutputConnections :: Ord b =&gt; Cell [b] -&gt; Map Text [b]
+<span class="lineno">  359 </span><span class="decl"><span class="istickedoff">cellOutputConnections c = Map.intersection (c ^. cellConnections) out</span>
+<span class="lineno">  360 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  361 </span><span class="spaces">    </span><span class="istickedoff">out = Map.filter (\d -&gt; d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections</span></span>
+<span class="lineno">  362 </span>
+<span class="lineno">  363 </span>-- | Test whether a 'Cell' is a state element ('CellTypeDff' or 'CellTypeFf').
+<span class="lineno">  364 </span>cellIsRegister :: Cell bs -&gt; Bool
+<span class="lineno">  365 </span><span class="decl"><span class="istickedoff">cellIsRegister c =</span>
+<span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">case c ^. cellType of</span>
+<span class="lineno">  367 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDff -&gt; True</span>
+<span class="lineno">  368 </span><span class="spaces">    </span><span class="istickedoff">CellTypeFf -&gt; <span class="nottickedoff">True</span></span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; False</span></span>
 
 </pre>
 </body>
