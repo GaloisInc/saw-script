@@ -281,7 +281,7 @@ makeLenses ''Netname
 instance Aeson.FromJSON Netname where
   parseJSON =
     Aeson.withObject "netname" $ \o ->
-    do _netnameHideName <- (/= 0) . Maybe.fromMaybe (0::Int) <$> o Aeson..:? "hide_name"
+    do _netnameHideName <- Maybe.maybe False (/= (0::Int)) <$> o Aeson..:? "hide_name"
        _netnameBits <- o Aeson..: "bits"
        _netnameAttributes <- o Aeson..:? "attributes"
        pure Netname{..}
