@@ -947,7 +947,7 @@ resolveIdentifier env nm =
   case splitOn (pack "::") nm of
     []  -> pure Nothing
            -- FIXME: shouldn't this be error?
-    [i] -> doResolve (P.UnQual (C.mkIdent i))
+    [i] -> doResolve (P.mkUnqual (C.mkIdent i))
     xs  -> let (qs,i) = (init xs, last xs)
            in  doResolve (P.Qual (C.packModName qs) (C.mkIdent i))
     -- FIXME: Is there no function that parses Text into PName?
