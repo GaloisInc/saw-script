@@ -300,7 +300,7 @@ span.spaces    { background: white }
 <span class="lineno">  281 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Netname</span></span></span></span> where
 <span class="lineno">  282 </span>  <span class="decl"><span class="istickedoff">parseJSON =</span>
 <span class="lineno">  283 </span><span class="spaces">    </span><span class="istickedoff">Aeson.withObject <span class="nottickedoff">&quot;netname&quot;</span> $ \o -&gt;</span>
-<span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">do _netnameHideName &lt;- (/= 0) . Maybe.fromMaybe <span class="nottickedoff">(0::Int)</span> &lt;$&gt; o Aeson..:? &quot;hide_name&quot;</span>
+<span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">do _netnameHideName &lt;- Maybe.maybe <span class="nottickedoff">False</span> (/= (0::Int)) &lt;$&gt; o Aeson..:? &quot;hide_name&quot;</span>
 <span class="lineno">  285 </span><span class="spaces">       </span><span class="istickedoff">_netnameBits &lt;- o Aeson..: &quot;bits&quot;</span>
 <span class="lineno">  286 </span><span class="spaces">       </span><span class="istickedoff">_netnameAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
 <span class="lineno">  287 </span><span class="spaces">       </span><span class="istickedoff">pure Netname{<span class="nottickedoff">..</span>}</span></span>
