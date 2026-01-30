@@ -207,16 +207,6 @@ evalTermF cfg lam recEval tf env =
                       let vrec = VRecursor dname nixs es
                       vFunList nixs (\_ixs -> pure (evalRecursor vrec))
 
-        RecordType elem_tps ->
-          TValue . VRecordType <$> traverse (traverse evalType) elem_tps
-
-        RecordValue elems   ->
-          VRecordValue <$> mapM (\(fld,t) -> (fld,) <$> recEvalDelay t) elems
-
-        RecordProj t fld    -> recEval t >>= \case
-                                 v@VRecordValue{} -> valRecordProj v fld
-                                 _ -> panic "evalTermF" ["Expected VRecordValue"]
-
         Sort s _h           -> return $ TValue (VSort s)
 
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv

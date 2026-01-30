@@ -29,7 +29,7 @@ import           Control.Monad.State          (MonadState(get), modify)
 import           Data.Char                    (isDigit)
 import           Data.IntMap.Strict           (IntMap)
 import qualified Data.IntMap.Strict           as IntMap
-import           Data.List                    (intersperse, sortOn)
+import           Data.List                    (intersperse)
 import           Data.Maybe                   (fromMaybe)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
@@ -428,35 +428,6 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return $ Rocq.List elems
     StringLit s -> pure (Rocq.Scope (Rocq.StringLit (Text.unpack s)) "string")
 
-    -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
-    -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil)...).
-    -- Note that SAW core equates record types up to reordering, so we sort our
-    -- record types by field name to canonicalize them.
-    RecordType fs ->
-      foldr (\(name, tp) rest_m ->
-              do rest <- rest_m
-                 tp_trans <- translateTerm tp
-                 return (Rocq.App (Rocq.Var "RecordTypeCons")
-                         [Rocq.StringLit (Text.unpack name), tp_trans, rest]))
-      (return (Rocq.Var "RecordTypeNil"))
-      (sortOn fst fs)
-
-    -- The translation of a record value {fld1 = x1, ..., fldn = xn} is
-    -- RecordCons fld1 x1 (... (RecordCons fldn xn RecordNil) ...). Note that
-    -- SAW core equates record values up to reordering, so we sort our record
-    -- values by field name to canonicalize them.
-    RecordValue fs ->
-      foldr (\(name, trm) rest_m ->
-              do rest <- rest_m
-                 trm_trans <- translateTerm trm
-                 return (Rocq.App (Rocq.Var "RecordCons")
-                         [Rocq.StringLit (Text.unpack name), trm_trans, rest]))
-      (return (Rocq.Var "RecordNil"))
-      (sortOn fst fs)
-
-    RecordProj r f -> do
-      r_trans <- translateTerm r
-      return (Rocq.App (Rocq.Var "RecordProj") [r_trans, Rocq.StringLit (Text.unpack f)])
 
 -- | Recognizes an @App (App "Cryptol.seq" n) x@ and returns @(n, x)@.
 asSeq :: Recognizer Term (Term, Term)

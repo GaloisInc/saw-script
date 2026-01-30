@@ -22,7 +22,6 @@ import Control.Exception (throw)
 
 import Data.Text (Text)
 import Data.Map (Map)
-import qualified Data.Map as Map
 
 import qualified Text.URI as URI
 
@@ -144,7 +143,7 @@ reduceSelectors t =
       case R.asRecordValue (reduceSelectors t1) of
         Nothing -> t
         Just tm ->
-          case Map.lookup fname tm of
+          case lookup fname tm of
             Nothing -> t
             Just t' -> t'
     _ -> t

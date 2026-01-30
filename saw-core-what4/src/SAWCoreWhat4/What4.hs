@@ -960,14 +960,14 @@ function.  If we need more than one value of a type, then we return an
 *array* of values, and the actual results of the original function are
 obtained by selecting elements of this array.
 
-For example, consider a function `f: [16] -> ([4][8],Bool)`. 
+For example, consider a function `f: [16] -> ([4][8],Bool)`.
 A call `f x` will be translated like this:
 
   f_bv8:  [16] -> Array [2] [8]   // Uninterpreted
   f_bool: [16] -> Bool            // Uninterpreted
   w8s   = f_bv8 x                 // This has some auto-generated name
   bools = f_bool x                // This has some auto-generated name
-  
+
 Value for `f x`:
   ([ w8s ! 0, w8s ! 1, w8s ! 2, w8s ! 3 ], bools)
 -}
@@ -1056,7 +1056,7 @@ countUninterpreted ::
   Natural -> MapF BaseTypeRepr UnintCount -> TValue (What4 sym) -> MapF BaseTypeRepr UnintCount
 countUninterpreted scale count ty =
   case ty of
-    VPiType {}      -> count 
+    VPiType {}      -> count
     VBoolType       -> add BaseBoolRepr
     VIntType        -> add BaseIntegerRepr
     VIntModType {}  -> add BaseIntegerRepr
@@ -1066,7 +1066,7 @@ countUninterpreted scale count ty =
         _                      -> count
 
     VVecType n et -> if n == 0 then count else countUninterpreted (n * scale) count et
-      
+
     VArrayType ity ety
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
@@ -1076,8 +1076,9 @@ countUninterpreted scale count ty =
 
     VPairType ty1 ty2 -> countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
-    VRecordType elem_tps ->
-      foldl (\ct (_,t) -> countUninterpreted scale ct t) count elem_tps
+    VEmptyRecordType -> count
+    VRecordType _f ty1 ty2 ->
+      countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
     _ -> count
   where
@@ -1086,7 +1087,7 @@ countUninterpreted scale count ty =
     MapF.insertWith
       (\(UnintCount x) (UnintCount y) -> UnintCount (x + y))
       bt (UnintCount scale) count
-    
+
 -- Note that this doesn't really use IO, except for the `fail`.
 parseUninterpreted' ::
   forall sym.
@@ -1136,11 +1137,12 @@ parseUninterpreted' sym ref app ty =
             x2 <- parseUninterpreted' sym ref app ty2
             return (VPair (ready x1) (ready x2))
 
-    VRecordType elem_tps
-      -> (VRecordValue <$>
-          mapM (\(f,tp) ->
-                 (f,) <$> ready <$>
-                 parseUninterpreted' sym ref app tp) elem_tps)
+    VEmptyRecordType
+      -> pure VEmptyRecord
+    VRecordType fname ty1 ty2
+      -> do x1 <- parseUninterpreted' sym ref app ty1
+            x2 <- parseUninterpreted' sym ref app ty2
+            pure (VRecordValue fname (ready x1) x2)
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
   where
@@ -1150,8 +1152,8 @@ parseUninterpreted' sym ref app ty =
        case MapF.lookup tyr mp of
          Just (Arr (x : xs)) -> put (MapF.insert tyr (Arr xs) mp) >> pure x
          _ -> panic "mkUninterpreted" ["Not enough uninterpreted results"]
-           
-  
+
+
 
 -- | A value of type @UnintApp f@ represents an uninterpreted function
 -- with the given 'String' name, applied to a list of argument values
@@ -1195,7 +1197,10 @@ applyUnintApp sym app0 v =
     VPair x y                 -> do app1 <- applyUnintApp sym app0 =<< force x
                                     app2 <- applyUnintApp sym app1 =<< force y
                                     return app2
-    VRecordValue elems        -> foldM (applyUnintApp sym) app0 =<< traverse (force . snd) elems
+    VEmptyRecord              -> pure app0
+    VRecordValue _ x y        -> do app1 <- applyUnintApp sym app0 =<< force x
+                                    app2 <- applyUnintApp sym app1 y
+                                    pure app2
     VVector xv                -> foldM (applyUnintApp sym) app0 =<< traverse force xv
     VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
     VInt si                   -> return (extendUnintApp app0 si BaseIntegerRepr)
@@ -1365,31 +1370,8 @@ argTypes v =
 --
 -- Convert a saw-core type expression to a FirstOrder type expression
 --
-vAsFirstOrderType :: forall sym. IsSymExprBuilder sym => TValue (What4 sym) -> Maybe FirstOrderType
-vAsFirstOrderType v =
-  case v of
-    VBoolType
-      -> return FOTBit
-    VIntType
-      -> return FOTInt
-    VIntModType n
-      -> return (FOTIntMod n)
-    VVecType n v2
-      -> FOTVec n <$> vAsFirstOrderType v2
-    VArrayType iv ev
-      -> FOTArray <$> vAsFirstOrderType iv <*> vAsFirstOrderType ev
-    VUnitType
-      -> return (FOTTuple [])
-    VPairType v1 v2
-      -> do t1 <- vAsFirstOrderType v1
-            t2 <- vAsFirstOrderType v2
-            case t2 of
-              FOTTuple ts -> return (FOTTuple (t1 : ts))
-              _ -> return (FOTTuple [t1, t2])
-    VRecordType tps
-      -> (FOTRec <$> Map.fromList <$>
-          mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
-    _ -> Nothing
+vAsFirstOrderType :: IsSymExprBuilder sym => TValue (What4 sym) -> Maybe FirstOrderType
+vAsFirstOrderType v = asFirstOrderTypeTValue v
 
 valueAsBaseType :: IsSymExprBuilder sym => TValue (What4 sym) -> Maybe (Some W.BaseTypeRepr)
 valueAsBaseType v = fotToBaseType =<< vAsFirstOrderType v
@@ -1612,7 +1594,9 @@ rebuildTerm sym st sc tv sv =
       chokeOn "arrays (VArray)"
     VString s ->
       scString sc s
-    VRecordValue _ ->
+    VEmptyRecord ->
+      chokeOn "records (VEmptyRecord)"
+    VRecordValue {} ->
       chokeOn "records (VRecordValue)"
     VExtra _ ->
       chokeOn "VExtra"
@@ -1818,6 +1802,15 @@ parseUninterpretedSAW sym st sc ref trm app ty =
             x2 <- parseUninterpretedSAW sym st sc ref trm2 (suffixUnintApp "_R" app) ty2
             return (VPair (ready x1) (ready x2))
 
+    VEmptyRecordType
+      -> pure VEmptyRecord
+    VRecordType fname ty1 ty2
+      -> do let trm1 = ArgTermRecordSelect trm fname
+            let suffix = "_" ++ Text.unpack fname
+            x1 <- parseUninterpretedSAW sym st sc ref trm1 (suffixUnintApp suffix app) ty1
+            x2 <- parseUninterpretedSAW sym st sc ref trm app ty2
+            pure (VRecordValue fname (ready x1) x2)
+
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
 
 mkUninterpretedSAW ::
@@ -1848,7 +1841,9 @@ data ArgTerm
   | ArgTermVector Term [ArgTerm] -- ^ element type, elements
   | ArgTermUnit
   | ArgTermPair ArgTerm ArgTerm
-  | ArgTermRecord [(FieldName, ArgTerm)]
+  | ArgTermEmpty
+  | ArgTermRecord FieldName ArgTerm ArgTerm
+  | ArgTermRecordSelect ArgTerm FieldName
   | ArgTermConst Term
   | ArgTermApply ArgTerm ArgTerm
   | ArgTermAt Natural Term ArgTerm Natural
@@ -1899,11 +1894,21 @@ reconstructArgTerm atrm sc ts =
              (x2, ts2) <- parse at2 ts1
              x <- scPairValue sc x1 x2
              return (x, ts2)
-        ArgTermRecord flds ->
-          do let (tags, ats) = unzip flds
-             (xs, ts1) <- parseList ats ts0
-             x <- scRecord sc (Map.fromList (zip tags xs))
-             return (x, ts1)
+        ArgTermEmpty ->
+          do x <- scRecordValue sc []
+             pure (x, ts0)
+        ArgTermRecord fname at1 at2 ->
+          do s <- scString sc fname
+             (x1, ts1) <- parse at1 ts0
+             (x2, ts2) <- parse at2 ts1
+             ty1 <- scTypeOf sc x1
+             ty2 <- scTypeOf sc x2
+             x <- scGlobalApply sc "Prelude.RecordValue" [s, ty1, ty2, x1, x2]
+             pure (x, ts2)
+        ArgTermRecordSelect at1 fname ->
+          do (x1, ts1) <- parse at1 ts0
+             x <- scRecordSelect sc x1 fname
+             pure (x, ts1)
         ArgTermConst x ->
           do return (x, ts0)
         ArgTermApply at1 at2 ->
@@ -1963,11 +1968,11 @@ mkArgTerm sc ty val =
          x2 <- mkArgTerm sc ty2 =<< force v2
          return (ArgTermPair x1 x2)
 
-    (VRecordType tys, VRecordValue flds) | map fst tys == map fst flds ->
-      do let tags = map fst tys
-         vs <- traverse (force . snd) flds
-         xs <- sequence [ mkArgTerm sc t v | (t, v) <- zip (map snd tys) vs ]
-         return (ArgTermRecord (zip tags xs))
+    (VEmptyRecordType, VEmptyRecord) -> pure ArgTermEmpty
+    (VRecordType fname ty1 ty2, VRecordValue fname' v1 v2) | fname == fname' ->
+      do x1 <- mkArgTerm sc ty1 =<< force v1
+         x2 <- mkArgTerm sc ty2 v2
+         pure (ArgTermRecord fname x1 x2)
 
     (_, VCtorApp i _ ps vv) ->
       do mm <- scGetModuleMap sc
@@ -2009,9 +2014,12 @@ termOfTValue sc val =
       -> do a' <- termOfTValue sc a
             b' <- termOfTValue sc b
             scPairType sc a' b'
-    VRecordType flds
-      -> do flds' <- traverse (traverse (termOfTValue sc)) flds
-            scRecordType sc flds'
+    VEmptyRecordType -> scRecordType sc []
+    VRecordType fname a b
+      -> do fname' <- scString sc fname
+            a' <- termOfTValue sc a
+            b' <- termOfTValue sc b
+            scGlobalApply sc "Prelude.RecordType" [fname', a', b']
     _ -> fail $ "termOfTValue: " ++ show val
 
 termOfSValue :: SharedContext -> SValue sym -> IO Term

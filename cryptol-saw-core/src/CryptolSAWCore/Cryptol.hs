@@ -43,7 +43,6 @@ import Control.Monad (foldM, forM, zipWithM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
-import Data.List (elemIndex)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromMaybe)
 import qualified Data.IntTrie as IntTrie
@@ -73,7 +72,7 @@ import qualified Cryptol.ModuleSystem.Name as C
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..)
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
-  , identText, interactiveName
+  , identText, interactiveName, mkIdent
   , ModPath(..), modPathSplit, ogModule, ogFromParam, Namespace(NSValue)
   , modNameChunksText
   )
@@ -286,7 +285,8 @@ importType sc env ty =
               ]
     C.TUser _ _ t  -> go t -- look through type synonyms
     C.TRec fm ->
-      importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
+      do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields fm)
+         scRecordType sc =<< traverse (traverse go) fields
 
     C.TNominal nt ts ->
       do let s = C.listSubst (zip (map C.TVBound (C.ntParams nt)) ts)
@@ -412,9 +412,6 @@ importPropsType sc env (prop : props) ty
 nameToLocalName :: C.Name -> LocalName
 nameToLocalName = C.identText . C.nameIdent
 
-nameToFieldName :: C.Name -> FieldName
-nameToFieldName = C.identText . C.nameIdent
-
 tparamToLocalName :: C.TParam -> LocalName
 tparamToLocalName tp =
   maybe (Text.pack ("u" ++ show (C.tpUnique tp)))
@@ -494,7 +491,9 @@ provePropRec sc env prop0 prop =
                 scTuple sc ps
         -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
         (C.pIsZero -> Just (C.tIsRec -> Just fm))
-          -> do provePropRec sc env prop0 (C.pZero (C.tTuple (map snd (C.canonicalFields fm))))
+          -> do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields fm)
+                fields' <- traverse (traverse (provePropRec sc env prop0 . C.pZero)) fields
+                scRecordValue sc fields'
 
         -- instance Logic Bit
         (C.pIsLogic -> Just (C.tIsBit -> True))
@@ -529,7 +528,7 @@ provePropRec sc env prop0 prop =
                 scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
         -- instance (Logic a, Logic b, ...) => instance Logic { x : a, y : b, ... }
         (C.pIsLogic -> Just (C.tIsRec -> Just fm))
-          -> do provePropRec sc env prop0 (C.pLogic (C.tTuple (map snd (C.canonicalFields fm))))
+          -> doRecord C.pLogic "Cryptol.PLogicEmpty" "Cryptol.PLogicRecord" fm
 
         -- instance Ring Integer
         (C.pIsRing -> Just (C.tIsInteger -> True))
@@ -576,7 +575,7 @@ provePropRec sc env prop0 prop =
                 scGlobalApply sc "Cryptol.PRingPair" [a, b, pa, pb]
         -- instance (Ring a, Ring b, ...) => instance Ring { x : a, y : b, ... }
         (C.pIsRing -> Just (C.tIsRec -> Just fm))
-          -> do provePropRec sc env prop0 (C.pRing (C.tTuple (map snd (C.canonicalFields fm))))
+          -> doRecord C.pRing "Cryptol.PRingEmpty" "Cryptol.PRingRecord" fm
 
         -- instance Integral Integer
         (C.pIsIntegral -> Just (C.tIsInteger -> True))
@@ -650,7 +649,7 @@ provePropRec sc env prop0 prop =
                 scGlobalApply sc "Cryptol.PEqPair" [a, b, pa, pb]
         -- instance (Eq a, Eq b, ...) => instance Eq { x : a, y : b, ... }
         (C.pIsEq -> Just (C.tIsRec -> Just fm))
-          -> do provePropRec sc env prop0 (C.pEq (C.tTuple (map snd (C.canonicalFields fm))))
+          -> doRecord C.pEq "Cryptol.PEqEmpty" "Cryptol.PEqRecord" fm
 
         -- instance Cmp Bit
         (C.pIsCmp -> Just (C.tIsBit -> True))
@@ -690,7 +689,7 @@ provePropRec sc env prop0 prop =
                 scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
         -- instance (Cmp a, Cmp b, ...) => instance Cmp { x : a, y : b, ... }
         (C.pIsCmp -> Just (C.tIsRec -> Just fm))
-          -> do provePropRec sc env prop0 (C.pCmp (C.tTuple (map snd (C.canonicalFields fm))))
+          -> doRecord C.pCmp "Cryptol.PCmpEmpty" "Cryptol.PCmpRecord" fm
 
         -- instance (fin n) => SignedCmp [n]
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
@@ -716,7 +715,7 @@ provePropRec sc env prop0 prop =
                 scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
         -- instance (SignedCmp a, SignedCmp b, ...) => instance SignedCmp { x : a, y : b, ... }
         (C.pIsSignedCmp -> Just (C.tIsRec -> Just fm))
-          -> do provePropRec sc env prop0 (C.pSignedCmp (C.tTuple (map snd (C.canonicalFields fm))))
+          -> doRecord C.pSignedCmp "Cryptol.PSignedCmpEmpty" "Cryptol.PSignedCmpRecord" fm
 
         -- instance Literal val Bit
         (C.pIsLiteral -> Just (_, C.tIsBit -> True))
@@ -777,6 +776,24 @@ provePropRec sc env prop0 prop =
                     "Available propositions in the environment:"
                  ] ++ env'
             panic "proveProp" message
+  where
+    doRecord :: (C.Type -> C.Type) -> Ident -> Ident -> C.RecordMap C.Ident C.Type -> IO Term
+    doRecord p nil cons fm = snd <$> go (C.canonicalFields fm)
+      where
+        go :: [(C.Ident, C.Type)] -> IO (Term, Term)
+        go [] =
+          do a <- scRecordType sc []
+             pa <- scGlobalDef sc nil
+             pure (a, pa)
+        go ((i, t) : ts) =
+          do s <- scString sc (C.identText i)
+             a <- importType sc env t
+             pa <- provePropRec sc env prop0 (p t)
+             (b, pb) <- go ts
+             c <- scGlobalApply sc "Prelude.RecordType" [s, a, b]
+             pc <- scGlobalApply sc cons [s, a, b, pa, pb]
+             pure (c, pc)
+
 
 importPrimitive :: SharedContext -> ImportPrimitiveOptions -> Env -> C.Name -> C.Schema -> IO Term
 importPrimitive sc primOpts env n sch
@@ -1046,8 +1063,9 @@ importExpr sc env expr =
          scTuple sc es'
 
     C.ERec fm ->
-      do es' <- traverse (importExpr sc env . snd) (C.canonicalFields fm)
-         scTuple sc es'
+      do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields fm)
+         fields' <- traverse (traverse (importExpr sc env)) fields
+         scRecordValue sc fields'
 
     C.ESel e sel ->
       -- Elimination for tuple/record/list
@@ -1063,33 +1081,7 @@ importExpr sc env expr =
                           ]
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
-             let t = fastTypeOf (envC env) e
-             case C.tNoUser t of
-               C.TRec fm ->
-                 do i <- the
-                      ("Expected field " <> Text.pack (show x) <> " in normal RecordSel")
-                      (elemIndex x (map fst (C.canonicalFields fm)))
-                    scTupleSelector sc e' (i+1) (length (C.canonicalFields fm))
-               C.TNominal nt _args ->
-                 do let fs = case C.ntDef nt of
-                               C.Struct s -> C.ntFields s
-                               C.Enum {} ->
-                                 panic "importExpr" [
-                                     "Select from enum",
-                                     "Type: " <> Text.pack (pretty t)
-                                 ]
-                               C.Abstract ->
-                                 panic "importExpr" [
-                                     "Select from abstract type",
-                                     "Type: " <> Text.pack (pretty t)
-                                 ]
-                    i <- the ("Expected field " <> Text.pack (show x) <> " in Newtype Record Sel")
-                          (elemIndex x (map fst (C.canonicalFields fs)))
-                    scTupleSelector sc e' (i+1) (length (C.canonicalFields fs))
-               _ -> panic "importExpr" [
-                        "Invalid record selector: " <> Text.pack (pretty x),
-                        "Type: " <> Text.pack (pretty t)
-                    ]
+             scRecordSelect sc e' (C.identText x)
         C.ListSel i _maybeLen ->
           do let t = fastTypeOf (envC env) e
              (n, a) <-
@@ -1134,12 +1126,12 @@ importExpr sc env expr =
                         "Type: " <> Text.pack (pretty t1)
                     ]
                Just tm ->
-                 do i <- the ("Expected a field " <> Text.pack (show x) <> " RecordSel")
-                      (elemIndex x (map fst (C.canonicalFields tm)))
-                    ts' <- traverse (importType sc env . snd) (C.canonicalFields tm)
-                    let t2' = ts' !! i
+                 do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields tm)
+                    fields' <- traverse (traverse (importType sc env)) fields
+                    let x' = C.identText x
+                    t2' <- the "field name not found" (lookup x' fields')
                     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
-                    g <- tupleUpdate sc f i ts'
+                    g <- recordUpdate sc f x' fields'
                     scApply sc g e1'
         C.ListSel _i _maybeLen ->
           panic "importExpr" [
@@ -1287,7 +1279,8 @@ importExpr' sc env schema expr =
       do ty <- the "Expected a mono type in ERec" (C.isMono schema)
          tm <- the "Expected a record type in ERec" (C.tIsRec ty)
          es' <- sequence (zipWith go (map snd (C.canonicalFields tm)) (map snd (C.canonicalFields fm)))
-         scTuple sc es'
+         let fnames = map (C.identText . fst) (C.canonicalFields fm)
+         scRecordValue sc (zip fnames es')
 
     C.EIf e1 e2 e3 ->
       do ty  <- the "Expected a mono type in EIf" (C.isMono schema)
@@ -1383,6 +1376,19 @@ tupleUpdate sc f n (a : ts) =
      scGlobalApply sc "Cryptol.updSnd" [a, b, g]
 tupleUpdate _ _ _ [] = panic "tupleUpdate" ["empty tuple"]
 
+recordUpdate :: SharedContext -> Term -> FieldName -> [(FieldName, Term)] -> IO Term
+recordUpdate _ _ _ [] = panic "recordUpdate" ["field not found"]
+recordUpdate sc f fname ((fname', a) : fields)
+  | fname == fname' =
+    do s <- scString sc fname'
+       b <- scRecordType sc fields
+       scGlobalApply sc "Cryptol.updHeadRecord" [s, a, b, f]
+  | otherwise =
+    do s <- scString sc fname'
+       b <- scRecordType sc fields
+       g <- recordUpdate sc f fname fields
+       scGlobalApply sc "Cryptol.updTailRecord" [s, a, b, g]
+
 -- | Apply a substitution to a type *without* simplifying
 -- constraints like @Ring [n]a@ to @Ring a@. (This is in contrast to
 -- 'apSubst', which performs simplifications wherever possible.)
@@ -1470,10 +1476,16 @@ importName cnm =
               uri       = cryptolURI nmParts Nothing
            in pure (ImportedName uri aliases)
 
+-- | Extract all components from a tuple term of the specified size.
+scTupleComponents :: SharedContext -> Term -> Int -> IO [Term]
+scTupleComponents sc t n =
+  -- NOTE: scTupleSelector expects a 1-based index.
+  traverse (\i -> scTupleSelector sc t i n) [1..n]
+
 -- | Currently this imports declaration groups by inlining all the
--- definitions. (With subterm sharing, this is not as bad as it might
--- seem.) We might want to think about generating let or where
--- expressions instead.
+-- definitions.
+-- (With subterm sharing, this is not as bad as it might seem.)
+-- The drawback with this approach is that we lose the local names.
 --
 -- For Cryptol @foreign@ declarations, we import them as regular
 -- Cryptol expressions if a Cryptol implementation exists, and as an
@@ -1517,28 +1529,32 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                     }
 
     -- - A group of mutually-recursive declarations -
-    -- We handle this by "tupling up" all the declarations using a record and
-    -- taking the fixpoint at this record type.  The desired declarations are
-    -- then achieved by projecting the field names from this record.
+    -- We handle this by "tupling up" all the declaration bodies and
+    -- taking the fixpoint at this tuple type.
+    -- Note that this requires a higher-rank tuple type, because the
+    -- declarations may have polymorphic types that inhabit sort 1.
+    -- The desired declarations are then achieved by projecting the
+    -- components from this tuple.
     _ -> do
       -- build the environment for the declaration bodies
       let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
       -- the types of the declarations
-      tm <- traverse (importSchema sc env0 . C.dSignature) dm
+      ts <- traverse (importSchema sc env0 . C.dSignature) decls
 
-      -- the type of the recursive record
-      rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
+      -- the type of the recursive tuple
+      rect <- scTupleType sc ts
 
-      -- grab a reference to the outermost variable; this will be the record
+      -- grab a reference to the outermost variable; this will be the tuple
       -- in the body of the lambda we build later
-      v0 <- scFreshVariable sc "fixRecord" rect
+      v0 <- scFreshVariable sc "fixTuple" rect
 
-      -- build a list of projections from a record variable
-      vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
+      -- build a list of projections from the tuple variable
+      vs <- scTupleComponents sc v0 (length decls)
+      let vm = Map.fromList (zip (map C.dName decls) vs)
 
       -- the raw imported bodies of the declarations
-      em <- do
+      es <- do
             let
                 -- | In env2 the names of the recursively-defined
                 -- functions/values are bound to projections from the
@@ -1565,30 +1581,29 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                       , "   " <> Text.pack (pretty decl)
                       ]
 
-            traverse extractDeclExpr dm
+            traverse extractDeclExpr decls
 
-      -- the body of the recursive record
-      recv <- scRecord sc (Map.mapKeys nameToFieldName em)
+      -- the body of the recursive tuple
+      recv <- scTuple sc es
 
       -- build a lambda from the record body...
       f <- scAbstractTerms sc [v0] recv
 
       -- and take its fixpoint
       rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
+      rs <- scTupleComponents sc rhs (length decls)
 
       -- finally, build projections from the fixed record to shove
       -- into the environment if toplevel, then wrap each binding with
       -- a Constant constructor
-      let mkRhs d t =
-            do let s = nameToFieldName (C.dName d)
-               r <- scRecordSelect sc rhs s
-               case declOpts of
-                 TopLevelDeclGroup _ ->
-                   do nmi <- importName (C.dName d)
-                      r' <- scAscribe sc r t
-                      scDefineConstant sc nmi r'
-                 NestedDeclGroup -> return r
-      rhss <- sequence (Map.intersectionWith mkRhs dm tm)
+      let mkRhs d r t =
+            case declOpts of
+              TopLevelDeclGroup _ ->
+                do nmi <- importName (C.dName d)
+                   r' <- scAscribe sc r t
+                   scDefineConstant sc nmi r'
+              NestedDeclGroup -> pure r
+      rhss <- sequence (Map.fromList (zip (map C.dName decls) (zipWith3 mkRhs decls rs ts)))
 
      -- NOTE: The envE fields of env2 and the following Env
      -- are different.  The same names bound in env2 are now bound to
@@ -1724,9 +1739,19 @@ proveEq sc env t1 t2
              else if a1 == a2
                   then scGlobalApply sc "Cryptol.pair_cong2" [a1', b1', b2', bEq]
                   else scGlobalApply sc "Cryptol.pair_cong" [a1', a2', b1', b2', aEq, bEq]
-      (C.tIsRec -> Just tm1, C.tIsRec -> Just tm2)
-        | map fst (C.canonicalFields tm1) == map fst (C.canonicalFields tm2) ->
-          proveEq sc env (C.tTuple (map snd (C.canonicalFields tm1))) (C.tTuple (map snd (C.canonicalFields tm2)))
+      (tIsRecord -> Just (s1, a1, b1), tIsRecord -> Just (s2, a2, b2)) | s1 == s2 ->
+        do a1' <- importType sc env a1
+           a2' <- importType sc env a2
+           b1' <- importType sc env b1
+           b2' <- importType sc env b2
+           aEq <- proveEq sc env a1 a2
+           bEq <- proveEq sc env b1 b2
+           s <- scString sc (C.identText s1)
+           if b1 == b2
+             then scGlobalApply sc "Cryptol.record_cong1" [s, a1', a2', b1', aEq]
+             else if a1 == a2
+                  then scGlobalApply sc "Cryptol.record_cong2" [s, a1', b1', b2', bEq]
+                  else scGlobalApply sc "Cryptol.record_cong" [s, a1', a2', b1', b2', aEq, bEq]
 
       (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_),
        C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_)) ->
@@ -1778,6 +1803,15 @@ tIsPair t =
        [] -> Nothing
        [t1, t2] -> Just (t1, t2)
        t1 : ts' -> Just (t1, C.tTuple ts')
+
+-- | Deconstruct a Cryptol non-empty record type as a label, head type
+-- and tail type according to the SAWCore record type encoding.
+tIsRecord :: C.Type -> Maybe (C.Ident, C.Type, C.Type)
+tIsRecord t =
+  do tm <- C.tIsRec t
+     case C.canonicalFields tm of
+       [] -> Nothing
+       ((i, t1) : more) -> Just (i, t1, C.tRec (C.recordFromFields more))
 
 
 --------------------------------------------------------------------------------
@@ -1992,10 +2026,16 @@ scCryptolType sc t =
         | s == mkSort 0 -> return (Left C.KType)
         | otherwise     -> Nothing
 
+      SC.VEmptyRecordType -> Just (Right (C.tRec (C.recordFromFields [])))
+      SC.VRecordType s v1 v2 ->
+        do Right t1 <- asCryptolTypeValue v1
+           Right t2 <- asCryptolTypeValue v2
+           ts <- C.canonicalFields <$> C.tIsRec t2
+           Just (Right (C.tRec (C.recordFromFields ((C.mkIdent s, t1) : ts))))
+
       -- TODO?
       SC.VPiType _v1 (SC.VDependentPi _) -> Nothing
       SC.VStringType -> Nothing
-      SC.VRecordType{} -> Nothing
       SC.VTyTerm{} -> Nothing
 
 --------------------------------------------------------------------------------
@@ -2048,7 +2088,7 @@ exportValue ty v = case ty of
 
   -- records
   TV.TVRec fields ->
-      pure . V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v
+    pure . V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v
 
   -- functions
   TV.TVFun _aty _bty ->
@@ -2075,13 +2115,10 @@ exportTupleValue tys v =
 exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
   case (fields, v) of
-    ([]         , SC.VUnit    ) -> []
-    ([(n, t)]   , _           ) -> [(n, exportValue t v)]
-    ((n, t) : ts, SC.VPair x y) -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
-    (_, SC.VRecordValue (alistAllFields
-                         (map (C.identText . fst) fields) -> Just ths)) ->
-      zipWith (\(n,t) x -> (n, exportValue t (run x))) fields ths
-    _                              -> error $ "exportValue: expected record"
+    ([], SC.VEmptyRecord)       -> []
+    ((n, t) : ts, SC.VRecordValue f x y) | C.identText n == f
+                                -> (n, exportValue t (run x)) : exportRecordValue ts y
+    _                           -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
 

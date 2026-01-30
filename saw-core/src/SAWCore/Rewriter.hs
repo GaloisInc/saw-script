@@ -462,7 +462,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow convFlag ann) =
       do let mkRule (k, x) =
                do l <- scRecordSelect sc lhs k
                   return (mkRewriteRule ctxt l x shallow convFlag ann)
-         Just <$> traverse mkRule (Map.assocs m)
+         Just <$> traverse mkRule m
     (R.asApplyAll ->
      (R.asRecursorApp -> Just (r, crec),
       splitAt (recursorNumParams crec) ->
@@ -630,13 +630,25 @@ asPairRedex t =
        (x, y) <- R.asPairValue u
        return (if b then y else x)
 
+-- | Return @Just x@ if @t@ has the form
+-- @headRecord _ _ _ (RecordValue _ _ _ x _)@.
+-- Return @Just y@ if @t@ has the form
+-- @tailRecord _ _ _ (RecordValue _ _ _ _ y)@.
+-- Return @Nothing@ otherwise.
 asRecordRedex :: R.Recognizer Term Term
 asRecordRedex t =
-    do (x, i) <- R.asRecordSelector t
-       ts <- R.asRecordValue x
-       case Map.lookup i ts of
-         Just t' -> return t'
-         Nothing -> fail "Record field not found"
+  do let wild = const (Just ())
+     -- match t to pattern "t1 _ _ _ t2"
+     t1 R.:*: t2 <- (pure R.<@ wild R.<@ wild R.<@ wild R.<@> pure) t
+     -- match t2 to pattern "RecordValue _ _ _ x y"
+     let rv = R.isGlobalDef "Prelude.RecordValue"
+     x R.:*: y <- (rv R.@> wild R.@> wild R.@> wild R.@> pure R.<@> pure) t2
+     case R.isGlobalDef "Prelude.headRecord" t1 of
+       Just () -> Just x
+       Nothing ->
+         case R.isGlobalDef "Prelude.tailRecord" t1 of
+           Just () -> Just y
+           Nothing -> Nothing
 
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
@@ -771,9 +783,6 @@ rewriteSharedTerm sc ss t0 =
           PairLeft{}       -> traverse (rewriteAll convertibleFlag) ftf
           PairRight{}      -> traverse (rewriteAll convertibleFlag) ftf
           Recursor{}       -> return ftf
-          RecordType{}     -> traverse (rewriteAll convertibleFlag) ftf
-          RecordValue{}    -> traverse (rewriteAll convertibleFlag) ftf
-          RecordProj{}     -> traverse (rewriteAll convertibleFlag) ftf
           Sort{}           -> return ftf
           ArrayValue t es  -> ArrayValue t <$> traverse (rewriteAll convertibleFlag) es -- specifically NOT rewriting type, only elts
           StringLit{}      -> return ftf
