@@ -1,12 +1,12 @@
 Loading file "test_cryptol_module_sha512.saw"
-Malformed term: let { x@1 = Cryptol.TCNum 0
-      x@2 = Cryptol.TCNum 1
-      x@3 = Cryptol.TCNum 8
-      x@4 = Cryptol.TCNum 64
-      x@5 = Cryptol.seq x@4 Prelude.Bool
-      x@6 = Cryptol.TCNum 80
-      x@7 = Cryptol.TCNum 81
-      x@8 = Cryptol.seq x@7 x@5
+Malformed term: let { x@1 = Cryptol.TCNum 0;
+      x@2 = Cryptol.TCNum 1;
+      x@3 = Cryptol.TCNum 8;
+      x@4 = Cryptol.TCNum 64;
+      x@5 = Cryptol.seq x@4 Prelude.Bool;
+      x@6 = Cryptol.TCNum 80;
+      x@7 = Cryptol.TCNum 81;
+      x@8 = Cryptol.seq x@7 x@5;
       x@9 = #{T1 : Cryptol.seq x@6 x@5
       ,T2 : x@8
       ,as : x@8
@@ -16,25 +16,25 @@ Malformed term: let { x@1 = Cryptol.TCNum 0
       ,es : x@8
       ,fs : x@8
       ,gs : x@8
-      ,hs : x@8}
-      x@10 = x@5 * x@5
-      x@11 = x@5 * x@10
-      x@12 = Cryptol.tcMin x@7 x@6
-      x@13 = x@5 * x@11
-      x@14 = Cryptol.tcMin x@7 x@12
-      x@15 = x@5 * x@13
-      x@16 = Cryptol.tcMin x@7 x@14
-      x@17 = Cryptol.PRingSeqBool x@4
+      ,hs : x@8};
+      x@10 = x@5 * x@5;
+      x@11 = x@5 * x@10;
+      x@12 = Cryptol.tcMin x@7 x@6;
+      x@13 = x@5 * x@11;
+      x@14 = Cryptol.tcMin x@7 x@12;
+      x@15 = x@5 * x@13;
+      x@16 = Cryptol.tcMin x@7 x@14;
+      x@17 = Cryptol.PRingSeqBool x@4;
     }
  in Prelude.fix x@9
       (\(fixRecord : x@9) ->
-         let { x@18 = fixRecord.T1
-               x@19 = fixRecord.gs
-               x@20 = fixRecord.fs
-               x@21 = fixRecord.es
-               x@22 = fixRecord.cs
-               x@23 = fixRecord.bs
-               x@24 = fixRecord.as
+         let { x@18 = fixRecord.T1;
+               x@19 = fixRecord.gs;
+               x@20 = fixRecord.fs;
+               x@21 = fixRecord.es;
+               x@22 = fixRecord.cs;
+               x@23 = fixRecord.bs;
+               x@24 = fixRecord.as;
              }
           in {T1 =
            Cryptol.seqMap (x@5 * x@15) x@5 (Cryptol.tcMin x@7 x@16)
