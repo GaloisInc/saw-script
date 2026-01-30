@@ -1,0 +1,47 @@
+{
+  "modules": {
+    "eq": {
+      "ports": {
+        "A": {
+          "direction": "input",
+          "bits": [ 2, 3 ]
+        },
+        "B": {
+          "direction": "input",
+          "bits": [ 4, 5 ]
+        },
+        "Y": {
+          "direction": "output",
+          "bits": [ 6 ]
+        }
+      },
+      "cells": {
+        "$eq": {
+          "type": "$eq",
+          "parameters": {
+            "A_SIGNED": "0",
+            "A_WIDTH": "10",
+            "B_SIGNED": "0",
+            "B_WIDTH": "10",
+            "Y_WIDTH": "1"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 2, 3 ],
+            "B": [ 4, 5 ],
+            "Y": [ 6 ]
+          }
+        }
+      },
+      "netnames": {
+        "myoutput": {
+          "bits": [ 6 ]
+        }
+      }
+    }
+  }
+}

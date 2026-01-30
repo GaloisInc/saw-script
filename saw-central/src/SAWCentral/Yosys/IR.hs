@@ -241,7 +241,7 @@ asUserType cellType =
 
 -- | A cell within an HDL module.
 data Cell bs = Cell
-  { _cellHideName :: Bool -- ^ Whether the cell's name is human-readable
+  { _cellHideName :: Bool -- ^ Whether the cell's name is human-readable (default: False)
   , _cellType :: CellType -- ^ The cell type
     -- NB: Yosys's documentation for write_json doesn't impose any restrictions
     -- on what type parameter values may take on, so we opt to be as permissive
@@ -249,7 +249,7 @@ data Cell bs = Cell
     -- be strings, but they can also be numbers on occasion (e.g., if you call
     -- write_json using the -compat-int flag).
   , _cellParameters :: Map Text Aeson.Value -- ^ Metadata parameters
-  , _cellAttributes :: Aeson.Value -- currently unused
+  , _cellAttributes :: Maybe Aeson.Value -- currently unused
   , _cellPortDirections :: Map Text Direction -- ^ Direction for each cell connection
   , _cellConnections :: Map Text bs -- ^ Bitrep for each cell connection
   } deriving (Show, Eq, Ord, Functor)
@@ -258,12 +258,10 @@ makeLenses ''Cell
 
 instance Aeson.FromJSON (Cell [Bitrep]) where
   parseJSON = Aeson.withObject "cell" $ \o -> do
-    _cellHideName <- o Aeson..:? "hide_name" >>= \case
-      Just (Aeson.Number 1) -> pure True
-      _ -> pure False
+    _cellHideName <- Maybe.maybe False (/= (0::Int)) <$> o Aeson..:? "hide_name"
     _cellType <- o Aeson..: "type"
     _cellParameters <- o Aeson..: "parameters"
-    _cellAttributes <- o Aeson..: "attributes"
+    _cellAttributes <- o Aeson..:? "attributes"
     _cellPortDirections <- o Aeson..: "port_directions"
     _cellConnections <- o Aeson..: "connections"
     pure Cell{..}
@@ -271,9 +269,9 @@ instance Aeson.FromJSON (Cell [Bitrep]) where
 -- | A description of a named internal signal within a module.
 data Netname =
   Netname
-  { _netnameHideName :: Bool
+  { _netnameHideName :: Bool -- ^ Whether the net's name is human-readable (default: False)
   , _netnameBits :: [Bitrep]
-  , _netnameAttributes :: Aeson.Value -- currently unused
+  , _netnameAttributes :: Maybe Aeson.Value -- currently unused
   } deriving (Show, Eq, Ord)
 
 makeLenses ''Netname
@@ -281,14 +279,14 @@ makeLenses ''Netname
 instance Aeson.FromJSON Netname where
   parseJSON =
     Aeson.withObject "netname" $ \o ->
-    do _netnameHideName <- (/= (0::Int)) <$> o Aeson..: "hide_name"
+    do _netnameHideName <- Maybe.maybe False (/= (0::Int)) <$> o Aeson..:? "hide_name"
        _netnameBits <- o Aeson..: "bits"
-       _netnameAttributes <- o Aeson..: "attributes"
+       _netnameAttributes <- o Aeson..:? "attributes"
        pure Netname{..}
 
 -- | A single HDL module.
 data Module = Module
-  { _moduleAttributes :: Aeson.Value -- currently unused
+  { _moduleAttributes :: Maybe Aeson.Value -- currently unused
   , _modulePorts :: Map Text Port
   , _moduleCells :: Map Text (Cell [Bitrep])
   , _moduleNetnames :: Map Text Netname
@@ -298,10 +296,10 @@ makeLenses ''Module
 
 instance Aeson.FromJSON Module where
   parseJSON = Aeson.withObject "module" $ \o -> do
-    _moduleAttributes <- o Aeson..: "attributes"
-    _modulePorts <- o Aeson..: "ports"
-    _moduleCells <- o Aeson..: "cells"
-    _moduleNetnames <- o Aeson..: "netnames"
+    _moduleAttributes <- o Aeson..:? "attributes"
+    _modulePorts <- Maybe.fromMaybe mempty <$> o Aeson..:? "ports"
+    _moduleCells <- Maybe.fromMaybe mempty <$> o Aeson..:? "cells"
+    _moduleNetnames <- Maybe.fromMaybe mempty <$> o Aeson..:? "netnames"
     pure Module{..}
 
 -- | A collection of multiple HDL modules (possibly with dependencies on each other).
@@ -314,8 +312,8 @@ makeLenses ''YosysIR
 
 instance Aeson.FromJSON YosysIR where
   parseJSON = Aeson.withObject "yosys" $ \o -> do
-    _yosysCreator <- o Aeson..: "creator"
-    _yosysModules <- o Aeson..: "modules"
+    _yosysCreator <- Maybe.fromMaybe mempty <$> o Aeson..:? "creator"
+    _yosysModules <- Maybe.fromMaybe mempty <$> o Aeson..:? "modules"
     pure YosysIR{..}
 
 -- | Read a collection of HDL modules from a file produced by Yosys' write_json command.

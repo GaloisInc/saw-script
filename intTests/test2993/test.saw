@@ -1,0 +1,8 @@
+// Tests that the Yosys JSON parser allows missing or empty fields. These JSON
+// files are all correctly parsed by Yosys itself, but note that they were all
+// handwritten, not output actually generatd by Yosys.
+enable_experimental;
+yosys_import "test1.json";
+yosys_import "test2.json";
+yosys_import "test3.json";
+yosys_import "test4.json";
