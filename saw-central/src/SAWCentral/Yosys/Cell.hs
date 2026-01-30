@@ -401,7 +401,7 @@ primCellToMap sc c args =
     outputBit res =
       do bool <- SC.scBoolType sc
          vres <- SC.scSingle sc bool res
-         pure (Just (Map.singleton "Y" vres))
+         output $ CellTerm vres 1 False
 
     -- convert input to big endian
     bvUnaryOp :: (CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))
@@ -417,7 +417,7 @@ primCellToMap sc c args =
          tb <- extTrunc sc w =<< input "B"
          res <- f ta tb
          output res
-    -- extend inputs to max input width, output is a single bit
+    -- extend inputs to max input width, output is a single bit extended to the output width
     bvBinaryCmp :: (CellTerm -> CellTerm -> IO SC.Term) -> IO (Maybe (Map Text SC.Term))
     bvBinaryCmp f =
       do ta <- input "A"
