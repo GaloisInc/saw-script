@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       name: ${{ steps.config.outputs.name }}
-      version: ${{ steps.config.outputs.version }}
+      saw-version: ${{ steps.config.outputs.saw-version }}
       crux-version: ${{ steps.config.outputs.crux-version }}
       event-tag: ${{ steps.config.outputs.tag }}
       event-schedule: ${{ steps.config.outputs.schedule }}
@@ -67,13 +67,13 @@ jobs:
           RELEASE: ${{ startsWith(github.event.ref, 'refs/heads/release-') }}
         run: |
           set -x
-          .github/ci.sh output name saw-$(.github/ci.sh ver)
-          .github/ci.sh output version $(.github/ci.sh ver)
+          .github/ci.sh output name saw-$(.github/ci.sh saw_ver)
+          .github/ci.sh output saw-version $(.github/ci.sh saw_ver)
           .github/ci.sh output crux-version $(.github/ci.sh crux_ver)
           .github/ci.sh output tag $EVENT_TAG
           .github/ci.sh output schedule $EVENT_SCHEDULE
           .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
-          .github/ci.sh output release $([[ "refs/heads/release-$(.github/ci.sh ver)" == "${{ github.event.ref }}" ]] && echo true || echo false)
+          .github/ci.sh output release $([[ "refs/heads/release-$(.github/ci.sh saw_ver)" == "${{ github.event.ref }}" ]] && echo true || echo false)
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
@@ -880,11 +880,11 @@ jobs:
           - file: saw/Dockerfile
             image: ghcr.io/galoisinc/saw
             cache: ghcr.io/galoisinc/cache-saw
-            image-tag: ${{ needs.config.outputs.version }}
+            image-tag: ${{ needs.config.outputs.saw-version }}
           - file: saw-remote-api/Dockerfile
             image: ghcr.io/galoisinc/saw-remote-api
             cache: ghcr.io/galoisinc/cache-saw-remote-api
-            image-tag: ${{ needs.config.outputs.version }}
+            image-tag: ${{ needs.config.outputs.saw-version }}
           - file: crux-mir-comp/Dockerfile
             image: ghcr.io/galoisinc/crux-mir-comp
             cache: ghcr.io/galoisinc/cache-crux-mir-comp
