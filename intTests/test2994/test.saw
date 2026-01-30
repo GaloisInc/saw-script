@@ -7,7 +7,7 @@ m <- yosys_import "test.json";
 let {{
 
   pad : Bit -> { Y : [4] }
-  pad b = { Y = [0, 0, 0, b] }
+  pad b = { Y = zero # [b] }
 
   reduce : (Bit -> Bit -> Bit) -> [2] -> Bit
   reduce f a = f (a @ 0) (a @ 1)
