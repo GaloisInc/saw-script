@@ -241,7 +241,7 @@ asUserType cellType =
 
 -- | A cell within an HDL module.
 data Cell bs = Cell
-  { _cellHideName :: Bool -- ^ Whether the cell's name is human-readable
+  { _cellHideName :: Bool -- ^ Whether the cell's name is human-readable (default: False)
   , _cellType :: CellType -- ^ The cell type
     -- NB: Yosys's documentation for write_json doesn't impose any restrictions
     -- on what type parameter values may take on, so we opt to be as permissive
@@ -258,9 +258,7 @@ makeLenses ''Cell
 
 instance Aeson.FromJSON (Cell [Bitrep]) where
   parseJSON = Aeson.withObject "cell" $ \o -> do
-    _cellHideName <- o Aeson..:? "hide_name" >>= \case
-      Just (Aeson.Number 1) -> pure True
-      _ -> pure False
+    _cellHideName <- Maybe.maybe False (/= (0::Int)) <$> o Aeson..:? "hide_name"
     _cellType <- o Aeson..: "type"
     _cellParameters <- o Aeson..: "parameters"
     _cellAttributes <- o Aeson..:? "attributes"
@@ -271,7 +269,7 @@ instance Aeson.FromJSON (Cell [Bitrep]) where
 -- | A description of a named internal signal within a module.
 data Netname =
   Netname
-  { _netnameHideName :: Bool
+  { _netnameHideName :: Bool -- ^ Whether the net's name is human-readable (default: False)
   , _netnameBits :: [Bitrep]
   , _netnameAttributes :: Maybe Aeson.Value -- currently unused
   } deriving (Show, Eq, Ord)
