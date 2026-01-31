@@ -1,5 +1,7 @@
 # Revision history for saw-remote-api
 
+## next
+
 ## 1.5 -- 2026-01-31
 
 * Add a `SAW/MIR/find mangled ADT` command, which allows looking up MIR

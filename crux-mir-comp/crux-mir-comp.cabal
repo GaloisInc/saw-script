@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               crux-mir-comp
-version:            0.12
+version:            0.12.0.0.99
 author:             Joshua Gancher,
                     Rob Dockins,
                     Andrey Chudnov,
