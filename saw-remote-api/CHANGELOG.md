@@ -9,7 +9,7 @@
   expressive enough to look up particular ADTs (e.g., ADTs that use const
   generics).
 
-## 1.4 -- release date still TBD
+## 1.4 -- 2025-11-18
 
 * Add a `"mutable globals"` field to specification objects, which contains a
   list of strings representing the names of mutable global variables that
