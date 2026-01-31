@@ -1,6 +1,6 @@
 # Revision history for saw-remote-api
 
-## next -- TBA
+## 1.5 -- 2026-01-31
 
 * Add a `SAW/MIR/find mangled ADT` command, which allows looking up MIR
   ADTs by their full, mangled names. `SAW/MIR/find mangled ADT`'s use is

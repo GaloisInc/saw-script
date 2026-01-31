@@ -1,4 +1,4 @@
-# next -- TBA
+# 1.5 -- 2026-01-31
 
 * `mir_verify` now enforces correctness checks that match the existing
   behavior of `llvm_verify` and `jvm_verify`:
