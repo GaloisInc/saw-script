@@ -13,7 +13,7 @@ Literal equality postcondition
 Expected term: 
 zero::table
 Actual term:
-let { x@1 = seq (TCNum 8) Bool
+let { x@1 = seq (TCNum 8) Bool;
     }
  in ecArrayUpdate x@1 x@1 zero::table zero::k (bvNat 8 0)
 

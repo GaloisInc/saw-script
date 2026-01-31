@@ -82,7 +82,7 @@ import qualified Data.IntMap.Strict as IntMap
 
 import SAWSupport.Pretty (prettyNat, prettyTypeConstraint)
 import qualified SAWSupport.Pretty as PPS (
-    Style(..), Doc, MemoStyle(..), Opts(..), defaultOpts, render
+    Style(..), Doc, MemoStyle(..), Opts(..), defaultOpts, render, prettyLetBlock
  )
 
 import SAWCore.Panic (panic)
@@ -388,18 +388,13 @@ prettyAppList p f args = prettyParensPrec p PrecApp $ group $ hang 2 $ vsep (f :
 prettyLetBlock :: [(MemoVar, PPS.Doc)] -> PPS.Doc -> PPM PPS.Doc
 prettyLetBlock defs body =
   do
-    lets <- align . vcat <$> mapM ppEqn defs
-    pure $
-      vcat
-        [ "let" <+> lbrace <+> lets
-        , indent 4 rbrace
-        , " in" <+> body
-        ]
+    lets <- mapM ppEqn defs
+    pure $ PPS.prettyLetBlock lets body
   where
     ppEqn (var,d) =
       do
         mv <- prettyMemoVar var
-        pure $ mv <+> pretty '=' <+> d
+        pure $ (mv, d)
 
 
 -- | Pretty-print pairs as "(x, y)"

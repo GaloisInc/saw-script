@@ -71,6 +71,7 @@ data UTerm
   | Sort Pos Sort SortFlags
   | App UTerm UTerm
   | Lambda Pos UTermCtx UTerm
+  | Let Pos [(UTermVar, UTerm)] UTerm
   | Pi Pos UTermCtx UTerm
   | Recursor (PosPair Text) Sort
   | UnitValue Pos
@@ -120,6 +121,7 @@ instance Positioned UTerm where
       Name i               -> pos i
       Sort p _ _           -> p
       Lambda p _ _         -> p
+      Let p _ _            -> p
       App x _              -> pos x
       Pi p _ _             -> p
       Recursor i _         -> pos i
@@ -360,6 +362,9 @@ prettyPrecUTerm prec uterm =
       in PP.nest 2 (wrap prec 3 (foldl (</>) (prettyPrecUTerm 3 e) (map (prettyPrecUTerm 4) es)))
     Lambda _ ctx body ->
       PP.nest 1 (wrap prec 1 ("\\" PP.<+> prettyUTermCtx ctx PP.<+> "->" </> prettyPrecUTerm 1 body))
+    Let _ binds body -> PPS.prettyLetBlock
+      (map (\(var,def) -> (prettyUTermVar var, prettyPrecUTerm 1 def)) binds)
+      (prettyPrecUTerm 1 body)
     Pi _ ctx body ->
       wrap prec 1 (foldr (\a b -> a PP.<+> "->" </> b) (prettyPrecUTerm 1 body) (map prettyPiBinding ctx))
     Recursor x s -> PP.pretty (val x <> "#" <> ppRecursorSuffix s)
