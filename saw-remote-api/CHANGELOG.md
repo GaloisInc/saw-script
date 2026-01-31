@@ -1,6 +1,8 @@
 # Revision history for saw-remote-api
 
-## next -- TBA
+## next
+
+## 1.5 -- 2026-01-31
 
 * Add a `SAW/MIR/find mangled ADT` command, which allows looking up MIR
   ADTs by their full, mangled names. `SAW/MIR/find mangled ADT`'s use is
@@ -9,7 +11,7 @@
   expressive enough to look up particular ADTs (e.g., ADTs that use const
   generics).
 
-## 1.4 -- release date still TBD
+## 1.4 -- 2025-11-18
 
 * Add a `"mutable globals"` field to specification objects, which contains a
   list of strings representing the names of mutable global variables that
