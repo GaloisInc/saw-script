@@ -1,0 +1,225 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compositional Proofs &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Interactive Interpreter" href="interactive-interpreter.html" />
+    <link rel="prev" title="External SAT Solvers" href="external-sat-solvers.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">LLVM/Java Verification with SAW</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="example-find-first-set.html">Example: Find First Set</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using-smt-lib-solvers.html">Using SMT-Lib Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="external-sat-solvers.html">External SAT Solvers</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Compositional Proofs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#compositional-imperative-proofs">Compositional Imperative Proofs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-interpreter.html">Interactive Interpreter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="other-examples.html">Other Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../saw-user-manual/index.html">SAW User Manual</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">LLVM/Java Verification with SAW</a></li>
+      <li class="breadcrumb-item active">Compositional Proofs</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/llvm-java-verification-with-saw/compositional-proofs.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="compositional-proofs">
+<h1>Compositional Proofs<a class="headerlink" href="#compositional-proofs" title="Link to this heading"></a></h1>
+<p>The examples shown so far treat programs as monolithic entities. A
+Java method or C function, along with all of its callees, is
+translated into a single mathematical model. SAWScript also has
+support for more compositional proofs, as well as proofs about
+functions that use heap data structures.</p>
+<section id="compositional-imperative-proofs">
+<h2>Compositional Imperative Proofs<a class="headerlink" href="#compositional-imperative-proofs" title="Link to this heading"></a></h2>
+<p>As a simple example of compositional reasoning on imperative programs,
+consider the following Java code.</p>
+<div class="highlight-java notranslate"><div class="highlight"><pre><span></span><span class="kd">class</span> <span class="nc">Add</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="nf">dbl</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">add</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Here, the <code class="docutils literal notranslate"><span class="pre">add</span></code> function computes the sum of its arguments. The <code class="docutils literal notranslate"><span class="pre">dbl</span></code>
+function then calls <code class="docutils literal notranslate"><span class="pre">add</span></code> to double its argument. While it would be easy
+to prove that <code class="docutils literal notranslate"><span class="pre">dbl</span></code> doubles its argument by following the call to <code class="docutils literal notranslate"><span class="pre">add</span></code>,
+it’s also possible in SAWScript to prove something about <code class="docutils literal notranslate"><span class="pre">add</span></code> first,
+and then use the results of that proof in the proof of <code class="docutils literal notranslate"><span class="pre">dbl</span></code>, as in the
+following SAWScript code (<code class="docutils literal notranslate"><span class="pre">java_add.saw</span></code> on GitHub).</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">add_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">jvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">java_int</span><span class="p">;</span>
+<span class="w">    </span><span class="n">y</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">jvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="w"> </span><span class="n">java_int</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">jvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">jvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="nb">jvm_term</span><span class="w"> </span><span class="n">y</span><span class="p">];</span>
+<span class="w">    </span><span class="nb">jvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">jvm_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nf">y</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">dbl_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">jvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="n">java_int</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">jvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">jvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">    </span><span class="nb">jvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">jvm_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="n">cls</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">java_load_class</span><span class="w"> </span><span class="s2">&quot;Add&quot;</span><span class="p">;</span>
+<span class="n">ms</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">jvm_verify</span><span class="w"> </span><span class="n">cls</span><span class="w"> </span><span class="s2">&quot;add&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">add_spec</span><span class="w"> </span><span class="n">abc</span><span class="p">;</span>
+<span class="n">ms&#39;</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">jvm_verify</span><span class="w"> </span><span class="n">cls</span><span class="w"> </span><span class="s2">&quot;dbl&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">ms</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">dbl_spec</span><span class="w"> </span><span class="n">abc</span><span class="p">;</span>
+<span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Done.&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>This can be run as follows:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw<span class="w"> </span>-b<span class="w"> </span>&lt;path<span class="w"> </span>to<span class="w"> </span>directory<span class="w"> </span>where<span class="w"> </span>Java<span class="w"> </span>lives&gt;<span class="w"> </span>java_add.saw
+</pre></div>
+</div>
+<p>In this example, the definitions of <code class="docutils literal notranslate"><span class="pre">add_spec</span></code> and <code class="docutils literal notranslate"><span class="pre">dbl_spec</span></code> provide
+extra information about how to configure the symbolic simulator when
+analyzing Java code. In this case, the setup blocks provide explicit
+descriptions of the implicit configuration used by
+<code class="docutils literal notranslate"><span class="pre">jvm_extract</span></code> (used in the earlier Java FFS example and in the
+next section). The <code class="docutils literal notranslate"><span class="pre">jvm_fresh_var</span></code> commands instruct the simulator to
+create fresh symbolic inputs to correspond to the Java variables <code class="docutils literal notranslate"><span class="pre">x</span></code> and
+<code class="docutils literal notranslate"><span class="pre">y</span></code>. Then, the <code class="docutils literal notranslate"><span class="pre">jvm_return</span></code> commands indicate the expected return value
+of the each method, in terms of existing models (which can be written
+inline). Because Java methods can operate on references, as well, which
+do not exist in Cryptol, Cryptol expressions must be translated to JVM
+values with <code class="docutils literal notranslate"><span class="pre">jvm_term</span></code>.</p>
+<p>To make use of these setup blocks, the <code class="docutils literal notranslate"><span class="pre">jvm_verify</span></code> command analyzes
+the method corresponding to the class and method name provided, using
+the setup block passed in as a parameter. It then returns an object
+that describes the proof it has just performed. This object can be
+passed into later instances of <code class="docutils literal notranslate"><span class="pre">jvm_verify</span></code> to indicate that calls to
+the analyzed method do not need to be followed, and the previous proof
+about that method can be used instead of re-analyzing it.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="external-sat-solvers.html" class="btn btn-neutral float-left" title="External SAT Solvers" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="interactive-interpreter.html" class="btn btn-neutral float-right" title="Interactive Interpreter" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,399 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analyzing Hardware Circuits using Yosys &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Creating Symbolic Variables" href="creating-symbolic-variables.html" />
+    <link rel="prev" title="Loading Code" href="loading-code.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="loading-code.html">Loading Code</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Analyzing Hardware Circuits using Yosys</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#processing-vhdl-with-yosys">Processing VHDL With Yosys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example-ripple-carry-adder">Example: Ripple-Carry Adder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api-reference">API Reference</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html">Extraction to the Rocq theorem prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Analyzing Hardware Circuits using Yosys</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/analyzing-hardware-circuits-using-yosys.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="analyzing-hardware-circuits-using-yosys">
+<h1>Analyzing Hardware Circuits using Yosys<a class="headerlink" href="#analyzing-hardware-circuits-using-yosys" title="Link to this heading"></a></h1>
+<p>SAW has experimental support for analysis of hardware descriptions written in VHDL (<a class="reference external" href="https://github.com/ghdl/ghdl-yosys-plugin">via GHDL</a>) through an intermediate representation produced by <a class="reference external" href="https://yosyshq.net/yosys/">Yosys</a>.
+This generally follows the same conventions and idioms used in the rest of SAWScript.</p>
+<section id="processing-vhdl-with-yosys">
+<h2>Processing VHDL With Yosys<a class="headerlink" href="#processing-vhdl-with-yosys" title="Link to this heading"></a></h2>
+<p>Given a VHDL file <code class="docutils literal notranslate"><span class="pre">test.vhd</span></code> containing an entity <code class="docutils literal notranslate"><span class="pre">test</span></code>, one can generate an intermediate representation <code class="docutils literal notranslate"><span class="pre">test.json</span></code> suitable for loading into SAW:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ghdl<span class="w"> </span>-a<span class="w"> </span>test.vhd
+<span class="gp">$ </span>yosys
+<span class="go">...</span>
+<span class="go">Yosys 0.10+1 (git sha1 7a7df9a3b4, gcc 10.3.0 -fPIC -Os)</span>
+<span class="go">yosys&gt; ghdl test</span>
+
+<span class="go">1. Executing GHDL.</span>
+<span class="go">Importing module test.</span>
+
+<span class="go">yosys&gt; write_json test.json</span>
+
+<span class="go">2. Executing JSON backend.</span>
+</pre></div>
+</div>
+<p>It can sometimes be helpful to invoke additional Yosys passes between the <code class="docutils literal notranslate"><span class="pre">ghdl</span></code> and <code class="docutils literal notranslate"><span class="pre">write_json</span></code> commands.
+For example, at present SAW does not support the <code class="docutils literal notranslate"><span class="pre">$pmux</span></code> cell type.
+Yosys is able to convert <code class="docutils literal notranslate"><span class="pre">$pmux</span></code> cells into trees of <code class="docutils literal notranslate"><span class="pre">$mux</span></code> cells using the <code class="docutils literal notranslate"><span class="pre">pmuxtree</span></code> command.
+We expect there are many other situations where Yosys’ considerable library of commands is valuable for pre-processing.</p>
+</section>
+<section id="example-ripple-carry-adder">
+<h2>Example: Ripple-Carry Adder<a class="headerlink" href="#example-ripple-carry-adder" title="Link to this heading"></a></h2>
+<p>Consider three VHDL entities.
+First, a half-adder:</p>
+<div class="highlight-vhdl notranslate"><div class="highlight"><pre><span></span><span class="k">library</span><span class="w"> </span><span class="nn">ieee</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="nn">ieee.std_logic_1164.</span><span class="k">all</span><span class="p">;</span>
+
+<span class="k">entity</span><span class="w"> </span><span class="nc">half</span><span class="w"> </span><span class="k">is</span>
+<span class="w">  </span><span class="k">port</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">c</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic</span>
+<span class="w">  </span><span class="p">);</span>
+<span class="k">end</span><span class="w"> </span><span class="nc">half</span><span class="p">;</span>
+
+<span class="k">architecture</span><span class="w"> </span><span class="nc">halfarch</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nc">half</span><span class="w"> </span><span class="k">is</span>
+<span class="k">begin</span>
+<span class="w">  </span><span class="n">c</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">b</span><span class="p">;</span>
+<span class="w">  </span><span class="n">s</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="k">xor</span><span class="w"> </span><span class="n">b</span><span class="p">;</span>
+<span class="k">end</span><span class="w"> </span><span class="nc">halfarch</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Next, a one-bit adder built atop that half-adder:</p>
+<div class="highlight-vhdl notranslate"><div class="highlight"><pre><span></span><span class="k">library</span><span class="w"> </span><span class="nn">ieee</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="nn">ieee.std_logic_1164.</span><span class="k">all</span><span class="p">;</span>
+
+<span class="k">entity</span><span class="w"> </span><span class="nc">full</span><span class="w"> </span><span class="k">is</span>
+<span class="w">  </span><span class="k">port</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">cin</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">cout</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic</span>
+<span class="w">  </span><span class="p">);</span>
+<span class="k">end</span><span class="w"> </span><span class="nc">full</span><span class="p">;</span>
+
+<span class="k">architecture</span><span class="w"> </span><span class="nc">fullarch</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nc">full</span><span class="w"> </span><span class="k">is</span>
+<span class="w">  </span><span class="k">signal</span><span class="w"> </span><span class="n">half0c</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">  </span><span class="k">signal</span><span class="w"> </span><span class="n">half0s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">  </span><span class="k">signal</span><span class="w"> </span><span class="n">half1c</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="k">begin</span>
+<span class="w">  </span><span class="n">half0</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">entity</span><span class="w"> </span><span class="nc">work</span><span class="p">.</span><span class="n">half</span><span class="w"> </span><span class="k">port</span><span class="w"> </span><span class="k">map</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">b</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">half0c</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">half0s</span><span class="p">);</span>
+<span class="w">  </span><span class="n">half1</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">entity</span><span class="w"> </span><span class="nc">work</span><span class="p">.</span><span class="n">half</span><span class="w"> </span><span class="k">port</span><span class="w"> </span><span class="k">map</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">half0s</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">cin</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">half1c</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">s</span><span class="p">);</span>
+<span class="w">  </span><span class="n">cout</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">half0c</span><span class="w"> </span><span class="k">or</span><span class="w"> </span><span class="n">half1c</span><span class="p">;</span>
+<span class="k">end</span><span class="w"> </span><span class="nc">fullarch</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Finally, a four-bit adder:</p>
+<div class="highlight-vhdl notranslate"><div class="highlight"><pre><span></span><span class="k">library</span><span class="w"> </span><span class="nn">ieee</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="nn">ieee.std_logic_1164.</span><span class="k">all</span><span class="p">;</span>
+
+<span class="k">entity</span><span class="w"> </span><span class="nc">add4</span><span class="w"> </span><span class="k">is</span>
+<span class="w">  </span><span class="k">port</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic_vector</span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="k">downto</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+<span class="w">    </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic_vector</span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="k">downto</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+<span class="w">    </span><span class="n">res</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic_vector</span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="k">downto</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+<span class="w">  </span><span class="p">);</span>
+<span class="k">end</span><span class="w"> </span><span class="nc">add4</span><span class="p">;</span>
+
+<span class="k">architecture</span><span class="w"> </span><span class="nc">add4arch</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nc">add4</span><span class="w"> </span><span class="k">is</span>
+<span class="w">  </span><span class="k">signal</span><span class="w"> </span><span class="n">full0cout</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">  </span><span class="k">signal</span><span class="w"> </span><span class="n">full1cout</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">  </span><span class="k">signal</span><span class="w"> </span><span class="n">full2cout</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">  </span><span class="k">signal</span><span class="w"> </span><span class="n">ignore</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="k">begin</span>
+<span class="w">  </span><span class="n">full0</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">entity</span><span class="w"> </span><span class="nc">work</span><span class="p">.</span><span class="n">full</span><span class="w"> </span><span class="k">port</span><span class="w"> </span><span class="k">map</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">b</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span><span class="w"> </span><span class="n">cin</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="sc">&#39;0&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">cout</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">full0cout</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">res</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+<span class="w">  </span><span class="n">full1</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">entity</span><span class="w"> </span><span class="nc">work</span><span class="p">.</span><span class="n">full</span><span class="w"> </span><span class="k">port</span><span class="w"> </span><span class="k">map</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">b</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="n">cin</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">full0cout</span><span class="p">,</span><span class="w"> </span><span class="n">cout</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">full1cout</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">res</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span>
+<span class="w">  </span><span class="n">full2</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">entity</span><span class="w"> </span><span class="nc">work</span><span class="p">.</span><span class="n">full</span><span class="w"> </span><span class="k">port</span><span class="w"> </span><span class="k">map</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">b</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span><span class="w"> </span><span class="n">cin</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">full1cout</span><span class="p">,</span><span class="w"> </span><span class="n">cout</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">full2cout</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">res</span><span class="p">(</span><span class="mi">2</span><span class="p">));</span>
+<span class="w">  </span><span class="n">full3</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">entity</span><span class="w"> </span><span class="nc">work</span><span class="p">.</span><span class="n">full</span><span class="w"> </span><span class="k">port</span><span class="w"> </span><span class="k">map</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">a</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">b</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span><span class="w"> </span><span class="n">cin</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">full2cout</span><span class="p">,</span><span class="w"> </span><span class="n">cout</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ignore</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">res</span><span class="p">(</span><span class="mi">3</span><span class="p">));</span>
+<span class="k">end</span><span class="w"> </span><span class="nc">add4arch</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Using GHDL and Yosys, we can convert the VHDL source above into a format that SAW can import.
+If all of the code above is in a file <code class="docutils literal notranslate"><span class="pre">adder.vhd</span></code>, we can run the following commands:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ghdl<span class="w"> </span>-a<span class="w"> </span>adder.vhd
+<span class="gp">$ </span>yosys<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;ghdl add4; write_json adder.json&#39;</span>
+</pre></div>
+</div>
+<blockquote>
+<div><p><strong>Side Note:</strong> this assumes the ghdl plugin was properly installed, see https://github.com/ghdl/ghdl-yosys-plugin
+for installation details.</p>
+</div></blockquote>
+<p>The produced file <code class="docutils literal notranslate"><span class="pre">adder.json</span></code> can then be loaded into SAW with <code class="docutils literal notranslate"><span class="pre">yosys_import</span></code>.</p>
+<blockquote>
+<div><p><strong>Side Note:</strong> different versions of Yosys and GHDL may produce slightly different naming for the inner modules.
+TabbyCAD may produce different inner module names as well, so you would need to adjust the script below
+accordingly to account for different module names.</p>
+<p>The generated module names are not guaranteed to be valid Cryptol field names, so it is a good idea to sanity check
+your JSON file before loading, and at least removing parenthesis from the names with sed:
+<code class="docutils literal notranslate"><span class="pre">sed</span> <span class="pre">-i</span> <span class="pre">''</span> <span class="pre">'s/)//g'</span> <span class="pre">adder.json</span> <span class="pre">&amp;&amp;</span> <span class="pre">sed</span> <span class="pre">-i</span> <span class="pre">''</span> <span class="pre">'s/(//g'</span> <span class="pre">adder.json</span></code>
+This preprocessing is needed until <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/2841">#2841</a> is fixed.</p>
+</div></blockquote>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw
+<span class="go">...</span>
+<span class="go">sawscript&gt; enable_experimental</span>
+<span class="go">sawscript&gt; m &lt;- yosys_import &quot;adder.json&quot;</span>
+<span class="go">sawscript&gt; :type m</span>
+<span class="go">Term</span>
+<span class="go">sawscript&gt; print (type m)</span>
+<span class="go">[23:57:14.492] {add4 : {a : [4], b : [4]} -&gt; {res : [4]},</span>
+<span class="go"> full_Bfullarch : {a : [1], b : [1], cin : [1]} -&gt; {cout : [1], s : [1]},</span>
+<span class="go"> half_Bhalfarch : {a : [1], b : [1]} -&gt; {c : [1], s : [1]}}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">yosys_import</span></code> returns a <code class="docutils literal notranslate"><span class="pre">Term</span></code> with a Cryptol record type, where the fields correspond to each VHDL module.
+We can access the fields of this record like we would any Cryptol record, and call the functions within like any Cryptol function.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; print (type {{ m.add4 }})</span>
+<span class="go">[00:00:25.255] {a : [4], b : [4]} -&gt; {res : [4]}</span>
+<span class="go">sawscript&gt; print (eval_int {{ (m.add4 { a = 1, b = 2 }).res }})</span>
+<span class="go">[00:02:07.329] 3</span>
+</pre></div>
+</div>
+<p>We can also use all of SAW’s infrastructure for asking solvers about <code class="docutils literal notranslate"><span class="pre">Term</span></code>s, such as the <code class="docutils literal notranslate"><span class="pre">sat</span></code> and <code class="docutils literal notranslate"><span class="pre">prove</span></code> commands.
+For example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; sat w4 {{ m.add4 === \_ -&gt; { res = 5 } }}</span>
+<span class="go">[00:04:41.993] Sat: [_ = (5, 0)]</span>
+<span class="go">sawscript&gt; prove z3 {{ m.add4 === \inp -&gt; { res = inp.a + inp.b } }}</span>
+<span class="go">[00:05:43.659] Valid</span>
+<span class="go">sawscript&gt; prove yices {{ m.add4 === \inp -&gt; { res = inp.a - inp.b } }}</span>
+<span class="go">[00:05:56.171] Invalid: [_ = (8, 13)]</span>
+</pre></div>
+</div>
+<p>The full library of <code class="docutils literal notranslate"><span class="pre">ProofScript</span></code> tactics is available in this setting.
+If necessary, proof tactics like <code class="docutils literal notranslate"><span class="pre">simplify</span></code> can be used to rewrite goals before querying a solver.</p>
+<p>Special support is provided for the common case of equivalence proofs between HDL modules and other <code class="docutils literal notranslate"><span class="pre">Term</span></code>s (e.g. Cryptol functions, other HDL modules, or “extracted” imperative LLVM or JVM code).
+The command <code class="docutils literal notranslate"><span class="pre">yosys_verify</span></code> has an interface similar to <code class="docutils literal notranslate"><span class="pre">llvm_verify</span></code>: given a specification, some lemmas, and a proof tactic, it produces evidence of a proven equivalence that may be passed as a lemma to future calls of <code class="docutils literal notranslate"><span class="pre">yosys_verify</span></code>.
+For example, consider the following Cryptol specifications for one-bit and four-bit adders:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">cryfull</span><span class="w"> </span><span class="kt">:</span><span class="w">  </span><span class="p">{</span><span class="n">a</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">cin</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">{</span><span class="n">cout</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
+<span class="nf">cryfull</span><span class="w"> </span><span class="n">inp</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">cout</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="n">cout</span><span class="p">],</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="kr">where</span><span class="w"> </span><span class="p">[</span><span class="n">cout</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">]</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">zext</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">zext</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">b</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">zext</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">cin</span>
+
+<span class="nf">cryadd4</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">{</span><span class="n">a</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">4</span><span class="p">],</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">4</span><span class="p">]}</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">{</span><span class="n">res</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">4</span><span class="p">]}</span>
+<span class="nf">cryadd4</span><span class="w"> </span><span class="n">inp</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">res</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">b</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>If the Cryptol code above is in a file named <code class="docutils literal notranslate"><span class="pre">adder.cry</span></code>, we can prove equivalence between <code class="docutils literal notranslate"><span class="pre">cryfull</span></code> and the VHDL <code class="docutils literal notranslate"><span class="pre">full</span></code> module:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; import &quot;adder.cry&quot;</span>
+<span class="go">sawscript&gt; full_spec &lt;- yosys_verify {{ m.full }} [] {{ cryfull }} [] w4;</span>
+</pre></div>
+</div>
+<p>The result <code class="docutils literal notranslate"><span class="pre">full_spec</span></code> can then be used as an “override” when proving equivalence between <code class="docutils literal notranslate"><span class="pre">cryadd4</span></code> and the VHDL <code class="docutils literal notranslate"><span class="pre">add4</span></code> module:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; add4_spec &lt;- yosys_verify {{ m.add4 }} [] {{ cryadd4 }} [full_spec] w4;</span>
+</pre></div>
+</div>
+<p>The above could also be accomplished through the use of <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> and term rewriting, but it is much more verbose.</p>
+<p><code class="docutils literal notranslate"><span class="pre">yosys_verify</span></code> may also be given a list of preconditions under which the equivalence holds.
+For example, consider the following Cryptol specification for <code class="docutils literal notranslate"><span class="pre">full</span></code> that ignores the <code class="docutils literal notranslate"><span class="pre">cin</span></code> bit (save them into a <code class="docutils literal notranslate"><span class="pre">cryfullnocarry.cry</span></code> file):</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">cryfullnocarry</span><span class="w"> </span><span class="kt">:</span><span class="w">  </span><span class="p">{</span><span class="n">a</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">cin</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">{</span><span class="n">cout</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
+<span class="nf">cryfullnocarry</span><span class="w"> </span><span class="n">inp</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">cout</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="n">cout</span><span class="p">],</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="kr">where</span><span class="w"> </span><span class="p">[</span><span class="n">cout</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">]</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">zext</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">zext</span><span class="w"> </span><span class="n">inp</span><span class="o">.</span><span class="n">b</span>
+</pre></div>
+</div>
+<p>This is not equivalent to <code class="docutils literal notranslate"><span class="pre">full</span></code> in general, but it is if constrained to inputs where <code class="docutils literal notranslate"><span class="pre">cin</span> <span class="pre">=</span> <span class="pre">0</span></code>.
+We may express that precondition like so:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; import &quot;cryfullnocarry.cry&quot;</span>
+<span class="go">sawscript&gt; full_nocarry_spec &lt;- yosys_verify {{ m.full_Bfullarch }} [{{\(inp : {a : [1], b : [1], cin : [1]}) -&gt; inp.cin == 0}}] {{ cryfullnocarry }} [] w4;</span>
+</pre></div>
+</div>
+<p>The resulting override <code class="docutils literal notranslate"><span class="pre">full_nocarry_spec</span></code> may still be used in the proof for <code class="docutils literal notranslate"><span class="pre">add4</span></code> (this is accomplished by rewriting to a conditional expression).</p>
+</section>
+<section id="api-reference">
+<h2>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h2>
+<p>The following commands must first be enabled using <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code>.</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">yosys_import</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code> produces a <code class="docutils literal notranslate"><span class="pre">Term</span></code> given the path to a JSON file produced by the Yosys <code class="docutils literal notranslate"><span class="pre">write_json</span></code> command.
+The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.
+Each HDL module is in turn represented by a function from a record of input port values to a record of output port values.
+For example, consider a Yosys JSON file derived from the following VHDL entities:</p>
+<div class="highlight-vhdl notranslate"><div class="highlight"><pre><span></span><span class="k">entity</span><span class="w"> </span><span class="nc">half</span><span class="w"> </span><span class="k">is</span>
+<span class="w">  </span><span class="k">port</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">c</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic</span>
+<span class="w">  </span><span class="p">);</span>
+<span class="k">end</span><span class="w"> </span><span class="nc">half</span><span class="p">;</span>
+
+<span class="k">entity</span><span class="w"> </span><span class="nc">full</span><span class="w"> </span><span class="k">is</span>
+<span class="w">  </span><span class="k">port</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">cin</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">cout</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic</span><span class="p">;</span>
+<span class="w">    </span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">std_logic</span>
+<span class="w">  </span><span class="p">);</span>
+<span class="k">end</span><span class="w"> </span><span class="nc">full</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>The resulting <code class="docutils literal notranslate"><span class="pre">Term</span></code> will have the type:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="n">half</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">{</span><span class="n">a</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">{</span><span class="n">c</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
+<span class="p">,</span><span class="w"> </span><span class="n">full</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">{</span><span class="n">a</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">cin</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">{</span><span class="n">cout</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">yosys_verify</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">[Term]</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">[YosysTheorem]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">YosysTheorem</span></code> proves equality between an HDL module and a specification.
+The first parameter is the HDL module - given a record <code class="docutils literal notranslate"><span class="pre">m</span></code> from <code class="docutils literal notranslate"><span class="pre">yosys_import</span></code>, this will typically look something like <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">m.foo</span> <span class="pre">}}</span></code>.
+The second parameter is a list of preconditions for the equality.
+The third parameter is the specification, a term of the same type as the HDL module, which will typically be some Cryptol function or another HDL module.
+The fourth parameter is a list of “overrides”, which witness the results of previous <code class="docutils literal notranslate"><span class="pre">yosys_verify</span></code> proofs.
+These overrides can be used to simplify terms by replacing use sites of submodules with their specifications.</p>
+<p>Note that <code class="docutils literal notranslate"><span class="pre">Term</span></code>s derived from HDL modules are “first class”, and are not restricted to <code class="docutils literal notranslate"><span class="pre">yosys_verify</span></code>: they may also be used with SAW’s typical <code class="docutils literal notranslate"><span class="pre">Term</span></code> infrastructure like <code class="docutils literal notranslate"><span class="pre">sat</span></code>, <code class="docutils literal notranslate"><span class="pre">prove_print</span></code>, term rewriting, etc.
+<code class="docutils literal notranslate"><span class="pre">yosys_verify</span></code> simply provides a convenient and familiar interface, similar to <code class="docutils literal notranslate"><span class="pre">llvm_verify</span></code> or <code class="docutils literal notranslate"><span class="pre">jvm_verify</span></code>.</p>
+</li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="loading-code.html" class="btn btn-neutral float-left" title="Loading Code" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="creating-symbolic-variables.html" class="btn btn-neutral float-right" title="Creating Symbolic Variables" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

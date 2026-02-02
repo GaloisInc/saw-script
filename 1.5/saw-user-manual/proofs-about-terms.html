@@ -1,0 +1,560 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proofs about Terms &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Extraction to the Rocq theorem prover" href="extraction-to-the-rocq-theorem-prover.html" />
+    <link rel="prev" title="Transforming Term Values" href="transforming-term-values.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="loading-code.html">Loading Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Proofs about Terms</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#automated-tactics">Automated Tactics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#proof-script-diagnostics">Proof Script Diagnostics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#rewriting-in-proof-scripts">Rewriting in Proof Scripts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-transformations">Other Transformations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#caching-solver-results">Caching Solver Results</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-external-provers">Other External Provers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#offline-provers">Offline Provers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#finishing-proofs-without-external-solvers">Finishing Proofs without External Solvers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multiple-goals">Multiple Goals</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#proof-failure-and-satisfying-assignments">Proof Failure and Satisfying Assignments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#aig-values-and-proofs">AIG Values and Proofs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html">Extraction to the Rocq theorem prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Proofs about Terms</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/proofs-about-terms.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="proofs-about-terms">
+<h1>Proofs about Terms<a class="headerlink" href="#proofs-about-terms" title="Link to this heading"></a></h1>
+<p>The goal of SAW is to facilitate proofs about the behavior of
+programs. It may be useful to prove some small fact to use as a rewrite
+rule in later proofs, but ultimately these rewrite rules come together
+into a proof of some higher-level property about a software system.</p>
+<p>Whether proving small lemmas (in the form of rewrite rules) or a
+top-level theorem, the process builds on the idea of a <em>proof script</em>
+that is run by one of the top level proof commands.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">prove_print</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Theorem</span></code>
+takes a proof script (which we’ll describe next) and a <code class="docutils literal notranslate"><span class="pre">Term</span></code>. The
+<code class="docutils literal notranslate"><span class="pre">Term</span></code> should be of function type with a return value of <code class="docutils literal notranslate"><span class="pre">Bool</span></code> (<code class="docutils literal notranslate"><span class="pre">Bit</span></code>
+at the Cryptol level). It will then use the proof script to attempt to
+show that the <code class="docutils literal notranslate"><span class="pre">Term</span></code> returns <code class="docutils literal notranslate"><span class="pre">True</span></code> for all possible inputs. If it is
+successful, it will print <code class="docutils literal notranslate"><span class="pre">Valid</span></code> and return a <code class="docutils literal notranslate"><span class="pre">Theorem</span></code>. If not, it
+will abort.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sat_print</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code> is similar
+except that it looks for a <em>single</em> value for which the <code class="docutils literal notranslate"><span class="pre">Term</span></code> evaluates
+to <code class="docutils literal notranslate"><span class="pre">True</span></code> and prints out that value, returning nothing.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">prove_core</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Theorem</span></code>
+proves and returns a <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> from a string in SAWCore syntax.</p></li>
+</ul>
+<section id="automated-tactics">
+<h2>Automated Tactics<a class="headerlink" href="#automated-tactics" title="Link to this heading"></a></h2>
+<p>The simplest proof scripts just specify the automated prover to use.
+The <code class="docutils literal notranslate"><span class="pre">ProofScript</span></code> values <code class="docutils literal notranslate"><span class="pre">abc</span></code> and <code class="docutils literal notranslate"><span class="pre">z3</span></code> select the ABC and Z3 theorem
+provers, respectively, and are typically good choices.</p>
+<p>For example, combining <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> with <code class="docutils literal notranslate"><span class="pre">abc</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; t &lt;- prove_print abc {{ \(x:[8]) -&gt; x+x == x*2 }}</span>
+<span class="go">Valid</span>
+<span class="go">sawscript&gt; t</span>
+<span class="go">Theorem (let { x@1 = Prelude.Vec 8 Prelude.Bool</span>
+<span class="go">      x@2 = Cryptol.TCNum 8</span>
+<span class="go">      x@3 = Cryptol.PArithSeqBool x@2</span>
+<span class="go">    }</span>
+<span class="go"> in (x : x@1)</span>
+<span class="go">-&gt; Prelude.EqTrue</span>
+<span class="go">     (Cryptol.ecEq x@1 (Cryptol.PCmpSeqBool x@2)</span>
+<span class="go">        (Cryptol.ecPlus x@1 x@3 x x)</span>
+<span class="go">        (Cryptol.ecMul x@1 x@3 x</span>
+<span class="go">           (Cryptol.ecNumber (Cryptol.TCNum 2) x@1</span>
+<span class="go">              (Cryptol.PLiteralSeqBool x@2)))))</span>
+</pre></div>
+</div>
+<p>Similarly, <code class="docutils literal notranslate"><span class="pre">sat_print</span></code> will show that the function returns <code class="docutils literal notranslate"><span class="pre">True</span></code> for
+one specific input (which it should, since we already know it returns
+<code class="docutils literal notranslate"><span class="pre">True</span></code> for all inputs):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; sat_print abc {{ \(x:[8]) -&gt; x+x == x*2 }}</span>
+<span class="go">Sat: [x = 0]</span>
+</pre></div>
+</div>
+<p>In addition to these, the <code class="docutils literal notranslate"><span class="pre">bitwuzla</span></code>, <code class="docutils literal notranslate"><span class="pre">boolector</span></code>, <code class="docutils literal notranslate"><span class="pre">cvc4</span></code>, <code class="docutils literal notranslate"><span class="pre">cvc5</span></code>, <code class="docutils literal notranslate"><span class="pre">mathsat</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">yices</span></code> provers are available. The internal decision procedure <code class="docutils literal notranslate"><span class="pre">rme</span></code>, short
+for Reed-Muller Expansion, is an automated prover that works particularly well
+on the Galois field operations that show up, for example, in AES.</p>
+<p>In more complex cases, some pre-processing can be helpful or necessary
+before handing the problem off to an automated prover. The
+pre-processing can involve rewriting, beta reduction, unfolding, the use
+of provers that require slightly more configuration, or the use of
+provers that do very little real work.</p>
+</section>
+<section id="proof-script-diagnostics">
+<h2>Proof Script Diagnostics<a class="headerlink" href="#proof-script-diagnostics" title="Link to this heading"></a></h2>
+<p>During development of a proof, it can be useful to print various
+information about the current goal. The following tactics are useful in
+that context.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">print_goal</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> prints the entire goal in SAWCore
+syntax.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">print_goal_consts</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> prints a list of unfoldable constants
+in the current goal.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">print_goal_depth</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> takes an integer argument, <code class="docutils literal notranslate"><span class="pre">n</span></code>,
+and prints the goal up to depth <code class="docutils literal notranslate"><span class="pre">n</span></code>. Any elided subterms are printed
+with a <code class="docutils literal notranslate"><span class="pre">...</span></code> notation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">print_goal_size</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> prints the number of nodes in the
+DAG representation of the goal.</p></li>
+</ul>
+</section>
+<section id="rewriting-in-proof-scripts">
+<h2>Rewriting in Proof Scripts<a class="headerlink" href="#rewriting-in-proof-scripts" title="Link to this heading"></a></h2>
+<p>One of the key techniques available for completing proofs in SAWScript
+is the use of rewriting or transformation. The following commands
+support this approach.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">simplify</span> <span class="pre">:</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> works just like <code class="docutils literal notranslate"><span class="pre">rewrite</span></code>,
+except that it works in a <code class="docutils literal notranslate"><span class="pre">ProofScript</span></code> context and implicitly
+transforms the current (unnamed) goal rather than taking a <code class="docutils literal notranslate"><span class="pre">Term</span></code> as a
+parameter.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">goal_eval</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> will evaluate the current proof goal to a
+first-order combination of primitives.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">goal_eval_unint</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> works like <code class="docutils literal notranslate"><span class="pre">goal_eval</span></code>
+but avoids expanding or simplifying the given names.</p></li>
+</ul>
+</section>
+<section id="other-transformations">
+<h2>Other Transformations<a class="headerlink" href="#other-transformations" title="Link to this heading"></a></h2>
+<p>Some useful transformations are not easily specified using equality
+statements, and instead have special tactics.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">beta_reduce_goal</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> works like <code class="docutils literal notranslate"><span class="pre">beta_reduce_term</span></code> but
+on the current goal. It takes any sub-expression of the form <code class="docutils literal notranslate"><span class="pre">(\x</span> <span class="pre">-&gt;</span> <span class="pre">t)</span> <span class="pre">v</span></code> and replaces it with a transformed version of <code class="docutils literal notranslate"><span class="pre">t</span></code> in which all
+instances of <code class="docutils literal notranslate"><span class="pre">x</span></code> are replaced by <code class="docutils literal notranslate"><span class="pre">v</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unfolding</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> works like <code class="docutils literal notranslate"><span class="pre">unfold_term</span></code> but
+on the current goal.</p></li>
+</ul>
+<p>Using <code class="docutils literal notranslate"><span class="pre">unfolding</span></code> is mostly valuable for proofs
+based entirely on rewriting, since the default behavior for automated
+provers is to unfold everything before sending a goal to a prover.
+However, with some provers it is possible to indicate that specific
+named subterms should be represented as uninterpreted functions.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">unint_bitwuzla</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unint_cvc4</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unint_cvc5</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unint_yices</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unint_z3</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+</ul>
+<p>The list of <code class="docutils literal notranslate"><span class="pre">String</span></code> arguments in these cases indicates the names of the
+subterms to leave folded, and therefore present as uninterpreted
+functions to the prover. To determine which folded constants appear in a
+goal, use the <code class="docutils literal notranslate"><span class="pre">print_goal_consts</span></code> function described above.</p>
+<p>Ultimately, we plan to implement a more generic tactic that leaves
+certain constants uninterpreted in whatever prover is ultimately used
+(provided that uninterpreted functions are expressible in the prover).</p>
+<p>Note that each of the <code class="docutils literal notranslate"><span class="pre">unint_*</span></code> tactics have variants that are prefixed
+with <code class="docutils literal notranslate"><span class="pre">sbv_</span></code> and <code class="docutils literal notranslate"><span class="pre">w4_</span></code>. The <code class="docutils literal notranslate"><span class="pre">sbv_</span></code>-prefixed tactics make use of the SBV
+library to represent and solve SMT queries:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">sbv_unint_bitwuzla</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sbv_unint_cvc4</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sbv_unint_cvc5</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sbv_unint_yices</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sbv_unint_z3</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">w4_</span></code>-prefixed tactics make use of the What4 library instead of SBV:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">w4_unint_bitwuzla</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">w4_unint_cvc4</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">w4_unint_cvc5</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">w4_unint_yices</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">w4_unint_z3</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+</ul>
+<p>In most specifications, the choice of SBV versus What4 is not important, as
+both libraries are broadly compatible in terms of functionality. There are some
+situations where one library may outpeform the other, however, due to
+differences in how each library represents certain SMT queries. There are also
+some experimental features that are only supported with What4 at the moment,
+such as <code class="docutils literal notranslate"><span class="pre">enable_lax_loads_and_stores</span></code>.</p>
+</section>
+<section id="caching-solver-results">
+<h2>Caching Solver Results<a class="headerlink" href="#caching-solver-results" title="Link to this heading"></a></h2>
+<p>SAW has the capability to cache the results of tactics which call out to
+automated provers. This can save a considerable amount of time in cases such as
+proof development and CI, where the same proof scripts are often run repeatedly
+without changes.</p>
+<p>This caching is available for all tactics which call out to automated provers
+at runtime: <code class="docutils literal notranslate"><span class="pre">abc</span></code>, <code class="docutils literal notranslate"><span class="pre">boolector</span></code>, <code class="docutils literal notranslate"><span class="pre">cvc4</span></code>, <code class="docutils literal notranslate"><span class="pre">cvc5</span></code>, <code class="docutils literal notranslate"><span class="pre">mathsat</span></code>, <code class="docutils literal notranslate"><span class="pre">yices</span></code>, <code class="docutils literal notranslate"><span class="pre">z3</span></code>,
+<code class="docutils literal notranslate"><span class="pre">rme</span></code>, and the family of <code class="docutils literal notranslate"><span class="pre">unint</span></code> tactics described in the previous section.</p>
+<p>When solver caching is enabled and one of the tactics mentioned above is
+encountered, if there is already an entry in the cache corresponding to the
+call then the cached result is used, otherwise the appropriate solver is
+queried, and the result saved to the cache. Entries are indexed by a SHA256
+hash of the exact query to the solver (ignoring variable names), any options
+passed to the solver, and the names and full version strings of all the solver
+backends involved (e.g. ABC and SBV for the <code class="docutils literal notranslate"><span class="pre">abc</span></code> tactic). This ensures cached
+results are only used when they would be identical to the result of actually
+running the tactic.</p>
+<p>The simplest way to enable solver caching is to set the environment variable
+<a class="reference internal" href="appendices/repl-reference.html#saw-solver-cache-path-definition"><span class="std std-ref"><code class="docutils literal notranslate"><span class="pre">SAW_SOLVER_CACHE_PATH</span></code></span></a>. With this environment variable set, <code class="docutils literal notranslate"><span class="pre">saw</span></code> and
+<code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> will automatically keep an <a class="reference external" href="http://www.lmdb.tech/doc/">LMDB</a>
+database at the given path containing the solver result cache. Setting this
+environment variable globally therefore creates a global, concurrency-safe
+solver result cache used by all newly created <code class="docutils literal notranslate"><span class="pre">saw</span></code> or <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code>
+processes. Note that when this environment variable is set, SAW does not create
+a cache at the specified path until it is actually needed.</p>
+<p>There are also a number of SAW commands related to solver caching.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">set_solver_cache_path</span></code> is like setting <code class="docutils literal notranslate"><span class="pre">SAW_SOLVER_CACHE_PATH</span></code> for the
+remainder of the current session, but opens an LMDB database at the specified
+path immediately. If a cache is already in use in the current session
+(i.e. through a prior call to <code class="docutils literal notranslate"><span class="pre">set_solver_cache_path</span></code> or through
+<code class="docutils literal notranslate"><span class="pre">SAW_SOLVER_CACHE_PATH</span></code> being set and the cache being used at least once)
+then all entries in the cache already in use will be copied to the new cache
+being opened.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set_solver_cache_timeout</span></code> sets the cache’s timeout (in microseconds) used
+for database lookups and inserts. The default timeout value is 2,000,000
+microseconds (2 seconds). This is a reasonably large timeout for most cache
+operations, but it may be convenient to increase this timeout for especially
+large proof goals.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">clean_mismatched_versions_solver_cache</span></code> will remove all entries in the
+solver result cache which were created using solver backend versions which do
+not match the versions in the current environment. This can be run after an
+update to clear out any old, unusable entries from the solver cache. This
+command can also be run directly from the command line through the
+<code class="docutils literal notranslate"><span class="pre">--clean-mismatched-versions-solver-cache</span></code> command-line option.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">print_solver_cache</span></code> prints to the console all entries in the cache whose
+SHA256 hash keys start with the given hex string. Providing an empty string
+results in all entries in the cache being printed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">print_solver_cache_stats</span></code> prints to the console statistics including the
+size of the solver cache, where on disk it is stored, and some counts of how
+often it has been used during the current session.</p></li>
+</ul>
+<p>For performing more complicated database operations on the set of cached
+results, the file <code class="docutils literal notranslate"><span class="pre">solver_cache.py</span></code> is provided with the Python bindings of the
+SAW Remote API. This file implements a general-purpose Python interface for
+interacting with the LMDB databases kept by SAW for solver caching.</p>
+<p>Below is an example of using solver caching with <code class="docutils literal notranslate"><span class="pre">saw</span> <span class="pre">-v</span> <span class="pre">Debug</span></code>. Only the
+relevant output is shown, the rest abbreviated with “…”.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; set_solver_cache_path &quot;example.cache&quot;</span>
+<span class="go">sawscript&gt; prove_print z3 {{ \(x:[8]) -&gt; x+x == x*2 }}</span>
+<span class="go">[22:13:00.832] Caching result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)</span>
+<span class="go">...</span>
+<span class="go">sawscript&gt; prove_print z3 {{ \(new:[8]) -&gt; new+new == new*2 }}</span>
+<span class="go">[22:13:04.122] Using cached result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)</span>
+<span class="go">...</span>
+<span class="go">sawscript&gt; prove_print (w4_unint_z3_using &quot;qfnia&quot; []) \</span>
+<span class="go">                                  {{ \(x:[8]) -&gt; x+x == x*2 }}</span>
+<span class="go">[22:13:09.484] Caching result: 4ee451f8429c2dfe (What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit)</span>
+<span class="go">...</span>
+<span class="go">sawscript&gt; print_solver_cache &quot;d1f5a76e7a0b7c01&quot;</span>
+<span class="go">[22:13:13.250] SHA: d1f5a76e7a0b7c01bdfe7d0e1be82b4f233a805ae85a287d45933ed12a54d3eb</span>
+<span class="go">[22:13:13.250] - Result: unsat</span>
+<span class="go">[22:13:13.250] - Solver: &quot;SBV-&gt;Z3&quot;</span>
+<span class="go">[22:13:13.250] - Versions: SBV 9.2, Z3 4.8.7 - 64 bit</span>
+<span class="go">[22:13:13.250] - Last used: 2023-07-25 22:13:04.120351 UTC</span>
+
+<span class="go">sawscript&gt; print_solver_cache &quot;4ee451f8429c2dfe&quot;</span>
+<span class="go">[22:13:16.727] SHA: 4ee451f8429c2dfefecb6216162bd33cf053f8e66a3b41833193529449ef5752</span>
+<span class="go">[22:13:16.727] - Result: unsat</span>
+<span class="go">[22:13:16.727] - Solver: &quot;W4 -&gt;z3&quot;</span>
+<span class="go">[22:13:16.727] - Versions: What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit</span>
+<span class="go">[22:13:16.727] - Last used: 2023-07-25 22:13:09.484464 UTC</span>
+
+<span class="go">sawscript&gt; print_solver_cache_stats</span>
+<span class="go">[22:13:20.585] == Solver result cache statistics ==</span>
+<span class="go">[22:13:20.585] - 2 results cached in example.cache</span>
+<span class="go">[22:13:20.585] - 2 insertions into the cache so far this run (0 failed attempts)</span>
+<span class="go">[22:13:20.585] - 1 usage of cached results so far this run (0 failed attempts)</span>
+</pre></div>
+</div>
+</section>
+<section id="other-external-provers">
+<h2>Other External Provers<a class="headerlink" href="#other-external-provers" title="Link to this heading"></a></h2>
+<p>In addition to the built-in automated provers already discussed, SAW
+supports more generic interfaces to other arbitrary theorem provers
+supporting specific interfaces.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">external_aig_solver</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code>
+supports theorem provers that can take input as a single-output AIGER
+file. The first argument is the name of the executable to run. The
+second argument is the list of command-line parameters to pass to that
+executable. Any element of this list equal to <code class="docutils literal notranslate"><span class="pre">&quot;%f&quot;</span></code> will be replaced
+with the name of the temporary AIGER file generated for the proof goal.
+The output from the solver is expected to be in DIMACS solution format.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">external_cnf_solver</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code>
+works similarly but for SAT solvers that take input in DIMACS CNF format
+and produce output in DIMACS solution format.</p></li>
+</ul>
+</section>
+<section id="offline-provers">
+<h2>Offline Provers<a class="headerlink" href="#offline-provers" title="Link to this heading"></a></h2>
+<p>For provers that must be invoked in more complex ways, or to defer proof
+until a later time, there are functions to write the current goal to a
+file in various formats, and then assume that the goal is valid through
+the rest of the script.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">offline_aig</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">offline_cnf</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">offline_extcore</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">offline_smtlib2</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">offline_unint_smtlib2</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code></p></li>
+</ul>
+<p>These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
+formats, respectively. The shared representation for SAWCore is
+described <a class="reference external" href="https://github.com/GaloisInc/saw-script/blob/master/doc/extcore.md">in the <code class="docutils literal notranslate"><span class="pre">saw-script</span></code>
+repository</a>.
+The <code class="docutils literal notranslate"><span class="pre">offline_unint_smtlib2</span></code> command represents the folded subterms
+listed in its first argument as uninterpreted functions.</p>
+</section>
+<section id="finishing-proofs-without-external-solvers">
+<span id="id1"></span><h2>Finishing Proofs without External Solvers<a class="headerlink" href="#finishing-proofs-without-external-solvers" title="Link to this heading"></a></h2>
+<p>Some proofs can be completed using unsound placeholders, or using
+techniques that do not require significant computation.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">assume_unsat</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> indicates that the current goal
+should be assumed to be unsatisfiable. This is an alias for
+<code class="docutils literal notranslate"><span class="pre">assume_valid</span></code>. Users should prefer to use <code class="docutils literal notranslate"><span class="pre">admit</span></code> instead.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">assume_valid</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> indicates that the current
+goal should be assumed to be valid.  Users should prefer to
+use <code class="docutils literal notranslate"><span class="pre">admit</span></code> instead</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">admit</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> indicates that the current
+goal should be assumed to be valid without proof. The given
+string should be used to record why the user has decided to
+assume this proof goal.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">quickcheck</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> runs the goal on the given
+number of random inputs, and succeeds if the result of evaluation is
+always <code class="docutils literal notranslate"><span class="pre">True</span></code>. This is unsound, but can be helpful during proof
+development, or as a way to provide some evidence for the validity of a
+specification believed to be true but difficult or infeasible to prove.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trivial</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> states that the current goal should
+be trivially true. This tactic recognizes instances of equality
+that can be demonstrated by conversion alone. In particular
+it is able to prove <code class="docutils literal notranslate"><span class="pre">EqTrue</span> <span class="pre">x</span></code> goals where <code class="docutils literal notranslate"><span class="pre">x</span></code> reduces to
+the constant value <code class="docutils literal notranslate"><span class="pre">True</span></code>. It fails if this is not the case.</p></li>
+</ul>
+</section>
+<section id="multiple-goals">
+<h2>Multiple Goals<a class="headerlink" href="#multiple-goals" title="Link to this heading"></a></h2>
+<p>The proof scripts shown so far all have a single implicit goal. As in
+many other interactive provers, however, SAWScript proofs can have
+multiple goals. The following commands can introduce or work with
+multiple goals. These are experimental and can be used only after
+<code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code> has been called.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">goal_apply</span> <span class="pre">:</span> <span class="pre">Theorem</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> will apply a given
+introduction rule to the current goal. This will result in zero or more
+new subgoals.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">goal_assume</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">Theorem</span></code> will convert the first hypothesis
+in the current proof goal into a local <code class="docutils literal notranslate"><span class="pre">Theorem</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">goal_insert</span> <span class="pre">:</span> <span class="pre">Theorem</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> will insert a given
+<code class="docutils literal notranslate"><span class="pre">Theorem</span></code> as a new hypothesis in the current proof goal.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">goal_intro</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">Term</span></code> will introduce a quantified
+variable in the current proof goal, returning the variable as a <code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">goal_when</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> will run the
+given proof script only when the goal name contains the given string.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">goal_exact</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> will attempt to use the given
+term as an exact proof for the current goal. This tactic will succeed
+whever the type of the given term exactly matches the current goal,
+and will fail otherwise.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">split_goal</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">()</span></code> will split a goal of the form
+<code class="docutils literal notranslate"><span class="pre">Prelude.and</span> <span class="pre">prop1</span> <span class="pre">prop2</span></code> into two separate goals <code class="docutils literal notranslate"><span class="pre">prop1</span></code> and <code class="docutils literal notranslate"><span class="pre">prop2</span></code>.</p></li>
+</ul>
+</section>
+<section id="proof-failure-and-satisfying-assignments">
+<h2>Proof Failure and Satisfying Assignments<a class="headerlink" href="#proof-failure-and-satisfying-assignments" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> and <code class="docutils literal notranslate"><span class="pre">sat_print</span></code> commands print out their essential
+results (potentially returning a <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> in the case of
+<code class="docutils literal notranslate"><span class="pre">prove_print</span></code>). In some cases, though, one may want to act
+programmatically on the result of a proof rather than displaying it.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">prove</span></code> and <code class="docutils literal notranslate"><span class="pre">sat</span></code> commands allow this sort of programmatic analysis
+of proof results. To allow this, they use two types we haven’t mentioned
+yet: <code class="docutils literal notranslate"><span class="pre">ProofResult</span></code> and <code class="docutils literal notranslate"><span class="pre">SatResult</span></code>. These are different from the other
+types in SAWScript because they encode the possibility of two outcomes.
+In the case of <code class="docutils literal notranslate"><span class="pre">ProofResult</span></code>, a statement may be valid or there may be a
+counter-example. In the case of <code class="docutils literal notranslate"><span class="pre">SatResult</span></code>, there may be a satisfying
+assignment or the statement may be unsatisfiable.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">prove</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">SatResult</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">ProofResult</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sat</span> <span class="pre">:</span> <span class="pre">ProofScript</span> <span class="pre">SatResult</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">SatResult</span></code></p></li>
+</ul>
+<p>To operate on these new types, SAWScript includes a pair of functions:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">caseProofResult</span> <span class="pre">:</span> <span class="pre">{b}</span> <span class="pre">ProofResult</span> <span class="pre">-&gt;</span> <span class="pre">b</span> <span class="pre">-&gt;</span> <span class="pre">(Term</span> <span class="pre">-&gt;</span> <span class="pre">b)</span> <span class="pre">-&gt;</span> <span class="pre">b</span></code> takes a
+<code class="docutils literal notranslate"><span class="pre">ProofResult</span></code>, a value to return in the case that the statement is
+valid, and a function to run on the counter-example, if there is one.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">caseSatResult</span> <span class="pre">:</span> <span class="pre">{b}</span> <span class="pre">SatResult</span> <span class="pre">-&gt;</span> <span class="pre">b</span> <span class="pre">-&gt;</span> <span class="pre">(Term</span> <span class="pre">-&gt;</span> <span class="pre">b)</span> <span class="pre">-&gt;</span> <span class="pre">b</span></code> has the same
+shape: it returns its first argument if the result represents an
+unsatisfiable statement, or its second argument applied to a satisfying
+assignment if it finds one.</p></li>
+</ul>
+</section>
+<section id="aig-values-and-proofs">
+<h2>AIG Values and Proofs<a class="headerlink" href="#aig-values-and-proofs" title="Link to this heading"></a></h2>
+<p>Most SAWScript programs operate on <code class="docutils literal notranslate"><span class="pre">Term</span></code> values, and in most cases this
+is the appropriate representation. It is possible, however, to represent
+the same function that a <code class="docutils literal notranslate"><span class="pre">Term</span></code> may represent using a different data
+structure: an And-Inverter-Graph (AIG). An AIG is a representation of a
+Boolean function as a circuit composed entirely of AND gates and
+inverters. Hardware synthesis and verification tools, including the ABC
+tool that SAW has built in, can do efficient verification and
+particularly equivalence checking on AIGs.</p>
+<p>To take advantage of this capability, a handful of built-in commands can
+operate on AIGs.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bitblast</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">AIG</span></code> represents a <code class="docutils literal notranslate"><span class="pre">Term</span></code> as an <code class="docutils literal notranslate"><span class="pre">AIG</span></code> by
+“blasting” all of its primitive operations (things like bit-vector
+addition) down to the level of individual bits.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">load_aig</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">AIG</span></code> loads an <code class="docutils literal notranslate"><span class="pre">AIG</span></code> from an external
+AIGER file.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">save_aig</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">AIG</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code> saves an <code class="docutils literal notranslate"><span class="pre">AIG</span></code> to an
+external AIGER file.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">save_aig_as_cnf</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">AIG</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code> writes an <code class="docutils literal notranslate"><span class="pre">AIG</span></code> out
+in CNF format for input into a standard SAT solver.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="transforming-term-values.html" class="btn btn-neutral float-left" title="Transforming Term Values" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="extraction-to-the-rocq-theorem-prover.html" class="btn btn-neutral float-right" title="Extraction to the Rocq theorem prover" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

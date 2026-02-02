@@ -1,0 +1,244 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Interpreter &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Other Examples" href="other-examples.html" />
+    <link rel="prev" title="Compositional Proofs" href="compositional-proofs.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">LLVM/Java Verification with SAW</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="example-find-first-set.html">Example: Find First Set</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using-smt-lib-solvers.html">Using SMT-Lib Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="external-sat-solvers.html">External SAT Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compositional-proofs.html">Compositional Proofs</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Interactive Interpreter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="other-examples.html">Other Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../saw-user-manual/index.html">SAW User Manual</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">LLVM/Java Verification with SAW</a></li>
+      <li class="breadcrumb-item active">Interactive Interpreter</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/llvm-java-verification-with-saw/interactive-interpreter.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="interactive-interpreter">
+<h1>Interactive Interpreter<a class="headerlink" href="#interactive-interpreter" title="Link to this heading"></a></h1>
+<p>The examples so far have used SAWScript in batch mode on complete
+script files. It also has an interactive Read-Eval-Print Loop (REPL)
+which can be convenient for experimentation. To start the REPL, run
+SAWScript with no arguments:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>saw
+</pre></div>
+</div>
+<p>The REPL can evaluate any command that would appear at the top level
+of a standalone script, or in the <code class="docutils literal notranslate"><span class="pre">main</span></code> function, as well as a few
+special commands that start with a colon:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">    :env     display the current sawscript environment</span>
+<span class="go">    :type    check the type of an expression</span>
+<span class="go">    :browse  display the current environment</span>
+<span class="go">    :eval    evaluate an expression and print the result</span>
+<span class="go">    :?       display a brief description about a built-in operator</span>
+<span class="go">    :help    display a brief description about a built-in operator</span>
+<span class="go">    :quit    exit the REPL</span>
+<span class="go">    :load    load a module</span>
+<span class="go">    :add     load an additional module</span>
+<span class="go">    :cd      set the current working directory</span>
+</pre></div>
+</div>
+<p>As an example of the sort of interactive use that the REPL allows,
+consider the file <code class="docutils literal notranslate"><span class="pre">code/NQueens.cry</span></code>, which provides a Cryptol
+specification of the problem of placing a specific number of queens on
+a chess board in such a way that none of them threaten any of the
+others.</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">all</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">{</span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="p">}</span><span class="w"> </span><span class="p">(</span><span class="kr">fin</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="ow">=&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="n">n</span><span class="p">]</span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span>
+<span class="nf">all</span><span class="w"> </span><span class="p">(</span><span class="n">f</span><span class="p">,</span><span class="w"> </span><span class="n">xs</span><span class="p">)</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">xs</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="o">~</span><span class="n">zero</span>
+
+<span class="nf">contains</span><span class="w"> </span><span class="n">xs</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">xs</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">zero</span>
+
+<span class="nf">distinct</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">{</span><span class="n">n</span><span class="p">,</span><span class="n">a</span><span class="p">}</span><span class="w"> </span><span class="p">(</span><span class="kr">fin</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="kr">Cmp</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="ow">=&gt;</span><span class="w"> </span><span class="p">[</span><span class="n">n</span><span class="p">]</span><span class="n">a</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span>
+<span class="nf">distinct</span><span class="w"> </span><span class="n">xs</span><span class="w"> </span><span class="ow">=</span>
+<span class="w">    </span><span class="p">[</span><span class="w"> </span><span class="kr">if</span><span class="w"> </span><span class="n">n1</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n2</span><span class="w"> </span><span class="kr">then</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="kr">else</span><span class="w"> </span><span class="kr">True</span>
+<span class="w">    </span><span class="o">|</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">n1</span><span class="p">)</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">numXs</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">y</span><span class="p">,</span><span class="n">n2</span><span class="p">)</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">numXs</span>
+<span class="w">    </span><span class="p">]</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="o">~</span><span class="n">zero</span>
+<span class="w">  </span><span class="kr">where</span>
+<span class="w">  </span><span class="n">numXs</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">xs</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">(</span><span class="mi">0</span><span class="kt">:</span><span class="p">[</span><span class="kr">width</span><span class="w"> </span><span class="n">n</span><span class="p">])</span><span class="w"> </span><span class="o">...</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="p">]</span>
+
+<span class="kr">type</span><span class="w"> </span><span class="kt">Position</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="kr">width</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)]</span>
+
+<span class="kr">type</span><span class="w"> </span><span class="kt">Board</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="n">n</span><span class="p">](</span><span class="kt">Position</span><span class="w"> </span><span class="n">n</span><span class="p">)</span>
+
+<span class="kr">type</span><span class="w"> </span><span class="kt">Solution</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kt">Board</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span>
+
+<span class="nf">checkDiag</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">{</span><span class="n">n</span><span class="p">}</span><span class="w"> </span><span class="p">(</span><span class="kr">fin</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="ow">=&gt;</span><span class="w"> </span><span class="kt">Board</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="kt">Position</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="kt">Position</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span>
+<span class="nf">checkDiag</span><span class="w"> </span><span class="n">qs</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">(</span><span class="n">diffR</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">diffC</span><span class="p">)</span>
+<span class="w">  </span><span class="kr">where</span><span class="w">   </span><span class="n">qi</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">qs</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="n">i</span>
+<span class="w">          </span><span class="n">qj</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">qs</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="n">j</span>
+<span class="w">          </span><span class="n">diffR</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">if</span><span class="w"> </span><span class="n">qi</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">qj</span><span class="w"> </span><span class="kr">then</span><span class="w"> </span><span class="n">qi</span><span class="o">-</span><span class="n">qj</span><span class="w"> </span><span class="kr">else</span><span class="w"> </span><span class="n">qj</span><span class="o">-</span><span class="n">qi</span>
+<span class="w">          </span><span class="n">diffC</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">i</span><span class="w">                   </span><span class="c1">// we know i &lt; j</span>
+
+<span class="nf">nQueens</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">{</span><span class="n">n</span><span class="p">}</span><span class="w"> </span><span class="p">(</span><span class="kr">fin</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="ow">=&gt;</span><span class="w"> </span><span class="kt">Solution</span><span class="w"> </span><span class="n">n</span>
+<span class="nf">nQueens</span><span class="w"> </span><span class="n">qs</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">all</span><span class="w"> </span><span class="p">(</span><span class="n">inRange</span><span class="w"> </span><span class="n">qs</span><span class="p">,</span><span class="w"> </span><span class="n">qs</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">all</span><span class="w"> </span><span class="p">(</span><span class="n">checkDiag</span><span class="w"> </span><span class="n">qs</span><span class="p">,</span><span class="w"> </span><span class="n">ijs</span><span class="w"> </span><span class="p">`{</span><span class="n">n</span><span class="p">})</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">distinct</span><span class="w"> </span><span class="n">qs</span>
+
+<span class="nf">ijs</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">{</span><span class="n">n</span><span class="p">}(</span><span class="kr">fin</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="ow">=&gt;</span><span class="w"> </span><span class="p">[</span><span class="n">_</span><span class="p">](</span><span class="kt">Position</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="kt">Position</span><span class="w"> </span><span class="n">n</span><span class="p">)</span>
+<span class="nf">ijs</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="p">[</span><span class="mi">0</span><span class="w"> </span><span class="o">..</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="o">-</span><span class="mi">1</span><span class="p">)],</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="p">[</span><span class="mi">0</span><span class="w"> </span><span class="o">..</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="o">-</span><span class="mi">1</span><span class="p">)]]</span>
+
+<span class="nf">inRange</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">{</span><span class="n">n</span><span class="p">}</span><span class="w"> </span><span class="p">(</span><span class="kr">fin</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="ow">=&gt;</span><span class="w"> </span><span class="kt">Board</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kt">Position</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span>
+<span class="nf">inRange</span><span class="w"> </span><span class="n">qs</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="p">`(</span><span class="n">n</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+
+<span class="kr">property</span><span class="w"> </span><span class="n">nQueensProve</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="n">nQueens</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kr">False</span>
+</pre></div>
+</div>
+<p>This example gives us the opportunity to use the satisfiability
+checking capabilities of SAWScript on a problem other than
+equivalence verification.</p>
+<p>First, we can load a model of the <code class="docutils literal notranslate"><span class="pre">nQueens</span></code> term from the Cryptol file.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; m &lt;- cryptol_load &quot;NQueens.cry&quot;</span>
+<span class="go">sawscript&gt; let nq8 = {{ m::nQueens`{8} }}</span>
+</pre></div>
+</div>
+<p>Once we’ve extracted this model, we can try it on a specific
+configuration to see if it satisfies the property that none of the
+queens threaten any of the others.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; print {{ nq8 [0,1,2,3,4,5,6,7] }}</span>
+<span class="go">False</span>
+</pre></div>
+</div>
+<p>This particular configuration didn’t work, but we can use the
+satisfiability checking tools to automatically find one that does.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; sat_print abc nq8</span>
+<span class="go">Sat [qs = [3, 1, 6, 2, 5, 7, 4, 0]]</span>
+</pre></div>
+</div>
+<p>And, finally, we can double-check that this is indeed a valid solution.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; print {{ nq8 [3,1,6,2,5,7,4,0] }}</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="compositional-proofs.html" class="btn btn-neutral float-left" title="Compositional Proofs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="other-examples.html" class="btn btn-neutral float-right" title="Other Examples" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

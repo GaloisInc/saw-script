@@ -1,0 +1,456 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loading Code &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Analyzing Hardware Circuits using Yosys" href="analyzing-hardware-circuits-using-yosys.html" />
+    <link rel="prev" title="Cryptol and its Role in SAW" href="cryptol-and-its-role-in-saw.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Loading Code</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#loading-llvm">Loading LLVM</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#loading-java">Loading Java</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#loading-mir">Loading MIR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#notes-on-compiling-code-for-saw">Notes on Compiling Code for SAW</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#compiling-llvm">Compiling LLVM</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#compiling-java">Compiling Java</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#compiling-mir">Compiling MIR</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#direct-extraction">Direct Extraction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#notes-on-c-analysis">Notes on C++ Analysis</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html">Extraction to the Rocq theorem prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Loading Code</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/loading-code.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="loading-code">
+<h1>Loading Code<a class="headerlink" href="#loading-code" title="Link to this heading"></a></h1>
+<p>The first step in analyzing any code is to load it into the system.</p>
+<section id="loading-llvm">
+<h2>Loading LLVM<a class="headerlink" href="#loading-llvm" title="Link to this heading"></a></h2>
+<p>To load LLVM code, simply provide the location of a valid bitcode file
+to the <code class="docutils literal notranslate"><span class="pre">llvm_load_module</span></code> function.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_load_module</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">LLVMModule</span></code></p></li>
+</ul>
+<p>The resulting <code class="docutils literal notranslate"><span class="pre">LLVMModule</span></code> can be passed into the various functions
+described below to perform analysis of specific LLVM functions.</p>
+<p>The LLVM bitcode parser should generally work with LLVM versions between
+3.5 and 16.0, though it may be incomplete for some versions. Debug
+metadata has changed somewhat throughout that version range, so is the
+most likely case of incompleteness. We aim to support every version
+after 3.5, however, so report any parsing failures as <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues">on
+GitHub</a>.</p>
+</section>
+<section id="loading-java">
+<h2>Loading Java<a class="headerlink" href="#loading-java" title="Link to this heading"></a></h2>
+<p>Loading Java code is slightly more complex, because of the more
+structured nature of Java packages. First, when running <code class="docutils literal notranslate"><span class="pre">saw</span></code>, three flags
+control where to look for classes:</p>
+<ul class="simple">
+<li><p>The <code class="docutils literal notranslate"><span class="pre">-b</span></code> flag takes the path where the <code class="docutils literal notranslate"><span class="pre">java</span></code> executable lives, which is used
+to locate the Java standard library classes and add them to the class
+database. Alternatively, one can put the directory where <code class="docutils literal notranslate"><span class="pre">java</span></code> lives on the
+<a class="reference internal" href="appendices/repl-reference.html#path-definition"><span class="std std-ref"><code class="docutils literal notranslate"><span class="pre">PATH</span></code></span></a>, which SAW will search if <code class="docutils literal notranslate"><span class="pre">-b</span></code> is not set.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">-j</span></code> flag takes the name of a JAR file as an argument and adds the
+contents of that file to the class database.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">-c</span></code> flag takes the name of a directory as an argument and adds all class
+files found in that directory (and its subdirectories) to the class database.
+By default, the current directory is included in the class path.</p></li>
+</ul>
+<p>Most Java programs will only require setting the <code class="docutils literal notranslate"><span class="pre">-b</span></code> flag (or the <code class="docutils literal notranslate"><span class="pre">PATH</span></code>), as
+that is enough to bring in the standard Java libraries. Note that when
+searching the <code class="docutils literal notranslate"><span class="pre">PATH</span></code>, SAW makes assumptions about where the standard library
+classes live. These assumptions are likely to hold on JDK 7 or later, but they
+may not hold on older JDKs on certain operating systems. If you are using an
+old version of the JDK and SAW is unable to find a standard Java class, you may
+need to specify the location of the standard classes’ JAR file with the <code class="docutils literal notranslate"><span class="pre">-j</span></code>
+flag (or, alternatively, with the <code class="docutils literal notranslate"><span class="pre">SAW_JDK_JAR</span></code> environment variable).</p>
+<p>Once the class path is configured, you can pass the name of a class to
+the <code class="docutils literal notranslate"><span class="pre">java_load_class</span></code> function.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">java_load_class</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">JavaClass</span></code></p></li>
+</ul>
+<p>The resulting <code class="docutils literal notranslate"><span class="pre">JavaClass</span></code> can be passed into the various functions
+described below to perform analysis of specific Java methods.</p>
+<p>Java class files from any JDK newer than version 6 should work. However,
+support for JDK 9 and later is experimental. Verifying code that only uses
+primitive data types is known to work well, but there are some as-of-yet
+unresolved issues in verifying code involving classes such as <code class="docutils literal notranslate"><span class="pre">String</span></code>. For
+more information on these issues, refer to
+<a class="reference external" href="https://github.com/GaloisInc/crucible/issues/641">this GitHub issue</a>.</p>
+</section>
+<section id="loading-mir">
+<span id="id1"></span><h2>Loading MIR<a class="headerlink" href="#loading-mir" title="Link to this heading"></a></h2>
+<p>To load a piece of Rust code, first compile it to a MIR JSON file, as described
+in <a class="reference internal" href="#compiling-mir">this section</a>, and then provide the location of the JSON
+file to the <code class="docutils literal notranslate"><span class="pre">mir_load_module</span></code> function:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_load_module</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">MIRModule</span></code></p></li>
+</ul>
+<p>SAW currently supports Rust code that can be built with a <a class="reference external" href="https://static.rust-lang.org/dist/2023-01-23/">January 23, 2023
+Rust nightly</a>.  If you encounter
+a Rust feature that SAW does not support, please report it <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues">on
+GitHub</a>.</p>
+</section>
+<section id="notes-on-compiling-code-for-saw">
+<h2>Notes on Compiling Code for SAW<a class="headerlink" href="#notes-on-compiling-code-for-saw" title="Link to this heading"></a></h2>
+<p>SAW will generally be able to load arbitrary LLVM bitcode, JVM bytecode, and
+MIR JSON files, but several guidelines can help make verification easier or
+more likely to succeed.</p>
+<section id="compiling-llvm">
+<h3>Compiling LLVM<a class="headerlink" href="#compiling-llvm" title="Link to this heading"></a></h3>
+<p>For generating LLVM with <code class="docutils literal notranslate"><span class="pre">clang</span></code>, it can be helpful to:</p>
+<ul class="simple">
+<li><p>Turn on debugging symbols with <code class="docutils literal notranslate"><span class="pre">-g</span></code> so that SAW can find source
+locations of functions, names of variables, etc.</p></li>
+<li><p>Optimize with <code class="docutils literal notranslate"><span class="pre">-O1</span></code> so that the generated bitcode more closely matches
+the C/C++ source, making the results more comprehensible.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">-fno-threadsafe-statics</span></code> to prevent <code class="docutils literal notranslate"><span class="pre">clang</span></code> from emitting
+unnecessary pthread code.</p></li>
+<li><p>Link all relevant bitcode with <code class="docutils literal notranslate"><span class="pre">llvm-link</span></code> (including, <em>e.g.</em>, the C++
+standard library when analyzing C++ code).</p></li>
+</ul>
+<p>All SAW proofs include side conditions to rule out undefined behavior,
+and proofs will only succeed if all of these side conditions have been
+discharged. However the default SAW notion of undefined behavior is with
+respect to the semantics of LLVM, rather than C or C++. If you want to
+rule out undefined behavior according to the C or C++ standards,
+consider compiling your code with <code class="docutils literal notranslate"><span class="pre">-fsanitize=undefined</span></code> or one of the
+related flags<a class="footnote-reference brackets" href="#id3" id="id2" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a> to <code class="docutils literal notranslate"><span class="pre">clang</span></code>.</p>
+<p>Generally, you’ll also want to use <code class="docutils literal notranslate"><span class="pre">-fsanitize-trap=undefined</span></code>, or one
+of the related flags, to cause the compiled code to use <code class="docutils literal notranslate"><span class="pre">llvm.trap</span></code> to
+indicate the presence of undefined behavior. Otherwise, the compiled
+code will call a separate function, such as
+<code class="docutils literal notranslate"><span class="pre">__ubsan_handle_shift_out_of_bounds</span></code>, for each type of undefined
+behavior, and SAW currently does not have built in support for these
+functions (though you could manually create overrides for them in a
+verification script).</p>
+</section>
+<section id="compiling-java">
+<h3>Compiling Java<a class="headerlink" href="#compiling-java" title="Link to this heading"></a></h3>
+<p>For Java, the only compilation flag that tends to be valuable is <code class="docutils literal notranslate"><span class="pre">-g</span></code> to
+retain information about the names of function arguments and local
+variables.</p>
+</section>
+<section id="compiling-mir">
+<span id="id4"></span><h3>Compiling MIR<a class="headerlink" href="#compiling-mir" title="Link to this heading"></a></h3>
+<p>In order to verify Rust code, SAW analyzes Rust’s MIR (mid-level intermediate
+representation) language. In particular, SAW analyzes a particular form of MIR
+that the <a class="reference external" href="https://github.com/GaloisInc/mir-json"><code class="docutils literal notranslate"><span class="pre">mir-json</span></code></a> tool produces. You
+will need to intall <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> and run it on Rust code in order to produce MIR
+JSON files that SAW can load (see <a class="reference internal" href="#loading-mir">this section</a>). You will also
+need to use <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> to build custom versions of the Rust standard libraries
+that are more suited to verification purposes.</p>
+<p>If you are working from a checkout of the <code class="docutils literal notranslate"><span class="pre">saw-script</span></code> repo, you can install
+the <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> tool and the custom Rust standard libraries by performing the
+following steps:</p>
+<ol class="arabic">
+<li><p>Clone the <a class="reference external" href="https://github.com/GaloisInc/crucible"><code class="docutils literal notranslate"><span class="pre">crucible</span></code></a> and <code class="docutils literal notranslate"><span class="pre">mir-json</span></code>
+submodules like so:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git<span class="w"> </span>submodule<span class="w"> </span>update<span class="w"> </span>deps/crucible<span class="w"> </span>deps/mir-json
+</pre></div>
+</div>
+</li>
+<li><p>Navigate to the <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> submodule:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>deps/mir-json
+</pre></div>
+</div>
+</li>
+<li><p>Follow the instructions laid out in the <a class="reference external" href="https://github.com/GaloisInc/mir-json#installation-instructions"><code class="docutils literal notranslate"><span class="pre">mir-json</span></code> installation
+instructions</a>
+in order to install <code class="docutils literal notranslate"><span class="pre">mir-json</span></code>.</p></li>
+<li><p>Run the <code class="docutils literal notranslate"><span class="pre">mir-json-translate-libs</span></code> script in the <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> submodule:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>mir-json-translate-libs
+</pre></div>
+</div>
+<p>This will compile the custom versions of the Rust standard libraries using
+<code class="docutils literal notranslate"><span class="pre">mir-json</span></code>, placing the results under the <code class="docutils literal notranslate"><span class="pre">rlibs</span></code> subdirectory.</p>
+</li>
+<li><p>Finally, define a <code class="docutils literal notranslate"><span class="pre">SAW_RUST_LIBRARY_PATH</span></code> environment variable that points
+to the newly created <code class="docutils literal notranslate"><span class="pre">rlibs</span></code> subdirectory:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">SAW_RUST_LIBRARY_PATH</span><span class="o">=</span>&lt;...&gt;/mir-json/rlibs
+</pre></div>
+</div>
+</li>
+</ol>
+<p>For <code class="docutils literal notranslate"><span class="pre">cargo</span></code>-based projects, <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> provides a <code class="docutils literal notranslate"><span class="pre">cargo</span></code> subcommand called
+<code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">saw-build</span></code> that builds a JSON file suitable for use with SAW. <code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">saw-build</span></code> integrates directly with <code class="docutils literal notranslate"><span class="pre">cargo</span></code>, so you can pass flags to it like
+any other <code class="docutils literal notranslate"><span class="pre">cargo</span></code> subcommand. For example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp"># </span>Make<span class="w"> </span>sure<span class="w"> </span>that<span class="w"> </span>SAW_RUST_LIBRARY_PATH<span class="w"> </span>is<span class="w"> </span>defined,<span class="w"> </span>as<span class="w"> </span>described<span class="w"> </span>above
+<span class="gp">$ </span>cargo<span class="w"> </span>saw-build<span class="w"> </span>&lt;other<span class="w"> </span>cargo<span class="w"> </span>flags&gt;
+<span class="go">&lt;snip&gt;</span>
+<span class="go">linking 11 mir files into &lt;...&gt;/example-364cf2df365c7055.linked-mir.json</span>
+<span class="go">&lt;snip&gt;</span>
+</pre></div>
+</div>
+<p>Note that:</p>
+<ul class="simple">
+<li><p>The full output of <code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">saw-build</span></code> here is omitted. The important part is
+the <code class="docutils literal notranslate"><span class="pre">.linked-mir.json</span></code> file that appears after <code class="docutils literal notranslate"><span class="pre">linking</span> <span class="pre">X</span> <span class="pre">mir</span> <span class="pre">files</span> <span class="pre">into</span></code>, as
+that is the JSON file that must be loaded with SAW.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SAW_RUST_LIBRARY_PATH</span></code> should point to the the MIR JSON files for the Rust
+standard library.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">mir-json</span></code> also supports compiling individual <code class="docutils literal notranslate"><span class="pre">.rs</span></code> files through <code class="docutils literal notranslate"><span class="pre">mir-json</span></code>’s
+<code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> command. As the name suggests, it accepts all of the flags that
+<code class="docutils literal notranslate"><span class="pre">rustc</span></code> accepts. For example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp"># </span>Make<span class="w"> </span>sure<span class="w"> </span>that<span class="w"> </span>SAW_RUST_LIBRARY_PATH<span class="w"> </span>is<span class="w"> </span>defined,<span class="w"> </span>as<span class="w"> </span>described<span class="w"> </span>above
+<span class="gp">$ </span>saw-rustc<span class="w"> </span>example.rs<span class="w"> </span>&lt;other<span class="w"> </span>rustc<span class="w"> </span>flags&gt;
+<span class="go">&lt;snip&gt;</span>
+<span class="go">linking 11 mir files into &lt;...&gt;/example.linked-mir.json</span>
+<span class="go">&lt;snip&gt;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="direct-extraction">
+<h2>Direct Extraction<a class="headerlink" href="#direct-extraction" title="Link to this heading"></a></h2>
+<p>In many simple cases (such as the mathematical <code class="docutils literal notranslate"><span class="pre">max</span></code> function), the relevant
+inputs and outputs are immediately apparent. The function takes two integer
+arguments, always uses both of them, and returns a single integer value,
+making no other changes to the program state.</p>
+<p>In cases like this, a direct translation is possible, given only an
+identification of which code to execute.
+Three functions exist to handle such simple code, one for each Crucible
+backend:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_extract</span> <span class="pre">:</span> <span class="pre">LLVMModule</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jvm_extract</span> <span class="pre">:</span> <span class="pre">JavaClass</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_extract</span> <span class="pre">:</span> <span class="pre">MIRModule</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code></p></li>
+</ul>
+<p>The structure of these extraction functions is essentially identical.
+The first argument describes where to look for code (in an LLVM module, Java
+class, or MIR module, loaded as described in the previous section).
+The second argument is the name of the method or function to extract.</p>
+<p>When the extraction functions complete, they return a <code class="docutils literal notranslate"><span class="pre">Term</span></code>
+corresponding to the value returned by the function or method as a
+function of its arguments.</p>
+<p>These functions currently work only for code that has specific argument and
+result types:</p>
+<ul class="simple">
+<li><p>For <code class="docutils literal notranslate"><span class="pre">llvm_extract</span></code>, the extracted function must take some fixed
+number of integral parameters and return an integral result.</p></li>
+<li><p>For <code class="docutils literal notranslate"><span class="pre">jvm_extract</span></code>, the extracted function’s argument and result types must
+be scalar types (i.e., not classes or arrays).</p></li>
+<li><p>For <code class="docutils literal notranslate"><span class="pre">mir_extract</span></code>, the extracted function’s argument and result types must be
+a primitive integer type (e.g., <code class="docutils literal notranslate"><span class="pre">u8</span></code> or <code class="docutils literal notranslate"><span class="pre">i8</span></code>), a <code class="docutils literal notranslate"><span class="pre">bool</span></code>, a <code class="docutils literal notranslate"><span class="pre">char</span></code>, an array,
+or a tuple.</p></li>
+</ul>
+<p>Although it is disallowed to extract functions that use pointers, classes, or
+references in the extracted function’s type signature, the implementation of
+the extracted function is allowed to allocate memory during execution.
+Also note the following requirements for interacting with global variables:</p>
+<ul class="simple">
+<li><p>For <code class="docutils literal notranslate"><span class="pre">llvm_extract</span></code>, the extracted function is allowed to read from immutable
+global variables during execution, but it is not allowed to read or write
+from mutable global variables during execution.</p></li>
+<li><p>For <code class="docutils literal notranslate"><span class="pre">jvm_extract</span></code>, the extracted function is allowed to read from or write
+to any class field or static field (regardless of mutability) during
+execution.
+The class and static fields will be given their initial values during
+extraction (unless they are overwritten during execution).</p></li>
+<li><p>For <code class="docutils literal notranslate"><span class="pre">mir_extract</span></code>, the extracted function is allowed to read from immutable
+static items during execution, and it is allowed to write to mutable static
+items during execution.
+The extracted function is not allowed to read from a mutable static item
+during execution unless the function has written another value to the static
+item earlier during execution.</p></li>
+</ul>
+</section>
+<section id="notes-on-c-analysis">
+<h2>Notes on C++ Analysis<a class="headerlink" href="#notes-on-c-analysis" title="Link to this heading"></a></h2>
+<p>The distance between C++ code and LLVM is greater than between C and
+LLVM, so some additional considerations come into play when analyzing
+C++ code with SAW.</p>
+<p>The first key issue is that the C++ standard library is large and
+complex, and tends to be widely used by C++ applications. To analyze
+most C++ code, it will be necessary to link your code with a version of
+the <code class="docutils literal notranslate"><span class="pre">libc++</span></code> library<a class="footnote-reference brackets" href="#id7" id="id5" role="doc-noteref"><span class="fn-bracket">[</span>2<span class="fn-bracket">]</span></a> compiled to LLVM bitcode. The <code class="docutils literal notranslate"><span class="pre">wllvm</span></code> program
+can<a class="footnote-reference brackets" href="#id8" id="id6" role="doc-noteref"><span class="fn-bracket">[</span>3<span class="fn-bracket">]</span></a> be useful for this.</p>
+<p>The C++ standard library includes a number of key global variables, and
+any code that touches them will require that they be initialized using
+<code class="docutils literal notranslate"><span class="pre">llvm_alloc_global</span></code>.</p>
+<p>Many C++ names are slightly awkward to deal with in SAW. They may be
+mangled relative to the text that appears in the C++ source code. SAW
+currently only understands the mangled names. The <code class="docutils literal notranslate"><span class="pre">llvm-nm</span></code> program can
+be used to show the list of symbols in an LLVM bitcode file, and the
+<code class="docutils literal notranslate"><span class="pre">c++filt</span></code> program can be used to demangle them, which can help in
+identifying the symbol you want to refer to. In addition, C++ names from
+namespaces can sometimes include quote marks in their LLVM encoding. For
+example:</p>
+<div class="highlight-llvm notranslate"><div class="highlight"><pre><span></span><span class="nv">%&quot;class.quux::Foo&quot;</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="k">type</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kt">i32</span><span class="p">,</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>This can be mentioned in SAW by saying:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">llvm_type</span><span class="w"> </span><span class="s2">&quot;%\&quot;</span><span class="n">class</span><span class="p">.</span><span class="n">quux</span><span class="p">::</span><span class="n">Foo</span><span class="p">\</span><span class="s2">&quot;&quot;</span>
+</pre></div>
+</div>
+<p>Finally, there is no support for calling constructors in specifications,
+so you will need to construct objects piece-by-piece using, <em>e.g.</em>,
+<code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code> and <code class="docutils literal notranslate"><span class="pre">llvm_points_to</span></code>.</p>
+</section>
+</section>
+<hr class="footnotes docutils" />
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="id3" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id2">1</a><span class="fn-bracket">]</span></span>
+<p><a class="reference external" href="https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation">https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation</a></p>
+</aside>
+<aside class="footnote brackets" id="id7" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id5">2</a><span class="fn-bracket">]</span></span>
+<p><a class="reference external" href="https://libcxx.llvm.org/index.html">https://libcxx.llvm.org/index.html</a></p>
+</aside>
+<aside class="footnote brackets" id="id8" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id6">3</a><span class="fn-bracket">]</span></span>
+<p><a class="reference external" href="https://github.com/travitch/whole-program-llvm">https://github.com/travitch/whole-program-llvm</a></p>
+</aside>
+</aside>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="cryptol-and-its-role-in-saw.html" class="btn btn-neutral float-left" title="Cryptol and its Role in SAW" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="analyzing-hardware-circuits-using-yosys.html" class="btn btn-neutral float-right" title="Analyzing Hardware Circuits using Yosys" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

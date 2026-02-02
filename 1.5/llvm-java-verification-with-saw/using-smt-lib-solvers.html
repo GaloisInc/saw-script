@@ -1,0 +1,207 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Using SMT-Lib Solvers &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="External SAT Solvers" href="external-sat-solvers.html" />
+    <link rel="prev" title="Example: Find First Set" href="example-find-first-set.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">LLVM/Java Verification with SAW</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="example-find-first-set.html">Example: Find First Set</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Using SMT-Lib Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="external-sat-solvers.html">External SAT Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compositional-proofs.html">Compositional Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-interpreter.html">Interactive Interpreter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="other-examples.html">Other Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../saw-user-manual/index.html">SAW User Manual</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">LLVM/Java Verification with SAW</a></li>
+      <li class="breadcrumb-item active">Using SMT-Lib Solvers</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/llvm-java-verification-with-saw/using-smt-lib-solvers.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="using-smt-lib-solvers">
+<h1>Using SMT-Lib Solvers<a class="headerlink" href="#using-smt-lib-solvers" title="Link to this heading"></a></h1>
+<p>The examples presented so far have used the internal proof system
+provided by SAWScript, based primarily on a version of the ABC tool
+from UC Berkeley linked into the <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable. However, there is
+internal support for other proof tools – such as Yices and Z3 as
+illustrated in the next example – and more general support for
+exporting models representing theorems as goals in the SMT-Lib
+language. These exported goals can then be solved using an external
+SMT solver.</p>
+<p>Consider the following C file:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">int</span><span class="w"> </span><span class="nf">double_ref</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">double_imp</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>In this trivial example, an integer can be doubled either using
+multiplication or shifting. The following SAWScript program (in
+<code class="docutils literal notranslate"><span class="pre">double.saw</span></code>) verifies that the two are equivalent using both internal
+Yices and Z3 modes, and by exporting an SMT-Lib theorem to be
+checked later, by an external SAT solver.</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">l</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_load_module</span><span class="w"> </span><span class="s2">&quot;double.bc&quot;</span><span class="p">;</span>
+<span class="n">double_imp</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_extract</span><span class="w"> </span><span class="n">l</span><span class="w"> </span><span class="s2">&quot;double_imp&quot;</span><span class="p">;</span>
+<span class="n">double_ref</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">llvm_extract</span><span class="w"> </span><span class="n">l</span><span class="w"> </span><span class="s2">&quot;double_ref&quot;</span><span class="p">;</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">thm</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">double_ref</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">double_imp</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+
+<span class="n">r</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">prove</span><span class="w"> </span><span class="nb">yices</span><span class="w"> </span><span class="n">thm</span><span class="p">;</span>
+<span class="nb">print</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
+
+<span class="n">r</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">prove</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="n">thm</span><span class="p">;</span>
+<span class="nb">print</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">thm_neg</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="o">~</span><span class="p">(</span><span class="nf">thm</span><span class="w"> </span><span class="nf">x</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="n">write_smtlib2</span><span class="w"> </span><span class="s2">&quot;double.smt2&quot;</span><span class="w"> </span><span class="n">thm_neg</span><span class="p">;</span>
+
+<span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Done.&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>The new primitives introduced here are the tilde operator, <code class="docutils literal notranslate"><span class="pre">~</span></code>, which
+constructs the logical negation of a term, and <code class="docutils literal notranslate"><span class="pre">write_smtlib2</span></code>, which
+writes a term as a proof obligation in SMT-Lib version 2 format. Because
+SMT solvers are satisfiability solvers, their default behavior is to
+treat free variables as existentially quantified. By negating the input
+term, we can instead treat the free variables as universally quantified:
+a result of “unsatisfiable” from the solver indicates that the original
+term (before negation) is a valid theorem. The <code class="docutils literal notranslate"><span class="pre">prove</span></code> primitive does
+this automatically, but for flexibility the <code class="docutils literal notranslate"><span class="pre">write_smtlib2</span></code> primitive
+passes the given term through unchanged, because it might be used for
+either satisfiability or validity checking.</p>
+<p>The SMT-Lib export capabilities in SAWScript make use of the Haskell SBV
+package, and support ABC, Bitwuzla, Boolector, CVC4, CVC5, MathSAT, Yices, and
+Z3.</p>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="example-find-first-set.html" class="btn btn-neutral float-left" title="Example: Find First Set" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="external-sat-solvers.html" class="btn btn-neutral float-right" title="External SAT Solvers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,438 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bisimulation Prover &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Transforming Term Values" href="transforming-term-values.html" />
+    <link rel="prev" title="Specification-Based Verification" href="specification-based-verification.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="loading-code.html">Loading Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Bisimulation Prover</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#bisimulation-example">Bisimulation Example</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#building-a-nand-gate">Building a NAND gate</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#understanding-the-proof-goals">Understanding the proof goals</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#limitations">Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html">Extraction to the Rocq theorem prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Bisimulation Prover</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/bisimulation-prover.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="bisimulation-prover">
+<h1>Bisimulation Prover<a class="headerlink" href="#bisimulation-prover" title="Link to this heading"></a></h1>
+<p>SAW contains a bisimulation prover to prove that two terms simulate each other.
+This prover allows users to prove that two terms executing in lockstep satisfy
+some relations over the state of each circuit and their outputs.  This type of
+proof is useful in demonstrating the eventual equivalence of two circuits, or
+of a circuit and a functional specification.  SAW enables these proofs with the
+experimental <code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code> command:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">prove_bisim</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">ProofScript</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">[</span><span class="n">BisimTheorem</span><span class="p">]</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kt">Term</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kt">Term</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kt">Term</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kt">Term</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kt">TopLevel</span><span class="w"> </span><span class="kt">BisimTheorem</span>
+</pre></div>
+</div>
+<p>When invoking <code class="docutils literal notranslate"><span class="pre">prove_bisim</span> <span class="pre">strat</span> <span class="pre">theorems</span> <span class="pre">srel</span> <span class="pre">orel</span> <span class="pre">lhs</span> <span class="pre">rhs</span></code>, the arguments
+represent the following:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">strat</span></code>: A proof strategy to use during verification.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">theorems</span></code>: A list of already proven bisimulation theorems.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">srel</span></code>: A state relation between <code class="docutils literal notranslate"><span class="pre">lhs</span></code> and <code class="docutils literal notranslate"><span class="pre">rhs</span></code>.  This relation must have
+the type <code class="docutils literal notranslate"><span class="pre">lhsState</span> <span class="pre">-&gt;</span> <span class="pre">rhsState</span> <span class="pre">-&gt;</span> <span class="pre">Bit</span></code>. The relation’s first argument is
+<code class="docutils literal notranslate"><span class="pre">lhs</span></code>’s state prior to execution. The relation’s second argument is <code class="docutils literal notranslate"><span class="pre">rhs</span></code>’s
+state prior to execution. <code class="docutils literal notranslate"><span class="pre">srel</span></code> then returns a <code class="docutils literal notranslate"><span class="pre">Bit</span></code> indicating whether
+the two arguments satisfy the bisimulation’s state relation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">orel</span></code>: An output relation between <code class="docutils literal notranslate"><span class="pre">lhs</span></code> and <code class="docutils literal notranslate"><span class="pre">rhs</span></code>.  This relation must have
+the type <code class="docutils literal notranslate"><span class="pre">(lhsState,</span> <span class="pre">output)</span> <span class="pre">-&gt;</span> <span class="pre">(rhsState,</span> <span class="pre">output)</span> <span class="pre">-&gt;</span> <span class="pre">Bit</span></code>. The relation’s
+first argument is a pair consisting of <code class="docutils literal notranslate"><span class="pre">lhs</span></code>’s state and output following
+execution. The relation’s second argument is a pair consisting of <code class="docutils literal notranslate"><span class="pre">rhs</span></code>’s
+state and output following execution. <code class="docutils literal notranslate"><span class="pre">orel</span></code> then returns a <code class="docutils literal notranslate"><span class="pre">Bit</span></code> indicating
+whether the two arguments satisfy the bisimulation’s output relation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lhs</span></code>: A term that simulates <code class="docutils literal notranslate"><span class="pre">rhs</span></code>. <code class="docutils literal notranslate"><span class="pre">lhs</span></code> must have the type
+<code class="docutils literal notranslate"><span class="pre">(lhsState,</span> <span class="pre">input)</span> <span class="pre">-&gt;</span> <span class="pre">(lhsState,</span> <span class="pre">output)</span></code>.  The first argument to <code class="docutils literal notranslate"><span class="pre">lhs</span></code> is a
+tuple containing the internal state of <code class="docutils literal notranslate"><span class="pre">lhs</span></code>, as well as the input to <code class="docutils literal notranslate"><span class="pre">lhs</span></code>.
+<code class="docutils literal notranslate"><span class="pre">lhs</span></code> returns a tuple containing its internal state after execution, as well
+as its output.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhs</span></code>: A term that simulates <code class="docutils literal notranslate"><span class="pre">lhs</span></code>. <code class="docutils literal notranslate"><span class="pre">rhs</span></code> must have the type
+<code class="docutils literal notranslate"><span class="pre">(rhsState,</span> <span class="pre">input)</span> <span class="pre">-&gt;</span> <span class="pre">(rhsState,</span> <span class="pre">output)</span></code>.  The first argument to <code class="docutils literal notranslate"><span class="pre">rhs</span></code> is a
+tuple containing the internal state of <code class="docutils literal notranslate"><span class="pre">rhs</span></code>, as well as the input to <code class="docutils literal notranslate"><span class="pre">rhs</span></code>.
+<code class="docutils literal notranslate"><span class="pre">rhs</span></code> returns a tuple containing its internal state after execution, as well
+as its output.</p></li>
+</ol>
+<p>On success, <code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code> returns a <code class="docutils literal notranslate"><span class="pre">BisimTheorem</span></code> that can be used in future
+bisimulation proofs to enable compositional bisimulation proofs.  On failure,
+<code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code> will abort.</p>
+<section id="bisimulation-example">
+<h2>Bisimulation Example<a class="headerlink" href="#bisimulation-example" title="Link to this heading"></a></h2>
+<p>This section walks through an example proving that the Cryptol implementation
+of an AND gate that makes use of internal state and takes two cycles to
+complete is equivalent to a pure function that computes the logical AND of its
+inputs in one cycle. First, we define the implementation’s state type:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="kr">type</span><span class="w"> </span><span class="n">andState</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">loaded</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="n">origX</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="n">origY</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="kr">Bit</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">andState</span></code> is a record type with three fields:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">loaded</span></code>: A <code class="docutils literal notranslate"><span class="pre">Bit</span></code> indicating whether the input to the AND gate has been
+loaded into the state record.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">origX</span></code>: A <code class="docutils literal notranslate"><span class="pre">Bit</span></code> storing the first input to the AND gate.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">origY</span></code>: A <code class="docutils literal notranslate"><span class="pre">Bit</span></code> storing the second input to the AND gate.</p></li>
+</ol>
+<p>Now, we define the AND gate’s implementation:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">andImp</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">(</span><span class="n">andState</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">andState</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span>
+<span class="nf">andImp</span><span class="w"> </span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">))</span><span class="w"> </span><span class="ow">=</span>
+<span class="w">  </span><span class="kr">if</span><span class="w"> </span><span class="n">s</span><span class="o">.</span><span class="n">loaded</span><span class="w"> </span><span class="o">/\</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">s</span><span class="o">.</span><span class="n">origX</span><span class="w"> </span><span class="o">/\</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">s</span><span class="o">.</span><span class="n">origY</span>
+<span class="w">  </span><span class="kr">then</span><span class="w"> </span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">True</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="o">.</span><span class="n">origX</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">s</span><span class="o">.</span><span class="n">origY</span><span class="p">))</span>
+<span class="w">  </span><span class="kr">else</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="n">loaded</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">True</span><span class="p">,</span><span class="w"> </span><span class="n">origX</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">origY</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="p">(</span><span class="kr">False</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">andImp</span></code> takes a tuple as input where the first field is an <code class="docutils literal notranslate"><span class="pre">andState</span></code> holding
+the gate’s internal state, and second field is a tuple containing the inputs to
+the AND gate. <code class="docutils literal notranslate"><span class="pre">andImp</span></code> returns a tuple consisting of the updated <code class="docutils literal notranslate"><span class="pre">andState</span></code> and
+the gate’s output.  The output is a tuple where the first field is a ready bit
+that is <code class="docutils literal notranslate"><span class="pre">1</span></code> when the second field is ready to be read, and the second field
+is the result of gate’s computation.</p>
+<p><code class="docutils literal notranslate"><span class="pre">andImp</span></code> takes two cycles to complete:</p>
+<ol class="arabic simple">
+<li><p>The first cycle loads the inputs into its state’s <code class="docutils literal notranslate"><span class="pre">origX</span></code> and <code class="docutils literal notranslate"><span class="pre">origY</span></code> fields
+and sets <code class="docutils literal notranslate"><span class="pre">loaded</span></code> to <code class="docutils literal notranslate"><span class="pre">True</span></code>. It sets both of its output bits to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+<li><p>The second cycle uses the stored input values to compute the logical AND.
+It sets its ready bit to <code class="docutils literal notranslate"><span class="pre">1</span></code> and its second output to the logical AND
+result.</p></li>
+</ol>
+<p>So long as the inputs remain fixed after the second cycle, <code class="docutils literal notranslate"><span class="pre">andImp</span></code>’s output
+remains unchanged.  If the inputs change, then <code class="docutils literal notranslate"><span class="pre">andImp</span></code> restarts the
+computation (even if the inputs change between the first and second cycles).</p>
+<p>Next, we define the pure function we’d like to prove <code class="docutils literal notranslate"><span class="pre">andImp</span></code> bisimilar to:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">andSpec</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span>
+<span class="nf">andSpec</span><span class="w"> </span><span class="p">(</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">))</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">True</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">y</span><span class="p">))</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">andSpec</span></code> takes a tuple as input where the first field is <code class="docutils literal notranslate"><span class="pre">()</span></code>, indicating that
+<code class="docutils literal notranslate"><span class="pre">andSpec</span></code> is a pure function without internal state, and the second field is a
+tuple containing the inputs to the AND function. <code class="docutils literal notranslate"><span class="pre">andSpec</span></code> returns a tuple
+consisting of <code class="docutils literal notranslate"><span class="pre">()</span></code> (again, because <code class="docutils literal notranslate"><span class="pre">andSpec</span></code> is stateless) and the function’s
+output.  Like <code class="docutils literal notranslate"><span class="pre">andImp</span></code>, the output is a tuple where the first field is a ready
+bit that is <code class="docutils literal notranslate"><span class="pre">1</span></code> when the second field is ready to be read, and the second field
+is the result of the function’s computation.</p>
+<p><code class="docutils literal notranslate"><span class="pre">andSpec</span></code> completes in a single cycle, and as such its ready bit is always <code class="docutils literal notranslate"><span class="pre">1</span></code>.
+It computes the logical AND directly on the function’s inputs using Cryptol’s
+<code class="docutils literal notranslate"><span class="pre">(&amp;&amp;)</span></code> operator.</p>
+<p>Next, we define a state relation over <code class="docutils literal notranslate"><span class="pre">andImp</span></code> and <code class="docutils literal notranslate"><span class="pre">andSpec</span></code>:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">andStateRel</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="n">andState</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="nb">()</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span>
+<span class="nf">andStateRel</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="nb">()</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">True</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">andStateRel</span></code> takes two arguments:</p>
+<ol class="arabic simple">
+<li><p>An <code class="docutils literal notranslate"><span class="pre">andState</span></code> for <code class="docutils literal notranslate"><span class="pre">andImp</span></code>.</p></li>
+<li><p>An empty state (<code class="docutils literal notranslate"><span class="pre">()</span></code>) for <code class="docutils literal notranslate"><span class="pre">andSpec</span></code>.</p></li>
+</ol>
+<p><code class="docutils literal notranslate"><span class="pre">andStateRel</span></code> returns a <code class="docutils literal notranslate"><span class="pre">Bit</span></code> indicating whether the relation is satisified.  In
+this case, <code class="docutils literal notranslate"><span class="pre">andStateRel</span></code> always returns <code class="docutils literal notranslate"><span class="pre">True</span></code> because <code class="docutils literal notranslate"><span class="pre">andSpec</span></code> is stateless
+and therefore the state relation permits <code class="docutils literal notranslate"><span class="pre">andImp</span></code> to accept any state.</p>
+<p>Lastly, we define a relation over <code class="docutils literal notranslate"><span class="pre">andImp</span></code> and <code class="docutils literal notranslate"><span class="pre">andSpec</span></code>:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">andOutputRel</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">(</span><span class="n">andState</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span>
+<span class="nf">andOutputRel</span><span class="w"> </span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">impReady</span><span class="p">,</span><span class="w"> </span><span class="n">impO</span><span class="p">))</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">specO</span><span class="p">))</span><span class="w"> </span><span class="ow">=</span>
+<span class="w">  </span><span class="kr">if</span><span class="w"> </span><span class="n">impReady</span><span class="w"> </span><span class="kr">then</span><span class="w"> </span><span class="n">impO</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">specO</span><span class="w"> </span><span class="kr">else</span><span class="w"> </span><span class="kr">True</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">andOutputRel</span></code> takes two arguments:</p>
+<ol class="arabic simple">
+<li><p>A return value from <code class="docutils literal notranslate"><span class="pre">andImp</span></code>. Specifically, a pair consisting of an
+<code class="docutils literal notranslate"><span class="pre">andState</span></code> and a pair containing a ready bit and result of the logical AND.</p></li>
+<li><p>A return value from <code class="docutils literal notranslate"><span class="pre">andSpec</span></code>. Specifically, a pair consisting of an empty
+state <code class="docutils literal notranslate"><span class="pre">()</span></code> and a pair containing a ready bit and result of the logical AND.</p></li>
+</ol>
+<p><code class="docutils literal notranslate"><span class="pre">andOutputRel</span></code> returns a <code class="docutils literal notranslate"><span class="pre">Bit</span></code> indicating whether the relation is satisfied.  It
+considers the relation satisfied in two ways:</p>
+<ol class="arabic simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">andImp</span></code>’s ready bit is set, the relation is satisfied if the output
+values <code class="docutils literal notranslate"><span class="pre">impO</span></code> and <code class="docutils literal notranslate"><span class="pre">specO</span></code> from <code class="docutils literal notranslate"><span class="pre">andImp</span></code> and <code class="docutils literal notranslate"><span class="pre">andSpec</span></code> respectively are
+equivalent.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">andImp</span></code>’s ready bit is not set, the relation is satisfied.</p></li>
+</ol>
+<p>Put another way, the relation is satisfied if the end result of <code class="docutils literal notranslate"><span class="pre">andImp</span></code> and
+<code class="docutils literal notranslate"><span class="pre">andSpec</span></code> are equivalent.  The relation permits intermediate outputs to differ.</p>
+<p>We can verify that this relation is always satisfied–and therefore the two
+terms are bisimilar–by using <code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">&quot;And.cry&quot;</span><span class="p">;</span>
+<span class="n">enable_experimental</span><span class="p">;</span>
+
+<span class="n">and_bisim</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">prove_bisim</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">and</span><span class="kt">S</span><span class="nf">tate</span><span class="kt">R</span><span class="nf">el</span><span class="w"> </span><span class="l">}}</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">and</span><span class="kt">O</span><span class="nf">utput</span><span class="kt">R</span><span class="nf">el</span><span class="w"> </span><span class="l">}}</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">and</span><span class="kt">I</span><span class="nf">mp</span><span class="w"> </span><span class="l">}}</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">and</span><span class="kt">S</span><span class="nf">pec</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Upon running this script, SAW prints:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">Successfully proved bisimulation between andImp and andSpec</span>
+</pre></div>
+</div>
+<section id="building-a-nand-gate">
+<h3>Building a NAND gate<a class="headerlink" href="#building-a-nand-gate" title="Link to this heading"></a></h3>
+<p>We can make the example more interesting by reusing components to build a NAND
+gate.  We first define a state type for the NAND gate implementation that
+contains <code class="docutils literal notranslate"><span class="pre">andImp</span></code>’s state.  This NAND gate will not need any additional state,
+so we will define a type <code class="docutils literal notranslate"><span class="pre">nandState</span></code> that is equal to <code class="docutils literal notranslate"><span class="pre">andState</span></code>:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="kr">type</span><span class="w"> </span><span class="n">nandState</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">andState</span>
+</pre></div>
+</div>
+<p>Now, we define an implementation <code class="docutils literal notranslate"><span class="pre">nandImp</span></code> that calls <code class="docutils literal notranslate"><span class="pre">andImp</span></code> and negates the
+result:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">nandImp</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">(</span><span class="n">nandState</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">nandState</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span>
+<span class="nf">nandImp</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">andReady</span><span class="p">,</span><span class="w"> </span><span class="o">~</span><span class="n">andRes</span><span class="p">))</span>
+<span class="w">  </span><span class="kr">where</span>
+<span class="w">    </span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">andReady</span><span class="p">,</span><span class="w"> </span><span class="n">andRes</span><span class="p">))</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">andImp</span><span class="w"> </span><span class="n">x</span>
+</pre></div>
+</div>
+<p>Note that <code class="docutils literal notranslate"><span class="pre">nandImp</span></code> is careful to preserve the ready status of <code class="docutils literal notranslate"><span class="pre">andImp</span></code>.
+Because <code class="docutils literal notranslate"><span class="pre">nandImp</span></code> relies on <code class="docutils literal notranslate"><span class="pre">andImp</span></code>, it also takes two cycles to compute the
+logical NAND of its inputs.</p>
+<p>Next, we define a specification <code class="docutils literal notranslate"><span class="pre">nandSpec</span></code> in terms of <code class="docutils literal notranslate"><span class="pre">andSpec</span></code>:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">nandSpec</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span>
+<span class="nf">nandSpec</span><span class="w"> </span><span class="p">(</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">))</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">True</span><span class="p">,</span><span class="w"> </span><span class="o">~</span><span class="w"> </span><span class="p">(</span><span class="n">andSpec</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">)))</span><span class="o">.</span><span class="mf">1.1</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>As with <code class="docutils literal notranslate"><span class="pre">andSpec</span></code>, <code class="docutils literal notranslate"><span class="pre">nandSpec</span></code> is pure and computes its result in a single
+cycle.</p>
+<p>Next, we define a state relation over <code class="docutils literal notranslate"><span class="pre">nandImp</span></code> and <code class="docutils literal notranslate"><span class="pre">nandSpec</span></code>:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">nandStateRel</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="n">andState</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="nb">()</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span>
+<span class="nf">nandStateRel</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="nb">()</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">True</span>
+</pre></div>
+</div>
+<p>As with <code class="docutils literal notranslate"><span class="pre">andStateRel</span></code>, this state relation is always <code class="docutils literal notranslate"><span class="pre">True</span></code> because <code class="docutils literal notranslate"><span class="pre">nandSpec</span></code>
+is stateless.</p>
+<p>Lastly, we define an output relation indicating that <code class="docutils literal notranslate"><span class="pre">nandImp</span></code> and <code class="docutils literal notranslate"><span class="pre">nandSpec</span></code>
+produce equivalent results once <code class="docutils literal notranslate"><span class="pre">nandImp</span></code>’s ready bit is <code class="docutils literal notranslate"><span class="pre">1</span></code>:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">nandOutputRel</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">(</span><span class="n">nandState</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kr">Bit</span><span class="p">,</span><span class="w"> </span><span class="kr">Bit</span><span class="p">))</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="kr">Bit</span>
+<span class="nf">nandOutputRel</span><span class="w"> </span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">impReady</span><span class="p">,</span><span class="w"> </span><span class="n">impO</span><span class="p">))</span><span class="w"> </span><span class="p">(</span><span class="nb">()</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">specO</span><span class="p">))</span><span class="w"> </span><span class="ow">=</span>
+<span class="w">  </span><span class="kr">if</span><span class="w"> </span><span class="n">impReady</span><span class="w"> </span><span class="kr">then</span><span class="w"> </span><span class="n">impO</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">specO</span><span class="w"> </span><span class="kr">else</span><span class="w"> </span><span class="kr">True</span>
+</pre></div>
+</div>
+<p>To prove that <code class="docutils literal notranslate"><span class="pre">nandImp</span></code> and <code class="docutils literal notranslate"><span class="pre">nandSpec</span></code> are bisimilar, we again use
+<code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code>. This time however, we can reuse the bisimulation proof for the
+AND gate by including it in the <code class="docutils literal notranslate"><span class="pre">theorems</span></code> paramter for <code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">prove_bisim</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="p">[</span><span class="n">and_bisim</span><span class="p">]</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">nand</span><span class="kt">S</span><span class="nf">tate</span><span class="kt">R</span><span class="nf">el</span><span class="w"> </span><span class="l">}}</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">nand</span><span class="kt">O</span><span class="nf">utput</span><span class="kt">R</span><span class="nf">el</span><span class="w"> </span><span class="l">}}</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">nand</span><span class="kt">I</span><span class="nf">mp</span><span class="w"> </span><span class="l">}}</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">nand</span><span class="kt">S</span><span class="nf">pec</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Upon running this script, SAW prints:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">Successfully proved bisimulation between nandImp and nandSpec</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="understanding-the-proof-goals">
+<h2>Understanding the proof goals<a class="headerlink" href="#understanding-the-proof-goals" title="Link to this heading"></a></h2>
+<p>While not necessary for simple proofs, more advanced proofs may require
+inspecting proof goals.  <code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code> generates and attempts to solve the
+following proof goals:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OUTPUT RELATION THEOREM:
+  forall s1 s2 in.
+    srel s1 s2 -&gt; orel (lhs (s1, in)) (rhs (s2, in))
+
+STATE RELATION THEOREM:
+  forall s1 s2 out1 out2.
+    orel (s1, out1) (s2, out2) -&gt; srel s1 s2
+</pre></div>
+</div>
+<p>where the variables in the <code class="docutils literal notranslate"><span class="pre">forall</span></code>s are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">s1</span></code>: Initial state for <code class="docutils literal notranslate"><span class="pre">lhs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">s2</span></code>: Initial state for <code class="docutils literal notranslate"><span class="pre">rhs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">in</span></code>: Input value to <code class="docutils literal notranslate"><span class="pre">lhs</span></code> and <code class="docutils literal notranslate"><span class="pre">rhs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">out1</span></code>: Initial output value for <code class="docutils literal notranslate"><span class="pre">lhs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">out2</span></code>: Initial output value for <code class="docutils literal notranslate"><span class="pre">rhs</span></code></p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">STATE</span> <span class="pre">RELATION</span> <span class="pre">THEOREM</span></code> verifies that the output relation properly captures
+the guarantees of the state relation.  The <code class="docutils literal notranslate"><span class="pre">OUTPUT</span> <span class="pre">RELATION</span> <span class="pre">THEOREM</span></code> verifies
+that if <code class="docutils literal notranslate"><span class="pre">lhs</span></code> and <code class="docutils literal notranslate"><span class="pre">rhs</span></code> are executed with related states, then the result of
+that execution is also related.  These two theorems together guarantee that the
+terms simulate each other.</p>
+<p>When using composition, <code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code> also generates and attempts to solve
+the proof goal below for any successfully applied <code class="docutils literal notranslate"><span class="pre">BisimTheorem</span></code> in the
+<code class="docutils literal notranslate"><span class="pre">theorems</span></code> list:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>COMPOSITION SIDE CONDITION:
+  forall g_lhs_s g_rhs_s.
+    g_srel g_lhs_s g_rhs_s -&gt; f_srel f_lhs_s f_rhs_s
+    where
+      f_lhs_s = extract_inner_state g_lhs g_lhs_s f_lhs
+      f_rhs_s = extract_inner_state g_rhs g_rhs_s f_rhs
+</pre></div>
+</div>
+<p>where <code class="docutils literal notranslate"><span class="pre">g_lhs</span></code> is an outer term containing a call to an inner term <code class="docutils literal notranslate"><span class="pre">f_lhs</span></code>
+represented by a <code class="docutils literal notranslate"><span class="pre">BisimTheorem</span></code> and <code class="docutils literal notranslate"><span class="pre">g_rhs</span></code> is an outer term containing a call
+to an inner term <code class="docutils literal notranslate"><span class="pre">f_rhs</span></code> represented by the same <code class="docutils literal notranslate"><span class="pre">BisimTheorem</span></code>. The variables
+in <code class="docutils literal notranslate"><span class="pre">COMPOSITION</span> <span class="pre">SIDE</span> <span class="pre">CONDITION</span></code> are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">extract_inner_state</span> <span class="pre">x</span> <span class="pre">x_s</span> <span class="pre">y</span></code>: A helper function that takes an outer term <code class="docutils literal notranslate"><span class="pre">x</span></code>, an
+outer state <code class="docutils literal notranslate"><span class="pre">x_s</span></code>, and an inner term <code class="docutils literal notranslate"><span class="pre">y</span></code>, and returns the inner state of <code class="docutils literal notranslate"><span class="pre">x_s</span></code>
+that <code class="docutils literal notranslate"><span class="pre">x</span></code> passes to <code class="docutils literal notranslate"><span class="pre">y</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">g_lhs_s</span></code>: The state for <code class="docutils literal notranslate"><span class="pre">g_lhs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">g_rhs_s</span></code>: The state for <code class="docutils literal notranslate"><span class="pre">g_rhs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">g_srel</span></code>: The state relation for <code class="docutils literal notranslate"><span class="pre">g_lhs</span></code> and <code class="docutils literal notranslate"><span class="pre">g_rhs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">f_srel</span></code>: The state relation for <code class="docutils literal notranslate"><span class="pre">f_lhs</span></code> and <code class="docutils literal notranslate"><span class="pre">f_rhs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">f_lhs_s</span></code>: The state for <code class="docutils literal notranslate"><span class="pre">f_lhs</span></code>, as represented in <code class="docutils literal notranslate"><span class="pre">g_lhs_s</span></code> (extracted using
+<code class="docutils literal notranslate"><span class="pre">extract_inner_state</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">f_rhs_s</span></code>: The state for <code class="docutils literal notranslate"><span class="pre">f_rhs</span></code>, as represented in <code class="docutils literal notranslate"><span class="pre">g_rhs_s</span></code> (extracted using
+<code class="docutils literal notranslate"><span class="pre">extract_inner_state</span></code>).</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">COMPOSITION</span> <span class="pre">SIDE</span> <span class="pre">CONDITION</span></code> exists to verify that the terms in the
+bisimulation relation properly set up valid states for subterms they contain.</p>
+</section>
+<section id="limitations">
+<h2>Limitations<a class="headerlink" href="#limitations" title="Link to this heading"></a></h2>
+<p>For now, the <code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code> command has a couple limitations:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">lhs</span></code> and <code class="docutils literal notranslate"><span class="pre">rhs</span></code> must be named functions.  This is because <code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code> uses
+these names to perform substitution when making use of compositionality.</p></li>
+<li><p>Each subterm present in the list of bisimulation theorems already
+proven may be invoked at most once in <code class="docutils literal notranslate"><span class="pre">lhs</span></code> or <code class="docutils literal notranslate"><span class="pre">rhs</span></code>.  That is, if some
+function <code class="docutils literal notranslate"><span class="pre">g_lhs</span></code> calls <code class="docutils literal notranslate"><span class="pre">f_lhs</span></code>, and <code class="docutils literal notranslate"><span class="pre">prove_bisim</span></code> is invoked with a
+<code class="docutils literal notranslate"><span class="pre">BisimTheorem</span></code> proving that <code class="docutils literal notranslate"><span class="pre">f_lhs</span></code> is bisimilar to <code class="docutils literal notranslate"><span class="pre">f_rhs</span></code>, then <code class="docutils literal notranslate"><span class="pre">g_lhs</span></code> may
+call <code class="docutils literal notranslate"><span class="pre">f_lhs</span></code> at most once.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="specification-based-verification.html" class="btn btn-neutral float-left" title="Specification-Based Verification" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="transforming-term-values.html" class="btn btn-neutral float-right" title="Transforming Term Values" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

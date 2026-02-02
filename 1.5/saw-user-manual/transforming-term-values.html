@@ -1,0 +1,436 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transforming Term Values &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Proofs about Terms" href="proofs-about-terms.html" />
+    <link rel="prev" title="Bisimulation Prover" href="bisimulation-prover.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="loading-code.html">Loading Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Transforming Term Values</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#rewriting">Rewriting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#folding-and-unfolding">Folding and Unfolding</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-built-in-transformation-and-inspection-functions">Other Built-in Transformation and Inspection Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#loading-and-storing-terms">Loading and Storing Terms</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html">Extraction to the Rocq theorem prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Transforming Term Values</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/transforming-term-values.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="transforming-term-values">
+<h1>Transforming Term Values<a class="headerlink" href="#transforming-term-values" title="Link to this heading"></a></h1>
+<p>The three primary functions of SAW are <em>extracting</em> models (<code class="docutils literal notranslate"><span class="pre">Term</span></code>
+values) from programs, <em>transforming</em> those models, and <em>proving</em>
+properties about models using external provers. We’ve seen how to construct
+<code class="docutils literal notranslate"><span class="pre">Term</span></code> values from a range of sources. Now we show how
+to use the various term transformation features available in SAW.</p>
+<section id="rewriting">
+<h2>Rewriting<a class="headerlink" href="#rewriting" title="Link to this heading"></a></h2>
+<p>Rewriting a <code class="docutils literal notranslate"><span class="pre">Term</span></code> consists of applying one or more <em>rewrite rules</em> to
+it, resulting in a new <code class="docutils literal notranslate"><span class="pre">Term</span></code>. A rewrite rule in SAW can be specified in
+multiple ways:</p>
+<ul class="simple">
+<li><p>as the definition of a function that can be unfolded,</p></li>
+<li><p>as a term of Boolean type (or a function returning a Boolean) that
+is an equality statement, and</p></li>
+<li><p>as a term of <em>equality type</em> with a body that encodes a proof that
+the equality in the type is valid.</p></li>
+</ul>
+<p>In each case the term logically consists of two sides and describes a
+way to transform the left side into the right side. Each side may
+contain variables (bound by enclosing lambda expressions) and is
+therefore a <em>pattern</em> which can match any term in which each variable
+represents an arbitrary sub-term. The left-hand pattern describes a term
+to match (which may be a sub-term of the full term being rewritten), and
+the right-hand pattern describes a term to replace it with. Any variable
+in the right-hand pattern must also appear in the left-hand pattern and
+will be instantiated with whatever sub-term matched that variable in the
+original term.</p>
+<p>For example, say we have the following Cryptol function:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="w"> </span><span class="nf">\</span><span class="p">(</span><span class="n">x</span><span class="kt">:</span><span class="p">[</span><span class="mi">8</span><span class="p">])</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span>
+</pre></div>
+</div>
+<p>We might for some reason want to replace multiplication by a power of
+two with a shift. We can describe this replacement using an equality
+statement in Cryptol (a rule of form 2 above):</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="nf">\</span><span class="p">(</span><span class="n">y</span><span class="kt">:</span><span class="p">[</span><span class="mi">8</span><span class="p">])</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">y</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="p">(</span><span class="n">y</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Interpreting this as a rewrite rule, it says that for any 8-bit vector
+(call it <code class="docutils literal notranslate"><span class="pre">y</span></code> for now), we can replace <code class="docutils literal notranslate"><span class="pre">y</span> <span class="pre">*</span> <span class="pre">2</span></code> with <code class="docutils literal notranslate"><span class="pre">y</span> <span class="pre">&lt;&lt;</span> <span class="pre">1</span></code>. Using this
+rule to rewrite the earlier expression would then yield:</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="w"> </span><span class="nf">\</span><span class="p">(</span><span class="n">x</span><span class="kt">:</span><span class="p">[</span><span class="mi">8</span><span class="p">])</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span>
+</pre></div>
+</div>
+<p>The general philosophy of rewriting is that the left and right patterns,
+while syntactically different, should be semantically equivalent.
+Therefore, applying a set of rewrite rules should not change the
+fundamental meaning of the term being rewritten. SAW is particularly
+focused on the task of proving that some logical statement expressed as
+a <code class="docutils literal notranslate"><span class="pre">Term</span></code> is always true. If that is in fact the case, then the entire
+term can be replaced by the term <code class="docutils literal notranslate"><span class="pre">True</span></code> without changing its meaning. The
+rewriting process can in some cases, by repeatedly applying rules that
+themselves are known to be valid, reduce a complex term entirely to
+<code class="docutils literal notranslate"><span class="pre">True</span></code>, which constitutes a proof of the original statement. In other
+cases, rewriting can simplify terms before sending them to external
+automated provers that can then finish the job. Sometimes this
+simplification can help the automated provers run more quickly, and
+sometimes it can help them prove things they would otherwise be unable
+to prove by applying reasoning steps (rewrite rules) that are not
+available to the automated provers.</p>
+<p>In practical use, rewrite rules can be aggregated into <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>
+values in SAWScript. A few pre-defined <code class="docutils literal notranslate"><span class="pre">Simpset</span></code> values exist:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">empty_ss</span> <span class="pre">:</span> <span class="pre">Simpset</span></code> is the empty set of rules. Rewriting with it
+should have no effect, but it is useful as an argument to some of the
+functions that construct larger <code class="docutils literal notranslate"><span class="pre">Simpset</span></code> values.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">basic_ss</span> <span class="pre">:</span> <span class="pre">Simpset</span></code> is a collection of rules that are useful in most
+proof scripts.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cryptol_ss</span> <span class="pre">:</span> <span class="pre">()</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> includes a collection of Cryptol-specific
+rules. Some of these simplify away the abstractions introduced in the
+translation from Cryptol to SAWCore, which can be useful when proving
+equivalence between Cryptol and non-Cryptol code. Leaving these
+abstractions in place is appropriate when comparing only Cryptol code,
+however, so <code class="docutils literal notranslate"><span class="pre">cryptol_ss</span></code> is not included in <code class="docutils literal notranslate"><span class="pre">basic_ss</span></code>.</p></li>
+</ul>
+<p>The following function can apply a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">rewrite</span> <span class="pre">:</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Term</span></code> applies a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code> to an existing
+<code class="docutils literal notranslate"><span class="pre">Term</span></code> to produce a new <code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p></li>
+</ul>
+<p>To make this more concrete, we examine how the rewriting example
+sketched above, to convert multiplication into shift, can work in
+practice. We simplify everything with <code class="docutils literal notranslate"><span class="pre">cryptol_ss</span></code> as we go along so
+that the <code class="docutils literal notranslate"><span class="pre">Term</span></code>s don’t get too cluttered. First, we declare the term
+to be transformed:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let term = rewrite (cryptol_ss ()) {{ \(x:[8]) -&gt; (x * 2) + 1 }}</span>
+<span class="go">sawscript&gt; print_term term</span>
+<span class="go">\(x : Prelude.Vec 8 Prelude.Bool) -&gt;</span>
+<span class="go">  Prelude.bvAdd 8 (Prelude.bvMul 8 x (Prelude.bvNat 8 2))</span>
+<span class="go">    (Prelude.bvNat 8 1)</span>
+</pre></div>
+</div>
+<p>Next, we declare the rewrite rule:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let rule = rewrite (cryptol_ss ()) {{ \(y:[8]) -&gt; (y * 2) == (y &lt;&lt; 1) }}</span>
+<span class="go">sawscript&gt; print_term rule</span>
+<span class="go">let { x@1 = Prelude.Vec 8 Prelude.Bool</span>
+<span class="go">    }</span>
+<span class="go"> in \(y : x@1) -&gt;</span>
+<span class="go">      Cryptol.ecEq x@1 (Cryptol.PCmpWord 8)</span>
+<span class="go">        (Prelude.bvMul 8 y (Prelude.bvNat 8 2))</span>
+<span class="go">        (Prelude.bvShiftL 8 Prelude.Bool 1 Prelude.False y</span>
+<span class="go">           (Prelude.bvNat 1 1))</span>
+</pre></div>
+</div>
+<p>The primary interface to rewriting uses the <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> type instead of
+the <code class="docutils literal notranslate"><span class="pre">Term</span></code> type, as shown in the signatures for <code class="docutils literal notranslate"><span class="pre">addsimp</span></code> and
+<code class="docutils literal notranslate"><span class="pre">addsimps</span></code>.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">addsimp</span> <span class="pre">:</span> <span class="pre">Theorem</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds a single <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> to a
+<code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">addsimps</span> <span class="pre">:</span> <span class="pre">[Theorem]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds several <code class="docutils literal notranslate"><span class="pre">Theorem</span></code>
+values to a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
+</ul>
+<p>A <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> is essentially a <code class="docutils literal notranslate"><span class="pre">Term</span></code> that is proven correct in some way.
+In general, a <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> can be any statement, and may not be useful as a
+rewrite rule. However, if it has an appropriate shape it can be used for
+rewriting. In the <a class="reference internal" href="proofs-about-terms.html"><span class="std std-doc">“Proofs about Terms”</span></a> section,
+we’ll describe how to construct <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> values from <code class="docutils literal notranslate"><span class="pre">Term</span></code> values.</p>
+<p>For the time being, we’ll assume we’ve proved our <code class="docutils literal notranslate"><span class="pre">rule</span></code> term correct in
+some way, and have a <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> named <code class="docutils literal notranslate"><span class="pre">rule_thm</span></code>.</p>
+<p>Finally, we apply the rule to the target term:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let result = rewrite (addsimp rule_thm empty_ss) term</span>
+<span class="go">sawscript&gt; print_term result</span>
+<span class="go">\(x : Prelude.Vec 8 Prelude.Bool) -&gt;</span>
+<span class="go">  Prelude.bvAdd 8</span>
+<span class="go">    (Prelude.bvShiftL 8 Prelude.Bool 1 Prelude.False x</span>
+<span class="go">       (Prelude.bvNat 1 1))</span>
+<span class="go">    (Prelude.bvNat 8 1)</span>
+</pre></div>
+</div>
+<p>In the absence of user-constructed <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> values, there are some
+additional built-in rules that are not included in either <code class="docutils literal notranslate"><span class="pre">basic_ss</span></code> and
+<code class="docutils literal notranslate"><span class="pre">cryptol_ss</span></code> because they are not always beneficial, but that can
+sometimes be helpful or essential. The <code class="docutils literal notranslate"><span class="pre">cryptol_ss</span></code> simpset includes
+rewrite rules to unfold all definitions in the <code class="docutils literal notranslate"><span class="pre">Cryptol</span></code> SAWCore module,
+but does not include any of the terms of equality type.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">add_cryptol_defs</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds unfolding
+rules for functions with the given names from the SAWCore <code class="docutils literal notranslate"><span class="pre">Cryptol</span></code> module
+to the given <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">add_cryptol_eqs</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds the terms of
+equality type with the given names from the SAWCore <code class="docutils literal notranslate"><span class="pre">Cryptol</span></code> module to
+the given <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">add_prelude_defs</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds unfolding
+rules from the SAWCore <code class="docutils literal notranslate"><span class="pre">Prelude</span></code> module to a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">add_prelude_eqs</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds equality-typed
+terms from the SAWCore <code class="docutils literal notranslate"><span class="pre">Prelude</span></code> module to a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
+</ul>
+<p>Finally, it’s possible to construct a theorem from an arbitrary SAWCore
+expression (rather than a Cryptol expression), using the <code class="docutils literal notranslate"><span class="pre">core_axiom</span></code>
+function.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">core_axiom</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">Theorem</span></code> creates a <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> from a <code class="docutils literal notranslate"><span class="pre">String</span></code>
+in SAWCore syntax. Any <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> introduced by this function is assumed
+to be correct, so use it with caution.</p></li>
+</ul>
+</section>
+<section id="folding-and-unfolding">
+<h2>Folding and Unfolding<a class="headerlink" href="#folding-and-unfolding" title="Link to this heading"></a></h2>
+<p>A SAWCore term can be given a name using the <code class="docutils literal notranslate"><span class="pre">define</span></code> function, and is
+then by default printed as that name alone. A named subterm can be
+“unfolded” so that the original definition appears again.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">define</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unfold_term</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Term</span></code></p></li>
+</ul>
+<p>For example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let t = {{ 0x22 }}</span>
+<span class="go">sawscript&gt; print_term t</span>
+<span class="go">Cryptol.ecNumber (Cryptol.TCNum 34) (Prelude.Vec 8 Prelude.Bool)</span>
+<span class="go">  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))</span>
+<span class="go">sawscript&gt; t&#39; &lt;- define &quot;t&quot; t</span>
+<span class="go">sawscript&gt; print_term t&#39;</span>
+<span class="go">t</span>
+<span class="go">sawscript&gt; let t&#39;&#39; = unfold_term [&quot;t&quot;] t&#39;</span>
+<span class="go">sawscript&gt; print_term t&#39;&#39;</span>
+<span class="go">Cryptol.ecNumber (Cryptol.TCNum 34) (Prelude.Vec 8 Prelude.Bool)</span>
+<span class="go">  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))</span>
+</pre></div>
+</div>
+<p>This process of folding and unfolding is useful both to make large terms
+easier for humans to work with and to make automated proofs more
+tractable. We’ll describe the latter in more detail when we discuss
+interacting with external provers.</p>
+<p>In some cases, folding happens automatically when constructing Cryptol
+expressions. Consider the following example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let t = {{ 0x22 }}</span>
+<span class="go">sawscript&gt; print_term t</span>
+<span class="go">Cryptol.ecNumber (Cryptol.TCNum 34) (Prelude.Vec 8 Prelude.Bool)</span>
+<span class="go">  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))</span>
+<span class="go">sawscript&gt; let {{ t&#39; = 0x22 }}</span>
+<span class="go">sawscript&gt; print_term {{ t&#39; }}</span>
+<span class="go">t&#39;</span>
+</pre></div>
+</div>
+<p>This illustrates that a bare expression in Cryptol braces gets
+translated directly to a SAWCore term. However, a Cryptol <em>definition</em>
+gets translated into a <em>folded</em> SAWCore term. In addition, because the
+second definition of <code class="docutils literal notranslate"><span class="pre">t</span></code> occurs at the Cryptol level, rather than the
+SAWScript level, it is visible only inside Cryptol braces. Definitions
+imported from Cryptol source files are also initially folded and can be
+unfolded as needed.</p>
+</section>
+<section id="other-built-in-transformation-and-inspection-functions">
+<h2>Other Built-in Transformation and Inspection Functions<a class="headerlink" href="#other-built-in-transformation-and-inspection-functions" title="Link to this heading"></a></h2>
+<p>In addition to the <code class="docutils literal notranslate"><span class="pre">Term</span></code> transformation functions described so far, a
+variety of others also exist.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">beta_reduce_term</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Term</span></code> takes any sub-expression of the form
+<code class="docutils literal notranslate"><span class="pre">(\x</span> <span class="pre">-&gt;</span> <span class="pre">t)</span> <span class="pre">v</span></code> in the given <code class="docutils literal notranslate"><span class="pre">Term</span></code> and replaces it with a transformed
+version of <code class="docutils literal notranslate"><span class="pre">t</span></code> in which all instances of <code class="docutils literal notranslate"><span class="pre">x</span></code> are replaced by <code class="docutils literal notranslate"><span class="pre">v</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">replace</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code> replaces arbitrary
+subterms. A call to <code class="docutils literal notranslate"><span class="pre">replace</span> <span class="pre">x</span> <span class="pre">y</span> <span class="pre">t</span></code> replaces any instance of <code class="docutils literal notranslate"><span class="pre">x</span></code> inside
+<code class="docutils literal notranslate"><span class="pre">t</span></code> with <code class="docutils literal notranslate"><span class="pre">y</span></code>.</p></li>
+</ul>
+<p>Assessing the size of a term can be particularly useful during benchmarking.
+SAWScript provides two mechanisms for this.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">term_size</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Int</span></code> calculates the number of nodes in the
+Directed Acyclic Graph (DAG) representation of a <code class="docutils literal notranslate"><span class="pre">Term</span></code> used internally
+by SAW. This is the most appropriate way of determining the resource use
+of a particular term.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">term_tree_size</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Int</span></code> calculates how large a <code class="docutils literal notranslate"><span class="pre">Term</span></code> would be
+if it were represented by a tree instead of a DAG. This can, in general,
+be much, much larger than the number returned by <code class="docutils literal notranslate"><span class="pre">term_size</span></code>, and serves
+primarily as a way of assessing, for a specific term, how much benefit
+there is to the term sharing used by the DAG representation.</p></li>
+</ul>
+<p>Finally, there are a few commands related to the internal SAWCore type of a
+<code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">check_term</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code> checks that the internal structure
+of a <code class="docutils literal notranslate"><span class="pre">Term</span></code> is well-formed and that it passes all of the rules of the
+SAWCore type checker.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">type</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Type</span></code> returns the type of a particular <code class="docutils literal notranslate"><span class="pre">Term</span></code>, which
+can then be used to, for example, construct a new fresh variable with
+<code class="docutils literal notranslate"><span class="pre">fresh_symbolic</span></code>.</p></li>
+</ul>
+</section>
+<section id="loading-and-storing-terms">
+<span id="id1"></span><h2>Loading and Storing Terms<a class="headerlink" href="#loading-and-storing-terms" title="Link to this heading"></a></h2>
+<p>Most frequently, <code class="docutils literal notranslate"><span class="pre">Term</span></code> values in SAWScript come from Cryptol, JVM, or
+LLVM programs, or some transformation thereof. However, it is also
+possible to obtain them from various other sources.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">parse_core</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">Term</span></code> parses a <code class="docutils literal notranslate"><span class="pre">String</span></code> containing a term in
+SAWCore syntax, returning a <code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">read_core</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code> is like <code class="docutils literal notranslate"><span class="pre">parse_core</span></code>, but
+obtains the text from the given file and expects it to be in the simpler
+SAWCore external representation format, rather than the human-readable
+syntax shown so far.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">read_aig</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code> returns a <code class="docutils literal notranslate"><span class="pre">Term</span></code> representation
+of an And-Inverter-Graph (AIG) file in AIGER format.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">read_bytes</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code> reads a constant sequence of
+bytes from a file and represents it as a <code class="docutils literal notranslate"><span class="pre">Term</span></code>. Its result will always
+have Cryptol type <code class="docutils literal notranslate"><span class="pre">[n][8]</span></code> for some <code class="docutils literal notranslate"><span class="pre">n</span></code>.</p></li>
+</ul>
+<p>It is also possible to write <code class="docutils literal notranslate"><span class="pre">Term</span></code> values into files in various
+formats, including: AIGER (<code class="docutils literal notranslate"><span class="pre">write_aig</span></code>), CNF (<code class="docutils literal notranslate"><span class="pre">write_cnf</span></code>), SAWCore
+external representation (<code class="docutils literal notranslate"><span class="pre">write_core</span></code>), and SMT-Lib version 2
+(<code class="docutils literal notranslate"><span class="pre">write_smtlib2</span></code>).</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">write_aig</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">write_cnf</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">write_core</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">write_smtlib2</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code></p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="bisimulation-prover.html" class="btn btn-neutral float-left" title="Bisimulation Prover" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="proofs-about-terms.html" class="btn btn-neutral float-right" title="Proofs about Terms" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

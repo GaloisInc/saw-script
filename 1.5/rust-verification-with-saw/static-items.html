@@ -1,0 +1,438 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Static items &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Case study: Salsa20" href="case-study-salsa20.html" />
+    <link rel="prev" title="Overrides and compositional verification" href="overrides-and-compositional-verification.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Rust Verification with SAW</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="about-mir-json.html">About <code class="docutils literal notranslate"><span class="pre">mir-json</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-basics.html">SAW basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference-types.html">Reference types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compound-data-types.html">Compound data types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overrides-and-compositional-verification.html">Overrides and compositional verification</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Static items</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#immutable-static-items">Immutable static items</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mutable-static-items">Mutable static items</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#mutable-static-items-and-compositional-overrides">Mutable static items and compositional overrides</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="case-study-salsa20.html">Case study: Salsa20</a></li>
+<li class="toctree-l2"><a class="reference internal" href="a-final-word.html">A final word</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../saw-user-manual/index.html">SAW User Manual</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Rust Verification with SAW</a></li>
+      <li class="breadcrumb-item active">Static items</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/rust-verification-with-saw/static-items.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="static-items">
+<h1>Static items<a class="headerlink" href="#static-items" title="Link to this heading"></a></h1>
+<p>Sometimes, Rust code makes use of <a class="reference external" href="https://doc.rust-lang.org/reference/items/static-items.html"><em>static
+items</em></a>, which are
+definitions that are defined in a precise memory location for the entire
+duration of the program. As such, static items can be thought of as a form of
+global variables.</p>
+<section id="immutable-static-items">
+<h2>Immutable static items<a class="headerlink" href="#immutable-static-items" title="Link to this heading"></a></h2>
+<p>There are two kinds of static items in Rust: mutable static items (which have a
+<code class="docutils literal notranslate"><span class="pre">mut</span></code> keyword) and immutable static items (which lack <code class="docutils literal notranslate"><span class="pre">mut</span></code>). Immutable static
+items are much easier to deal with, so let’s start by looking at an example of
+a program that uses immutable static data:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">static</span><span class="w"> </span><span class="n">ANSWER</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">answer_to_the_ultimate_question</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">ANSWER</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>This function will return <code class="docutils literal notranslate"><span class="pre">ANSWER</span></code>, i.e., <code class="docutils literal notranslate"><span class="pre">42</span></code>. We can write a spec that says
+as much:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">answer_to_the_ultimate_question_spec1</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">42</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>This works, but it is somewhat unsatisfying, as it requires hard-coding the
+value of <code class="docutils literal notranslate"><span class="pre">ANSWER</span></code> into the spec. Ideally, we’d not have to think about the
+precise implementation of static items like <code class="docutils literal notranslate"><span class="pre">ANSWER</span></code>. Fortunately, SAW makes
+this possible by providing a <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span></code> function which computes
+the initial value of a static item at the start of the program:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_static_initializer</span>
+<span class="go">String -&gt; MIRValue</span>
+</pre></div>
+</div>
+<p>In this case, <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span> <span class="pre">&quot;statics::ANSWER&quot;</span></code> is equivalent to
+writing <code class="docutils literal notranslate"><span class="pre">mir_term</span> <span class="pre">{{</span> <span class="pre">42</span> <span class="pre">:</span> <span class="pre">[32]</span> <span class="pre">}}</span></code>, so this spec is also valid:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">answer_to_the_ultimate_question_spec2</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="s2">&quot;statics::ANSWER&quot;</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>Like <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>, the <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span></code> function expects a full
+identifier as an argument, so we must write <code class="docutils literal notranslate"><span class="pre">&quot;statics::ANSWER&quot;</span></code> instead of
+just `“ANSWER”.</p>
+<p>At the MIR level, there is a unique reference to every static item. You can
+obtain this reference by using the <code class="docutils literal notranslate"><span class="pre">mir_static</span></code> function:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_static</span>
+<span class="go">String -&gt; MIRValue</span>
+</pre></div>
+</div>
+<p>Here is one situation in which you would need to use a <em>reference</em> to a static
+item (which <code class="docutils literal notranslate"><span class="pre">mir_static</span></code> computes) rather than the <em>value</em> of a static item
+(which <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span></code> computes):</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">answer_in_ref_form</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="o">&amp;</span><span class="n">ANSWER</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>A spec for this function would look like this:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">answer_in_ref_form_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="s2">&quot;statics::ANSWER&quot;</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>That’s about all there is to say regarding immutable static items.</p>
+</section>
+<section id="mutable-static-items">
+<h2>Mutable static items<a class="headerlink" href="#mutable-static-items" title="Link to this heading"></a></h2>
+<p>Mutable static items are a particularly tricky aspect of Rust. Including a
+mutable static item in your program is tantamount to having mutable global
+state that any function can access and modify. They are so tricky, in fact,
+that Rust does not even allow you to use them unless you surround them in an
+<code class="docutils literal notranslate"><span class="pre">unsafe</span></code> block:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">static</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">MUT_ANSWER</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">mut_answer_to_the_ultimate_question</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">MUT_ANSWER</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span></code> and <code class="docutils literal notranslate"><span class="pre">mut_static</span></code> functions work both immutable and
+mutable static items, so we can write specs for mutable items using mostly the
+same techniques as for writing specs for immutable items. We must be careful,
+however, as SAW is pickier when it comes to specifying the initial values of
+mutable static items. For example, here is naïve attempt at porting the spec
+for <code class="docutils literal notranslate"><span class="pre">answer_to_the_ultimate_question</span></code> over to its mutable static counterpart,
+<code class="docutils literal notranslate"><span class="pre">mut_answer_to_the_ultimate_question</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="s2">&quot;statics::MUT_ANSWER&quot;</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>This looks plausible, but SAW will fail to verify it:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[21:52:32.738] Verifying statics/28a97e47::mut_answer_to_the_ultimate_question[0] ...</span>
+<span class="go">[21:52:32.745] Simulating statics/28a97e47::mut_answer_to_the_ultimate_question[0] ...</span>
+<span class="go">...</span>
+<span class="go">Symbolic execution failed.</span>
+<span class="go">Abort due to assertion failure:</span>
+<span class="go">  statics.rs:14:14: 14:24: error: in statics/28a97e47::mut_answer_to_the_ultimate_question[0]</span>
+<span class="go">  attempted to read empty mux tree</span>
+</pre></div>
+</div>
+<p>Oh no! Recall that we have seen this “<code class="docutils literal notranslate"><span class="pre">attempted</span> <span class="pre">to</span> <span class="pre">read</span> <span class="pre">empty</span> <span class="pre">mux</span> <span class="pre">tree</span></code>” error
+message once before when discussing reference types. This error arose when we
+attempted to read from uninitialized memory from a reference value. The same
+situation applies here. A static item is backed by a reference, and SAW
+deliberately does <em>not</em> initialize the memory that a mutable static reference
+points to upon program startup. Since we did not initialize <code class="docutils literal notranslate"><span class="pre">MUT_ANSWER</span></code>’s
+reference value in the preconditions of the spec, SAW crashes at simulation
+time when it attempts to read from the uninitialized memory.</p>
+<p>The solution to this problem is to perform this initialization explicitly using
+<code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> in the preconditions of the spec. For example, this is a valid
+spec:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;statics::MUT_ANSWER&quot;</span><span class="p">;</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer_init</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">mut_answer</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">mut_answer</span><span class="p">)</span><span class="w"> </span><span class="n">mut_answer_init</span><span class="p">;</span>
+
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">mut_answer_init</span><span class="p">;</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>We don’t necessarily have to use <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span></code> as the starting value
+for <code class="docutils literal notranslate"><span class="pre">MUT_ANSWER</span></code>, however. This spec, which uses <code class="docutils literal notranslate"><span class="pre">27</span></code> as the starting value, is
+equally valid:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_alt_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">alt_answer</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">27</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="s2">&quot;statics::MUT_ANSWER&quot;</span><span class="p">)</span><span class="w"> </span><span class="n">alt_answer</span><span class="p">;</span>
+
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">alt_answer</span><span class="p">;</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>At this point, you are likely wondering: why do we need to explicitly
+initialize mutable static references but not immutable static references? After
+all, when we wrote a spec for <code class="docutils literal notranslate"><span class="pre">answer_to_the_ultimate_question</span></code> earlier, we
+managed to get away with not initializing the reference for <code class="docutils literal notranslate"><span class="pre">ANSWER</span></code> (which is
+an immutable static item). The difference is that the value of a mutable static
+item can change over the course of a program, and SAW requires that you be very
+careful in specifying what a mutable static value is at the start of a
+function. For example, consider a slightly extended version of the earlier Rust
+code we saw:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">static</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">MUT_ANSWER</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">mut_answer_to_the_ultimate_question</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">MUT_ANSWER</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">alternate_universe</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">MUT_ANSWER</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">27</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="n">mut_answer_to_the_ultimate_question</span><span class="p">()</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Suppose someone were to ask you “what value does
+<code class="docutils literal notranslate"><span class="pre">mut_answer_to_the_ultimate_question</span></code> return?” This is not a straightforward
+question to answer, as the value that it returns depends on the surrounding
+context. If you were to call <code class="docutils literal notranslate"><span class="pre">mut_answer_to_the_ultimate_question</span></code> right as the
+program started, it would return <code class="docutils literal notranslate"><span class="pre">42</span></code>. If you were to call
+<code class="docutils literal notranslate"><span class="pre">mut_answer_to_the_ultimate_question</span></code> as part of the implementation of
+<code class="docutils literal notranslate"><span class="pre">alternate_universe</span></code>, however, then it would return <code class="docutils literal notranslate"><span class="pre">27</span></code>! This is an inherent
+danger of using mutable static items, as they can be modified at any time by
+any function. For this reason, SAW requires you to be explicit about what the
+initial values of mutable static items should be.</p>
+<section id="mutable-static-items-and-compositional-overrides">
+<h3>Mutable static items and compositional overrides<a class="headerlink" href="#mutable-static-items-and-compositional-overrides" title="Link to this heading"></a></h3>
+<p>In the “Overrides and mutable references” section, we discussed the potential
+pitfalls of using mutable references in compositional overrides. Mutable static
+items are also mutable values that are backed by references, and as such, they
+are also subject to the same pitfalls. Let’s see an example of this:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">static</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">A</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">side_effect</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">A</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">foo</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">side_effect</span><span class="p">();</span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">A</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The setup is almost the same, except that instead of passing a mutable
+reference as an argument to <code class="docutils literal notranslate"><span class="pre">side_effect</span></code>, we instead declare a mutable static
+item <code class="docutils literal notranslate"><span class="pre">A</span></code> that is shared between <code class="docutils literal notranslate"><span class="pre">side_effect</span></code> and <code class="docutils literal notranslate"><span class="pre">foo</span></code>. We could potentially
+write SAW specs for <code class="docutils literal notranslate"><span class="pre">side_effect</span></code> and <code class="docutils literal notranslate"><span class="pre">foo</span></code> like these:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;statics_compositional::A&quot;</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<span class="p">};</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">a_init</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="n">a_init</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="n">a_init</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">side_effect_ov</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;statics_compositional::side_effect&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+<span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;statics_compositional::foo&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">side_effect_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Note that we have once again underspecified the behavior of <code class="docutils literal notranslate"><span class="pre">side_effect</span></code>, as
+we do not say what <code class="docutils literal notranslate"><span class="pre">A</span></code>’s value should be in the postconditions of
+<code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code>. Similarly, <code class="docutils literal notranslate"><span class="pre">foo_spec</span></code> is wrong, as it should return <code class="docutils literal notranslate"><span class="pre">0</span></code>
+rather than the initial value of <code class="docutils literal notranslate"><span class="pre">A</span></code>. By similar reasoning as before, we run
+the risk that using <code class="docutils literal notranslate"><span class="pre">side_effect_ov</span></code> could lead use to prove something
+incorrect. Thankfully, SAW can also catch this sort of mistake:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[15:46:38.525] Verifying statics_compositional/16fea9c0::side_effect[0] ...</span>
+<span class="go">[15:46:38.533] Simulating statics_compositional/16fea9c0::side_effect[0] ...</span>
+<span class="go">[15:46:38.533] Checking proof obligations statics_compositional/16fea9c0::side_effect[0] ...</span>
+<span class="go">[15:46:38.533] Proof succeeded! statics_compositional/16fea9c0::side_effect[0]</span>
+<span class="go">[15:46:38.533] Verifying statics_compositional/16fea9c0::foo[0] ...</span>
+<span class="go">[15:46:38.542] Simulating statics_compositional/16fea9c0::foo[0] ...</span>
+<span class="go">[15:46:38.542] Matching 1 overrides of  statics_compositional/16fea9c0::side_effect[0] ...</span>
+<span class="go">[15:46:38.542] Branching on 1 override variants of statics_compositional/16fea9c0::side_effect[0] ...</span>
+<span class="go">...</span>
+<span class="go">State of mutable static variable &quot;statics_compositional/16fea9c0::A[0]&quot; not described in postcondition</span>
+</pre></div>
+</div>
+<p>To repair this proof, add a <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> statement in the postconditions of
+<code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">side_effect_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+
+<span class="w">  </span><span class="c c-Singleline">// This is new</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>And then correct the behavior of <code class="docutils literal notranslate"><span class="pre">foo_spec</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="n">a_init</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_static_initializer</span><span class="w"> </span><span class="n">a</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_static</span><span class="w"> </span><span class="n">a</span><span class="p">)</span><span class="w"> </span><span class="n">a_init</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[];</span>
+
+<span class="w">  </span><span class="c c-Singleline">// This is new</span>
+<span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>Be warned that if your program declares any mutable static items, then any
+compositional override <em>must</em> state what the value of each mutable static item
+is in its postconditions. This applies <em>even if the override does not directly
+use the mutable static items</em>. For example, if we had declared a second mutable
+static item alongside <code class="docutils literal notranslate"><span class="pre">A</span></code>:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">static</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">A</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span>
+<span class="k">static</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">B</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">27</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Then <code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code> would need an additional <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> statement
+involving <code class="docutils literal notranslate"><span class="pre">B</span></code> to satisfy this requirement. This requirement is somewhat
+heavy-handed, but it is necessary in general to avoid unsoundness. Think
+carefully before you use mutable static items!</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="overrides-and-compositional-verification.html" class="btn btn-neutral float-left" title="Overrides and compositional verification" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="case-study-salsa20.html" class="btn btn-neutral float-right" title="Case study: Salsa20" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

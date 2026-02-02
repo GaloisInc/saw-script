@@ -1,0 +1,577 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Structure of SAWScript &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Invoking SAW" href="invoking-saw.html" />
+    <link rel="prev" title="Overview" href="overview.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Structure of SAWScript</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#parts-of-a-saw-script">Parts of a SAW Script</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#a-first-simple-example">A First Simple Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#syntax">Syntax</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#basic-types-and-values">Basic Types and Values</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#basic-expression-forms">Basic Expression Forms</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-basic-functions">Other Basic Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#repl-actions">REPL Actions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#further-built-in-functions-and-commands">Further built-in functions and commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#experimental-and-deprecated-functions-and-commands">Experimental and deprecated functions and commands</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="loading-code.html">Loading Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html">Extraction to the Rocq theorem prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Structure of SAWScript</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/structure-of-sawscript.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="structure-of-sawscript">
+<h1>Structure of SAWScript<a class="headerlink" href="#structure-of-sawscript" title="Link to this heading"></a></h1>
+<p>A SAWScript program consists, at the top level, of a sequence of
+commands to be executed in order. Each command is terminated with a
+semicolon. For example, the <code class="docutils literal notranslate"><span class="pre">print</span></code> command displays a textual
+representation of its argument. Suppose the following text is stored in
+the file <code class="docutils literal notranslate"><span class="pre">print.saw</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="w"> </span><span class="mi">3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>The command <code class="docutils literal notranslate"><span class="pre">saw</span> <span class="pre">print.saw</span></code> will then yield output similar to the
+following:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">Loading module Cryptol</span>
+<span class="go">Loading file &quot;print.saw&quot;</span>
+<span class="go">3</span>
+</pre></div>
+</div>
+<p>The same code can be run from the interactive REPL:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; print 3;</span>
+<span class="go">3</span>
+</pre></div>
+</div>
+<p>At the REPL, terminating semicolons can be omitted:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; print 3</span>
+<span class="go">3</span>
+</pre></div>
+</div>
+<p>To make common use cases simpler, bare values at the REPL are treated as
+if they were arguments to <code class="docutils literal notranslate"><span class="pre">print</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; 3</span>
+<span class="go">3</span>
+</pre></div>
+</div>
+<p>One SAWScript file can be included in another using the <code class="docutils literal notranslate"><span class="pre">include</span></code>
+command, which takes the name of the file to be included as an argument.
+For example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; include &quot;print.saw&quot;</span>
+<span class="go">Loading file &quot;print.saw&quot;</span>
+<span class="go">3</span>
+</pre></div>
+</div>
+<p>Typically, included files are used to import definitions, not perform
+side effects like printing. However, as you can see, if any commands
+with side effects occur at the top level of the imported file, those
+side effects will occur during import.</p>
+<section id="parts-of-a-saw-script">
+<h2>Parts of a SAW Script<a class="headerlink" href="#parts-of-a-saw-script" title="Link to this heading"></a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This section is under construction!</p>
+</div>
+</section>
+<section id="a-first-simple-example">
+<span id="first-simple-example"></span><h2>A First Simple Example<a class="headerlink" href="#a-first-simple-example" title="Link to this heading"></a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This section is under construction!</p>
+</div>
+<p>To get started with SAW, let’s see what it takes to verify simple programs
+that do not use pointers (or that use them only internally). Consider,
+for instance the C program that adds its two arguments together:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;stdint.h&gt;</span>
+<span class="kt">uint32_t</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>We can specify this function’s expected behavior as follows:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">add_setup</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">32</span><span class="p">);</span>
+<span class="w">    </span><span class="n">y</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">32</span><span class="p">);</span>
+<span class="w">    </span><span class="nb">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">y</span><span class="p">];</span>
+<span class="w">    </span><span class="nb">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nf">y</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>We can then compile the C file <code class="docutils literal notranslate"><span class="pre">add.c</span></code> into the bitcode file <code class="docutils literal notranslate"><span class="pre">add.bc</span></code>
+and verify it with ABC:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">m</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_load_module</span><span class="w"> </span><span class="s2">&quot;add.bc&quot;</span><span class="p">;</span>
+<span class="n">add_ms</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;add&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">add_setup</span><span class="w"> </span><span class="n">abc</span><span class="p">;</span>
+</pre></div>
+</div>
+</section>
+<section id="syntax">
+<h2>Syntax<a class="headerlink" href="#syntax" title="Link to this heading"></a></h2>
+<p>The syntax of SAWScript is reminiscent of functional languages such as
+Cryptol, Haskell and ML. In particular, functions are applied by
+writing them next to their arguments rather than by using parentheses
+and commas. Rather than writing <code class="docutils literal notranslate"><span class="pre">f(x,</span> <span class="pre">y)</span></code>, write <code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">x</span> <span class="pre">y</span></code>.</p>
+<p>Comments are written as in C, Java, and Rust (among many other languages). All
+text from <code class="docutils literal notranslate"><span class="pre">//</span></code> until the end of a line is ignored. Additionally, all
+text between <code class="docutils literal notranslate"><span class="pre">/*</span></code> and <code class="docutils literal notranslate"><span class="pre">*/</span></code> is ignored, regardless of whether the line
+ends.</p>
+</section>
+<section id="basic-types-and-values">
+<h2>Basic Types and Values<a class="headerlink" href="#basic-types-and-values" title="Link to this heading"></a></h2>
+<p>All values in SAWScript have types, and these types are determined and
+checked before a program runs (that is, SAWScript is statically typed).
+The basic types available are similar to those in many other languages.</p>
+<ul class="simple">
+<li><p>The <code class="docutils literal notranslate"><span class="pre">Int</span></code> type represents unbounded mathematical integers. Integer
+constants can be written in decimal notation (e.g., <code class="docutils literal notranslate"><span class="pre">42</span></code>), hexadecimal
+notation (<code class="docutils literal notranslate"><span class="pre">0x2a</span></code>), and binary (<code class="docutils literal notranslate"><span class="pre">0b00101010</span></code>). However, unlike many
+languages, integers in SAWScript are used primarily as constants.
+Arithmetic is usually encoded in Cryptol, as discussed in the next
+section.</p></li>
+<li><p>The Boolean type, <code class="docutils literal notranslate"><span class="pre">Bool</span></code>, contains the values <code class="docutils literal notranslate"><span class="pre">true</span></code> and <code class="docutils literal notranslate"><span class="pre">false</span></code>, like
+in many other languages. As with integers, computations on Boolean
+values usually occur in Cryptol.</p></li>
+<li><p>Values of any type can be aggregated into tuples. For example, the
+value <code class="docutils literal notranslate"><span class="pre">(true,</span> <span class="pre">10)</span></code> has the type <code class="docutils literal notranslate"><span class="pre">(Bool,</span> <span class="pre">Int)</span></code>.</p></li>
+<li><p>Values of any type can also be aggregated into records, which are
+exactly like tuples except that their components have names. For
+example, the value <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">b</span> <span class="pre">=</span> <span class="pre">true,</span> <span class="pre">n</span> <span class="pre">=</span> <span class="pre">10</span> <span class="pre">}</span></code> has the type <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">b</span> <span class="pre">:</span> <span class="pre">Bool,</span> <span class="pre">n</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">}</span></code>.</p></li>
+<li><p>A sequence of values of the same type can be stored in a list. For
+example, the value <code class="docutils literal notranslate"><span class="pre">[true,</span> <span class="pre">false,</span> <span class="pre">true]</span></code> has the type <code class="docutils literal notranslate"><span class="pre">[Bool]</span></code>.</p></li>
+<li><p>Strings of textual characters can be represented in the <code class="docutils literal notranslate"><span class="pre">String</span></code> type.
+For example, the value <code class="docutils literal notranslate"><span class="pre">&quot;example&quot;</span></code> has type <code class="docutils literal notranslate"><span class="pre">String</span></code>.</p></li>
+<li><p>The “unit” type, written <code class="docutils literal notranslate"><span class="pre">()</span></code>, is essentially a placeholder, similar
+to <code class="docutils literal notranslate"><span class="pre">void</span></code> in languages like C and Java. It has only one value, also
+written <code class="docutils literal notranslate"><span class="pre">()</span></code>. Values of type <code class="docutils literal notranslate"><span class="pre">()</span></code> convey no information. We will show
+in later sections several cases where this is useful.</p></li>
+<li><p>Functions are given types that indicate what type they consume and
+what type they produce. For example, the type <code class="docutils literal notranslate"><span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">Bool</span></code> indicates
+a function that takes an <code class="docutils literal notranslate"><span class="pre">Int</span></code> as input and produces a <code class="docutils literal notranslate"><span class="pre">Bool</span></code> as
+output. Functions with multiple arguments use multiple arrows. For
+example, the type <code class="docutils literal notranslate"><span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">Bool</span></code> indicates a function in
+which the first argument is an <code class="docutils literal notranslate"><span class="pre">Int</span></code>, the second is a <code class="docutils literal notranslate"><span class="pre">String</span></code>, and
+the result is a <code class="docutils literal notranslate"><span class="pre">Bool</span></code>. It is possible, but not necessary, to group
+arguments in tuples, as well, so the type <code class="docutils literal notranslate"><span class="pre">(Int,</span> <span class="pre">String)</span> <span class="pre">-&gt;</span> <span class="pre">Bool</span></code>
+describes a function that takes one argument, a pair of an <code class="docutils literal notranslate"><span class="pre">Int</span></code> and a
+<code class="docutils literal notranslate"><span class="pre">String</span></code>, and returns a <code class="docutils literal notranslate"><span class="pre">Bool</span></code>.</p></li>
+</ul>
+<p>SAWScript also includes some more specialized types that do not have
+straightforward counterparts in most other languages. These will appear
+in later sections.</p>
+</section>
+<section id="basic-expression-forms">
+<h2>Basic Expression Forms<a class="headerlink" href="#basic-expression-forms" title="Link to this heading"></a></h2>
+<p>One of the key forms of top-level command in SAWScript is a <em>binding</em>,
+introduced with the <code class="docutils literal notranslate"><span class="pre">let</span></code> keyword, which gives a name to a value. For
+example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let x = 5</span>
+<span class="go">sawscript&gt; x</span>
+<span class="go">5</span>
+</pre></div>
+</div>
+<p>Bindings can have parameters, in which case they define functions. For
+instance, the following function takes one parameter and constructs a
+list containing that parameter as its single element.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let f x = [x]</span>
+<span class="go">sawscript&gt; f &quot;text&quot;</span>
+<span class="go">[&quot;text&quot;]</span>
+</pre></div>
+</div>
+<p>Functions themselves are values and have types. The type of a function
+that takes an argument of type <code class="docutils literal notranslate"><span class="pre">a</span></code> and returns a result of type <code class="docutils literal notranslate"><span class="pre">b</span></code> is
+<code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">b</span></code>.</p>
+<p>Function types are typically inferred, as in the example <code class="docutils literal notranslate"><span class="pre">f</span></code>
+above. In this case, because <code class="docutils literal notranslate"><span class="pre">f</span></code> only creates a list with the given
+argument, and because it is possible to create a list of any element
+type, <code class="docutils literal notranslate"><span class="pre">f</span></code> can be applied to an argument of any type. We say, therefore,
+that <code class="docutils literal notranslate"><span class="pre">f</span></code> is <em>polymorphic</em>. Concretely, we write the type of <code class="docutils literal notranslate"><span class="pre">f</span></code> as <code class="docutils literal notranslate"><span class="pre">{a}</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">[a]</span></code>, meaning it takes a value of any type (denoted <code class="docutils literal notranslate"><span class="pre">a</span></code>) and
+returns a list containing elements of that same type. This means we can
+also apply <code class="docutils literal notranslate"><span class="pre">f</span></code> to <code class="docutils literal notranslate"><span class="pre">10</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; f 10</span>
+<span class="go">[10]</span>
+</pre></div>
+</div>
+<p>However, we may want to specify that a function has a more
+specific type. In this case, we could restrict <code class="docutils literal notranslate"><span class="pre">f</span></code> to operate only on
+<code class="docutils literal notranslate"><span class="pre">Int</span></code> parameters.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let f (x : Int) = [x]</span>
+</pre></div>
+</div>
+<p>This will work identically to the original <code class="docutils literal notranslate"><span class="pre">f</span></code> on an <code class="docutils literal notranslate"><span class="pre">Int</span></code> parameter:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; f 10</span>
+<span class="go">[10]</span>
+</pre></div>
+</div>
+<p>However, it will fail for a <code class="docutils literal notranslate"><span class="pre">String</span></code> parameter:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; f &quot;text&quot;</span>
+
+<span class="go">type mismatch: String -&gt; t.0 and Int -&gt; [Int]</span>
+<span class="go"> at &quot;_&quot; (REPL)</span>
+<span class="go">mismatched type constructors: String and Int</span>
+</pre></div>
+</div>
+<p>Type annotations can be applied to any expression. The notation <code class="docutils literal notranslate"><span class="pre">(e</span> <span class="pre">:</span> <span class="pre">t)</span></code> indicates that expression <code class="docutils literal notranslate"><span class="pre">e</span></code> is expected to have type <code class="docutils literal notranslate"><span class="pre">t</span></code> and
+that it is an error for <code class="docutils literal notranslate"><span class="pre">e</span></code> to have a different type. Most types in
+SAWScript are inferred automatically, but specifying them explicitly can
+sometimes enhance readability.</p>
+<p>Because functions are values, functions can return other functions. We
+make use of this feature when writing functions of multiple arguments.
+Consider the function <code class="docutils literal notranslate"><span class="pre">g</span></code>, similar to <code class="docutils literal notranslate"><span class="pre">f</span></code> but with two arguments:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let g x y = [x, y]</span>
+</pre></div>
+</div>
+<p>Like <code class="docutils literal notranslate"><span class="pre">f</span></code>, <code class="docutils literal notranslate"><span class="pre">g</span></code> is polymorphic. Its type is <code class="docutils literal notranslate"><span class="pre">{a}</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">[a]</span></code>. This
+means it takes an argument of type <code class="docutils literal notranslate"><span class="pre">a</span></code> and returns a <em>function</em> that
+takes an argument of the same type <code class="docutils literal notranslate"><span class="pre">a</span></code> and returns a list of <code class="docutils literal notranslate"><span class="pre">a</span></code> values.
+We can therefore apply <code class="docutils literal notranslate"><span class="pre">g</span></code> to any two arguments of the same type:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; g 2 3</span>
+<span class="go">[2,3]</span>
+<span class="go">sawscript&gt; g true false</span>
+<span class="go">[true,false]</span>
+</pre></div>
+</div>
+<p>But type checking will fail if we apply it to two values of different types:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; g 2 false</span>
+
+<span class="go">type mismatch: Bool -&gt; t.0 and Int -&gt; [Int]</span>
+<span class="go"> at &quot;_&quot; (REPL)</span>
+<span class="go">mismatched type constructors: Bool and Int</span>
+</pre></div>
+</div>
+<p>So far we have used two related terms, <em>function</em> and <em>command</em>, and we
+take these to mean slightly different things. A function is any value
+with a function type (e.g., <code class="docutils literal notranslate"><span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">[Int]</span></code>). A command is any value with
+a special command type (e.g. <code class="docutils literal notranslate"><span class="pre">TopLevel</span> <span class="pre">()</span></code>, as shown below). These
+special types allow us to restrict command usage to specific contexts,
+and are also <em>parameterized</em> (like the list type). Most but not all
+commands are also functions.</p>
+<p>The most important command type is the <code class="docutils literal notranslate"><span class="pre">TopLevel</span></code> type, indicating a
+command that can run at the top level (directly at the REPL, or as one
+of the top level commands in a script file). The <code class="docutils literal notranslate"><span class="pre">print</span></code> command
+has the type <code class="docutils literal notranslate"><span class="pre">{a}</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code>, where <code class="docutils literal notranslate"><span class="pre">TopLevel</span> <span class="pre">()</span></code> means that it
+is a command that runs in the <code class="docutils literal notranslate"><span class="pre">TopLevel</span></code> context and returns a value of
+type <code class="docutils literal notranslate"><span class="pre">()</span></code> (that is, no useful information). In other words, it has a
+side effect (printing some text to the screen) but doesn’t produce any
+information to use in the rest of the SAWScript program. This is the
+primary usage of the <code class="docutils literal notranslate"><span class="pre">()</span></code> type.</p>
+<p>It can sometimes be useful to bind a sequence of commands together. This
+can be accomplished with the <code class="docutils literal notranslate"><span class="pre">do</span> <span class="pre">{</span> <span class="pre">...</span> <span class="pre">}</span></code> construct. For example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let print_two = do { print &quot;first&quot;; print &quot;second&quot;; }</span>
+<span class="go">sawscript&gt; print_two</span>
+<span class="go">first</span>
+<span class="go">second</span>
+</pre></div>
+</div>
+<p>The bound value, <code class="docutils literal notranslate"><span class="pre">print_two</span></code>, has type <code class="docutils literal notranslate"><span class="pre">TopLevel</span> <span class="pre">()</span></code>, since that is the
+type of its last command.</p>
+<p>Note that in the previous example the printing doesn’t occur until
+<code class="docutils literal notranslate"><span class="pre">print_two</span></code> directly appears at the REPL. The <code class="docutils literal notranslate"><span class="pre">let</span></code> expression does not
+cause those commands to run. The construct that <em>runs</em> a command is
+written using the <code class="docutils literal notranslate"><span class="pre">&lt;-</span></code> operator. This operator works like <code class="docutils literal notranslate"><span class="pre">let</span></code> except
+that it says to run the command listed on the right hand side and bind
+the result, rather than binding the variable to the command itself.
+Using <code class="docutils literal notranslate"><span class="pre">&lt;-</span></code> instead of <code class="docutils literal notranslate"><span class="pre">let</span></code> in the previous example yields:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; print_two &lt;- do { print &quot;first&quot;; print &quot;second&quot;; }</span>
+<span class="go">first</span>
+<span class="go">second</span>
+<span class="go">sawscript&gt; print print_two</span>
+<span class="gp gp-VirtualEnv">()</span>
+</pre></div>
+</div>
+<p>Here, the <code class="docutils literal notranslate"><span class="pre">print</span></code> commands run first, and then <code class="docutils literal notranslate"><span class="pre">print_two</span></code> gets the
+value returned by the second <code class="docutils literal notranslate"><span class="pre">print</span></code> command, namely <code class="docutils literal notranslate"><span class="pre">()</span></code>. Any command
+run without using <code class="docutils literal notranslate"><span class="pre">&lt;-</span></code> at either the top level of a script or within a
+<code class="docutils literal notranslate"><span class="pre">do</span></code> block discards its result. However, the REPL prints the result of
+any command run without using the <code class="docutils literal notranslate"><span class="pre">&lt;-</span></code> operator.</p>
+<p>In some cases it can be useful to have more control over the value
+returned by a <code class="docutils literal notranslate"><span class="pre">do</span></code> block. The <code class="docutils literal notranslate"><span class="pre">return</span></code> command allows us to do this. For
+example, say we wanted to write a function that would print a message
+before and after running some arbitrary command and then return the
+result of that command. We could write:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">run_with_message</span><span class="w"> </span><span class="n">msg</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="ow">=</span>
+<span class="w">  </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Starting.&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">print</span><span class="w"> </span><span class="n">msg</span><span class="p">;</span>
+<span class="w">    </span><span class="n">res</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">c</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Done.&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">return</span><span class="w"> </span><span class="n">res</span><span class="p">;</span>
+<span class="w">  </span><span class="p">};</span>
+
+<span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">run_with_message</span><span class="w"> </span><span class="s2">&quot;Hello&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">return</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span>
+<span class="nb">print</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>If we put this script in <code class="docutils literal notranslate"><span class="pre">run.saw</span></code> and run it with <code class="docutils literal notranslate"><span class="pre">saw</span></code>, we get
+something like:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">Loading module Cryptol</span>
+<span class="go">Loading file &quot;run.saw&quot;</span>
+<span class="go">Starting.</span>
+<span class="go">Hello</span>
+<span class="go">Done.</span>
+<span class="go">3</span>
+</pre></div>
+</div>
+<p>Note that it ran the first <code class="docutils literal notranslate"><span class="pre">print</span></code> command, then the caller-specified
+command, then the second <code class="docutils literal notranslate"><span class="pre">print</span></code> command. The result stored in <code class="docutils literal notranslate"><span class="pre">x</span></code> at
+the end is the result of the <code class="docutils literal notranslate"><span class="pre">return</span></code> command passed in as an argument.</p>
+</section>
+<section id="other-basic-functions">
+<h2>Other Basic Functions<a class="headerlink" href="#other-basic-functions" title="Link to this heading"></a></h2>
+<p>Aside from the functions we have listed so far, there are a number of other
+operations for working with basic data structures and interacting
+with the operating system.</p>
+<p>The following functions work on lists:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">concat</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">[a]</span></code> takes two lists and returns the
+concatenation of the two.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">head</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">a</span></code> returns the first element of a list.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tail</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">[a]</span></code> returns everything except the first element.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">length</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">Int</span></code> counts the number of elements in a list.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">null</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">Bool</span></code> indicates whether a list is empty (has zero
+elements).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nth</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">a</span></code> returns the element at the given position,
+with <code class="docutils literal notranslate"><span class="pre">nth</span> <span class="pre">l</span> <span class="pre">0</span></code> being equivalent to <code class="docutils literal notranslate"><span class="pre">head</span> <span class="pre">l</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">:</span> <span class="pre">{m,</span> <span class="pre">a,</span> <span class="pre">b}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">(a</span> <span class="pre">-&gt;</span> <span class="pre">m</span> <span class="pre">b)</span> <span class="pre">-&gt;</span> <span class="pre">m</span> <span class="pre">[b]</span></code> takes a list and a
+function that runs in some command context. The passed command will be
+called once for every element of the list, in order. Returns a list of
+all of the results produced by the command.</p></li>
+</ul>
+<p>For interacting with the operating system, we have:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">get_opt</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">String</span></code> returns the command-line argument to <code class="docutils literal notranslate"><span class="pre">saw</span></code>
+at the given index. Argument 0 is always the name of the <code class="docutils literal notranslate"><span class="pre">saw</span></code>
+executable itself, and higher indices represent later arguments.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">exec</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">String</span></code> runs an
+external program given, respectively, an executable name, a list of
+arguments, and a string to send to the standard input of the program.
+The <code class="docutils literal notranslate"><span class="pre">exec</span></code> command returns the standard output from the program it
+executes and prints standard error to the screen.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">exit</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code> stops execution of the current script and
+returns the given exit code to the operating system.</p></li>
+</ul>
+<p>Finally, there are a few miscellaneous functions and commands:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">show</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">String</span></code> computes the textual representation of its
+argument in the same way as <code class="docutils literal notranslate"><span class="pre">print</span></code>, but instead of displaying the value
+it returns it as a <code class="docutils literal notranslate"><span class="pre">String</span></code> value for later use in the program. This can
+be useful for constructing more detailed messages later.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">str_concat</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">String</span></code> concatenates two <code class="docutils literal notranslate"><span class="pre">String</span></code>
+values, and can also be useful with <code class="docutils literal notranslate"><span class="pre">show</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">time</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">TopLevel</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">a</span></code> runs any other <code class="docutils literal notranslate"><span class="pre">TopLevel</span></code>
+command and prints out the time it took to execute.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">with_time</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">TopLevel</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">(Int,</span> <span class="pre">a)</span></code> returns both the
+original result of the timed command and the time taken to execute it
+(in milliseconds), without printing anything in the process.</p></li>
+</ul>
+</section>
+<section id="repl-actions">
+<h2>REPL Actions<a class="headerlink" href="#repl-actions" title="Link to this heading"></a></h2>
+<p>There is an additional class of things that one may type at the REPL
+for interactive use:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">:cd</span></code> changes the REPL’s current directory.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">:pwd</span></code> prints the REPL’s current directory.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">:env</span></code> displays the values and types of all currently bound
+variables, including built-in functions and commands.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">:search</span></code> with one or more types (complex types go in parentheses)
+searches the currently bound variables, including built-in functions
+and commands, and prints those that mention all the types cited.
+You can use <code class="docutils literal notranslate"><span class="pre">_</span></code> as a wildcard.
+Free type variables are treated as pattern constraints; use
+forall-bound type variables using the <code class="docutils literal notranslate"><span class="pre">{a}</span></code> syntax to search
+specifically for forall-bound types.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">:tenv</span></code> displays the expansions of all currently defined type
+aliases, including those that are built in.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">:type</span></code> or <code class="docutils literal notranslate"><span class="pre">:t</span></code> checks and prints the type of an arbitrary SAWScript
+expression:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :t show</span>
+<span class="go">{a.0} a.0 -&gt; String</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">:help</span></code> or <code class="docutils literal notranslate"><span class="pre">:h</span></code> prints the help text for a built-in function or
+command:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :h show</span>
+
+<span class="go">Description</span>
+<span class="go">-----------</span>
+
+<span class="go">    show : {a} a -&gt; String</span>
+
+<span class="go">Convert the value of the given expression to a string.</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">:quit</span></code> or <code class="docutils literal notranslate"><span class="pre">:q</span></code> exits the program.</p></li>
+</ul>
+</section>
+<section id="further-built-in-functions-and-commands">
+<h2>Further built-in functions and commands<a class="headerlink" href="#further-built-in-functions-and-commands" title="Link to this heading"></a></h2>
+<p>SAW contains many built-in operations, referred to as “primitives.”
+These appear in SAWScript as built-in functions and commands.
+The following sections of the manual will introduce many of these.</p>
+</section>
+<section id="experimental-and-deprecated-functions-and-commands">
+<h2>Experimental and deprecated functions and commands<a class="headerlink" href="#experimental-and-deprecated-functions-and-commands" title="Link to this heading"></a></h2>
+<p>Some of the primitives available in SAW at any given time are
+experimental.
+These may be incomplete, unfinished, use at your own risk, etc.
+The functions and commands associated with these are unavailable
+by default; they can be made visible with the <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code>
+command.</p>
+<p>Other primitives are considered deprecated.
+Some of these, as the
+<a class="reference internal" href="formal-deprecation-process.html"><span class="std std-doc">deprecation process</span></a> proceeds, are
+unavailable by default.</p>
+<p>They can be made visible with the <code class="docutils literal notranslate"><span class="pre">enable_deprecated</span></code> command.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="overview.html" class="btn btn-neutral float-left" title="Overview" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="invoking-saw.html" class="btn btn-neutral float-right" title="Invoking SAW" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: v1.5
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
