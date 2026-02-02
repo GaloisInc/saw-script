@@ -2,6 +2,12 @@
 
 # 1.5 -- 2026-01-31
 
+This release supports [version
+8](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#8) of
+`mir-json`'s schema.
+
+## Changes
+
 * `mir_verify` now enforces correctness checks that match the existing
   behavior of `llvm_verify` and `jvm_verify`:
 
@@ -11,12 +17,6 @@
   2. For functions that return a value other than `()`, a `mir_return`
      statement is now required.  Omitting the return statement will
      cause SAW to raise an error.
-
-This release supports [version
-8](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#7) of
-`mir-json`'s schema.
-
-## Changes
 
 * The (by now extremely old) `crucible_*` alternate names for the `llvm_*`
   primitives have been marked deprecated and will now warn.
