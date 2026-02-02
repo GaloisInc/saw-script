@@ -78,12 +78,13 @@ $cntrl     = [A-Z \@\[\\\]\^\_]
 $idfirst   = [$alpha \_]
 $idchar    = [$alpha $digit $unidigit $unitick \' \_]
 @ident     = $idfirst $idchar*
+@identidx  = $alpha $idchar* \@ @num
 
 @punct = "#" | "," | "->" | "." | ";" | ":" | "=" | "*"
        | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"
 @keywords = "data" | "hiding" | "import" | "module" | "injectCode"
           | "sort" | "isort" | "qsort" | "qisort"
-          | "Prop" | "where" | "primitive" | "axiom"
+          | "Prop" | "where" | "primitive" | "axiom" | "let" | "in"
 @key = @punct | @keywords
 
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hex)
@@ -103,6 +104,7 @@ $whitechar+;
 "0b"[0-1]+  { TBitvector . readBinBV . drop 2 }
 @key        { TKey }
 @ident      { TIdent }
+@identidx   { TLetIdent }
 @ident "#rec" [0-9]*
             { TRecursor . parseRecursor }
 @ident "#ind"
@@ -112,6 +114,7 @@ $whitechar+;
 {
 data Token
   = TIdent { tokIdent :: String }   -- ^ Identifier
+  | TLetIdent { tokLetIdent :: String }   -- ^ Let-binding identifier
   | TRecursor { tokRecursor :: (String, Natural) }   -- ^ Recursor
   | TInductor { tokInductor :: String }   -- ^ Recursor at sort Prop
   | TNat { tokNat :: Natural }  -- ^ Natural number literal

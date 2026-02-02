@@ -111,7 +111,9 @@ data TCEnv =
   TCEnv
   { tcSharedContext :: SharedContext -- ^ the SAW context
   , tcModName :: Maybe ModuleName -- ^ the current module name
-  , tcLocals :: Map LocalName (VarName, Term) -- ^ the mapping of display names to variables
+  , tcLocals :: Map LocalName (VarName, Term, Bool)
+      -- ^ the mapping of display names to variables, flag is true if the term
+      -- is the definition of the variable, false if the term is the variable type
   }
 
 -- | Errors that can occur during type-checking
@@ -142,7 +144,7 @@ askModName :: TCM (Maybe ModuleName)
 askModName = TCM (asks tcModName)
 
 -- | Read the current context of named variables
-askLocals :: TCM (Map LocalName (VarName, Term))
+askLocals :: TCM (Map LocalName (VarName, Term, Bool))
 askLocals = TCM (asks tcLocals)
 
 -- | Look up the current module name, raising an error if it is not set
@@ -194,8 +196,10 @@ inferResolveName n =
      mm <- liftIO $ scGetModuleMap sc
      let ident = mkIdent mnm n
      case (Map.lookup n nctx, resolveNameInMap mm ident) of
-       (Just (vn, tp), _) ->
-         liftSCM $ SC.scmVariable vn tp
+       (Just (vn, t, is_def), _) ->
+         case is_def of
+           True -> return t
+           False -> liftSCM $ SC.scmVariable vn t
        (_, Just rn) ->
          do let c = resolvedNameName rn
             liftSCM $ SC.scmConst c
@@ -260,6 +264,14 @@ typeInferCompleteTerm uterm =
          body <- withVar x vn tp_trm $
            typeInferCompleteTerm $ Un.Lambda p ctx t
          liftSCM $ SC.scmLambda vn tp_trm body
+
+    Un.Let _ [] t ->
+      typeInferCompleteUTerm t
+    Un.Let p ((Un.termVarLocalName -> x, def) : bs) t ->
+      do vn <- liftSCM $ SC.scmFreshVarName x
+         def' <- typeInferCompleteUTerm def
+         withDefinedVar x vn def' $
+           typeInferCompleteTerm $ Un.Let p bs t
 
     Un.Pi _ [] t ->
       typeInferCompleteUTerm t
@@ -518,12 +530,20 @@ matchPiWithNames (var : vars) tp =
          (ctx, body) <- matchPiWithNames vars body_tp
          pure ((var, vn, arg_tp) : ctx, body)
 
+withVar' :: LocalName -> VarName -> Term -> Bool -> TCM a -> TCM a
+withVar' x vn tp b (TCM m) =
+  TCM $
+  local (\env -> env { tcLocals = Map.insert x (vn, tp, b) (tcLocals env) }) m
+
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given name and type.
 withVar :: LocalName -> VarName -> Term -> TCM a -> TCM a
-withVar x vn tp (TCM m) =
-  TCM $
-  local (\env -> env { tcLocals = Map.insert x (vn, tp) (tcLocals env) }) m
+withVar x vn tp f = withVar' x vn tp False f
+
+-- | Run a type-checking computation in a typing context extended with a new
+-- variable with the given name and definition.
+withDefinedVar :: LocalName -> VarName -> Term -> TCM a -> TCM a
+withDefinedVar x vn tp f = withVar' x vn tp True f
 
 -- | Run a type-checking computation in a typing context extended by a list of
 -- variables and their types. See 'withVar'.
