@@ -1,0 +1,362 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWSupport.Pretty
+<span class="lineno">    3 </span>Copyright   : Galois, Inc. 2025
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : saw@galois.com
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>Portability : non-portable (language extensions)
+<span class="lineno">    8 </span>-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>{-# LANGUAGE CPP #-}
+<span class="lineno">   11 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   12 </span>{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+<span class="lineno">   13 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   14 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   15 </span>{-# LANGUAGE TupleSections #-}
+<span class="lineno">   16 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">   17 </span>{-# LANGUAGE RecordWildCards #-}
+<span class="lineno">   18 </span>{-# LANGUAGE PatternGuards #-}
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>-- Prettyprinting infrastructure.
+<span class="lineno">   21 </span>--
+<span class="lineno">   22 </span>-- This module is meant to be used like this:
+<span class="lineno">   23 </span>--    import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   24 </span>--
+<span class="lineno">   25 </span>-- or if you like, it's reasonable to import the print functions unqualified:
+<span class="lineno">   26 </span>--    import SAWSupport.Pretty (ppNat, ppTypeConstraint)
+<span class="lineno">   27 </span>--    import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   28 </span>--
+<span class="lineno">   29 </span>-- This module is a haphazard collection of prettyprinting
+<span class="lineno">   30 </span>-- infrastructure that used to be scattered in random places around
+<span class="lineno">   31 </span>-- the tree. Most of it came from (a) saw-core's Term prettyprinter,
+<span class="lineno">   32 </span>-- (b) saw-script's Value prettyprinter, or (c) saw-script's AST
+<span class="lineno">   33 </span>-- prettyprinter, none of which shared any logic other than the
+<span class="lineno">   34 </span>-- upstream prettyprinter package.
+<span class="lineno">   35 </span>--
+<span class="lineno">   36 </span>-- XXX: Someone should try to systematize the naming. In particular
+<span class="lineno">   37 </span>-- we'd like to have some kind of convention like (perhaps)
+<span class="lineno">   38 </span>-- &quot;prettyFoo&quot; generates a Doc for a Foo and &quot;ppFoo&quot; generates a Doc
+<span class="lineno">   39 </span>-- and also renders it to Text. (Note that in the prettyprinter
+<span class="lineno">   40 </span>-- package, &quot;pretty&quot; generates Doc and there is no &quot;pp&quot;, so this
+<span class="lineno">   41 </span>-- choice seems preferable to the other way around.) I've done some
+<span class="lineno">   42 </span>-- of this, but there's a lot more out in the rest of the tree that
+<span class="lineno">   43 </span>-- ought to be updated to match it.
+<span class="lineno">   44 </span>--
+<span class="lineno">   45 </span>-- Update: that convention has now been adopted, but is still not
+<span class="lineno">   46 </span>-- widely honored.
+<span class="lineno">   47 </span>--
+<span class="lineno">   48 </span>-- XXX: should come up with a better name for pShowText, and remove
+<span class="lineno">   49 </span>-- pShow entirely. These shouldn't be called &quot;show&quot; because they
+<span class="lineno">   50 </span>-- aren't Show instances and don't have the properties of Show
+<span class="lineno">   51 </span>-- instances. And we don't want people writing or using Show instances
+<span class="lineno">   52 </span>-- except maybe for extremely simple types.
+<span class="lineno">   53 </span>--
+<span class="lineno">   54 </span>-- XXX: The ShowS material at the bottom should go away; that requires
+<span class="lineno">   55 </span>-- cleaning up the callers to use prettyprinting instead of Show
+<span class="lineno">   56 </span>-- instances.
+<span class="lineno">   57 </span>--
+<span class="lineno">   58 </span>-- XXX: Also we should crack down on callers using &quot;show&quot; instead of
+<span class="lineno">   59 </span>-- &quot;render&quot; to produce output text.
+<span class="lineno">   60 </span>--
+<span class="lineno">   61 </span>-- It would also be nice in the long run to be able to do
+<span class="lineno">   62 </span>--    import qualified Prettyprinter as PP
+<span class="lineno">   63 </span>--    import qualified SAWSupport.Pretty as PP
+<span class="lineno">   64 </span>-- without this causing problems.
+<span class="lineno">   65 </span>--
+<span class="lineno">   66 </span>-- It may also be that this should be split into two or more modules,
+<span class="lineno">   67 </span>-- one meant to be used qualified and one meant for selective import,
+<span class="lineno">   68 </span>-- or something. It isn't at all clear yet what a good interface is.
+<span class="lineno">   69 </span>--
+<span class="lineno">   70 </span>-- FUTURE: there's also been some talk of adopting Cryptol's technique
+<span class="lineno">   71 </span>-- of wrapping the upstream prettyprinter and exposing a monad, or
+<span class="lineno">   72 </span>-- some other similar way of allowing options to be applied to the
+<span class="lineno">   73 </span>-- document after it's assembled instead of needing to be threaded
+<span class="lineno">   74 </span>-- through everywhere.
+<span class="lineno">   75 </span>--
+<span class="lineno">   76 </span>-- XXX: in any event, it's problematic that seemingly more than half
+<span class="lineno">   77 </span>-- of the call sites for things that want options pass the default
+<span class="lineno">   78 </span>-- options. If we're actually going to support the things the options
+<span class="lineno">   79 </span>-- allows the user to set, we should make sure the user's settings
+<span class="lineno">   80 </span>-- make it to the places that do prints. This includes errors.
+<span class="lineno">   81 </span>--
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>module SAWSupport.Pretty (
+<span class="lineno">   84 </span>    Doc,
+<span class="lineno">   85 </span>    Style(..),
+<span class="lineno">   86 </span>    MemoStyle(..),
+<span class="lineno">   87 </span>    Opts(..),
+<span class="lineno">   88 </span>    defaultOpts,
+<span class="lineno">   89 </span>    limitMaxDepth,
+<span class="lineno">   90 </span>    PrettyPrec(..),
+<span class="lineno">   91 </span>    prettyNat,
+<span class="lineno">   92 </span>    prettyTypeConstraint,
+<span class="lineno">   93 </span>    prettyTypeSig,
+<span class="lineno">   94 </span>    replicate,
+<span class="lineno">   95 </span>    commaSepAll,
+<span class="lineno">   96 </span>    squotesMatching,
+<span class="lineno">   97 </span>    prettyLetBlock,
+<span class="lineno">   98 </span>    render,
+<span class="lineno">   99 </span>    renderText,
+<span class="lineno">  100 </span>    pShow,
+<span class="lineno">  101 </span>    pShowText,
+<span class="lineno">  102 </span>    showCommaSep,
+<span class="lineno">  103 </span>    showBrackets,
+<span class="lineno">  104 </span>    showBraces
+<span class="lineno">  105 </span> ) where
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>import Prelude hiding (replicate)
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>import Numeric (showIntAtBase)
+<span class="lineno">  110 </span>import Data.Text (Text)
+<span class="lineno">  111 </span>--import qualified Data.Text as Text
+<span class="lineno">  112 </span>import qualified Data.Text.Lazy as TextL
+<span class="lineno">  113 </span>import Data.List (intersperse)
+<span class="lineno">  114 </span>
+<span class="lineno">  115 </span>import Prettyprinter (pretty, (&lt;+&gt;) )
+<span class="lineno">  116 </span>import qualified Prettyprinter as PP
+<span class="lineno">  117 </span>import qualified Prettyprinter.Render.Terminal as PP
+<span class="lineno">  118 </span>import qualified Prettyprinter.Render.Text as PPT
+<span class="lineno">  119 </span>
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>------------------------------------------------------------
+<span class="lineno">  122 </span>-- Document and document style
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>data Style
+<span class="lineno">  125 </span>  = PrimitiveStyle
+<span class="lineno">  126 </span>  | ConstantStyle
+<span class="lineno">  127 </span>  | VariableStyle
+<span class="lineno">  128 </span>  | LocalVarStyle
+<span class="lineno">  129 </span>  | DataTypeStyle
+<span class="lineno">  130 </span>  | CtorAppStyle
+<span class="lineno">  131 </span>  | RecursorStyle
+<span class="lineno">  132 </span>  | FieldNameStyle
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>-- TODO: assign colors for more styles
+<span class="lineno">  135 </span>-- FUTURE: is it possible to get non-angry-fruit-salad colors?
+<span class="lineno">  136 </span>colorStyle :: Style -&gt; PP.AnsiStyle
+<span class="lineno">  137 </span><span class="decl"><span class="nottickedoff">colorStyle =</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">\case</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="nottickedoff">PrimitiveStyle -&gt; mempty</span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="nottickedoff">ConstantStyle -&gt; PP.colorDull PP.Blue</span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="nottickedoff">VariableStyle -&gt; PP.colorDull PP.Red</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="nottickedoff">LocalVarStyle -&gt; PP.colorDull PP.Green</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="nottickedoff">DataTypeStyle -&gt; mempty</span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="nottickedoff">CtorAppStyle -&gt; mempty</span>
+<span class="lineno">  145 </span><span class="spaces">    </span><span class="nottickedoff">RecursorStyle -&gt; mempty</span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="nottickedoff">FieldNameStyle -&gt; mempty</span></span>
+<span class="lineno">  147 </span>
+<span class="lineno">  148 </span>type Doc = PP.Doc Style
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>
+<span class="lineno">  151 </span>------------------------------------------------------------
+<span class="lineno">  152 </span>-- Options
+<span class="lineno">  153 </span>
+<span class="lineno">  154 </span>-- | Global options for pretty-printing
+<span class="lineno">  155 </span>data Opts = Opts {
+<span class="lineno">  156 </span>    -- | Passed to the &quot;useAscii&quot; setting of Cryptol's prettyprinter.
+<span class="lineno">  157 </span>    --   Default is false.
+<span class="lineno">  158 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ppUseAscii</span></span></span> :: Bool,
+<span class="lineno">  159 </span>
+<span class="lineno">  160 </span>    -- | The base to print integers in; default is 10.
+<span class="lineno">  161 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ppBase</span></span></span> :: Int,
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>    -- | Whether to print in color; default is false.
+<span class="lineno">  164 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ppColor</span></span></span> :: Bool,
+<span class="lineno">  165 </span>
+<span class="lineno">  166 </span>    -- | Maximum depth to recurse into SAWCore terms. If not set, no
+<span class="lineno">  167 </span>    --   limit. Default is unset.
+<span class="lineno">  168 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ppMaxDepth</span></span></span> :: Maybe Int,
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>    -- | The numeric identifiers, as seen in the 'memoFresh' field of
+<span class="lineno">  171 </span>    --   'MemoVar', of SAWCore variables that shouldn't be inlined.
+<span class="lineno">  172 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ppNoInlineMemoFresh</span></span></span> :: [Int],
+<span class="lineno">  173 </span>
+<span class="lineno">  174 </span>    -- | The way to display SAWCore memoization variables.
+<span class="lineno">  175 </span>    --   Default is Incremental.
+<span class="lineno">  176 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ppMemoStyle</span></span></span> :: MemoStyle,
+<span class="lineno">  177 </span>
+<span class="lineno">  178 </span>    -- | Minimum sharing level required to memoize SAWCore subterms.
+<span class="lineno">  179 </span>    --   Default is 2 (i.e., any sharing).
+<span class="lineno">  180 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ppMinSharing</span></span></span> :: Int
+<span class="lineno">  181 </span> }
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>-- | How should memoization variables be displayed?
+<span class="lineno">  184 </span>--
+<span class="lineno">  185 </span>-- Note: actual text stylization is the province of 'ppMemoVar', this just
+<span class="lineno">  186 </span>-- describes the semantic information 'ppMemoVar' should be prepared to display.
+<span class="lineno">  187 </span>data MemoStyle
+<span class="lineno">  188 </span>  = Incremental
+<span class="lineno">  189 </span>  -- ^ 'Incremental' says to display a term's memoization variable with the
+<span class="lineno">  190 </span>  -- value of a counter that increments after a term is memoized. The first
+<span class="lineno">  191 </span>  -- term to be memoized will be displayed with '1', the second with '2', etc.
+<span class="lineno">  192 </span>  | Hash Int
+<span class="lineno">  193 </span>  -- ^ 'Hash i' says to display a term's memoization variable with the first 'i'
+<span class="lineno">  194 </span>  -- digits of the term's hash.
+<span class="lineno">  195 </span>  | HashIncremental Int
+<span class="lineno">  196 </span>  -- ^ 'HashIncremental i' says to display a term's memoization variable with
+<span class="lineno">  197 </span>  -- _both_ the first 'i' digits of the term's hash _and_ the value of the
+<span class="lineno">  198 </span>  -- counter described in 'Incremental'.
+<span class="lineno">  199 </span>
+<span class="lineno">  200 </span>-- | Default options for pretty-printing.
+<span class="lineno">  201 </span>--
+<span class="lineno">  202 </span>--   If the default 'ppMemoStyle' changes, be sure to update the help
+<span class="lineno">  203 </span>--   text in the interpreter functions that control the memoization
+<span class="lineno">  204 </span>--   style to reflect this change to users.
+<span class="lineno">  205 </span>defaultOpts :: Opts
+<span class="lineno">  206 </span><span class="decl"><span class="istickedoff">defaultOpts = Opts {</span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">ppUseAscii = False,</span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">ppBase = 10,</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">ppColor = False,</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">ppMaxDepth = Nothing,</span>
+<span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff">ppNoInlineMemoFresh = mempty,</span>
+<span class="lineno">  212 </span><span class="spaces">    </span><span class="istickedoff">ppMemoStyle = Incremental,</span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff">ppMinSharing = 2</span>
+<span class="lineno">  214 </span><span class="spaces"> </span><span class="istickedoff">}</span></span>
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>limitMaxDepth :: Opts -&gt; Int -&gt; Opts
+<span class="lineno">  217 </span><span class="decl"><span class="istickedoff">limitMaxDepth opts limit =</span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">let adjust depth = case depth of</span>
+<span class="lineno">  219 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; Just limit</span>
+<span class="lineno">  220 </span><span class="spaces">        </span><span class="istickedoff">Just d -&gt; <span class="nottickedoff">Just $ if d &gt; limit then limit else d</span></span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  222 </span><span class="spaces">  </span><span class="istickedoff">opts { ppMaxDepth = adjust $ ppMaxDepth opts }</span></span>
+<span class="lineno">  223 </span>
+<span class="lineno">  224 </span>
+<span class="lineno">  225 </span>------------------------------------------------------------
+<span class="lineno">  226 </span>-- Precedence prettyprinting
+<span class="lineno">  227 </span>
+<span class="lineno">  228 </span>class PrettyPrec p where
+<span class="lineno">  229 </span>  prettyPrec :: Int -&gt; p -&gt; PP.Doc ann
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>
+<span class="lineno">  232 </span>------------------------------------------------------------
+<span class="lineno">  233 </span>-- Common prettyprint operations
+<span class="lineno">  234 </span>-- (for base types and common constructs not tied to any particular AST)
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>-- | Pretty-print an integer in the correct base
+<span class="lineno">  237 </span>prettyNat :: Opts -&gt; Integer -&gt; Doc
+<span class="lineno">  238 </span><span class="decl"><span class="istickedoff">prettyNat (Opts{..}) i</span>
+<span class="lineno">  239 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">ppBase &gt; 36</span> = <span class="nottickedoff">pretty i</span></span>
+<span class="lineno">  240 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = prefix &lt;&gt; pretty value</span>
+<span class="lineno">  241 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">prefix = case ppBase of</span>
+<span class="lineno">  243 </span><span class="spaces">      </span><span class="istickedoff">2  -&gt; &quot;0b&quot;</span>
+<span class="lineno">  244 </span><span class="spaces">      </span><span class="istickedoff">8  -&gt; <span class="nottickedoff">&quot;0o&quot;</span></span>
+<span class="lineno">  245 </span><span class="spaces">      </span><span class="istickedoff">10 -&gt; mempty</span>
+<span class="lineno">  246 </span><span class="spaces">      </span><span class="istickedoff">16 -&gt; &quot;0x&quot;</span>
+<span class="lineno">  247 </span><span class="spaces">      </span><span class="istickedoff">_  -&gt; <span class="nottickedoff">&quot;0&quot; &lt;&gt; pretty '&lt;' &lt;&gt; pretty ppBase &lt;&gt; pretty '&gt;'</span></span>
+<span class="lineno">  248 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  249 </span><span class="spaces">    </span><span class="istickedoff">value  = showIntAtBase (toInteger ppBase) (digits !!) i &quot;&quot;</span>
+<span class="lineno">  250 </span><span class="spaces">    </span><span class="istickedoff">digits = &quot;0123456789abcdefghijklmnopqrstuvwxyz&quot;</span></span>
+<span class="lineno">  251 </span>
+<span class="lineno">  252 </span>-- | Pretty-print a type constraint (also known as an ascription) @x : tp@
+<span class="lineno">  253 </span>--   This is the formatting used by SAWCore.
+<span class="lineno">  254 </span>prettyTypeConstraint :: Doc -&gt; Doc -&gt; Doc
+<span class="lineno">  255 </span><span class="decl"><span class="istickedoff">prettyTypeConstraint x tp =</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="istickedoff">PP.hang 2 $ PP.group $ PP.vsep [PP.annotate <span class="nottickedoff">LocalVarStyle</span> x, &quot;:&quot; &lt;+&gt; tp]</span></span>
+<span class="lineno">  257 </span>
+<span class="lineno">  258 </span>-- | Pretty-print a type signature.
+<span class="lineno">  259 </span>--   This is the formatting used by SAWScript.
+<span class="lineno">  260 </span>--   XXX: should probably unify with prettyTypeConstraint
+<span class="lineno">  261 </span>prettyTypeSig :: PP.Doc ann -&gt; PP.Doc ann -&gt; PP.Doc ann
+<span class="lineno">  262 </span><span class="decl"><span class="istickedoff">prettyTypeSig n t = n &lt;+&gt; PP.pretty ':' &lt;+&gt; t</span></span>
+<span class="lineno">  263 </span>
+<span class="lineno">  264 </span>-- | Concatenate n copies of a doc.
+<span class="lineno">  265 </span>replicate :: Integer -&gt; PP.Doc ann -&gt; PP.Doc ann
+<span class="lineno">  266 </span><span class="decl"><span class="istickedoff">replicate n d</span>
+<span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">| n &lt; 1 = PP.emptyDoc</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">True</span>  = d &lt;&gt; replicate (n-1) d</span></span>
+<span class="lineno">  269 </span>
+<span class="lineno">  270 </span>-- | Add a comma to d1 and append d2.
+<span class="lineno">  271 </span>--   (Functionally internal to commaSepAll.)
+<span class="lineno">  272 </span>commaSepDoc :: PP.Doc ann -&gt; PP.Doc ann -&gt; PP.Doc ann
+<span class="lineno">  273 </span><span class="decl"><span class="istickedoff">commaSepDoc d1 d2 = d1 &lt;&gt; PP.comma &lt;+&gt; d2</span></span>
+<span class="lineno">  274 </span>
+<span class="lineno">  275 </span>-- | Concatenate ds, appending a comma to each.
+<span class="lineno">  276 </span>commaSepAll :: [PP.Doc ann] -&gt; PP.Doc ann
+<span class="lineno">  277 </span><span class="decl"><span class="istickedoff">commaSepAll ds = case ds of</span>
+<span class="lineno">  278 </span><span class="spaces">  </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">PP.emptyDoc</span></span>
+<span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">_  -&gt; foldl1 commaSepDoc ds</span></span>
+<span class="lineno">  280 </span>
+<span class="lineno">  281 </span>-- | Wrap d in single quotes that match.
+<span class="lineno">  282 </span>--   There's a PP.squotes that uses right-quote on both sides.
+<span class="lineno">  283 </span>--   (There's also a PP.dquotes.)
+<span class="lineno">  284 </span>squotesMatching :: PP.Doc ann -&gt; PP.Doc ann
+<span class="lineno">  285 </span><span class="decl"><span class="istickedoff">squotesMatching d =</span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">PP.enclose &quot;`&quot; &quot;'&quot; d</span></span>
+<span class="lineno">  287 </span>
+<span class="lineno">  288 </span>-- | Generalized layout for let-bindings.
+<span class="lineno">  289 </span>prettyLetBlock :: [(PP.Doc ann, PP.Doc ann)] -&gt; PP.Doc ann -&gt; PP.Doc ann
+<span class="lineno">  290 </span><span class="decl"><span class="istickedoff">prettyLetBlock defs body =</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">let lets = PP.align $</span>
+<span class="lineno">  292 </span><span class="spaces">        </span><span class="istickedoff">(PP.concatWith (\x y -&gt; x &lt;&gt; PP.hardline &lt;&gt; y))</span>
+<span class="lineno">  293 </span><span class="spaces">          </span><span class="istickedoff">(map ppEqn defs)</span>
+<span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">in PP.group $ PP.vcat</span>
+<span class="lineno">  295 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;let&quot; PP.&lt;+&gt; PP.align (PP.lbrace PP.&lt;+&gt; lets &lt;&gt; PP.line &lt;&gt; PP.rbrace)</span>
+<span class="lineno">  296 </span><span class="spaces">        </span><span class="istickedoff">, &quot; in&quot; PP.&lt;+&gt; body</span>
+<span class="lineno">  297 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">ppEqn (var,d) = var PP.&lt;+&gt; &quot;=&quot; PP.&lt;+&gt; d &lt;&gt; &quot;;&quot;</span></span>
+<span class="lineno">  300 </span>
+<span class="lineno">  301 </span>------------------------------------------------------------
+<span class="lineno">  302 </span>-- Render documents
+<span class="lineno">  303 </span>
+<span class="lineno">  304 </span>render :: Opts -&gt; Doc -&gt; String
+<span class="lineno">  305 </span><span class="decl"><span class="istickedoff">render opts doc =</span>
+<span class="lineno">  306 </span><span class="spaces">  </span><span class="istickedoff">TextL.unpack (PP.renderLazy (style (PP.layoutPretty layoutOpts doc)))</span>
+<span class="lineno">  307 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  308 </span><span class="spaces">    </span><span class="istickedoff">-- ribbon width 64, with effectively unlimited right margin</span>
+<span class="lineno">  309 </span><span class="spaces">    </span><span class="istickedoff">layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)</span>
+<span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff">style = if <span class="tickonlyfalse">ppColor opts</span> then <span class="nottickedoff">PP.reAnnotateS colorStyle</span> else PP.unAnnotateS</span></span>
+<span class="lineno">  311 </span>
+<span class="lineno">  312 </span>renderText :: Opts -&gt; Doc -&gt; Text
+<span class="lineno">  313 </span><span class="decl"><span class="istickedoff">renderText opts doc =</span>
+<span class="lineno">  314 </span><span class="spaces">  </span><span class="istickedoff">PP.renderStrict (style (PP.layoutPretty layoutOpts doc))</span>
+<span class="lineno">  315 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">-- ribbon width 64, with effectively unlimited right margin</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)</span>
+<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">style = if <span class="tickonlyfalse">ppColor opts</span> then <span class="nottickedoff">PP.reAnnotateS colorStyle</span> else PP.unAnnotateS</span></span>
+<span class="lineno">  319 </span>
+<span class="lineno">  320 </span>pShow :: PrettyPrec a =&gt; a -&gt; String
+<span class="lineno">  321 </span><span class="decl"><span class="istickedoff">pShow = show . prettyPrec 0</span></span>
+<span class="lineno">  322 </span>
+<span class="lineno">  323 </span>pShowText :: PrettyPrec a =&gt; a -&gt; Text
+<span class="lineno">  324 </span><span class="decl"><span class="istickedoff">pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . prettyPrec <span class="nottickedoff">0</span></span></span>
+<span class="lineno">  325 </span>
+<span class="lineno">  326 </span>
+<span class="lineno">  327 </span>------------------------------------------------------------
+<span class="lineno">  328 </span>-- Show infrastructure
+<span class="lineno">  329 </span>-- XXX: these should go away
+<span class="lineno">  330 </span>
+<span class="lineno">  331 </span>showCommaSep :: [ShowS] -&gt; ShowS
+<span class="lineno">  332 </span><span class="decl"><span class="istickedoff">showCommaSep ss = foldr (.) id (intersperse (showString &quot;,&quot;) ss)</span></span>
+<span class="lineno">  333 </span>
+<span class="lineno">  334 </span>showBrackets :: ShowS -&gt; ShowS
+<span class="lineno">  335 </span><span class="decl"><span class="istickedoff">showBrackets s = showString &quot;[&quot; . s . showString &quot;]&quot;</span></span>
+<span class="lineno">  336 </span>
+<span class="lineno">  337 </span>showBraces :: ShowS -&gt; ShowS
+<span class="lineno">  338 </span><span class="decl"><span class="istickedoff">showBraces s = showString &quot;{&quot; . s . showString &quot;}&quot;</span></span>
+<span class="lineno">  339 </span>
+
+</pre>
+</body>
+</html>
