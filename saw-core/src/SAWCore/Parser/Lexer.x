@@ -77,7 +77,7 @@ $cntrl     = [A-Z \@\[\\\]\^\_]
 @hex       = $hexit+
 $idfirst   = [$alpha \_]
 $idchar    = [$alpha $digit $unidigit $unitick \' \_]
-@ident     = $idfirst $idchar*
+@ident     = $idfirst ($idchar | "::")*
 @identidx  = $alpha $idchar* \@ @num
 
 @punct = "#" | "," | "->" | "." | ";" | ":" | "=" | "*"
