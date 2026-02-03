@@ -1402,7 +1402,7 @@ muxValue :: forall l.
   (HasCallStack, VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
   VBool l -> Value l -> Value l -> EvalM l (Value l)
-muxValue bp b = value
+muxValue bp b x0 y0 = value x0 y0
   where
     value :: Value l -> Value l -> EvalM l (Value l)
     value (VNat m)  (VNat n)      | m == n = return $ VNat m
@@ -1421,7 +1421,11 @@ muxValue bp b = value
     value VEmptyRecord VEmptyRecord = pure VEmptyRecord
     value (VRecordValue f1 t1 v1) (VRecordValue f2 t2 v2) =
       do unless (f1 == f2) $
-           panic "muxValue" ["Mismatched record field names: " <> f1 <> ", " <> f2]
+           panic "muxValue"
+           [ "Mismatched record field names: " <> f1 <> ", " <> f2
+           , "in values " <> Text.pack (show x0)
+           , "and " <> Text.pack (show y0)
+           ]
          VRecordValue f1 <$> thunk t1 t2 <*> value v1 v2
 
     value (VCtorApp i itv ps xv) (VCtorApp j jtv _ yv)
