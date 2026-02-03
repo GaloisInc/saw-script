@@ -1,7 +1,7 @@
 Loading file "unify011.saw"
-unify011.saw:12:2-12:19: Warning: Monadic bind of non-monadic value; rewrite as let-binding or use return
-unify011.saw:12:2-12:19: Warning: This will become an error in a future release of SAW
-unify011.saw:12:14-12:19: Type mismatch.
+Type errors:
+  unify011.saw:12:2-12:19: Monadic bind of non-monadic value; rewrite as let-binding or use return
+  unify011.saw:12:14-12:19: Type mismatch.
     Mismatch of type constructors. Expected: Int but got String
     unify011.saw:12:6-12:9: The type Int arises from this type annotation
     unify011.saw:12:14-12:19: The type String arises from the type of this term
@@ -10,5 +10,6 @@ unify011.saw:12:14-12:19: Type mismatch.
     Found:    String
 
     within "<toplevel>" (unify011.saw:12:2-12:19)
+
 
 FAILED

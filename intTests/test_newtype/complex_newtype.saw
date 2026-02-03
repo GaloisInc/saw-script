@@ -1,8 +1,8 @@
 import "complex.cry";
 
-prove_print cvc4 {{ \ x y z -> cplxAddAssoc x y z}};
+prove_print cvc5 {{ \ x y z -> cplxAddAssoc x y z}};
 
-prove_print cvc4 {{ \ x y z -> cplxMulAssoc x y z}};
+prove_print cvc5 {{ \ x y z -> cplxMulAssoc x y z}};
 
-prove_print cvc4 {{ \ x y z -> cplxMulDistrib x y z}};
+prove_print cvc5 {{ \ x y z -> cplxMulDistrib x y z}};
 
