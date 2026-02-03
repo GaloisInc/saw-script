@@ -318,12 +318,22 @@ applyPiBody :: VMonad l => PiBody l -> Thunk l -> EvalM l (TValue l)
 applyPiBody (VDependentPi f) x    = f x
 applyPiBody (VNondependentPi t) _ = pure t
 
+-- | Return the 'FiniteType' corresponding to the given 'Value', if
+-- one exists.
+-- If @asFiniteTypeValue v = Just t@, then the term returned by
+-- 'SAWCore.FiniteValue.scFiniteType' applied to @t@ should evaluate
+-- to @v@.
 asFiniteTypeValue :: Value l -> Maybe FiniteType
 asFiniteTypeValue v =
   case v of
     TValue tv -> asFiniteTypeTValue tv
     _ -> Nothing
 
+-- | Return the 'FiniteType' corresponding to the given 'TValue', if
+-- one exists.
+-- If @asFiniteTypeValue tv = Just t@, then the term returned by
+-- 'SAWCore.FiniteValue.scFiniteType' applied to @t@ should evaluate
+-- to @TValue tv@.
 asFiniteTypeTValue :: TValue l -> Maybe FiniteType
 asFiniteTypeTValue v =
   case v of
@@ -342,8 +352,13 @@ asFiniteTypeTValue v =
     VRecordType fname v1 v2 ->
       do t1 <- asFiniteTypeTValue v1
          t2 <- asFiniteTypeTValue v2
+         -- scFiniteType only produces nested record types with field
+         -- names in strictly increasing order.
+         -- In the case of duplicate or non-sorted field names, this
+         -- TValue does not correspond to any canonical record type,
+         -- so we return Nothing.
          case t2 of
-           FTRec tm | Map.notMember fname tm -> Just (FTRec (Map.insert fname t1 tm))
+           FTRec tm | lessThanKeys fname tm -> Just (FTRec (Map.insert fname t1 tm))
            _ -> Nothing
     VStringType   -> Nothing
     VPiType{}     -> Nothing
@@ -353,6 +368,7 @@ asFiniteTypeTValue v =
     VIntType      -> Nothing
     VIntModType{} -> Nothing
     VArrayType{}  -> Nothing
+  where
 
 asFirstOrderTypeValue :: Value l -> Maybe FirstOrderType
 asFirstOrderTypeValue v =
@@ -380,8 +396,13 @@ asFirstOrderTypeTValue v =
     VRecordType fname v1 v2 ->
       do t1 <- asFirstOrderTypeTValue v1
          t2 <- asFirstOrderTypeTValue v2
+         -- scFirstOrderType only produces nested record types with
+         -- field names in strictly increasing order.
+         -- In the case of duplicate or non-sorted field names, this
+         -- TValue does not correspond to any canonical record type,
+         -- so we return Nothing.
          case t2 of
-           FOTRec tm | Map.notMember fname tm -> Just (FOTRec (Map.insert fname t1 tm))
+           FOTRec tm | lessThanKeys fname tm -> Just (FOTRec (Map.insert fname t1 tm))
            _ -> Nothing
 
     VStringType -> Nothing
@@ -389,6 +410,13 @@ asFirstOrderTypeTValue v =
     VDataType{} -> Nothing
     VSort{}     -> Nothing
     VTyTerm{}   -> Nothing
+
+-- | Is the given key less than all keys in the given map?
+lessThanKeys :: (Ord k) => k -> Map k a -> Bool
+lessThanKeys k m =
+  case Map.minViewWithKey m of
+    Just ((k', _), _) -> k < k'
+    Nothing -> True
 
 -- | A (partial) injective mapping from type values to strings. These
 -- are intended to be useful as suffixes for names of type instances
