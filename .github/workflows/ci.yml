@@ -324,7 +324,7 @@ jobs:
     # tags only. Skip running it on forks as well, because we won't have
     # the signing key there.
     if: github.event_name == 'push' &&
-        needs.config.outputs.tag == 'true' &&
+        needs.config.outputs.event-tag == 'true' &&
         github.repository_owner == 'GaloisInc' &&
         github.actor != 'dependabot[bot]'
     strategy:
