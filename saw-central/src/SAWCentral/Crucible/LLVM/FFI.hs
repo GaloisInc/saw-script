@@ -273,7 +273,7 @@ setupInArg tenv = go
       (OpenTerm, [AllLLVM SetupValue])
     recordInArgs rm =
       -- The FFI passes record elements by display order, while SAW
-      -- represents records by tuples in canonical order.
+      -- represents records with fields in canonical order.
       let terms = [ (Cry.identText i, t) | (i, t) <- canonicalFields (fmap fst rm) ]
           inArgss = displayElements (fmap snd rm)
       in (OT.record terms, concat inArgss)
@@ -330,7 +330,7 @@ setupOutArg tenv = go "out"
         pure (concat outArgss, post)
       FFIRecord ffiTypeMap -> do
         -- The FFI passes record elements by display order, while SAW
-        -- represents records by tuples in canonical order
+        -- represents records with fields in canonical order
         rm <- setupRecordArgs go name ffiTypeMap
         let outArgss = displayElements (fmap fst rm)
         let posts = fmap snd rm
