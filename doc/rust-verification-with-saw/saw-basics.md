@@ -304,7 +304,7 @@ There are two possible ways that we can repair this. One way is to rewrite
 `times_two_ref` to use Rust's
 [`wrapping_mul`](https://doc.rust-lang.org/std/primitive.u32.html#method.wrapping_mul)
 function, a variant of multiplication that always uses integer overflow.  This
-work around the issue, but it is a bit more verbose.
+works around the issue, but it is a bit more verbose.
 
 The other way is to make our spec more precise such that we only verify
 `times_two_ref` for particular inputs. Although `times_two_ref` will run into
@@ -384,4 +384,4 @@ For example, we can rewrite `times_two_ref_positive_postcond_spec` to use
 :::
 
 The choice of whether to use `mir_precond`/`mir_postcond` versus `mir_assert` is
-mostly a matter personal taste.
+mostly a matter of personal taste.

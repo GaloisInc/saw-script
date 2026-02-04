@@ -47,7 +47,7 @@ writing `mir_term {{ 42 : [32] }}`, so this spec is also valid:
 
 Like `mir_verify`, the `mir_static_initializer` function expects a full
 identifier as an argument, so we must write `"statics::ANSWER"` instead of
-just `"ANSWER".
+just `"ANSWER"`.
 
 At the MIR level, there is a unique reference to every static item. You can
 obtain this reference by using the `mir_static` function:
@@ -88,11 +88,11 @@ that Rust does not even allow you to use them unless you surround them in an
 :language: rust
 :::
 
-The `mir_static_initializer` and `mut_static` functions work both immutable and
+The `mir_static_initializer` and `mir_static` functions work with both immutable and
 mutable static items, so we can write specs for mutable items using mostly the
 same techniques as for writing specs for immutable items. We must be careful,
 however, as SAW is pickier when it comes to specifying the initial values of
-mutable static items. For example, here is naïve attempt at porting the spec
+mutable static items. For example, here is a naïve attempt at porting the spec
 for `answer_to_the_ultimate_question` over to its mutable static counterpart,
 `mut_answer_to_the_ultimate_question`:
 
@@ -192,7 +192,7 @@ Note that we have once again underspecified the behavior of `side_effect`, as
 we do not say what `A`'s value should be in the postconditions of
 `side_effect_spec`. Similarly, `foo_spec` is wrong, as it should return `0`
 rather than the initial value of `A`. By similar reasoning as before, we run
-the risk that using `side_effect_ov` could lead use to prove something
+the risk that using `side_effect_ov` could lead us to prove something
 incorrect. Thankfully, SAW can also catch this sort of mistake:
 
 :::{code-block} console
