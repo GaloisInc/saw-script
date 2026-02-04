@@ -1,0 +1,8 @@
+module test_qual2 where
+import Prelude;
+
+test_qual2_nat : Nat;
+test_qual2_nat = 2;
+
+test_qual_nat : Nat;
+test_qual_nat = 3;
