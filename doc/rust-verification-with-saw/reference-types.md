@@ -90,7 +90,7 @@ it from `r_val`, which is the value that `r_ref` is declared to point to using
 `r_val` using `mir_return`, as `r_val` is exactly the value that will be
 computed by dereferencing `r_ref`.
 
-This pattern, where a call to `mir_alloc`/`mir_alloc_mut` to followed by a call
+This pattern, where a call to `mir_alloc`/`mir_alloc_mut` is followed by a call
 to `mir_points_to`, is common with function specs that involve references.
 Later in the tutorial, we will see other examples of `mir_points_to` where the
 reference argument does not come from `mir_alloc`/`mir_alloc_mut`.
@@ -116,7 +116,7 @@ There are two interesting things worth calling out in this spec:
 
 1. Instead of allocating the reference values with `mir_alloc`, we instead use
    `mir_alloc_mut`. This is a consequence of the fact that `&mut u32` is a
-   different type from `&mut` in Rust (and in MIR), and and such, we need a
+   different type from `&u32` in Rust (and in MIR), and as such, we need a
    separate `mir_alloc_mut` to get the types right.
 2. This spec features calls to `mir_points_to` before _and_ after
    `mir_execute_func`. This is because the values that `a_ref` and `b_ref` point

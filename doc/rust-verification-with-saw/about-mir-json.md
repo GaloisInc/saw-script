@@ -54,12 +54,12 @@ linking 1 mir files into first-example.linked-mir.json
 print, and we have displayed the parts of this information that are most
 interesting. In particular:
 
-* `saw-rustc` notes that is is `Emitting MIR for first_example/abef32c5::id_u8`,
+* `saw-rustc` notes that it is `Emitting MIR for first_example/abef32c5::id_u8`,
   where `first_example/abef32c5::id_u8` is the full _identifier_ used to uniquely
   refer to the `id_u8` function. It's entirely possible that the `abef32c5`
   bit will look different on your machine; we'll talk more about identifiers in
   the "Identifiers" section.
-* Once `saw-rustc` produced a MIR JSON file named
+* `saw-rustc` produced a MIR JSON file named
   `first-example.linked-mir.json`. This is an important bit of information, as
   SAW will ingest this JSON file.
 
@@ -180,7 +180,7 @@ linking 1 mir files into generics-take-2.linked-mir.json
 :::
 
 This time, the resulting JSON file contains a definition for `id_u8`. The
-reason that this works is because when `id_u8` calls `id`, the Rust compile
+reason that this works is because when `id_u8` calls `id`, the Rust compiler
 will generate a specialized version of `id` where `A` is instantiated with the
 type `u8`. This specialized version of `id` is named
 `id::_instaddce72e1232152c[0]` in the output above. (You don't have to remember
