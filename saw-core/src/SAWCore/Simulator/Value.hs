@@ -131,7 +131,6 @@ data TValue l
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !Name ![Value l] ![Value l] -- ^ name, parameters, indices
-  | VRecordType !FieldName !(TValue l) !(TValue l)
   | VSort !Sort
   | VTyTerm !Sort !Term
 
@@ -232,8 +231,6 @@ instance Show (Extra l) => Show (TValue l) where
           case ps ++ vs of
             [] -> shows s'
             vs' -> shows s' . showList vs'
-      VRecordType fld _ _ ->
-        showString "{" . showString (Text.unpack fld) . showString " :: _, ...}"
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
@@ -350,7 +347,8 @@ asFiniteTypeTValue v =
         _ -> return (FTTuple [t1, t2])
     VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FTRec Map.empty)
-    VRecordType fname v1 v2 ->
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+      [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFiniteTypeTValue v1
          t2 <- asFiniteTypeTValue v2
          -- scFiniteType only produces nested record types with field
@@ -369,7 +367,6 @@ asFiniteTypeTValue v =
     VIntType      -> Nothing
     VIntModType{} -> Nothing
     VArrayType{}  -> Nothing
-  where
 
 asFirstOrderTypeValue :: Value l -> Maybe FirstOrderType
 asFirstOrderTypeValue v =
@@ -395,7 +392,8 @@ asFirstOrderTypeTValue v =
         _ -> return (FOTTuple [t1, t2])
     VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FOTRec Map.empty)
-    VRecordType fname v1 v2 ->
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+      [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFirstOrderTypeTValue v1
          t2 <- asFirstOrderTypeTValue v2
          -- scFirstOrderType only produces nested record types with
@@ -445,6 +443,5 @@ suffixTValue tv =
 
     VStringType -> Nothing
     VDataType {} -> Nothing
-    VRecordType {} -> Nothing
     VSort {} -> Nothing
     VTyTerm{} -> Nothing

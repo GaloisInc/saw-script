@@ -686,10 +686,11 @@ parseUninterpreted cws nm ty =
 
     VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure VEmptyRecord
-    (VRecordType f ty1 ty2)
-      -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack f) ty1
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+      [VString fname, TValue ty1, TValue ty2] []
+      -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack fname) ty1
             x2 <- parseUninterpreted cws nm ty2
-            pure (VRecordValue f (ready x1) x2)
+            pure (VRecordValue fname (ready x1) x2)
 
     _ -> fail $ "could not create uninterpreted type for " ++ show ty
 

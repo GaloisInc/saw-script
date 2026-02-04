@@ -379,7 +379,6 @@ constMap bp = Map.fromList
   , ("Prelude.equalString", equalStringOp bp)
   -- Records
   , ("Prelude.Empty", PrimValue VEmptyRecord)
-  , ("Prelude.RecordType", recordTypeOp)
   , ("Prelude.RecordValue", recordValueOp)
   , ("Prelude.headRecord", headRecordOp)
   , ("Prelude.tailRecord", tailRecordOp)
@@ -812,13 +811,6 @@ equalStringOp bp =
 
 --------------------------------------------------------------------------------
 -- Records
-
-recordTypeOp :: VMonad l => Prim l
-recordTypeOp =
-  stringFun $ \s ->
-  tvalFun $ \a ->
-  tvalFun $ \b ->
-  PrimValue (TValue (VRecordType s a b))
 
 recordValueOp :: VMonad l => Prim l
 recordValueOp =

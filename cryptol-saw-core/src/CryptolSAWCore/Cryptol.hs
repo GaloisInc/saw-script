@@ -2018,7 +2018,8 @@ scCryptolType sc t =
 
       SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
         Just (Right (C.tRec (C.recordFromFields [])))
-      SC.VRecordType s v1 v2 ->
+      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+        [SC.VString s, SC.TValue v1, SC.TValue v2] [] ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2
            ts <- C.canonicalFields <$> C.tIsRec t2
