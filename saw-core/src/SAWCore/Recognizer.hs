@@ -71,8 +71,6 @@ module SAWCore.Recognizer
 import Control.Lens
 import Control.Monad
 import Data.List (foldl')
-import Data.Map (Map)
-import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
@@ -228,24 +226,49 @@ asTupleSelector t = do
     PairRight y -> do (x, i) <- asTupleSelector y; return (x, i+1)
     _           -> Nothing
 
-asRecordType :: Recognizer Term (Map FieldName Term)
-asRecordType t = do
-  ftf <- asFTermF t
-  case ftf of
-    RecordType elems -> return $ Map.fromList elems
-    _                -> Nothing
+asRecordType :: Recognizer Term [(FieldName, Term)]
+asRecordType t =
+  case isGlobalDef "Prelude.EmptyType" t of
+    Just () -> Just []
+    Nothing ->
+      do (t1, b) <- asApp t
+         (t2, a) <- asApp t1
+         (t3, s) <- asApp t2
+         () <- isGlobalDef "Prelude.RecordType" t3
+         fname <- asStringLit s
+         fields <- asRecordType b
+         Just ((fname, a) : fields)
 
-asRecordValue :: Recognizer Term (Map FieldName Term)
-asRecordValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    RecordValue elems -> return $ Map.fromList elems
-    _                 -> Nothing
+asRecordValue :: Recognizer Term [(FieldName, Term)]
+asRecordValue t0 =
+  case isGlobalDef "Prelude.Empty" t0 of
+    Just () -> Just []
+    Nothing ->
+      do (t1, y) <- asApp t0
+         (t2, x) <- asApp t1
+         (t3, _b) <- asApp t2
+         (t4, _a) <- asApp t3
+         (t5, s) <- asApp t4
+         () <- isGlobalDef "Prelude.RecordValue" t5
+         fname <- asStringLit s
+         fields <- asRecordValue y
+         Just ((fname, x) : fields)
 
 asRecordSelector :: Recognizer Term (Term, FieldName)
-asRecordSelector t = do
-  RecordProj u s <- asFTermF t
-  return (u, s)
+asRecordSelector t0 =
+  do (t1, r) <- asApp t0
+     (t2, _b) <- asApp t1
+     (t3, _a) <- asApp t2
+     (t4, s) <- asApp t3
+     () <- isGlobalDef "Prelude.headRecord" t4
+     fname <- asStringLit s
+     Just (go r, fname)
+  where
+    go :: Term -> Term
+    go t =
+      case asGlobalApply "Prelude.tailRecord" t of
+        Just [_s, _a, _b, t'] -> go t'
+        _ -> t
 
 asRecursorApp :: Recognizer Term (Term, CompiledRecursor)
 asRecursorApp t =

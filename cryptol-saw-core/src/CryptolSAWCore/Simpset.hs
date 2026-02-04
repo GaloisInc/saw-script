@@ -37,7 +37,12 @@ mkCryptolSimpset sc =
       case nameInfo (defName d) of
         ModuleIdentifier ident -> ident `elem` excludedNames
         ImportedName{} -> True
-    idents = ["Prelude.coerce_same", "Prelude.unsafeCoerce_same"]
+    idents =
+      [ "Prelude.coerce_same"
+      , "Prelude.unsafeCoerce_same"
+      , "Prelude.headRecord_RecordValue"
+      , "Prelude.tailRecord_RecordValue"
+      ]
 
 cryptolModuleName :: ModuleName
 cryptolModuleName = mkModuleName ["Cryptol"]
@@ -54,6 +59,7 @@ excludedNames =
   , "fun_cong"
   , "seq_TCNum"
   , "seq_TCInf"
+  , "PZero"
   , "PLiteral"
   , "PLogic"
   , "PRing"

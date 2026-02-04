@@ -53,14 +53,13 @@ module SAWCore.Simulator.Value
   -- * Recognizers
   , asFiniteTypeValue
   , asFirstOrderTypeValue
+  , asFirstOrderTypeTValue
   , suffixTValue
   -- * Re-exports
   , module SAWCore.Simulator.MonadLazy
   ) where
 
-import Prelude hiding (mapM)
-
-import Control.Monad (foldM, mapM)
+import Control.Monad (foldM)
 import Data.Kind (Type)
 import Data.IntMap (IntMap)
 import Data.Map (Map)
@@ -109,7 +108,8 @@ data Value l
   | VIntMod !Natural (VInt l)
   | VArray (VArray l)
   | VString !Text
-  | VRecordValue ![(FieldName, Thunk l)]
+  | VEmptyRecord
+  | VRecordValue !FieldName (Thunk l) !(Value l) -- strict in spine of record
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -131,7 +131,8 @@ data TValue l
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !Name ![Value l] ![Value l] -- ^ name, parameters, indices
-  | VRecordType ![(FieldName, TValue l)]
+  | VEmptyRecordType
+  | VRecordType !FieldName !(TValue l) !(TValue l)
   | VSort !Sort
   | VTyTerm !Sort !Term
 
@@ -207,8 +208,8 @@ instance Show (Extra l) => Show (Value l) where
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VArray{}       -> showString "<<array>>"
       VString s      -> shows s
-      VRecordValue [] -> showString "{}"
-      VRecordValue ((fld,_):_) ->
+      VEmptyRecord   -> showString "{}"
+      VRecordValue fld _ _ ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
@@ -230,8 +231,8 @@ instance Show (Extra l) => Show (TValue l) where
       VDataType s ps vs
         | null (ps++vs) -> shows s
         | otherwise  -> shows s . showList (ps++vs)
-      VRecordType [] -> showString "{}"
-      VRecordType ((fld,_):_) ->
+      VEmptyRecordType -> showString "{}"
+      VRecordType fld _ _ ->
         showString "{" . showString (Text.unpack fld) . showString " :: _, ...}"
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
@@ -287,18 +288,21 @@ valPairRight (VPair _ t2) = force t2
 valPairRight v = panic "valPairRight" ["Not a pair value: " <> Text.pack (show v)]
 
 vRecord :: Map FieldName (Thunk l) -> Value l
-vRecord m = VRecordValue (Map.assocs m)
+vRecord m = foldr (\(f, t) -> VRecordValue f t) VEmptyRecord (Map.assocs m)
 
 valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> FieldName -> MValue l
-valRecordProj (VRecordValue fld_map) fld
-  | Just t <- lookup fld fld_map = force t
-valRecordProj v@(VRecordValue _) fld =
-  panic "valRecordProj" [
-      "Record field " <> Text.pack (show fld) <> " not found in value: " <>
-          Text.pack (show v)
-  ]
-valRecordProj v _ =
-  panic "valRecordProj" ["Not a record value: " <> Text.pack (show v)]
+valRecordProj v fld = go v
+  where
+    go (VRecordValue fld1 t1 v1)
+      | fld == fld1 = force t1
+      | otherwise = go v1
+    go VEmptyRecord =
+      panic "valRecordProj"
+      [ "Record field " <> Text.pack (show fld) <> " not found in value: " <>
+        Text.pack (show v)
+      ]
+    go _ =
+      panic "valRecordProj" ["Not a record value: " <> Text.pack (show v)]
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
@@ -314,12 +318,22 @@ applyPiBody :: VMonad l => PiBody l -> Thunk l -> EvalM l (TValue l)
 applyPiBody (VDependentPi f) x    = f x
 applyPiBody (VNondependentPi t) _ = pure t
 
+-- | Return the 'FiniteType' corresponding to the given 'Value', if
+-- one exists.
+-- If @asFiniteTypeValue v = Just t@, then the term returned by
+-- 'SAWCore.FiniteValue.scFiniteType' applied to @t@ should evaluate
+-- to @v@.
 asFiniteTypeValue :: Value l -> Maybe FiniteType
 asFiniteTypeValue v =
   case v of
     TValue tv -> asFiniteTypeTValue tv
     _ -> Nothing
 
+-- | Return the 'FiniteType' corresponding to the given 'TValue', if
+-- one exists.
+-- If @asFiniteTypeValue tv = Just t@, then the term returned by
+-- 'SAWCore.FiniteValue.scFiniteType' applied to @t@ should evaluate
+-- to @TValue tv@.
 asFiniteTypeTValue :: TValue l -> Maybe FiniteType
 asFiniteTypeTValue v =
   case v of
@@ -334,10 +348,27 @@ asFiniteTypeTValue v =
       case t2 of
         FTTuple ts -> return (FTTuple (t1 : ts))
         _ -> return (FTTuple [t1, t2])
-    VRecordType elem_tps ->
-      FTRec <$> Map.fromList <$>
-      mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeTValue tp) elem_tps
-    _ -> Nothing
+    VEmptyRecordType -> Just (FTRec Map.empty)
+    VRecordType fname v1 v2 ->
+      do t1 <- asFiniteTypeTValue v1
+         t2 <- asFiniteTypeTValue v2
+         -- scFiniteType only produces nested record types with field
+         -- names in strictly increasing order.
+         -- In the case of duplicate or non-sorted field names, this
+         -- TValue does not correspond to any canonical record type,
+         -- so we return Nothing.
+         case t2 of
+           FTRec tm | lessThanKeys fname tm -> Just (FTRec (Map.insert fname t1 tm))
+           _ -> Nothing
+    VStringType   -> Nothing
+    VPiType{}     -> Nothing
+    VDataType{}   -> Nothing
+    VSort{}       -> Nothing
+    VTyTerm{}     -> Nothing
+    VIntType      -> Nothing
+    VIntModType{} -> Nothing
+    VArrayType{}  -> Nothing
+  where
 
 asFirstOrderTypeValue :: Value l -> Maybe FirstOrderType
 asFirstOrderTypeValue v =
@@ -361,15 +392,31 @@ asFirstOrderTypeTValue v =
       case t2 of
         FOTTuple ts -> return (FOTTuple (t1 : ts))
         _ -> return (FOTTuple [t1, t2])
-    VRecordType elem_tps ->
-      FOTRec . Map.fromList <$>
-        mapM (traverse asFirstOrderTypeTValue) elem_tps
+    VEmptyRecordType -> Just (FOTRec Map.empty)
+    VRecordType fname v1 v2 ->
+      do t1 <- asFirstOrderTypeTValue v1
+         t2 <- asFirstOrderTypeTValue v2
+         -- scFirstOrderType only produces nested record types with
+         -- field names in strictly increasing order.
+         -- In the case of duplicate or non-sorted field names, this
+         -- TValue does not correspond to any canonical record type,
+         -- so we return Nothing.
+         case t2 of
+           FOTRec tm | lessThanKeys fname tm -> Just (FOTRec (Map.insert fname t1 tm))
+           _ -> Nothing
 
-    VStringType   -> Nothing
+    VStringType -> Nothing
     VPiType{}   -> Nothing
     VDataType{} -> Nothing
     VSort{}     -> Nothing
     VTyTerm{}   -> Nothing
+
+-- | Is the given key less than all keys in the given map?
+lessThanKeys :: (Ord k) => k -> Map k a -> Bool
+lessThanKeys k m =
+  case Map.minViewWithKey m of
+    Just ((k', _), _) -> k < k'
+    Nothing -> True
 
 -- | A (partial) injective mapping from type values to strings. These
 -- are intended to be useful as suffixes for names of type instances
@@ -396,6 +443,7 @@ suffixTValue tv =
 
     VStringType -> Nothing
     VDataType {} -> Nothing
+    VEmptyRecordType -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing
     VTyTerm{} -> Nothing

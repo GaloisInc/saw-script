@@ -155,17 +155,6 @@ data FlatTermF e
     -- about the recursor.
   | Recursor CompiledRecursor
 
-    -- | Non-dependent record types, i.e., N-ary tuple types with named
-    -- fields. These are considered equal up to reordering of fields. Actual
-    -- tuple types are represented with field names @"1"@, @"2"@, etc.
-  | RecordType ![(FieldName, e)]
-    -- | Non-dependent records, i.e., N-ary tuples with named fields. These are
-    -- considered equal up to reordering of fields. Actual tuples are
-    -- represented with field names @"1"@, @"2"@, etc.
-  | RecordValue ![(FieldName, e)]
-    -- | Non-dependent record projection
-  | RecordProj e !FieldName
-
     -- | Sorts, aka universes, are the types of types; i.e., an object is a
     -- "type" iff it has type @Sort s@ for some s. See 'SortFlags' for an
     -- explanation of the extra argument.
@@ -195,10 +184,10 @@ data CompiledRecursor =
 
 instance Hashable CompiledRecursor -- automatically derived
 
--- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
--- precisely the given field names and no more. If so, return the values
--- associated with those field names, in the order given in the input, and
--- otherwise return 'Nothing'
+-- | Test if an association list uses precisely the given field names
+-- and no more.
+-- If so, return the values associated with those field names, in the
+-- order given in the input, and otherwise return 'Nothing'.
 alistAllFields :: Eq k => [k] -> [(k, a)] -> Maybe [a]
 alistAllFields [] [] = Just []
 alistAllFields (fld:flds) alist
@@ -245,15 +234,6 @@ zipWithFlatTermF f = go
     go (Recursor rec1) (Recursor rec2) =
       Recursor <$> zipRec rec1 rec2
 
-    go (RecordType elems1) (RecordType elems2)
-      | Just vals2 <- alistAllFields (map fst elems1) elems2 =
-        Just $ RecordType $ zipWith (\(fld,x) y -> (fld, f x y)) elems1 vals2
-    go (RecordValue elems1) (RecordValue elems2)
-      | Just vals2 <- alistAllFields (map fst elems1) elems2 =
-        Just $ RecordValue $ zipWith (\(fld,x) y -> (fld, f x y)) elems1 vals2
-    go (RecordProj e1 fld1) (RecordProj e2 fld2)
-      | fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1
-
     go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (sortFlagsLift2 (&&) hx hy))
          -- /\ NB, it's not entirely clear how the flags should be propagated
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
@@ -268,9 +248,6 @@ zipWithFlatTermF f = go
     go PairLeft{}     _ = Nothing
     go PairRight{}    _ = Nothing
     go Recursor{}     _ = Nothing
-    go RecordType{}   _ = Nothing
-    go RecordValue{}  _ = Nothing
-    go RecordProj{}   _ = Nothing
     go Sort{}         _ = Nothing
     go ArrayValue{}   _ = Nothing
     go StringLit{}    _ = Nothing

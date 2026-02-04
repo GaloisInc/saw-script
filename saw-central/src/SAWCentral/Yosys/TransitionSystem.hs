@@ -270,7 +270,7 @@ queryModelChecker sym sc sequential path query fixedInputs =
                do -- here we generate a single query, corresponding to the provided query term q
                   -- this is q applied to:
                   --  - the cycle counter (an 8-bit bitvector)
-                  --  - a record of the fixed inputs (as usual really a SAWCore tuple, ordered per the Cryptol record type)
+                  --  - a record of the fixed inputs
                   --  - a record of the outputs
                   curFixedInputBindings <- ecBindingsOfFields sym sc "stateinput_" (fst <$> fixedInputFields) stateFields cur
                   curOutputBindings <- ecBindingsOfFields sym sc "stateoutput_" (fst <$> (sequential ^. yosysSequentialOutputFields)) stateFields cur

@@ -30,8 +30,6 @@ import Numeric.Natural (Natural)
 
 import Text.Encoding.Z (zEncodeString)
 
-import qualified SAWSupport.Pretty as PPS
-
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
 
@@ -137,45 +135,34 @@ reverseTopSort =
   reverse . Graph.topSort
 #endif
 
--- | Produce a SAWCore tuple type corresponding to a Cryptol record type with the given fields.
+-- | Produce a SAWCore record type corresponding to a Cryptol record type with the given fields.
 cryptolRecordType ::
   SC.SharedContext ->
   Map Text SC.Term ->
   IO SC.Term
 cryptolRecordType sc fields =
-  SC.scTupleType sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
+  SC.scRecordType sc (C.canonicalFields $ C.recordFromFields $ Map.assocs fields)
 
--- | Produce a SAWCore tuple corresponding to a Cryptol record with the given fields.
+-- | Produce a SAWCore record corresponding to a Cryptol record with the given fields.
 cryptolRecord ::
   SC.SharedContext ->
   Map Text SC.Term ->
   IO SC.Term
 cryptolRecord sc fields =
-  SC.scTuple sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
+  SC.scRecordValue sc (C.canonicalFields $ C.recordFromFields $ Map.assocs fields)
 
--- | Produce a SAWCore tuple index corresponding to a lookup in a Cryptol record with the given fields.
+-- | Produce a SAWCore record projection corresponding to a lookup in
+-- a Cryptol record with the given fields.
 cryptolRecordSelect ::
   SC.SharedContext ->
   Map Text a ->
   SC.Term ->
   Text ->
   IO SC.Term
-cryptolRecordSelect sc fields r nm =
-  case List.elemIndex nm ord of
-    Just i -> SC.scTupleSelector sc r (i + 1) (length ord)
-    Nothing -> do
-     r' <- SC.ppTerm sc PPS.defaultOpts r
-     throwIO $ YosysError $ mconcat
-      [ "Could not build record selector term for field name \""
-      , nm
-      , "\" on record term: "
-      , Text.pack $ r'
-      , "\nFields are: "
-      , Text.pack . show $ Map.keys fields
-      ]
-  where ord = fmap fst . C.canonicalFields . C.recordFromFields $ Map.assocs fields
+cryptolRecordSelect sc _fields r nm =
+  SC.scRecordSelect sc r nm
 
--- | Produce a SAWCore tuple index corresponding to a lookup in a
+-- | Produce a SAWCore record projection corresponding to a lookup in a
 -- Cryptol record. The record fields are inferred from the Cryptol
 -- type attached to the `TypedTerm`.
 cryptolRecordSelectTyped ::
@@ -206,7 +193,7 @@ cryptolRecordSelectTyped sc r nm =
      pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
 
 -- | Construct a SAWCore expression asserting equality between each
--- field of two records. Both records should be tuples corresponding
+-- field of two records. Both records should be records corresponding
 -- to the specified Cryptol record type.
 eqBvRecords ::
   SC.SharedContext ->

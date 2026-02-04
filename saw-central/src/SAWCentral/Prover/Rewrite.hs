@@ -26,6 +26,8 @@ basic_ss sc =
      where
        eqs = map (mkIdent preludeName)
          [ "unsafeCoerce_same"
+         , "headRecord_RecordValue"
+         , "tailRecord_RecordValue"
          , "not_not"
          , "true_implies"
          , "implies__eq"

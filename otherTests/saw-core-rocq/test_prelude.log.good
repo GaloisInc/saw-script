@@ -51,14 +51,6 @@ Definition uncurry : forall (a : Type), forall (b : Type), forall (c : Type), fo
 
 (* "Prelude.error" was skipped *)
 
-(* Prelude.EmptyType was skipped *)
-
-(* "Prelude.EmptyType__rec" was skipped *)
-
-(* Prelude.RecordType was skipped *)
-
-(* "Prelude.RecordType__rec" was skipped *)
-
 (* Prelude.Void was skipped *)
 
 Definition elimVoid : forall (a : Type), forall (_1 : Init.Datatypes.Empty_set), a :=
@@ -134,6 +126,24 @@ Definition piCong0 : forall (r : Type), forall (x : Type), forall (y : Type), fo
 
 Definition piCong1 : forall (r : Type), forall (x : Type), forall (y : Type), forall (_1 : @Init.Logic.eq Type x y), @Init.Logic.eq Type (forall (_2 : r), x) (forall (_2 : r), y) :=
   fun (r : Type) (x : Type) (y : Type) (eq : @Init.Logic.eq Type x y) => SAWCoreScaffolding.Eq__rec Type x (fun (y' : Type) (eq' : @Init.Logic.eq Type x y') => @Init.Logic.eq Type (forall (_1 : r), x) (forall (_1 : r), y')) (@Init.Logic.eq_refl Type (forall (_1 : r), x)) y eq.
+
+(* Prelude.EmptyType was skipped *)
+
+(* "Prelude.EmptyType__rec" was skipped *)
+
+(* Prelude.RecordType was skipped *)
+
+(* "Prelude.RecordType__rec" was skipped *)
+
+(* "Prelude.headRecord" was skipped *)
+
+(* "Prelude.tailRecord" was skipped *)
+
+Definition headRecord_RecordValue : forall (s : Stdlib.Strings.String.string), forall (a : Type), forall (b : Type), forall (x : a), forall (y : b), @Init.Logic.eq a (@SAWCoreScaffolding.recordHead s a b (@SAWCoreScaffolding.RecordCons s a b x y)) x :=
+  fun (s : Stdlib.Strings.String.string) (a : Type) (b : Type) (x : a) (y : b) => @Init.Logic.eq_refl a x.
+
+Definition tailRecord_RecordValue : forall (s : Stdlib.Strings.String.string), forall (a : Type), forall (b : Type), forall (x : a), forall (y : b), @Init.Logic.eq b (@SAWCoreScaffolding.recordTail s a b (@SAWCoreScaffolding.RecordCons s a b x y)) y :=
+  fun (s : Stdlib.Strings.String.string) (a : Type) (b : Type) (x : a) (y : b) => @Init.Logic.eq_refl b y.
 
 (* Prelude.Bool was skipped *)
 

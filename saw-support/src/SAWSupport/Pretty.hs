@@ -293,7 +293,7 @@ prettyLetBlock defs body =
           (map ppEqn defs)
   in PP.group $ PP.vcat
         [ "let" PP.<+> PP.align (PP.lbrace PP.<+> lets <> PP.line <> PP.rbrace)
-        , " in" PP.<+> body
+        , " in" PP.<+> PP.hang 0 body
         ]
   where
     ppEqn (var,d) = var PP.<+> "=" PP.<+> d <> ";"

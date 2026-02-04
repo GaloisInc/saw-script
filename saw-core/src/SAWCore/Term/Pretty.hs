@@ -415,7 +415,8 @@ prettyPairType prec x y = prettyParensPrec prec PrecProd (x <+> pretty '*' <+> y
 prettyRecord :: Bool -> [(FieldName, PPS.Doc)] -> PPS.Doc
 prettyRecord type_p alist =
   (if type_p then (pretty '#' <>) else id) $
-  encloseSep lbrace rbrace comma $ map ppField alist
+  group $
+  encloseSep (flatAlt "{ " "{") (flatAlt " }" "}") ", " $ map ppField alist
   where
     ppField (fld, rhs) = group (nest 2 (vsep [pretty fld <+> op_str, rhs]))
     op_str = if type_p then ":" else "="
@@ -425,8 +426,8 @@ prettyProj :: FieldName -> PPS.Doc -> PPS.Doc
 prettyProj sel doc = doc <> pretty '.' <> pretty sel
 
 -- | Pretty-print an array value @[v1, ..., vn]@
-prettyArrayvalue :: [PPS.Doc] -> PPS.Doc
-prettyArrayvalue = list
+prettyArrayValue :: [PPS.Doc] -> PPS.Doc
+prettyArrayValue = list
 
 -- | Pretty-print a lambda abstraction as @\(x :: tp) -> body@, where the
 -- variable name to use for @x@ is bundled with @body@
@@ -468,11 +469,6 @@ prettyFlatTermF prec tf =
          return $
            annotate PPS.RecursorStyle (nm <> suffix)
 
-    RecordType alist ->
-      prettyRecord True <$> mapM (\(fld,t) -> (fld,) <$> prettyTerm' PrecTerm t) alist
-    RecordValue alist ->
-      prettyRecord False <$> mapM (\(fld,t) -> (fld,) <$> prettyTerm' PrecTerm t) alist
-    RecordProj e fld -> prettyProj fld <$> prettyTerm' PrecArg e
     Sort s h -> return (viaShow h <> viaShow s)
     ArrayValue (asBoolType -> Just _) args
       | Just bits <- mapM asBool $ V.toList args ->
@@ -481,7 +477,7 @@ prettyFlatTermF prec tf =
         else
           return $ pretty ("0b" ++ map (\b -> if b then '1' else '0') bits)
     ArrayValue _ args   ->
-      prettyArrayvalue <$> mapM (prettyTerm' PrecTerm) (V.toList args)
+      prettyArrayValue <$> mapM (prettyTerm' PrecTerm) (V.toList args)
     StringLit s -> return $ viaShow s
 
 -- | Pretty-print a big endian list of bit values as a hexadecimal number
@@ -534,13 +530,25 @@ prettyTermF _ (Variable vn _tp) = annotate PPS.VariableStyle <$> prettyVarName v
 
 -- | Internal function to recursively pretty-print a term
 prettyTerm' :: Prec -> Term -> PPM PPS.Doc
-prettyTerm' prec = atNextDepthM "..." . prettyTerm'' where
-  prettyTerm'' (asNat -> Just n) = prettyNat <$> asks ppOpts <*> pure (toInteger n)
-  prettyTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
-    do maybe_memo_var <- memoLookupM idx
-       case maybe_memo_var of
-         Just memo_var -> prettyMemoVar memo_var
-         Nothing -> prettyTermF prec tf
+prettyTerm' prec = atNextDepthM "..." . prettyTerm''
+  where
+    prettyTerm'' :: Term -> PPM PPS.Doc
+    prettyTerm'' t =
+      do maybe_memo_var <- memoLookupM (termIndex t)
+         case maybe_memo_var of
+           Just memo_var -> prettyMemoVar memo_var
+           Nothing ->
+             case t of
+               (asNat -> Just n) ->
+                 prettyNat <$> asks ppOpts <*> pure (toInteger n)
+               (asRecordType -> Just alist) ->
+                 prettyRecord True <$> traverse (traverse (prettyTerm' PrecTerm)) alist
+               (asRecordValue -> Just alist) ->
+                 prettyRecord False <$> traverse (traverse (prettyTerm' PrecTerm)) alist
+               (asRecordSelector -> Just (e, fname)) ->
+                 prettyProj fname <$> prettyTerm' PrecArg e
+               _ ->
+                 prettyTermF prec (unwrapTermF t)
 
 
 --------------------------------------------------------------------------------
@@ -564,22 +572,24 @@ scTermCountAux :: Bool -> [Term] -> State OccurrenceMap ()
 scTermCountAux doBinders = go
   where go :: [Term] -> State OccurrenceMap ()
         go [] = return ()
-        go (t:r) =
-          case t of
-            STApp{ stAppIndex = i } -> do
-              m <- get
-              case IntMap.lookup i m of
-                Just (_, n) -> do
-                  put $ n `seq` IntMap.insert i (t, n+1) m
-                  go r
-                Nothing -> do
-                  put (IntMap.insert i (t, 1) m)
-                  recurse
-          where
-            recurse = go (r ++ argsAndSubterms t)
+        go (t : ts) =
+          do m <- get
+             let i = termIndex t
+             case IntMap.lookup i m of
+               Just (_, n) ->
+                 do put $ n `seq` IntMap.insert i (t, n+1) m
+                    go ts
+               Nothing ->
+                 do put (IntMap.insert i (t, 1) m)
+                    go (ts ++ argsAndSubterms t)
 
         argsAndSubterms :: Term -> [Term]
-        argsAndSubterms (asApplyAll -> (f, args)) | not (null args) = f : args
+        -- Skip type arguments in record syntax
+        argsAndSubterms (asRecordSelector -> Just (t1, _)) = [t1]
+        argsAndSubterms (asRecordValue -> Just fields) = map snd fields
+        -- Skip partially-applied function terms
+        argsAndSubterms (asApp -> Just (t1@(asApp -> Just _), t2)) =
+          argsAndSubterms t1 ++ [t2]
         argsAndSubterms h =
           case unwrapTermF h of
             Lambda _ t1 _ | not doBinders  -> [t1]
@@ -615,14 +625,14 @@ shouldMemoizeTerm t =
 prettyTermWithMemoTable :: Prec -> Bool -> Term -> PPM PPS.Doc
 prettyTermWithMemoTable prec global_p trm = do
      min_occs <- PPS.ppMinSharing <$> ppOpts <$> ask
-     let occPairs = IntMap.assocs $ filterOccurenceMap min_occs global_p $ scTermCount global_p trm
+     let occPairs = IntMap.assocs $ filterOccurrenceMap min_occs global_p $ scTermCount global_p trm
      prettyLets global_p occPairs [] (prettyTerm' prec trm)
 
 -- Filter an occurrence map, filtering out terms that only occur
 -- once, that are "too small" to memoize, and, for the global table, terms
 -- that are not closed
-filterOccurenceMap :: Int -> Bool -> OccurrenceMap -> OccurrenceMap
-filterOccurenceMap min_occs global_p =
+filterOccurrenceMap :: Int -> Bool -> OccurrenceMap -> OccurrenceMap
+filterOccurrenceMap min_occs global_p =
     IntMap.filter
       (\(t,cnt) ->
         cnt >= min_occs && shouldMemoizeTerm t &&
@@ -734,7 +744,7 @@ prettyTermContainerWithEnv prettyContainer opts ne trms =
   let min_occs = PPS.ppMinSharing opts
       global_p = True
       occPairs = IntMap.assocs $
-                   filterOccurenceMap min_occs global_p $
+                   filterOccurrenceMap min_occs global_p $
                    flip execState mempty $
                    traverse (\t -> scTermCountAux global_p [t]) $
                    trms

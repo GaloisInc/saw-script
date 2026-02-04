@@ -122,9 +122,6 @@ scWriteExternal t0 =
                  let show_s = if s == propSort then "Prop" else drop 5 (show s)
                  pure $ unwords ["Recursor", show (nameIndex d), show_s]
 
-            RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
-            RecordValue elems   -> pure $ unwords ["Record", show elems]
-            RecordProj e prj    -> pure $ unwords ["RecordProj", show e, Text.unpack prj]
             Sort s h
               | s == propSort -> pure $ unwords ("Prop" : map show (sortFlagsToList h))
               | otherwise     -> pure $ unwords ("Sort" : drop 5 (show s) : map show (sortFlagsToList h))
@@ -264,14 +261,6 @@ scReadExternal sc input =
              s' <- if s == "Prop" then pure propSort else mkSort <$> readM s
              lift $ scRecursor sc nm s'
 
-        ["RecordType", elem_tps]
-                            -> do ts <- traverse (traverse getTerm) =<< readM elem_tps
-                                  lift $ scRecordType sc ts
-        ["Record", elems]   -> do ts <- traverse (traverse getTerm) =<< readM elems
-                                  lift $ scRecordValue sc ts
-        ["RecordProj", e, prj]
-                            -> do t <- readIdx e
-                                  lift $ scRecordSelect sc t (Text.pack prj)
         ("Prop" : h)        -> do flags <- sortFlagsFromList <$> mapM readM h
                                   lift $ scSortWithFlags sc propSort flags
         ("Sort" : s : h)    -> do s' <- mkSort <$> readM s
