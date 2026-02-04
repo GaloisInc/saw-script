@@ -131,7 +131,6 @@ data TValue l
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !Name ![Value l] ![Value l] -- ^ name, parameters, indices
-  | VEmptyRecordType
   | VRecordType !FieldName !(TValue l) !(TValue l)
   | VSort !Sort
   | VTyTerm !Sort !Term
@@ -233,7 +232,6 @@ instance Show (Extra l) => Show (TValue l) where
           case ps ++ vs of
             [] -> shows s'
             vs' -> shows s' . showList vs'
-      VEmptyRecordType -> showString "{}"
       VRecordType fld _ _ ->
         showString "{" . showString (Text.unpack fld) . showString " :: _, ...}"
       VVecType n a   -> showString "Vec " . shows n
@@ -350,7 +348,8 @@ asFiniteTypeTValue v =
       case t2 of
         FTTuple ts -> return (FTTuple (t1 : ts))
         _ -> return (FTTuple [t1, t2])
-    VEmptyRecordType -> Just (FTRec Map.empty)
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+      Just (FTRec Map.empty)
     VRecordType fname v1 v2 ->
       do t1 <- asFiniteTypeTValue v1
          t2 <- asFiniteTypeTValue v2
@@ -394,7 +393,8 @@ asFirstOrderTypeTValue v =
       case t2 of
         FOTTuple ts -> return (FOTTuple (t1 : ts))
         _ -> return (FOTTuple [t1, t2])
-    VEmptyRecordType -> Just (FOTRec Map.empty)
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+      Just (FOTRec Map.empty)
     VRecordType fname v1 v2 ->
       do t1 <- asFirstOrderTypeTValue v1
          t2 <- asFirstOrderTypeTValue v2
@@ -445,7 +445,6 @@ suffixTValue tv =
 
     VStringType -> Nothing
     VDataType {} -> Nothing
-    VEmptyRecordType -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing
     VTyTerm{} -> Nothing

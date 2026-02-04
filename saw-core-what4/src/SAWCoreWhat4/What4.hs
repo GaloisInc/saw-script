@@ -1076,7 +1076,6 @@ countUninterpreted scale count ty =
 
     VPairType ty1 ty2 -> countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
-    VEmptyRecordType -> count
     VRecordType _f ty1 ty2 ->
       countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
@@ -1137,7 +1136,7 @@ parseUninterpreted' sym ref app ty =
             x2 <- parseUninterpreted' sym ref app ty2
             return (VPair (ready x1) (ready x2))
 
-    VEmptyRecordType
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure VEmptyRecord
     VRecordType fname ty1 ty2
       -> do x1 <- parseUninterpreted' sym ref app ty1
@@ -1802,7 +1801,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
             x2 <- parseUninterpretedSAW sym st sc ref trm2 (suffixUnintApp "_R" app) ty2
             return (VPair (ready x1) (ready x2))
 
-    VEmptyRecordType
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure VEmptyRecord
     VRecordType fname ty1 ty2
       -> do let trm1 = ArgTermRecordSelect trm fname
@@ -1968,7 +1967,8 @@ mkArgTerm sc ty val =
          x2 <- mkArgTerm sc ty2 =<< force v2
          return (ArgTermPair x1 x2)
 
-    (VEmptyRecordType, VEmptyRecord) -> pure ArgTermEmpty
+    (VDataType _nm [] [], VEmptyRecord) ->
+      pure ArgTermEmpty
     (VRecordType fname ty1 ty2, VRecordValue fname' v1 v2) | fname == fname' ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
          x2 <- mkArgTerm sc ty2 v2
@@ -2014,7 +2014,8 @@ termOfTValue sc val =
       -> do a' <- termOfTValue sc a
             b' <- termOfTValue sc b
             scPairType sc a' b'
-    VEmptyRecordType -> scRecordType sc []
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] []
+      -> scRecordType sc []
     VRecordType fname a b
       -> do fname' <- scString sc fname
             a' <- termOfTValue sc a

@@ -378,7 +378,6 @@ constMap bp = Map.fromList
   , ("Prelude.bytesToString", bytesToStringOp bp)
   , ("Prelude.equalString", equalStringOp bp)
   -- Records
-  , ("Prelude.EmptyType", PrimValue (TValue VEmptyRecordType))
   , ("Prelude.Empty", PrimValue VEmptyRecord)
   , ("Prelude.RecordType", recordTypeOp)
   , ("Prelude.RecordValue", recordValueOp)

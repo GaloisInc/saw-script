@@ -684,7 +684,7 @@ parseUninterpreted cws nm ty =
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             return (VPair (ready x1) (ready x2))
 
-    VEmptyRecordType
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure VEmptyRecord
     (VRecordType f ty1 ty2)
       -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack f) ty1
