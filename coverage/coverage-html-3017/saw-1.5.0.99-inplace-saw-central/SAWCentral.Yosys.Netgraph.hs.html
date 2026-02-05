@@ -148,7 +148,7 @@ span.spaces    { background: white }
 <span class="lineno">  129 </span><span class="spaces">        </span><span class="istickedoff">( \acc v -&gt;</span>
 <span class="lineno">  130 </span><span class="spaces">            </span><span class="istickedoff">do</span>
 <span class="lineno">  131 </span><span class="spaces">            </span><span class="istickedoff">let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v</span>
-<span class="lineno">  132 </span><span class="spaces">            </span><span class="istickedoff">let outputFields = Map.filter (\d -&gt; d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections</span>
+<span class="lineno">  132 </span><span class="spaces">            </span><span class="istickedoff">let <span class="nottickedoff">outputFields = Map.filter (\d -&gt; d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections</span></span>
 <span class="lineno">  133 </span><span class="spaces">            </span><span class="istickedoff">if</span>
 <span class="lineno">  134 </span><span class="spaces">              </span><span class="istickedoff">-- special handling for $dff/$ff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state</span>
 <span class="lineno">  135 </span><span class="spaces">              </span><span class="istickedoff">| c ^. cellType == CellTypeDff</span>
@@ -187,7 +187,7 @@ span.spaces    { background: white }
 <span class="lineno">  168 </span><span class="spaces">                     </span><span class="istickedoff">-- once we've built a term, insert it along with each of its bits</span>
 <span class="lineno">  169 </span><span class="spaces">                     </span><span class="istickedoff">ts &lt;-</span>
 <span class="lineno">  170 </span><span class="spaces">                       </span><span class="istickedoff">forM (Map.assocs $ cellOutputConnections c) $ \(o, out) -&gt;</span>
-<span class="lineno">  171 </span><span class="spaces">                       </span><span class="istickedoff">do t &lt;- cryptolRecordSelect sc outputFields r o</span>
+<span class="lineno">  171 </span><span class="spaces">                       </span><span class="istickedoff">do t &lt;- cryptolRecordSelect sc <span class="nottickedoff">outputFields</span> r o</span>
 <span class="lineno">  172 </span><span class="spaces">                          </span><span class="istickedoff">deriveTermsByIndices <span class="nottickedoff">sc</span> out t</span>
 <span class="lineno">  173 </span><span class="spaces">                     </span><span class="istickedoff">pure $ Map.union (Map.unions ts) acc</span>
 <span class="lineno">  174 </span><span class="spaces">        </span><span class="istickedoff">)</span>
@@ -219,7 +219,7 @@ span.spaces    { background: white }
 <span class="lineno">  200 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  201 </span><span class="spaces">     </span><span class="istickedoff">derivedInputs &lt;-</span>
 <span class="lineno">  202 </span><span class="spaces">       </span><span class="istickedoff">forM (Map.assocs inputPorts) $ \(nm, inp) -&gt;</span>
-<span class="lineno">  203 </span><span class="spaces">       </span><span class="istickedoff">do t &lt;- cryptolRecordSelect sc inputFields inputRecord nm</span>
+<span class="lineno">  203 </span><span class="spaces">       </span><span class="istickedoff">do t &lt;- cryptolRecordSelect sc <span class="nottickedoff">inputFields</span> inputRecord nm</span>
 <span class="lineno">  204 </span><span class="spaces">          </span><span class="istickedoff">deriveTermsByIndices <span class="nottickedoff">sc</span> inp t</span>
 <span class="lineno">  205 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  206 </span><span class="spaces">     </span><span class="istickedoff">oneBitType &lt;- SC.scBitvector sc 1</span>

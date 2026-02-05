@@ -312,7 +312,7 @@ span.spaces    { background: white }
 <span class="lineno">  293 </span><span class="spaces">          </span><span class="istickedoff">(map ppEqn defs)</span>
 <span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">in PP.group $ PP.vcat</span>
 <span class="lineno">  295 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;let&quot; PP.&lt;+&gt; PP.align (PP.lbrace PP.&lt;+&gt; lets &lt;&gt; PP.line &lt;&gt; PP.rbrace)</span>
-<span class="lineno">  296 </span><span class="spaces">        </span><span class="istickedoff">, &quot; in&quot; PP.&lt;+&gt; body</span>
+<span class="lineno">  296 </span><span class="spaces">        </span><span class="istickedoff">, &quot; in&quot; PP.&lt;+&gt; PP.hang 0 body</span>
 <span class="lineno">  297 </span><span class="spaces">        </span><span class="istickedoff">]</span>
 <span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">ppEqn (var,d) = var PP.&lt;+&gt; &quot;=&quot; PP.&lt;+&gt; d &lt;&gt; &quot;;&quot;</span></span>

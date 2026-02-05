@@ -191,7 +191,7 @@ span.spaces    { background: white }
 <span class="lineno">  172 </span>  IO (Maybe SC.Term)
 <span class="lineno">  173 </span><span class="decl"><span class="istickedoff">primCellToTerm sc c args =</span>
 <span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">do mm &lt;- primCellToMap sc c args</span>
-<span class="lineno">  175 </span><span class="spaces">     </span><span class="istickedoff">traverse (cryptolRecord <span class="nottickedoff">sc</span>) mm</span></span>
+<span class="lineno">  175 </span><span class="spaces">     </span><span class="istickedoff">traverse (cryptolRecord sc) mm</span></span>
 <span class="lineno">  176 </span>
 <span class="lineno">  177 </span>primCellToMap ::
 <span class="lineno">  178 </span>  forall b.

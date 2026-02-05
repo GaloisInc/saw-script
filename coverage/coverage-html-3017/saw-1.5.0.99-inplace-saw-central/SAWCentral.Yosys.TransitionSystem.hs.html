@@ -233,20 +233,20 @@ span.spaces    { background: white }
 <span class="lineno">  214 </span><span class="spaces">                    </span><span class="istickedoff">let bindings = if Set.member nm fixedInputs then curFixedInputBindings else inputBindings</span>
 <span class="lineno">  215 </span><span class="spaces">                    </span><span class="istickedoff">in (nm,) &lt;$&gt; lookupBinding nm bindings</span>
 <span class="lineno">  216 </span><span class="spaces">                  </span><span class="istickedoff">states &lt;- forM curBindings $ \(vn, tp, _) -&gt; SC.scVariable sc vn tp</span>
-<span class="lineno">  217 </span><span class="spaces">                  </span><span class="istickedoff">inpst &lt;- cryptolRecord <span class="nottickedoff">sc</span> states</span>
+<span class="lineno">  217 </span><span class="spaces">                  </span><span class="istickedoff">inpst &lt;- cryptolRecord sc states</span>
 <span class="lineno">  218 </span><span class="spaces">                  </span><span class="istickedoff">domainRec &lt;- cryptolRecord sc $ Map.insert &quot;__state__&quot; inpst inps</span>
 <span class="lineno">  219 </span><span class="spaces">                  </span><span class="istickedoff">codomainRec &lt;- SC.scApply sc (sequential ^. yosysSequentialTerm . SC.ttTermLens) domainRec</span>
-<span class="lineno">  220 </span><span class="spaces">                  </span><span class="istickedoff">codomainFields &lt;- insertStateField <span class="nottickedoff">sc</span> (sequential ^. yosysSequentialStateFields) $ sequential ^. yosysSequentialOutputFields</span>
-<span class="lineno">  221 </span><span class="spaces">                  </span><span class="istickedoff">outst &lt;- cryptolRecordSelect sc codomainFields codomainRec &quot;__state__&quot;</span>
+<span class="lineno">  220 </span><span class="spaces">                  </span><span class="istickedoff">codomainFields &lt;- insertStateField sc (sequential ^. yosysSequentialStateFields) $ <span class="nottickedoff">sequential ^. yosysSequentialOutputFields</span></span>
+<span class="lineno">  221 </span><span class="spaces">                  </span><span class="istickedoff">outst &lt;- cryptolRecordSelect sc <span class="nottickedoff">codomainFields</span> codomainRec &quot;__state__&quot;</span>
 <span class="lineno">  222 </span><span class="spaces">                  </span><span class="istickedoff">stPreds &lt;-</span>
 <span class="lineno">  223 </span><span class="spaces">                    </span><span class="istickedoff">forM (Map.assocs $ sequential ^. yosysSequentialStateWidths) $ \(nm, w) -&gt;</span>
-<span class="lineno">  224 </span><span class="spaces">                    </span><span class="istickedoff">do val &lt;- cryptolRecordSelect <span class="nottickedoff">sc</span> (sequential ^. yosysSequentialStateFields) outst nm</span>
+<span class="lineno">  224 </span><span class="spaces">                    </span><span class="istickedoff">do val &lt;- cryptolRecordSelect sc <span class="nottickedoff">(sequential ^. yosysSequentialStateFields)</span> outst nm</span>
 <span class="lineno">  225 </span><span class="spaces">                       </span><span class="istickedoff">wnat &lt;- SC.scNat sc w</span>
 <span class="lineno">  226 </span><span class="spaces">                       </span><span class="istickedoff">new &lt;- lookupBinding nm nextBindings</span>
 <span class="lineno">  227 </span><span class="spaces">                       </span><span class="istickedoff">SC.scBvEq sc wnat new val</span>
 <span class="lineno">  228 </span><span class="spaces">                  </span><span class="istickedoff">outputPreds &lt;-</span>
 <span class="lineno">  229 </span><span class="spaces">                    </span><span class="istickedoff">forM (Map.assocs $ sequential ^. yosysSequentialOutputWidths) $ \(nm, w) -&gt;</span>
-<span class="lineno">  230 </span><span class="spaces">                    </span><span class="istickedoff">do val &lt;- cryptolRecordSelect sc codomainFields codomainRec nm</span>
+<span class="lineno">  230 </span><span class="spaces">                    </span><span class="istickedoff">do val &lt;- cryptolRecordSelect sc <span class="nottickedoff">codomainFields</span> codomainRec nm</span>
 <span class="lineno">  231 </span><span class="spaces">                       </span><span class="istickedoff">wnat &lt;- SC.scNat sc w</span>
 <span class="lineno">  232 </span><span class="spaces">                       </span><span class="istickedoff">new &lt;- lookupBinding nm nextOutputBindings</span>
 <span class="lineno">  233 </span><span class="spaces">                       </span><span class="istickedoff">SC.scBvEq sc wnat new val</span>
@@ -289,7 +289,7 @@ span.spaces    { background: white }
 <span class="lineno">  270 </span><span class="spaces">               </span><span class="istickedoff">do -- here we generate a single query, corresponding to the provided query term q</span>
 <span class="lineno">  271 </span><span class="spaces">                  </span><span class="istickedoff">-- this is q applied to:</span>
 <span class="lineno">  272 </span><span class="spaces">                  </span><span class="istickedoff">--  - the cycle counter (an 8-bit bitvector)</span>
-<span class="lineno">  273 </span><span class="spaces">                  </span><span class="istickedoff">--  - a record of the fixed inputs (as usual really a SAWCore tuple, ordered per the Cryptol record type)</span>
+<span class="lineno">  273 </span><span class="spaces">                  </span><span class="istickedoff">--  - a record of the fixed inputs</span>
 <span class="lineno">  274 </span><span class="spaces">                  </span><span class="istickedoff">--  - a record of the outputs</span>
 <span class="lineno">  275 </span><span class="spaces">                  </span><span class="istickedoff">curFixedInputBindings &lt;- ecBindingsOfFields sym sc &quot;stateinput_&quot; (fst &lt;$&gt; fixedInputFields) stateFields cur</span>
 <span class="lineno">  276 </span><span class="spaces">                  </span><span class="istickedoff">curOutputBindings &lt;- ecBindingsOfFields sym sc &quot;stateoutput_&quot; (fst &lt;$&gt; (sequential ^. yosysSequentialOutputFields)) stateFields cur</span>
@@ -302,7 +302,7 @@ span.spaces    { background: white }
 <span class="lineno">  283 </span><span class="spaces">                    </span><span class="istickedoff">(nm,) &lt;$&gt; lookupBinding nm curOutputBindings</span>
 <span class="lineno">  284 </span><span class="spaces">                  </span><span class="istickedoff">cycleVal &lt;- lookupBinding &quot;cycle&quot; curInternalBindings</span>
 <span class="lineno">  285 </span><span class="spaces">                  </span><span class="istickedoff">fixedInputRec &lt;- cryptolRecord sc fixedInps</span>
-<span class="lineno">  286 </span><span class="spaces">                  </span><span class="istickedoff">outputRec &lt;- cryptolRecord <span class="nottickedoff">sc</span> outputs</span>
+<span class="lineno">  286 </span><span class="spaces">                  </span><span class="istickedoff">outputRec &lt;- cryptolRecord sc outputs</span>
 <span class="lineno">  287 </span><span class="spaces">                  </span><span class="istickedoff">result &lt;- SC.scApplyAll sc (query ^. SC.ttTermLens) [cycleVal, fixedInputRec, outputRec]</span>
 <span class="lineno">  288 </span><span class="spaces">                  </span><span class="istickedoff">ref &lt;- IORef.newIORef <span class="nottickedoff">Map.empty</span></span>
 <span class="lineno">  289 </span><span class="spaces">                  </span><span class="istickedoff">let args =</span>

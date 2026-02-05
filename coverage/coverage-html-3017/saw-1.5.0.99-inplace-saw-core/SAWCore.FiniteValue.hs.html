@@ -298,17 +298,17 @@ span.spaces    { background: white }
 <span class="lineno">  279 </span>
 <span class="lineno">  280 </span>-- | Smart constructor
 <span class="lineno">  281 </span>fovVec :: FirstOrderType -&gt; [FirstOrderValue] -&gt; FirstOrderValue
-<span class="lineno">  282 </span><span class="decl"><span class="nottickedoff">fovVec t vs =</span>
-<span class="lineno">  283 </span><span class="spaces">  </span><span class="nottickedoff">case (t, traverse toBit vs) of</span>
-<span class="lineno">  284 </span><span class="spaces">    </span><span class="nottickedoff">(FOTBit, Just bs) -&gt; FOVWord (fromIntegral (length bs)) (fromBits bs)</span>
-<span class="lineno">  285 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; FOVVec t vs</span>
-<span class="lineno">  286 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  287 </span><span class="spaces">    </span><span class="nottickedoff">toBit :: FirstOrderValue -&gt; Maybe Bool</span>
-<span class="lineno">  288 </span><span class="spaces">    </span><span class="nottickedoff">toBit (FOVBit b) = Just b</span>
-<span class="lineno">  289 </span><span class="spaces">    </span><span class="nottickedoff">toBit _ = Nothing</span>
-<span class="lineno">  290 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  291 </span><span class="spaces">    </span><span class="nottickedoff">fromBits :: [Bool] -&gt; Integer</span>
-<span class="lineno">  292 </span><span class="spaces">    </span><span class="nottickedoff">fromBits = foldl (\n b -&gt; 2*n + if b then 1 else 0) 0</span></span>
+<span class="lineno">  282 </span><span class="decl"><span class="istickedoff">fovVec t vs =</span>
+<span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">case (t, <span class="nottickedoff">traverse toBit vs</span>) of</span>
+<span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">(FOTBit, Just bs) -&gt; <span class="nottickedoff">FOVWord (fromIntegral (length bs)) (fromBits bs)</span></span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; FOVVec t vs</span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">toBit :: FirstOrderValue -&gt; Maybe Bool</span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">toBit (FOVBit b) = Just b</span></span>
+<span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">toBit _ = Nothing</span></span>
+<span class="lineno">  290 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  291 </span><span class="spaces">    </span><span class="istickedoff">fromBits :: [Bool] -&gt; Integer</span>
+<span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fromBits = foldl (\n b -&gt; 2*n + if b then 1 else 0) 0</span></span></span>
 <span class="lineno">  293 </span>
 <span class="lineno">  294 </span>finiteTypeOf :: FiniteValue -&gt; FiniteType
 <span class="lineno">  295 </span><span class="decl"><span class="nottickedoff">finiteTypeOf fv =</span>
@@ -351,8 +351,8 @@ span.spaces    { background: white }
 <span class="lineno">  332 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; FTVec n &lt;$&gt; asFiniteType sc tp</span>
 <span class="lineno">  333 </span><span class="spaces">    </span><span class="nottickedoff">(R.asTupleType -&gt; Just ts)</span>
 <span class="lineno">  334 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; FTTuple &lt;$&gt; traverse (asFiniteType sc) ts</span>
-<span class="lineno">  335 </span><span class="spaces">    </span><span class="nottickedoff">(R.asRecordType -&gt; Just tm)</span>
-<span class="lineno">  336 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; FTRec &lt;$&gt; traverse (asFiniteType sc) tm</span>
+<span class="lineno">  335 </span><span class="spaces">    </span><span class="nottickedoff">(R.asRecordType -&gt; Just fs)</span>
+<span class="lineno">  336 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; FTRec &lt;$&gt; traverse (asFiniteType sc) (Map.fromList fs)</span>
 <span class="lineno">  337 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; do</span>
 <span class="lineno">  338 </span><span class="spaces">        </span><span class="nottickedoff">t'' &lt;- ppTerm sc PPS.defaultOpts t'</span>
 <span class="lineno">  339 </span><span class="spaces">        </span><span class="nottickedoff">fail $ &quot;asFiniteType: unsupported argument type: &quot; ++ t''</span></span>
@@ -383,8 +383,8 @@ span.spaces    { background: white }
 <span class="lineno">  364 </span><span class="spaces">         </span><span class="nottickedoff">return $ FOTArray tp1' tp2'</span>
 <span class="lineno">  365 </span><span class="spaces">       </span><span class="nottickedoff">(R.asTupleType -&gt; Just ts)</span>
 <span class="lineno">  366 </span><span class="spaces">         </span><span class="nottickedoff">-&gt; FOTTuple &lt;$&gt; traverse (asFirstOrderTypeMaybe sc) ts</span>
-<span class="lineno">  367 </span><span class="spaces">       </span><span class="nottickedoff">(R.asRecordType -&gt; Just tm)</span>
-<span class="lineno">  368 </span><span class="spaces">         </span><span class="nottickedoff">-&gt; FOTRec &lt;$&gt; traverse (asFirstOrderTypeMaybe sc) tm</span>
+<span class="lineno">  367 </span><span class="spaces">       </span><span class="nottickedoff">(R.asRecordType -&gt; Just fs)</span>
+<span class="lineno">  368 </span><span class="spaces">         </span><span class="nottickedoff">-&gt; FOTRec &lt;$&gt; traverse (asFirstOrderTypeMaybe sc) (Map.fromList fs)</span>
 <span class="lineno">  369 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; mzero</span></span>
 <span class="lineno">  370 </span>
 <span class="lineno">  371 </span>
@@ -394,7 +394,7 @@ span.spaces    { background: white }
 <span class="lineno">  375 </span><span class="spaces">    </span><span class="nottickedoff">(R.asBoolType -&gt; Just ()) -&gt; Just FTBit</span>
 <span class="lineno">  376 </span><span class="spaces">    </span><span class="nottickedoff">(R.isVecType return -&gt; Just (n R.:*: tp)) -&gt; FTVec n &lt;$&gt; asFiniteTypePure tp</span>
 <span class="lineno">  377 </span><span class="spaces">    </span><span class="nottickedoff">(R.asTupleType -&gt; Just ts) -&gt; FTTuple &lt;$&gt; traverse asFiniteTypePure ts</span>
-<span class="lineno">  378 </span><span class="spaces">    </span><span class="nottickedoff">(R.asRecordType -&gt; Just tm) -&gt; FTRec &lt;$&gt; traverse asFiniteTypePure tm</span>
+<span class="lineno">  378 </span><span class="spaces">    </span><span class="nottickedoff">(R.asRecordType -&gt; Just fs) -&gt; FTRec &lt;$&gt; traverse asFiniteTypePure (Map.fromList fs)</span>
 <span class="lineno">  379 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
 <span class="lineno">  380 </span>
 <span class="lineno">  381 </span>-- The definitions of the next two functions depend on the encoding of
@@ -462,7 +462,7 @@ span.spaces    { background: white }
 <span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">FOVOpaqueArray _tk _tv -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno">  444 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;Cannot convert opaque array to SharedTerm&quot;</span></span>
 <span class="lineno">  445 </span><span class="spaces">    </span><span class="istickedoff">FOVTuple vs -&gt; scTuple sc =&lt;&lt; traverse (scFirstOrderValue sc) vs</span>
-<span class="lineno">  446 </span><span class="spaces">    </span><span class="istickedoff">FOVRec vm   -&gt; <span class="nottickedoff">scRecord sc =&lt;&lt; traverse (scFirstOrderValue sc) vm</span></span></span>
+<span class="lineno">  446 </span><span class="spaces">    </span><span class="istickedoff">FOVRec vm   -&gt; scRecord sc =&lt;&lt; traverse (scFirstOrderValue sc) vm</span></span>
 <span class="lineno">  447 </span>
 <span class="lineno">  448 </span>-- Parsing values from lists of booleans ---------------------------------------
 <span class="lineno">  449 </span>
