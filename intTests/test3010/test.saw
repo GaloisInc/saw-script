@@ -33,5 +33,6 @@ f_ov_2 <- mir_verify m "test::f" [] false f_spec_2 z3;
 mir_verify m "test::g" [] false g_spec_correct z3;
 fails (mir_verify m "test::g" [f_ov_0] false g_spec_correct z3);
 mir_verify m "test::g" [f_ov_2] false g_spec_correct z3;
+fails (mir_verify m "test::g" [] false g_spec_wrong z3);
 fails (mir_verify m "test::g" [f_ov_0] false g_spec_wrong z3);
 fails (mir_verify m "test::g" [f_ov_2] false g_spec_wrong z3);
