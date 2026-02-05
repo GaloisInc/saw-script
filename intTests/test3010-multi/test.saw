@@ -1,0 +1,48 @@
+let f_spec_0 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u8);
+    a_ref <- mir_ref_of_mut (mir_term a_array);
+    mir_execute_func [mir_slice_range_value a_ref 0 2];
+    mir_points_to a_ref (mir_term {{
+        [a0 + 1, a1, a2, a3, a4] where [a0, a1, a2, a3, a4] = a_array
+    }});
+};
+
+let f_spec_2 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u8);
+    a_ref <- mir_ref_of_mut (mir_term a_array);
+    mir_execute_func [mir_slice_range_value a_ref 2 4];
+    mir_points_to a_ref (mir_term {{
+        [a0, a1, a2 + 1, a3, a4] where [a0, a1, a2, a3, a4] = a_array
+    }});
+};
+
+let g_spec_correct = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u8);
+    a_ref <- mir_ref_of_mut (mir_term a_array);
+    mir_execute_func [a_ref];
+    mir_points_to a_ref (mir_term {{
+        [a0 + 1, a1, a2 + 1, a3, a4] where [a0, a1, a2, a3, a4] = a_array
+    }});
+};
+
+let g_spec_wrong = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u8);
+    a_ref <- mir_ref_of_mut (mir_term a_array);
+    mir_execute_func [a_ref];
+    mir_points_to a_ref (mir_term {{
+        [a0 + 2, a1, a2, a3, a4] where [a0, a1, a2, a3, a4] = a_array
+    }});
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+f_ov_0 <- mir_verify m "test::f" [] false f_spec_0 z3;
+f_ov_2 <- mir_verify m "test::f" [] false f_spec_2 z3;
+mir_verify m "test::g" [] false g_spec_correct z3;
+fails (mir_verify m "test::g" [f_ov_0] false g_spec_correct z3);
+fails (mir_verify m "test::g" [f_ov_2] false g_spec_correct z3);
+mir_verify m "test::g" [f_ov_0, f_ov_2] false g_spec_correct z3;
+fails (mir_verify m "test::g" [] false g_spec_wrong z3);
+fails (mir_verify m "test::g" [f_ov_0] false g_spec_wrong z3);
+fails (mir_verify m "test::g" [f_ov_2] false g_spec_wrong z3);
+fails (mir_verify m "test::g" [f_ov_0, f_ov_2] false g_spec_wrong z3);

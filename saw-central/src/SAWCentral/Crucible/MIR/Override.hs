@@ -1386,15 +1386,18 @@ matchArg opts sc cc cs prepost md = go False []
                  arrRefTyLen (Mir.TyRef (Mir.TyArray _ len) _) = pure len
                  arrRefTyLen _ = fail_
 
-             let -- Take the actual slice value's underlying reference, convert
-                 -- it to an array reference value, and match it against the
-                 -- expected array reference value. See
-                 -- Note [Matching slices in overrides] for why we do this.
+             -- Take the actual slice value's underlying reference, obtain the
+             -- array reference value that it points into, and the index of that
+             -- array that it is pointing at.
+             -- See Note [Matching slices in overrides] for why we do this.
+             Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
+               liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef
+
+             let -- Match the expected array reference value against the actual
+                 -- array reference value.
                  matchSlice :: Mir.Ty -> SetupValue -> OverrideMatcher MIR w ()
                  matchSlice expectedArrRefTy expectedArrRef = do
                    arrLen <- arrRefTyLen expectedArrRefTy
-                   Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> _ <-
-                     liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef
                    let actualArrTy = Mir.TyArray actualElemTy arrLen
                    let actualArrTpr = Mir.MirAggregateRepr
                    let actualArrRefTy = Mir.TyRef actualArrTy actualMutbl
@@ -1431,6 +1434,13 @@ matchArg opts sc cc cs prepost md = go False []
                  expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
                  let expectedSliceLen = expectedEnd - expectedStart
                  unless (expectedSliceLen == actualSliceLen) fail_
+                 -- Check that the starting indices into the expected and actual
+                 -- arrays are the same.
+                 case W4.asBV actualStartSym of
+                   Just actualStartBV
+                     | expectedStart == fromInteger (BV.asUnsigned actualStartBV) ->
+                       pure ()
+                   _ -> fail_
                  -- Match the reference values.
                  matchSlice expectedArrRefTy expectedArrRef
 
@@ -1546,10 +1556,12 @@ Note [Matching slices in overrides]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Matching slice references in overrides is surprisingly tricky. Suppose we have
 expected and actual slice reference values, both of type &[T]. At a high level,
-we need to check two things:
+we need to check three things:
 
 1. The lengths of the expected and actual slices are the same.
 2. The underlying references (of type `*const T`) are the same.
+3. For slices constructed from a sub-range of an array, the starting indices of
+   the expected and actual slices are the same.
 
 (1) is fairly straightforward, but (2) is easy to mess up. It's tempting to
 just call `matchArg` on the underlying references, but don't do this! These
@@ -1568,6 +1580,10 @@ operation which "peels back" the indexing operation that raw slice references
 use, thereby turning a `*const T` value into a `&[T; N]` value. It's a bit
 indirect, but it avoids needing to plumb around the original array reference
 value alongside the slice's raw reference value.
+
+Conveniently, mirRef_peelIndexIO also gives us the index of the slice's raw
+reference value in the array, so we can check (3) by comparing that against the
+expected slice starting index.
 
 We do something similar for &str slices, as crucible-mir backs them with an
 array reference value of type &[u8; N].
