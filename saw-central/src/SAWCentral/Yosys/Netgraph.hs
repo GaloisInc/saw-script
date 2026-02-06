@@ -129,7 +129,7 @@ netgraphToTerms sc env ng inputs
         ( \acc v ->
             do
             let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v
-            let outputFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
+            let outputFields = Map.filter isOutput (c ^. cellPortDirections)
             if
               -- special handling for $dff/$ff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
               | c ^. cellType == CellTypeDff

@@ -42,6 +42,20 @@ data Direction
   | DirectionInout
   deriving (Show, Eq, Ord)
 
+isInput :: Direction -> Bool
+isInput d =
+  case d of
+    DirectionInput -> True
+    DirectionOutput -> False
+    DirectionInout -> True
+
+isOutput :: Direction -> Bool
+isOutput d =
+  case d of
+    DirectionInput -> False
+    DirectionOutput -> True
+    DirectionInout -> True
+
 instance Aeson.FromJSON Direction where
   parseJSON (Aeson.String "input") = pure DirectionInput
   parseJSON (Aeson.String "output") = pure DirectionOutput
@@ -338,7 +352,7 @@ moduleOutputPorts :: Module -> Map Text [Bitrep]
 moduleOutputPorts m =
   Map.mapMaybe
   ( \ip ->
-      if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout
+      if isOutput (ip ^. portDirection)
       then Just (ip ^. portBits)
       else Nothing
   )
@@ -348,13 +362,13 @@ moduleOutputPorts m =
 cellInputConnections :: Cell [b] -> Map Text [b]
 cellInputConnections c = Map.intersection (c ^. cellConnections) inp
   where
-    inp = Map.filter (\d -> d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections
+    inp = Map.filter isInput (c ^. cellPortDirections)
 
 -- | Return the patterns for all of the output connections of a cell
 cellOutputConnections :: Ord b => Cell [b] -> Map Text [b]
 cellOutputConnections c = Map.intersection (c ^. cellConnections) out
   where
-    out = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
+    out = Map.filter isOutput (c ^. cellPortDirections)
 
 -- | Test whether a 'Cell' is a state element ('CellTypeDff' or 'CellTypeFf').
 cellIsRegister :: Cell bs -> Bool
