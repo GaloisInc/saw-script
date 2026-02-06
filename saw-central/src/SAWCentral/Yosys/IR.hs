@@ -325,27 +325,23 @@ loadYosysIR p = Aeson.eitherDecodeFileStrict p >>= \case
 -- | Return the patterns for all of the input ports of a module
 moduleInputPorts :: Module -> Map Text [Bitrep]
 moduleInputPorts m =
-  Map.fromList
-  . Maybe.mapMaybe
-  ( \(nm, ip) ->
+  Map.mapMaybe
+  ( \ip ->
       if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout
-      then Just (nm, ip ^. portBits)
+      then Just (ip ^. portBits)
       else Nothing
   )
-  . Map.assocs
   $ m ^. modulePorts
 
 -- | Return the patterns for all of the output ports of a module
 moduleOutputPorts :: Module -> Map Text [Bitrep]
 moduleOutputPorts m =
-  Map.fromList
-  . Maybe.mapMaybe
-  ( \(nm, ip) ->
+  Map.mapMaybe
+  ( \ip ->
       if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout
-      then Just (nm, ip ^. portBits)
+      then Just (ip ^. portBits)
       else Nothing
   )
-  . Map.assocs
   $ m ^. modulePorts
 
 -- | Return the patterns for all of the input connections of a cell
