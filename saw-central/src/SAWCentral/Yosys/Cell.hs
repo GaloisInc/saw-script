@@ -51,6 +51,9 @@ extTrunc sc width (CellTerm { cellTermTerm = t, cellTermWidth = bvw, cellTermSig
        | bvw > width ->
            do diffterm <- SC.scNat sc $ bvw - width
               SC.scBvTrunc sc diffterm wterm t
+       | width > bvw && bvw == 0 ->
+           do zero <- SC.scNat sc 0
+              SC.scBvNat sc wterm zero
        | width > bvw && signed ->
            do bvwpredterm <- SC.scNat sc $ bvw - 1
               diffterm <- SC.scNat sc $ width - bvw
