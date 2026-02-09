@@ -44,6 +44,7 @@ module SAWCore.Module
   , findDef
   , moduleDecls
   , isLocal
+  , lookupDisplayNameEnv
     -- * Module Maps
   , ModuleMap
   , emptyModuleMap
@@ -408,6 +409,9 @@ resolveNameInMap mm i =
          [vi] -> Just vi
          _ -> Nothing
      IntMap.lookup vi (mmIndexMap mm)
+
+lookupDisplayNameEnv :: ModuleName -> ModuleMap -> Maybe DisplayNameEnv
+lookupDisplayNameEnv mnm mm = Map.lookup mnm (mmNameEnv mm)
 
 -- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
 findCtorInMap :: Ident -> ModuleMap -> Maybe Ctor

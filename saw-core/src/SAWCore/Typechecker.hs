@@ -39,7 +39,7 @@ import SAWCore.Module
   , resolvedNameName
   , CtorArg(..)
   , DefQualifier(..)
-  , DataType(dtName), lookupVarIndexInMap, ResolvedName, isLocal
+  , DataType(dtName), lookupVarIndexInMap, ResolvedName, isLocal, resolvedNameInfo, lookupDisplayNameEnv
   )
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Name
@@ -52,6 +52,7 @@ import qualified SAWCore.Term.Certified as SC
 
 import Debug.Trace
 import Data.Maybe (catMaybes)
+import Control.Applicative ((<|>))
 
 -- | Infer the type of an untyped term and complete it to a 'Term'.
 inferCompleteTerm ::
@@ -81,14 +82,19 @@ prettyTCError opts ne e = helper Nothing e where
       Just p -> vcat (pretty (ppPos p) : strs)
       Nothing -> vcat strs
 
+  ppResolvedName :: ResolvedName -> PPS.Doc
+  ppResolvedName rn = case resolvedNameInfo rn of
+    ModuleIdentifier i -> pretty $ identText i
+    ImportedName uri nms -> pretty (show uri) <+> pretty nms
+
   helper :: Maybe Pos -> TCError -> PPS.Doc
   helper mp err =
     case err of
-      UnboundName str ->
+      AmbiguousName str [] ->
         ppWithPos mp [ "Unbound name:" <+> pretty str ]
       AmbiguousName str nms ->
         ppWithPos mp $ [ "Ambiguous name:" <+> pretty str ]
-          ++ map (pretty . last . nameAliases . nameInfo . resolvedNameName) nms
+          ++ map ppResolvedName nms
       EmptyVectorLit ->
         ppWithPos mp [ "Empty vector literal"]
       NoSuchDataType d ->
@@ -121,8 +127,7 @@ data TCEnv =
 
 -- | Errors that can occur during type-checking
 data TCError
-  = UnboundName Text
-  | AmbiguousName Text [ResolvedName]
+  = AmbiguousName Text [ResolvedName]
   | EmptyVectorLit
   | NoSuchDataType NameInfo
   | DeclError Text String
@@ -197,31 +202,45 @@ inferResolveName n =
   do nctx <- askLocals
      sc <- askSharedContext
      mm <- liftIO $ scGetModuleMap sc
-     env <- liftIO $ SC.scGetNamingEnv sc
-     mnm <- getModuleName
+     mnm <- askModName
+     env <- case mnm of
+      Just nm -> 
+        case lookupDisplayNameEnv nm mm of
+          Just env -> return env
+          Nothing -> panic "inferResolveName" ["Missing display environment for module: ", moduleNameText nm]
+      Nothing -> liftIO $ SC.scGetNamingEnv sc
+     let isImported rn =
+           case resolvedNameInfo rn of
+             ImportedName{} -> True
+             _ -> False
      let lookupName nm = 
-           catMaybes $ map (\vi -> lookupVarIndexInMap vi mm) $ resolveDisplayName env nm
-     let lookupIdent ident =
+           catMaybes 
+           $ map (\vi -> lookupVarIndexInMap vi mm) 
+           $ resolveDisplayName env nm
+      
+     let _lookupIdent ident =
            filter (isLocal (identModule ident)) (lookupName (identBaseName ident))
-     case parseMaybeQualIdent n of
-       Nothing ->
-        case Map.lookup n nctx of
-          Just (vn, t, is_def) ->
-            case is_def of
-              True -> return t
-              False -> liftSCM $ SC.scmVariable vn t
-          Nothing ->
-            case lookupName n of
-              [] -> throwTCError $ UnboundName n
-              [rn] -> resolved rn
-              rns -> case filter (isLocal mnm) rns of
-                [rn] -> resolved rn
-                _ -> throwTCError $ AmbiguousName n rns
-       Just ident | [rn] <- lookupIdent ident ->
-        resolved rn
-       _ -> throwTCError $ UnboundName n
+     case Map.lookup n nctx of
+      Just (vn, t, is_def) ->
+        case is_def of
+          True -> return t
+          False -> liftSCM $ SC.scmVariable vn t
+      Nothing ->
+        let 
+          rns = lookupName n
+          res = find1 (\_ -> True) rns
+            <|> do
+              ident <- parseMaybeQualIdent n
+              let rns' = lookupName (identBaseName ident)
+              find1 (isLocal (identModule ident)) rns'
+            <|> find1 (not . isImported) rns
+        in case res of
+          Just rn -> resolved rn
+          Nothing -> throwTCError $ AmbiguousName n rns
   where
-
+    find1 f xs = case filter f xs of
+      [x] -> Just x
+      _ -> Nothing
     resolved rn =
       liftSCM $ SC.scmConst (resolvedNameName rn)
 

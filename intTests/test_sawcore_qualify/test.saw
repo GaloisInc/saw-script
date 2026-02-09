@@ -28,7 +28,7 @@ fails (do {
 
 let t = parse_core "test_qual::test_qual_nat";
 check2 (parse_core "4") t;
-let t_mod = parse_core_mod "test_qual" "test_qual_nat";
+let t_mod = parse_core_mod "test_qual" "test_qual::test_qual_nat";
 check2 t t_mod;
 
 let t1 = parse_core "test_qual1::test_qual_nat";
