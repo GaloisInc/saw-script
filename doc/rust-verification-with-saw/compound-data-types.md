@@ -301,7 +301,10 @@ enum Option<T> {
 
 `Option` is commonly used in Rust code to represent a value that may be present
 (`Some`) or absent (`None`). For this reason, we will use `Option` as our
-motivating example of an enum in this section.
+motivating example of an enum in this section. (Note that the definition of
+`Option` above is purely illustrative, and we will actually be using the Rust
+standard library's definition of `Option` throughout the rest of this tutorial
+instead of redefining it ourselves.)
 
 First, let's start by defining some functions that make use of `Option`'s
 variants:
@@ -344,10 +347,13 @@ Next, we can use this ADT to construct enum values. We shall use
 :language: sawscript
 :::
 
-Note that while we used the full identifier `core::option::Option` to look up
-the `Option` ADT, we do not need to use the `core::option` prefix when
-specifying the `"Some"` variant. This is because SAW already knows what the
-prefix should be from the `option_u32` ADT, so the `"Some"` shorthand suffices.
+The identifier `core::option::Option` indicates that we are using the standard
+library's definition of `Option`, which is defined in the `core` crate's
+`option` module. Note that while we used the full identifier
+`core::option::Option` to look up the `Option` ADT, we do not need to use the
+`core::option` prefix when specifying the `"Some"` variant. This is because SAW
+already knows what the prefix should be from the `option_u32` ADT, so the
+`"Some"` shorthand suffices.
 
 Similarly, we can also write a spec for `i_got_nothing`, which uses the `None`
 variant:
