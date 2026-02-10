@@ -109,57 +109,23 @@ cellTypeIsPrimitive cellType =
 
 -- | Mapping from 'Text' to primitive cell types
 textToPrimitiveCellType :: Map Text CellType
-textToPrimitiveCellType = Map.fromList
-  [ ("$not"         , CellTypeNot)
-  , ("$pos"         , CellTypePos)
-  , ("$neg"         , CellTypeNeg)
-  , ("$and"         , CellTypeAnd)
-  , ("$or"          , CellTypeOr)
-  , ("$xor"         , CellTypeXor)
-  , ("$xnor"        , CellTypeXnor)
-  , ("$reduce_and"  , CellTypeReduceAnd)
-  , ("$reduce_or"   , CellTypeReduceOr)
-  , ("$reduce_xor"  , CellTypeReduceXor)
-  , ("$reduce_xnor" , CellTypeReduceXnor)
-  , ("$reduce_bool" , CellTypeReduceBool)
-  , ("$shl"         , CellTypeShl)
-  , ("$shr"         , CellTypeShr)
-  , ("$sshl"        , CellTypeSshl)
-  , ("$sshr"        , CellTypeSshr)
-  , ("$shift"       , CellTypeShift)
-  , ("$shiftx"      , CellTypeShiftx)
-  , ("$lt"          , CellTypeLt)
-  , ("$le"          , CellTypeLe)
-  , ("$gt"          , CellTypeGt)
-  , ("$ge"          , CellTypeGe)
-  , ("$eq"          , CellTypeEq)
-  , ("$ne"          , CellTypeNe)
-  , ("$eqx"         , CellTypeEqx)
-  , ("$nex"         , CellTypeNex)
-  , ("$add"         , CellTypeAdd)
-  , ("$sub"         , CellTypeSub)
-  , ("$mul"         , CellTypeMul)
-  , ("$div"         , CellTypeDiv)
-  , ("$mod"         , CellTypeMod)
-  , ("$logic_not"   , CellTypeLogicNot)
-  , ("$logic_and"   , CellTypeLogicAnd)
-  , ("$logic_or"    , CellTypeLogicOr)
-  , ("$mux"         , CellTypeMux)
-  , ("$pmux"        , CellTypePmux)
-  , ("$bmux"        , CellTypeBmux)
-  , ("$dff"         , CellTypeDff)
-  , ("$ff"          , CellTypeFf)
-  , ("$_BUF_"       , CellTypeBUF)
-  ]
+textToPrimitiveCellType =
+  Map.insert "$dff" CellTypeDff $
+  Map.insert "$ff" CellTypeFf $
+  fmap CellTypeCombinational comb
+  where
+    comb :: Map Text CellTypeCombinational
+    comb =
+      Map.fromList
+      [ (ppCellTypeCombinational t, t) | t <- [minBound .. maxBound] ]
 
 -- | Mapping from primitive cell types to textual representation
 primitiveCellTypeToText :: Map CellType Text
 primitiveCellTypeToText =
   Map.fromList [(y, x) | (x, y) <- Map.toList textToPrimitiveCellType]
 
--- | All supported cell types. All types are primitives except for
--- 'CellTypeUserType' which represents user-defined submodules
-data CellType
+-- | All supported primitive combinational cell types.
+data CellTypeCombinational
   = CellTypeNot
   | CellTypePos
   | CellTypeNeg
@@ -197,9 +163,20 @@ data CellType
   | CellTypeMux
   | CellTypePmux
   | CellTypeBmux
+  | CellTypeBUF
+  deriving (Eq, Ord, Enum, Bounded)
+
+-- | All supported cell types.
+-- All types are primitives except for 'CellTypeUserType' which
+-- represents user-defined submodules.
+-- Invariants: 'CellTypeUnsupportedPrimitive' should only be applied
+-- to names satisfying 'cellTypeIsPrimitive', and 'CellTypeUserType'
+-- should only be applied to names *not* satisfying
+-- 'cellTypeIsPrimitive'.
+data CellType
+  = CellTypeCombinational CellTypeCombinational
   | CellTypeDff
   | CellTypeFf
-  | CellTypeBUF
   | CellTypeUnsupportedPrimitive Text
   | CellTypeUserType Text
   deriving (Eq, Ord)
@@ -226,13 +203,62 @@ instance Aeson.FromJSON CellType where
         | otherwise -> pure $ CellTypeUserType s
   parseJSON v = fail $ "Failed to parse cell type: " <> show v
 
+ppCellTypeCombinational :: CellTypeCombinational -> Text
+ppCellTypeCombinational ctc =
+  case ctc of
+    CellTypeNot        -> "$not"
+    CellTypePos        -> "$pos"
+    CellTypeNeg        -> "$neg"
+    CellTypeAnd        -> "$and"
+    CellTypeOr         -> "$or"
+    CellTypeXor        -> "$xor"
+    CellTypeXnor       -> "$xnor"
+    CellTypeReduceAnd  -> "$reduce_and"
+    CellTypeReduceOr   -> "$reduce_or"
+    CellTypeReduceXor  -> "$reduce_xor"
+    CellTypeReduceXnor -> "$reduce_xnor"
+    CellTypeReduceBool -> "$reduce_bool"
+    CellTypeShl        -> "$shl"
+    CellTypeShr        -> "$shr"
+    CellTypeSshl       -> "$sshl"
+    CellTypeSshr       -> "$sshr"
+    CellTypeShift      -> "$shift"
+    CellTypeShiftx     -> "$shiftx"
+    CellTypeLt         -> "$lt"
+    CellTypeLe         -> "$le"
+    CellTypeGt         -> "$gt"
+    CellTypeGe         -> "$ge"
+    CellTypeEq         -> "$eq"
+    CellTypeNe         -> "$ne"
+    CellTypeEqx        -> "$eqx"
+    CellTypeNex        -> "$nex"
+    CellTypeAdd        -> "$add"
+    CellTypeSub        -> "$sub"
+    CellTypeMul        -> "$mul"
+    CellTypeDiv        -> "$div"
+    CellTypeMod        -> "$mod"
+    CellTypeLogicNot   -> "$logic_not"
+    CellTypeLogicAnd   -> "$logic_and"
+    CellTypeLogicOr    -> "$logic_or"
+    CellTypeMux        -> "$mux"
+    CellTypePmux       -> "$pmux"
+    CellTypeBmux       -> "$bmux"
+    CellTypeBUF        -> "$_BUF_"
+
+instance Show CellTypeCombinational where
+  show ctc = Text.unpack (ppCellTypeCombinational ctc)
+
+ppCellType :: CellType -> Text
+ppCellType ct =
+  case ct of
+    CellTypeCombinational ctc -> ppCellTypeCombinational ctc
+    CellTypeDff -> "$dff"
+    CellTypeFf -> "$ff"
+    CellTypeUnsupportedPrimitive t -> t
+    CellTypeUserType t -> t
+
 instance Show CellType where
-  show ct = Text.unpack $
-    case ct of
-      CellTypeUserType ut -> ut
-      CellTypeUnsupportedPrimitive t -> t
-      _ | Just t <- Map.lookup ct primitiveCellTypeToText -> t
-        | otherwise -> panic "Show CellType" ["Unknown primitive cell type"]
+  show ct = Text.unpack (ppCellType ct)
 
 -- | Extract the name from a user-defined submodule 'CellType'
 asUserType :: CellType -> Text
