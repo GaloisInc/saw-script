@@ -982,7 +982,7 @@ Strictly speaking, we don't need to verify `new` in order to verify
 useful exercise to verify `new`, as the insights we gain when doing so will
 help us write a better version of `apply_keystream_spec`.
 
-All that being said, we probably to verify `new_raw` (a lower-level helper
+All that being said, we probably want to verify `new_raw` (a lower-level helper
 function) rather than `new` itself. This is because the definitions of `Key`
 and `Nonce` are somewhat involved. For instance, `Key` is defined as:
 
