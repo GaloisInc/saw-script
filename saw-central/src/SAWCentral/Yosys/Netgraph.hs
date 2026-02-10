@@ -125,51 +125,48 @@ netgraphToTerms sc env ng inputs
   | length (Graph.scc $ ng ^. netgraphGraph) /= length (ng ^. netgraphGraph)
   = throw $ YosysError "Network graph contains a cycle after splitting on DFFs; SAW does not currently support analysis of this circuit"
   | otherwise =
-      do
       let sorted = reverseTopSort $ ng ^. netgraphGraph
-      foldM
-        ( \acc v ->
-            do
-            let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v
-            let outputFields = Map.filter isOutput (c ^. cellPortDirections)
-            if
-              -- special handling for $dff/$ff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
-              | c ^. cellType == CellTypeDff
-              , Just dffout <- Map.lookup "Q" $ c ^. cellConnections ->
-                  do r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") dffout acc
-                     ts <- deriveTermsByIndices sc dffout r
-                     pure $ Map.union ts acc
-              | c ^. cellType == CellTypeFf
-              , Just ffout <- Map.lookup "Q" $ c ^. cellConnections ->
-                  do r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") ffout acc
-                     ts <- deriveTermsByIndices sc ffout r
-                     pure $ Map.union ts acc
-              | Map.null outputFields ->
-                  -- Cells with no output ports are debugging cells, which we can simply ignore.
-                  pure acc
-              | otherwise ->
-                  do let doInput inm i = lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
-                     args <- Map.traverseWithKey doInput (cellInputConnections c)
-                     r <- primCellToTerm sc c args >>= \case
-                       Just r -> pure r
-                       Nothing ->
-                         let submoduleName = asUserType $ c ^. cellType in
-                         case Map.lookup submoduleName env of
-                           Just cm ->
-                             do r <- cryptolRecord sc args
-                                SC.scApply sc (cm ^. convertedModuleTerm) r
-                           Nothing ->
-                             throw $ YosysErrorNoSuchSubmodule submoduleName cnm
+      in foldM doVertex inputs sorted
+  where
+    doVertex :: Map [Bitrep] Preterm -> Graph.Vertex -> IO (Map [Bitrep] Preterm)
+    doVertex acc v =
+      do let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v
+         let outputFields = Map.filter isOutput (c ^. cellPortDirections)
+         if
+           -- special handling for $dff/$ff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
+           | c ^. cellType == CellTypeDff
+           , Just dffout <- Map.lookup "Q" $ c ^. cellConnections ->
+               do r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") dffout acc
+                  ts <- deriveTermsByIndices sc dffout r
+                  pure $ Map.union ts acc
+           | c ^. cellType == CellTypeFf
+           , Just ffout <- Map.lookup "Q" $ c ^. cellConnections ->
+               do r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") ffout acc
+                  ts <- deriveTermsByIndices sc ffout r
+                  pure $ Map.union ts acc
+           | Map.null outputFields ->
+               -- Cells with no output ports are debugging cells, which we can simply ignore.
+               pure acc
+           | otherwise ->
+               do let doInput inm i = lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
+                  args <- Map.traverseWithKey doInput (cellInputConnections c)
+                  r <- primCellToTerm sc c args >>= \case
+                    Just r -> pure r
+                    Nothing ->
+                      let submoduleName = asUserType $ c ^. cellType in
+                      case Map.lookup submoduleName env of
+                        Just cm ->
+                          do r <- cryptolRecord sc args
+                             SC.scApply sc (cm ^. convertedModuleTerm) r
+                        Nothing ->
+                          throw $ YosysErrorNoSuchSubmodule submoduleName cnm
 
-                     -- once we've built a term, insert it along with each of its bits
-                     ts <-
-                       forM (Map.assocs $ cellOutputConnections c) $ \(o, out) ->
-                       do t <- cryptolRecordSelect sc outputFields r o
-                          deriveTermsByIndices sc out t
-                     pure $ Map.union (Map.unions ts) acc
-        )
-        inputs
-        sorted
+                  -- once we've built a term, insert it along with each of its bits
+                  ts <-
+                    forM (Map.assocs $ cellOutputConnections c) $ \(o, out) ->
+                    do t <- cryptolRecordSelect sc outputFields r o
+                       deriveTermsByIndices sc out t
+                  pure $ Map.union (Map.unions ts) acc
 
 convertModule ::
   SC.SharedContext ->
