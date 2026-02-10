@@ -142,11 +142,9 @@ netgraphToTerms sc env ng inputs
                   do r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") ffout acc
                      ts <- deriveTermsByIndices sc ffout r
                      pure $ Map.union ts acc
-                -- $check, $print, and $scopeinfo are debugging cells (see
-                -- https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_debug.html),
-                -- which we simply ignore.
-              | c ^. cellType `elem` [CellTypeCheck, CellTypePrint, CellTypeScopeinfo] ->
-                  return acc
+              | Map.null outputFields ->
+                  -- Cells with no output ports are debugging cells, which we can simply ignore.
+                  pure acc
               | otherwise ->
                   do args <- fmap Map.fromList . forM (Map.assocs $ cellInputConnections c) $ \(inm, i) ->
                        -- for each input bit pattern
