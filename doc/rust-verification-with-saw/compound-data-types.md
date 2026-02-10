@@ -323,9 +323,10 @@ MIRAdt -> String -> [MIRValue] -> MIRValue
 
 Like `mir_struct_value`, `mir_enum_value` also requires a `MIRAdt` argument in
 order to discern which particular enum you want. Unlike `mir_struct_value`,
-however, it also requires a `String` which variant of the enum you want. In the
-case of `Option`, this `String` will either be `"None"` or `"Some"`. Finally,
-the `[MIRValue]` arguments represent the fields of the enum variant.
+however, it also requires a `String` to specify which variant of the enum you
+want. In the case of `Option`, this `String` will either be `"None"` or
+`"Some"`. Finally, the `[MIRValue]` arguments represent the fields of the enum
+variant.
 
 Let's now verify some enum-related code with SAW. First, we must look up the
 `Option<u32>` ADT, which works just as if you had a struct type:
