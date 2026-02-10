@@ -21,11 +21,11 @@ import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Vector as V
 import Text.Read (readMaybe)
-import Text.URI
 
 import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
+import SAWCore.URI
 
 --------------------------------------------------------------------------------
 -- External text format

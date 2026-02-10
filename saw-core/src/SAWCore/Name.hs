@@ -70,12 +70,11 @@ import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           GHC.Generics (Generic)
-import           Text.URI
 import qualified Language.Haskell.TH.Syntax as TH
 import           Instances.TH.Lift () -- for instance TH.Lift Text
 
 import SAWCore.Panic (panic)
-
+import SAWCore.URI
 
 -- Module Names ----------------------------------------------------------------
 

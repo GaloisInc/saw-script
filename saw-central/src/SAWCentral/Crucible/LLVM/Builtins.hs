@@ -112,7 +112,6 @@ import qualified Data.Vector as V
 import           Prettyprinter
 import           System.IO
 import qualified Text.LLVM.AST as L
-import           Text.URI
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
 -- parameterized-utils
@@ -167,6 +166,7 @@ import SAWCore.FiniteValue (ppFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
+import SAWCore.URI
 
 import SAWCoreWhat4.ReturnTrip
 

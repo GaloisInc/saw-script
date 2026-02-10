@@ -286,7 +286,6 @@ import qualified Data.Set as Set
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 import qualified Prettyprinter as PP
-import Text.URI
 
 import qualified SAWSupport.IntRangeSet as IntRangeSet
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
@@ -318,6 +317,7 @@ import SAWCore.Recognizer
 import SAWCore.Term.Certified
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
+import SAWCore.URI
 
 --------------------------------------------------------------------------------
 

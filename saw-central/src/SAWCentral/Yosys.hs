@@ -41,11 +41,11 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
-import qualified Text.URI as URI
 
 import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified SAWCore.SharedTerm as SC
+import qualified SAWCore.URI as URI
 import qualified CryptolSAWCore.TypedTerm as SC
 
 import qualified Cryptol.TypeCheck.Type as C

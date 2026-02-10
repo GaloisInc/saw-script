@@ -75,7 +75,6 @@ import qualified Data.Set as Set
 import qualified Data.Vector as V
 import Numeric (showHex)
 import Prettyprinter
-import Text.URI
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
@@ -90,7 +89,7 @@ import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
-
+import SAWCore.URI
 
 -- | Test if a depth is "allowed", meaning not greater than the max depth
 depthAllowed :: PPS.Opts -> Int -> Bool

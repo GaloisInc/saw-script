@@ -54,7 +54,6 @@ import qualified Data.Vector as Vector
 import GHC.Stack
 import Prelude ()
 import Prelude.Compat
-import Text.URI
 
 -- cryptol
 import qualified Cryptol.Eval.Type as TV
@@ -90,6 +89,7 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName, Name(..))
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
+import SAWCore.URI
 
 -- local modules:
 import CryptolSAWCore.Panic
