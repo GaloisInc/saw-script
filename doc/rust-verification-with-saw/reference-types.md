@@ -142,18 +142,18 @@ returning a reference to the specified value. Likewise `mir_ref_of_mut`
 combines `mir_alloc_mut` and `mir_points_to`. This portion of a spec:
 
 :::{code-block} console
-s <- mir_alloc (mir_adt s_adt);
-s_val <- mir_fresh_expanded_value "s_val" (mir_adt s_adt);
-mir_points_to s s_val;
+r_ref <- mir_alloc mir_u32;
+r_val <- mir_fresh_var "r_val" mir_u32;
+mir_points_to r_ref (mir_term r_val);
 :::
 
 can be rewritten more concisely as:
 
 :::{code-block} console
-s_val <- mir_fresh_expanded_value "s_val" (mir_adt s_adt);
-s <- mir_ref_of s_val;
+r_val <- mir_fresh_var "r_val" mir_u32;
+r_ref <- mir_ref_of (mir_term r_val);
 :::
 
-This version mirrors how one would write the function in Rust, where a `&T`
-points to an already-initialized value. Using `mir_ref_of` encourages that 
+This version mirrors how one would write the function in Rust, where a `&u32`
+points to an already-initialized value. Using `mir_ref_of` encourages that
 style and avoids the risk of forgetting to initialize allocated memory.
