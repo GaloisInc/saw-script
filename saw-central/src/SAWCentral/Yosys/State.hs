@@ -23,7 +23,6 @@ import Control.Monad (forM, foldM)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 import Numeric.Natural (Natural)
@@ -78,23 +77,12 @@ convertModuleInline ::
   SC.SharedContext ->
   Module ->
   IO YosysSequential
-convertModuleInline sc m =
-  do let ng = moduleNetgraph m
-
-     let netnames =
-           Map.fromList
-           [ (n ^. netnameBits, t)
-           | (t, n) <- Map.assocs (m ^. moduleNetnames), not (n ^. netnameHideName) ]
-
-     let bestName t c =
-           fromMaybe (cellIdentifier t) $
-           do bs <- Map.lookup "Q" (c ^. cellConnections)
-              Map.lookup bs netnames
+convertModuleInline sc m0 =
+  do let m = renameDffInstances m0
+     let ng = moduleNetgraph m
 
      -- construct SAWCore and Cryptol types
-     let dffs =
-           Map.fromList
-           [ (bestName t c, c) | (t, c) <- Map.assocs (m ^. moduleCells), cellIsRegister c ]
+     let dffs = Map.filter cellIsRegister (m ^. moduleCells)
 
      stateWidths <- forM dffs $ \c ->
        case Map.lookup "Q" $ c ^. cellConnections of

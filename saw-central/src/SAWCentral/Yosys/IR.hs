@@ -18,7 +18,7 @@ module SAWCentral.Yosys.IR where
 
 import Control.Lens.TH (makeLenses)
 
-import Control.Lens ((^.))
+import Control.Lens ((^.), set)
 
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
@@ -395,3 +395,31 @@ cellIsRegister c =
     CellTypeDff -> True
     CellTypeFf -> True
     _ -> False
+
+-- | Swap out machine-generated names of DFF cells for user-provided
+-- names from the netnames section of the module, wherever possible.
+-- If no suitable name exists in the netnames table, then use function
+-- 'cellIdentifier' to produce a lexically-valid field name.
+renameDffInstances :: Module -> Module
+renameDffInstances m = set moduleCells cells' m
+  where
+    cells' :: Map CellInstName (Cell [Bitrep])
+    cells' =
+      Map.fromList $
+      map (\(t, c) -> (bestName t c, c)) $
+      Map.toList (m ^. moduleCells)
+
+    netnames :: Map [Bitrep] CellInstName
+    netnames =
+      Map.fromList
+      [ (n ^. netnameBits, t)
+      | (t, n) <- Map.assocs (m ^. moduleNetnames), not (n ^. netnameHideName) ]
+
+    bestName :: CellInstName -> Cell [Bitrep] -> CellInstName
+    bestName t c
+      | cellIsRegister c =
+          Maybe.fromMaybe (cellIdentifier t) $
+          do bs <- Map.lookup "Q" (c ^. cellConnections)
+             Map.lookup bs netnames
+      | otherwise =
+          t
