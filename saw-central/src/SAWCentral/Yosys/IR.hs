@@ -42,6 +42,20 @@ data Direction
   | DirectionInout
   deriving (Show, Eq, Ord)
 
+isInput :: Direction -> Bool
+isInput d =
+  case d of
+    DirectionInput -> True
+    DirectionOutput -> False
+    DirectionInout -> True
+
+isOutput :: Direction -> Bool
+isOutput d =
+  case d of
+    DirectionInput -> False
+    DirectionOutput -> True
+    DirectionInout -> True
+
 instance Aeson.FromJSON Direction where
   parseJSON (Aeson.String "input") = pure DirectionInput
   parseJSON (Aeson.String "output") = pure DirectionOutput
@@ -137,9 +151,6 @@ textToPrimitiveCellType = Map.fromList
   , ("$dff"         , CellTypeDff)
   , ("$ff"          , CellTypeFf)
   , ("$_BUF_"       , CellTypeBUF)
-  , ("$check"       , CellTypeCheck)
-  , ("$print"       , CellTypePrint)
-  , ("$scopeinfo"   , CellTypeScopeinfo)
   ]
 
 -- | Mapping from primitive cell types to textual representation
@@ -190,9 +201,6 @@ data CellType
   | CellTypeDff
   | CellTypeFf
   | CellTypeBUF
-  | CellTypeCheck
-  | CellTypePrint
-  | CellTypeScopeinfo
   | CellTypeUnsupportedPrimitive Text
   | CellTypeUserType Text
   deriving (Eq, Ord)
@@ -325,40 +333,36 @@ loadYosysIR p = Aeson.eitherDecodeFileStrict p >>= \case
 -- | Return the patterns for all of the input ports of a module
 moduleInputPorts :: Module -> Map Text [Bitrep]
 moduleInputPorts m =
-  Map.fromList
-  . Maybe.mapMaybe
-  ( \(nm, ip) ->
+  Map.mapMaybe
+  ( \ip ->
       if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout
-      then Just (nm, ip ^. portBits)
+      then Just (ip ^. portBits)
       else Nothing
   )
-  . Map.assocs
   $ m ^. modulePorts
 
 -- | Return the patterns for all of the output ports of a module
 moduleOutputPorts :: Module -> Map Text [Bitrep]
 moduleOutputPorts m =
-  Map.fromList
-  . Maybe.mapMaybe
-  ( \(nm, ip) ->
-      if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout
-      then Just (nm, ip ^. portBits)
+  Map.mapMaybe
+  ( \ip ->
+      if isOutput (ip ^. portDirection)
+      then Just (ip ^. portBits)
       else Nothing
   )
-  . Map.assocs
   $ m ^. modulePorts
 
 -- | Return the patterns for all of the input connections of a cell
 cellInputConnections :: Cell [b] -> Map Text [b]
 cellInputConnections c = Map.intersection (c ^. cellConnections) inp
   where
-    inp = Map.filter (\d -> d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections
+    inp = Map.filter isInput (c ^. cellPortDirections)
 
 -- | Return the patterns for all of the output connections of a cell
 cellOutputConnections :: Ord b => Cell [b] -> Map Text [b]
 cellOutputConnections c = Map.intersection (c ^. cellConnections) out
   where
-    out = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
+    out = Map.filter isOutput (c ^. cellPortDirections)
 
 -- | Test whether a 'Cell' is a state element ('CellTypeDff' or 'CellTypeFf').
 cellIsRegister :: Cell bs -> Bool

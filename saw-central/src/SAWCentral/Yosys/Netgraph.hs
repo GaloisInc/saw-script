@@ -100,7 +100,9 @@ lookupPatternTerm ::
   IO SC.Term
 lookupPatternTerm sc loc pat ts =
   case Map.lookup pat ts of
+    -- if we can find that pattern exactly, great! use that term
     Just t -> scPreterm sc t
+    -- otherwise, find each individual bit and append the terms
     Nothing ->
       do bits <-
            forM pat $ \b ->
@@ -129,7 +131,7 @@ netgraphToTerms sc env ng inputs
         ( \acc v ->
             do
             let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v
-            let outputFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
+            let outputFields = Map.filter isOutput (c ^. cellPortDirections)
             if
               -- special handling for $dff/$ff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
               | c ^. cellType == CellTypeDff
@@ -142,18 +144,12 @@ netgraphToTerms sc env ng inputs
                   do r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") ffout acc
                      ts <- deriveTermsByIndices sc ffout r
                      pure $ Map.union ts acc
-                -- $check, $print, and $scopeinfo are debugging cells (see
-                -- https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_debug.html),
-                -- which we simply ignore.
-              | c ^. cellType `elem` [CellTypeCheck, CellTypePrint, CellTypeScopeinfo] ->
-                  return acc
+              | Map.null outputFields ->
+                  -- Cells with no output ports are debugging cells, which we can simply ignore.
+                  pure acc
               | otherwise ->
-                  do args <- fmap Map.fromList . forM (Map.assocs $ cellInputConnections c) $ \(inm, i) ->
-                       -- for each input bit pattern
-                       -- if we can find that pattern exactly, great! use that term
-                       -- otherwise, find each individual bit and append the terms
-                       (inm,) <$> lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
-
+                  do let doInput inm i = lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
+                     args <- Map.traverseWithKey doInput (cellInputConnections c)
                      r <- primCellToTerm sc c args >>= \case
                        Just r -> pure r
                        Nothing ->
