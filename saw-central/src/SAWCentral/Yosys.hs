@@ -99,7 +99,7 @@ convertYosysIR sc ir =
              cm <- convertModule sc env m
              n <- Nonce.freshNonce Nonce.globalNonceGenerator
              uri <- URI.mkURI
-              URI.NameSpaceYoSys
+              URI.NamespaceYosys
               [nm]
               (fromIntegral $ Nonce.indexValue n)
              let ni = SC.ImportedName uri [nm]

@@ -13,7 +13,7 @@ Simple URI implementation with namespaces and paths.
 -}
 
 module SAWCore.URI 
-  ( NameSpace(..)
+  ( Namespace(..)
   , URI
   , mkURI
   , parseURI
@@ -30,31 +30,31 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Read as Text
 
-data NameSpace =
-  NameSpaceCore | NameSpaceCryptol | NameSpaceFresh | NameSpaceYoSys | NameSpaceLLVM
+data Namespace =
+  NamespaceCore | NamespaceCryptol | NamespaceFresh | NamespaceYosys | NamespaceLLVM
   deriving (Eq, Ord, Enum, Bounded)
 
-instance Hashable NameSpace where
+instance Hashable Namespace where
   hashWithSalt s ns = hashWithSalt s (fromEnum ns)
 
-renderNameSpace :: NameSpace -> Text
-renderNameSpace = \case
-  NameSpaceCore -> "core"
-  NameSpaceCryptol -> "cryptol"
-  NameSpaceFresh -> "fresh"
-  NameSpaceYoSys -> "yosys"
-  NameSpaceLLVM -> "llvm"
+renderNamespace :: Namespace -> Text
+renderNamespace = \case
+  NamespaceCore -> "core"
+  NamespaceCryptol -> "cryptol"
+  NamespaceFresh -> "fresh"
+  NamespaceYosys -> "yosys"
+  NamespaceLLVM -> "llvm"
 
-instance Show NameSpace where
-  show ns = Text.unpack $ renderNameSpace ns
+instance Show Namespace where
+  show ns = Text.unpack $ renderNamespace ns
 
-nameSpaceMap :: Map Text NameSpace
-nameSpaceMap = Map.fromList $ map (\ns -> (renderNameSpace ns, ns)) [minBound..maxBound]
+namespaceMap :: Map Text Namespace
+namespaceMap = Map.fromList $ map (\ns -> (renderNamespace ns, ns)) [minBound..maxBound]
 
-readNameSpace :: MonadFail m => Text -> m NameSpace
-readNameSpace txt = case Map.lookup txt nameSpaceMap of
+readNamespace :: MonadFail m => Text -> m Namespace
+readNamespace txt = case Map.lookup txt namespaceMap of
   Just ns -> pure ns
-  Nothing -> fail $ "readNameSpace: namespace not found: " ++ Text.unpack txt
+  Nothing -> fail $ "readNamespace: namespace not found: " ++ Text.unpack txt
 
 parsePath :: MonadFail m => Text -> m ([Text], Text)
 parsePath txt
@@ -68,7 +68,7 @@ parsePath txt =
   fail $ "parsePath: invalid path: " ++ (Text.unpack txt)
 
 data URI = URI 
-  { uriNameSpace :: NameSpace
+  { uriNamespace :: Namespace
   , uriBaseName :: Text
   , uriPath :: [Text]
   , uriIndex :: Int
@@ -93,7 +93,7 @@ mkPath ps = case (List.any Text.null ps,ps) of
   (False, _:_) -> return (List.init ps,List.last ps)
   _ -> fail $ "mkPath: invalid path: " ++ show ps
 
-mkURI :: (MonadFail m, Foldable t) => NameSpace -> t Text -> Int -> m URI
+mkURI :: (MonadFail m, Foldable t) => Namespace -> t Text -> Int -> m URI
 mkURI _ _ idx | idx < 0, not (idx == -1) =
   fail $ "mkURI: invalid index: " ++ show idx
 mkURI ns ps idx = do
@@ -123,7 +123,7 @@ splitM fwd c txt = do
 parseURI :: MonadFail m => Text -> m URI
 parseURI txt0 = do
   (ns, txt1) <- splitM True ':' txt0
-  ns' <- readNameSpace ns
+  ns' <- readNamespace ns
   let (i', txt3) = case splitM False '#' txt1 of
         Just (txt2,si)
           | Right (i,s) <- Text.decimal si
@@ -135,7 +135,7 @@ parseURI txt0 = do
 
 renderURI :: URI -> Text
 renderURI uri =
-     renderNameSpace (uriNameSpace uri)
+     renderNamespace (uriNamespace uri)
   <> ":" <> pathBody <> suffix
   where
     suffix :: Text
