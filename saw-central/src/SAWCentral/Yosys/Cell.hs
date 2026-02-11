@@ -12,13 +12,9 @@ Stability   : experimental
 
 module SAWCentral.Yosys.Cell where
 
-import Control.Lens ((^.))
-
-import qualified Data.Aeson as Aeson
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
 
 import Numeric.Natural (Natural)
 
@@ -27,7 +23,6 @@ import qualified SAWCore.Name as SC
 
 import SAWCentral.Panic (panic)
 
-import SAWCentral.Yosys.Utils
 import SAWCentral.Yosys.IR
 
 -- | A SAWCore bitvector term along with its width and whether it should be interpreted as signed.
@@ -162,62 +157,6 @@ shift sc a b
   | otherwise =
     -- If the shift amount is unsigned, then unconditionally shift right.
     shr sc a b
-
--- | Given a primitive Yosys cell and a map of terms for its
--- arguments, construct a record term representing the output. If the
--- provided cell is not a primitive, return Nothing.
-primCellToTerm ::
-  forall b.
-  SC.SharedContext ->
-  Cell [b] {- ^ Cell type -} ->
-  Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
-  IO (Maybe SC.Term)
-primCellToTerm sc c args =
-  do mm <- primCellToMap sc c args
-     traverse (cryptolRecord sc) mm
-
-primCellToMap ::
-  forall b.
-  SC.SharedContext ->
-  Cell [b] {- ^ Cell type -} ->
-  Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
-  IO (Maybe (Map Text SC.Term))
-primCellToMap sc c args =
-  case c ^. cellType of
-    CellTypeCombinational ctc ->
-      do let widths = fmap (fromIntegral . length) (c ^. cellConnections)
-         let args' = Map.intersectionWithKey (\i t w -> CellTerm t w (connSigned i)) args widths
-         let ywidth = connWidthNat "Y"
-         res <- combCellToTerm sc ctc args' ywidth
-         pure (Just (Map.singleton "Y" res))
-    CellTypeDff -> pure Nothing
-    CellTypeFf -> pure Nothing
-    CellTypeUnsupportedPrimitive _ -> pure Nothing
-    CellTypeUserType _ -> pure Nothing
-  where
-    nm :: Text
-    nm = ppCellType (c ^. cellType)
-
-    connSigned :: Text -> Bool
-    connSigned onm =
-      case Map.lookup (onm <> "_SIGNED") $ c ^. cellParameters of
-        Just (Aeson.Number n) -> n > 0
-        Just (Aeson.String t) -> textBinNat t > 0
-        Just v ->
-          -- XXX This should not be a panic, as it is possible to trigger this
-          -- with a malformed input file.
-          panic "cellToTerm"
-            [ "Expected SIGNED parameter to be a number or a string,"
-            , "but encountered " <> Text.pack (show v)
-            ]
-        Nothing -> False
-    connWidthNat :: Text -> Natural
-    connWidthNat onm =
-      case Map.lookup onm $ c ^. cellConnections of
-        -- XXX This should not be a panic, as it is possible to trigger this
-        -- with a malformed input file.
-        Nothing -> panic "cellToTerm" ["Missing expected output name for " <> nm <> " cell"]
-        Just bits -> fromIntegral $ length bits
 
 -- | Translate a single combinational primitive cell into a SAWCore
 -- term, given 'CellTerm's for the inputs.
