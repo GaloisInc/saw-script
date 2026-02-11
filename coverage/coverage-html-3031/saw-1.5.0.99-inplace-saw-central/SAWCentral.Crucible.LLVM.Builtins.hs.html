@@ -369,7 +369,7 @@ span.spaces    { background: white }
 <span class="lineno">  350 </span>llvmURI :: Text -&gt; URI
 <span class="lineno">  351 </span><span class="decl"><span class="istickedoff">llvmURI symbol_name =</span>
 <span class="lineno">  352 </span><span class="spaces">  </span><span class="istickedoff">fromMaybe <span class="nottickedoff">(panic &quot;llvmURI&quot; [&quot;Could not create LLVM symbol name &quot; &lt;&gt; symbol_name])</span> $</span>
-<span class="lineno">  353 </span><span class="spaces">    </span><span class="istickedoff">mkPathURI NameSpaceLLVM [symbol_name]</span></span>
+<span class="lineno">  353 </span><span class="spaces">    </span><span class="istickedoff">mkURI NameSpaceLLVM [symbol_name] (-1)</span></span>
 <span class="lineno">  354 </span>
 <span class="lineno">  355 </span>llvmNameInfo :: Text -&gt; NameInfo
 <span class="lineno">  356 </span><span class="decl"><span class="istickedoff">llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ symbol_name ]</span></span>

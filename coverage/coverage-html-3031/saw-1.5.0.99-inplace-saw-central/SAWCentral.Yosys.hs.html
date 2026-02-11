@@ -118,9 +118,9 @@ span.spaces    { background: white }
 <span class="lineno">   99 </span><span class="spaces">          </span><span class="istickedoff">do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v</span>
 <span class="lineno">  100 </span><span class="spaces">             </span><span class="istickedoff">cm &lt;- convertModule sc env m</span>
 <span class="lineno">  101 </span><span class="spaces">             </span><span class="istickedoff">n &lt;- Nonce.freshNonce Nonce.globalNonceGenerator</span>
-<span class="lineno">  102 </span><span class="spaces">             </span><span class="istickedoff">uri &lt;- URI.mkIdxURI</span>
+<span class="lineno">  102 </span><span class="spaces">             </span><span class="istickedoff">uri &lt;- URI.mkURI</span>
 <span class="lineno">  103 </span><span class="spaces">              </span><span class="istickedoff">URI.NameSpaceYoSys</span>
-<span class="lineno">  104 </span><span class="spaces">              </span><span class="istickedoff">nm</span>
+<span class="lineno">  104 </span><span class="spaces">              </span><span class="istickedoff">[nm]</span>
 <span class="lineno">  105 </span><span class="spaces">              </span><span class="istickedoff">(fromIntegral $ Nonce.indexValue n)</span>
 <span class="lineno">  106 </span><span class="spaces">             </span><span class="istickedoff">let ni = SC.ImportedName uri [nm]</span>
 <span class="lineno">  107 </span><span class="spaces">             </span><span class="istickedoff">body &lt;- SC.scAscribe sc (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)</span>

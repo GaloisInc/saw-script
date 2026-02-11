@@ -1442,12 +1442,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1423 </span><span class="decl"><span class="istickedoff">cryptolURI [] _ = <span class="nottickedoff">panic &quot;cryptolURI&quot; [&quot;Could not make URI from empty path&quot;]</span></span>
 <span class="lineno"> 1424 </span><span class="spaces"></span><span class="istickedoff">cryptolURI (p:ps) Nothing =</span>
 <span class="lineno"> 1425 </span><span class="spaces">  </span><span class="istickedoff">fromMaybe <span class="nottickedoff">(panic &quot;cryptolURI&quot; [&quot;Could not make URI from path: &quot; &lt;&gt; Text.pack (show (p:ps))])</span> $</span>
-<span class="lineno"> 1426 </span><span class="spaces">    </span><span class="istickedoff">mkPathURI NameSpaceCryptol (p:ps)</span>
+<span class="lineno"> 1426 </span><span class="spaces">    </span><span class="istickedoff">mkURI NameSpaceCryptol (p:ps) (-1)</span>
 <span class="lineno"> 1427 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1428 </span><span class="spaces"></span><span class="istickedoff">cryptolURI ps (Just uniq) =</span>
 <span class="lineno"> 1429 </span><span class="spaces">  </span><span class="istickedoff">fromMaybe <span class="nottickedoff">(panic &quot;cryptolURI&quot; [&quot;Could not make URI from path: &quot; &lt;&gt; Text.pack (show ps), &quot;Fragment: &quot; &lt;&gt; Text.pack (show uniq)])</span> $ do</span>
 <span class="lineno"> 1430 </span><span class="spaces">    </span><span class="istickedoff">[p] &lt;- return ps</span>
-<span class="lineno"> 1431 </span><span class="spaces">    </span><span class="istickedoff">mkIdxURI NameSpaceCryptol p uniq</span></span>
+<span class="lineno"> 1431 </span><span class="spaces">    </span><span class="istickedoff">mkURI NameSpaceCryptol [p] uniq</span></span>
 <span class="lineno"> 1432 </span>
 <span class="lineno"> 1433 </span>importName :: C.Name -&gt; IO NameInfo
 <span class="lineno"> 1434 </span><span class="decl"><span class="istickedoff">importName cnm =</span>

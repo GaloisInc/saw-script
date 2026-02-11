@@ -371,90 +371,87 @@ span.spaces    { background: white }
 <span class="lineno">  352 </span><span class="spaces">    </span><span class="istickedoff">CellTypeBUF -&gt;</span>
 <span class="lineno">  353 </span><span class="spaces">      </span><span class="istickedoff">do res &lt;- input &quot;A&quot;</span>
 <span class="lineno">  354 </span><span class="spaces">         </span><span class="istickedoff">output res</span>
-<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff">CellTypeCheck -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  356 </span><span class="spaces">    </span><span class="istickedoff">CellTypePrint -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  357 </span><span class="spaces">    </span><span class="istickedoff">CellTypeScopeinfo -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  358 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUnsupportedPrimitive _ -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUserType _ -&gt; pure Nothing</span>
-<span class="lineno">  360 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  361 </span><span class="spaces">    </span><span class="istickedoff">nm :: Text</span>
-<span class="lineno">  362 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nm = Text.pack $ show $ c ^. cellType</span></span>
-<span class="lineno">  363 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  364 </span><span class="spaces">    </span><span class="istickedoff">textBinNat :: Text -&gt; Natural</span>
-<span class="lineno">  365 </span><span class="spaces">    </span><span class="istickedoff">textBinNat = fromIntegral . Text.foldl' (\a x -&gt; digitToInt x + a * 2) 0</span>
-<span class="lineno">  366 </span><span class="spaces">    </span><span class="istickedoff">connSigned :: Text -&gt; Bool</span>
-<span class="lineno">  367 </span><span class="spaces">    </span><span class="istickedoff">connSigned onm =</span>
-<span class="lineno">  368 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup (onm &lt;&gt; &quot;_SIGNED&quot;) $ c ^. cellParameters of</span>
-<span class="lineno">  369 </span><span class="spaces">        </span><span class="istickedoff">Just (Aeson.Number n) -&gt; <span class="nottickedoff">n &gt; 0</span></span>
-<span class="lineno">  370 </span><span class="spaces">        </span><span class="istickedoff">Just (Aeson.String t) -&gt; textBinNat t &gt; 0</span>
-<span class="lineno">  371 </span><span class="spaces">        </span><span class="istickedoff">Just v -&gt;</span>
-<span class="lineno">  372 </span><span class="spaces">          </span><span class="istickedoff">-- XXX This should not be a panic, as it is possible to trigger this</span>
-<span class="lineno">  373 </span><span class="spaces">          </span><span class="istickedoff">-- with a malformed input file.</span>
-<span class="lineno">  374 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;cellToTerm&quot;</span></span>
-<span class="lineno">  375 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Expected SIGNED parameter to be a number or a string,&quot;</span></span>
-<span class="lineno">  376 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, &quot;but encountered &quot; &lt;&gt; Text.pack (show v)</span></span>
-<span class="lineno">  377 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  378 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">False</span></span>
-<span class="lineno">  379 </span><span class="spaces">    </span><span class="istickedoff">connWidthNat :: Text -&gt; Natural</span>
-<span class="lineno">  380 </span><span class="spaces">    </span><span class="istickedoff">connWidthNat onm =</span>
-<span class="lineno">  381 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup onm $ c ^. cellConnections of</span>
-<span class="lineno">  382 </span><span class="spaces">        </span><span class="istickedoff">-- XXX This should not be a panic, as it is possible to trigger this</span>
-<span class="lineno">  383 </span><span class="spaces">        </span><span class="istickedoff">-- with a malformed input file.</span>
-<span class="lineno">  384 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;cellToTerm&quot; [&quot;Missing expected output name for &quot; &lt;&gt; nm &lt;&gt; &quot; cell&quot;]</span></span>
-<span class="lineno">  385 </span><span class="spaces">        </span><span class="istickedoff">Just bits -&gt; fromIntegral $ length bits</span>
-<span class="lineno">  386 </span><span class="spaces">    </span><span class="istickedoff">connWidth :: Text -&gt; IO SC.Term</span>
-<span class="lineno">  387 </span><span class="spaces">    </span><span class="istickedoff">connWidth onm = SC.scNat sc $ connWidthNat onm</span>
-<span class="lineno">  388 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  389 </span><span class="spaces">    </span><span class="istickedoff">input :: Text -&gt; IO CellTerm</span>
-<span class="lineno">  390 </span><span class="spaces">    </span><span class="istickedoff">input inpNm =</span>
-<span class="lineno">  391 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup inpNm args of</span>
-<span class="lineno">  392 </span><span class="spaces">        </span><span class="istickedoff">-- XXX This should not be a panic, as it is possible to trigger this</span>
-<span class="lineno">  393 </span><span class="spaces">        </span><span class="istickedoff">-- with a malformed input file.</span>
-<span class="lineno">  394 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;cellToTerm&quot; [nm &lt;&gt; &quot; missing input &quot; &lt;&gt; inpNm]</span></span>
-<span class="lineno">  395 </span><span class="spaces">        </span><span class="istickedoff">Just a -&gt; pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)</span>
-<span class="lineno">  396 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">-- | Extend or truncate a cell term as needed to fit the output @Y@ port.</span>
-<span class="lineno">  398 </span><span class="spaces">    </span><span class="istickedoff">output :: CellTerm -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  399 </span><span class="spaces">    </span><span class="istickedoff">output res =</span>
-<span class="lineno">  400 </span><span class="spaces">      </span><span class="istickedoff">do CellTerm t _ _ &lt;- extTrunc sc (connWidthNat &quot;Y&quot;) res</span>
-<span class="lineno">  401 </span><span class="spaces">         </span><span class="istickedoff">pure (Just (Map.singleton &quot;Y&quot; t))</span>
-<span class="lineno">  402 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  403 </span><span class="spaces">    </span><span class="istickedoff">outputBit :: SC.Term -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  404 </span><span class="spaces">    </span><span class="istickedoff">outputBit res =</span>
-<span class="lineno">  405 </span><span class="spaces">      </span><span class="istickedoff">do bool &lt;- SC.scBoolType sc</span>
-<span class="lineno">  406 </span><span class="spaces">         </span><span class="istickedoff">vres &lt;- SC.scSingle sc bool res</span>
-<span class="lineno">  407 </span><span class="spaces">         </span><span class="istickedoff">output $ CellTerm vres 1 False</span>
-<span class="lineno">  408 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  409 </span><span class="spaces">    </span><span class="istickedoff">-- convert input to big endian</span>
-<span class="lineno">  410 </span><span class="spaces">    </span><span class="istickedoff">bvUnaryOp :: (CellTerm -&gt; IO CellTerm) -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  411 </span><span class="spaces">    </span><span class="istickedoff">bvUnaryOp f =</span>
-<span class="lineno">  412 </span><span class="spaces">      </span><span class="istickedoff">do t &lt;- input &quot;A&quot;</span>
-<span class="lineno">  413 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- f t</span>
-<span class="lineno">  414 </span><span class="spaces">         </span><span class="istickedoff">output res</span>
-<span class="lineno">  415 </span><span class="spaces">    </span><span class="istickedoff">-- extend inputs to output width</span>
-<span class="lineno">  416 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp :: (CellTerm -&gt; CellTerm -&gt; IO CellTerm) -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  417 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp f =</span>
-<span class="lineno">  418 </span><span class="spaces">      </span><span class="istickedoff">do let w = connWidthNat &quot;Y&quot;</span>
-<span class="lineno">  419 </span><span class="spaces">         </span><span class="istickedoff">ta &lt;- extTrunc sc w =&lt;&lt; input &quot;A&quot;</span>
-<span class="lineno">  420 </span><span class="spaces">         </span><span class="istickedoff">tb &lt;- extTrunc sc w =&lt;&lt; input &quot;B&quot;</span>
-<span class="lineno">  421 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- f ta tb</span>
-<span class="lineno">  422 </span><span class="spaces">         </span><span class="istickedoff">output res</span>
-<span class="lineno">  423 </span><span class="spaces">    </span><span class="istickedoff">-- extend inputs to max input width, output is a single bit extended to the output width</span>
-<span class="lineno">  424 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryCmp :: (CellTerm -&gt; CellTerm -&gt; IO SC.Term) -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  425 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryCmp f =</span>
-<span class="lineno">  426 </span><span class="spaces">      </span><span class="istickedoff">do ta &lt;- input &quot;A&quot;</span>
-<span class="lineno">  427 </span><span class="spaces">         </span><span class="istickedoff">tb &lt;- input &quot;B&quot;</span>
-<span class="lineno">  428 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- uncurry f =&lt;&lt; extMax sc ta tb</span>
-<span class="lineno">  429 </span><span class="spaces">         </span><span class="istickedoff">outputBit res</span>
-<span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">bvReduce :: Bool -&gt; SC.Term -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff">bvReduce boolIdentity boolFun =</span>
-<span class="lineno">  432 </span><span class="spaces">      </span><span class="istickedoff">do CellTerm t _ _ &lt;- input &quot;A&quot;</span>
-<span class="lineno">  433 </span><span class="spaces">         </span><span class="istickedoff">w &lt;- connWidth &quot;A&quot;</span>
-<span class="lineno">  434 </span><span class="spaces">         </span><span class="istickedoff">boolTy &lt;- SC.scBoolType sc</span>
-<span class="lineno">  435 </span><span class="spaces">         </span><span class="istickedoff">identity &lt;- SC.scBool sc boolIdentity</span>
-<span class="lineno">  436 </span><span class="spaces">         </span><span class="istickedoff">scFoldr &lt;- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span>
-<span class="lineno">  437 </span><span class="spaces">         </span><span class="istickedoff">bit &lt;- SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]</span>
-<span class="lineno">  438 </span><span class="spaces">         </span><span class="istickedoff">outputBit bit</span></span>
+<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUnsupportedPrimitive _ -&gt; <span class="nottickedoff">pure Nothing</span></span>
+<span class="lineno">  356 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUserType _ -&gt; pure Nothing</span>
+<span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  358 </span><span class="spaces">    </span><span class="istickedoff">nm :: Text</span>
+<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nm = Text.pack $ show $ c ^. cellType</span></span>
+<span class="lineno">  360 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  361 </span><span class="spaces">    </span><span class="istickedoff">textBinNat :: Text -&gt; Natural</span>
+<span class="lineno">  362 </span><span class="spaces">    </span><span class="istickedoff">textBinNat = fromIntegral . Text.foldl' (\a x -&gt; digitToInt x + a * 2) 0</span>
+<span class="lineno">  363 </span><span class="spaces">    </span><span class="istickedoff">connSigned :: Text -&gt; Bool</span>
+<span class="lineno">  364 </span><span class="spaces">    </span><span class="istickedoff">connSigned onm =</span>
+<span class="lineno">  365 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup (onm &lt;&gt; &quot;_SIGNED&quot;) $ c ^. cellParameters of</span>
+<span class="lineno">  366 </span><span class="spaces">        </span><span class="istickedoff">Just (Aeson.Number n) -&gt; <span class="nottickedoff">n &gt; 0</span></span>
+<span class="lineno">  367 </span><span class="spaces">        </span><span class="istickedoff">Just (Aeson.String t) -&gt; textBinNat t &gt; 0</span>
+<span class="lineno">  368 </span><span class="spaces">        </span><span class="istickedoff">Just v -&gt;</span>
+<span class="lineno">  369 </span><span class="spaces">          </span><span class="istickedoff">-- XXX This should not be a panic, as it is possible to trigger this</span>
+<span class="lineno">  370 </span><span class="spaces">          </span><span class="istickedoff">-- with a malformed input file.</span>
+<span class="lineno">  371 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;cellToTerm&quot;</span></span>
+<span class="lineno">  372 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Expected SIGNED parameter to be a number or a string,&quot;</span></span>
+<span class="lineno">  373 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, &quot;but encountered &quot; &lt;&gt; Text.pack (show v)</span></span>
+<span class="lineno">  374 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  375 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">  376 </span><span class="spaces">    </span><span class="istickedoff">connWidthNat :: Text -&gt; Natural</span>
+<span class="lineno">  377 </span><span class="spaces">    </span><span class="istickedoff">connWidthNat onm =</span>
+<span class="lineno">  378 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup onm $ c ^. cellConnections of</span>
+<span class="lineno">  379 </span><span class="spaces">        </span><span class="istickedoff">-- XXX This should not be a panic, as it is possible to trigger this</span>
+<span class="lineno">  380 </span><span class="spaces">        </span><span class="istickedoff">-- with a malformed input file.</span>
+<span class="lineno">  381 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;cellToTerm&quot; [&quot;Missing expected output name for &quot; &lt;&gt; nm &lt;&gt; &quot; cell&quot;]</span></span>
+<span class="lineno">  382 </span><span class="spaces">        </span><span class="istickedoff">Just bits -&gt; fromIntegral $ length bits</span>
+<span class="lineno">  383 </span><span class="spaces">    </span><span class="istickedoff">connWidth :: Text -&gt; IO SC.Term</span>
+<span class="lineno">  384 </span><span class="spaces">    </span><span class="istickedoff">connWidth onm = SC.scNat sc $ connWidthNat onm</span>
+<span class="lineno">  385 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  386 </span><span class="spaces">    </span><span class="istickedoff">input :: Text -&gt; IO CellTerm</span>
+<span class="lineno">  387 </span><span class="spaces">    </span><span class="istickedoff">input inpNm =</span>
+<span class="lineno">  388 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup inpNm args of</span>
+<span class="lineno">  389 </span><span class="spaces">        </span><span class="istickedoff">-- XXX This should not be a panic, as it is possible to trigger this</span>
+<span class="lineno">  390 </span><span class="spaces">        </span><span class="istickedoff">-- with a malformed input file.</span>
+<span class="lineno">  391 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;cellToTerm&quot; [nm &lt;&gt; &quot; missing input &quot; &lt;&gt; inpNm]</span></span>
+<span class="lineno">  392 </span><span class="spaces">        </span><span class="istickedoff">Just a -&gt; pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)</span>
+<span class="lineno">  393 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  394 </span><span class="spaces">    </span><span class="istickedoff">-- | Extend or truncate a cell term as needed to fit the output @Y@ port.</span>
+<span class="lineno">  395 </span><span class="spaces">    </span><span class="istickedoff">output :: CellTerm -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">output res =</span>
+<span class="lineno">  397 </span><span class="spaces">      </span><span class="istickedoff">do CellTerm t _ _ &lt;- extTrunc sc (connWidthNat &quot;Y&quot;) res</span>
+<span class="lineno">  398 </span><span class="spaces">         </span><span class="istickedoff">pure (Just (Map.singleton &quot;Y&quot; t))</span>
+<span class="lineno">  399 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  400 </span><span class="spaces">    </span><span class="istickedoff">outputBit :: SC.Term -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  401 </span><span class="spaces">    </span><span class="istickedoff">outputBit res =</span>
+<span class="lineno">  402 </span><span class="spaces">      </span><span class="istickedoff">do bool &lt;- SC.scBoolType sc</span>
+<span class="lineno">  403 </span><span class="spaces">         </span><span class="istickedoff">vres &lt;- SC.scSingle sc bool res</span>
+<span class="lineno">  404 </span><span class="spaces">         </span><span class="istickedoff">output $ CellTerm vres 1 False</span>
+<span class="lineno">  405 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  406 </span><span class="spaces">    </span><span class="istickedoff">-- convert input to big endian</span>
+<span class="lineno">  407 </span><span class="spaces">    </span><span class="istickedoff">bvUnaryOp :: (CellTerm -&gt; IO CellTerm) -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  408 </span><span class="spaces">    </span><span class="istickedoff">bvUnaryOp f =</span>
+<span class="lineno">  409 </span><span class="spaces">      </span><span class="istickedoff">do t &lt;- input &quot;A&quot;</span>
+<span class="lineno">  410 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- f t</span>
+<span class="lineno">  411 </span><span class="spaces">         </span><span class="istickedoff">output res</span>
+<span class="lineno">  412 </span><span class="spaces">    </span><span class="istickedoff">-- extend inputs to output width</span>
+<span class="lineno">  413 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp :: (CellTerm -&gt; CellTerm -&gt; IO CellTerm) -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  414 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp f =</span>
+<span class="lineno">  415 </span><span class="spaces">      </span><span class="istickedoff">do let w = connWidthNat &quot;Y&quot;</span>
+<span class="lineno">  416 </span><span class="spaces">         </span><span class="istickedoff">ta &lt;- extTrunc sc w =&lt;&lt; input &quot;A&quot;</span>
+<span class="lineno">  417 </span><span class="spaces">         </span><span class="istickedoff">tb &lt;- extTrunc sc w =&lt;&lt; input &quot;B&quot;</span>
+<span class="lineno">  418 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- f ta tb</span>
+<span class="lineno">  419 </span><span class="spaces">         </span><span class="istickedoff">output res</span>
+<span class="lineno">  420 </span><span class="spaces">    </span><span class="istickedoff">-- extend inputs to max input width, output is a single bit extended to the output width</span>
+<span class="lineno">  421 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryCmp :: (CellTerm -&gt; CellTerm -&gt; IO SC.Term) -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  422 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryCmp f =</span>
+<span class="lineno">  423 </span><span class="spaces">      </span><span class="istickedoff">do ta &lt;- input &quot;A&quot;</span>
+<span class="lineno">  424 </span><span class="spaces">         </span><span class="istickedoff">tb &lt;- input &quot;B&quot;</span>
+<span class="lineno">  425 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- uncurry f =&lt;&lt; extMax sc ta tb</span>
+<span class="lineno">  426 </span><span class="spaces">         </span><span class="istickedoff">outputBit res</span>
+<span class="lineno">  427 </span><span class="spaces">    </span><span class="istickedoff">bvReduce :: Bool -&gt; SC.Term -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  428 </span><span class="spaces">    </span><span class="istickedoff">bvReduce boolIdentity boolFun =</span>
+<span class="lineno">  429 </span><span class="spaces">      </span><span class="istickedoff">do CellTerm t _ _ &lt;- input &quot;A&quot;</span>
+<span class="lineno">  430 </span><span class="spaces">         </span><span class="istickedoff">w &lt;- connWidth &quot;A&quot;</span>
+<span class="lineno">  431 </span><span class="spaces">         </span><span class="istickedoff">boolTy &lt;- SC.scBoolType sc</span>
+<span class="lineno">  432 </span><span class="spaces">         </span><span class="istickedoff">identity &lt;- SC.scBool sc boolIdentity</span>
+<span class="lineno">  433 </span><span class="spaces">         </span><span class="istickedoff">scFoldr &lt;- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span>
+<span class="lineno">  434 </span><span class="spaces">         </span><span class="istickedoff">bit &lt;- SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]</span>
+<span class="lineno">  435 </span><span class="spaces">         </span><span class="istickedoff">outputBit bit</span></span>
 
 </pre>
 </body>
