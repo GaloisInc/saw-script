@@ -139,7 +139,9 @@ parseURI txt0 = do
       -> pure $ (Just i, Text.reverse txt2_rev)
     _ -> pure (Nothing, txt1)
   case mi of
-    Just i -> return $ URI ns' (percentDecode txt2) (Right i)
+    Just i -> do
+      ([],nm) <- parsePath txt2
+      return $ URI ns' nm (Right i)
     Nothing -> do
       (ps,nm) <- parsePath txt2
       return $ URI ns' nm (Left ps)
