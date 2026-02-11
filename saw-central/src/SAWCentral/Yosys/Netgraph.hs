@@ -22,6 +22,7 @@ import Control.Lens.TH (makeLenses)
 import Control.Lens ((^.))
 import Control.Monad (forM, foldM)
 
+import qualified Data.Aeson as Aeson
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -131,41 +132,67 @@ netgraphToTerms sc env ng inputs
     doVertex acc v =
       do let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v
          let outputFields = Map.filter isOutput (c ^. cellPortDirections)
-         if
-           -- special handling for $dff/$ff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
-           | c ^. cellType == CellTypeDff
-           , Just dffout <- Map.lookup "Q" $ c ^. cellConnections ->
-               do r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") dffout acc
-                  ts <- deriveTermsByIndices sc dffout r
-                  pure $ Map.union ts acc
-           | c ^. cellType == CellTypeFf
-           , Just ffout <- Map.lookup "Q" $ c ^. cellConnections ->
-               do r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") ffout acc
-                  ts <- deriveTermsByIndices sc ffout r
-                  pure $ Map.union ts acc
-           | Map.null outputFields ->
-               -- Cells with no output ports are debugging cells, which we can simply ignore.
-               pure acc
-           | otherwise ->
-               do let doInput inm i = lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
-                  args <- Map.traverseWithKey doInput (cellInputConnections c)
-                  r <- primCellToTerm sc c args >>= \case
-                    Just r -> pure r
-                    Nothing ->
-                      let submoduleName = asUserType $ c ^. cellType in
-                      case Map.lookup submoduleName env of
-                        Just cm ->
-                          do r <- cryptolRecord sc args
-                             SC.scApply sc (cm ^. convertedModuleTerm) r
-                        Nothing ->
-                          yosysError $ YosysErrorNoSuchSubmodule submoduleName cnm
+         let lookupConn portname =
+               case Map.lookup portname (c ^. cellConnections) of
+                 Nothing ->
+                   yosysError $
+                   YosysError $
+                   "Malformed Yosys file: Missing port " <> portname <> " for cell " <> cnm
+                 Just bs ->
+                   pure bs
 
-                  -- once we've built a term, insert it along with each of its bits
-                  ts <-
-                    forM (Map.assocs $ cellOutputConnections c) $ \(o, out) ->
-                    do t <- cryptolRecordSelect sc outputFields r o
-                       deriveTermsByIndices sc out t
-                  pure $ Map.union (Map.unions ts) acc
+         case c ^. cellType of
+           CellTypeCombinational ctc ->
+             do let doInput inm i =
+                      do t <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
+                         let w = fromIntegral (length i)
+                         let s =
+                               case Map.lookup (inm <> "_SIGNED") (c ^. cellParameters) of
+                                 Just (Aeson.Number n) -> n > 0
+                                 Just (Aeson.String x) -> textBinNat x > 0
+                                 Just _ -> False
+                                 Nothing -> False
+                         pure (CellTerm t w s)
+                args <- Map.traverseWithKey doInput (cellInputConnections c)
+                bs <- lookupConn "Y"
+                let ywidth = fromIntegral (length bs)
+                t <- combCellToTerm sc ctc args ywidth
+                ts <- deriveTermsByIndices sc bs t
+                pure $ Map.union ts acc
+           -- special handling for $dff/$ff nodes - we read their
+           -- /output/ from the inputs map, and later detect and write
+           -- their /input/ to the state
+           CellTypeDff ->
+             do dffout <- lookupConn "Q"
+                r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") dffout acc
+                ts <- deriveTermsByIndices sc dffout r
+                pure $ Map.union ts acc
+           CellTypeFf ->
+             do ffout <- lookupConn "Q"
+                r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") ffout acc
+                ts <- deriveTermsByIndices sc ffout r
+                pure $ Map.union ts acc
+           CellTypeUnsupportedPrimitive nm
+             | Map.null outputFields ->
+                 -- Cells with no output ports are debugging cells, which we can simply ignore.
+                 pure acc
+             | otherwise ->
+                 yosysError $ YosysErrorUnsupportedFF nm
+           CellTypeUserType submoduleName ->
+             case Map.lookup submoduleName env of
+               Nothing ->
+                 yosysError $ YosysErrorNoSuchSubmodule submoduleName cnm
+               Just cm ->
+                 do let doInput inm i = lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
+                    args <- Map.traverseWithKey doInput (cellInputConnections c)
+                    rin <- cryptolRecord sc args
+                    r <- SC.scApply sc (cm ^. convertedModuleTerm) rin
+                    -- once we've built a term, insert it along with each of its bits
+                    ts <-
+                      forM (Map.assocs $ cellOutputConnections c) $ \(o, out) ->
+                      do t <- cryptolRecordSelect sc outputFields r o
+                         deriveTermsByIndices sc out t
+                    pure $ Map.union (Map.unions ts) acc
 
 convertModule ::
   SC.SharedContext ->
