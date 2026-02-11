@@ -98,9 +98,9 @@ convertYosysIR sc ir =
           do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
              cm <- convertModule sc env m
              n <- Nonce.freshNonce Nonce.globalNonceGenerator
-             uri <- URI.mkIdxURI
+             uri <- URI.mkURI
               URI.NameSpaceYoSys
-              nm
+              [nm]
               (fromIntegral $ Nonce.indexValue n)
              let ni = SC.ImportedName uri [nm]
              body <- SC.scAscribe sc (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
