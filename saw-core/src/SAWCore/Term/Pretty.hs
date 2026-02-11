@@ -510,7 +510,7 @@ prettyBestName nm =
 
 prettyName :: NameInfo -> PPS.Doc
 prettyName (ModuleIdentifier i) = prettyIdent i
-prettyName (ImportedName absName _) = pretty (render absName)
+prettyName (ImportedName absName _) = pretty (renderURI absName)
 
 -- | Pretty-print a non-shared term
 prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc

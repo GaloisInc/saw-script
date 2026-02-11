@@ -446,7 +446,7 @@ prettyTermError opts ne err =
       ]
     DuplicateURI uri ->
       [ "Attempt to register name with duplicate URI"
-      , PP.indent 2 $ PP.pretty (render uri)
+      , PP.indent 2 $ PP.pretty (renderURI uri)
       ]
     AlreadyDefined nm ->
       [ "Attempt to redefine existing constant"

@@ -13,99 +13,151 @@ Simple URI implementation with namespaces and paths.
 -}
 
 module SAWCore.URI 
-  ( URI(..)
-  , mkScheme
-  , mkPathPiece
-  , mkFragment
-  , mkURI
-  , render
-
+  ( NameSpace(..)
+  , URI
+  , mkPathURI
+  , mkIdxURI
+  , parseURI
+  , renderURI
   ) where
 
+import qualified Data.Foldable as Foldable
 import           Data.Hashable
-import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List as List
+import           Data.Map (Map)
+import qualified Data.Map as Map
+
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Read as Text
+
+data NameSpace =
+  NameSpaceCore | NameSpaceCryptol | NameSpaceFresh | NameSpaceYoSys | NameSpaceLLVM
+  deriving (Eq, Ord, Enum, Bounded)
+
+instance Hashable NameSpace where
+  hashWithSalt s ns = hashWithSalt s (fromEnum ns)
+
+renderNameSpace :: NameSpace -> Text
+renderNameSpace = \case
+  NameSpaceCore -> "core"
+  NameSpaceCryptol -> "cryptol"
+  NameSpaceFresh -> "fresh"
+  NameSpaceYoSys -> "yosys"
+  NameSpaceLLVM -> "llvm"
+
+instance Show NameSpace where
+  show ns = Text.unpack $ renderNameSpace ns
+
+nameSpaceMap :: Map Text NameSpace
+nameSpaceMap = Map.fromList $ map (\ns -> (renderNameSpace ns, ns)) [minBound..maxBound]
+
+readNameSpace :: MonadFail m => Text -> m NameSpace
+readNameSpace txt = case Map.lookup txt nameSpaceMap of
+  Just ns -> pure ns
+  Nothing -> fail $ "readNameSpace: namespace not found: " ++ Text.unpack txt
+
+parsePath :: MonadFail m => Text -> m ([Text], Text)
+parsePath txt
+  | not (Text.null txt)
+  , ps <- map percentDecode $ Text.splitOn "/" txt
+  = case ps of
+      -- allow for a leading '/'
+      (p:ps') | Text.null p -> mkPath ps'
+      _ -> mkPath ps
+parsePath txt =
+  fail $ "parsePath: invalid path: " ++ (Text.unpack txt)
 
 data URI = URI 
-  { uriScheme :: Maybe Text 
-  , uriAuthority :: Either Bool ()
-  , uriPath :: Maybe (Bool, NonEmpty Text)
-  , uriQuery :: [()]
-  , uriFragment :: Maybe Text
+  { uriNameSpace :: NameSpace
+  , uriBaseName :: Text
+  , uriPathIdx :: Either [Text] Int
   }
- deriving (Eq,Ord,Show)
+  deriving (Eq, Ord)
+
+uriQualifier :: URI -> [Text]
+uriQualifier uri = case uriPathIdx uri of
+  Left ps -> ps
+  Right _ -> []
 
 instance Hashable URI where
-  hashWithSalt s (URI a b c d e) = s
+  hashWithSalt s (URI a b c) = s
     `hashWithSalt` a 
     `hashWithSalt` b
     `hashWithSalt` c
-    `hashWithSalt` d
-    `hashWithSalt` e
 
-mkScheme :: Text -> Maybe Text
-mkScheme nm = Just nm
+percentEncode :: Text -> Text
+percentEncode txt = Text.replace "/" "%2F" $ Text.replace "%" "%25" txt
 
-mkPathPiece :: Text -> Maybe Text
-mkPathPiece nm = Just nm
+percentDecode :: Text -> Text
+percentDecode txt = Text.replace "%25" "%" $ Text.replace "%2F" "/" txt
 
-mkFragment :: Text -> Maybe Text
-mkFragment nm = Just nm
+mkPath :: (Foldable t, MonadFail m) => t Text -> m ([Text], Text)
+mkPath ps = case (List.any Text.null ps',ps') of
+  (False, _:_) -> return (List.init ps',List.last ps')
+  _ -> fail $ "mkPath: invalid path: " ++ show ps'
+  where
+    ps' = Foldable.toList ps
 
+mkPathURI :: (Foldable t, MonadFail m) => NameSpace -> t Text -> m URI
+mkPathURI ns ps = do
+  (ps', nm) <- mkPath ps
+  return $ URI ns nm (Left ps')
 
-nonEmpty :: MonadFail m => Text -> m ()
-nonEmpty txt = case Text.null txt of
-  True -> fail "nonEmpty"
+mkIdxURI :: (MonadFail m) => NameSpace -> Text -> Int -> m URI
+mkIdxURI ns nm i = do
+  ([],nm') <- mkPath [nm]
+  return $ URI ns nm' (Right i)
+
+nonEmpty :: MonadFail m => String -> Text -> m ()
+nonEmpty msg txt = case Text.null txt of
+  True -> fail msg
   False -> return ()
 
-splitM :: MonadFail m => (Char -> Bool) -> Text -> m (NonEmpty Text)
-splitM f txt = do
-  nonEmpty txt
-  (p:ps) <- return $ Text.split f txt
-  return $ p :| ps
+splitM :: MonadFail m => Char -> Text -> m (Text,Text)
+splitM c txt = do
+  nonEmpty err txt
+  let (lhs, rhs) = Text.break (==c) txt
+  nonEmpty err lhs
+  case Text.uncons rhs of
+    Nothing -> return (lhs, Text.empty)
+    Just(_,rhs') -> return (lhs, rhs')
+  where
+    err = "splitM: failed to split on char '" ++ [c] ++ "' in '"
+      ++ Text.unpack txt
 
-breakM :: MonadFail m => (Char -> Bool) -> Text -> m (Text,Text)
-breakM f txt = nonEmpty txt >> (return $ Text.break f txt)
+parseURI :: MonadFail m => Text -> m URI
+parseURI txt0 = do
+  (ns, txt1) <- splitM ':' txt0
+  ns' <- readNameSpace ns
+  (si_rev, txt2_rev) <- splitM '#' (Text.reverse txt1)
+  let si = Text.reverse si_rev
+  (mi, txt2) <- case Text.null txt2_rev of
+    False
+      | Right (i,s) <- Text.decimal si
+      , Text.null s
+      -> pure $ (Just i, Text.reverse txt2_rev)
+    _ -> pure (Nothing, txt1)
+  case mi of
+    Just i -> return $ URI ns' (percentDecode txt2) (Right i)
+    Nothing -> do
+      (ps,nm) <- parsePath txt2
+      return $ URI ns' nm (Left ps)
 
-sepM :: MonadFail m => Char -> Text -> m (Maybe (Text, Text))
-sepM c txt = do
-  (ns,rest) <- breakM (==c) txt
-  nonEmpty ns
-  case Text.uncons rest of
-    Nothing -> return $ Nothing
-    Just (_,rest') -> return $ Just (ns,rest')
+renderURI :: URI -> Text
+renderURI uri =
+     renderNameSpace (uriNameSpace uri)
+  <> ":" <> pathBody <> suffix
+  where
+    suffix :: Text
+    suffix = case uriPathIdx uri of
+      Left _ -> Text.empty
+      Right i -> "#" <> Text.pack (show i)
 
-mkURI :: Text -> Maybe URI
-mkURI txt = do
-  (mns, txt') <- sepM ':' txt >>= \case
-    Nothing -> return (Nothing, txt)
-    Just (ns,txt') -> return (Just ns, txt')
-  (mf, txt'') <- sepM '#' txt' >>= \case
-    Nothing -> return (Nothing, txt')
-    Just (txt'', f) -> return (Just f, txt'')
-  ps <- splitM (=='/') txt''
-  ps' <- case ps of
-    (p :| (p':ps')) | Text.null p -> return $ p' :| ps'
-    _ -> return ps
-  return $ URI mns (Left True) (Just (False, ps')) [] mf
+    pathBody :: Text
+    pathBody = case uriQualifier uri of
+      [] -> percentEncode $ uriBaseName uri
+      ps -> "/" <> Text.intercalate "/" (map percentEncode (ps ++ [uriBaseName uri]))
 
-render :: URI -> Text
-render uri = schemePrefix uri <> pathBody uri <> fragmentSuffix uri
-
-schemePrefix :: URI -> Text
-schemePrefix uri = case uriScheme uri of
-  Just s -> s <> ":"
-  Nothing -> Text.empty
-
-fragmentSuffix :: URI -> Text
-fragmentSuffix uri = case uriFragment uri of
-  Just f -> "#" <> f
-  Nothing -> Text.empty
-
-pathBody :: URI -> Text
-pathBody uri = case uriPath uri of
-  Just (_,p :| ps) -> case ps of
-    [] -> p
-    _ -> "/" <> Text.intercalate "/" (p:ps)
-  Nothing -> Text.empty
+instance Show URI where
+  show uri = Text.unpack (renderURI uri)

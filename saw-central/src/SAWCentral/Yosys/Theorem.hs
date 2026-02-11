@@ -162,7 +162,7 @@ applyOverride sc thm t = do
   tidx <-
     do result <- SC.scResolveNameByURI sc $ thm ^. theoremURI
        case result of
-         Nothing -> yosysError $ YosysErrorOverrideNameNotFound $ URI.render $ thm ^. theoremURI
+         Nothing -> yosysError $ YosysErrorOverrideNameNotFound $ URI.renderURI $ thm ^. theoremURI
          Just i -> pure i
   -- unfold everything except for theoremURI and prelude constants
   let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName

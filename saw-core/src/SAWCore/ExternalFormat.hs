@@ -40,7 +40,7 @@ renderNames nms = show
  where
    f (Left s) = Left s
    f (Right (ModuleIdentifier i))  = Right (Left (show i))
-   f (Right (ImportedName uri as)) = Right (Right (render uri, as))
+   f (Right (ImportedName uri as)) = Right (Right (renderURI uri, as))
 
 readNames :: String -> Maybe (Map VarIndex (Either Text NameInfo))
 readNames xs = Map.fromList <$> (mapM readName =<< readMaybe xs)
@@ -49,7 +49,7 @@ readNames xs = Map.fromList <$> (mapM readName =<< readMaybe xs)
    readName (idx, Left x) = pure (idx, Left x)
    readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))
    readName (idx, Right (Right (uri,as))) =
-       do uri' <- mkURI uri
+       do uri' <- parseURI uri
           pure (idx, Right (ImportedName uri' as))
 
 -- | Render to external text format

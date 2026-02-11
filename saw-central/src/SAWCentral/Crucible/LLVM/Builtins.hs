@@ -350,15 +350,7 @@ llvm_array_size_profile assume (Some lm) nm lemmas setup = do
 llvmURI :: Text -> URI
 llvmURI symbol_name =
   fromMaybe (panic "llvmURI" ["Could not create LLVM symbol name " <> symbol_name]) $
-  do sch <- mkScheme "llvm"
-     p   <- mkPathPiece symbol_name
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left True -- absolute path
-       , uriPath = Just (False, p NE.:| [])
-       , uriQuery = []
-       , uriFragment = Nothing
-       }
+    mkPathURI NameSpaceLLVM [symbol_name]
 
 llvmNameInfo :: Text -> NameInfo
 llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ symbol_name ]
