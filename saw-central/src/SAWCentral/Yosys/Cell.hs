@@ -185,7 +185,12 @@ primCellToMap ::
   IO (Maybe (Map Text SC.Term))
 primCellToMap sc c args =
   case c ^. cellType of
-    CellTypeNot -> bvUnaryOp . liftUnary sc $ SC.scBvNot sc
+    CellTypeNot ->
+      -- If output size is larger, then we must extend before inverting
+      -- to compute the high bits correctly.
+      -- If output size is smaller, truncating first is safe.
+      do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
+         output =<< liftUnary sc (SC.scBvNot sc) a
     CellTypePos ->
       do res <- input "A"
          output res
@@ -403,12 +408,6 @@ primCellToMap sc c args =
          vres <- SC.scSingle sc bool res
          output $ CellTerm vres 1 False
 
-    -- convert input to big endian
-    bvUnaryOp :: (CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))
-    bvUnaryOp f =
-      do t <- input "A"
-         res <- f t
-         output res
     -- extend inputs to output width
     bvBinaryOp :: (CellTerm -> CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))
     bvBinaryOp f =
