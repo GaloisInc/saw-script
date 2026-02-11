@@ -23,6 +23,7 @@ module SAWCore.Name
    -- * Identifiers
   , Ident(identModule, identBaseName), identName, mkIdent, mkSafeIdent
   , parseIdent
+  , parseMaybeQualIdent
   , isIdent
   , identText
   , identPieces
@@ -92,12 +93,12 @@ moduleNameText :: ModuleName -> Text
 moduleNameText (ModuleName x) = x
 
 moduleNamePieces :: ModuleName -> [Text]
-moduleNamePieces (ModuleName x) = Text.splitOn "." x
+moduleNamePieces (ModuleName x) = Text.splitOn "::" x
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkModuleName :: [Text] -> ModuleName
-mkModuleName nms = ModuleName $ Text.intercalate "." nms
+mkModuleName nms = ModuleName $ Text.intercalate "::" nms
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
@@ -115,10 +116,10 @@ data Ident =
 instance Hashable Ident -- automatically derived
 
 instance Show Ident where
-  show (Ident m s) = shows m ('.' : Text.unpack s)
+  show (Ident m s) = shows m ("::" <> Text.unpack s)
 
 identText :: Ident -> Text
-identText i = moduleNameText (identModule i) <> Text.pack "." <> identBaseName i
+identText i = moduleNameText (identModule i) <> Text.pack "::" <> identBaseName i
 
 identPieces :: Ident -> NonEmpty Text
 identPieces i =
@@ -154,17 +155,30 @@ mkSafeIdent mnm nm =
            "__x" ++ showHex (ord c) "")
   nm
 
+
+parseMaybeQualIdent' :: Text -> Text -> Maybe Ident
+parseMaybeQualIdent' sep s0 =
+  case reverse (Text.splitOn sep s0) of
+    [] -> Nothing
+    [_] -> Nothing
+    (nm:rMod) -> Just $ mkIdent (mkModuleName (reverse rMod)) nm
+
+-- | Parse a possibly-qualified identifier.
+parseMaybeQualIdent :: Text -> Maybe Ident
+parseMaybeQualIdent = parseMaybeQualIdent' "::"
+
 -- | Parse a fully qualified identifier.
 parseIdent :: String -> Ident
 parseIdent s0 =
-    case reverse (breakEach s0) of
-      (_:[]) -> panic "parseIdent" ["Empty module name"]
-      (nm:rMod) -> mkIdent (mkModuleName (reverse rMod)) nm
-      _ -> panic "parseIdent" ["Bad identifier " <> Text.pack s0]
-  where breakEach s =
-          case break (=='.') s of
-            (h, []) -> [Text.pack h]
-            (h, _ : r) -> Text.pack h : breakEach r
+  let t = Text.pack s0
+  in case parseMaybeQualIdent t of
+    Nothing ->
+      -- For backwards-compatibility, we allow "." as a module separator
+      -- here, as it is unambiguous when parsed as an identifier.
+      case parseMaybeQualIdent' "." t of
+        Nothing -> panic "parseIdent" ["Bad identifier ", t]
+        Just ident -> ident
+    Just ident -> ident
 
 instance IsString Ident where
   fromString = parseIdent
@@ -175,7 +189,7 @@ isIdent [] = False
 
 -- | Returns true if character can appear in identifier.
 isIdChar :: Char -> Bool
-isIdChar c = isAlphaNum c || (c == '_') || (c == '\'') || (c == '.')
+isIdChar c = isAlphaNum c || (c == '_') || (c == '\'') || (c == ':')
 
 
 --------------------------------------------------------------------------------
