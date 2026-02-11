@@ -15,7 +15,6 @@ module SAWCentral.Yosys.Cell where
 import Control.Lens ((^.))
 
 import qualified Data.Aeson as Aeson
-import Data.Char (digitToInt)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -199,8 +198,6 @@ primCellToMap sc c args =
     nm :: Text
     nm = ppCellType (c ^. cellType)
 
-    textBinNat :: Text -> Natural
-    textBinNat = fromIntegral . Text.foldl' (\a x -> digitToInt x + a * 2) 0
     connSigned :: Text -> Bool
     connSigned onm =
       case Map.lookup (onm <> "_SIGNED") $ c ^. cellParameters of
