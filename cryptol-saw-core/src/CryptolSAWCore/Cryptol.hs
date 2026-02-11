@@ -1425,10 +1425,9 @@ cryptolURI (p:ps) Nothing =
   fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show (p:ps))]) $
     mkURI NameSpaceCryptol (p:ps) (-1)
 
-cryptolURI ps (Just uniq) =
-  fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show ps), "Fragment: " <> Text.pack (show uniq)]) $ do
-    [p] <- return ps
-    mkURI NameSpaceCryptol [p] uniq
+cryptolURI (p:ps) (Just uniq) =
+  fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show (p:ps)), "Fragment: " <> Text.pack (show uniq)]) $ do
+    mkURI NameSpaceCryptol (p:ps) uniq
 
 importName :: C.Name -> IO NameInfo
 importName cnm =
