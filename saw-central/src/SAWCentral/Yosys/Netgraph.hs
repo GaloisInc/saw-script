@@ -21,7 +21,6 @@ import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
 import Control.Monad (forM, foldM)
-import Control.Exception (throw)
 
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
@@ -108,7 +107,7 @@ lookupPatternTerm sc loc pat ts =
            forM pat $ \b ->
            case Map.lookup [b] ts of
              Just t -> pure t
-             Nothing -> throw $ YosysErrorNoSuchOutputBitvec (Text.pack $ show b) loc
+             Nothing -> yosysError $ YosysErrorNoSuchOutputBitvec (Text.pack $ show b) loc
          -- Yosys lists bits in little-endian order, while scVector expects big-endian, so reverse
          let ps = fusePreterms (reverse bits)
          scPreterms sc ps
@@ -123,7 +122,7 @@ netgraphToTerms ::
   IO (Map [Bitrep] Preterm)
 netgraphToTerms sc env ng inputs
   | length (Graph.scc $ ng ^. netgraphGraph) /= length (ng ^. netgraphGraph)
-  = throw $ YosysError "Network graph contains a cycle after splitting on DFFs; SAW does not currently support analysis of this circuit"
+  = yosysError $ YosysError "Network graph contains a cycle after splitting on DFFs; SAW does not currently support analysis of this circuit"
   | otherwise =
       let sorted = reverseTopSort $ ng ^. netgraphGraph
       in foldM doVertex inputs sorted
@@ -159,7 +158,7 @@ netgraphToTerms sc env ng inputs
                           do r <- cryptolRecord sc args
                              SC.scApply sc (cm ^. convertedModuleTerm) r
                         Nothing ->
-                          throw $ YosysErrorNoSuchSubmodule submoduleName cnm
+                          yosysError $ YosysErrorNoSuchSubmodule submoduleName cnm
 
                   -- once we've built a term, insert it along with each of its bits
                   ts <-

@@ -124,6 +124,9 @@ instance Show YosysError where
     , reportBugText
     ]
 
+yosysError :: YosysError -> IO a
+yosysError = throwIO
+
 mapForWithKeyM :: Monad m => Map k a -> (k -> a -> m b) -> m (Map k b)
 mapForWithKeyM m f = sequence $ Map.mapWithKey f m
 

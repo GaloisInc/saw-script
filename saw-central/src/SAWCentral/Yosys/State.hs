@@ -20,7 +20,6 @@ import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
 import Control.Monad (forM, foldM)
-import Control.Exception (throw)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -229,7 +228,7 @@ composeYosysSequentialHelper sc s n =
          do inps <-
               fmap Map.fromList . forM (Map.assocs allInputs) $ \(nm, inp) ->
               case Map.lookup nm $ s ^. yosysSequentialInputFields of
-                Nothing -> throw . YosysError $ "Invalid input: " <> nm
+                Nothing -> yosysError . YosysError $ "Invalid input: " <> nm
                 Just (elemty, _) ->
                   do idx <- SC.scNat sc $ fromIntegral i
                      idxed <- SC.scAt sc width elemty inp idx

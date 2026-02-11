@@ -19,7 +19,6 @@ module SAWCentral.Yosys.IR where
 import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
-import Control.Exception (throw)
 
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
@@ -208,16 +207,16 @@ data CellType
 instance Aeson.FromJSON CellType where
   parseJSON (Aeson.String s) =
     case s of
-      "$adff"        -> throw $ YosysErrorUnsupportedFF "$adff"
-      "$sdff"        -> throw $ YosysErrorUnsupportedFF "$sdff"
-      "$aldff"       -> throw $ YosysErrorUnsupportedFF "$aldff"
-      "$dffsr"       -> throw $ YosysErrorUnsupportedFF "$dffsr"
-      "$dffe"        -> throw $ YosysErrorUnsupportedFF "$dffe"
-      "$adffe"       -> throw $ YosysErrorUnsupportedFF "$adffe"
-      "$sdffe"       -> throw $ YosysErrorUnsupportedFF "$sdffe"
-      "$sdffce"      -> throw $ YosysErrorUnsupportedFF "$sdffce"
-      "$aldffe"      -> throw $ YosysErrorUnsupportedFF "$aldffe"
-      "$dffsre"      -> throw $ YosysErrorUnsupportedFF "$dffsre"
+      "$adff"        -> fail $ show $ YosysErrorUnsupportedFF "$adff"
+      "$sdff"        -> fail $ show $ YosysErrorUnsupportedFF "$sdff"
+      "$aldff"       -> fail $ show $ YosysErrorUnsupportedFF "$aldff"
+      "$dffsr"       -> fail $ show $ YosysErrorUnsupportedFF "$dffsr"
+      "$dffe"        -> fail $ show $ YosysErrorUnsupportedFF "$dffe"
+      "$adffe"       -> fail $ show $ YosysErrorUnsupportedFF "$adffe"
+      "$sdffe"       -> fail $ show $ YosysErrorUnsupportedFF "$sdffe"
+      "$sdffce"      -> fail $ show $ YosysErrorUnsupportedFF "$sdffce"
+      "$aldffe"      -> fail $ show $ YosysErrorUnsupportedFF "$aldffe"
+      "$dffsre"      -> fail $ show $ YosysErrorUnsupportedFF "$dffsre"
       _ | cellTypeIsPrimitive s ->
           case Map.lookup s textToPrimitiveCellType of
             Just cellType -> pure cellType
@@ -327,7 +326,7 @@ instance Aeson.FromJSON YosysIR where
 -- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
 loadYosysIR :: FilePath -> IO YosysIR
 loadYosysIR p = Aeson.eitherDecodeFileStrict p >>= \case
-  Left err -> throw . YosysError $ Text.pack err
+  Left err -> yosysError $ YosysError $ Text.pack err
   Right ir -> pure ir
 
 -- | Return the patterns for all of the input ports of a module
