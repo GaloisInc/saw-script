@@ -59,7 +59,7 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span><span class="spaces"> </span><span class="istickedoff">where</span>
 <span class="lineno">   41 </span><span class="spaces">   </span><span class="istickedoff">f (Left s) = Left s</span>
 <span class="lineno">   42 </span><span class="spaces">   </span><span class="istickedoff">f (Right (ModuleIdentifier i))  = Right (Left (show i))</span>
-<span class="lineno">   43 </span><span class="spaces">   </span><span class="istickedoff">f (Right (ImportedName uri as)) = Right (Right (render uri, as))</span></span>
+<span class="lineno">   43 </span><span class="spaces">   </span><span class="istickedoff">f (Right (ImportedName uri as)) = Right (Right (renderURI uri, as))</span></span>
 <span class="lineno">   44 </span>
 <span class="lineno">   45 </span>readNames :: String -&gt; Maybe (Map VarIndex (Either Text NameInfo))
 <span class="lineno">   46 </span><span class="decl"><span class="istickedoff">readNames xs = Map.fromList &lt;$&gt; (mapM readName =&lt;&lt; readMaybe xs)</span>
@@ -68,7 +68,7 @@ span.spaces    { background: white }
 <span class="lineno">   49 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Left x) = pure (idx, Left x)</span>
 <span class="lineno">   50 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))</span>
 <span class="lineno">   51 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Right (Right (uri,as))) =</span>
-<span class="lineno">   52 </span><span class="spaces">       </span><span class="istickedoff">do uri' &lt;- mkURI uri</span>
+<span class="lineno">   52 </span><span class="spaces">       </span><span class="istickedoff">do uri' &lt;- parseURI uri</span>
 <span class="lineno">   53 </span><span class="spaces">          </span><span class="istickedoff">pure (idx, Right (ImportedName uri' <span class="nottickedoff">as</span>))</span></span>
 <span class="lineno">   54 </span>
 <span class="lineno">   55 </span>-- | Render to external text format

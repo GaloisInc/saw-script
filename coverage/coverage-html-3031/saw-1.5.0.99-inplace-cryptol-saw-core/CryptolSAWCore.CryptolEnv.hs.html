@@ -913,7 +913,7 @@ span.spaces    { background: white }
 <span class="lineno">  894 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">C.NSValue</span></span>
 <span class="lineno">  895 </span><span class="spaces">                        </span><span class="istickedoff">(C.TopModule interactiveName)</span>
 <span class="lineno">  896 </span><span class="spaces">                        </span><span class="istickedoff">MN.UserName</span>
-<span class="lineno">  897 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">ident</span> fixity P.emptyRange supply</span>
+<span class="lineno">  897 </span><span class="spaces">                        </span><span class="istickedoff">ident fixity P.emptyRange supply</span>
 <span class="lineno">  898 </span><span class="spaces">    </span><span class="istickedoff">modEnv' = modEnv { ME.meSupply = supply' }</span>
 <span class="lineno">  899 </span><span class="spaces">    </span><span class="istickedoff">env' = env { eModuleEnv = modEnv' }</span></span>
 <span class="lineno">  900 </span>
@@ -926,7 +926,7 @@ span.spaces    { background: white }
 <span class="lineno">  907 </span><span class="spaces">       </span><span class="istickedoff">}</span>
 <span class="lineno">  908 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  909 </span><span class="spaces">    </span><span class="istickedoff">pname = P.mkUnqual ident</span>
-<span class="lineno">  910 </span><span class="spaces">    </span><span class="istickedoff">(name, env') = bindIdent <span class="nottickedoff">ident</span> env</span>
+<span class="lineno">  910 </span><span class="spaces">    </span><span class="istickedoff">(name, env') = bindIdent ident env</span>
 <span class="lineno">  911 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  912 </span><span class="spaces"></span><span class="istickedoff">-- Only bind terms that have Cryptol schemas</span>
 <span class="lineno">  913 </span><span class="spaces"></span><span class="istickedoff">bindTypedTerm _ env = env</span></span>

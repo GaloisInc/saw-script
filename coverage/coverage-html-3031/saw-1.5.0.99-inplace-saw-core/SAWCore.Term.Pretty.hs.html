@@ -529,7 +529,7 @@ span.spaces    { background: white }
 <span class="lineno">  510 </span>
 <span class="lineno">  511 </span>prettyName :: NameInfo -&gt; PPS.Doc
 <span class="lineno">  512 </span><span class="decl"><span class="istickedoff">prettyName (ModuleIdentifier i) = prettyIdent i</span>
-<span class="lineno">  513 </span><span class="spaces"></span><span class="istickedoff">prettyName (ImportedName absName _) = <span class="nottickedoff">pretty (render absName)</span></span></span>
+<span class="lineno">  513 </span><span class="spaces"></span><span class="istickedoff">prettyName (ImportedName absName _) = <span class="nottickedoff">pretty (renderURI absName)</span></span></span>
 <span class="lineno">  514 </span>
 <span class="lineno">  515 </span>-- | Pretty-print a non-shared term
 <span class="lineno">  516 </span>prettyTermF :: Prec -&gt; TermF Term -&gt; PPM PPS.Doc

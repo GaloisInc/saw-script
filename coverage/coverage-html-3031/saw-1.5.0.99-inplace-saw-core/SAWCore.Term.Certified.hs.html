@@ -658,12 +658,12 @@ span.spaces    { background: white }
 <span class="lineno">  639 </span>
 <span class="lineno">  640 </span>-- | Create a unique global name with the given base name.
 <span class="lineno">  641 </span>scmFreshName :: Text -&gt; SCM Name
-<span class="lineno">  642 </span><span class="decl"><span class="nottickedoff">scmFreshName x =</span>
-<span class="lineno">  643 </span><span class="spaces">  </span><span class="nottickedoff">do i &lt;- scmFreshVarIndex</span>
-<span class="lineno">  644 </span><span class="spaces">     </span><span class="nottickedoff">let uri = scFreshNameURI x i</span>
-<span class="lineno">  645 </span><span class="spaces">     </span><span class="nottickedoff">let nmi = ImportedName uri [x, x &lt;&gt; &quot;#&quot; &lt;&gt;  Text.pack (show i)]</span>
-<span class="lineno">  646 </span><span class="spaces">     </span><span class="nottickedoff">scmRegisterNameWithIndex i nmi</span>
-<span class="lineno">  647 </span><span class="spaces">     </span><span class="nottickedoff">pure (Name i nmi)</span></span>
+<span class="lineno">  642 </span><span class="decl"><span class="istickedoff">scmFreshName x =</span>
+<span class="lineno">  643 </span><span class="spaces">  </span><span class="istickedoff">do i &lt;- scmFreshVarIndex</span>
+<span class="lineno">  644 </span><span class="spaces">     </span><span class="istickedoff">let uri = scFreshNameURI x i</span>
+<span class="lineno">  645 </span><span class="spaces">     </span><span class="istickedoff">let nmi = ImportedName uri [x, x &lt;&gt; &quot;#&quot; &lt;&gt;  Text.pack (show i)]</span>
+<span class="lineno">  646 </span><span class="spaces">     </span><span class="istickedoff">scmRegisterNameWithIndex i nmi</span>
+<span class="lineno">  647 </span><span class="spaces">     </span><span class="istickedoff">pure (Name i nmi)</span></span>
 <span class="lineno">  648 </span>
 <span class="lineno">  649 </span>-- | Create a 'VarName' with the given identifier (which may be &quot;_&quot;).
 <span class="lineno">  650 </span>scmFreshVarName :: Text -&gt; SCM VarName
@@ -1747,12 +1747,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1728 </span>  Text {- ^ The base name -} -&gt;
 <span class="lineno"> 1729 </span>  Term {- ^ The body -} -&gt;
 <span class="lineno"> 1730 </span>  SCM Term
-<span class="lineno"> 1731 </span><span class="decl"><span class="nottickedoff">scmFreshConstant name rhs =</span>
-<span class="lineno"> 1732 </span><span class="spaces">  </span><span class="nottickedoff">do scmEnsureValidTerm rhs</span>
-<span class="lineno"> 1733 </span><span class="spaces">     </span><span class="nottickedoff">nm &lt;- scmFreshName name</span>
-<span class="lineno"> 1734 </span><span class="spaces">     </span><span class="nottickedoff">unless (closedTerm rhs) $ scmError (ConstantNotClosed nm rhs)</span>
-<span class="lineno"> 1735 </span><span class="spaces">     </span><span class="nottickedoff">ty &lt;- scmTypeOf rhs</span>
-<span class="lineno"> 1736 </span><span class="spaces">     </span><span class="nottickedoff">scmDeclareDef nm NoQualifier ty (Just rhs)</span></span>
+<span class="lineno"> 1731 </span><span class="decl"><span class="istickedoff">scmFreshConstant name rhs =</span>
+<span class="lineno"> 1732 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm rhs</span>
+<span class="lineno"> 1733 </span><span class="spaces">     </span><span class="istickedoff">nm &lt;- scmFreshName name</span>
+<span class="lineno"> 1734 </span><span class="spaces">     </span><span class="istickedoff">unless (closedTerm rhs) $ <span class="nottickedoff">scmError (ConstantNotClosed nm rhs)</span></span>
+<span class="lineno"> 1735 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scmTypeOf rhs</span>
+<span class="lineno"> 1736 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty (Just rhs)</span></span>
 <span class="lineno"> 1737 </span>
 <span class="lineno"> 1738 </span>-- | Define a global constant with the specified name (as 'NameInfo')
 <span class="lineno"> 1739 </span>-- and body.

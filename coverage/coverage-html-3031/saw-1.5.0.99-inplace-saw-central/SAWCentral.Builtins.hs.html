@@ -166,20 +166,20 @@ span.spaces    { background: white }
 <span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">return $ Text.pack $ SV.showsPrecValue opts nenv <span class="nottickedoff">0</span> v &quot;&quot;</span></span>
 <span class="lineno">  148 </span>
 <span class="lineno">  149 </span>definePrim :: Text -&gt; TypedTerm -&gt; TopLevel TypedTerm
-<span class="lineno">  150 </span><span class="decl"><span class="nottickedoff">definePrim name (TypedTerm (TypedTermSchema schema) rhs) =</span>
-<span class="lineno">  151 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  152 </span><span class="spaces">     </span><span class="nottickedoff">ty &lt;- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema</span>
-<span class="lineno">  153 </span><span class="spaces">     </span><span class="nottickedoff">rhs' &lt;- io $ scAscribe sc rhs ty</span>
-<span class="lineno">  154 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- io $ scFreshConstant sc name rhs'</span>
-<span class="lineno">  155 </span><span class="spaces">     </span><span class="nottickedoff">return $ TypedTerm (TypedTermSchema schema) t</span>
-<span class="lineno">  156 </span><span class="spaces"></span><span class="nottickedoff">definePrim _name (TypedTerm tp _) = do</span>
-<span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  158 </span><span class="spaces">  </span><span class="nottickedoff">opts &lt;- gets rwPPOpts</span>
-<span class="lineno">  159 </span><span class="spaces">  </span><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc opts tp</span>
-<span class="lineno">  160 </span><span class="spaces">  </span><span class="nottickedoff">fail $ unlines</span>
-<span class="lineno">  161 </span><span class="spaces">    </span><span class="nottickedoff">[ &quot;Expected term with Cryptol schema type, but got&quot;</span>
-<span class="lineno">  162 </span><span class="spaces">    </span><span class="nottickedoff">, PPS.render opts tp'</span>
-<span class="lineno">  163 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  150 </span><span class="decl"><span class="istickedoff">definePrim name (TypedTerm (TypedTermSchema schema) rhs) =</span>
+<span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  152 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema</span>
+<span class="lineno">  153 </span><span class="spaces">     </span><span class="istickedoff">rhs' &lt;- io $ scAscribe sc rhs ty</span>
+<span class="lineno">  154 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- io $ scFreshConstant sc name rhs'</span>
+<span class="lineno">  155 </span><span class="spaces">     </span><span class="istickedoff">return $ TypedTerm (TypedTermSchema schema) t</span>
+<span class="lineno">  156 </span><span class="spaces"></span><span class="istickedoff">definePrim _name (TypedTerm tp _) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">sc &lt;- getSharedContext</span></span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">opts &lt;- gets rwPPOpts</span></span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc opts tp</span></span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Expected term with Cryptol schema type, but got&quot;</span></span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PPS.render opts tp'</span></span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 <span class="lineno">  164 </span>
 <span class="lineno">  165 </span>readBytes :: Text -&gt; TopLevel TypedTerm
 <span class="lineno">  166 </span><span class="decl"><span class="istickedoff">readBytes pathtxt = do</span>
