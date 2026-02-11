@@ -217,13 +217,10 @@ primCellToMap sc c args =
       do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "xor"
          bvReduce False r
     CellTypeReduceXnor ->
-      do boolTy <- SC.scBoolType sc
-         x <- SC.scFreshVariable sc "x" boolTy
-         y <- SC.scFreshVariable sc "y" boolTy
-         r <- SC.scXor sc x y
-         res <- SC.scNot sc r
-         t <- SC.scAbstractTerms sc [x, y] res
-         bvReduce True t
+      -- "~(reduceXor bits)" then extend if necessary.
+      do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "xor"
+         bit <- bvReduce' False r
+         outputBit =<< SC.scNot sc bit
     CellTypeReduceBool ->
       do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
          bvReduce False r
@@ -423,12 +420,14 @@ primCellToMap sc c args =
          tb <- input "B"
          res <- uncurry f =<< extMax sc ta tb
          outputBit res
-    bvReduce :: Bool -> SC.Term -> IO (Maybe (Map Text SC.Term))
-    bvReduce boolIdentity boolFun =
+    bvReduce' :: Bool -> SC.Term -> IO SC.Term
+    bvReduce' boolIdentity boolFun =
       do CellTerm t _ _ <- input "A"
          w <- connWidth "A"
          boolTy <- SC.scBoolType sc
          identity <- SC.scBool sc boolIdentity
          scFoldr <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "foldr"
-         bit <- SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
-         outputBit bit
+         SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
+    -- | bvReduce', but extend or truncate output as necessary.
+    bvReduce :: Bool -> SC.Term -> IO (Maybe (Map Text SC.Term))
+    bvReduce boolIdentity boolFun = outputBit =<< bvReduce' boolIdentity boolFun
