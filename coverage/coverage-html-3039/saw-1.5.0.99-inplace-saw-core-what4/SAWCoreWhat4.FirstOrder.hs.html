@@ -63,7 +63,7 @@ span.spaces    { background: white }
 <span class="lineno">   44 </span>-- | Convert a type expression from SAW-core to What4
 <span class="lineno">   45 </span>fotToBaseType :: FirstOrderType -&gt; Maybe (Some BaseTypeRepr)
 <span class="lineno">   46 </span><span class="decl"><span class="istickedoff">fotToBaseType FOTBit</span>
-<span class="lineno">   47 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some BaseBoolRepr)</span>
+<span class="lineno">   47 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseBoolRepr)</span></span>
 <span class="lineno">   48 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType FOTInt</span>
 <span class="lineno">   49 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseIntegerRepr)</span></span>
 <span class="lineno">   50 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTIntMod _n)</span>
@@ -122,7 +122,7 @@ span.spaces    { background: white }
 <span class="lineno">  103 </span>-- | Convert between What4 GroundValues and saw-core FirstOrderValues
 <span class="lineno">  104 </span>
 <span class="lineno">  105 </span>groundToFOV :: BaseTypeRepr ty -&gt; GroundValue ty -&gt; Either String FirstOrderValue
-<span class="lineno">  106 </span><span class="decl"><span class="istickedoff">groundToFOV BaseBoolRepr    b         = pure $ FOVBit b</span>
+<span class="lineno">  106 </span><span class="decl"><span class="istickedoff">groundToFOV BaseBoolRepr    b         = <span class="nottickedoff">pure $ FOVBit b</span></span>
 <span class="lineno">  107 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseIntegerRepr i         = <span class="nottickedoff">pure $ FOVInt i</span></span>
 <span class="lineno">  108 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) (BV.asUnsigned bv)</span>
 <span class="lineno">  109 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseRealRepr    _         = <span class="nottickedoff">Left &quot;Real is not FOV&quot;</span></span>

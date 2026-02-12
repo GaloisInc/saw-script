@@ -126,295 +126,294 @@ span.spaces    { background: white }
 <span class="lineno">  107 </span><span class="spaces">    </span><span class="istickedoff">Just ('$', _) -&gt; True</span>
 <span class="lineno">  108 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; False</span></span>
 <span class="lineno">  109 </span>
-<span class="lineno">  110 </span>-- | Mapping from 'Text' to primitive cell types
-<span class="lineno">  111 </span>textToPrimitiveCellType :: Map Text CellType
-<span class="lineno">  112 </span><span class="decl"><span class="istickedoff">textToPrimitiveCellType =</span>
-<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">Map.insert &quot;$dff&quot; CellTypeDff $</span>
-<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">Map.insert &quot;$ff&quot; <span class="nottickedoff">CellTypeFf</span> $</span>
-<span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">fmap CellTypeCombinational comb</span>
-<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">comb :: Map Text CellTypeCombinational</span>
-<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">comb =</span>
-<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff">Map.fromList</span>
-<span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff">[ (ppCellTypeCombinational t, t) | t &lt;- [minBound .. maxBound] ]</span></span>
-<span class="lineno">  121 </span>
-<span class="lineno">  122 </span>-- | Mapping from primitive cell types to textual representation
-<span class="lineno">  123 </span>primitiveCellTypeToText :: Map CellType Text
-<span class="lineno">  124 </span><span class="decl"><span class="nottickedoff">primitiveCellTypeToText =</span>
-<span class="lineno">  125 </span><span class="spaces">  </span><span class="nottickedoff">Map.fromList [(y, x) | (x, y) &lt;- Map.toList textToPrimitiveCellType]</span></span>
-<span class="lineno">  126 </span>
-<span class="lineno">  127 </span>-- | All supported primitive combinational cell types.
-<span class="lineno">  128 </span>data CellTypeCombinational
-<span class="lineno">  129 </span>  = CellTypeNot
-<span class="lineno">  130 </span>  | CellTypePos
-<span class="lineno">  131 </span>  | CellTypeNeg
-<span class="lineno">  132 </span>  | CellTypeAnd
-<span class="lineno">  133 </span>  | CellTypeOr
-<span class="lineno">  134 </span>  | CellTypeXor
-<span class="lineno">  135 </span>  | CellTypeXnor
-<span class="lineno">  136 </span>  | CellTypeReduceAnd
-<span class="lineno">  137 </span>  | CellTypeReduceOr
-<span class="lineno">  138 </span>  | CellTypeReduceXor
-<span class="lineno">  139 </span>  | CellTypeReduceXnor
-<span class="lineno">  140 </span>  | CellTypeReduceBool
-<span class="lineno">  141 </span>  | CellTypeShl
-<span class="lineno">  142 </span>  | CellTypeShr
-<span class="lineno">  143 </span>  | CellTypeSshl
-<span class="lineno">  144 </span>  | CellTypeSshr
-<span class="lineno">  145 </span>  | CellTypeShift
-<span class="lineno">  146 </span>  | CellTypeShiftx
-<span class="lineno">  147 </span>  | CellTypeLt
-<span class="lineno">  148 </span>  | CellTypeLe
-<span class="lineno">  149 </span>  | CellTypeGt
-<span class="lineno">  150 </span>  | CellTypeGe
-<span class="lineno">  151 </span>  | CellTypeEq
-<span class="lineno">  152 </span>  | CellTypeNe
-<span class="lineno">  153 </span>  | CellTypeEqx
-<span class="lineno">  154 </span>  | CellTypeNex
-<span class="lineno">  155 </span>  | CellTypeAdd
-<span class="lineno">  156 </span>  | CellTypeSub
-<span class="lineno">  157 </span>  | CellTypeMul
-<span class="lineno">  158 </span>  | CellTypeDiv
-<span class="lineno">  159 </span>  | CellTypeMod
-<span class="lineno">  160 </span>  | CellTypeLogicNot
-<span class="lineno">  161 </span>  | CellTypeLogicAnd
-<span class="lineno">  162 </span>  | CellTypeLogicOr
-<span class="lineno">  163 </span>  | CellTypeMux
-<span class="lineno">  164 </span>  | CellTypePmux
-<span class="lineno">  165 </span>  | CellTypeBmux
-<span class="lineno">  166 </span>  | CellTypeBUF
-<span class="lineno">  167 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Enum</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Bounded</span></span></span></span>)
-<span class="lineno">  168 </span>
-<span class="lineno">  169 </span>-- | All supported cell types.
-<span class="lineno">  170 </span>-- All types are primitives except for 'CellTypeUserType' which
-<span class="lineno">  171 </span>-- represents user-defined submodules.
-<span class="lineno">  172 </span>-- Invariants: 'CellTypeUnsupportedPrimitive' should only be applied
-<span class="lineno">  173 </span>-- to names satisfying 'cellTypeIsPrimitive', and 'CellTypeUserType'
-<span class="lineno">  174 </span>-- should only be applied to names *not* satisfying
-<span class="lineno">  175 </span>-- 'cellTypeIsPrimitive'.
-<span class="lineno">  176 </span>data CellType
-<span class="lineno">  177 </span>  = CellTypeCombinational CellTypeCombinational
-<span class="lineno">  178 </span>  | CellTypeDff
-<span class="lineno">  179 </span>  | CellTypeFf
-<span class="lineno">  180 </span>  | CellTypeUnsupportedPrimitive Text
-<span class="lineno">  181 </span>  | CellTypeUserType Text
-<span class="lineno">  182 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
-<span class="lineno">  183 </span>
-<span class="lineno">  184 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON CellType</span></span></span></span> where
-<span class="lineno">  185 </span>  <span class="decl"><span class="istickedoff">parseJSON (Aeson.String s) =</span>
-<span class="lineno">  186 </span><span class="spaces">    </span><span class="istickedoff">case s of</span>
-<span class="lineno">  187 </span><span class="spaces">      </span><span class="istickedoff">&quot;$adff&quot;        -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$adff&quot;</span></span>
-<span class="lineno">  188 </span><span class="spaces">      </span><span class="istickedoff">&quot;$sdff&quot;        -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$sdff&quot;</span></span>
-<span class="lineno">  189 </span><span class="spaces">      </span><span class="istickedoff">&quot;$aldff&quot;       -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$aldff&quot;</span></span>
-<span class="lineno">  190 </span><span class="spaces">      </span><span class="istickedoff">&quot;$dffsr&quot;       -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$dffsr&quot;</span></span>
-<span class="lineno">  191 </span><span class="spaces">      </span><span class="istickedoff">&quot;$dffe&quot;        -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$dffe&quot;</span></span>
-<span class="lineno">  192 </span><span class="spaces">      </span><span class="istickedoff">&quot;$adffe&quot;       -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$adffe&quot;</span></span>
-<span class="lineno">  193 </span><span class="spaces">      </span><span class="istickedoff">&quot;$sdffe&quot;       -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$sdffe&quot;</span></span>
-<span class="lineno">  194 </span><span class="spaces">      </span><span class="istickedoff">&quot;$sdffce&quot;      -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$sdffce&quot;</span></span>
-<span class="lineno">  195 </span><span class="spaces">      </span><span class="istickedoff">&quot;$aldffe&quot;      -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$aldffe&quot;</span></span>
-<span class="lineno">  196 </span><span class="spaces">      </span><span class="istickedoff">&quot;$dffsre&quot;      -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$dffsre&quot;</span></span>
-<span class="lineno">  197 </span><span class="spaces">      </span><span class="istickedoff">_ | cellTypeIsPrimitive s -&gt;</span>
-<span class="lineno">  198 </span><span class="spaces">          </span><span class="istickedoff">case Map.lookup s textToPrimitiveCellType of</span>
-<span class="lineno">  199 </span><span class="spaces">            </span><span class="istickedoff">Just cellType -&gt; pure cellType</span>
-<span class="lineno">  200 </span><span class="spaces">            </span><span class="istickedoff">-- XXX We should probably log a warning when generating CellTypeUnsupportedPrimitive,</span>
-<span class="lineno">  201 </span><span class="spaces">            </span><span class="istickedoff">-- we can't do that here however.</span>
-<span class="lineno">  202 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; pure $ CellTypeUnsupportedPrimitive s</span>
-<span class="lineno">  203 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; pure $ CellTypeUserType s</span>
-<span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">parseJSON v = <span class="nottickedoff">fail $ &quot;Failed to parse cell type: &quot; &lt;&gt; show v</span></span></span>
-<span class="lineno">  205 </span>
-<span class="lineno">  206 </span>ppCellTypeCombinational :: CellTypeCombinational -&gt; Text
-<span class="lineno">  207 </span><span class="decl"><span class="istickedoff">ppCellTypeCombinational ctc =</span>
-<span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">case ctc of</span>
-<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">CellTypeNot        -&gt; &quot;$not&quot;</span>
-<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">CellTypePos        -&gt; &quot;$pos&quot;</span>
-<span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff">CellTypeNeg        -&gt; &quot;$neg&quot;</span>
-<span class="lineno">  212 </span><span class="spaces">    </span><span class="istickedoff">CellTypeAnd        -&gt; &quot;$and&quot;</span>
-<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff">CellTypeOr         -&gt; &quot;$or&quot;</span>
-<span class="lineno">  214 </span><span class="spaces">    </span><span class="istickedoff">CellTypeXor        -&gt; &quot;$xor&quot;</span>
-<span class="lineno">  215 </span><span class="spaces">    </span><span class="istickedoff">CellTypeXnor       -&gt; &quot;$xnor&quot;</span>
-<span class="lineno">  216 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceAnd  -&gt; &quot;$reduce_and&quot;</span>
-<span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceOr   -&gt; &quot;$reduce_or&quot;</span>
-<span class="lineno">  218 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceXor  -&gt; &quot;$reduce_xor&quot;</span>
-<span class="lineno">  219 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceXnor -&gt; &quot;$reduce_xnor&quot;</span>
-<span class="lineno">  220 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceBool -&gt; &quot;$reduce_bool&quot;</span>
-<span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">CellTypeShl        -&gt; &quot;$shl&quot;</span>
-<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">CellTypeShr        -&gt; &quot;$shr&quot;</span>
-<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">CellTypeSshl       -&gt; &quot;$sshl&quot;</span>
-<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff">CellTypeSshr       -&gt; &quot;$sshr&quot;</span>
-<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">CellTypeShift      -&gt; &quot;$shift&quot;</span>
-<span class="lineno">  226 </span><span class="spaces">    </span><span class="istickedoff">CellTypeShiftx     -&gt; &quot;$shiftx&quot;</span>
-<span class="lineno">  227 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLt         -&gt; &quot;$lt&quot;</span>
-<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLe         -&gt; &quot;$le&quot;</span>
-<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">CellTypeGt         -&gt; &quot;$gt&quot;</span>
-<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">CellTypeGe         -&gt; &quot;$ge&quot;</span>
-<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">CellTypeEq         -&gt; &quot;$eq&quot;</span>
-<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">CellTypeNe         -&gt; &quot;$ne&quot;</span>
-<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">CellTypeEqx        -&gt; &quot;$eqx&quot;</span>
-<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">CellTypeNex        -&gt; &quot;$nex&quot;</span>
-<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">CellTypeAdd        -&gt; &quot;$add&quot;</span>
-<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">CellTypeSub        -&gt; &quot;$sub&quot;</span>
-<span class="lineno">  237 </span><span class="spaces">    </span><span class="istickedoff">CellTypeMul        -&gt; &quot;$mul&quot;</span>
-<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDiv        -&gt; &quot;$div&quot;</span>
-<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">CellTypeMod        -&gt; &quot;$mod&quot;</span>
-<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLogicNot   -&gt; &quot;$logic_not&quot;</span>
-<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLogicAnd   -&gt; &quot;$logic_and&quot;</span>
-<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLogicOr    -&gt; &quot;$logic_or&quot;</span>
-<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">CellTypeMux        -&gt; &quot;$mux&quot;</span>
-<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">CellTypePmux       -&gt; &quot;$pmux&quot;</span>
-<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">CellTypeBmux       -&gt; &quot;$bmux&quot;</span>
-<span class="lineno">  246 </span><span class="spaces">    </span><span class="istickedoff">CellTypeBUF        -&gt; &quot;$_BUF_&quot;</span></span>
-<span class="lineno">  247 </span>
-<span class="lineno">  248 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show CellTypeCombinational</span></span></span></span> where
-<span class="lineno">  249 </span>  <span class="decl"><span class="nottickedoff">show ctc = Text.unpack (ppCellTypeCombinational ctc)</span></span>
-<span class="lineno">  250 </span>
-<span class="lineno">  251 </span>ppCellType :: CellType -&gt; Text
-<span class="lineno">  252 </span><span class="decl"><span class="istickedoff">ppCellType ct =</span>
-<span class="lineno">  253 </span><span class="spaces">  </span><span class="istickedoff">case ct of</span>
-<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">CellTypeCombinational ctc -&gt; ppCellTypeCombinational ctc</span>
-<span class="lineno">  255 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDff -&gt; <span class="nottickedoff">&quot;$dff&quot;</span></span>
-<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">CellTypeFf -&gt; <span class="nottickedoff">&quot;$ff&quot;</span></span>
-<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUnsupportedPrimitive t -&gt; t</span>
-<span class="lineno">  258 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUserType t -&gt; t</span></span>
-<span class="lineno">  259 </span>
-<span class="lineno">  260 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show CellType</span></span></span></span> where
-<span class="lineno">  261 </span>  <span class="decl"><span class="istickedoff">show ct = Text.unpack (ppCellType ct)</span></span>
-<span class="lineno">  262 </span>
-<span class="lineno">  263 </span>-- | Extract the name from a user-defined submodule 'CellType'
-<span class="lineno">  264 </span>asUserType :: CellType -&gt; Text
-<span class="lineno">  265 </span><span class="decl"><span class="nottickedoff">asUserType cellType =</span>
-<span class="lineno">  266 </span><span class="spaces">  </span><span class="nottickedoff">case cellType of</span>
-<span class="lineno">  267 </span><span class="spaces">    </span><span class="nottickedoff">CellTypeUserType t -&gt; t</span>
-<span class="lineno">  268 </span><span class="spaces">    </span><span class="nottickedoff">CellTypeUnsupportedPrimitive t -&gt; t</span>
-<span class="lineno">  269 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt;</span>
-<span class="lineno">  270 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;asUserType&quot; [</span>
-<span class="lineno">  271 </span><span class="spaces">          </span><span class="nottickedoff">&quot;Expected a user defined type, but got a primitive type: &quot; &lt;&gt;</span>
-<span class="lineno">  272 </span><span class="spaces">              </span><span class="nottickedoff">Text.pack (show cellType)</span>
-<span class="lineno">  273 </span><span class="spaces">      </span><span class="nottickedoff">]</span></span>
-<span class="lineno">  274 </span>
-<span class="lineno">  275 </span>-- | A cell within an HDL module.
-<span class="lineno">  276 </span>data Cell bs = Cell
-<span class="lineno">  277 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellHideName</span></span></span> :: Bool -- ^ Whether the cell's name is human-readable (default: False)
-<span class="lineno">  278 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellType</span></span></span> :: CellType -- ^ The cell type
-<span class="lineno">  279 </span>    -- NB: Yosys's documentation for write_json doesn't impose any restrictions
-<span class="lineno">  280 </span>    -- on what type parameter values may take on, so we opt to be as permissive
-<span class="lineno">  281 </span>    -- as possible by using Aeson Values. Most of the time, these Values will
-<span class="lineno">  282 </span>    -- be strings, but they can also be numbers on occasion (e.g., if you call
-<span class="lineno">  283 </span>    -- write_json using the -compat-int flag).
-<span class="lineno">  284 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellParameters</span></span></span> :: Map Text Aeson.Value -- ^ Metadata parameters
-<span class="lineno">  285 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
-<span class="lineno">  286 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellPortDirections</span></span></span> :: Map Text Direction -- ^ Direction for each cell connection
-<span class="lineno">  287 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellConnections</span></span></span> :: Map Text bs -- ^ Bitrep for each cell connection
-<span class="lineno">  288 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>)
-<span class="lineno">  289 </span>
-<span class="lineno">  290 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Cell</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  291 </span>
-<span class="lineno">  292 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON (Cell [Bitrep])</span></span></span></span> where
-<span class="lineno">  293 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;cell&quot;</span> $ \o -&gt; do</span>
-<span class="lineno">  294 </span><span class="spaces">    </span><span class="istickedoff">_cellHideName &lt;- <span class="nottickedoff">Maybe.maybe False (/= (0::Int))</span> &lt;$&gt; o Aeson..:? &quot;hide_name&quot;</span>
-<span class="lineno">  295 </span><span class="spaces">    </span><span class="istickedoff">_cellType &lt;- o Aeson..: &quot;type&quot;</span>
-<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">_cellParameters &lt;- o Aeson..: &quot;parameters&quot;</span>
-<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">_cellAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
-<span class="lineno">  298 </span><span class="spaces">    </span><span class="istickedoff">_cellPortDirections &lt;- o Aeson..: &quot;port_directions&quot;</span>
-<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">_cellConnections &lt;- o Aeson..: &quot;connections&quot;</span>
-<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">pure Cell{<span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">..</span></span></span></span>}</span></span>
-<span class="lineno">  301 </span>
-<span class="lineno">  302 </span>-- | A description of a named internal signal within a module.
-<span class="lineno">  303 </span>data Netname =
-<span class="lineno">  304 </span>  Netname
-<span class="lineno">  305 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameHideName</span></span></span> :: Bool -- ^ Whether the net's name is human-readable (default: False)
-<span class="lineno">  306 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameBits</span></span></span> :: [Bitrep]
-<span class="lineno">  307 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
-<span class="lineno">  308 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
-<span class="lineno">  309 </span>
-<span class="lineno">  310 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Netname</span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  311 </span>
-<span class="lineno">  312 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Netname</span></span></span></span> where
-<span class="lineno">  313 </span>  <span class="decl"><span class="istickedoff">parseJSON =</span>
-<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">Aeson.withObject <span class="nottickedoff">&quot;netname&quot;</span> $ \o -&gt;</span>
-<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">do _netnameHideName &lt;- Maybe.maybe <span class="nottickedoff">False</span> (/= (0::Int)) &lt;$&gt; o Aeson..:? &quot;hide_name&quot;</span>
-<span class="lineno">  316 </span><span class="spaces">       </span><span class="istickedoff">_netnameBits &lt;- o Aeson..: &quot;bits&quot;</span>
-<span class="lineno">  317 </span><span class="spaces">       </span><span class="istickedoff">_netnameAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
-<span class="lineno">  318 </span><span class="spaces">       </span><span class="istickedoff">pure Netname{<span class="nottickedoff">..</span>}</span></span>
-<span class="lineno">  319 </span>
-<span class="lineno">  320 </span>-- | A single HDL module.
-<span class="lineno">  321 </span>data Module = Module
-<span class="lineno">  322 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
-<span class="lineno">  323 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modulePorts</span></span></span> :: Map Text Port
-<span class="lineno">  324 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleCells</span></span></span> :: Map Text (Cell [Bitrep])
-<span class="lineno">  325 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleNetnames</span></span></span> :: Map Text Netname
-<span class="lineno">  326 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
-<span class="lineno">  327 </span>
-<span class="lineno">  328 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Module</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  329 </span>
-<span class="lineno">  330 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Module</span></span></span></span> where
-<span class="lineno">  331 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;module&quot;</span> $ \o -&gt; do</span>
-<span class="lineno">  332 </span><span class="spaces">    </span><span class="istickedoff">_moduleAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
-<span class="lineno">  333 </span><span class="spaces">    </span><span class="istickedoff">_modulePorts &lt;- Maybe.fromMaybe mempty &lt;$&gt; o Aeson..:? &quot;ports&quot;</span>
-<span class="lineno">  334 </span><span class="spaces">    </span><span class="istickedoff">_moduleCells &lt;- Maybe.fromMaybe <span class="nottickedoff">mempty</span> &lt;$&gt; o Aeson..:? &quot;cells&quot;</span>
-<span class="lineno">  335 </span><span class="spaces">    </span><span class="istickedoff">_moduleNetnames &lt;- Maybe.fromMaybe <span class="nottickedoff">mempty</span> &lt;$&gt; o Aeson..:? &quot;netnames&quot;</span>
-<span class="lineno">  336 </span><span class="spaces">    </span><span class="istickedoff">pure Module{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
-<span class="lineno">  337 </span>
-<span class="lineno">  338 </span>-- | A collection of multiple HDL modules (possibly with dependencies on each other).
-<span class="lineno">  339 </span>data YosysIR = YosysIR
-<span class="lineno">  340 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysCreator</span></span></span> :: Text
-<span class="lineno">  341 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysModules</span></span></span> :: Map Text Module
-<span class="lineno">  342 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
-<span class="lineno">  343 </span>
-<span class="lineno">  344 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''YosysIR</span></span></span></span></span></span></span>
-<span class="lineno">  345 </span>
-<span class="lineno">  346 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON YosysIR</span></span></span></span> where
-<span class="lineno">  347 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;yosys&quot;</span> $ \o -&gt; do</span>
-<span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff">_yosysCreator &lt;- <span class="nottickedoff">Maybe.fromMaybe mempty</span> &lt;$&gt; o Aeson..:? &quot;creator&quot;</span>
-<span class="lineno">  349 </span><span class="spaces">    </span><span class="istickedoff">_yosysModules &lt;- Maybe.fromMaybe mempty &lt;$&gt; o Aeson..:? &quot;modules&quot;</span>
-<span class="lineno">  350 </span><span class="spaces">    </span><span class="istickedoff">pure YosysIR{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
-<span class="lineno">  351 </span>
-<span class="lineno">  352 </span>-- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
-<span class="lineno">  353 </span>loadYosysIR :: FilePath -&gt; IO YosysIR
-<span class="lineno">  354 </span><span class="decl"><span class="istickedoff">loadYosysIR p = Aeson.eitherDecodeFileStrict p &gt;&gt;= \case</span>
-<span class="lineno">  355 </span><span class="spaces">  </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">yosysError $ YosysError $ Text.pack err</span></span>
-<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">Right ir -&gt; pure ir</span></span>
-<span class="lineno">  357 </span>
-<span class="lineno">  358 </span>-- | Return the patterns for all of the input ports of a module
-<span class="lineno">  359 </span>moduleInputPorts :: Module -&gt; Map Text [Bitrep]
-<span class="lineno">  360 </span><span class="decl"><span class="istickedoff">moduleInputPorts m =</span>
-<span class="lineno">  361 </span><span class="spaces">  </span><span class="istickedoff">Map.mapMaybe</span>
-<span class="lineno">  362 </span><span class="spaces">  </span><span class="istickedoff">( \ip -&gt;</span>
-<span class="lineno">  363 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout</span>
-<span class="lineno">  364 </span><span class="spaces">      </span><span class="istickedoff">then Just (ip ^. portBits)</span>
-<span class="lineno">  365 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
-<span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">)</span>
-<span class="lineno">  367 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
-<span class="lineno">  368 </span>
-<span class="lineno">  369 </span>-- | Return the patterns for all of the output ports of a module
-<span class="lineno">  370 </span>moduleOutputPorts :: Module -&gt; Map Text [Bitrep]
-<span class="lineno">  371 </span><span class="decl"><span class="istickedoff">moduleOutputPorts m =</span>
-<span class="lineno">  372 </span><span class="spaces">  </span><span class="istickedoff">Map.mapMaybe</span>
-<span class="lineno">  373 </span><span class="spaces">  </span><span class="istickedoff">( \ip -&gt;</span>
-<span class="lineno">  374 </span><span class="spaces">      </span><span class="istickedoff">if isOutput (ip ^. portDirection)</span>
-<span class="lineno">  375 </span><span class="spaces">      </span><span class="istickedoff">then Just (ip ^. portBits)</span>
-<span class="lineno">  376 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
-<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">)</span>
-<span class="lineno">  378 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
-<span class="lineno">  379 </span>
-<span class="lineno">  380 </span>-- | Return the patterns for all of the input connections of a cell
-<span class="lineno">  381 </span>cellInputConnections :: Cell [b] -&gt; Map Text [b]
-<span class="lineno">  382 </span><span class="decl"><span class="istickedoff">cellInputConnections c = Map.intersection (c ^. cellConnections) inp</span>
-<span class="lineno">  383 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  384 </span><span class="spaces">    </span><span class="istickedoff">inp = Map.filter isInput (c ^. cellPortDirections)</span></span>
-<span class="lineno">  385 </span>
-<span class="lineno">  386 </span>-- | Return the patterns for all of the output connections of a cell
-<span class="lineno">  387 </span>cellOutputConnections :: Ord b =&gt; Cell [b] -&gt; Map Text [b]
-<span class="lineno">  388 </span><span class="decl"><span class="istickedoff">cellOutputConnections c = Map.intersection (c ^. cellConnections) out</span>
-<span class="lineno">  389 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  390 </span><span class="spaces">    </span><span class="istickedoff">out = Map.filter isOutput (c ^. cellPortDirections)</span></span>
-<span class="lineno">  391 </span>
-<span class="lineno">  392 </span>-- | Test whether a 'Cell' is a state element ('CellTypeDff' or 'CellTypeFf').
-<span class="lineno">  393 </span>cellIsRegister :: Cell bs -&gt; Bool
-<span class="lineno">  394 </span><span class="decl"><span class="istickedoff">cellIsRegister c =</span>
-<span class="lineno">  395 </span><span class="spaces">  </span><span class="istickedoff">case c ^. cellType of</span>
-<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDff -&gt; True</span>
-<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">CellTypeFf -&gt; <span class="nottickedoff">True</span></span>
-<span class="lineno">  398 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; False</span></span>
+<span class="lineno">  110 </span>-- | Mapping from 'Text' to combinational primitive cell types.
+<span class="lineno">  111 </span>textToCellTypeCombinational :: Map Text CellTypeCombinational
+<span class="lineno">  112 </span><span class="decl"><span class="istickedoff">textToCellTypeCombinational =</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList [ (ppCellTypeCombinational t, t) | t &lt;- [minBound .. maxBound] ]</span></span>
+<span class="lineno">  114 </span>
+<span class="lineno">  115 </span>-- | Mapping from 'Text' to primitive cell types.
+<span class="lineno">  116 </span>textToPrimitiveCellType :: Map Text CellType
+<span class="lineno">  117 </span><span class="decl"><span class="istickedoff">textToPrimitiveCellType =</span>
+<span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList [ (ppCellType ct, ct) | ct &lt;- [CellTypeDff, CellTypeFf] ] &lt;&gt;</span>
+<span class="lineno">  119 </span><span class="spaces">  </span><span class="istickedoff">fmap CellTypeCombinational textToCellTypeCombinational</span></span>
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>-- | Mapping from primitive cell types to textual representation
+<span class="lineno">  122 </span>primitiveCellTypeToText :: Map CellType Text
+<span class="lineno">  123 </span><span class="decl"><span class="nottickedoff">primitiveCellTypeToText =</span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="nottickedoff">Map.fromList [(y, x) | (x, y) &lt;- Map.toList textToPrimitiveCellType]</span></span>
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>-- | All supported primitive combinational cell types.
+<span class="lineno">  127 </span>data CellTypeCombinational
+<span class="lineno">  128 </span>  = CellTypeNot
+<span class="lineno">  129 </span>  | CellTypePos
+<span class="lineno">  130 </span>  | CellTypeNeg
+<span class="lineno">  131 </span>  | CellTypeAnd
+<span class="lineno">  132 </span>  | CellTypeOr
+<span class="lineno">  133 </span>  | CellTypeXor
+<span class="lineno">  134 </span>  | CellTypeXnor
+<span class="lineno">  135 </span>  | CellTypeReduceAnd
+<span class="lineno">  136 </span>  | CellTypeReduceOr
+<span class="lineno">  137 </span>  | CellTypeReduceXor
+<span class="lineno">  138 </span>  | CellTypeReduceXnor
+<span class="lineno">  139 </span>  | CellTypeReduceBool
+<span class="lineno">  140 </span>  | CellTypeShl
+<span class="lineno">  141 </span>  | CellTypeShr
+<span class="lineno">  142 </span>  | CellTypeSshl
+<span class="lineno">  143 </span>  | CellTypeSshr
+<span class="lineno">  144 </span>  | CellTypeShift
+<span class="lineno">  145 </span>  | CellTypeShiftx
+<span class="lineno">  146 </span>  | CellTypeLt
+<span class="lineno">  147 </span>  | CellTypeLe
+<span class="lineno">  148 </span>  | CellTypeGt
+<span class="lineno">  149 </span>  | CellTypeGe
+<span class="lineno">  150 </span>  | CellTypeEq
+<span class="lineno">  151 </span>  | CellTypeNe
+<span class="lineno">  152 </span>  | CellTypeEqx
+<span class="lineno">  153 </span>  | CellTypeNex
+<span class="lineno">  154 </span>  | CellTypeAdd
+<span class="lineno">  155 </span>  | CellTypeSub
+<span class="lineno">  156 </span>  | CellTypeMul
+<span class="lineno">  157 </span>  | CellTypeDiv
+<span class="lineno">  158 </span>  | CellTypeMod
+<span class="lineno">  159 </span>  | CellTypeLogicNot
+<span class="lineno">  160 </span>  | CellTypeLogicAnd
+<span class="lineno">  161 </span>  | CellTypeLogicOr
+<span class="lineno">  162 </span>  | CellTypeMux
+<span class="lineno">  163 </span>  | CellTypePmux
+<span class="lineno">  164 </span>  | CellTypeBmux
+<span class="lineno">  165 </span>  | CellTypeBUF
+<span class="lineno">  166 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Enum</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Bounded</span></span></span></span>)
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>-- | All supported cell types.
+<span class="lineno">  169 </span>-- All types are primitives except for 'CellTypeUserType' which
+<span class="lineno">  170 </span>-- represents user-defined submodules.
+<span class="lineno">  171 </span>-- Invariants: 'CellTypeUnsupportedPrimitive' should only be applied
+<span class="lineno">  172 </span>-- to names satisfying 'cellTypeIsPrimitive', and 'CellTypeUserType'
+<span class="lineno">  173 </span>-- should only be applied to names *not* satisfying
+<span class="lineno">  174 </span>-- 'cellTypeIsPrimitive'.
+<span class="lineno">  175 </span>data CellType
+<span class="lineno">  176 </span>  = CellTypeCombinational CellTypeCombinational
+<span class="lineno">  177 </span>  | CellTypeDff
+<span class="lineno">  178 </span>  | CellTypeFf
+<span class="lineno">  179 </span>  | CellTypeUnsupportedPrimitive Text
+<span class="lineno">  180 </span>  | CellTypeUserType Text
+<span class="lineno">  181 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON CellType</span></span></span></span> where
+<span class="lineno">  184 </span>  <span class="decl"><span class="istickedoff">parseJSON (Aeson.String s) =</span>
+<span class="lineno">  185 </span><span class="spaces">    </span><span class="istickedoff">case s of</span>
+<span class="lineno">  186 </span><span class="spaces">      </span><span class="istickedoff">&quot;$adff&quot;        -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$adff&quot;</span></span>
+<span class="lineno">  187 </span><span class="spaces">      </span><span class="istickedoff">&quot;$sdff&quot;        -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$sdff&quot;</span></span>
+<span class="lineno">  188 </span><span class="spaces">      </span><span class="istickedoff">&quot;$aldff&quot;       -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$aldff&quot;</span></span>
+<span class="lineno">  189 </span><span class="spaces">      </span><span class="istickedoff">&quot;$dffsr&quot;       -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$dffsr&quot;</span></span>
+<span class="lineno">  190 </span><span class="spaces">      </span><span class="istickedoff">&quot;$dffe&quot;        -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$dffe&quot;</span></span>
+<span class="lineno">  191 </span><span class="spaces">      </span><span class="istickedoff">&quot;$adffe&quot;       -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$adffe&quot;</span></span>
+<span class="lineno">  192 </span><span class="spaces">      </span><span class="istickedoff">&quot;$sdffe&quot;       -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$sdffe&quot;</span></span>
+<span class="lineno">  193 </span><span class="spaces">      </span><span class="istickedoff">&quot;$sdffce&quot;      -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$sdffce&quot;</span></span>
+<span class="lineno">  194 </span><span class="spaces">      </span><span class="istickedoff">&quot;$aldffe&quot;      -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$aldffe&quot;</span></span>
+<span class="lineno">  195 </span><span class="spaces">      </span><span class="istickedoff">&quot;$dffsre&quot;      -&gt; <span class="nottickedoff">fail $ show $ YosysErrorUnsupportedFF &quot;$dffsre&quot;</span></span>
+<span class="lineno">  196 </span><span class="spaces">      </span><span class="istickedoff">_ | cellTypeIsPrimitive s -&gt;</span>
+<span class="lineno">  197 </span><span class="spaces">          </span><span class="istickedoff">case Map.lookup s textToPrimitiveCellType of</span>
+<span class="lineno">  198 </span><span class="spaces">            </span><span class="istickedoff">Just cellType -&gt; pure cellType</span>
+<span class="lineno">  199 </span><span class="spaces">            </span><span class="istickedoff">-- XXX We should probably log a warning when generating CellTypeUnsupportedPrimitive,</span>
+<span class="lineno">  200 </span><span class="spaces">            </span><span class="istickedoff">-- we can't do that here however.</span>
+<span class="lineno">  201 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; pure $ CellTypeUnsupportedPrimitive s</span>
+<span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; pure $ CellTypeUserType s</span>
+<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">parseJSON v = <span class="nottickedoff">fail $ &quot;Failed to parse cell type: &quot; &lt;&gt; show v</span></span></span>
+<span class="lineno">  204 </span>
+<span class="lineno">  205 </span>ppCellTypeCombinational :: CellTypeCombinational -&gt; Text
+<span class="lineno">  206 </span><span class="decl"><span class="istickedoff">ppCellTypeCombinational ctc =</span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">case ctc of</span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">CellTypeNot        -&gt; &quot;$not&quot;</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">CellTypePos        -&gt; &quot;$pos&quot;</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">CellTypeNeg        -&gt; &quot;$neg&quot;</span>
+<span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff">CellTypeAnd        -&gt; &quot;$and&quot;</span>
+<span class="lineno">  212 </span><span class="spaces">    </span><span class="istickedoff">CellTypeOr         -&gt; &quot;$or&quot;</span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff">CellTypeXor        -&gt; &quot;$xor&quot;</span>
+<span class="lineno">  214 </span><span class="spaces">    </span><span class="istickedoff">CellTypeXnor       -&gt; &quot;$xnor&quot;</span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceAnd  -&gt; &quot;$reduce_and&quot;</span>
+<span class="lineno">  216 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceOr   -&gt; &quot;$reduce_or&quot;</span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceXor  -&gt; &quot;$reduce_xor&quot;</span>
+<span class="lineno">  218 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceXnor -&gt; &quot;$reduce_xnor&quot;</span>
+<span class="lineno">  219 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceBool -&gt; &quot;$reduce_bool&quot;</span>
+<span class="lineno">  220 </span><span class="spaces">    </span><span class="istickedoff">CellTypeShl        -&gt; &quot;$shl&quot;</span>
+<span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">CellTypeShr        -&gt; &quot;$shr&quot;</span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">CellTypeSshl       -&gt; &quot;$sshl&quot;</span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">CellTypeSshr       -&gt; &quot;$sshr&quot;</span>
+<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff">CellTypeShift      -&gt; &quot;$shift&quot;</span>
+<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">CellTypeShiftx     -&gt; &quot;$shiftx&quot;</span>
+<span class="lineno">  226 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLt         -&gt; &quot;$lt&quot;</span>
+<span class="lineno">  227 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLe         -&gt; &quot;$le&quot;</span>
+<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">CellTypeGt         -&gt; &quot;$gt&quot;</span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">CellTypeGe         -&gt; &quot;$ge&quot;</span>
+<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">CellTypeEq         -&gt; &quot;$eq&quot;</span>
+<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">CellTypeNe         -&gt; &quot;$ne&quot;</span>
+<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">CellTypeEqx        -&gt; &quot;$eqx&quot;</span>
+<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">CellTypeNex        -&gt; &quot;$nex&quot;</span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">CellTypeAdd        -&gt; &quot;$add&quot;</span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">CellTypeSub        -&gt; &quot;$sub&quot;</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">CellTypeMul        -&gt; &quot;$mul&quot;</span>
+<span class="lineno">  237 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDiv        -&gt; &quot;$div&quot;</span>
+<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">CellTypeMod        -&gt; &quot;$mod&quot;</span>
+<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLogicNot   -&gt; &quot;$logic_not&quot;</span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLogicAnd   -&gt; &quot;$logic_and&quot;</span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLogicOr    -&gt; &quot;$logic_or&quot;</span>
+<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">CellTypeMux        -&gt; &quot;$mux&quot;</span>
+<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">CellTypePmux       -&gt; &quot;$pmux&quot;</span>
+<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">CellTypeBmux       -&gt; &quot;$bmux&quot;</span>
+<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">CellTypeBUF        -&gt; &quot;$_BUF_&quot;</span></span>
+<span class="lineno">  246 </span>
+<span class="lineno">  247 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show CellTypeCombinational</span></span></span></span> where
+<span class="lineno">  248 </span>  <span class="decl"><span class="nottickedoff">show ctc = Text.unpack (ppCellTypeCombinational ctc)</span></span>
+<span class="lineno">  249 </span>
+<span class="lineno">  250 </span>ppCellType :: CellType -&gt; Text
+<span class="lineno">  251 </span><span class="decl"><span class="istickedoff">ppCellType ct =</span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="istickedoff">case ct of</span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">CellTypeCombinational ctc -&gt; ppCellTypeCombinational ctc</span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDff -&gt; &quot;$dff&quot;</span>
+<span class="lineno">  255 </span><span class="spaces">    </span><span class="istickedoff">CellTypeFf -&gt; &quot;$ff&quot;</span>
+<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUnsupportedPrimitive t -&gt; t</span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUserType t -&gt; t</span></span>
+<span class="lineno">  258 </span>
+<span class="lineno">  259 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show CellType</span></span></span></span> where
+<span class="lineno">  260 </span>  <span class="decl"><span class="istickedoff">show ct = Text.unpack (ppCellType ct)</span></span>
+<span class="lineno">  261 </span>
+<span class="lineno">  262 </span>-- | Extract the name from a user-defined submodule 'CellType'
+<span class="lineno">  263 </span>asUserType :: CellType -&gt; Text
+<span class="lineno">  264 </span><span class="decl"><span class="nottickedoff">asUserType cellType =</span>
+<span class="lineno">  265 </span><span class="spaces">  </span><span class="nottickedoff">case cellType of</span>
+<span class="lineno">  266 </span><span class="spaces">    </span><span class="nottickedoff">CellTypeUserType t -&gt; t</span>
+<span class="lineno">  267 </span><span class="spaces">    </span><span class="nottickedoff">CellTypeUnsupportedPrimitive t -&gt; t</span>
+<span class="lineno">  268 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt;</span>
+<span class="lineno">  269 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;asUserType&quot; [</span>
+<span class="lineno">  270 </span><span class="spaces">          </span><span class="nottickedoff">&quot;Expected a user defined type, but got a primitive type: &quot; &lt;&gt;</span>
+<span class="lineno">  271 </span><span class="spaces">              </span><span class="nottickedoff">Text.pack (show cellType)</span>
+<span class="lineno">  272 </span><span class="spaces">      </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  273 </span>
+<span class="lineno">  274 </span>-- | A cell within an HDL module.
+<span class="lineno">  275 </span>data Cell bs = Cell
+<span class="lineno">  276 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellHideName</span></span></span> :: Bool -- ^ Whether the cell's name is human-readable (default: False)
+<span class="lineno">  277 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellType</span></span></span> :: CellType -- ^ The cell type
+<span class="lineno">  278 </span>    -- NB: Yosys's documentation for write_json doesn't impose any restrictions
+<span class="lineno">  279 </span>    -- on what type parameter values may take on, so we opt to be as permissive
+<span class="lineno">  280 </span>    -- as possible by using Aeson Values. Most of the time, these Values will
+<span class="lineno">  281 </span>    -- be strings, but they can also be numbers on occasion (e.g., if you call
+<span class="lineno">  282 </span>    -- write_json using the -compat-int flag).
+<span class="lineno">  283 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellParameters</span></span></span> :: Map Text Aeson.Value -- ^ Metadata parameters
+<span class="lineno">  284 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
+<span class="lineno">  285 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellPortDirections</span></span></span> :: Map Text Direction -- ^ Direction for each cell connection
+<span class="lineno">  286 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellConnections</span></span></span> :: Map Text bs -- ^ Bitrep for each cell connection
+<span class="lineno">  287 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>)
+<span class="lineno">  288 </span>
+<span class="lineno">  289 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Cell</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  290 </span>
+<span class="lineno">  291 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON (Cell [Bitrep])</span></span></span></span> where
+<span class="lineno">  292 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;cell&quot;</span> $ \o -&gt; do</span>
+<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff">_cellHideName &lt;- <span class="nottickedoff">Maybe.maybe False (/= (0::Int))</span> &lt;$&gt; o Aeson..:? &quot;hide_name&quot;</span>
+<span class="lineno">  294 </span><span class="spaces">    </span><span class="istickedoff">_cellType &lt;- o Aeson..: &quot;type&quot;</span>
+<span class="lineno">  295 </span><span class="spaces">    </span><span class="istickedoff">_cellParameters &lt;- o Aeson..: &quot;parameters&quot;</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">_cellAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">_cellPortDirections &lt;- o Aeson..: &quot;port_directions&quot;</span>
+<span class="lineno">  298 </span><span class="spaces">    </span><span class="istickedoff">_cellConnections &lt;- o Aeson..: &quot;connections&quot;</span>
+<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">pure Cell{<span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">..</span></span></span></span>}</span></span>
+<span class="lineno">  300 </span>
+<span class="lineno">  301 </span>-- | A description of a named internal signal within a module.
+<span class="lineno">  302 </span>data Netname =
+<span class="lineno">  303 </span>  Netname
+<span class="lineno">  304 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameHideName</span></span></span> :: Bool -- ^ Whether the net's name is human-readable (default: False)
+<span class="lineno">  305 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameBits</span></span></span> :: [Bitrep]
+<span class="lineno">  306 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netnameAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
+<span class="lineno">  307 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  308 </span>
+<span class="lineno">  309 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Netname</span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  310 </span>
+<span class="lineno">  311 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Netname</span></span></span></span> where
+<span class="lineno">  312 </span>  <span class="decl"><span class="istickedoff">parseJSON =</span>
+<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">Aeson.withObject <span class="nottickedoff">&quot;netname&quot;</span> $ \o -&gt;</span>
+<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">do _netnameHideName &lt;- Maybe.maybe <span class="nottickedoff">False</span> (/= (0::Int)) &lt;$&gt; o Aeson..:? &quot;hide_name&quot;</span>
+<span class="lineno">  315 </span><span class="spaces">       </span><span class="istickedoff">_netnameBits &lt;- o Aeson..: &quot;bits&quot;</span>
+<span class="lineno">  316 </span><span class="spaces">       </span><span class="istickedoff">_netnameAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
+<span class="lineno">  317 </span><span class="spaces">       </span><span class="istickedoff">pure Netname{<span class="nottickedoff">..</span>}</span></span>
+<span class="lineno">  318 </span>
+<span class="lineno">  319 </span>-- | A single HDL module.
+<span class="lineno">  320 </span>data Module = Module
+<span class="lineno">  321 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleAttributes</span></span></span> :: Maybe Aeson.Value -- currently unused
+<span class="lineno">  322 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modulePorts</span></span></span> :: Map Text Port
+<span class="lineno">  323 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleCells</span></span></span> :: Map Text (Cell [Bitrep])
+<span class="lineno">  324 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleNetnames</span></span></span> :: Map Text Netname
+<span class="lineno">  325 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  326 </span>
+<span class="lineno">  327 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Module</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  328 </span>
+<span class="lineno">  329 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Module</span></span></span></span> where
+<span class="lineno">  330 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;module&quot;</span> $ \o -&gt; do</span>
+<span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff">_moduleAttributes &lt;- o Aeson..:? &quot;attributes&quot;</span>
+<span class="lineno">  332 </span><span class="spaces">    </span><span class="istickedoff">_modulePorts &lt;- Maybe.fromMaybe mempty &lt;$&gt; o Aeson..:? &quot;ports&quot;</span>
+<span class="lineno">  333 </span><span class="spaces">    </span><span class="istickedoff">_moduleCells &lt;- Maybe.fromMaybe <span class="nottickedoff">mempty</span> &lt;$&gt; o Aeson..:? &quot;cells&quot;</span>
+<span class="lineno">  334 </span><span class="spaces">    </span><span class="istickedoff">_moduleNetnames &lt;- Maybe.fromMaybe <span class="nottickedoff">mempty</span> &lt;$&gt; o Aeson..:? &quot;netnames&quot;</span>
+<span class="lineno">  335 </span><span class="spaces">    </span><span class="istickedoff">pure Module{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
+<span class="lineno">  336 </span>
+<span class="lineno">  337 </span>-- | A collection of multiple HDL modules (possibly with dependencies on each other).
+<span class="lineno">  338 </span>data YosysIR = YosysIR
+<span class="lineno">  339 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysCreator</span></span></span> :: Text
+<span class="lineno">  340 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysModules</span></span></span> :: Map Text Module
+<span class="lineno">  341 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  342 </span>
+<span class="lineno">  343 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''YosysIR</span></span></span></span></span></span></span>
+<span class="lineno">  344 </span>
+<span class="lineno">  345 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON YosysIR</span></span></span></span> where
+<span class="lineno">  346 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;yosys&quot;</span> $ \o -&gt; do</span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="istickedoff">_yosysCreator &lt;- <span class="nottickedoff">Maybe.fromMaybe mempty</span> &lt;$&gt; o Aeson..:? &quot;creator&quot;</span>
+<span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff">_yosysModules &lt;- Maybe.fromMaybe mempty &lt;$&gt; o Aeson..:? &quot;modules&quot;</span>
+<span class="lineno">  349 </span><span class="spaces">    </span><span class="istickedoff">pure YosysIR{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
+<span class="lineno">  350 </span>
+<span class="lineno">  351 </span>-- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
+<span class="lineno">  352 </span>loadYosysIR :: FilePath -&gt; IO YosysIR
+<span class="lineno">  353 </span><span class="decl"><span class="istickedoff">loadYosysIR p = Aeson.eitherDecodeFileStrict p &gt;&gt;= \case</span>
+<span class="lineno">  354 </span><span class="spaces">  </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">yosysError $ YosysError $ Text.pack err</span></span>
+<span class="lineno">  355 </span><span class="spaces">  </span><span class="istickedoff">Right ir -&gt; pure ir</span></span>
+<span class="lineno">  356 </span>
+<span class="lineno">  357 </span>-- | Return the patterns for all of the input ports of a module
+<span class="lineno">  358 </span>moduleInputPorts :: Module -&gt; Map Text [Bitrep]
+<span class="lineno">  359 </span><span class="decl"><span class="istickedoff">moduleInputPorts m =</span>
+<span class="lineno">  360 </span><span class="spaces">  </span><span class="istickedoff">Map.mapMaybe</span>
+<span class="lineno">  361 </span><span class="spaces">  </span><span class="istickedoff">( \ip -&gt;</span>
+<span class="lineno">  362 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout</span>
+<span class="lineno">  363 </span><span class="spaces">      </span><span class="istickedoff">then Just (ip ^. portBits)</span>
+<span class="lineno">  364 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
+<span class="lineno">  365 </span><span class="spaces">  </span><span class="istickedoff">)</span>
+<span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
+<span class="lineno">  367 </span>
+<span class="lineno">  368 </span>-- | Return the patterns for all of the output ports of a module
+<span class="lineno">  369 </span>moduleOutputPorts :: Module -&gt; Map Text [Bitrep]
+<span class="lineno">  370 </span><span class="decl"><span class="istickedoff">moduleOutputPorts m =</span>
+<span class="lineno">  371 </span><span class="spaces">  </span><span class="istickedoff">Map.mapMaybe</span>
+<span class="lineno">  372 </span><span class="spaces">  </span><span class="istickedoff">( \ip -&gt;</span>
+<span class="lineno">  373 </span><span class="spaces">      </span><span class="istickedoff">if isOutput (ip ^. portDirection)</span>
+<span class="lineno">  374 </span><span class="spaces">      </span><span class="istickedoff">then Just (ip ^. portBits)</span>
+<span class="lineno">  375 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
+<span class="lineno">  376 </span><span class="spaces">  </span><span class="istickedoff">)</span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
+<span class="lineno">  378 </span>
+<span class="lineno">  379 </span>-- | Return the patterns for all of the input connections of a cell
+<span class="lineno">  380 </span>cellInputConnections :: Cell [b] -&gt; Map Text [b]
+<span class="lineno">  381 </span><span class="decl"><span class="istickedoff">cellInputConnections c = Map.intersection (c ^. cellConnections) inp</span>
+<span class="lineno">  382 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  383 </span><span class="spaces">    </span><span class="istickedoff">inp = Map.filter isInput (c ^. cellPortDirections)</span></span>
+<span class="lineno">  384 </span>
+<span class="lineno">  385 </span>-- | Return the patterns for all of the output connections of a cell
+<span class="lineno">  386 </span>cellOutputConnections :: Ord b =&gt; Cell [b] -&gt; Map Text [b]
+<span class="lineno">  387 </span><span class="decl"><span class="istickedoff">cellOutputConnections c = Map.intersection (c ^. cellConnections) out</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  389 </span><span class="spaces">    </span><span class="istickedoff">out = Map.filter isOutput (c ^. cellPortDirections)</span></span>
+<span class="lineno">  390 </span>
+<span class="lineno">  391 </span>-- | Test whether a 'Cell' is a state element ('CellTypeDff' or 'CellTypeFf').
+<span class="lineno">  392 </span>cellIsRegister :: Cell bs -&gt; Bool
+<span class="lineno">  393 </span><span class="decl"><span class="istickedoff">cellIsRegister c =</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">case c ^. cellType of</span>
+<span class="lineno">  395 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDff -&gt; True</span>
+<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">CellTypeFf -&gt; <span class="nottickedoff">True</span></span>
+<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; False</span></span>
 
 </pre>
 </body>
