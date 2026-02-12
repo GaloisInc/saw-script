@@ -107,17 +107,16 @@ cellTypeIsPrimitive cellType =
     Just ('$', _) -> True
     _ -> False
 
--- | Mapping from 'Text' to primitive cell types
+-- | Mapping from 'Text' to combinational primitive cell types.
+textToCellTypeCombinational :: Map Text CellTypeCombinational
+textToCellTypeCombinational =
+  Map.fromList [ (ppCellTypeCombinational t, t) | t <- [minBound .. maxBound] ]
+
+-- | Mapping from 'Text' to primitive cell types.
 textToPrimitiveCellType :: Map Text CellType
 textToPrimitiveCellType =
-  Map.insert "$dff" CellTypeDff $
-  Map.insert "$ff" CellTypeFf $
-  fmap CellTypeCombinational comb
-  where
-    comb :: Map Text CellTypeCombinational
-    comb =
-      Map.fromList
-      [ (ppCellTypeCombinational t, t) | t <- [minBound .. maxBound] ]
+  Map.fromList [ (ppCellType ct, ct) | ct <- [CellTypeDff, CellTypeFf] ] <>
+  fmap CellTypeCombinational textToCellTypeCombinational
 
 -- | Mapping from primitive cell types to textual representation
 primitiveCellTypeToText :: Map CellType Text
