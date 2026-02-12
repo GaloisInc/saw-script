@@ -167,7 +167,7 @@ import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
-import SAWCore.URI
+import qualified SAWCore.QualName as QN
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -348,13 +348,14 @@ llvm_array_size_profile assume (Some lm) nm lemmas setup = do
     profiles <- io $ readIORef cell
     pure $ Map.toList profiles
 
-llvmURI :: Text -> URI
-llvmURI symbol_name =
-  fromMaybe (panic "llvmURI" ["Could not create LLVM symbol name " <> symbol_name]) $
-    mkURI NamespaceLLVM [symbol_name] Nothing
+llvmQualName :: Text -> QN.QualName
+llvmQualName symbol_name = case QN.pathToQualName QN.NamespaceLLVM [symbol_name] of
+  Right qn -> qn
+  Left errs ->
+    panic "llvmQualName" $ ("Could not create LLVM symbol name " <> symbol_name):errs
 
 llvmNameInfo :: Text -> NameInfo
-llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ symbol_name ]
+llvmNameInfo symbol_name = ImportedName (llvmQualName symbol_name) [ symbol_name ]
 
 llvm_compositional_extract ::
   Some LLVMModule ->

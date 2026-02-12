@@ -43,7 +43,6 @@ import Control.Monad (foldM, forM, zipWithM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
-import Data.Maybe (fromMaybe)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -92,7 +91,7 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName, Name(..))
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
-import SAWCore.URI
+import qualified SAWCore.QualName as QN
 
 -- local modules:
 import CryptolSAWCore.Panic
@@ -1411,7 +1410,7 @@ plainSubst s ty =
     C.TNominal nt ts -> C.TNominal nt (fmap (plainSubst s) ts)
 
 
--- | Generate a URI representing a cryptol name from a sequence of
+-- | Generate a qualified name representing a cryptol name from a sequence of
 --   name parts representing the fully-qualified name.  If a \"unique\"
 --   value is given, this represents a dynamically bound name in
 --   the \"\<interactive\>\" pseudo-module, and the unique value will
@@ -1420,24 +1419,29 @@ plainSubst s ty =
 --
 --   Some examples:
 --
---   * @Cryptol::foldl@ ---> @cryptol:\/Cryptol\/foldl@
---   * @MyModule::SubModule::name@ ---> @cryptol:\/MyModule\/SubModule\/name@
---   * @\<interactive\>::f@ ---> @cryptol:f#1234@
+--   * @Cryptol::foldl@ ---> @Cryptol::foldl\@cryptol@
+--   * @Qual::MyModule::SubModule::name@ ---> @Qual::MyModule::[Submodule::name]\@cryptol@
+--   * @\<interactive\>::f@ ---> @f#1234\@cryptol@
 --
 --   In the above example, 1234 is the unique integer value provided with the name.
 
-cryptolURI ::
-  [Text] {- ^ Name components  -} ->
+cryptolQualName ::
+  [Text] {- ^ Module name components  -} ->
+  [Text] {- ^ Submodule name components -} ->
+  Text -> {- ^ base name -}
   Maybe Int {- ^ unique integer for dynamic names -} ->
-  URI
-cryptolURI [] _ = panic "cryptolURI" ["Could not make URI from empty path"]
-cryptolURI (p:ps) Nothing =
-  fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show (p:ps))]) $
-    mkURI NamespaceCryptol (p:ps) Nothing
-
-cryptolURI (p:ps) (Just uniq) =
-  fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show (p:ps)), "Fragment: " <> Text.pack (show uniq)]) $ do
-    mkURI NamespaceCryptol (p:ps) (Just uniq)
+  QN.QualName
+cryptolQualName ps sps nm midx =
+  case QN.mkQualName QN.NamespaceCryptol ps sps nm midx of
+    Right qn -> qn
+    Left errs ->
+      panic "cryptolQualName" (err:errs)
+      where
+        err = "Could not make qualified name from path: "
+          <> Text.pack (show ps) <> " subpath: " <> Text.pack (show ps)
+          <> case midx of
+            Just idx -> " and index: " <> Text.pack (show idx)
+            Nothing -> Text.empty
 
 importName :: C.Name -> IO NameInfo
 importName cnm =
@@ -1446,14 +1450,14 @@ importName cnm =
     C.GlobalName _ns og
       | C.ogModule og == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
-              aliases = [shortNm]
-              uri = cryptolURI [shortNm] (Just (C.nameUnique cnm))
-           in pure (ImportedName uri aliases)
+              qn = cryptolQualName [] [] shortNm (Just (C.nameUnique cnm))
+              aliases   = QN.aliases qn
+           in pure (ImportedName qn aliases)
 
       | otherwise ->
           let (topMod, nested) = C.modPathSplit (C.ogModule og)
               topChunks = C.modNameChunksText topMod
-              modNms    = topChunks ++ map C.identText nested
+              nestedNms = map C.identText nested
               -- If the name came from a module parameter, add the module
               -- parameter identifier to distinguish between names that have the
               -- same identifier but come from different module parameters (see
@@ -1462,11 +1466,9 @@ importName cnm =
                             Just i  -> [C.identText i]
                             Nothing -> []
               shortNm   = C.identText (C.nameIdent cnm)
-              nmParts   = modNms ++ ifaceNms ++ [shortNm]
-              longNm    = Text.intercalate "::" nmParts
-              aliases   = [shortNm, longNm]
-              uri       = cryptolURI nmParts Nothing
-           in pure (ImportedName uri aliases)
+              qn        = cryptolQualName topChunks (nestedNms ++ ifaceNms) shortNm Nothing
+              aliases   = QN.aliases qn
+           in pure (ImportedName qn aliases)
 
 -- | Extract all components from a tuple term of the specified size.
 scTupleComponents :: SharedContext -> Term -> Int -> IO [Term]

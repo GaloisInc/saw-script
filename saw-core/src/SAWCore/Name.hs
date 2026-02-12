@@ -30,10 +30,10 @@ module SAWCore.Name
   , NameInfo(..)
   , toShortName
   , toAbsoluteName
-  , moduleIdentToURI
-  , nameURI
+  , moduleIdentToQualName
+  , toQualName
   , nameAliases
-  , scFreshNameURI
+  , scFreshQualName
     -- * Name
   , VarIndex
   , Name(..)
@@ -65,7 +65,6 @@ import qualified Data.List as List
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Maybe
 import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
@@ -74,7 +73,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 import           Instances.TH.Lift () -- for instance TH.Lift Text
 
 import SAWCore.Panic (panic)
-import SAWCore.URI
+import qualified SAWCore.QualName as QN
 
 -- Module Names ----------------------------------------------------------------
 
@@ -188,7 +187,7 @@ data NameInfo
 
   | -- | This name was imported from some other programming language/scope
     ImportedName
-      URI      -- ^ An absolutely-qualified name, which is required to be unique
+      QN.QualName  -- ^ An absolutely-qualified name, which is required to be unique
       [Text]   -- ^ A collection of aliases for this name.  Shorter or "less-qualified"
                --   aliases should be nearer the front of the list
 
@@ -198,13 +197,13 @@ instance Hashable NameInfo where
   hashWithSalt x nmi =
     case nmi of
       ModuleIdentifier ident -> hashWithSalt x ident
-      ImportedName uri _ -> hashWithSalt x uri
+      ImportedName qn _ -> hashWithSalt x qn
 
-nameURI :: NameInfo -> URI
-nameURI =
+toQualName :: NameInfo -> QN.QualName
+toQualName =
   \case
-    ModuleIdentifier i -> moduleIdentToURI i
-    ImportedName uri _ -> uri
+    ModuleIdentifier i -> moduleIdentToQualName i
+    ImportedName qn _ -> qn
 
 nameAliases :: NameInfo -> [Text]
 nameAliases =
@@ -214,20 +213,24 @@ nameAliases =
 
 toShortName :: NameInfo -> Text
 toShortName (ModuleIdentifier i) = identBaseName i
-toShortName (ImportedName uri []) = renderURI uri
+toShortName (ImportedName qn []) = QN.render qn
 toShortName (ImportedName _ (x:_)) = x
 
 toAbsoluteName :: NameInfo -> Text
 toAbsoluteName (ModuleIdentifier i) = identText i
-toAbsoluteName (ImportedName uri _) = renderURI uri
+toAbsoluteName (ImportedName qn _) = QN.render qn
 
-moduleIdentToURI :: Ident -> URI
-moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to construct ident URI: " <> identText ident]) $
-  mkURI NamespaceCore (identPieces ident) Nothing
+moduleIdentToQualName :: Ident -> QN.QualName
+moduleIdentToQualName ident = case QN.pathToQualName QN.NamespaceCore (identPieces ident) of
+  Right qn -> qn
+  Left errs ->
+    panic "moduleIdentToQualName" $ ("Failed to construct qualified name: " <> identText ident):errs
 
-scFreshNameURI :: Text -> VarIndex -> URI
-scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $
-  mkURI NamespaceFresh [(if Text.null nm then "_" else nm)] (Just i)
+scFreshQualName :: Text -> VarIndex -> QN.QualName
+scFreshQualName nm i = case QN.indexedQualName QN.NamespaceCore (if Text.null nm then "_" else nm) i of
+  Right qn -> qn
+  Left errs ->
+    panic "scFreshQualName" $ ("Failed to construct qualified name: <> " <> nm <> "  " <> Text.pack (show i)):errs
 
 -- Global Names ----------------------------------------------------------------
 

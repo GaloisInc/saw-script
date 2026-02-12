@@ -44,7 +44,7 @@ import qualified Data.Graph as Graph
 import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified SAWCore.SharedTerm as SC
-import qualified SAWCore.URI as URI
+import qualified SAWCore.QualName as QN
 import qualified CryptolSAWCore.TypedTerm as SC
 
 import qualified Cryptol.TypeCheck.Type as C
@@ -98,11 +98,16 @@ convertYosysIR sc ir =
           do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
              cm <- convertModule sc env m
              n <- Nonce.freshNonce Nonce.globalNonceGenerator
-             uri <- URI.mkURI
-              URI.NamespaceYosys
-              [nm]
-              (Just $ fromIntegral $ Nonce.indexValue n)
-             let ni = SC.ImportedName uri [nm]
+             let mqn = QN.indexedQualName
+                   QN.NamespaceYosys
+                   nm
+                   (fromIntegral $ Nonce.indexValue n)
+             qn <- case mqn of
+              Left errs ->
+                fail $ Text.unpack $
+                  Text.intercalate "\n" $ ("convertYosysIR: failed to make qualified name: " <> nm):errs
+              Right qn -> return qn
+             let ni = SC.ImportedName qn [nm]
              body <- SC.scAscribe sc (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
              tc <- SC.scDefineConstant sc ni body
              let cm' = cm { _convertedModuleTerm = tc }
