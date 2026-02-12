@@ -3,7 +3,7 @@
 Up until this point, all uses of `mir_verify` in this tutorial have provided an
 empty list (`[]`) of overrides. This means that any time SAW has simulated a
 function which calls another function, it will step into the definition of the
-callee function and verify its behavior alongside the behavior of the callee
+callee function and verify its behavior alongside the behavior of the caller
 function. This is a fine thing to do, but it can be inefficient. For example,
 consider a function like this:
 
@@ -148,7 +148,7 @@ We can then prove `f` compositionally by passing both of the `g` overrides to
 :language: sawscript
 :::
 
-Like before, this will successfully verify. The only different now is that SAW
+Like before, this will successfully verify. The only difference now is that SAW
 will print output involving two overrides instead of just one:
 
 :::{code-block} console
@@ -262,7 +262,7 @@ verify this compositionally using our `side_effect_ov` override:
 :language: sawscript
 :::
 
-If SAW were to simulate `foo(x)`, it would invoke create a temporary variable
+If SAW were to simulate `foo(x)`, it would create a temporary variable
 `b` and assign it to the value `x`, and then it would invoke `side_effect(&mut
 b)`. At this point, the `side_effect_ov` override would apply. According to
 `side_effect_spec`, the argument to `side_effect` is not modified at all after

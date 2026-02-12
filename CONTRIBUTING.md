@@ -348,8 +348,8 @@ The available issue labels are documented in
 SAW's major user-facing documentation consists of the
 [doc/manual/manual.pdf](SAW manual)
 plus two (soon to be three) tutorials:
-[doc/tutorial/tutorial.md](LLVM and Java verification) and
-[doc/rust-tutorial/tutorial.md](Rust verification).
+[doc/llvm-java-verification-with-saw/index.md](LLVM and Java verification) and
+[doc/rust-verification-with-saw/index.md](Rust verification).
 Other user-facing documentation includes the top-level
 [README.md](README) and [CHANGES.md](change log), as well as some (but
 not all) of the assorted other READMEs and change logs scattered about
@@ -558,7 +558,7 @@ changed the text.
 
 The following are the basic points needed to work successfully in this
 repository.
-For further discussion, rationale, etc. see 
+For further discussion, rationale, etc. see
 [doc/developer/developer.md](doc/developer/developer.md#git).
 
 ## Branching
@@ -591,7 +591,7 @@ See [doc/developer/developer.md](doc/developer/developer.md#releases).
   merging.
   When and whether to rebase remains a contentious (sometimes extremely
   contentious) topic.
-  For discussion, see 
+  For discussion, see
   [doc/developer/developer.md](doc/developer/developer.md#rebasing).
 
   Because of concerns about rebase and history loss, we specifically
