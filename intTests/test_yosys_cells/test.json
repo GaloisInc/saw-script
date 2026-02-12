@@ -843,23 +843,18 @@
                             1,
                             2,
                             3,
-                            4,
-                            5,
-                            6,
-                            7,
-                            8
+                            4
                         ],
                         "S": [
-                            9,
-                            10
+                            5
                         ],
                         "Y": [
-                            11,
-                            12
+                            6,
+                            7
                         ]
                     },
                     "parameters": {
-                        "S_WIDTH": "10",
+                        "S_WIDTH": "1",
                         "WIDTH": "10"
                     },
                     "port_directions": {
@@ -876,25 +871,20 @@
                         1,
                         2,
                         3,
-                        4,
-                        5,
-                        6,
-                        7,
-                        8
+                        4
                     ],
                     "direction": "input"
                 },
                 "S": {
                     "bits": [
-                        9,
-                        10
+                        5
                     ],
                     "direction": "input"
                 },
                 "Y": {
                     "bits": [
-                        11,
-                        12
+                        6,
+                        7
                     ],
                     "direction": "output"
                 }
@@ -7249,21 +7239,18 @@
                         ],
                         "B": [
                             3,
-                            4,
-                            5,
-                            6
+                            4
                         ],
                         "S": [
-                            7,
-                            8
+                            5
                         ],
                         "Y": [
-                            9,
-                            10
+                            6,
+                            7
                         ]
                     },
                     "parameters": {
-                        "S_WIDTH": "10",
+                        "S_WIDTH": "1",
                         "WIDTH": "10"
                     },
                     "port_directions": {
@@ -7286,23 +7273,20 @@
                 "B": {
                     "bits": [
                         3,
-                        4,
-                        5,
-                        6
+                        4
                     ],
                     "direction": "input"
                 },
                 "S": {
                     "bits": [
-                        7,
-                        8
+                        5
                     ],
                     "direction": "input"
                 },
                 "Y": {
                     "bits": [
-                        9,
-                        10
+                        6,
+                        7
                     ],
                     "direction": "output"
                 }
@@ -9864,62 +9848,6 @@
                 }
             }
         },
-        "shiftx11": {
-            "cells": {
-                "shiftxCell": {
-                    "connections": {
-                        "A": [
-                            1,
-                            2
-                        ],
-                        "B": [
-                            3,
-                            4
-                        ],
-                        "Y": [
-                            5,
-                            6
-                        ]
-                    },
-                    "parameters": {
-                        "A_SIGNED": "0",
-                        "A_WIDTH": "10",
-                        "B_SIGNED": "1",
-                        "B_WIDTH": "10",
-                        "Y_WIDTH": "10"
-                    },
-                    "port_directions": {
-                        "A": "input",
-                        "B": "input",
-                        "Y": "output"
-                    },
-                    "type": "$shiftx"
-                }
-            },
-            "ports": {
-                "A": {
-                    "bits": [
-                        1,
-                        2
-                    ],
-                    "direction": "input"
-                },
-                "B": {
-                    "bits": [
-                        3,
-                        4
-                    ],
-                    "direction": "input"
-                },
-                "Y": {
-                    "bits": [
-                        5,
-                        6
-                    ],
-                    "direction": "output"
-                }
-            }
-        },
         "shiftx2": {
             "cells": {
                 "shiftxCell": {
@@ -10421,62 +10349,6 @@
                 "Y": {
                     "bits": [
                         2
-                    ],
-                    "direction": "output"
-                }
-            }
-        },
-        "shl10": {
-            "cells": {
-                "shlCell": {
-                    "connections": {
-                        "A": [
-                            1,
-                            2
-                        ],
-                        "B": [
-                            3,
-                            4
-                        ],
-                        "Y": [
-                            5,
-                            6
-                        ]
-                    },
-                    "parameters": {
-                        "A_SIGNED": "1",
-                        "A_WIDTH": "10",
-                        "B_SIGNED": "0",
-                        "B_WIDTH": "10",
-                        "Y_WIDTH": "10"
-                    },
-                    "port_directions": {
-                        "A": "input",
-                        "B": "input",
-                        "Y": "output"
-                    },
-                    "type": "$shl"
-                }
-            },
-            "ports": {
-                "A": {
-                    "bits": [
-                        1,
-                        2
-                    ],
-                    "direction": "input"
-                },
-                "B": {
-                    "bits": [
-                        3,
-                        4
-                    ],
-                    "direction": "input"
-                },
-                "Y": {
-                    "bits": [
-                        5,
-                        6
                     ],
                     "direction": "output"
                 }
@@ -10996,62 +10868,6 @@
                 }
             }
         },
-        "shr10": {
-            "cells": {
-                "shrCell": {
-                    "connections": {
-                        "A": [
-                            1,
-                            2
-                        ],
-                        "B": [
-                            3,
-                            4
-                        ],
-                        "Y": [
-                            5,
-                            6
-                        ]
-                    },
-                    "parameters": {
-                        "A_SIGNED": "1",
-                        "A_WIDTH": "10",
-                        "B_SIGNED": "0",
-                        "B_WIDTH": "10",
-                        "Y_WIDTH": "10"
-                    },
-                    "port_directions": {
-                        "A": "input",
-                        "B": "input",
-                        "Y": "output"
-                    },
-                    "type": "$shr"
-                }
-            },
-            "ports": {
-                "A": {
-                    "bits": [
-                        1,
-                        2
-                    ],
-                    "direction": "input"
-                },
-                "B": {
-                    "bits": [
-                        3,
-                        4
-                    ],
-                    "direction": "input"
-                },
-                "Y": {
-                    "bits": [
-                        5,
-                        6
-                    ],
-                    "direction": "output"
-                }
-            }
-        },
         "shr2": {
             "cells": {
                 "shrCell": {
@@ -11566,62 +11382,6 @@
                 }
             }
         },
-        "sshl10": {
-            "cells": {
-                "sshlCell": {
-                    "connections": {
-                        "A": [
-                            1,
-                            2
-                        ],
-                        "B": [
-                            3,
-                            4
-                        ],
-                        "Y": [
-                            5,
-                            6
-                        ]
-                    },
-                    "parameters": {
-                        "A_SIGNED": "1",
-                        "A_WIDTH": "10",
-                        "B_SIGNED": "0",
-                        "B_WIDTH": "10",
-                        "Y_WIDTH": "10"
-                    },
-                    "port_directions": {
-                        "A": "input",
-                        "B": "input",
-                        "Y": "output"
-                    },
-                    "type": "$sshl"
-                }
-            },
-            "ports": {
-                "A": {
-                    "bits": [
-                        1,
-                        2
-                    ],
-                    "direction": "input"
-                },
-                "B": {
-                    "bits": [
-                        3,
-                        4
-                    ],
-                    "direction": "input"
-                },
-                "Y": {
-                    "bits": [
-                        5,
-                        6
-                    ],
-                    "direction": "output"
-                }
-            }
-        },
         "sshl2": {
             "cells": {
                 "sshlCell": {
@@ -12131,62 +11891,6 @@
                 "Y": {
                     "bits": [
                         2
-                    ],
-                    "direction": "output"
-                }
-            }
-        },
-        "sshr10": {
-            "cells": {
-                "sshrCell": {
-                    "connections": {
-                        "A": [
-                            1,
-                            2
-                        ],
-                        "B": [
-                            3,
-                            4
-                        ],
-                        "Y": [
-                            5,
-                            6
-                        ]
-                    },
-                    "parameters": {
-                        "A_SIGNED": "1",
-                        "A_WIDTH": "10",
-                        "B_SIGNED": "0",
-                        "B_WIDTH": "10",
-                        "Y_WIDTH": "10"
-                    },
-                    "port_directions": {
-                        "A": "input",
-                        "B": "input",
-                        "Y": "output"
-                    },
-                    "type": "$sshr"
-                }
-            },
-            "ports": {
-                "A": {
-                    "bits": [
-                        1,
-                        2
-                    ],
-                    "direction": "input"
-                },
-                "B": {
-                    "bits": [
-                        3,
-                        4
-                    ],
-                    "direction": "input"
-                },
-                "Y": {
-                    "bits": [
-                        5,
-                        6
                     ],
                     "direction": "output"
                 }

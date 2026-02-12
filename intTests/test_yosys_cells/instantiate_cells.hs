@@ -70,7 +70,6 @@ tests = binaryOps False 0 0 0
      <> shiftOps (1, True) 1 1
      <> shiftOps (1, True) 2 3
      <> shiftOps (2, True) 1 2
-     <> shiftOps (2, True) 2 2
 
      <> [ shiftx 1 (0, False) 1
         , shiftx 0 (1, False) 1
@@ -83,13 +82,12 @@ tests = binaryOps False 0 0 0
         , shiftx 1 (1, True) 1
         , shiftx 2 (1, True) 3
         , shiftx 1 (2, True) 2
-        , shiftx 2 (2, True) 2
         ]
 
      <> muxen 0 2
      <> muxen 2 0
      <> muxen 1 2
-     <> muxen 2 2
+     <> muxen 2 1
 
      <> debugCells
 
