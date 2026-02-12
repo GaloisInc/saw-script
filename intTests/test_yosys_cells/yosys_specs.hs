@@ -196,7 +196,7 @@ data Def
     | Verb ByteString
 
 data Ty
-    = TyVec Natural (Maybe Ty)
+    = TySeq Natural (Maybe Ty)
     | TyTuple [Ty]
     | TyFun Ty Ty
     | TyRecord [(Id, Ty)]
@@ -264,9 +264,9 @@ instance Pretty Def where
 
 instance Pretty Ty where
     pretty' _ = \case
-        TyVec n (Just t@TyApp{}) -> "[" <> pack (show n) <> "]" <> parens (pretty t)
-        TyVec n (Just t) -> "[" <> pack (show n) <> "]" <> pretty t
-        TyVec n Nothing -> "[" <> pack (show n) <> "]"
+        TySeq n (Just t@TyApp{}) -> "[" <> pack (show n) <> "]" <> parens (pretty t)
+        TySeq n (Just t) -> "[" <> pack (show n) <> "]" <> pretty t
+        TySeq n Nothing -> "[" <> pack (show n) <> "]"
         TyTuple ts -> "(" <> commas (pretty <$> ts) <> ")"
         TyFun ta tb -> pretty ta <> " -> " <> pretty tb
         TyRecord fs -> "{" <> commas (map (\(x, t) -> x <> ": " <> pretty t) fs) <> "}"
@@ -390,8 +390,8 @@ toDef (Table m ev h rs)
     out = Def "out" Nothing [] $ App (Ident "spec") inTup
     inTup = Tuple $ Field (Ident "in") . fst <$> ins
 
-    inTy = TyRecord $ second (flip TyVec Nothing . width) <$> ins
-    outTy = TyRecord $ second (flip TyVec (Just $ tyOption tyBit) . width) <$> outs
+    inTy = TyRecord $ second (flip TySeq Nothing . width) <$> ins
+    outTy = TyRecord $ second (flip TySeq (Just $ tyOption tyBit) . width) <$> outs
 
     outFields
         | [(n, _)] <- outs = [(n, Ident "out")]
