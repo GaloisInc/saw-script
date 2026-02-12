@@ -223,11 +223,11 @@ toAbsoluteName (ImportedName uri _) = renderURI uri
 
 moduleIdentToURI :: Ident -> URI
 moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to construct ident URI: " <> identText ident]) $
-  mkURI NamespaceCore (identPieces ident) (-1)
+  mkURI NamespaceCore (identPieces ident) Nothing
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $
-  mkURI NamespaceFresh [(if Text.null nm then "_" else nm)] i
+  mkURI NamespaceFresh [(if Text.null nm then "_" else nm)] (Just i)
 
 -- Global Names ----------------------------------------------------------------
 

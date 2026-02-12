@@ -1423,11 +1423,11 @@ cryptolURI ::
 cryptolURI [] _ = panic "cryptolURI" ["Could not make URI from empty path"]
 cryptolURI (p:ps) Nothing =
   fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show (p:ps))]) $
-    mkURI NamespaceCryptol (p:ps) (-1)
+    mkURI NamespaceCryptol (p:ps) Nothing
 
 cryptolURI (p:ps) (Just uniq) =
   fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show (p:ps)), "Fragment: " <> Text.pack (show uniq)]) $ do
-    mkURI NamespaceCryptol (p:ps) uniq
+    mkURI NamespaceCryptol (p:ps) (Just uniq)
 
 importName :: C.Name -> IO NameInfo
 importName cnm =

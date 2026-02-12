@@ -350,7 +350,7 @@ llvm_array_size_profile assume (Some lm) nm lemmas setup = do
 llvmURI :: Text -> URI
 llvmURI symbol_name =
   fromMaybe (panic "llvmURI" ["Could not create LLVM symbol name " <> symbol_name]) $
-    mkURI NamespaceLLVM [symbol_name] (-1)
+    mkURI NamespaceLLVM [symbol_name] Nothing
 
 llvmNameInfo :: Text -> NameInfo
 llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ symbol_name ]

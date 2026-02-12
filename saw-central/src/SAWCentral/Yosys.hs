@@ -101,7 +101,7 @@ convertYosysIR sc ir =
              uri <- URI.mkURI
               URI.NamespaceYosys
               [nm]
-              (fromIntegral $ Nonce.indexValue n)
+              (Just $ fromIntegral $ Nonce.indexValue n)
              let ni = SC.ImportedName uri [nm]
              body <- SC.scAscribe sc (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
              tc <- SC.scDefineConstant sc ni body

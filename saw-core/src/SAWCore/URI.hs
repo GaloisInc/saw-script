@@ -71,7 +71,7 @@ data URI = URI
   { uriNamespace :: Namespace
   , uriBaseName :: Text
   , uriPath :: [Text]
-  , uriIndex :: Int
+  , uriIndex :: Maybe Int
   }
   deriving (Eq, Ord)
 
@@ -93,9 +93,7 @@ mkPath ps = case (List.any Text.null ps,ps) of
   (False, _:_) -> return (List.init ps,List.last ps)
   _ -> fail $ "mkPath: invalid path: " ++ show ps
 
-mkURI :: (MonadFail m, Foldable t) => Namespace -> t Text -> Int -> m URI
-mkURI _ _ idx | idx < 0, not (idx == -1) =
-  fail $ "mkURI: invalid index: " ++ show idx
+mkURI :: (MonadFail m, Foldable t) => Namespace -> t Text -> Maybe Int -> m URI
 mkURI ns ps idx = do
   (ps', nm) <- mkPath (Foldable.toList ps)
   return $ URI ns nm ps' idx
@@ -124,14 +122,14 @@ parseURI :: MonadFail m => Text -> m URI
 parseURI txt0 = do
   (ns, txt1) <- splitM True ':' txt0
   ns' <- readNamespace ns
-  let (i', txt3) = case splitM False '#' txt1 of
+  let (mi, txt3) = case splitM False '#' txt1 of
         Just (txt2,si)
           | Right (i,s) <- Text.decimal si
           , Text.null s
-         -> (i, txt2)
-        _ -> (-1, txt1)
+         -> (Just i, txt2)
+        _ -> (Nothing, txt1)
   (ps,nm) <- parsePath txt3
-  return $ URI ns' nm ps i'
+  return $ URI ns' nm ps mi
 
 renderURI :: URI -> Text
 renderURI uri =
@@ -139,9 +137,9 @@ renderURI uri =
   <> ":" <> pathBody <> suffix
   where
     suffix :: Text
-    suffix = case uriIndex uri < 0 of
-      True -> Text.empty
-      False -> "#" <> Text.pack (show $ uriIndex uri)
+    suffix = case uriIndex uri of
+      Nothing -> Text.empty
+      Just i -> "#" <> Text.pack (show i)
 
     pathBody :: Text
     pathBody = case uriPath uri of
