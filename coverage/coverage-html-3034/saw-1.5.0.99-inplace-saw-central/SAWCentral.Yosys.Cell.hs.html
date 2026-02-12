@@ -107,10 +107,10 @@ span.spaces    { background: white }
 <span class="lineno">   88 </span>  SC.SharedContext -&gt;
 <span class="lineno">   89 </span>  (SC.Term -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) -&gt; -- (w : Nat) -&gt; [w] -&gt; [w] -&gt; [w]
 <span class="lineno">   90 </span>  CellTerm -&gt; CellTerm -&gt; IO CellTerm
-<span class="lineno">   91 </span><span class="decl"><span class="istickedoff">liftBinary sc f c1@(CellTerm { cellTermTerm = t1 }) (CellTerm { cellTermTerm = t2 }) =</span>
-<span class="lineno">   92 </span><span class="spaces">  </span><span class="istickedoff">do wt &lt;- SC.scNat sc $ cellTermWidth c1</span>
-<span class="lineno">   93 </span><span class="spaces">     </span><span class="istickedoff">res &lt;- f wt t1 t2</span>
-<span class="lineno">   94 </span><span class="spaces">     </span><span class="istickedoff">pure $ c1 { cellTermTerm = res }</span></span>
+<span class="lineno">   91 </span><span class="decl"><span class="nottickedoff">liftBinary sc f c1@(CellTerm { cellTermTerm = t1 }) (CellTerm { cellTermTerm = t2 }) =</span>
+<span class="lineno">   92 </span><span class="spaces">  </span><span class="nottickedoff">do wt &lt;- SC.scNat sc $ cellTermWidth c1</span>
+<span class="lineno">   93 </span><span class="spaces">     </span><span class="nottickedoff">res &lt;- f wt t1 t2</span>
+<span class="lineno">   94 </span><span class="spaces">     </span><span class="nottickedoff">pure $ c1 { cellTermTerm = res }</span></span>
 <span class="lineno">   95 </span>
 <span class="lineno">   96 </span>liftBinaryCmp ::
 <span class="lineno">   97 </span>  SC.SharedContext -&gt;
@@ -219,11 +219,11 @@ span.spaces    { background: white }
 <span class="lineno">  200 </span><span class="spaces">      </span><span class="istickedoff">-- If output size is smaller, truncating first is safe.</span>
 <span class="lineno">  201 </span><span class="spaces">      </span><span class="istickedoff">do a &lt;- extTrunc sc (connWidthNat &quot;Y&quot;) =&lt;&lt; input &quot;A&quot;</span>
 <span class="lineno">  202 </span><span class="spaces">         </span><span class="istickedoff">output =&lt;&lt; bvneg sc a</span>
-<span class="lineno">  203 </span><span class="spaces">    </span><span class="istickedoff">CellTypeAnd -&gt; bvBinaryOp . liftBinary sc $ SC.scBvAnd sc</span>
-<span class="lineno">  204 </span><span class="spaces">    </span><span class="istickedoff">CellTypeOr -&gt; bvBinaryOp . liftBinary sc $ SC.scBvOr sc</span>
-<span class="lineno">  205 </span><span class="spaces">    </span><span class="istickedoff">CellTypeXor -&gt; bvBinaryOp . liftBinary sc $ SC.scBvXor sc</span>
+<span class="lineno">  203 </span><span class="spaces">    </span><span class="istickedoff">CellTypeAnd -&gt; bvBinaryOp $ SC.scBvAnd sc</span>
+<span class="lineno">  204 </span><span class="spaces">    </span><span class="istickedoff">CellTypeOr -&gt; bvBinaryOp $ SC.scBvOr sc</span>
+<span class="lineno">  205 </span><span class="spaces">    </span><span class="istickedoff">CellTypeXor -&gt; bvBinaryOp $ SC.scBvXor sc</span>
 <span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff">CellTypeXnor -&gt;</span>
-<span class="lineno">  207 </span><span class="spaces">      </span><span class="istickedoff">bvBinaryOp $ liftBinary sc $ \w x y -&gt;</span>
+<span class="lineno">  207 </span><span class="spaces">      </span><span class="istickedoff">bvBinaryOp $ \w x y -&gt;</span>
 <span class="lineno">  208 </span><span class="spaces">      </span><span class="istickedoff">do r &lt;- SC.scBvXor sc w x y</span>
 <span class="lineno">  209 </span><span class="spaces">         </span><span class="istickedoff">SC.scBvNot sc w r</span>
 <span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">CellTypeReduceAnd -&gt;</span>
@@ -307,17 +307,17 @@ span.spaces    { background: white }
 <span class="lineno">  288 </span><span class="spaces">      </span><span class="istickedoff">bvBinaryCmp $ liftBinaryCmp sc $ \w x y -&gt;</span>
 <span class="lineno">  289 </span><span class="spaces">      </span><span class="istickedoff">do r &lt;- SC.scBvEq sc w x y</span>
 <span class="lineno">  290 </span><span class="spaces">         </span><span class="istickedoff">SC.scNot sc r</span>
-<span class="lineno">  291 </span><span class="spaces">    </span><span class="istickedoff">CellTypeAdd -&gt; bvBinaryOp . liftBinary sc $ SC.scBvAdd sc</span>
-<span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff">CellTypeSub -&gt; bvBinaryOp . liftBinary sc $ SC.scBvSub sc</span>
-<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff">CellTypeMul -&gt; bvBinaryOp . liftBinary sc $ SC.scBvMul sc</span>
+<span class="lineno">  291 </span><span class="spaces">    </span><span class="istickedoff">CellTypeAdd -&gt; bvBinaryOp $ SC.scBvAdd sc</span>
+<span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff">CellTypeSub -&gt; bvBinaryOp $ SC.scBvSub sc</span>
+<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff">CellTypeMul -&gt; bvBinaryOp $ SC.scBvMul sc</span>
 <span class="lineno">  294 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDiv -&gt;</span>
 <span class="lineno">  295 </span><span class="spaces">      </span><span class="istickedoff">if signed</span>
-<span class="lineno">  296 </span><span class="spaces">      </span><span class="istickedoff">then signedBinaryOp $ SC.scBvSDiv sc</span>
-<span class="lineno">  297 </span><span class="spaces">      </span><span class="istickedoff">else bvBinaryOp . liftBinary sc $ SC.scBvUDiv sc</span>
+<span class="lineno">  296 </span><span class="spaces">      </span><span class="istickedoff">then bvBinarySOp $ SC.scBvSDiv sc</span>
+<span class="lineno">  297 </span><span class="spaces">      </span><span class="istickedoff">else bvBinaryOp $ SC.scBvUDiv sc</span>
 <span class="lineno">  298 </span><span class="spaces">    </span><span class="istickedoff">CellTypeMod -&gt;</span>
 <span class="lineno">  299 </span><span class="spaces">      </span><span class="istickedoff">if signed</span>
-<span class="lineno">  300 </span><span class="spaces">      </span><span class="istickedoff">then signedBinaryOp $ SC.scBvSRem sc</span>
-<span class="lineno">  301 </span><span class="spaces">      </span><span class="istickedoff">else bvBinaryOp . liftBinary sc $ SC.scBvURem sc</span>
+<span class="lineno">  300 </span><span class="spaces">      </span><span class="istickedoff">then bvBinarySOp $ SC.scBvSRem sc</span>
+<span class="lineno">  301 </span><span class="spaces">      </span><span class="istickedoff">else bvBinaryOp $ SC.scBvURem sc</span>
 <span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff">-- &quot;$modfloor&quot; -&gt; _</span>
 <span class="lineno">  303 </span><span class="spaces">    </span><span class="istickedoff">CellTypeLogicNot -&gt;</span>
 <span class="lineno">  304 </span><span class="spaces">      </span><span class="istickedoff">do w &lt;- connWidth &quot;A&quot;</span>
@@ -436,48 +436,44 @@ span.spaces    { background: white }
 <span class="lineno">  417 </span><span class="spaces">         </span><span class="istickedoff">vres &lt;- SC.scSingle sc bool res</span>
 <span class="lineno">  418 </span><span class="spaces">         </span><span class="istickedoff">output $ CellTerm vres 1 False</span>
 <span class="lineno">  419 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  420 </span><span class="spaces">    </span><span class="istickedoff">-- extend inputs to output width</span>
-<span class="lineno">  421 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp :: (CellTerm -&gt; CellTerm -&gt; IO CellTerm) -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  422 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp f =</span>
-<span class="lineno">  423 </span><span class="spaces">      </span><span class="istickedoff">do let w = connWidthNat &quot;Y&quot;</span>
-<span class="lineno">  424 </span><span class="spaces">         </span><span class="istickedoff">ta &lt;- extTrunc sc w =&lt;&lt; input &quot;A&quot;</span>
-<span class="lineno">  425 </span><span class="spaces">         </span><span class="istickedoff">tb &lt;- extTrunc sc w =&lt;&lt; input &quot;B&quot;</span>
-<span class="lineno">  426 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- f ta tb</span>
-<span class="lineno">  427 </span><span class="spaces">         </span><span class="istickedoff">output res</span>
-<span class="lineno">  428 </span><span class="spaces">    </span><span class="istickedoff">-- Extend inputs to max of input and output widths, compute with</span>
-<span class="lineno">  429 </span><span class="spaces">    </span><span class="istickedoff">-- width - 1 for signed output.</span>
-<span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">signedBinaryOp ::</span>
-<span class="lineno">  431 </span><span class="spaces">      </span><span class="istickedoff">(SC.Term -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) -&gt;</span>
-<span class="lineno">  432 </span><span class="spaces">      </span><span class="istickedoff">IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  433 </span><span class="spaces">    </span><span class="istickedoff">signedBinaryOp f =</span>
-<span class="lineno">  434 </span><span class="spaces">      </span><span class="istickedoff">do ta &lt;- input &quot;A&quot;</span>
-<span class="lineno">  435 </span><span class="spaces">         </span><span class="istickedoff">tb &lt;- input &quot;B&quot;</span>
-<span class="lineno">  436 </span><span class="spaces">         </span><span class="istickedoff">let w = maximum [cellTermWidth ta, cellTermWidth tb, connWidthNat &quot;Y&quot;]</span>
-<span class="lineno">  437 </span><span class="spaces">         </span><span class="istickedoff">ta' &lt;- extTrunc sc w ta</span>
-<span class="lineno">  438 </span><span class="spaces">         </span><span class="istickedoff">tb' &lt;- extTrunc sc w tb</span>
-<span class="lineno">  439 </span><span class="spaces">         </span><span class="istickedoff">if w &gt; 0</span>
-<span class="lineno">  440 </span><span class="spaces">           </span><span class="istickedoff">then do wt &lt;- SC.scNat sc $ w - 1</span>
-<span class="lineno">  441 </span><span class="spaces">                   </span><span class="istickedoff">res &lt;- f wt (cellTermTerm ta') $ cellTermTerm tb'</span>
-<span class="lineno">  442 </span><span class="spaces">                   </span><span class="istickedoff">output ta' { cellTermTerm = res }</span>
-<span class="lineno">  443 </span><span class="spaces">           </span><span class="istickedoff">else output ta'</span>
-<span class="lineno">  444 </span><span class="spaces">    </span><span class="istickedoff">-- extend inputs to max input width, output is a single bit extended to the output width</span>
-<span class="lineno">  445 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryCmp :: (CellTerm -&gt; CellTerm -&gt; IO SC.Term) -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  446 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryCmp f =</span>
-<span class="lineno">  447 </span><span class="spaces">      </span><span class="istickedoff">do ta &lt;- input &quot;A&quot;</span>
-<span class="lineno">  448 </span><span class="spaces">         </span><span class="istickedoff">tb &lt;- input &quot;B&quot;</span>
-<span class="lineno">  449 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- uncurry f =&lt;&lt; extMax sc ta tb</span>
-<span class="lineno">  450 </span><span class="spaces">         </span><span class="istickedoff">outputBit res</span>
-<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">bvReduce' :: Bool -&gt; SC.Term -&gt; IO SC.Term</span>
-<span class="lineno">  452 </span><span class="spaces">    </span><span class="istickedoff">bvReduce' boolIdentity boolFun =</span>
-<span class="lineno">  453 </span><span class="spaces">      </span><span class="istickedoff">do CellTerm t _ _ &lt;- input &quot;A&quot;</span>
-<span class="lineno">  454 </span><span class="spaces">         </span><span class="istickedoff">w &lt;- connWidth &quot;A&quot;</span>
-<span class="lineno">  455 </span><span class="spaces">         </span><span class="istickedoff">boolTy &lt;- SC.scBoolType sc</span>
-<span class="lineno">  456 </span><span class="spaces">         </span><span class="istickedoff">identity &lt;- SC.scBool sc boolIdentity</span>
-<span class="lineno">  457 </span><span class="spaces">         </span><span class="istickedoff">scFoldr &lt;- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span>
-<span class="lineno">  458 </span><span class="spaces">         </span><span class="istickedoff">SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]</span>
-<span class="lineno">  459 </span><span class="spaces">    </span><span class="istickedoff">-- | bvReduce', but extend or truncate output as necessary.</span>
-<span class="lineno">  460 </span><span class="spaces">    </span><span class="istickedoff">bvReduce :: Bool -&gt; SC.Term -&gt; IO (Maybe (Map Text SC.Term))</span>
-<span class="lineno">  461 </span><span class="spaces">    </span><span class="istickedoff">bvReduce boolIdentity boolFun = outputBit =&lt;&lt; bvReduce' boolIdentity boolFun</span></span>
+<span class="lineno">  420 </span><span class="spaces">    </span><span class="istickedoff">-- Extend inputs to max of input and output widths, compute with</span>
+<span class="lineno">  421 </span><span class="spaces">    </span><span class="istickedoff">-- width - 1 for signed output.</span>
+<span class="lineno">  422 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp' ::</span>
+<span class="lineno">  423 </span><span class="spaces">      </span><span class="istickedoff">Bool -&gt; (SC.Term -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) -&gt;</span>
+<span class="lineno">  424 </span><span class="spaces">      </span><span class="istickedoff">IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  425 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp' isSignedOp f =</span>
+<span class="lineno">  426 </span><span class="spaces">      </span><span class="istickedoff">do ta &lt;- input &quot;A&quot;</span>
+<span class="lineno">  427 </span><span class="spaces">         </span><span class="istickedoff">tb &lt;- input &quot;B&quot;</span>
+<span class="lineno">  428 </span><span class="spaces">         </span><span class="istickedoff">let w = maximum [cellTermWidth ta, cellTermWidth tb, connWidthNat &quot;Y&quot;]</span>
+<span class="lineno">  429 </span><span class="spaces">         </span><span class="istickedoff">ta' &lt;- extTrunc sc w ta</span>
+<span class="lineno">  430 </span><span class="spaces">         </span><span class="istickedoff">tb' &lt;- extTrunc sc w tb</span>
+<span class="lineno">  431 </span><span class="spaces">         </span><span class="istickedoff">if w &gt; 0</span>
+<span class="lineno">  432 </span><span class="spaces">           </span><span class="istickedoff">then do wt &lt;- SC.scNat sc $ if isSignedOp then w - 1 else w</span>
+<span class="lineno">  433 </span><span class="spaces">                   </span><span class="istickedoff">res &lt;- f wt (cellTermTerm ta') $ cellTermTerm tb'</span>
+<span class="lineno">  434 </span><span class="spaces">                   </span><span class="istickedoff">output ta' { cellTermTerm = res }</span>
+<span class="lineno">  435 </span><span class="spaces">           </span><span class="istickedoff">else output ta'</span>
+<span class="lineno">  436 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp :: (SC.Term -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp = bvBinaryOp' False</span>
+<span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">bvBinarySOp :: (SC.Term -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">bvBinarySOp = bvBinaryOp' True</span>
+<span class="lineno">  440 </span><span class="spaces">    </span><span class="istickedoff">-- extend inputs to max input width, output is a single bit extended to the output width</span>
+<span class="lineno">  441 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryCmp :: (CellTerm -&gt; CellTerm -&gt; IO SC.Term) -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  442 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryCmp f =</span>
+<span class="lineno">  443 </span><span class="spaces">      </span><span class="istickedoff">do ta &lt;- input &quot;A&quot;</span>
+<span class="lineno">  444 </span><span class="spaces">         </span><span class="istickedoff">tb &lt;- input &quot;B&quot;</span>
+<span class="lineno">  445 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- uncurry f =&lt;&lt; extMax sc ta tb</span>
+<span class="lineno">  446 </span><span class="spaces">         </span><span class="istickedoff">outputBit res</span>
+<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">bvReduce' :: Bool -&gt; SC.Term -&gt; IO SC.Term</span>
+<span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">bvReduce' boolIdentity boolFun =</span>
+<span class="lineno">  449 </span><span class="spaces">      </span><span class="istickedoff">do CellTerm t _ _ &lt;- input &quot;A&quot;</span>
+<span class="lineno">  450 </span><span class="spaces">         </span><span class="istickedoff">w &lt;- connWidth &quot;A&quot;</span>
+<span class="lineno">  451 </span><span class="spaces">         </span><span class="istickedoff">boolTy &lt;- SC.scBoolType sc</span>
+<span class="lineno">  452 </span><span class="spaces">         </span><span class="istickedoff">identity &lt;- SC.scBool sc boolIdentity</span>
+<span class="lineno">  453 </span><span class="spaces">         </span><span class="istickedoff">scFoldr &lt;- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span>
+<span class="lineno">  454 </span><span class="spaces">         </span><span class="istickedoff">SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]</span>
+<span class="lineno">  455 </span><span class="spaces">    </span><span class="istickedoff">-- | bvReduce', but extend or truncate output as necessary.</span>
+<span class="lineno">  456 </span><span class="spaces">    </span><span class="istickedoff">bvReduce :: Bool -&gt; SC.Term -&gt; IO (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  457 </span><span class="spaces">    </span><span class="istickedoff">bvReduce boolIdentity boolFun = outputBit =&lt;&lt; bvReduce' boolIdentity boolFun</span></span>
 
 </pre>
 </body>

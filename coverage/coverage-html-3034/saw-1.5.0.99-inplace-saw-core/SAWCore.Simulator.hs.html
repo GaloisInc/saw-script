@@ -636,7 +636,7 @@ span.spaces    { background: white }
 <span class="lineno">  617 </span><span class="spaces">    </span><span class="istickedoff">recEval t =</span>
 <span class="lineno">  618 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (termIndex t) memo of</span>
 <span class="lineno">  619 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; force x</span>
-<span class="lineno">  620 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; evalTermF <span class="nottickedoff">cfg</span> <span class="nottickedoff">lam</span> recEval (unwrapTermF t) env</span>
+<span class="lineno">  620 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; evalTermF <span class="nottickedoff">cfg</span> lam recEval (unwrapTermF t) env</span>
 <span class="lineno">  621 </span><span class="spaces">      </span><span class="istickedoff">where memo = if closedTerm t then memoClosed else memoLocal</span></span>
 <span class="lineno">  622 </span>
 <span class="lineno">  623 </span>{-# SPECIALIZE evalOpen ::
