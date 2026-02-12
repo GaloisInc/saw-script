@@ -15,21 +15,7 @@ module Main (main) where
 
 import Control.Applicative (many, (<|>))
 import Control.Arrow (second)
-import Data.Attoparsec.ByteString.Char8 (
-    Parser,
-    endOfLine,
-    isAlpha_ascii,
-    isDigit,
-    isSpace,
-    many1,
-    manyTill,
-    parseOnly,
-    satisfy,
-    sepBy,
-    string,
-    takeWhile1,
-    (<?>),
- )
+import Data.Attoparsec.ByteString.Char8 (Parser, (<?>))
 import qualified Data.Attoparsec.ByteString.Char8 as A
 import Data.ByteString.Char8 (ByteString, pack, unpack)
 import qualified Data.ByteString.Char8 as B
@@ -49,19 +35,27 @@ type Path = ByteString
 
 type Bit = Maybe Bool -- Nothing for 'x', 'z'
 
-data Value = Value {width :: Width, val :: [Bit]} deriving (Show)
+data Value = Value
+    { width :: Width
+    , val :: [Bit]
+    } deriving (Show)
 
-data Header = Header {inputNames :: [Id], outputNames :: [Id]} deriving (Show)
+data Header = Header
+    { inputNames :: [Id]
+    , outputNames :: [Id]
+    } deriving (Show)
 
-data Row = Row {inputs :: [Value], outputs :: [Value]} deriving (Show)
+data Row = Row
+    { inputs :: [Value]
+    , outputs :: [Value]
+    } deriving (Show)
 
 data Table = Table
     { modName :: Id
     , allSigs :: Header
     , header :: Header
     , rows :: [Row]
-    }
-    deriving (Show)
+    } deriving (Show)
 
 data YosysLog = YosysLog Path [Table] deriving (Show)
 
@@ -75,20 +69,20 @@ isHSpace :: Char -> Bool
 isHSpace = (`B.elem` " \t")
 
 isName :: Char -> Bool
-isName c = isAlpha_ascii c || isDigit c || c `B.elem` "_$\\"
+isName c = A.isAlpha_ascii c || A.isDigit c || c `B.elem` "_$\\"
 
 isFilePath :: Char -> Bool
-isFilePath c = isAlpha_ascii c || isDigit c || c `B.elem` "\\/.$"
+isFilePath c = A.isAlpha_ascii c || A.isDigit c || c `B.elem` "\\/.$"
 
 -- | Skip horizontal space.
 hspace :: Parser ()
 hspace = A.takeWhile isHSpace $> ()
 
 natural :: Parser Natural
-natural = (read . unpack <$> takeWhile1 isDigit) <* hspace
+natural = (read . unpack <$> A.takeWhile1 A.isDigit) <* hspace
 
 bit :: Parser Bit
-bit = toN <$> satisfy isBit
+bit = toN <$> A.satisfy isBit
   where
     toN = \case
         '0' -> Just False
@@ -96,31 +90,31 @@ bit = toN <$> satisfy isBit
         _ -> Nothing
 
 eol :: Parser ()
-eol = endOfLine *> hspace
+eol = A.endOfLine *> hspace
 
 tick :: Parser ()
-tick = satisfy (== '\'') *> hspace
+tick = A.satisfy (== '\'') *> hspace
 
 comma :: Parser ()
-comma = satisfy (== ',') *> hspace
+comma = A.satisfy (== ',') *> hspace
 
 skipSemis :: Parser ()
 skipSemis = A.takeWhile (== ';') $> ()
 
 tok :: ByteString -> Parser ()
-tok s = string s *> hspace
+tok s = A.string s *> hspace
 
 anyWord :: Parser ByteString
-anyWord = takeWhile1 (not . isSpace) <* hspace
+anyWord = A.takeWhile1 (not . A.isSpace) <* hspace
 
 name :: Parser Id
-name = takeWhile1 isName <* hspace
+name = A.takeWhile1 isName <* hspace
 
 filePath :: Parser Id
-filePath = takeWhile1 isFilePath <* hspace
+filePath = A.takeWhile1 isFilePath <* hspace
 
 value :: Parser Value
-value = Value <$> natural <*> (tick *> many1 bit) <* hspace
+value = Value <$> natural <*> (tick *> A.many1 bit) <* hspace
 
 manyThen :: Parser a -> Parser b -> Parser b
 manyThen pa pb = pb <|> (pa *> manyThen pa pb)
@@ -147,7 +141,7 @@ evalLine :: Parser (Id, Header)
 evalLine =
     ( do
         tok "yosys>" *> tok "eval" *> tok "-table"
-        h <- Header <$> (name `sepBy` comma) <*> (tok "-show" *> (name `sepBy` comma) <|> pure [])
+        h <- Header <$> (name `A.sepBy` comma) <*> (tok "-show" *> (name `A.sepBy` comma) <|> pure [])
         x <- name <* skipSemis <* eol
         pure (x, h)
     )
@@ -155,16 +149,16 @@ evalLine =
 
 tableHeader :: Parser Header
 tableHeader =
-    ( (Header <$> manyTill name (tok "|") <*> manyTill name eol <* hrule)
-        <|> (Header <$> manyTill name eol <*> pure [] <* hrule)
+    ( (Header <$> A.manyTill name (tok "|") <*> A.manyTill name eol <* hrule)
+        <|> (Header <$> A.manyTill name eol <*> pure [] <* hrule)
         <|> pure (Header [] [])
     )
         <?> "eval -table header"
 
 row :: Parser Row
 row =
-    ( (Row <$> manyTill value (tok "|") <*> manyTill value eol)
-        <|> (Row <$> ((:) <$> value <*> manyTill value eol) <*> pure [])
+    ( (Row <$> A.manyTill value (tok "|") <*> A.manyTill value eol)
+        <|> (Row <$> ((:) <$> value <*> A.manyTill value eol) <*> pure [])
     )
         <?> "eval -table row"
 
@@ -197,7 +191,9 @@ data Stmt
 
 newtype Cryptol = Cryptol [Def]
 
-data Def = Def Id (Maybe Ty) [Id] Expr | Verb ByteString
+data Def
+    = Def Id (Maybe Ty) [Id] Expr
+    | Verb ByteString
 
 data Ty
     = TyVec Natural (Maybe Ty)
@@ -233,7 +229,7 @@ instance Pretty Stmt where
     pretty' lvl = \case
         EnableExperimental -> "enable_experimental;"
         YosysImport x p -> x <> " <- yosys_import " <> "\"" <> p <> "\";"
-        Let cry -> "let {{" <> pretty' (lvl + 2) cry <> "\n}};"
+        Let cry -> "let {{\n" <> pretty' (lvl + 2) cry <> "\n}};"
         ProvePrint x e -> "prove_print " <> x <> " {{ " <> pretty e <> " }};"
         ProveThenPrint x e ->
             "do {p <- prove "
@@ -264,7 +260,7 @@ instance Pretty Def where
       where
         lhs = x <> B.concat ((" " <>) <$> as)
         rhs = pretty' (lvl + len lhs + 3) e
-    pretty' lvl (Verb x) = indent lvl <> x
+    pretty' _ (Verb x) = x
 
 instance Pretty Ty where
     pretty' _ = \case
@@ -344,15 +340,15 @@ tyBit :: Ty
 tyBit = TyIdent "Bit"
 
 preamble :: [Def]
-preamble =
+preamble = pure $ Verb $ B.unlines
     -- TODO: really should handle other output types as well.
-    [ Verb "(===>) : {a, y} (fin y) => (a -> {Y: [y](Option Bit)}) -> (a -> {Y: [y]}) -> a -> Bit"
-    , Verb "(===>) spec impl a = and [i == fromOption i s | i <- (impl a).Y | s <- (spec a).Y]"
-    , Verb "                     where"
-    , Verb "                       fromOption : {b} b -> Option b -> b"
-    , Verb "                       fromOption def opt = case opt of"
-    , Verb "                                              Some x -> x"
-    , Verb "                                              None   -> def\n"
+    [ "  (===>) : {a, y} (fin y) => (a -> {Y: [y](Option Bit)}) -> (a -> {Y: [y]}) -> a -> Bit"
+    , "  (===>) spec impl a = and [i == fromOption i s | i <- (impl a).Y | s <- (spec a).Y]"
+    , "                       where"
+    , "                         fromOption : {b} b -> Option b -> b"
+    , "                         fromOption def opt = case opt of"
+    , "                                                Some x -> x"
+    , "                                                None   -> def"
     ]
 
 -- Table -> SAW/Cryptol translation
@@ -470,7 +466,7 @@ main :: IO ()
 main = do
     args <- getArgs
     let nonFatal = "--non-fatal" `elem` args
-    result <- parseOnly yosysLog <$> B.getContents
+    result <- A.parseOnly yosysLog <$> B.getContents
     case result of
         Left err -> putStrLn $ "Error: " <> err
         Right tbls -> B.putStrLn $ pretty $ toSAW nonFatal tbls

@@ -21,7 +21,7 @@ import Data.Aeson.Encode.Pretty (encodePretty)
 import Data.Aeson.Key (fromString)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as B
-import Data.List (stripPrefix)
+import Data.List (stripPrefix, foldl')
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
@@ -91,15 +91,16 @@ tests = binaryOps False 0 0 0
 
      <> debugCells
 
--- | Params:
+-- | Arguments to this function set the value of corresponding Yosys cell
+--   parameters.
 binaryOps ::
-    -- \| {A,B}_SIGNED
+    -- | {A,B}_SIGNED
     Bool ->
-    -- \| A_WIDTH
+    -- | A_WIDTH
     Width ->
-    -- \| B_WIDTH
+    -- | B_WIDTH
     Width ->
-    -- \| Y_WIDTH
+    -- | Y_WIDTH
     Width ->
     [Cell]
 binaryOps s a b y =
@@ -123,13 +124,14 @@ binaryOps s a b y =
             , "lt"
             ]
 
--- | Params:
+-- | Arguments to this function set the value of corresponding Yosys cell
+--   parameters.
 binaryOps' ::
-    -- \| (A_WIDTH, A_SIGNED)
+    -- | (A_WIDTH, A_SIGNED)
     (Width, Bool) ->
-    -- \| (B_WIDTH, B_SIGNED)
+    -- | (B_WIDTH, B_SIGNED)
     (Width, Bool) ->
-    -- \| Y_WIDTH
+    -- | Y_WIDTH
     Width ->
     [Cell]
 binaryOps' a b y =
@@ -139,24 +141,26 @@ binaryOps' a b y =
             , "shift" -- these shifts reverse when B is negative
             ]
 
--- | Like shift, but shift-in 'x' bits. Also, A_SIGNED must be false. Params:
+-- | Like shift, but shift-in 'x' bits. Also, A_SIGNED must be false. Arguments
+--   to this function set the value of corresponding Yosys cell parameters.
 shiftx ::
-    -- \| A_WIDTH
+    -- | A_WIDTH
     Width ->
-    -- \| (B_WIDTH, B_SIGNED)
+    -- | (B_WIDTH, B_SIGNED)
     (Width, Bool) ->
-    -- \| Y_WIDTH
+    -- | Y_WIDTH
     Width ->
     Cell
 shiftx aw b yw = binary (aw, False) b yw "shiftx"
 
--- | Same params as binaryOps', but B_SIGNED must be 0. Params:
+-- | Same params as binaryOps', but B_SIGNED must be 0. Arguments to this
+--   function set the value of corresponding Yosys cell parameters.
 shiftOps ::
-    -- \| (A_WIDTH, A_SIGNED)
+    -- | (A_WIDTH, A_SIGNED)
     (Width, Bool) ->
-    -- \| B_WIDTH
+    -- | B_WIDTH
     Width ->
-    -- \| Y_WIDTH
+    -- | Y_WIDTH
     Width ->
     [Cell]
 shiftOps a b y =
@@ -167,11 +171,12 @@ shiftOps a b y =
             , "sshr"
             ]
 
--- | Params:
+-- | Arguments to this function set the value of corresponding Yosys cell
+--   parameters.
 unaryOps ::
-    -- \| (A_WIDTH, A_SIGNED)
+    -- | (A_WIDTH, A_SIGNED)
     (Width, Bool) ->
-    -- \| Y_WIDTH
+    -- | Y_WIDTH
     Width ->
     [Cell]
 unaryOps a yw =
@@ -187,11 +192,12 @@ unaryOps a yw =
             , "reduce_xor"
             ]
 
--- | Params:
+-- | Arguments to this function set the value of corresponding Yosys cell
+--   parameters.
 muxen ::
-    -- \| WIDTH
+    -- | WIDTH
     Width ->
-    -- \| S_WIDTH
+    -- | S_WIDTH
     Width ->
     [Cell]
 muxen w sw = [pmux w sw, bmux w sw, mux w]
@@ -212,34 +218,45 @@ type Width = Natural
 
 type Id = ByteString
 
-tyToMod :: Id -> Fresh Id
-tyToMod = fresh
-
-tyToCell :: Id -> Id
-tyToCell = (<> "Cell")
-
-tyToTy :: Id -> Id
-tyToTy = ("$" <>)
-
 newtype Device = Device [Module] deriving (Semigroup)
 
-data Module = Module {modName :: Id, modPorts :: Ports, modCells :: Cells}
+data Module = Module
+    { modName :: Id
+    , modPorts :: Ports
+    , modCells :: Cells
+    }
 
 newtype Ports = Ports [Signal] deriving (Semigroup)
 
 newtype Cells = Cells [Cell] deriving (Semigroup)
 
-data Cell = Cell {cellType :: Id, cellParams :: Params, cellSigs :: [Signal]}
+data Cell = Cell
+    { cellType :: Id
+    , cellParams :: Params
+    , cellSigs :: [Signal]
+    }
 
-data Signal = Signal {sigName :: Id, sigDir :: Direction, sigWidth :: Width, sigWidthParam :: Maybe Id}
+data Signal = Signal
+    { sigName :: Id
+    , sigDir :: Direction
+    , sigWidth :: Width
+    , sigWidthParam :: Maybe Id
+    }
 
 newtype Params = Params [Param] deriving (Semigroup)
 
-data Param = Param {paramName :: Id, paramValue :: ParamValue}
+data Param = Param
+    { paramName :: Id
+    , paramValue :: ParamValue
+    }
 
-data ParamValue = StrParam ByteString | NatParam Natural
+data ParamValue
+    = StrParam ByteString
+    | NatParam Natural
 
-data Direction = Input | Output
+data Direction
+    = Input
+    | Output
 
 class Named a where
     getName :: a -> Id
@@ -248,7 +265,7 @@ instance Named Module where
     getName = modName
 
 instance Named Cell where
-    getName = tyToCell . cellType
+    getName = (<> "Cell") . cellType
 
 instance Named Signal where
     getName = sigName
@@ -288,7 +305,7 @@ instance ToJSON Cells where
 instance ToJSON Cell where
     toJSON (Cell t ps ss) =
         object
-            [ "type" .= B.unpack (tyToTy t)
+            [ "type" .= B.unpack ("$" <> t)
             , "parameters" .= (ps <> getWidthParams ss)
             , "port_directions" .= named' sigDir ss
             , "connections" .= named' snd (getBits ss)
@@ -307,17 +324,21 @@ instance ToJSON Direction where
         Input -> String "input"
         Output -> String "output"
 
+-- | For a set of signals, assign a unique index to each bit/wire. This index
+--   identifies a "net", used when making connections between ports.
 getBits :: [Signal] -> [(Signal, [Natural])]
-getBits = foldr bits [] . reverse
+getBits = foldl' bits []
   where
-    bits :: Signal -> [(Signal, [Natural])] -> [(Signal, [Natural])]
-    bits s ss = (s, [lastBit ss + 1 .. lastBit ss + sigWidth s]) : ss
+    bits :: [(Signal, [Natural])] -> Signal -> [(Signal, [Natural])]
+    bits ss s = (s, [b + 1 .. b + sigWidth s]) : ss
+      where
+        b = lastBit ss
 
     lastBit :: [(Signal, [Natural])] -> Natural
     lastBit = \case
         (s, b : _) : _ -> sigWidth s + b - 1
-        _ : ss -> lastBit ss
-        [] -> 0
+        _ : ss         -> lastBit ss
+        []             -> 0
 
 getWidthParams :: [Signal] -> Params
 getWidthParams = Params . concatMap getP
@@ -329,7 +350,7 @@ getWidthParams = Params . concatMap getP
 
 -- | Wrap a Cell in a Module that just passes through the cell's interface.
 wrapCell :: Cell -> Fresh Module
-wrapCell c = Module <$> tyToMod (cellType c) <*> pure (Ports $ cellSigs c) <*> pure (Cells [c])
+wrapCell c = Module <$> fresh (cellType c) <*> pure (Ports $ cellSigs c) <*> pure (Cells [c])
 
 params :: [(Id, Natural)] -> Params
 params = Params . map (\(n, v) -> Param n $ NatParam v)
@@ -366,11 +387,12 @@ unary (a, aSigned) y t =
         (params [("A_SIGNED", if aSigned then 1 else 0)])
         [sIn "A" a, sOut "Y" y]
 
--- | Instantiate a $bmux cell. Params:
+-- | Instantiate a $bmux cell. Arguments to this function set the value of
+--   corresponding Yosys cell parameters.
 bmux ::
-    -- \| WIDTH
+    -- | WIDTH
     Width ->
-    -- \| S_WIDTH
+    -- | S_WIDTH
     Width ->
     Cell
 bmux w sw =
@@ -379,11 +401,12 @@ bmux w sw =
         (params [("WIDTH", w), ("S_WIDTH", sw)])
         [sig' Input "A" $ w * (2 ^ sw), sig' Input "S" sw, sig' Output "Y" w]
 
--- | Instantiate a $pmux cell. Params:
+-- | Instantiate a $pmux cell. Arguments to this function set the value of
+--   corresponding Yosys cell parameters.
 pmux ::
-    -- \| WIDTH
+    -- | WIDTH
     Width ->
-    -- \| S_WIDTH
+    -- | S_WIDTH
     Width ->
     Cell
 pmux w sw =
@@ -392,9 +415,10 @@ pmux w sw =
         (params [("WIDTH", w), ("S_WIDTH", sw)])
         [sig' Input "A" w, sig' Input "B" $ w * sw, sig' Input "S" sw, sig' Output "Y" w]
 
--- | Instantiate a $mux cell. Params:
+-- | Instantiate a $mux cell. Arguments to this function set the value of
+--   corresponding Yosys cell parameters.
 mux ::
-    -- \| WIDTH
+    -- | WIDTH
     Width ->
     Cell
 mux w =
@@ -403,11 +427,12 @@ mux w =
         (params [("WIDTH", w)])
         [sig' Input "A" w, sig' Input "B" w, sig' Input "S" 1, sig' Output "Y" w]
 
--- | FLAVOR must be: assert, assume, live, fair, or cover. Params:
+-- | FLAVOR must be: assert, assume, live, fair, or cover. Arguments to this
+--   function set the value of corresponding Yosys cell parameters.
 dbCheck ::
-    -- \| TRG_WIDTH
+    -- | TRG_WIDTH
     Width ->
-    -- \| ARGS_WIDTH
+    -- | ARGS_WIDTH
     Width ->
     Cell
 dbCheck tw aw =
@@ -418,11 +443,12 @@ dbCheck tw aw =
         )
         [sig' Input "A" 1, sig' Input "EN" 1, sIn "TRG" tw, sIn "ARGS" aw]
 
--- | Params:
+-- | Arguments to this function set the value of corresponding Yosys cell
+--   parameters.
 dbPrint ::
-    -- \| TRG_WIDTH
+    -- | TRG_WIDTH
     Width ->
-    -- \| ARGS_WIDTH
+    -- | ARGS_WIDTH
     Width ->
     Cell
 dbPrint tw aw =
@@ -473,9 +499,11 @@ main = do
             B.writeFile jsonPath $ encodePretty device
             B.writeFile ysPath $ ysContent jsonPath device
         _ -> do
-            putStrLn "Error: expecting exactly 2 arguments."
-            putStrLn $ "Usage: ./" <> me <> " <yosys-json> <yosys-script>"
-            putStrLn "  where both <yosys-json> and <yosys-script> are paths to files that will be overwritten."
-            putStrLn "    <yosys-json>: Yosys RTLIL JSON file containing instantiated modules for testing."
-            putStrLn "    <yosys-script>: Yosys script file for loading and evaluating the modules generated in <yosys-json>."
+            putStrLn $ unlines
+                [ "Error: expecting exactly 2 arguments."
+                , "Usage: ./" <> me <> " <yosys-json> <yosys-script>"
+                , "  where both <yosys-json> and <yosys-script> are paths to files that will be overwritten."
+                , "    <yosys-json>: path to write Yosys RTLIL JSON file containing instantiated modules for testing."
+                , "    <yosys-script>: path to write Yosys script file for loading and evaluating the modules generated in <yosys-json>."
+                ]
             exitFailure
