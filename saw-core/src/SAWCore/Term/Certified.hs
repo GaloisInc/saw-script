@@ -89,7 +89,7 @@ module SAWCore.Term.Certified
   , scLoadModule
   , scmFreshName
   , scFreshenGlobalIdent
-  , scResolveNameByURI
+  , scResolveQualName
     -- * Checkpointing
   , SharedContextCheckpoint
   , checkpointSharedContext
@@ -159,7 +159,7 @@ import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 import SAWCore.Unique
-import SAWCore.URI
+import qualified SAWCore.QualName as QN
 
 ----------------------------------------------------------------------
 
@@ -180,7 +180,7 @@ data TermError
   | DataTypeNotFound Name
   | RecursorPropElim Name Sort
   | ConstantNotClosed Name Term
-  | DuplicateURI URI
+  | DuplicateQualName QN.QualName
   | AlreadyDefined Name
   | AscriptionNotSubtype Term Term -- expected type, body
   | DataTypeKindNotClosed Name Term
@@ -305,7 +305,7 @@ emptyAppCache = emptyTFM
 -- declaration in 'scModuleMap' whose name is a 'ModuleIdentifier'.
 -- Each map entry points to a 'Constant' term with the same 'Ident'.
 -- It exists only to save one map lookup when building terms: Without
--- it we would first have to look up the Ident by URI in scURIEnv, and
+-- it we would first have to look up the Ident by QualName in scQualNameEnv, and
 -- then do another lookup for hash-consing the Constant term.
 -- Invariant: All entries in 'scAppCache' must have 'TermIndex'es that
 -- are less than 'scNextTermIndex' and marked valid in 'scValidTerms'.
@@ -313,7 +313,7 @@ data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scAppCache       :: AppCacheRef
   , scDisplayNameEnv :: IORef DisplayNameEnv
-  , scURIEnv         :: IORef (Map URI VarIndex)
+  , scQualNameEnv    :: IORef (Map QN.QualName VarIndex)
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
@@ -364,7 +364,7 @@ data SharedContextCheckpoint =
   SCC
   { sccModuleMap :: ModuleMap
   , sccNamingEnv :: DisplayNameEnv
-  , sccURIEnv    :: Map URI VarIndex
+  , sccQualNameEnv :: Map QN.QualName VarIndex
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
   }
@@ -373,13 +373,13 @@ checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
 checkpointSharedContext sc =
   do mmap <- readIORef (scModuleMap sc)
      nenv <- readIORef (scDisplayNameEnv sc)
-     uenv <- readIORef (scURIEnv sc)
+     uenv <- readIORef (scQualNameEnv sc)
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
-            , sccURIEnv = uenv
+            , sccQualNameEnv = uenv
             , sccGlobalEnv = genv
             , sccTermIndex = i
             }
@@ -397,7 +397,7 @@ restoreSharedContext scc sc =
      -- Restore saved environments
      writeIORef (scModuleMap sc) (sccModuleMap scc)
      writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
-     writeIORef (scURIEnv sc) (sccURIEnv scc)
+     writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
@@ -617,10 +617,10 @@ scmFreshVarIndex =
 scmRegisterNameWithIndex :: VarIndex -> NameInfo -> SCM ()
 scmRegisterNameWithIndex i nmi =
   do sc <- scmSharedContext
-     uris <- liftIO $ readIORef (scURIEnv sc)
-     let uri = nameURI nmi
-     when (Map.member uri uris) $ scmError (DuplicateURI uri)
-     liftIO $ writeIORef (scURIEnv sc) (Map.insert uri i uris)
+     qns <- liftIO $ readIORef (scQualNameEnv sc)
+     let qn = toQualName nmi
+     when (Map.member qn qns) $ scmError (DuplicateQualName qn)
+     liftIO $ writeIORef (scQualNameEnv sc) (Map.insert qn i qns)
      liftIO $ modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i (nameAliases nmi)
 
 -- | Generate a 'Name' with a fresh 'VarIndex' for the given
@@ -632,17 +632,17 @@ scmRegisterName nmi =
      scmRegisterNameWithIndex i nmi
      pure (Name i nmi)
 
-scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
-scResolveNameByURI sc uri =
-  do env <- readIORef (scURIEnv sc)
-     pure $! Map.lookup uri env
+scResolveQualName :: SharedContext -> QN.QualName -> IO (Maybe VarIndex)
+scResolveQualName sc qn =
+  do env <- readIORef (scQualNameEnv sc)
+     pure $! Map.lookup qn env
 
 -- | Create a unique global name with the given base name.
 scmFreshName :: Text -> SCM Name
 scmFreshName x =
   do i <- scmFreshVarIndex
-     let uri = scFreshNameURI x i
-     let nmi = ImportedName uri [x, x <> "#" <>  Text.pack (show i)]
+     let qn = scFreshQualName x i
+     let nmi = ImportedName qn (QN.aliases qn)
      scmRegisterNameWithIndex i nmi
      pure (Name i nmi)
 
@@ -667,7 +667,7 @@ scmRegisterGlobal :: Ident -> Term -> SCM ()
 scmRegisterGlobal ident t =
   do sc <- scmSharedContext
      dup <- liftIO $ atomicModifyIORef' (scGlobalEnv sc) f
-     when dup $ scmError (DuplicateURI (moduleIdentToURI ident))
+     when dup $ scmError (DuplicateQualName (moduleIdentToQualName ident))
   where
     f m =
       case HMap.lookup ident m of
@@ -1737,7 +1737,7 @@ scmFreshConstant name rhs =
 
 -- | Define a global constant with the specified name (as 'NameInfo')
 -- and body.
--- The URI in the given 'NameInfo' must be globally unique.
+-- The QualName in the given 'NameInfo' must be globally unique.
 -- The term for the body must not have any free variables.
 -- The type of the body determines the type of the constant; to
 -- specify a different formulation of the type, use 'scAscribe'.
@@ -1801,7 +1801,7 @@ mkSharedContext =
        , scAppCache = cr
        , scNextVarIndex = vr
        , scDisplayNameEnv = dr
-       , scURIEnv = ur
+       , scQualNameEnv = ur
        , scGlobalEnv = gr
        , scNextTermIndex = tr
        , scValidTerms = ir

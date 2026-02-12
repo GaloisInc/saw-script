@@ -184,7 +184,7 @@ library saw-core
     SAWCore.Testing.Random
     SAWCore.Typechecker
     SAWCore.Unique
-    SAWCore.URI
+    SAWCore.QualName
     SAWCore.Change
   other-modules:
     SAWCore.Panic

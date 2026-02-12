@@ -90,7 +90,7 @@ import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
-import SAWCore.URI
+import qualified SAWCore.QualName as QN
 
 -- | Test if a depth is "allowed", meaning not greater than the max depth
 depthAllowed :: PPS.Opts -> Int -> Bool
@@ -511,7 +511,7 @@ prettyBestName nm =
 
 prettyName :: NameInfo -> PPS.Doc
 prettyName (ModuleIdentifier i) = prettyIdent i
-prettyName (ImportedName absName _) = pretty (renderURI absName)
+prettyName (ImportedName qName _) = pretty (QN.render qName)
 
 -- | Pretty-print a non-shared term
 prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc
