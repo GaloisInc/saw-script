@@ -32,7 +32,7 @@ span.spaces    { background: white }
 <span class="lineno">   13 </span>-}
 <span class="lineno">   14 </span>
 <span class="lineno">   15 </span>module SAWCore.URI 
-<span class="lineno">   16 </span>  ( NameSpace(..)
+<span class="lineno">   16 </span>  ( Namespace(..)
 <span class="lineno">   17 </span>  , URI
 <span class="lineno">   18 </span>  , mkURI
 <span class="lineno">   19 </span>  , parseURI
@@ -49,31 +49,31 @@ span.spaces    { background: white }
 <span class="lineno">   30 </span>import qualified Data.Text as Text
 <span class="lineno">   31 </span>import qualified Data.Text.Read as Text
 <span class="lineno">   32 </span>
-<span class="lineno">   33 </span>data NameSpace =
-<span class="lineno">   34 </span>  NameSpaceCore | NameSpaceCryptol | NameSpaceFresh | NameSpaceYoSys | NameSpaceLLVM
+<span class="lineno">   33 </span>data Namespace =
+<span class="lineno">   34 </span>  NamespaceCore | NamespaceCryptol | NamespaceFresh | NamespaceYosys | NamespaceLLVM
 <span class="lineno">   35 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Enum</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Bounded</span></span></span></span>)
 <span class="lineno">   36 </span>
-<span class="lineno">   37 </span>instance <span class="decl"><span class="nottickedoff">Hashable NameSpace</span></span> where
+<span class="lineno">   37 </span>instance <span class="decl"><span class="nottickedoff">Hashable Namespace</span></span> where
 <span class="lineno">   38 </span>  <span class="decl"><span class="istickedoff">hashWithSalt s ns = hashWithSalt s (fromEnum ns)</span></span>
 <span class="lineno">   39 </span>
-<span class="lineno">   40 </span>renderNameSpace :: NameSpace -&gt; Text
-<span class="lineno">   41 </span><span class="decl"><span class="istickedoff">renderNameSpace = \case</span>
-<span class="lineno">   42 </span><span class="spaces">  </span><span class="istickedoff">NameSpaceCore -&gt; &quot;core&quot;</span>
-<span class="lineno">   43 </span><span class="spaces">  </span><span class="istickedoff">NameSpaceCryptol -&gt; &quot;cryptol&quot;</span>
-<span class="lineno">   44 </span><span class="spaces">  </span><span class="istickedoff">NameSpaceFresh -&gt; &quot;fresh&quot;</span>
-<span class="lineno">   45 </span><span class="spaces">  </span><span class="istickedoff">NameSpaceYoSys -&gt; &quot;yosys&quot;</span>
-<span class="lineno">   46 </span><span class="spaces">  </span><span class="istickedoff">NameSpaceLLVM -&gt; &quot;llvm&quot;</span></span>
+<span class="lineno">   40 </span>renderNamespace :: Namespace -&gt; Text
+<span class="lineno">   41 </span><span class="decl"><span class="istickedoff">renderNamespace = \case</span>
+<span class="lineno">   42 </span><span class="spaces">  </span><span class="istickedoff">NamespaceCore -&gt; &quot;core&quot;</span>
+<span class="lineno">   43 </span><span class="spaces">  </span><span class="istickedoff">NamespaceCryptol -&gt; &quot;cryptol&quot;</span>
+<span class="lineno">   44 </span><span class="spaces">  </span><span class="istickedoff">NamespaceFresh -&gt; &quot;fresh&quot;</span>
+<span class="lineno">   45 </span><span class="spaces">  </span><span class="istickedoff">NamespaceYosys -&gt; &quot;yosys&quot;</span>
+<span class="lineno">   46 </span><span class="spaces">  </span><span class="istickedoff">NamespaceLLVM -&gt; &quot;llvm&quot;</span></span>
 <span class="lineno">   47 </span>
-<span class="lineno">   48 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show NameSpace</span></span></span></span> where
-<span class="lineno">   49 </span>  <span class="decl"><span class="nottickedoff">show ns = Text.unpack $ renderNameSpace ns</span></span>
+<span class="lineno">   48 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Namespace</span></span></span></span> where
+<span class="lineno">   49 </span>  <span class="decl"><span class="nottickedoff">show ns = Text.unpack $ renderNamespace ns</span></span>
 <span class="lineno">   50 </span>
-<span class="lineno">   51 </span>nameSpaceMap :: Map Text NameSpace
-<span class="lineno">   52 </span><span class="decl"><span class="istickedoff">nameSpaceMap = Map.fromList $ map (\ns -&gt; (renderNameSpace ns, ns)) [minBound..maxBound]</span></span>
+<span class="lineno">   51 </span>namespaceMap :: Map Text Namespace
+<span class="lineno">   52 </span><span class="decl"><span class="istickedoff">namespaceMap = Map.fromList $ map (\ns -&gt; (renderNamespace ns, ns)) [minBound..maxBound]</span></span>
 <span class="lineno">   53 </span>
-<span class="lineno">   54 </span>readNameSpace :: MonadFail m =&gt; Text -&gt; m NameSpace
-<span class="lineno">   55 </span><span class="decl"><span class="istickedoff">readNameSpace txt = case Map.lookup txt nameSpaceMap of</span>
+<span class="lineno">   54 </span>readNamespace :: MonadFail m =&gt; Text -&gt; m Namespace
+<span class="lineno">   55 </span><span class="decl"><span class="istickedoff">readNamespace txt = case Map.lookup txt namespaceMap of</span>
 <span class="lineno">   56 </span><span class="spaces">  </span><span class="istickedoff">Just ns -&gt; pure ns</span>
-<span class="lineno">   57 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;readNameSpace: namespace not found: &quot; ++ Text.unpack txt</span></span></span>
+<span class="lineno">   57 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;readNamespace: namespace not found: &quot; ++ Text.unpack txt</span></span></span>
 <span class="lineno">   58 </span>
 <span class="lineno">   59 </span>parsePath :: MonadFail m =&gt; Text -&gt; m ([Text], Text)
 <span class="lineno">   60 </span><span class="decl"><span class="istickedoff">parsePath txt</span>
@@ -87,10 +87,10 @@ span.spaces    { background: white }
 <span class="lineno">   68 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;parsePath: invalid path: &quot; ++ (Text.unpack txt)</span></span></span>
 <span class="lineno">   69 </span>
 <span class="lineno">   70 </span>data URI = URI 
-<span class="lineno">   71 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">uriNameSpace</span></span></span> :: NameSpace
+<span class="lineno">   71 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">uriNamespace</span></span></span> :: Namespace
 <span class="lineno">   72 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">uriBaseName</span></span></span> :: Text
 <span class="lineno">   73 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">uriPath</span></span></span> :: [Text]
-<span class="lineno">   74 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">uriIndex</span></span></span> :: Int
+<span class="lineno">   74 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">uriIndex</span></span></span> :: Maybe Int
 <span class="lineno">   75 </span>  }
 <span class="lineno">   76 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
 <span class="lineno">   77 </span>
@@ -112,63 +112,61 @@ span.spaces    { background: white }
 <span class="lineno">   93 </span><span class="spaces">  </span><span class="istickedoff">(False, _:_) -&gt; return (List.init ps,List.last ps)</span>
 <span class="lineno">   94 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;mkPath: invalid path: &quot; ++ show ps</span></span></span>
 <span class="lineno">   95 </span>
-<span class="lineno">   96 </span>mkURI :: (MonadFail m, Foldable t) =&gt; NameSpace -&gt; t Text -&gt; Int -&gt; m URI
-<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">mkURI _ _ idx | idx &lt; 0, <span class="tickonlyfalse">not (idx == -1)</span> =</span>
-<span class="lineno">   98 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;mkURI: invalid index: &quot; ++ show idx</span></span>
-<span class="lineno">   99 </span><span class="spaces"></span><span class="istickedoff">mkURI ns ps idx = do</span>
-<span class="lineno">  100 </span><span class="spaces">  </span><span class="istickedoff">(ps', nm) &lt;- mkPath (Foldable.toList ps)</span>
-<span class="lineno">  101 </span><span class="spaces">  </span><span class="istickedoff">return $ URI ns nm ps' idx</span></span>
-<span class="lineno">  102 </span>
-<span class="lineno">  103 </span>nonEmpty :: MonadFail m =&gt; String -&gt; Text -&gt; m ()
-<span class="lineno">  104 </span><span class="decl"><span class="istickedoff">nonEmpty msg txt = case Text.null txt of</span>
-<span class="lineno">  105 </span><span class="spaces">  </span><span class="istickedoff">True -&gt; <span class="nottickedoff">fail msg</span></span>
-<span class="lineno">  106 </span><span class="spaces">  </span><span class="istickedoff">False -&gt; return <span class="nottickedoff">()</span></span></span>
-<span class="lineno">  107 </span>
-<span class="lineno">  108 </span>splitM :: MonadFail m =&gt; Bool -&gt; Char -&gt; Text -&gt; m (Text,Text)
-<span class="lineno">  109 </span><span class="decl"><span class="istickedoff">splitM fwd c txt = do</span>
-<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">nonEmpty <span class="nottickedoff">err</span> txt</span>
-<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">let txt' = if fwd then txt else Text.reverse txt</span>
-<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">let (lhs,rhs) = Text.break (==c) txt'</span>
-<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">nonEmpty <span class="nottickedoff">err</span> lhs</span>
-<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">case Text.uncons rhs of</span>
-<span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; fail <span class="nottickedoff">err</span></span>
-<span class="lineno">  116 </span><span class="spaces">    </span><span class="istickedoff">Just(_,rhs') -&gt; case fwd of</span>
-<span class="lineno">  117 </span><span class="spaces">      </span><span class="istickedoff">True -&gt; return (lhs, rhs')</span>
-<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">False -&gt; return (Text.reverse rhs', Text.reverse lhs)</span>
-<span class="lineno">  119 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">err = &quot;splitM: failed to split on char '&quot; ++ [c] ++ &quot;' in '&quot;</span></span>
-<span class="lineno">  121 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">++ Text.unpack txt</span></span></span>
-<span class="lineno">  122 </span>
-<span class="lineno">  123 </span>parseURI :: MonadFail m =&gt; Text -&gt; m URI
-<span class="lineno">  124 </span><span class="decl"><span class="istickedoff">parseURI txt0 = do</span>
-<span class="lineno">  125 </span><span class="spaces">  </span><span class="istickedoff">(ns, txt1) &lt;- splitM True ':' txt0</span>
-<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">ns' &lt;- readNameSpace ns</span>
-<span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">let (i', txt3) = case splitM False '#' txt1 of</span>
-<span class="lineno">  128 </span><span class="spaces">        </span><span class="istickedoff">Just (txt2,si)</span>
-<span class="lineno">  129 </span><span class="spaces">          </span><span class="istickedoff">| Right (i,s) &lt;- Text.decimal si</span>
-<span class="lineno">  130 </span><span class="spaces">          </span><span class="istickedoff">, <span class="tickonlytrue">Text.null s</span></span>
-<span class="lineno">  131 </span><span class="spaces">         </span><span class="istickedoff">-&gt; (i, txt2)</span>
-<span class="lineno">  132 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; (-1, txt1)</span>
-<span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">(ps,nm) &lt;- parsePath txt3</span>
-<span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff">return $ URI ns' nm ps i'</span></span>
-<span class="lineno">  135 </span>
-<span class="lineno">  136 </span>renderURI :: URI -&gt; Text
-<span class="lineno">  137 </span><span class="decl"><span class="istickedoff">renderURI uri =</span>
-<span class="lineno">  138 </span><span class="spaces">     </span><span class="istickedoff">renderNameSpace (uriNameSpace uri)</span>
-<span class="lineno">  139 </span><span class="spaces">  </span><span class="istickedoff">&lt;&gt; &quot;:&quot; &lt;&gt; pathBody &lt;&gt; suffix</span>
-<span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">suffix :: Text</span>
-<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">suffix = case uriIndex uri &lt; 0 of</span>
-<span class="lineno">  143 </span><span class="spaces">      </span><span class="istickedoff">True -&gt; Text.empty</span>
-<span class="lineno">  144 </span><span class="spaces">      </span><span class="istickedoff">False -&gt; &quot;#&quot; &lt;&gt; Text.pack (show $ uriIndex uri)</span>
-<span class="lineno">  145 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">pathBody :: Text</span>
-<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">pathBody = case uriPath uri of</span>
-<span class="lineno">  148 </span><span class="spaces">      </span><span class="istickedoff">[] -&gt; percentEncode $ uriBaseName uri</span>
-<span class="lineno">  149 </span><span class="spaces">      </span><span class="istickedoff">ps -&gt; &quot;/&quot; &lt;&gt; Text.intercalate &quot;/&quot; (map percentEncode (ps ++ [uriBaseName uri]))</span></span>
-<span class="lineno">  150 </span>
-<span class="lineno">  151 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show URI</span></span></span></span> where
-<span class="lineno">  152 </span>  <span class="decl"><span class="nottickedoff">show uri = Text.unpack (renderURI uri)</span></span>
+<span class="lineno">   96 </span>mkURI :: (MonadFail m, Foldable t) =&gt; Namespace -&gt; t Text -&gt; Maybe Int -&gt; m URI
+<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">mkURI ns ps idx = do</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="istickedoff">(ps', nm) &lt;- mkPath (Foldable.toList ps)</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="istickedoff">return $ URI ns nm ps' idx</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>nonEmpty :: MonadFail m =&gt; String -&gt; Text -&gt; m ()
+<span class="lineno">  102 </span><span class="decl"><span class="istickedoff">nonEmpty msg txt = case Text.null txt of</span>
+<span class="lineno">  103 </span><span class="spaces">  </span><span class="istickedoff">True -&gt; <span class="nottickedoff">fail msg</span></span>
+<span class="lineno">  104 </span><span class="spaces">  </span><span class="istickedoff">False -&gt; return <span class="nottickedoff">()</span></span></span>
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>splitM :: MonadFail m =&gt; Bool -&gt; Char -&gt; Text -&gt; m (Text,Text)
+<span class="lineno">  107 </span><span class="decl"><span class="istickedoff">splitM fwd c txt = do</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="istickedoff">nonEmpty <span class="nottickedoff">err</span> txt</span>
+<span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">let txt' = if fwd then txt else Text.reverse txt</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">let (lhs,rhs) = Text.break (==c) txt'</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">nonEmpty <span class="nottickedoff">err</span> lhs</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">case Text.uncons rhs of</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; fail <span class="nottickedoff">err</span></span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">Just(_,rhs') -&gt; case fwd of</span>
+<span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">True -&gt; return (lhs, rhs')</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">False -&gt; return (Text.reverse rhs', Text.reverse lhs)</span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">err = &quot;splitM: failed to split on char '&quot; ++ [c] ++ &quot;' in '&quot;</span></span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">++ Text.unpack txt</span></span></span>
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>parseURI :: MonadFail m =&gt; Text -&gt; m URI
+<span class="lineno">  122 </span><span class="decl"><span class="istickedoff">parseURI txt0 = do</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">(ns, txt1) &lt;- splitM True ':' txt0</span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff">ns' &lt;- readNamespace ns</span>
+<span class="lineno">  125 </span><span class="spaces">  </span><span class="istickedoff">let (mi, txt3) = case splitM False '#' txt1 of</span>
+<span class="lineno">  126 </span><span class="spaces">        </span><span class="istickedoff">Just (txt2,si)</span>
+<span class="lineno">  127 </span><span class="spaces">          </span><span class="istickedoff">| Right (i,s) &lt;- Text.decimal si</span>
+<span class="lineno">  128 </span><span class="spaces">          </span><span class="istickedoff">, <span class="tickonlytrue">Text.null s</span></span>
+<span class="lineno">  129 </span><span class="spaces">         </span><span class="istickedoff">-&gt; (Just i, txt2)</span>
+<span class="lineno">  130 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; (Nothing, txt1)</span>
+<span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">(ps,nm) &lt;- parsePath txt3</span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">return $ URI ns' nm ps mi</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>renderURI :: URI -&gt; Text
+<span class="lineno">  135 </span><span class="decl"><span class="istickedoff">renderURI uri =</span>
+<span class="lineno">  136 </span><span class="spaces">     </span><span class="istickedoff">renderNamespace (uriNamespace uri)</span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="istickedoff">&lt;&gt; &quot;:&quot; &lt;&gt; pathBody &lt;&gt; suffix</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">suffix :: Text</span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff">suffix = case uriIndex uri of</span>
+<span class="lineno">  141 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; Text.empty</span>
+<span class="lineno">  142 </span><span class="spaces">      </span><span class="istickedoff">Just i -&gt; &quot;#&quot; &lt;&gt; Text.pack (show i)</span>
+<span class="lineno">  143 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">pathBody :: Text</span>
+<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff">pathBody = case uriPath uri of</span>
+<span class="lineno">  146 </span><span class="spaces">      </span><span class="istickedoff">[] -&gt; percentEncode $ uriBaseName uri</span>
+<span class="lineno">  147 </span><span class="spaces">      </span><span class="istickedoff">ps -&gt; &quot;/&quot; &lt;&gt; Text.intercalate &quot;/&quot; (map percentEncode (ps ++ [uriBaseName uri]))</span></span>
+<span class="lineno">  148 </span>
+<span class="lineno">  149 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show URI</span></span></span></span> where
+<span class="lineno">  150 </span>  <span class="decl"><span class="nottickedoff">show uri = Text.unpack (renderURI uri)</span></span>
 
 </pre>
 </body>

@@ -242,11 +242,11 @@ span.spaces    { background: white }
 <span class="lineno">  223 </span>
 <span class="lineno">  224 </span>moduleIdentToURI :: Ident -&gt; URI
 <span class="lineno">  225 </span><span class="decl"><span class="istickedoff">moduleIdentToURI ident = fromMaybe <span class="nottickedoff">(panic &quot;moduleIdentToURI&quot; [&quot;Failed to construct ident URI: &quot; &lt;&gt; identText ident])</span> $</span>
-<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">mkURI NameSpaceCore (identPieces ident) (-1)</span></span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">mkURI NamespaceCore (identPieces ident) Nothing</span></span>
 <span class="lineno">  227 </span>
 <span class="lineno">  228 </span>scFreshNameURI :: Text -&gt; VarIndex -&gt; URI
 <span class="lineno">  229 </span><span class="decl"><span class="istickedoff">scFreshNameURI nm i = fromMaybe <span class="nottickedoff">(panic &quot;scFreshNameURI&quot; [&quot;Failed to construct name URI: &lt;&gt; &quot; &lt;&gt; nm &lt;&gt; &quot;  &quot; &lt;&gt; Text.pack (show i)])</span> $</span>
-<span class="lineno">  230 </span><span class="spaces">  </span><span class="istickedoff">mkURI NameSpaceFresh [(if <span class="tickonlyfalse">Text.null nm</span> then <span class="nottickedoff">&quot;_&quot;</span> else nm)] i</span></span>
+<span class="lineno">  230 </span><span class="spaces">  </span><span class="istickedoff">mkURI NamespaceFresh [(if <span class="tickonlyfalse">Text.null nm</span> then <span class="nottickedoff">&quot;_&quot;</span> else nm)] (Just i)</span></span>
 <span class="lineno">  231 </span>
 <span class="lineno">  232 </span>-- Global Names ----------------------------------------------------------------
 <span class="lineno">  233 </span>

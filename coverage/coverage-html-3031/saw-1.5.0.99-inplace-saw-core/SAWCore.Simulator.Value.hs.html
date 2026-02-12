@@ -291,7 +291,7 @@ span.spaces    { background: white }
 <span class="lineno">  272 </span><span class="decl"><span class="istickedoff">vTuple [] = <span class="nottickedoff">VUnit</span></span>
 <span class="lineno">  273 </span><span class="spaces"></span><span class="istickedoff">vTuple [_] = <span class="nottickedoff">error &quot;vTuple: unsupported 1-tuple&quot;</span></span>
 <span class="lineno">  274 </span><span class="spaces"></span><span class="istickedoff">vTuple [x, y] = VPair x y</span>
-<span class="lineno">  275 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = VPair x (ready (vTuple xs))</span></span>
+<span class="lineno">  275 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = <span class="nottickedoff">VPair x (ready (vTuple xs))</span></span></span>
 <span class="lineno">  276 </span>
 <span class="lineno">  277 </span>vTupleType :: VMonad l =&gt; [TValue l] -&gt; TValue l
 <span class="lineno">  278 </span><span class="decl"><span class="nottickedoff">vTupleType [] = VUnitType</span>
@@ -307,7 +307,7 @@ span.spaces    { background: white }
 <span class="lineno">  288 </span><span class="spaces"></span><span class="nottickedoff">valPairRight v = panic &quot;valPairRight&quot; [&quot;Not a pair value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
 <span class="lineno">  289 </span>
 <span class="lineno">  290 </span>vRecord :: Map FieldName (Thunk l) -&gt; Value l
-<span class="lineno">  291 </span><span class="decl"><span class="istickedoff">vRecord m = foldr (\(f, t) -&gt; VRecordValue f t) VEmptyRecord (Map.assocs m)</span></span>
+<span class="lineno">  291 </span><span class="decl"><span class="nottickedoff">vRecord m = foldr (\(f, t) -&gt; VRecordValue f t) VEmptyRecord (Map.assocs m)</span></span>
 <span class="lineno">  292 </span>
 <span class="lineno">  293 </span>valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; FieldName -&gt; MValue l
 <span class="lineno">  294 </span><span class="decl"><span class="nottickedoff">valRecordProj v fld = go v</span>
@@ -404,7 +404,7 @@ span.spaces    { background: white }
 <span class="lineno">  385 </span><span class="spaces">    </span><span class="istickedoff">VIntModType m -&gt; return <span class="nottickedoff">(FOTIntMod m)</span></span>
 <span class="lineno">  386 </span><span class="spaces">    </span><span class="istickedoff">VArrayType a b -&gt;</span>
 <span class="lineno">  387 </span><span class="spaces">      </span><span class="istickedoff">FOTArray &lt;$&gt; asFirstOrderTypeTValue a &lt;*&gt; asFirstOrderTypeTValue b</span>
-<span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; return (FOTTuple [])</span>
+<span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; return <span class="nottickedoff">(FOTTuple [])</span></span>
 <span class="lineno">  389 </span><span class="spaces">    </span><span class="istickedoff">VPairType v1 v2 -&gt; do</span>
 <span class="lineno">  390 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- asFirstOrderTypeTValue v1</span>
 <span class="lineno">  391 </span><span class="spaces">      </span><span class="istickedoff">t2 &lt;- asFirstOrderTypeTValue v2</span>
