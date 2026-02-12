@@ -220,6 +220,7 @@ command:</p>
 <span class="w">  </span><span class="nb">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">arr</span><span class="p">,</span><span class="w"> </span><span class="nb">mir_term</span><span class="w"> </span><span class="n">idx</span><span class="p">];</span>
 
 <span class="w">  </span><span class="nb">mir_return</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">[</span><span class="nf">arr</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nf">arr</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nf">arr</span><span class="mi">2</span><span class="p">]</span><span class="w"> </span><span class="o">@</span><span class="w"> </span><span class="nf">idx</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
 </pre></div>
 </div>
 <p>Here, <code class="docutils literal notranslate"><span class="pre">[arr0,</span> <span class="pre">arr1,</span> <span class="pre">arr2]</span></code> is Cryptol notation for constructing a length-3
@@ -440,7 +441,10 @@ which is defined by the standard library like so:</p>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">Option</span></code> is commonly used in Rust code to represent a value that may be present
 (<code class="docutils literal notranslate"><span class="pre">Some</span></code>) or absent (<code class="docutils literal notranslate"><span class="pre">None</span></code>). For this reason, we will use <code class="docutils literal notranslate"><span class="pre">Option</span></code> as our
-motivating example of an enum in this section.</p>
+motivating example of an enum in this section. (Note that the definition of
+<code class="docutils literal notranslate"><span class="pre">Option</span></code> above is purely illustrative, and we will actually be using the Rust
+standard library’s definition of <code class="docutils literal notranslate"><span class="pre">Option</span></code> throughout the rest of this tutorial
+instead of redefining it ourselves.)</p>
 <p>First, let’s start by defining some functions that make use of <code class="docutils literal notranslate"><span class="pre">Option</span></code>’s
 variants:</p>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">i_found_something</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">u32</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
@@ -455,16 +459,17 @@ variants:</p>
 <p>Both functions return an <code class="docutils literal notranslate"><span class="pre">Option&lt;u32&gt;</span></code> value, but each function returns a
 different variant. In order to tell these variants apart, we need a SAW
 function which can construct an enum value that allows the user to pick which
-variant they want to construct. The `mir_enum_value function does exactly that:</p>
+variant they want to construct. The <code class="docutils literal notranslate"><span class="pre">mir_enum_value</span></code> function does exactly that:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_enum_value</span>
 <span class="go">MIRAdt -&gt; String -&gt; [MIRValue] -&gt; MIRValue</span>
 </pre></div>
 </div>
 <p>Like <code class="docutils literal notranslate"><span class="pre">mir_struct_value</span></code>, <code class="docutils literal notranslate"><span class="pre">mir_enum_value</span></code> also requires a <code class="docutils literal notranslate"><span class="pre">MIRAdt</span></code> argument in
 order to discern which particular enum you want. Unlike <code class="docutils literal notranslate"><span class="pre">mir_struct_value</span></code>,
-however, it also requires a <code class="docutils literal notranslate"><span class="pre">String</span></code> which variant of the enum you want. In the
-case of <code class="docutils literal notranslate"><span class="pre">Option</span></code>, this <code class="docutils literal notranslate"><span class="pre">String</span></code> will either be <code class="docutils literal notranslate"><span class="pre">&quot;None&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;Some&quot;</span></code>. Finally,
-the <code class="docutils literal notranslate"><span class="pre">[MIRValue]</span></code> arguments represent the fields of the enum variant.</p>
+however, it also requires a <code class="docutils literal notranslate"><span class="pre">String</span></code> to specify which variant of the enum you
+want. In the case of <code class="docutils literal notranslate"><span class="pre">Option</span></code>, this <code class="docutils literal notranslate"><span class="pre">String</span></code> will either be <code class="docutils literal notranslate"><span class="pre">&quot;None&quot;</span></code> or
+<code class="docutils literal notranslate"><span class="pre">&quot;Some&quot;</span></code>. Finally, the <code class="docutils literal notranslate"><span class="pre">[MIRValue]</span></code> arguments represent the fields of the enum
+variant.</p>
 <p>Let’s now verify some enum-related code with SAW. First, we must look up the
 <code class="docutils literal notranslate"><span class="pre">Option&lt;u32&gt;</span></code> ADT, which works just as if you had a struct type:</p>
 <div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">option_u32</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;core::option::Option&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">mir_u32</span><span class="p">];</span>
@@ -484,10 +489,13 @@ the <code class="docutils literal notranslate"><span class="pre">[MIRValue]</spa
 <span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;enums::i_found_something&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">i_found_something_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
-<p>Note that while we used the full identifier <code class="docutils literal notranslate"><span class="pre">core::option::Option</span></code> to look up
-the <code class="docutils literal notranslate"><span class="pre">Option</span></code> ADT, we do not need to use the <code class="docutils literal notranslate"><span class="pre">core::option</span></code> prefix when
-specifying the <code class="docutils literal notranslate"><span class="pre">&quot;Some&quot;</span></code> variant. This is because SAW already knows what the
-prefix should be from the <code class="docutils literal notranslate"><span class="pre">option_u32</span></code> ADT, so the <code class="docutils literal notranslate"><span class="pre">&quot;Some&quot;</span></code> shorthand suffices.</p>
+<p>The identifier <code class="docutils literal notranslate"><span class="pre">core::option::Option</span></code> indicates that we are using the standard
+library’s definition of <code class="docutils literal notranslate"><span class="pre">Option</span></code>, which is defined in the <code class="docutils literal notranslate"><span class="pre">core</span></code> crate’s
+<code class="docutils literal notranslate"><span class="pre">option</span></code> module. Note that while we used the full identifier
+<code class="docutils literal notranslate"><span class="pre">core::option::Option</span></code> to look up the <code class="docutils literal notranslate"><span class="pre">Option</span></code> ADT, we do not need to use the
+<code class="docutils literal notranslate"><span class="pre">core::option</span></code> prefix when specifying the <code class="docutils literal notranslate"><span class="pre">&quot;Some&quot;</span></code> variant. This is because SAW
+already knows what the prefix should be from the <code class="docutils literal notranslate"><span class="pre">option_u32</span></code> ADT, so the
+<code class="docutils literal notranslate"><span class="pre">&quot;Some&quot;</span></code> shorthand suffices.</p>
 <p>Similarly, we can also write a spec for <code class="docutils literal notranslate"><span class="pre">i_got_nothing</span></code>, which uses the <code class="docutils literal notranslate"><span class="pre">None</span></code>
 variant:</p>
 <div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">i_got_nothing_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
@@ -617,7 +625,7 @@ to take a slice of length 5 rather than a slice of length 2:</p>
 </div>
 <p>Both of these examples declare a slice whose length matches the length of the
 underlying array. In general, there is no reason that these have to be the
-same, and it is perfectly fine for a slice’s length to be less than the the
+same, and it is perfectly fine for a slice’s length to be less than the
 length of the underlying array. In Rust, for example, we can write a slice of a
 subset of an array by writing <code class="docutils literal notranslate"><span class="pre">&amp;arr_ref[0..2]</span></code>. The SAW equivalent of this can
 be achieved with the <code class="docutils literal notranslate"><span class="pre">mir_slice_range_value</span></code> function:</p>
@@ -625,7 +633,7 @@ be achieved with the <code class="docutils literal notranslate"><span class="pre
 <span class="go">MIRValue -&gt; Int -&gt; Int -&gt; MIRValue</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">mir_slice_range_value</span></code> takes takes two additional <code class="docutils literal notranslate"><span class="pre">Int</span></code> arguments that
+<p><code class="docutils literal notranslate"><span class="pre">mir_slice_range_value</span></code> takes two additional <code class="docutils literal notranslate"><span class="pre">Int</span></code> arguments that
 represent (1) the index to start the slice from, and (2) the index at which the
 slice ends. For example, <code class="docutils literal notranslate"><span class="pre">mir_slice_range_value</span> <span class="pre">arr_ref</span> <span class="pre">0</span> <span class="pre">2</span></code> creates a slice
 that is backed by the first element (index <code class="docutils literal notranslate"><span class="pre">0</span></code>) and the second element (index
@@ -652,7 +660,7 @@ they are not allowed to be symbolic.)</p>
 <section id="aside-slices-of-arbitrary-length">
 <h3>Aside: slices of arbitrary length<a class="headerlink" href="#aside-slices-of-arbitrary-length" title="Link to this heading"></a></h3>
 <p>After reading the section about slices above, one might reasonably wonder: is
-there a way to write a more general spec for <code class="docutils literal notranslate"><span class="pre">sum_of_prefix</span></code>: that covers all
+there a way to write a more general spec for <code class="docutils literal notranslate"><span class="pre">sum_of_prefix</span></code> that covers all
 possible slice lengths <code class="docutils literal notranslate"><span class="pre">n</span></code>, where <code class="docutils literal notranslate"><span class="pre">n</span></code> is greater than or equal to 2? In this
 case, the answer is “no”.</p>
 <p>This is a fundamental limitation of the way SAW’s symbolic execution works. The
@@ -664,7 +672,7 @@ function very deliberately requires the start and end values to be concrete
 integers, as allowing these values to be symbolic would allow users to
 inadvertently introduce infinite loops in their specifications.</p>
 <p>A longer answer as to why SAW loops forever on computations that are bounded by
-symbolic lengths: due to the way SAW’s symblolic execution works, it creates a
+symbolic lengths: due to the way SAW’s symbolic execution works, it creates a
 complete model of the behavior of a function for all possible inputs. The way
 that SAW achieves this is by exploring all possible execution paths through a
 program. If a program involves a loop, for example, then SAW will unroll all

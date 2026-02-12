@@ -356,7 +356,7 @@ command:</p>
 <a class="reference external" href="https://github.com/GaloisInc/saw-script/tree/master/doc/rust-tutorial/code/salsa20/salsa20-reference.saw"><code class="docutils literal notranslate"><span class="pre">code/salsa20/salsa20-reference.saw</span></code></a>,
 which contains a complete SAW file. We encourage you <em>not</em> to look at this file
 for now, since following along with the tutorial is meant to illustrate the
-“a-ha moments” that one would have in the process of writing the proofs. In you
+“a-ha moments” that one would have in the process of writing the proofs. If you
 become stuck while following along and absolutely need a hint, however, then
 this file can help you become unstuck.</p>
 </section>
@@ -544,7 +544,7 @@ This translates into a postcondition that looks like this:</p>
 <span class="w">  </span><span class="nb">mir_points_to</span><span class="w"> </span><span class="n">state_ref</span><span class="w"> </span><span class="p">(</span><span class="nb">mir_term</span><span class="w"> </span><span class="n">state_arr&#39;</span><span class="p">);</span>
 </pre></div>
 </div>
-<p>What does SAW think of this? Someone surprisingly, SAW finds a counterexample:</p>
+<p>What does SAW think of this? Somewhat surprisingly, SAW finds a counterexample:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">[01:43:30.065] Verifying salsa20/10e438b3::core#</span><span class="m">1</span><span class="o">[</span><span class="m">0</span><span class="o">]</span>::quarter_round<span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span>...
 <span class="gp">[01:43:30.078] Simulating salsa20/10e438b3::core#</span><span class="m">1</span><span class="o">[</span><span class="m">0</span><span class="o">]</span>::quarter_round<span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span>...
 <span class="gp">[01:43:30.084] Checking proof obligations salsa20/10e438b3::core#</span><span class="m">1</span><span class="o">[</span><span class="m">0</span><span class="o">]</span>::quarter_round<span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span>...
@@ -785,7 +785,7 @@ state that we are using 8 rounds:</p>
 <p>Now let’s address the fact that we are hard-coding everything to <code class="docutils literal notranslate"><span class="pre">R8</span></code>, which is
 somewhat uncomfortable. We can make things better by allowing the user to
 specify the number of rounds. The first thing that we will need to change is
-the <code class="docutils literal notranslate"><span class="pre">r_adt</span></code> definition, which is response for looking up <code class="docutils literal notranslate"><span class="pre">R8</span></code>. We want to turn
+the <code class="docutils literal notranslate"><span class="pre">r_adt</span></code> definition, which is responsible for looking up <code class="docutils literal notranslate"><span class="pre">R8</span></code>. We want to turn
 this into a function that, depending on the user input, will look up <code class="docutils literal notranslate"><span class="pre">R8</span></code>,
 <code class="docutils literal notranslate"><span class="pre">R12</span></code>, or <code class="docutils literal notranslate"><span class="pre">R20</span></code>:</p>
 <div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">r_adt</span><span class="w"> </span><span class="n">num_rounds</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="nb">mir_find_adt</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="p">(</span><span class="nb">str_concat</span><span class="w"> </span><span class="s2">&quot;salsa20::rounds::R&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">show</span><span class="w"> </span><span class="n">num_rounds</span><span class="p">))</span><span class="w"> </span><span class="p">[];</span>
@@ -849,7 +849,7 @@ of <code class="docutils literal notranslate"><span class="pre">counter_setup</s
 </pre></div>
 </div>
 <p>This updates the elements of the <code class="docutils literal notranslate"><span class="pre">state</span></code> array at indices <code class="docutils literal notranslate"><span class="pre">8</span></code> and <code class="docutils literal notranslate"><span class="pre">9</span></code> with the
-lower 32 bits and the upper 32 bits of the <code class="docutils literal notranslate"><span class="pre">counter</span></code> argument, respecitvely.
+lower 32 bits and the upper 32 bits of the <code class="docutils literal notranslate"><span class="pre">counter</span></code> argument, respectively.
 At a first glance, there doesn’t appear to be any function in <code class="docutils literal notranslate"><span class="pre">Salsa20.cry</span></code>
 that directly corresponds to what <code class="docutils literal notranslate"><span class="pre">counter_setup</span></code> does. This is a bit of a
 head-scratcher, but the answer to this mystery will become more apparent as we
@@ -969,7 +969,7 @@ important difference between how the Salsa20 spec defines the encryption
 function versus how <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code> defines it, however. In the Salsa20 spec,
 encryption is a function of a key, nonce, and a message. <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code>, on
 the other hand, is a function of <code class="docutils literal notranslate"><span class="pre">self</span></code>’s internal state, a counter, and a
-message. The two aren’t <em>quite</em> the same, which is makes it somewhat tricky to
+message. The two aren’t <em>quite</em> the same, which makes it somewhat tricky to
 describe one in terms of the other.</p>
 <p><code class="docutils literal notranslate"><span class="pre">Salsa20.cry</span></code> defines a straightforward Cryptol port of the Salsa20 encryption
 function from the spec, named <code class="docutils literal notranslate"><span class="pre">Salsa20_encrypt</span></code>. Because it takes a key and a
@@ -1075,13 +1075,13 @@ critical point that we overlooked. When using the <code class="docutils literal 
 use the <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code> function in isolation. Instead, you would create an
 initial <code class="docutils literal notranslate"><span class="pre">Core</span></code> value using <code class="docutils literal notranslate"><span class="pre">new</span></code>, and <em>then</em> you would invoke
 <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code>. The Salsa20 spec effectively combines both of these
-operations in is encryption function, whereas the <code class="docutils literal notranslate"><span class="pre">salsa20</span></code> splits these two
+operations in its encryption function, whereas the <code class="docutils literal notranslate"><span class="pre">salsa20</span></code> splits these two
 operations into separate functions altogether.</p>
 <p>Strictly speaking, we don’t need to verify <code class="docutils literal notranslate"><span class="pre">new</span></code> in order to verify
 <code class="docutils literal notranslate"><span class="pre">apply_keystream</span></code>, as the latter never invokes the former. Still, it will be a
 useful exercise to verify <code class="docutils literal notranslate"><span class="pre">new</span></code>, as the insights we gain when doing so will
 help us write a better version of <code class="docutils literal notranslate"><span class="pre">apply_keystream_spec</span></code>.</p>
-<p>All that being said, we probably to verify <code class="docutils literal notranslate"><span class="pre">new_raw</span></code> (a lower-level helper
+<p>All that being said, we probably want to verify <code class="docutils literal notranslate"><span class="pre">new_raw</span></code> (a lower-level helper
 function) rather than <code class="docutils literal notranslate"><span class="pre">new</span></code> itself. This is because the definitions of <code class="docutils literal notranslate"><span class="pre">Key</span></code>
 and <code class="docutils literal notranslate"><span class="pre">Nonce</span></code> are somewhat involved. For instance, <code class="docutils literal notranslate"><span class="pre">Key</span></code> is defined as:</p>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">type</span><span class="w"> </span><span class="nc">Key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cipher</span><span class="p">::</span><span class="n">generic_array</span><span class="p">::</span><span class="n">GenericArray</span><span class="o">&lt;</span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="n">U32</span><span class="o">&gt;</span><span class="p">;</span>
@@ -1260,7 +1260,7 @@ to initializing <code class="docutils literal notranslate"><span class="pre">sta
 the <code class="docutils literal notranslate"><span class="pre">v#(littleendian_inverse</span> <span class="pre">i)</span></code> part—we <em>just</em> saw a use of
 <code class="docutils literal notranslate"><span class="pre">littleendian_inverse</span></code> earlier in our discussion about initializing the
 <code class="docutils literal notranslate"><span class="pre">state</span></code>! Moreover, <code class="docutils literal notranslate"><span class="pre">v</span></code> is the nonce argument, so it is becoming clearer that
-<code class="docutils literal notranslate"><span class="pre">Sals20_encrypt</span></code> is creating an initial state is much the same way that
+<code class="docutils literal notranslate"><span class="pre">Salsa20_encrypt</span></code> is creating an initial state in much the same way that
 <code class="docutils literal notranslate"><span class="pre">new_raw</span></code> is.</p>
 <p>A related question: what is the <code class="docutils literal notranslate"><span class="pre">i</span></code> value? The answer is somewhat technical:
 the Salsa20 encryption function is designed to work with messages with
@@ -1374,7 +1374,7 @@ spec in a slightly different way such that the SMT solver can spot patterns
 that it couldn’t before. Other times, it can be useful to try and break the
 problem up into smaller functions and use compositional verification to handle
 the more complicated subfunctions. As we mentioned before, the performance of
-SMT solvers in unpredictable, and it’s not always obvious what the best
+SMT solvers is unpredictable, and it’s not always obvious what the best
 solution is.</p>
 <p>In this example, however, the problem lies with Z3 itself. As it turns out,
 Yices (a different SMT solver) <em>can</em> spot the patterns needed to prove

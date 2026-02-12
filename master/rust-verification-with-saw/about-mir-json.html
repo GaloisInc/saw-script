@@ -160,12 +160,12 @@ this with <code class="docutils literal notranslate"><span class="pre">saw-rustc
 print, and we have displayed the parts of this information that are most
 interesting. In particular:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> notes that is is <code class="docutils literal notranslate"><span class="pre">Emitting</span> <span class="pre">MIR</span> <span class="pre">for</span> <span class="pre">first_example/abef32c5::id_u8</span></code>,
+<li><p><code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> notes that it is <code class="docutils literal notranslate"><span class="pre">Emitting</span> <span class="pre">MIR</span> <span class="pre">for</span> <span class="pre">first_example/abef32c5::id_u8</span></code>,
 where <code class="docutils literal notranslate"><span class="pre">first_example/abef32c5::id_u8</span></code> is the full <em>identifier</em> used to uniquely
 refer to the <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> function. It’s entirely possible that the <code class="docutils literal notranslate"><span class="pre">abef32c5</span></code>
 bit will look different on your machine; we’ll talk more about identifiers in
 the “Identifiers” section.</p></li>
-<li><p>Once <code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> produced a MIR JSON file named
+<li><p><code class="docutils literal notranslate"><span class="pre">saw-rustc</span></code> produced a MIR JSON file named
 <code class="docutils literal notranslate"><span class="pre">first-example.linked-mir.json</span></code>. This is an important bit of information, as
 SAW will ingest this JSON file.</p></li>
 </ul>
@@ -278,7 +278,7 @@ For example, you can rewrite the example above like so:</p>
 </pre></div>
 </div>
 <p>This time, the resulting JSON file contains a definition for <code class="docutils literal notranslate"><span class="pre">id_u8</span></code>. The
-reason that this works is because when <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> calls <code class="docutils literal notranslate"><span class="pre">id</span></code>, the Rust compile
+reason that this works is because when <code class="docutils literal notranslate"><span class="pre">id_u8</span></code> calls <code class="docutils literal notranslate"><span class="pre">id</span></code>, the Rust compiler
 will generate a specialized version of <code class="docutils literal notranslate"><span class="pre">id</span></code> where <code class="docutils literal notranslate"><span class="pre">A</span></code> is instantiated with the
 type <code class="docutils literal notranslate"><span class="pre">u8</span></code>. This specialized version of <code class="docutils literal notranslate"><span class="pre">id</span></code> is named
 <code class="docutils literal notranslate"><span class="pre">id::_instaddce72e1232152c[0]</span></code> in the output above. (You don’t have to remember

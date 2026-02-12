@@ -112,7 +112,7 @@
 <p>Up until this point, all uses of <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> in this tutorial have provided an
 empty list (<code class="docutils literal notranslate"><span class="pre">[]</span></code>) of overrides. This means that any time SAW has simulated a
 function which calls another function, it will step into the definition of the
-callee function and verify its behavior alongside the behavior of the callee
+callee function and verify its behavior alongside the behavior of the caller
 function. This is a fine thing to do, but it can be inefficient. For example,
 consider a function like this:</p>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">{</span>
@@ -263,7 +263,7 @@ argument to <code class="docutils literal notranslate"><span class="pre">g</span
 <div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides::f&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">g_even_ov</span><span class="p">,</span><span class="w"> </span><span class="n">g_odd_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">f_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
-<p>Like before, this will successfully verify. The only different now is that SAW
+<p>Like before, this will successfully verify. The only difference now is that SAW
 will print output involving two overrides instead of just one:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[20:48:07.649] Simulating overrides/96c5af24::f[0] ...</span>
 <span class="go">[20:48:07.650] Matching 2 overrides of  overrides/96c5af24::g[0] ...</span>
@@ -369,7 +369,7 @@ verify this compositionally using our <code class="docutils literal notranslate"
 <div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">mir_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;overrides_mut::foo&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">side_effect_ov</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">foo_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
 </pre></div>
 </div>
-<p>If SAW were to simulate <code class="docutils literal notranslate"><span class="pre">foo(x)</span></code>, it would invoke create a temporary variable
+<p>If SAW were to simulate <code class="docutils literal notranslate"><span class="pre">foo(x)</span></code>, it would create a temporary variable
 <code class="docutils literal notranslate"><span class="pre">b</span></code> and assign it to the value <code class="docutils literal notranslate"><span class="pre">x</span></code>, and then it would invoke <code class="docutils literal notranslate"><span class="pre">side_effect(&amp;mut</span> <span class="pre">b)</span></code>. At this point, the <code class="docutils literal notranslate"><span class="pre">side_effect_ov</span></code> override would apply. According to
 <code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code>, the argument to <code class="docutils literal notranslate"><span class="pre">side_effect</span></code> is not modified at all after
 the function returns. This means that when the <code class="docutils literal notranslate"><span class="pre">foo</span></code> function returns <code class="docutils literal notranslate"><span class="pre">b</span></code>, it

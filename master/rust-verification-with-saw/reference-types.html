@@ -196,7 +196,7 @@ it from <code class="docutils literal notranslate"><span class="pre">r_val</span
 <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code>. In this version of the spec, it is clear that we should return
 <code class="docutils literal notranslate"><span class="pre">r_val</span></code> using <code class="docutils literal notranslate"><span class="pre">mir_return</span></code>, as <code class="docutils literal notranslate"><span class="pre">r_val</span></code> is exactly the value that will be
 computed by dereferencing <code class="docutils literal notranslate"><span class="pre">r_ref</span></code>.</p>
-<p>This pattern, where a call to <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> to followed by a call
+<p>This pattern, where a call to <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> is followed by a call
 to <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code>, is common with function specs that involve references.
 Later in the tutorial, we will see other examples of <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> where the
 reference argument does not come from <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code>.</p>
@@ -234,7 +234,7 @@ memory, as seen in this <code class="docutils literal notranslate"><span class="
 <ol class="arabic simple">
 <li><p>Instead of allocating the reference values with <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>, we instead use
 <code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code>. This is a consequence of the fact that <code class="docutils literal notranslate"><span class="pre">&amp;mut</span> <span class="pre">u32</span></code> is a
-different type from <code class="docutils literal notranslate"><span class="pre">&amp;mut</span></code> in Rust (and in MIR), and and such, we need a
+different type from <code class="docutils literal notranslate"><span class="pre">&amp;u32</span></code> in Rust (and in MIR), and as such, we need a
 separate <code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> to get the types right.</p></li>
 <li><p>This spec features calls to <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> before <em>and</em> after
 <code class="docutils literal notranslate"><span class="pre">mir_execute_func</span></code>. This is because the values that <code class="docutils literal notranslate"><span class="pre">a_ref</span></code> and <code class="docutils literal notranslate"><span class="pre">b_ref</span></code> point
@@ -256,17 +256,17 @@ references and <code class="docutils literal notranslate"><span class="pre">mir_
 <p><code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> combines <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> into a single operation,
 returning a reference to the specified value. Likewise <code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span></code>
 combines <code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code>. This portion of a spec:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">s &lt;- mir_alloc (mir_adt s_adt);</span>
-<span class="go">s_val &lt;- mir_fresh_expanded_value &quot;s_val&quot; (mir_adt s_adt);</span>
-<span class="go">mir_points_to s s_val;</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">r_ref &lt;- mir_alloc mir_u32;</span>
+<span class="go">r_val &lt;- mir_fresh_var &quot;r_val&quot; mir_u32;</span>
+<span class="go">mir_points_to r_ref (mir_term r_val);</span>
 </pre></div>
 </div>
 <p>can be rewritten more concisely as:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">s_val &lt;- mir_fresh_expanded_value &quot;s_val&quot; (mir_adt s_adt);</span>
-<span class="go">s &lt;- mir_ref_of s_val;</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">r_val &lt;- mir_fresh_var &quot;r_val&quot; mir_u32;</span>
+<span class="go">r_ref &lt;- mir_ref_of (mir_term r_val);</span>
 </pre></div>
 </div>
-<p>This version mirrors how one would write the function in Rust, where a <code class="docutils literal notranslate"><span class="pre">&amp;T</span></code>
+<p>This version mirrors how one would write the function in Rust, where a <code class="docutils literal notranslate"><span class="pre">&amp;u32</span></code>
 points to an already-initialized value. Using <code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> encourages that
 style and avoids the risk of forgetting to initialize allocated memory.</p>
 </section>

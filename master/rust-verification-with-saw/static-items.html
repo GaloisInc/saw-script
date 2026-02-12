@@ -159,7 +159,7 @@ writing <code class="docutils literal notranslate"><span class="pre">mir_term</s
 </div>
 <p>Like <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code>, the <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span></code> function expects a full
 identifier as an argument, so we must write <code class="docutils literal notranslate"><span class="pre">&quot;statics::ANSWER&quot;</span></code> instead of
-just `“ANSWER”.</p>
+just <code class="docutils literal notranslate"><span class="pre">&quot;ANSWER&quot;</span></code>.</p>
 <p>At the MIR level, there is a unique reference to every static item. You can
 obtain this reference by using the <code class="docutils literal notranslate"><span class="pre">mir_static</span></code> function:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_static</span>
@@ -198,11 +198,11 @@ that Rust does not even allow you to use them unless you surround them in an
 <span class="p">}</span>
 </pre></div>
 </div>
-<p>The <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span></code> and <code class="docutils literal notranslate"><span class="pre">mut_static</span></code> functions work both immutable and
+<p>The <code class="docutils literal notranslate"><span class="pre">mir_static_initializer</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_static</span></code> functions work with both immutable and
 mutable static items, so we can write specs for mutable items using mostly the
 same techniques as for writing specs for immutable items. We must be careful,
 however, as SAW is pickier when it comes to specifying the initial values of
-mutable static items. For example, here is naïve attempt at porting the spec
+mutable static items. For example, here is a naïve attempt at porting the spec
 for <code class="docutils literal notranslate"><span class="pre">answer_to_the_ultimate_question</span></code> over to its mutable static counterpart,
 <code class="docutils literal notranslate"><span class="pre">mut_answer_to_the_ultimate_question</span></code>:</p>
 <div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">mut_answer_to_the_ultimate_question_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
@@ -336,7 +336,7 @@ write SAW specs for <code class="docutils literal notranslate"><span class="pre"
 we do not say what <code class="docutils literal notranslate"><span class="pre">A</span></code>’s value should be in the postconditions of
 <code class="docutils literal notranslate"><span class="pre">side_effect_spec</span></code>. Similarly, <code class="docutils literal notranslate"><span class="pre">foo_spec</span></code> is wrong, as it should return <code class="docutils literal notranslate"><span class="pre">0</span></code>
 rather than the initial value of <code class="docutils literal notranslate"><span class="pre">A</span></code>. By similar reasoning as before, we run
-the risk that using <code class="docutils literal notranslate"><span class="pre">side_effect_ov</span></code> could lead use to prove something
+the risk that using <code class="docutils literal notranslate"><span class="pre">side_effect_ov</span></code> could lead us to prove something
 incorrect. Thankfully, SAW can also catch this sort of mistake:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[15:46:38.525] Verifying statics_compositional/16fea9c0::side_effect[0] ...</span>
 <span class="go">[15:46:38.533] Simulating statics_compositional/16fea9c0::side_effect[0] ...</span>

@@ -397,7 +397,7 @@ didn’t notice any overflow-related issues when verifying <code class="docutils
 <code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> to use Rust’s
 <a class="reference external" href="https://doc.rust-lang.org/std/primitive.u32.html#method.wrapping_mul"><code class="docutils literal notranslate"><span class="pre">wrapping_mul</span></code></a>
 function, a variant of multiplication that always uses integer overflow.  This
-work around the issue, but it is a bit more verbose.</p>
+works around the issue, but it is a bit more verbose.</p>
 <p>The other way is to make our spec more precise such that we only verify
 <code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> for particular inputs. Although <code class="docutils literal notranslate"><span class="pre">times_two_ref</span></code> will run into
 overflow-related issues when the argument is <code class="docutils literal notranslate"><span class="pre">2^^31</span></code> or greater, it is
@@ -480,7 +480,7 @@ then it declares a postcondition.</p>
 </pre></div>
 </div>
 <p>The choice of whether to use <code class="docutils literal notranslate"><span class="pre">mir_precond</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_postcond</span></code> versus <code class="docutils literal notranslate"><span class="pre">mir_assert</span></code> is
-mostly a matter personal taste.</p>
+mostly a matter of personal taste.</p>
 </section>
 </section>
 
