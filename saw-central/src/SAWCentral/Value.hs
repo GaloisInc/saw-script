@@ -271,7 +271,7 @@ import SAWCentral.Yosys.State (YosysSequential)
 
 import SAWCore.Name (VarName(..), DisplayNameEnv, emptyDisplayNameEnv)
 import CryptolSAWCore.CryptolEnv as CEnv
-import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
+import SAWCore.FiniteValue (FirstOrderValue, prettyFirstOrderValue)
 import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, ctxtRewriteRule, listRules)
 import SAWCore.SharedTerm
 import qualified SAWCore.Term.Pretty as SAWCorePP
@@ -645,7 +645,7 @@ showsProofResult opts r =
     InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
     UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining"
   where
-    showVal t = shows (ppFirstOrderValue opts t)
+    showVal t = shows (prettyFirstOrderValue opts t)
     showEqn (x, t) = showVarName x . showString " = " . showVal t
     showVarName vn = showString (Text.unpack (vnName vn))
 
@@ -659,7 +659,7 @@ showsSatResult opts r =
     Sat _ ts -> showString "Sat: [" . showMulti "" ts
     SatUnknown  -> showString "Unknown"
   where
-    showVal t = shows (ppFirstOrderValue opts t)
+    showVal t = shows (prettyFirstOrderValue opts t)
     showVarName vn = showString (Text.unpack (vnName vn))
     showEqn (x, t) = showVarName x . showString " = " . showVal t
     showMulti _ [] = showString "]"
