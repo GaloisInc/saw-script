@@ -985,6 +985,7 @@ test-suite saw-core-tests
     tasty-ant-xml >= 1.1.0,
     tasty-hunit,
     tasty-quickcheck,
+    text,
     time,
     unordered-containers,
     vector,
