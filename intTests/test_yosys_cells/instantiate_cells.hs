@@ -65,7 +65,7 @@ tests = binaryOps False 0 0 0
      <> shiftOps (1, False) 2 3
      <> shiftOps (2, False) 1 2
      <> shiftOps (2, False) 2 2
-     -- <> shiftOps (0, True) 1 1 -- yosys segfault
+     -- <> shiftOps (0, True) 1 1 -- Yosys segfault, see https://github.com/YosysHQ/yosys/issues/5684
      <> shiftOps (1, True) 0 1
      <> shiftOps (1, True) 1 1
      <> shiftOps (1, True) 2 3
