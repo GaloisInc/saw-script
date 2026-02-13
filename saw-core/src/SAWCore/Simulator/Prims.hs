@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 {- |
 Module      : SAWCore.Simulator.Prims
@@ -72,7 +73,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (Ident, Name(..), NameInfo(..))
+import SAWCore.Name (Ident, Name(..), pattern ModuleIdentifier)
 import SAWCore.Panic (panic)
 import SAWCore.Simulator.Value
 import SAWCore.Prim

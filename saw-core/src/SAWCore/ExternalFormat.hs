@@ -40,16 +40,16 @@ renderNames nms = show
  where
    f (Left s) = Left s
    f (Right (ModuleIdentifier i))  = Right (Left (show i))
-   f (Right (ImportedName qn as)) = Right (Right (QN.render qn, as))
+   f (Right (ImportedName qn _)) = Right (Right (QN.render qn))
 
 readNames :: String -> Either String (Map VarIndex (Either Text NameInfo))
 readNames xs = Map.fromList <$> (mapM readName =<< readEither xs)
  where
-   readName :: (VarIndex, Either Text (Either Text (Text,[Text]))) -> Either String (VarIndex, Either Text NameInfo)
+   readName :: (VarIndex, Either Text (Either Text (Text))) -> Either String (VarIndex, Either Text NameInfo)
    readName (idx, Left x) = pure (idx, Left x)
    readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))
-   readName (idx, Right (Right (qn_txt,as))) = case QN.parse qn_txt of
-    Right qn -> pure (idx, Right (ImportedName qn as))
+   readName (idx, Right (Right (qn_txt))) = case QN.parse qn_txt of
+    Right qn -> pure (idx, Right (mkImportedName qn))
     Left errs -> Left $ Text.unpack (Text.intercalate (Text.pack "\n") errs)
 
 -- | Render to external text format

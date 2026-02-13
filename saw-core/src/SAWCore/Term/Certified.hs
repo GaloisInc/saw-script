@@ -642,7 +642,7 @@ scmFreshName :: Text -> SCM Name
 scmFreshName x =
   do i <- scmFreshVarIndex
      let qn = scFreshQualName x i
-     let nmi = ImportedName qn (QN.aliases qn)
+     let nmi = mkImportedName qn
      scmRegisterNameWithIndex i nmi
      pure (Name i nmi)
 
