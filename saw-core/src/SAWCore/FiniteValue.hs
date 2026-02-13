@@ -209,11 +209,11 @@ instance Show FirstOrderValue where
       showEntry (k, v) = shows k . showString " := " . shows v
       showField (field, v) = showString (Text.unpack field) . showString " = " . shows v
 
-ppFiniteValue :: PPS.Opts -> FiniteValue -> PPS.Doc
-ppFiniteValue opts fv = ppFirstOrderValue opts (toFirstOrderValue fv)
+prettyFiniteValue :: PPS.Opts -> FiniteValue -> PPS.Doc
+prettyFiniteValue opts fv = prettyFirstOrderValue opts (toFirstOrderValue fv)
 
-ppFirstOrderValue :: PPS.Opts -> FirstOrderValue -> PPS.Doc
-ppFirstOrderValue opts = loop
+prettyFirstOrderValue :: PPS.Opts -> FirstOrderValue -> PPS.Doc
+prettyFirstOrderValue opts = loop
  where
  loop fv = case fv of
    FOVBit b

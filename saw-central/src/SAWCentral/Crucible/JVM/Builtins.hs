@@ -98,7 +98,7 @@ import qualified Lang.Crucible.JVM as CJ
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 
-import SAWCore.FiniteValue (ppFirstOrderValue)
+import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import CryptolSAWCore.TypedTerm
@@ -350,7 +350,7 @@ verifyObligations cc mspec tactic assumes asserts =
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
            opts <- rwPPOpts <$> getTopLevelRW
            let showVar x = Text.unpack (vnName x)
-           let showAssignment (name, val) = "  " ++ showVar name ++ ": " ++ show (ppFirstOrderValue opts val)
+           let showAssignment (name, val) = "  " ++ showVar name ++ ": " ++ show (prettyFirstOrderValue opts val)
            mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
            io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
          UnfinishedProof pst ->
