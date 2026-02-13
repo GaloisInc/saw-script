@@ -37,169 +37,168 @@ span.spaces    { background: white }
 <span class="lineno">   18 </span>import Control.Lens.TH (makeLenses)
 <span class="lineno">   19 </span>
 <span class="lineno">   20 </span>import Control.Lens ((^.))
-<span class="lineno">   21 </span>import Control.Exception (throw)
-<span class="lineno">   22 </span>
-<span class="lineno">   23 </span>import Data.Text (Text)
-<span class="lineno">   24 </span>import Data.Map (Map)
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import Data.Text (Text)
+<span class="lineno">   23 </span>import Data.Map (Map)
+<span class="lineno">   24 </span>
 <span class="lineno">   25 </span>
-<span class="lineno">   26 </span>
-<span class="lineno">   27 </span>import qualified SAWCore.Cache as SC
-<span class="lineno">   28 </span>import qualified SAWCore.Name as SC
-<span class="lineno">   29 </span>import qualified SAWCore.Prelude.Constants as SC (preludeModuleName)
-<span class="lineno">   30 </span>import qualified SAWCore.SharedTerm as SC
-<span class="lineno">   31 </span>import qualified CryptolSAWCore.TypedTerm as SC
-<span class="lineno">   32 </span>import qualified SAWCore.Recognizer as R
-<span class="lineno">   33 </span>import qualified SAWCore.URI as URI
-<span class="lineno">   34 </span>
-<span class="lineno">   35 </span>import qualified CryptolSAWCore.Cryptol as CSC
-<span class="lineno">   36 </span>
-<span class="lineno">   37 </span>import qualified Cryptol.TypeCheck.Type as C
-<span class="lineno">   38 </span>
-<span class="lineno">   39 </span>import SAWCentral.Yosys.Utils
-<span class="lineno">   40 </span>
-<span class="lineno">   41 </span>newtype YosysImport = YosysImport { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">yosysImport</span></span></span> :: Map Text SC.TypedTerm }
-<span class="lineno">   42 </span>
-<span class="lineno">   43 </span>data YosysTheorem = YosysTheorem
-<span class="lineno">   44 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremURI</span></span></span> :: URI.URI -- ^ URI identifying overridden module
-<span class="lineno">   45 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremInputCryptolType</span></span></span> :: C.Type -- ^ cryptol type of r
-<span class="lineno">   46 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremOutputCryptolType</span></span></span> :: C.Type -- ^ cryptol type of (module r)
-<span class="lineno">   47 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremInputType</span></span></span> :: SC.Term -- ^ type of r
-<span class="lineno">   48 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremOutputType</span></span></span> :: SC.Term -- ^ type of (module r)
-<span class="lineno">   49 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremModule</span></span></span> :: SC.Term -- ^ {{ \r -&gt; module r }}
-<span class="lineno">   50 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremPrecond</span></span></span> :: Maybe SC.Term -- ^ {{ \r -&gt; precond r }}
-<span class="lineno">   51 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremBody</span></span></span> :: SC.Term -- ^ {{ \r -&gt; other r }}
-<span class="lineno">   52 </span>  }
-<span class="lineno">   53 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''YosysTheorem</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">   54 </span>
-<span class="lineno">   55 </span>-- | Construct a SAWCore proposition for the given theorem.
-<span class="lineno">   56 </span>-- In pseudo-Cryptol, this looks like {{ \r -&gt; precond r ==&gt; (module r == body r) }}
-<span class="lineno">   57 </span>theoremProp ::
-<span class="lineno">   58 </span>  SC.SharedContext -&gt;
-<span class="lineno">   59 </span>  YosysTheorem -&gt;
-<span class="lineno">   60 </span>  IO SC.TypedTerm
-<span class="lineno">   61 </span><span class="decl"><span class="istickedoff">theoremProp sc thm =</span>
-<span class="lineno">   62 </span><span class="spaces">  </span><span class="istickedoff">do r &lt;- SC.scFreshVariable sc &quot;r&quot; $ thm ^. theoremInputType</span>
-<span class="lineno">   63 </span><span class="spaces">     </span><span class="istickedoff">modr &lt;- SC.scApply sc (thm ^. theoremModule) r</span>
-<span class="lineno">   64 </span><span class="spaces">     </span><span class="istickedoff">bodyr &lt;- SC.scApply sc (thm ^. theoremBody) r</span>
-<span class="lineno">   65 </span><span class="spaces">     </span><span class="istickedoff">equality &lt;- eqBvRecords sc (thm ^. theoremOutputCryptolType) modr bodyr</span>
-<span class="lineno">   66 </span><span class="spaces">     </span><span class="istickedoff">res &lt;-</span>
-<span class="lineno">   67 </span><span class="spaces">       </span><span class="istickedoff">case thm ^. theoremPrecond of</span>
-<span class="lineno">   68 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; pure equality</span>
-<span class="lineno">   69 </span><span class="spaces">         </span><span class="istickedoff">Just pc -&gt;</span>
-<span class="lineno">   70 </span><span class="spaces">           </span><span class="istickedoff">do pcr &lt;- SC.scApply sc pc r</span>
-<span class="lineno">   71 </span><span class="spaces">              </span><span class="istickedoff">SC.scImplies sc pcr equality</span>
-<span class="lineno">   72 </span><span class="spaces">     </span><span class="istickedoff">func &lt;- SC.scAbstractTerms sc [r] res</span>
-<span class="lineno">   73 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">cty = C.tFun (thm ^. theoremInputCryptolType) C.tBit</span></span>
-<span class="lineno">   74 </span><span class="spaces">     </span><span class="istickedoff">pure (SC.TypedTerm <span class="nottickedoff">(SC.TypedTermSchema (C.tMono cty))</span> func)</span></span>
-<span class="lineno">   75 </span>
-<span class="lineno">   76 </span>-- | Construct a SAWCore proposition for the given theorem.
-<span class="lineno">   77 </span>-- In pseudo-Cryptol, this looks like {{ \r -&gt; if precond r then body r else module r }}
-<span class="lineno">   78 </span>theoremReplacement ::
-<span class="lineno">   79 </span>  SC.SharedContext -&gt;
-<span class="lineno">   80 </span>  YosysTheorem -&gt;
-<span class="lineno">   81 </span>  IO SC.Term
-<span class="lineno">   82 </span><span class="decl"><span class="istickedoff">theoremReplacement sc thm =</span>
-<span class="lineno">   83 </span><span class="spaces">  </span><span class="istickedoff">do r &lt;- SC.scFreshVariable sc &quot;r&quot; $ thm ^. theoremInputType</span>
-<span class="lineno">   84 </span><span class="spaces">     </span><span class="istickedoff">body &lt;-</span>
-<span class="lineno">   85 </span><span class="spaces">       </span><span class="istickedoff">case thm ^. theoremPrecond of</span>
-<span class="lineno">   86 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; SC.scApply sc (thm ^. theoremBody) r</span>
-<span class="lineno">   87 </span><span class="spaces">          </span><span class="istickedoff">Just pc -&gt;</span>
-<span class="lineno">   88 </span><span class="spaces">            </span><span class="istickedoff">do precond &lt;- SC.scApply sc pc r</span>
-<span class="lineno">   89 </span><span class="spaces">               </span><span class="istickedoff">thenCase &lt;- SC.scApply sc (thm ^. theoremBody) r</span>
-<span class="lineno">   90 </span><span class="spaces">               </span><span class="istickedoff">elseCase &lt;- SC.scApply sc (thm ^. theoremModule) r</span>
-<span class="lineno">   91 </span><span class="spaces">               </span><span class="istickedoff">SC.scIte sc (thm ^. theoremOutputType) precond thenCase elseCase</span>
-<span class="lineno">   92 </span><span class="spaces">     </span><span class="istickedoff">SC.scAbstractTerms sc [r] body</span></span>
-<span class="lineno">   93 </span>
-<span class="lineno">   94 </span>-- | Given a SAWCore term corresponding to an HDL module, a specification, and a precondition:
-<span class="lineno">   95 </span>-- Construct a theorem summarizing the relationship between the module and the specification.
-<span class="lineno">   96 </span>buildTheorem ::
-<span class="lineno">   97 </span>  SC.SharedContext -&gt;
-<span class="lineno">   98 </span>  SC.TypedTerm -&gt;
-<span class="lineno">   99 </span>  SC.Term -&gt;
-<span class="lineno">  100 </span>  Maybe SC.TypedTerm -&gt;
-<span class="lineno">  101 </span>  SC.TypedTerm -&gt;
-<span class="lineno">  102 </span>  IO YosysTheorem
-<span class="lineno">  103 </span><span class="decl"><span class="istickedoff">buildTheorem sc ymod newmod precond body = do</span>
-<span class="lineno">  104 </span><span class="spaces">  </span><span class="istickedoff">cty &lt;-</span>
-<span class="lineno">  105 </span><span class="spaces">    </span><span class="istickedoff">case SC.ttType ymod of</span>
-<span class="lineno">  106 </span><span class="spaces">      </span><span class="istickedoff">SC.TypedTermSchema (C.Forall [] [] cty) -&gt; pure cty</span>
-<span class="lineno">  107 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throw YosysErrorInvalidOverrideTarget</span></span>
-<span class="lineno">  108 </span><span class="spaces">  </span><span class="istickedoff">(cinpTy, coutTy) &lt;-</span>
-<span class="lineno">  109 </span><span class="spaces">    </span><span class="istickedoff">case cty of</span>
-<span class="lineno">  110 </span><span class="spaces">      </span><span class="istickedoff">C.TCon (C.TC C.TCFun) [ci, co] -&gt; pure (ci, co)</span>
-<span class="lineno">  111 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throw YosysErrorInvalidOverrideTarget</span></span>
-<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">inpTy &lt;- CSC.importType sc <span class="nottickedoff">CSC.emptyEnv</span> cinpTy</span>
-<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">outTy &lt;- CSC.importType sc <span class="nottickedoff">CSC.emptyEnv</span> coutTy</span>
-<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">nmi &lt;-</span>
-<span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">case reduceSelectors (SC.ttTerm ymod) of</span>
-<span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">(R.asConstant -&gt; Just (SC.Name _ nmi)) -&gt; pure nmi</span>
-<span class="lineno">  117 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throw YosysErrorInvalidOverrideTarget</span></span>
-<span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">uri &lt;-</span>
-<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">case nmi of</span>
-<span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff">SC.ImportedName uri _ -&gt; pure uri</span>
-<span class="lineno">  121 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throw YosysErrorInvalidOverrideTarget</span></span>
-<span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">pure YosysTheorem</span>
-<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">{ _theoremURI = uri</span>
-<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">, _theoremInputCryptolType = <span class="nottickedoff">cinpTy</span></span>
-<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">, _theoremOutputCryptolType = coutTy</span>
-<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff">, _theoremInputType = inpTy</span>
-<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff">, _theoremOutputType = outTy</span>
-<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">, _theoremModule = newmod</span>
-<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">, _theoremPrecond = SC.ttTerm &lt;$&gt; precond</span>
-<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">, _theoremBody = SC.ttTerm body</span>
-<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
-<span class="lineno">  132 </span>
-<span class="lineno">  133 </span>-- | Reduce nested tuple and record selectors at the top-level of the
-<span class="lineno">  134 </span>-- given term, if possible.
-<span class="lineno">  135 </span>reduceSelectors :: SC.Term -&gt; SC.Term
-<span class="lineno">  136 </span><span class="decl"><span class="istickedoff">reduceSelectors t =</span>
-<span class="lineno">  137 </span><span class="spaces">  </span><span class="istickedoff">case t of</span>
-<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff">(R.asPairSelector -&gt; Just (t1, b)) -&gt;</span>
-<span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case R.asPairValue (reduceSelectors t1) of</span></span>
-<span class="lineno">  140 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; t</span></span>
-<span class="lineno">  141 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just (x, y) -&gt; if b then y else x</span></span>
-<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">(R.asRecordSelector -&gt; Just (t1, fname)) -&gt;</span>
-<span class="lineno">  143 </span><span class="spaces">      </span><span class="istickedoff">case R.asRecordValue (reduceSelectors t1) of</span>
-<span class="lineno">  144 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">t</span></span>
-<span class="lineno">  145 </span><span class="spaces">        </span><span class="istickedoff">Just tm -&gt;</span>
-<span class="lineno">  146 </span><span class="spaces">          </span><span class="istickedoff">case lookup fname tm of</span>
-<span class="lineno">  147 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">t</span></span>
-<span class="lineno">  148 </span><span class="spaces">            </span><span class="istickedoff">Just t' -&gt; t'</span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; t</span></span>
-<span class="lineno">  150 </span>
-<span class="lineno">  151 </span>-- | Applying a theorem thm as an &quot;override&quot; in a Yosys-derived term t proceeds as follows:
-<span class="lineno">  152 </span>--  1) unfold all names except thm.theoremURI in t
-<span class="lineno">  153 </span>--  2) traverse t, looking for constants named thm.theoremURI
-<span class="lineno">  154 </span>--  4) replace the constant term with either thm.theoremBody, or
-<span class="lineno">  155 </span>--     {{ \r -&gt; if thm.theoremPrecond r then thm.theoremBody r else thm.theoremURI r }}
-<span class="lineno">  156 </span>--     in the presence of a precondition
-<span class="lineno">  157 </span>applyOverride ::
-<span class="lineno">  158 </span>  SC.SharedContext -&gt;
-<span class="lineno">  159 </span>  YosysTheorem -&gt;
-<span class="lineno">  160 </span>  SC.Term -&gt;
-<span class="lineno">  161 </span>  IO SC.Term
-<span class="lineno">  162 </span><span class="decl"><span class="istickedoff">applyOverride sc thm t = do</span>
-<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">tidx &lt;-</span>
-<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">do result &lt;- SC.scResolveNameByURI sc $ thm ^. theoremURI</span>
-<span class="lineno">  165 </span><span class="spaces">       </span><span class="istickedoff">case result of</span>
-<span class="lineno">  166 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throw . YosysErrorOverrideNameNotFound . URI.renderURI $ thm ^. theoremURI</span></span>
-<span class="lineno">  167 </span><span class="spaces">         </span><span class="istickedoff">Just i -&gt; pure i</span>
-<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">-- unfold everything except for theoremURI and prelude constants</span>
-<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName</span>
-<span class="lineno">  170 </span><span class="spaces">      </span><span class="istickedoff">isPreludeName _ = False</span>
-<span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">let unfold nm = SC.nameIndex nm /= tidx &amp;&amp; not (isPreludeName (SC.nameInfo nm))</span>
-<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">unfolded &lt;- SC.scUnfoldConstants sc unfold t</span>
-<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">cache &lt;- SC.newIntCache</span>
-<span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">let</span>
-<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">go :: SC.Term -&gt; IO SC.Term</span>
-<span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">go s =</span>
-<span class="lineno">  177 </span><span class="spaces">      </span><span class="istickedoff">SC.useIntCache cache (SC.termIndex s) $</span>
-<span class="lineno">  178 </span><span class="spaces">      </span><span class="istickedoff">case SC.unwrapTermF s of</span>
-<span class="lineno">  179 </span><span class="spaces">        </span><span class="istickedoff">SC.Constant (SC.Name idx _)</span>
-<span class="lineno">  180 </span><span class="spaces">          </span><span class="istickedoff">| idx == tidx -&gt; theoremReplacement sc thm</span>
-<span class="lineno">  181 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; pure s</span>
-<span class="lineno">  182 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; SC.scTermF sc =&lt;&lt; traverse go (SC.unwrapTermF s)</span>
-<span class="lineno">  183 </span><span class="spaces">  </span><span class="istickedoff">go unfolded</span></span>
+<span class="lineno">   26 </span>import qualified SAWCore.Cache as SC
+<span class="lineno">   27 </span>import qualified SAWCore.Name as SC
+<span class="lineno">   28 </span>import qualified SAWCore.Prelude.Constants as SC (preludeModuleName)
+<span class="lineno">   29 </span>import qualified SAWCore.SharedTerm as SC
+<span class="lineno">   30 </span>import qualified CryptolSAWCore.TypedTerm as SC
+<span class="lineno">   31 </span>import qualified SAWCore.Recognizer as R
+<span class="lineno">   32 </span>import qualified SAWCore.URI as URI
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>import qualified CryptolSAWCore.Cryptol as CSC
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>import qualified Cryptol.TypeCheck.Type as C
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>import SAWCentral.Yosys.Utils
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>newtype YosysImport = YosysImport { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">yosysImport</span></span></span> :: Map Text SC.TypedTerm }
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>data YosysTheorem = YosysTheorem
+<span class="lineno">   43 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremURI</span></span></span> :: URI.URI -- ^ URI identifying overridden module
+<span class="lineno">   44 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremInputCryptolType</span></span></span> :: C.Type -- ^ cryptol type of r
+<span class="lineno">   45 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremOutputCryptolType</span></span></span> :: C.Type -- ^ cryptol type of (module r)
+<span class="lineno">   46 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremInputType</span></span></span> :: SC.Term -- ^ type of r
+<span class="lineno">   47 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremOutputType</span></span></span> :: SC.Term -- ^ type of (module r)
+<span class="lineno">   48 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremModule</span></span></span> :: SC.Term -- ^ {{ \r -&gt; module r }}
+<span class="lineno">   49 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremPrecond</span></span></span> :: Maybe SC.Term -- ^ {{ \r -&gt; precond r }}
+<span class="lineno">   50 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremBody</span></span></span> :: SC.Term -- ^ {{ \r -&gt; other r }}
+<span class="lineno">   51 </span>  }
+<span class="lineno">   52 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''YosysTheorem</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>-- | Construct a SAWCore proposition for the given theorem.
+<span class="lineno">   55 </span>-- In pseudo-Cryptol, this looks like {{ \r -&gt; precond r ==&gt; (module r == body r) }}
+<span class="lineno">   56 </span>theoremProp ::
+<span class="lineno">   57 </span>  SC.SharedContext -&gt;
+<span class="lineno">   58 </span>  YosysTheorem -&gt;
+<span class="lineno">   59 </span>  IO SC.TypedTerm
+<span class="lineno">   60 </span><span class="decl"><span class="istickedoff">theoremProp sc thm =</span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="istickedoff">do r &lt;- SC.scFreshVariable sc &quot;r&quot; $ thm ^. theoremInputType</span>
+<span class="lineno">   62 </span><span class="spaces">     </span><span class="istickedoff">modr &lt;- SC.scApply sc (thm ^. theoremModule) r</span>
+<span class="lineno">   63 </span><span class="spaces">     </span><span class="istickedoff">bodyr &lt;- SC.scApply sc (thm ^. theoremBody) r</span>
+<span class="lineno">   64 </span><span class="spaces">     </span><span class="istickedoff">equality &lt;- eqBvRecords sc (thm ^. theoremOutputCryptolType) modr bodyr</span>
+<span class="lineno">   65 </span><span class="spaces">     </span><span class="istickedoff">res &lt;-</span>
+<span class="lineno">   66 </span><span class="spaces">       </span><span class="istickedoff">case thm ^. theoremPrecond of</span>
+<span class="lineno">   67 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; pure equality</span>
+<span class="lineno">   68 </span><span class="spaces">         </span><span class="istickedoff">Just pc -&gt;</span>
+<span class="lineno">   69 </span><span class="spaces">           </span><span class="istickedoff">do pcr &lt;- SC.scApply sc pc r</span>
+<span class="lineno">   70 </span><span class="spaces">              </span><span class="istickedoff">SC.scImplies sc pcr equality</span>
+<span class="lineno">   71 </span><span class="spaces">     </span><span class="istickedoff">func &lt;- SC.scAbstractTerms sc [r] res</span>
+<span class="lineno">   72 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">cty = C.tFun (thm ^. theoremInputCryptolType) C.tBit</span></span>
+<span class="lineno">   73 </span><span class="spaces">     </span><span class="istickedoff">pure (SC.TypedTerm <span class="nottickedoff">(SC.TypedTermSchema (C.tMono cty))</span> func)</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>-- | Construct a SAWCore proposition for the given theorem.
+<span class="lineno">   76 </span>-- In pseudo-Cryptol, this looks like {{ \r -&gt; if precond r then body r else module r }}
+<span class="lineno">   77 </span>theoremReplacement ::
+<span class="lineno">   78 </span>  SC.SharedContext -&gt;
+<span class="lineno">   79 </span>  YosysTheorem -&gt;
+<span class="lineno">   80 </span>  IO SC.Term
+<span class="lineno">   81 </span><span class="decl"><span class="istickedoff">theoremReplacement sc thm =</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="istickedoff">do r &lt;- SC.scFreshVariable sc &quot;r&quot; $ thm ^. theoremInputType</span>
+<span class="lineno">   83 </span><span class="spaces">     </span><span class="istickedoff">body &lt;-</span>
+<span class="lineno">   84 </span><span class="spaces">       </span><span class="istickedoff">case thm ^. theoremPrecond of</span>
+<span class="lineno">   85 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; SC.scApply sc (thm ^. theoremBody) r</span>
+<span class="lineno">   86 </span><span class="spaces">          </span><span class="istickedoff">Just pc -&gt;</span>
+<span class="lineno">   87 </span><span class="spaces">            </span><span class="istickedoff">do precond &lt;- SC.scApply sc pc r</span>
+<span class="lineno">   88 </span><span class="spaces">               </span><span class="istickedoff">thenCase &lt;- SC.scApply sc (thm ^. theoremBody) r</span>
+<span class="lineno">   89 </span><span class="spaces">               </span><span class="istickedoff">elseCase &lt;- SC.scApply sc (thm ^. theoremModule) r</span>
+<span class="lineno">   90 </span><span class="spaces">               </span><span class="istickedoff">SC.scIte sc (thm ^. theoremOutputType) precond thenCase elseCase</span>
+<span class="lineno">   91 </span><span class="spaces">     </span><span class="istickedoff">SC.scAbstractTerms sc [r] body</span></span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>-- | Given a SAWCore term corresponding to an HDL module, a specification, and a precondition:
+<span class="lineno">   94 </span>-- Construct a theorem summarizing the relationship between the module and the specification.
+<span class="lineno">   95 </span>buildTheorem ::
+<span class="lineno">   96 </span>  SC.SharedContext -&gt;
+<span class="lineno">   97 </span>  SC.TypedTerm -&gt;
+<span class="lineno">   98 </span>  SC.Term -&gt;
+<span class="lineno">   99 </span>  Maybe SC.TypedTerm -&gt;
+<span class="lineno">  100 </span>  SC.TypedTerm -&gt;
+<span class="lineno">  101 </span>  IO YosysTheorem
+<span class="lineno">  102 </span><span class="decl"><span class="istickedoff">buildTheorem sc ymod newmod precond body = do</span>
+<span class="lineno">  103 </span><span class="spaces">  </span><span class="istickedoff">cty &lt;-</span>
+<span class="lineno">  104 </span><span class="spaces">    </span><span class="istickedoff">case SC.ttType ymod of</span>
+<span class="lineno">  105 </span><span class="spaces">      </span><span class="istickedoff">SC.TypedTermSchema (C.Forall [] [] cty) -&gt; pure cty</span>
+<span class="lineno">  106 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">yosysError YosysErrorInvalidOverrideTarget</span></span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="istickedoff">(cinpTy, coutTy) &lt;-</span>
+<span class="lineno">  108 </span><span class="spaces">    </span><span class="istickedoff">case cty of</span>
+<span class="lineno">  109 </span><span class="spaces">      </span><span class="istickedoff">C.TCon (C.TC C.TCFun) [ci, co] -&gt; pure (ci, co)</span>
+<span class="lineno">  110 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">yosysError YosysErrorInvalidOverrideTarget</span></span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">inpTy &lt;- CSC.importType sc <span class="nottickedoff">CSC.emptyEnv</span> cinpTy</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">outTy &lt;- CSC.importType sc <span class="nottickedoff">CSC.emptyEnv</span> coutTy</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">nmi &lt;-</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">case reduceSelectors (SC.ttTerm ymod) of</span>
+<span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">(R.asConstant -&gt; Just (SC.Name _ nmi)) -&gt; pure nmi</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">yosysError YosysErrorInvalidOverrideTarget</span></span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">uri &lt;-</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">case nmi of</span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff">SC.ImportedName uri _ -&gt; pure uri</span>
+<span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">yosysError YosysErrorInvalidOverrideTarget</span></span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">pure YosysTheorem</span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">{ _theoremURI = uri</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">, _theoremInputCryptolType = <span class="nottickedoff">cinpTy</span></span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">, _theoremOutputCryptolType = coutTy</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">, _theoremInputType = inpTy</span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff">, _theoremOutputType = outTy</span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff">, _theoremModule = newmod</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">, _theoremPrecond = SC.ttTerm &lt;$&gt; precond</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">, _theoremBody = SC.ttTerm body</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>-- | Reduce nested tuple and record selectors at the top-level of the
+<span class="lineno">  133 </span>-- given term, if possible.
+<span class="lineno">  134 </span>reduceSelectors :: SC.Term -&gt; SC.Term
+<span class="lineno">  135 </span><span class="decl"><span class="istickedoff">reduceSelectors t =</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="istickedoff">case t of</span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">(R.asPairSelector -&gt; Just (t1, b)) -&gt;</span>
+<span class="lineno">  138 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case R.asPairValue (reduceSelectors t1) of</span></span>
+<span class="lineno">  139 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; t</span></span>
+<span class="lineno">  140 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just (x, y) -&gt; if b then y else x</span></span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">(R.asRecordSelector -&gt; Just (t1, fname)) -&gt;</span>
+<span class="lineno">  142 </span><span class="spaces">      </span><span class="istickedoff">case R.asRecordValue (reduceSelectors t1) of</span>
+<span class="lineno">  143 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">t</span></span>
+<span class="lineno">  144 </span><span class="spaces">        </span><span class="istickedoff">Just tm -&gt;</span>
+<span class="lineno">  145 </span><span class="spaces">          </span><span class="istickedoff">case lookup fname tm of</span>
+<span class="lineno">  146 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">t</span></span>
+<span class="lineno">  147 </span><span class="spaces">            </span><span class="istickedoff">Just t' -&gt; t'</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; t</span></span>
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>-- | Applying a theorem thm as an &quot;override&quot; in a Yosys-derived term t proceeds as follows:
+<span class="lineno">  151 </span>--  1) unfold all names except thm.theoremURI in t
+<span class="lineno">  152 </span>--  2) traverse t, looking for constants named thm.theoremURI
+<span class="lineno">  153 </span>--  4) replace the constant term with either thm.theoremBody, or
+<span class="lineno">  154 </span>--     {{ \r -&gt; if thm.theoremPrecond r then thm.theoremBody r else thm.theoremURI r }}
+<span class="lineno">  155 </span>--     in the presence of a precondition
+<span class="lineno">  156 </span>applyOverride ::
+<span class="lineno">  157 </span>  SC.SharedContext -&gt;
+<span class="lineno">  158 </span>  YosysTheorem -&gt;
+<span class="lineno">  159 </span>  SC.Term -&gt;
+<span class="lineno">  160 </span>  IO SC.Term
+<span class="lineno">  161 </span><span class="decl"><span class="istickedoff">applyOverride sc thm t = do</span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">tidx &lt;-</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">do result &lt;- SC.scResolveNameByURI sc $ thm ^. theoremURI</span>
+<span class="lineno">  164 </span><span class="spaces">       </span><span class="istickedoff">case result of</span>
+<span class="lineno">  165 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">yosysError $ YosysErrorOverrideNameNotFound $ URI.renderURI $ thm ^. theoremURI</span></span>
+<span class="lineno">  166 </span><span class="spaces">         </span><span class="istickedoff">Just i -&gt; pure i</span>
+<span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">-- unfold everything except for theoremURI and prelude constants</span>
+<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName</span>
+<span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff">isPreludeName _ = False</span>
+<span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">let unfold nm = SC.nameIndex nm /= tidx &amp;&amp; not (isPreludeName (SC.nameInfo nm))</span>
+<span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">unfolded &lt;- SC.scUnfoldConstants sc unfold t</span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">cache &lt;- SC.newIntCache</span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno">  174 </span><span class="spaces">    </span><span class="istickedoff">go :: SC.Term -&gt; IO SC.Term</span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">go s =</span>
+<span class="lineno">  176 </span><span class="spaces">      </span><span class="istickedoff">SC.useIntCache cache (SC.termIndex s) $</span>
+<span class="lineno">  177 </span><span class="spaces">      </span><span class="istickedoff">case SC.unwrapTermF s of</span>
+<span class="lineno">  178 </span><span class="spaces">        </span><span class="istickedoff">SC.Constant (SC.Name idx _)</span>
+<span class="lineno">  179 </span><span class="spaces">          </span><span class="istickedoff">| idx == tidx -&gt; theoremReplacement sc thm</span>
+<span class="lineno">  180 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; pure s</span>
+<span class="lineno">  181 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; SC.scTermF sc =&lt;&lt; traverse go (SC.unwrapTermF s)</span>
+<span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">go unfolded</span></span>
 
 </pre>
 </body>

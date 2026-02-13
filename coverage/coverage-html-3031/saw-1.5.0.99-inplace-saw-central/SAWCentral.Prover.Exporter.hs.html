@@ -162,9 +162,9 @@ span.spaces    { background: white }
 <span class="lineno">  143 </span><span class="decl"><span class="istickedoff">writeAIG_SAT f satq =</span>
 <span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">do AIGProxy proxy &lt;- getProxy</span>
 <span class="lineno">  145 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  146 </span><span class="spaces">     </span><span class="istickedoff">io $ BBSim.withBitBlastedSATQuery <span class="nottickedoff">proxy</span> sc mempty satq $ <span class="nottickedoff">\g l vars -&gt;</span></span>
-<span class="lineno">  147 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do AIG.writeAiger f (AIG.Network g [l])</span></span>
-<span class="lineno">  148 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">return vars</span></span></span>
+<span class="lineno">  146 </span><span class="spaces">     </span><span class="istickedoff">io $ BBSim.withBitBlastedSATQuery <span class="nottickedoff">proxy</span> sc mempty satq $ \g l vars -&gt;</span>
+<span class="lineno">  147 </span><span class="spaces">         </span><span class="istickedoff">do AIG.writeAiger f (AIG.Network g [l])</span>
+<span class="lineno">  148 </span><span class="spaces">            </span><span class="istickedoff">return vars</span></span>
 <span class="lineno">  149 </span>
 <span class="lineno">  150 </span>-- | Write a @Term@ representing a an arbitrary function to an AIG file.
 <span class="lineno">  151 </span>writeAIG :: FilePath -&gt; Term -&gt; TopLevel ()
