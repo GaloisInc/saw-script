@@ -13,6 +13,7 @@ Various kinds of names.
 {-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module SAWCore.Name
   ( -- * Module names
@@ -21,13 +22,15 @@ module SAWCore.Name
   , moduleNameText
   , moduleNamePieces
    -- * Identifiers
-  , Ident(identModule, identBaseName), identName, mkIdent, mkSafeIdent
+  , Ident, identModule, identBaseName, identName, mkIdent, mkSafeIdent
   , parseIdent
-  , isIdent
   , identText
   , identPieces
     -- * NameInfo
-  , NameInfo(..)
+  , NameInfo
+  , pattern ModuleIdentifier
+  , pattern ImportedName
+  , mkImportedName
   , toShortName
   , toAbsoluteName
   , moduleIdentToQualName
@@ -68,34 +71,32 @@ import qualified Data.Map as Map
 import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
-import           GHC.Generics (Generic)
+-- import           GHC.Generics (Generic)
 import qualified Language.Haskell.TH.Syntax as TH
-import           Instances.TH.Lift () -- for instance TH.Lift Text
 
 import SAWCore.Panic (panic)
 import qualified SAWCore.QualName as QN
 
 -- Module Names ----------------------------------------------------------------
 
-newtype ModuleName = ModuleName Text
-  deriving (Eq, Ord, Generic, TH.Lift)
-
-instance Hashable ModuleName -- automatically derived
+newtype ModuleName = ModuleName QN.QualName
+  deriving (Eq, Ord, Hashable, TH.Lift)
 
 instance Show ModuleName where
-  show (ModuleName s) = Text.unpack s
-
+  show (ModuleName qn) = Text.unpack (QN.render qn)
 
 moduleNameText :: ModuleName -> Text
-moduleNameText (ModuleName x) = x
+moduleNameText (ModuleName qn) = QN.render qn
 
 moduleNamePieces :: ModuleName -> [Text]
-moduleNamePieces (ModuleName x) = Text.splitOn "." x
+moduleNamePieces (ModuleName qn) = QN.qnFullPath qn
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkModuleName :: [Text] -> ModuleName
-mkModuleName nms = ModuleName $ Text.intercalate "." nms
+mkModuleName nms = case QN.pathToQualName QN.NamespaceCore nms of
+  Right qn -> ModuleName qn
+  Left errs -> panic "mkModuleName" $ ["could not make module name from pieces"] ++ nms ++ errs
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
@@ -103,37 +104,33 @@ preludeName = mkModuleName ["Prelude"]
 
 -- Identifiers -----------------------------------------------------------------
 
-data Ident =
-  Ident
-  { identModule :: ModuleName
-  , identBaseName :: Text
-  }
-  deriving (Eq, Ord, Generic)
+newtype Ident = Ident QN.QualName
+  deriving (Eq, Ord, Hashable)
 
-instance Hashable Ident -- automatically derived
+identModule :: Ident -> ModuleName
+identModule (Ident qn) = case QN.splitQualName qn of
+  Right (q, _) -> ModuleName q
+  Left errs -> panic "identModule" $ ["invalid Ident"] ++ errs
+
+identBaseName :: Ident -> Text
+identBaseName (Ident qn) = QN.qnBaseName qn
 
 instance Show Ident where
-  show (Ident m s) = shows m ('.' : Text.unpack s)
+  show i = Text.unpack (identText i)
 
 identText :: Ident -> Text
-identText i = moduleNameText (identModule i) <> Text.pack "." <> identBaseName i
+identText (Ident qn) = QN.renderPath qn
 
 identPieces :: Ident -> NonEmpty Text
-identPieces i =
-  case moduleNamePieces (identModule i) of
-    [] -> identBaseName i :| []
-    (x:xs) -> x :| (xs ++ [identBaseName i])
+identPieces (Ident qn) = QN.qnFullPathNE qn
 
 identName :: Ident -> String
 identName = Text.unpack . identBaseName
 
-instance Read Ident where
-  readsPrec _ str =
-    let (str1, str2) = break (not . isIdChar) str in
-    [(parseIdent str1, str2)]
-
 mkIdent :: ModuleName -> Text -> Ident
-mkIdent m s = Ident m s
+mkIdent (ModuleName m) s = case QN.qualifyName m s of
+  Left errs -> panic "mkIdent" errs
+  Right qn -> Ident qn
 
 -- | Make a \"rocq-safe\" identifier from a string that might contain
 -- non-identifier characters, where we use the SAW core notion of identifier
@@ -152,82 +149,70 @@ mkSafeIdent mnm nm =
            "__x" ++ showHex (ord c) "")
   nm
 
--- | Parse a fully qualified identifier.
+-- | Parse a fully-qualified identifier. Supports either '.' or '::' as path separator.
 parseIdent :: String -> Ident
-parseIdent s0 =
-    case reverse (breakEach s0) of
-      (_:[]) -> panic "parseIdent" ["Empty module name"]
-      (nm:rMod) -> mkIdent (mkModuleName (reverse rMod)) nm
-      _ -> panic "parseIdent" ["Bad identifier " <> Text.pack s0]
-  where breakEach s =
-          case break (=='.') s of
-            (h, []) -> [Text.pack h]
-            (h, _ : r) -> Text.pack h : breakEach r
+parseIdent s0 = case QN.pathToQualName QN.NamespaceCore (Text.splitOn sep t0) of
+  Right qn -> Ident qn
+  Left errs -> panic "parseIdent" $ ("Bad identifier " <> t0):errs
+  where
+    sep = case Text.any (\c -> c=='.') t0 of
+      True -> "."
+      False -> "::"
+    t0 = Text.pack s0
 
 instance IsString Ident where
   fromString = parseIdent
-
-isIdent :: String -> Bool
-isIdent (c:l) = isAlpha c && all isIdChar l
-isIdent [] = False
-
--- | Returns true if character can appear in identifier.
-isIdChar :: Char -> Bool
-isIdChar c = isAlphaNum c || (c == '_') || (c == '\'') || (c == '.')
-
 
 --------------------------------------------------------------------------------
 -- NameInfo
 
 
 -- | Descriptions of the origins of names that may be in scope
-data NameInfo
-  = -- | This name arises from an exported declaration from a module
-    ModuleIdentifier Ident
+data NameInfo =
+  NameInfo { nameInfoQualName :: QN.QualName, nameInfoImported :: Bool}
+  deriving (Eq,Ord,Show)
 
-  | -- | This name was imported from some other programming language/scope
-    ImportedName
-      QN.QualName  -- ^ An absolutely-qualified name, which is required to be unique
-      [Text]   -- ^ A collection of aliases for this name.  Shorter or "less-qualified"
-               --   aliases should be nearer the front of the list
+-- | This name arises from an exported declaration from a module
+pattern ModuleIdentifier :: Ident -> NameInfo
+pattern ModuleIdentifier i <- NameInfo (Ident -> i) False  where
+  ModuleIdentifier i = NameInfo (moduleIdentToQualName i) False
 
- deriving (Eq,Ord,Show)
+-- | This name was imported from some other programming language/scope
+pattern ImportedName ::
+  QN.QualName -> -- ^ An absolutely-qualified name, which is required to be unique
+  [Text] ->  -- ^ A collection of aliases for this name.  Shorter or "less-qualified"
+             --   aliases should be nearer the front of the list
+  NameInfo
+pattern ImportedName qn as <- NameInfo (qualNameWithAliases -> (qn,as)) True
+
+mkImportedName :: QN.QualName -> NameInfo
+mkImportedName qn = NameInfo qn True
+
+{-# COMPLETE ModuleIdentifier,ImportedName #-}
+
+qualNameWithAliases:: QN.QualName -> (QN.QualName, [Text])
+qualNameWithAliases qn = (qn,QN.aliases qn)
 
 instance Hashable NameInfo where
-  hashWithSalt x nmi =
-    case nmi of
-      ModuleIdentifier ident -> hashWithSalt x ident
-      ImportedName qn _ -> hashWithSalt x qn
+  hashWithSalt x (NameInfo a b) = x `hashWithSalt` a `hashWithSalt` b
 
 toQualName :: NameInfo -> QN.QualName
-toQualName =
-  \case
-    ModuleIdentifier i -> moduleIdentToQualName i
-    ImportedName qn _ -> qn
+toQualName ni = nameInfoQualName ni
 
 nameAliases :: NameInfo -> [Text]
-nameAliases =
-  \case
-    ModuleIdentifier i -> [identBaseName i, identText i]
-    ImportedName _ aliases -> aliases
+nameAliases ni = QN.aliases $ nameInfoQualName ni
 
 toShortName :: NameInfo -> Text
-toShortName (ModuleIdentifier i) = identBaseName i
-toShortName (ImportedName qn []) = QN.render qn
-toShortName (ImportedName _ (x:_)) = x
+toShortName ni = QN.qnBaseName $ nameInfoQualName ni
 
 toAbsoluteName :: NameInfo -> Text
-toAbsoluteName (ModuleIdentifier i) = identText i
-toAbsoluteName (ImportedName qn _) = QN.render qn
+toAbsoluteName ni = QN.render $ nameInfoQualName ni
 
 moduleIdentToQualName :: Ident -> QN.QualName
-moduleIdentToQualName ident = case QN.pathToQualName QN.NamespaceCore (identPieces ident) of
-  Right qn -> qn
-  Left errs ->
-    panic "moduleIdentToQualName" $ ("Failed to construct qualified name: " <> identText ident):errs
+moduleIdentToQualName (Ident qn) = qn
 
 scFreshQualName :: Text -> VarIndex -> QN.QualName
-scFreshQualName nm i = case QN.indexedQualName QN.NamespaceCore (if Text.null nm then "_" else nm) i of
+scFreshQualName nm i = case QN.indexedQualName QN.NamespaceFresh (if Text.null nm then "_" else nm) i of
   Right qn -> qn
   Left errs ->
     panic "scFreshQualName" $ ("Failed to construct qualified name: <> " <> nm <> "  " <> Text.pack (show i)):errs

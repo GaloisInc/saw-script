@@ -107,7 +107,7 @@ convertYosysIR sc ir =
                 fail $ Text.unpack $
                   Text.intercalate "\n" $ ("convertYosysIR: failed to make qualified name: " <> nm):errs
               Right qn -> return qn
-             let ni = SC.ImportedName qn [nm]
+             let ni = SC.mkImportedName qn
              body <- SC.scAscribe sc (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
              tc <- SC.scDefineConstant sc ni body
              let cm' = cm { _convertedModuleTerm = tc }

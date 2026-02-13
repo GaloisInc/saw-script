@@ -1451,8 +1451,7 @@ importName cnm =
       | C.ogModule og == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
               qn = cryptolQualName [] [] shortNm (Just (C.nameUnique cnm))
-              aliases   = QN.aliases qn
-           in pure (ImportedName qn aliases)
+           in pure (mkImportedName qn)
 
       | otherwise ->
           let (topMod, nested) = C.modPathSplit (C.ogModule og)
@@ -1467,8 +1466,7 @@ importName cnm =
                             Nothing -> []
               shortNm   = C.identText (C.nameIdent cnm)
               qn        = cryptolQualName topChunks (nestedNms ++ ifaceNms) shortNm Nothing
-              aliases   = QN.aliases qn
-           in pure (ImportedName qn aliases)
+           in pure (mkImportedName qn)
 
 -- | Extract all components from a tuple term of the specified size.
 scTupleComponents :: SharedContext -> Term -> Int -> IO [Term]

@@ -355,7 +355,7 @@ llvmQualName symbol_name = case QN.pathToQualName QN.NamespaceLLVM [symbol_name]
     panic "llvmQualName" $ ("Could not create LLVM symbol name " <> symbol_name):errs
 
 llvmNameInfo :: Text -> NameInfo
-llvmNameInfo symbol_name = ImportedName (llvmQualName symbol_name) [ symbol_name ]
+llvmNameInfo symbol_name = mkImportedName (llvmQualName symbol_name)
 
 llvm_compositional_extract ::
   Some LLVMModule ->

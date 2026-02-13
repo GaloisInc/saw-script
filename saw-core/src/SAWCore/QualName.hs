@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DeriveLift #-}
 
 {- |
 Module      : SAWCore.QualName
@@ -16,11 +17,21 @@ module SAWCore.QualName
   ( Namespace(..)
   , readNamespace
   , QualName
+  , qnNamespace
+  , qnBaseName
+  , qnPath
+  , qnSubPath
+  , qnIndex
+  , qnFullPath
+  , qnFullPathNE
   , pathToQualName
   , indexedQualName
   , mkQualName
+  , qualifyName
+  , splitQualName
   , parse
   , render
+  , renderPath
   , aliases
   ) where
 
@@ -33,7 +44,11 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Read as Text
 import Control.Monad.Except
-import Control.Monad (when)
+import Control.Monad (unless)
+import qualified Data.List.NonEmpty as NE
+
+import qualified Language.Haskell.TH.Syntax as TH
+import Data.Char (isAlpha, isAlphaNum)
 
 {-# INLINE debugParse #-}
 debugParse :: Bool
@@ -54,7 +69,7 @@ squelch f = f `catchError` \_ -> throwError []
 
 data Namespace =
   NamespaceCore | NamespaceCryptol | NamespaceFresh | NamespaceYosys | NamespaceLLVM
-  deriving (Eq, Ord, Enum, Bounded)
+  deriving (Eq, Ord, Enum, Bounded, TH.Lift)
 
 instance Hashable Namespace where
   hashWithSalt s ns = hashWithSalt s (fromEnum ns)
@@ -128,8 +143,13 @@ data QualName = QualName
   , qnSubPath :: [Text]
   , qnIndex :: Maybe Int
   }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, TH.Lift)
 
+qnFullPath :: QualName -> [Text]
+qnFullPath qn = qnPath qn ++ qnSubPath qn ++ [qnBaseName qn]
+
+qnFullPathNE :: QualName -> NE.NonEmpty Text
+qnFullPathNE qn = NE.fromList (qnFullPath qn)
 
 instance Hashable QualName where
   hashWithSalt s (QualName a b c d e) = s
@@ -140,11 +160,26 @@ instance Hashable QualName where
     `hashWithSalt` e
 
 
-invalidPathElem :: Text -> Bool
-invalidPathElem txt =
-     Text.null txt
-  || Text.any (\c -> c == '[' || c == ']') txt
-  || Text.isInfixOf "::" txt
+validPathElem :: Text -> Bool
+validPathElem txt =
+     not (Text.null txt)
+  && Text.all (\c -> not (c == '[' || c == ']')) txt
+  && (not (Text.isInfixOf "::" txt))
+
+validQualifierElem :: Text -> Bool
+validQualifierElem txt = validPathElem txt && Text.all isAlpha txt
+
+-- Pulled from Cryptol.Parser.Lexer.x
+validNameSymbols :: [Char]
+validNameSymbols = ['!','#','$','%','&','*','-','.',':','<','=','>','?','@','^','~','\\','/']
+
+validBaseName :: Text -> Bool
+validBaseName txt = validPathElem txt && case Text.uncons txt of
+  Nothing -> False
+  Just (c,txt') -> case isAlpha c of
+    True -> Text.all (\c_ -> isAlphaNum c_ || c_ == '\'' || c_== '_') txt'
+    False -> (c == '_' && Text.null txt') ||
+      Text.all (\c_ -> List.elem c_ validNameSymbols) txt
 
 pathToQualName :: (Foldable t) => Namespace -> t Text -> Either [Text] QualName
 pathToQualName ns ps = squelch $ case ps' of
@@ -158,7 +193,9 @@ indexedQualName ns nm i = squelch $ mkQualName ns [] [] nm (Just i)
 
 mkQualName :: Namespace -> [Text] -> [Text] -> Text -> Maybe Int -> Either [Text] QualName
 mkQualName ns ps sps nm idx = squelch $ rethrow err $ do
-  mapM_ go (nm : ps ++ sps)
+  unless (validBaseName nm) $
+    throwOne $ "mkQualName: invalid base name: " <> nm
+  mapM_ checkQual (ps ++ sps)
   return $ QualName ns nm ps sps idx
   where
     err = Text.intercalate " " $
@@ -170,8 +207,34 @@ mkQualName ns ps sps nm idx = squelch $ rethrow err $ do
       , Text.pack (show idx)
       ]
 
-    go txt = when (invalidPathElem txt) $
-      throwOne $ "mkQualName: invalid path element: " <> txt
+    checkQual txt = unless (validQualifierElem txt) $
+      throwOne $ "mkQualName: invalid path qualifier element: " <> txt
+
+-- | Append a base name to a given 'QualName', pushing the existing
+--   base name into the path (or subpath, if it is nonempty).
+qualifyName :: QualName -> Text -> Either [Text] QualName
+qualifyName qn txt = do
+  let prevBaseName = qnBaseName qn
+  unless (validBaseName txt) $
+    throwOne $ "qualifyName: invalid base name: " <> txt
+  unless (validQualifierElem prevBaseName) $
+    throwOne $ "qualifyName: cannot convert base name to qualifier element: " <> prevBaseName
+  case qnSubPath qn of
+    [] -> return $ qn { qnPath = qnPath qn ++ [prevBaseName], qnBaseName = txt }
+    sps -> return $ qn { qnSubPath = sps ++ [prevBaseName], qnBaseName = txt }
+
+-- | Split a qualified name into a qualifier and base name.
+splitQualName :: QualName -> Either [Text] (QualName, Text)
+splitQualName qn = case qnSubPath qn of
+  [] -> case qnPath qn of
+    (p:ps) | validBaseName p ->
+      return $ (qn { qnPath = ps, qnBaseName = p }, qnBaseName qn)
+    _ -> bad
+  (p:sps) | validBaseName p ->
+    return $ (qn { qnSubPath = sps, qnBaseName = p }, qnBaseName qn)
+  _ -> bad
+  where
+    bad = throwOne $ "splitQualName: cannot split qualified name: " <> render qn
 
 nonEmpty :: Text -> ParseM ()
 nonEmpty txt = case Text.null txt of
@@ -194,11 +257,14 @@ parse txt0 = squelch $ rethrow err $ do
   where
     err = "parse: failed to parse qualified name: " <> txt0
 
+data RenderOpts = RenderOpts { optRenderNamespace :: Maybe Bool }
 
+defaultRenderOpts :: RenderOpts
+defaultRenderOpts = RenderOpts Nothing
 
 -- | Valid aliases for a qualified name, from most to least precise
-aliasesRev :: QualName -> [Text]
-aliasesRev qn = do
+aliasesRev :: RenderOpts -> QualName -> [Text]
+aliasesRev opts qn = do
   sps <- subPathText
   ps <- pathText
   ix <- indexSuffix
@@ -206,62 +272,45 @@ aliasesRev qn = do
   let bn = qnBaseName qn
   return $ ps <> sps <> bn <> ix <> ns
   where
-    opt :: Maybe Text -> [Text]
-    opt mtxt = case mtxt of
+    opt :: Maybe Bool -> Maybe Text -> [Text]
+    opt mopt mtxt = case mtxt of
       Nothing -> [Text.empty]
-      Just txt -> [txt, Text.empty]
+      Just txt -> case mopt of
+        Nothing -> [txt, Text.empty]
+        Just True -> [txt]
+        Just False -> [Text.empty]
 
     indexSuffix :: [Text]
-    indexSuffix = opt $ fmap (\i -> "#" <> Text.pack (show i)) (qnIndex qn)
+    indexSuffix = opt Nothing $
+      fmap (\i -> "#" <> Text.pack (show i)) (qnIndex qn)
 
     namespaceSuffix :: [Text]
-    namespaceSuffix = opt $ (Just $ "@" <> renderNamespace (qnNamespace qn))
+    namespaceSuffix = opt (optRenderNamespace opts) $
+      Just $ "@" <> renderNamespace (qnNamespace qn)
 
     pathText :: [Text]
-    pathText = opt $ case qnPath qn of
-      [] -> Nothing
-      ps -> Just $ Text.intercalate "::" ps <> "::"
+    pathText = opt Nothing $
+      case qnPath qn of
+        [] -> Nothing
+        ps -> Just $ Text.intercalate "::" ps <> "::"
 
     subPathText :: [Text]
-    subPathText = opt $ case qnSubPath qn of
-      [] -> Nothing
-      sp -> Just $ "[" <> Text.intercalate "::" sp <> "]" <> "::"
+    subPathText = opt Nothing $
+      case qnSubPath qn of
+        [] -> Nothing
+        sp -> Just $ "[" <> Text.intercalate "::" sp <> "]" <> "::"
 
 -- | Valid aliases for a qualified name, from least to most precise
 aliases :: QualName -> [Text]
-aliases qn = List.reverse (aliasesRev qn)
+aliases qn = List.reverse (aliasesRev defaultRenderOpts qn)
 
--- | Fully-qualified rendering of a qualified name
+-- | Fully-qualified rendering of a qualified name, including namespace
 render :: QualName -> Text
-render qn = List.head (aliasesRev qn)
+render qn = List.head (aliasesRev defaultRenderOpts qn)
+
+-- | Fully-qualified rendering of a qualified name, without namespace
+renderPath :: QualName -> Text
+renderPath qn = List.head (aliasesRev (defaultRenderOpts { optRenderNamespace = Just False }) qn)
 
 instance Show QualName where
   show qn = Text.unpack (render qn)
-
-{-
-render :: QualName -> Text
-render qn =
-     pathText
-  <> subPathText
-  <> qnBaseName qn
-  <> indexSuffix
-  <> namespaceSuffix
-  where
-    namespaceSuffix :: Text
-    namespaceSuffix = "@" <> renderNamespace (qnNamespace qn)
-
-    indexSuffix :: Text
-    indexSuffix = case qnIndex qn of
-      Nothing -> Text.empty
-      Just i -> "#" <> Text.pack (show i)
-
-    pathText :: Text
-    pathText = Text.intercalate "::" (qnPath qn)
-
-    subPathText :: Text
-    subPathText = case qnSubPath qn of
-      [] -> Text.empty
-      sp -> "[" <> Text.intercalate "::" sp <> "]"
-
-
--}

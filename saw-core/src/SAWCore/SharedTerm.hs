@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 {- |
 Module      : SAWCore.SharedTerm
@@ -31,7 +32,10 @@ module SAWCore.SharedTerm
   , TermF(..)
   , Ident, mkIdent
   , VarIndex
-  , NameInfo(..)
+  , NameInfo
+  , pattern ModuleIdentifier
+  , pattern ImportedName
+  , mkImportedName
   , TermIndex
   , unwrapTermF
   , termIndex
