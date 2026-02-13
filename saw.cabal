@@ -124,7 +124,6 @@ library saw-core
     hashable >= 1.3.4,
     indexed-traversable,
     lens >= 3.8,
-    modern-uri >= 0.3.2 && < 0.4,
     MonadRandom,
     mtl,
     pretty,
@@ -185,6 +184,7 @@ library saw-core
     SAWCore.Testing.Random
     SAWCore.Typechecker
     SAWCore.Unique
+    SAWCore.URI
     SAWCore.Change
   other-modules:
     SAWCore.Panic
@@ -223,7 +223,6 @@ library cryptol-saw-core
     executable-path,
     filepath,
     integer-gmp,
-    modern-uri,
     mtl,
     prettyprinter >= 1.7.0,
     sbv,
@@ -443,7 +442,6 @@ library saw-central
     filepath,
     indexed-traversable,
     lens,
-    modern-uri >= 0.3.2 && < 0.4,
     mtl >= 2.1,
     old-locale,
     old-time,

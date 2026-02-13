@@ -112,7 +112,6 @@ import qualified Data.Vector as V
 import           Prettyprinter
 import           System.IO
 import qualified Text.LLVM.AST as L
-import           Text.URI
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
 -- parameterized-utils
@@ -167,6 +166,7 @@ import SAWCore.FiniteValue (ppFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
+import SAWCore.URI
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -350,15 +350,7 @@ llvm_array_size_profile assume (Some lm) nm lemmas setup = do
 llvmURI :: Text -> URI
 llvmURI symbol_name =
   fromMaybe (panic "llvmURI" ["Could not create LLVM symbol name " <> symbol_name]) $
-  do sch <- mkScheme "llvm"
-     p   <- mkPathPiece symbol_name
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left True -- absolute path
-       , uriPath = Just (False, p NE.:| [])
-       , uriQuery = []
-       , uriFragment = Nothing
-       }
+    mkURI NamespaceLLVM [symbol_name] Nothing
 
 llvmNameInfo :: Text -> NameInfo
 llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ symbol_name ]

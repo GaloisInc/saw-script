@@ -1,9 +1,40 @@
 import "unint.cry";
 
-fails (prove_print (w4_unint_yices ["g"]) {{ \x -> f x > 0 }});
+let require_convertible t1 t2 = do {
+  b <- is_convertible t1 t2;
+  if b then print "Convertible" else
+  fail (str_concats
+    [ "Terms are not convertible: "
+    , show_term t1
+    , show_term t2
+    ]);
+};
 
-write_core "unint.core" {{ \x -> f x > 0 }};
+fails (prove_print (w4_unint_yices ["g"]) {{ \x -> f x > 0 \/ (f x / 2 < f x) }});
+
+write_core "unint.core" {{ \x -> f x > 0 \/ (f x / 2 < f x) }};
 
 prop <- read_core "unint.core";
 
+h <- define "h" {{ 0 }};
+
+write_core "unint.core" {{ \x -> f x > h \/ (f x / 2 < f x) }};
+
+prop2 <- read_core "unint.core";
+
+require_convertible prop prop2;
+
+let
+{{
+  j : [32] -> Bit
+  j x = f x > h \/ (f x / 2 < f x)
+}};
+
+write_core "unint.core" {{ j }};
+
+prop3 <- read_core "unint.core";
+
+require_convertible prop prop3;
+
 fails (prove_print (w4_unint_yices ["g"]) {{ \x -> prop x }});
+fails (prove_print (w4_unint_yices ["j"]) {{ \x -> prop3 x }});

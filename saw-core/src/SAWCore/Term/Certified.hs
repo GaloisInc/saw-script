@@ -122,7 +122,6 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
-import Text.URI
 
 import SAWSupport.IntRangeSet (IntRangeSet)
 import qualified SAWSupport.IntRangeSet as IntRangeSet
@@ -160,6 +159,7 @@ import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 import SAWCore.Unique
+import SAWCore.URI
 
 ----------------------------------------------------------------------
 
