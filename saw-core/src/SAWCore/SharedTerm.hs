@@ -46,6 +46,8 @@ module SAWCore.SharedTerm
   , scGetModuleMap
   , scGetNamingEnv
   -- * Pretty printing
+  , ppName
+  , prettyName
   , ppTerm
   , prettyTerm
   , ppTermError
@@ -280,15 +282,16 @@ import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ref ( C )
-import Data.Set (Set)
 import Data.Text (Text)
+import qualified Data.Text as Text
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 import qualified Prettyprinter as PP
 
 import qualified SAWSupport.IntRangeSet as IntRangeSet
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
 
 import SAWCore.Cache
 import SAWCore.Change
@@ -390,7 +393,7 @@ prettyTermError opts ne err =
     VariableFreeInContext x body ->
       [ "Variable occurs free in typing context"
       , "Variable:"
-      , PP.indent 2 $ PP.pretty (show (vnName x))
+      , PP.indent 2 $ PP.pretty (vnName x)
       , "For term:"
       , ishow body
       ]
@@ -402,7 +405,7 @@ prettyTermError opts ne err =
       , tyshow t
       ]
     NameNotFound nm ->
-      [ "No such constant:" PP.<+> PP.pretty (toAbsoluteName (nameInfo nm)) ]
+      [ "No such constant:" PP.<+> prettyNameWithEnv opts ne nm ]
     IdentNotFound ident ->
       [ "No such global:" PP.<+> PP.pretty (show ident) ]
     NotPairType t ->
@@ -427,18 +430,18 @@ prettyTermError opts ne err =
       , tyshow t
       ]
     DataTypeNotFound d ->
-      [ "No such data type:" PP.<+> PP.pretty (show d) ]
+      [ "No such data type:" PP.<+> prettyNameWithEnv opts ne d ]
     RecursorPropElim d s ->
       [ "Invalid recursor with disallowed propositional elimination"
       , "Data type:"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo d))
+      , PP.indent 2 $ prettyNameWithEnv opts ne d
       , "Elimination sort:"
       , PP.indent 2 $ PP.pretty (show s)
       ]
     ConstantNotClosed nm body ->
       [ "Definition body contains free variables"
       , "Name:"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo nm))
+      , PP.indent 2 $ prettyNameWithEnv opts ne nm
       , "For term:"
       , ishow body
       , "With type:"
@@ -450,19 +453,19 @@ prettyTermError opts ne err =
       ]
     AlreadyDefined nm ->
       [ "Attempt to redefine existing constant"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo nm))
+      , PP.indent 2 $ prettyNameWithEnv opts ne nm
       ]
     DataTypeKindNotClosed dname dtype ->
       [ "Kind of data type contains free variables"
       , "Name:"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , PP.indent 2 $ prettyNameWithEnv opts ne dname
       , "Kind:"
       , ishow dtype
       ]
     DataTypeParameterSort dname dsort pname ptype ->
       [ "Universe level of parameters greater than data type sort"
       , "Data type name:"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , PP.indent 2 $ prettyNameWithEnv opts ne dname
       , "Data type sort:"
       , PP.indent 2 $ PP.pretty (show dsort)
       , "Parameter name:"
@@ -473,7 +476,7 @@ prettyTermError opts ne err =
     DataTypeIndexSort dname dsort iname itype ->
       [ "Universe level of indices not contained in data type sort"
       , "Data type name:"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , PP.indent 2 $ prettyNameWithEnv opts ne dname
       , "Data type sort:"
       , PP.indent 2 $ PP.pretty (show dsort)
       , "Index name:"
@@ -486,20 +489,20 @@ prettyTermError opts ne err =
     DataTypeCtorNotClosed dname cname ctype ->
       [ "Data constructor type contains free variables"
       , "Data type name:"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , PP.indent 2 $ prettyNameWithEnv opts ne dname
       , "Constructor name:"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo cname))
+      , PP.indent 2 $ prettyNameWithEnv opts ne cname
       , "Constructor type:"
       , ishow ctype
       ]
     DataTypeCtorSort dname dsort cname ctype ->
       [ "Universe level of constructor not contained in data type sort"
       , "Data type name:"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo dname))
+      , PP.indent 2 $ prettyNameWithEnv opts ne dname
       , "Data type sort:"
       , PP.indent 2 $ PP.pretty (show dsort)
       , "Constructor name:"
-      , PP.indent 2 $ PP.pretty (toAbsoluteName (nameInfo cname))
+      , PP.indent 2 $ prettyNameWithEnv opts ne cname
       , "Constructor type:"
       , ishow ctype
       , "Constructor sort:"
@@ -885,6 +888,17 @@ ppTerm :: SharedContext -> PPS.Opts -> Term -> IO String
 ppTerm sc opts t =
   PPS.render opts <$> prettyTerm sc opts t
 
+-- | The preferred printing mechanism for `Name`, as a `Doc`.
+prettyName :: SharedContext -> PPS.Opts -> Name -> IO PPS.Doc
+prettyName sc opts nm =
+  do env <- scGetNamingEnv sc
+     pure $ prettyNameWithEnv opts env nm
+
+-- | The preferred printing mechanism for `Name`, as `Text`.
+ppName :: SharedContext -> PPS.Opts -> Name -> IO Text
+ppName sc opts nm =
+  PPS.renderText opts <$> prettyName sc opts nm
+
 --------------------------------------------------------------------------------
 -- Recursors
 
@@ -1004,7 +1018,9 @@ scTypeOfName sc nm =
   do mm <- scGetModuleMap sc
      case lookupVarIndexInMap (nameIndex nm) mm of
        Just r -> pure (resolvedNameType r)
-       Nothing -> fail ("scTypeOfName: Name not found: " ++ show nm)
+       Nothing -> do
+         nm' <- ppName sc PPS.defaultOpts nm
+         fail ("scTypeOfName: Name not found: " ++ Text.unpack nm')
 
 --------------------------------------------------------------------------------
 

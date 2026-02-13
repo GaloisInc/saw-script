@@ -53,6 +53,7 @@ module SAWCore.Term.Pretty
   , ppTermPure
   , ppTermPureDefaults
   , ppTermWithEnv
+  , prettyNameWithEnv
   , prettyTermWithEnv
   , prettyTermWithNameList
   , prettyTermContainerWithEnv
@@ -721,6 +722,12 @@ ppTermPureDefaults t = ppTermPure PPS.defaultOpts t
 --------------------------------------------------------------------------------
 -- * Pretty-printers with naming environments
 --------------------------------------------------------------------------------
+
+-- | Pretty-print a `NameInfo`, using the `DisplayNameEnv` to figure
+--   how much name to print.
+prettyNameWithEnv :: PPS.Opts -> DisplayNameEnv -> Name -> PPS.Doc
+prettyNameWithEnv opts env name =
+  runPPM opts env $ prettyBestName name
 
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
 -- more than once at the same binding level

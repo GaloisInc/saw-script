@@ -89,7 +89,11 @@ prettyTCError opts ne e = helper Nothing e where
       EmptyVectorLit ->
         ppWithPos mp [ "Empty vector literal"]
       NoSuchDataType d ->
-        ppWithPos mp [ "No such data type:" <+> pretty (show d) ]
+        -- Note: for now d is always an `Ident`; when it needs to be
+        -- more general (`Name`), switch to the commented-out version.
+        --let d' = prettyNameWithEnv opts ne d in
+        let d' = pretty $ identText d in
+        ppWithPos mp [ "No such data type:" <+> d' ]
       DeclError nm reason ->
         ppWithPos mp [ "Malformed declaration for" <+> pretty (show nm), pretty reason ]
       ErrorPos p err' ->
@@ -120,7 +124,7 @@ data TCEnv =
 data TCError
   = UnboundName Text
   | EmptyVectorLit
-  | NoSuchDataType NameInfo
+  | NoSuchDataType Ident
   | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorUTerm Un.UTerm TCError
@@ -221,8 +225,10 @@ typeInferCompleteUTerm t =
   do typeInferDebug ("typechecking term: " ++ show t)
      res <- atPos (pos t) $ withErrorUTerm t $ typeInferCompleteTerm t
      ty <- liftSCM $ SC.scmTypeOf res
+     sc <- askSharedContext
+     ty' <- liftIO $ ppTerm sc PPS.defaultOpts ty
      typeInferDebug ("completed typechecking term: " ++ show t ++ "\n"
-                     ++ "type = " ++ show ty)
+                     ++ "type = " ++ ty')
      return res
 
 -- | Main workhorse function for type inference on untyped terms
@@ -242,7 +248,7 @@ typeInferCompleteTerm uterm =
          let dt_ident = mkIdent mnm str
          dt <- case findDataTypeInMap dt_ident mm of
            Just d -> return d
-           Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
+           Nothing -> throwTCError $ NoSuchDataType dt_ident
          liftSCM $ SC.scmRecursor (dtName dt) s
 
     Un.App f arg ->
