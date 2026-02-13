@@ -57,7 +57,7 @@ import qualified CryptolSAWCore.Simpset as Cryptol
 import qualified SAWSupport.PanicSupport as PanicSupport
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText, render)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText, render, renderText)
 import qualified SAWSupport.ConsoleSupport as Cons
 
 -- saw-core
@@ -143,8 +143,9 @@ import SAWCentral.VerificationSummary
 showPrim :: SV.Value -> TopLevel Text
 showPrim v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  nenv <- io . scGetNamingEnv =<< getSharedContext
-  return $ Text.pack $ SV.showsPrecValue opts nenv 0 v ""
+  sc <- getSharedContext
+  v' <- liftIO $ SV.prettyValue sc opts v
+  return $ PPS.renderText opts v'
 
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
@@ -1228,7 +1229,7 @@ proveHelper nm script t f = do
   res <- SV.runProofScript script prop goal Nothing (Text.pack nm) True False
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                          ++ SV.showsProofResult opts res ""
+                          ++ Text.unpack (ppProofResult opts res)
   case res of
     ValidProof _stats thm ->
       do
@@ -1460,7 +1461,7 @@ satPrintPrim ::
 satPrintPrim script t = do
   result <- satPrim script t
   opts <- getTopLevelPPOpts
-  printOutLnTop Info (SV.showsSatResult opts result "")
+  printOutLnTop Info (Text.unpack $ SV.ppSatResult opts result)
 
 -- | Quick check (random test) a term and print the result. The
 -- 'Integer' parameter is the number of random tests to run.
@@ -2020,7 +2021,7 @@ prove_core script input =
      res <- SV.runProofScript script p goal Nothing "prove_core" True False
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                                  ++ SV.showsProofResult opts res ""
+                                  ++ Text.unpack (ppProofResult opts res)
      case res of
        ValidProof _ thm -> SV.returnTheoremProof thm
        InvalidProof _ _ pst -> failProof pst

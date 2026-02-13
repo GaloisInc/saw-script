@@ -61,6 +61,7 @@ import Mir.Intrinsics (MIR)
 import qualified Mir.Generator as MIR (RustModule)
 import qualified Mir.Mir as MIR
 
+import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts, pShow, pShowText)
@@ -389,10 +390,13 @@ bindPattern rb pat ms v =
                             "Expected tuple type, got " <> Text.pack (show t)
                         ]
             sequence_ $ zipWith3 (bindPattern rb) ps mss vs
-        _ ->
+        _ -> do
+            sc <- getSharedContext
+            opts <- gets rwPPOpts
+            v' <- liftIO $ ppValue sc opts v
             panic "bindPatternLocal" [
-                "Expected tuple value; got " <> Text.pack (show v)
-            ]
+                "Expected tuple value; got " <> v'
+             ]
 
 
 ------------------------------------------------------------
@@ -521,13 +525,16 @@ applyValue pos v1info v1 v2 =
             -- f will still be partially applied after this, so it
             -- won't do anything and there's no need to enter/leave.
             VBuiltin name (args :|> v2) <$> f v2
-    _ ->
+    _ -> do
+        sc <- getSharedContext
+        opts <- gets rwPPOpts
+        v1' <- liftIO $ ppValue sc opts v1
         panic "applyValue" [
             "Called object is not a function",
             "Call site: " <> Text.pack (show pos),
-            "Value found: " <> Text.pack (show v1),
+            "Value found: " <> v1',
             v1info
-        ]
+         ]
 
 -- Eval an expression.
 --
@@ -579,13 +586,16 @@ interpretExpr expr =
       SS.Index pos e1 e2 -> do
           a <- interpretExpr e1
           i <- interpretExpr e2
-          return (indexValue pos a i)
+          ret <- indexValue pos a i
+          return ret
       SS.Lookup pos e n -> do
           a <- interpretExpr e
-          return (lookupValue pos a n)
+          ret <- lookupValue pos a n
+          return ret
       SS.TLookup pos e i -> do
           a <- interpretExpr e
-          return (tupleLookupValue pos a i)
+          ret <- tupleLookupValue pos a i
+          return ret
       SS.Var pos x -> do
           avail <- gets rwPrimsAvail
           Environ varenv _tyenv _cryenv <- gets rwEnviron
@@ -635,13 +645,16 @@ interpretExpr expr =
           case v1 of
             VBool b ->
               interpretExpr (if b then e2 else e3)
-            _ ->
+            _ -> do
+              sc <- getSharedContext
+              opts <- gets rwPPOpts
+              v1' <- liftIO $ ppValue sc opts v1
               panic "interpretExpr" [
                   "Ill-typed value in if-expression (should be Bool)",
-                  "Source position: " <> Text.pack (show pos),
-                  "Value found: " <> Text.pack (show v1),
+                  "Source position: " <> ppPosition pos,
+                  "Value found: " <> v1',
                   "Expression: " <> PPS.pShowText e1
-              ]
+               ]
 
 -- Eval a "decl group", which is a let-binding or group of mutually
 -- recursive let-bindings.
@@ -980,8 +993,9 @@ processStmtBind printBinds pos pat expr = do
     case pat of
       SS.PWild _ _ | not (isVUnit result) ->
         liftTopLevel $
-        do nenv <- io . scGetNamingEnv =<< getSharedContext
-           printOutLnTop Info (showsPrecValue opts nenv 0 result "")
+        do sc <- getSharedContext
+           result' <- liftIO $ ppValue sc opts result
+           printOutLnTop Info (Text.unpack result')
       _ -> return ()
 
     -- Print function type if result was a function
@@ -1516,7 +1530,7 @@ instance FromValue a => FromValue (TopLevel a) where
           fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (TopLevel)" [
-              "Invalid/ill-typed value: " <> Text.pack (show v')
+              "Invalid/ill-typed value: " <> uglyValue v'
           ]
 
 instance IsValue a => IsValue (ProofScript a) where
@@ -1531,7 +1545,7 @@ instance FromValue a => FromValue (ProofScript a) where
           fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (ProofScript)" [
-              "Invalid/ill-typed value: " <> Text.pack (show v')
+              "Invalid/ill-typed value: " <> uglyValue v'
           ]
 
 instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
@@ -1546,7 +1560,7 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
           fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (LLVMSetup)" [
-              "Invalid/ill-typed value: " <> Text.pack (show v')
+              "Invalid/ill-typed value: " <> uglyValue v'
           ]
 
 instance IsValue a => IsValue (JVMSetupM a) where
@@ -1561,7 +1575,7 @@ instance FromValue a => FromValue (JVMSetupM a) where
           fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (JVMSetup)" [
-              "Invalid/ill-typed value: " <> Text.pack (show v')
+              "Invalid/ill-typed value: " <> uglyValue v'
           ]
 
 instance IsValue a => IsValue (MIRSetupM a) where
@@ -1576,7 +1590,7 @@ instance FromValue a => FromValue (MIRSetupM a) where
           fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (MIRSetup)" [
-              "Invalid/ill-typed value: " <> Text.pack (show v')
+              "Invalid/ill-typed value: " <> uglyValue v'
           ]
 
 instance IsValue (CIR.AllLLVM CMS.SetupValue) where
@@ -1797,49 +1811,49 @@ instance IsValue ProofResult where
 
 instance FromValue ProofResult where
    fromValue _ (VProofResult r) = r
-   fromValue _ v = error $ "fromValue ProofResult: " ++ show v
+   fromValue _ v = error $ "fromValue ProofResult: " ++ Text.unpack (uglyValue v)
 
 instance IsValue SatResult where
    toValue _name r = VSatResult r
 
 instance FromValue SatResult where
    fromValue _ (VSatResult r) = r
-   fromValue _ v = error $ "fromValue SatResult: " ++ show v
+   fromValue _ v = error $ "fromValue SatResult: " ++ Text.unpack (uglyValue v)
 
 instance IsValue CMS.GhostGlobal where
   toValue _name x = VGhostVar x
 
 instance FromValue CMS.GhostGlobal where
   fromValue _ (VGhostVar r) = r
-  fromValue _ v = error ("fromValue GlobalVar: " ++ show v)
+  fromValue _ v = error ("fromValue GlobalVar: " ++ Text.unpack (uglyValue v))
 
 instance IsValue Yo.YosysIR where
   toValue _name ym = VYosysModule ym
 
 instance FromValue Yo.YosysIR where
   fromValue _ (VYosysModule ir) = ir
-  fromValue _ v = error ("fromValue YosysIR: " ++ show v)
+  fromValue _ v = error ("fromValue YosysIR: " ++ Text.unpack (uglyValue v))
 
 instance IsValue Yo.YosysImport where
   toValue _name yi = VYosysImport yi
 
 instance FromValue Yo.YosysImport where
   fromValue _ (VYosysImport i) = i
-  fromValue _ v = error ("fromValue YosysImport: " ++ show v)
+  fromValue _ v = error ("fromValue YosysImport: " ++ Text.unpack (uglyValue v))
 
 instance IsValue Yo.YosysSequential where
   toValue _name ysq = VYosysSequential ysq
 
 instance FromValue Yo.YosysSequential where
   fromValue _ (VYosysSequential s) = s
-  fromValue _ v = error ("fromValue YosysSequential: " ++ show v)
+  fromValue _ v = error ("fromValue YosysSequential: " ++ Text.unpack (uglyValue v))
 
 instance IsValue Yo.YosysTheorem where
   toValue _name yt = VYosysTheorem yt
 
 instance FromValue Yo.YosysTheorem where
   fromValue _ (VYosysTheorem thm) = thm
-  fromValue _ v = error ("fromValue YosysTheorem: " ++ show v)
+  fromValue _ v = error ("fromValue YosysTheorem: " ++ Text.unpack (uglyValue v))
 
 
 ------------------------------------------------------------
@@ -2297,8 +2311,9 @@ print_value (VTerm t) = do
 
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  nenv <- io . scGetNamingEnv =<< getSharedContext
-  printOutLnTop Info (showsPrecValue opts nenv 0 v "")
+  sc <- getSharedContext
+  v' <- liftIO $ ppValue sc opts v
+  printOutLnTop Info (Text.unpack v')
 
 dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
 dump_file_AST _bic opts filetxt = do

@@ -37,6 +37,7 @@ import Control.Monad.State (MonadState(..), StateT(..), get, gets, modify)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Exception as X
+import qualified Data.Text as Text
 import System.IO.Error (isUserError, ioeGetErrorString)
 import System.Exit (ExitCode)
 
@@ -46,13 +47,13 @@ import qualified SAWSupport.ConsoleSupport as Cons
 import CryptolSAWCore.CryptolEnv
 
 import SAWCentral.Options (Options)
-import SAWCentral.Proof (ProofState, ProofResult(..))
+import SAWCentral.Proof (ProofState, ProofResult(..), ppProofResult)
 import SAWCentral.TopLevel (
     TopLevelRO(..), TopLevelRW(..), TopLevel(..),
     runTopLevel
  )
 import SAWCentral.Value (
-    ProofScript(..), showsProofResult,
+    ProofScript(..),
     rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook
  )
 
@@ -167,7 +168,7 @@ liftProofScript m = do
     liftTopLevel $ case result of
        Left (stats, cex) ->
          do ppOpts <- rwPPOpts <$> get
-            fail (showsProofResult ppOpts (InvalidProof stats cex pst') "")
+            fail (Text.unpack $ ppProofResult ppOpts (InvalidProof stats cex pst'))
        Right x -> return x
 
 
