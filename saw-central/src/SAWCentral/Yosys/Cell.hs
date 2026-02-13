@@ -185,7 +185,12 @@ primCellToMap ::
   IO (Maybe (Map Text SC.Term))
 primCellToMap sc c args =
   case c ^. cellType of
-    CellTypeNot -> bvUnaryOp . liftUnary sc $ SC.scBvNot sc
+    CellTypeNot ->
+      -- If output size is larger, then we must extend before inverting
+      -- to compute the high bits correctly.
+      -- If output size is smaller, truncating first is safe.
+      do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
+         output =<< liftUnary sc (SC.scBvNot sc) a
     CellTypePos ->
       do res <- input "A"
          output res
@@ -195,11 +200,11 @@ primCellToMap sc c args =
       -- If output size is smaller, truncating first is safe.
       do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
          output =<< bvneg sc a
-    CellTypeAnd -> bvBinaryOp . liftBinary sc $ SC.scBvAnd sc
-    CellTypeOr -> bvBinaryOp . liftBinary sc $ SC.scBvOr sc
-    CellTypeXor -> bvBinaryOp . liftBinary sc $ SC.scBvXor sc
+    CellTypeAnd -> bvBinaryOp $ SC.scBvAnd sc
+    CellTypeOr -> bvBinaryOp $ SC.scBvOr sc
+    CellTypeXor -> bvBinaryOp $ SC.scBvXor sc
     CellTypeXnor ->
-      bvBinaryOp $ liftBinary sc $ \w x y ->
+      bvBinaryOp $ \w x y ->
       do r <- SC.scBvXor sc w x y
          SC.scBvNot sc w r
     CellTypeReduceAnd ->
@@ -212,13 +217,10 @@ primCellToMap sc c args =
       do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "xor"
          bvReduce False r
     CellTypeReduceXnor ->
-      do boolTy <- SC.scBoolType sc
-         x <- SC.scFreshVariable sc "x" boolTy
-         y <- SC.scFreshVariable sc "y" boolTy
-         r <- SC.scXor sc x y
-         res <- SC.scNot sc r
-         t <- SC.scAbstractTerms sc [x, y] res
-         bvReduce True t
+      -- "~(reduceXor bits)" then extend if necessary.
+      do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "xor"
+         bit <- bvReduce' False r
+         outputBit =<< SC.scNot sc bit
     CellTypeReduceBool ->
       do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
          bvReduce False r
@@ -268,10 +270,14 @@ primCellToMap sc c args =
          a <- extTrunc sc w =<< input "A"
          b <- input "B"
          output =<< shift sc a b
-    CellTypeLt -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULt sc
-    CellTypeLe -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULe sc
-    CellTypeGt -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGt sc
-    CellTypeGe -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGe sc
+    CellTypeLt -> bvBinaryCmp . liftBinaryCmp sc $
+      if signed then SC.scBvSLt sc else SC.scBvULt sc
+    CellTypeLe -> bvBinaryCmp . liftBinaryCmp sc $
+      if signed then SC.scBvSLe sc else SC.scBvULe sc
+    CellTypeGt -> bvBinaryCmp . liftBinaryCmp sc $
+      if signed then SC.scBvSGt sc else SC.scBvUGt sc
+    CellTypeGe -> bvBinaryCmp . liftBinaryCmp sc $
+      if signed then SC.scBvSGe sc else SC.scBvUGe sc
     CellTypeEq -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvEq sc
     CellTypeNe ->
       bvBinaryCmp $ liftBinaryCmp sc $ \w x y ->
@@ -282,11 +288,17 @@ primCellToMap sc c args =
       bvBinaryCmp $ liftBinaryCmp sc $ \w x y ->
       do r <- SC.scBvEq sc w x y
          SC.scNot sc r
-    CellTypeAdd -> bvBinaryOp . liftBinary sc $ SC.scBvAdd sc
-    CellTypeSub -> bvBinaryOp . liftBinary sc $ SC.scBvSub sc
-    CellTypeMul -> bvBinaryOp . liftBinary sc $ SC.scBvMul sc
-    CellTypeDiv -> bvBinaryOp . liftBinary sc $ SC.scBvUDiv sc
-    CellTypeMod -> bvBinaryOp . liftBinary sc $ SC.scBvURem sc
+    CellTypeAdd -> bvBinaryOp $ SC.scBvAdd sc
+    CellTypeSub -> bvBinaryOp $ SC.scBvSub sc
+    CellTypeMul -> bvBinaryOp $ SC.scBvMul sc
+    CellTypeDiv ->
+      if signed
+      then bvBinarySOp $ SC.scBvSDiv sc
+      else bvBinaryOp $ SC.scBvUDiv sc
+    CellTypeMod ->
+      if signed
+      then bvBinarySOp $ SC.scBvSRem sc
+      else bvBinaryOp $ SC.scBvURem sc
     -- "$modfloor" -> _
     CellTypeLogicNot ->
       do w <- connWidth "A"
@@ -382,6 +394,8 @@ primCellToMap sc c args =
         Just bits -> fromIntegral $ length bits
     connWidth :: Text -> IO SC.Term
     connWidth onm = SC.scNat sc $ connWidthNat onm
+    signed :: Bool
+    signed = connSigned "A" && connSigned "B"
 
     input :: Text -> IO CellTerm
     input inpNm =
@@ -403,20 +417,26 @@ primCellToMap sc c args =
          vres <- SC.scSingle sc bool res
          output $ CellTerm vres 1 False
 
-    -- convert input to big endian
-    bvUnaryOp :: (CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))
-    bvUnaryOp f =
-      do t <- input "A"
-         res <- f t
-         output res
-    -- extend inputs to output width
-    bvBinaryOp :: (CellTerm -> CellTerm -> IO CellTerm) -> IO (Maybe (Map Text SC.Term))
-    bvBinaryOp f =
-      do let w = connWidthNat "Y"
-         ta <- extTrunc sc w =<< input "A"
-         tb <- extTrunc sc w =<< input "B"
-         res <- f ta tb
-         output res
+    -- Extend inputs to max of input and output widths, compute with
+    -- width - 1 for signed output.
+    bvBinaryOp' ::
+      Bool -> (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) ->
+      IO (Maybe (Map Text SC.Term))
+    bvBinaryOp' isSignedOp f =
+      do ta <- input "A"
+         tb <- input "B"
+         let w = maximum [cellTermWidth ta, cellTermWidth tb, connWidthNat "Y"]
+         ta' <- extTrunc sc w ta
+         tb' <- extTrunc sc w tb
+         if w > 0
+           then do wt <- SC.scNat sc $ if isSignedOp then w - 1 else w
+                   res <- f wt (cellTermTerm ta') $ cellTermTerm tb'
+                   output ta' { cellTermTerm = res }
+           else output ta'
+    bvBinaryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> IO (Maybe (Map Text SC.Term))
+    bvBinaryOp = bvBinaryOp' False
+    bvBinarySOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> IO (Maybe (Map Text SC.Term))
+    bvBinarySOp = bvBinaryOp' True
     -- extend inputs to max input width, output is a single bit extended to the output width
     bvBinaryCmp :: (CellTerm -> CellTerm -> IO SC.Term) -> IO (Maybe (Map Text SC.Term))
     bvBinaryCmp f =
@@ -424,12 +444,14 @@ primCellToMap sc c args =
          tb <- input "B"
          res <- uncurry f =<< extMax sc ta tb
          outputBit res
-    bvReduce :: Bool -> SC.Term -> IO (Maybe (Map Text SC.Term))
-    bvReduce boolIdentity boolFun =
+    bvReduce' :: Bool -> SC.Term -> IO SC.Term
+    bvReduce' boolIdentity boolFun =
       do CellTerm t _ _ <- input "A"
          w <- connWidth "A"
          boolTy <- SC.scBoolType sc
          identity <- SC.scBool sc boolIdentity
          scFoldr <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "foldr"
-         bit <- SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
-         outputBit bit
+         SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
+    -- | bvReduce', but extend or truncate output as necessary.
+    bvReduce :: Bool -> SC.Term -> IO (Maybe (Map Text SC.Term))
+    bvReduce boolIdentity boolFun = outputBit =<< bvReduce' boolIdentity boolFun
