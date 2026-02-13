@@ -307,7 +307,7 @@ span.spaces    { background: white }
 <span class="lineno">  288 </span><span class="spaces"></span><span class="nottickedoff">valPairRight v = panic &quot;valPairRight&quot; [&quot;Not a pair value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
 <span class="lineno">  289 </span>
 <span class="lineno">  290 </span>vRecord :: Map FieldName (Thunk l) -&gt; Value l
-<span class="lineno">  291 </span><span class="decl"><span class="nottickedoff">vRecord m = foldr (\(f, t) -&gt; VRecordValue f t) VEmptyRecord (Map.assocs m)</span></span>
+<span class="lineno">  291 </span><span class="decl"><span class="istickedoff">vRecord m = foldr (\(f, t) -&gt; VRecordValue f t) VEmptyRecord (Map.assocs m)</span></span>
 <span class="lineno">  292 </span>
 <span class="lineno">  293 </span>valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; FieldName -&gt; MValue l
 <span class="lineno">  294 </span><span class="decl"><span class="nottickedoff">valRecordProj v fld = go v</span>
@@ -334,7 +334,7 @@ span.spaces    { background: white }
 <span class="lineno">  315 </span>
 <span class="lineno">  316 </span>{-# INLINE applyPiBody #-}
 <span class="lineno">  317 </span>applyPiBody :: VMonad l =&gt; PiBody l -&gt; Thunk l -&gt; EvalM l (TValue l)
-<span class="lineno">  318 </span><span class="decl"><span class="istickedoff">applyPiBody (VDependentPi f) x    = <span class="nottickedoff">f x</span></span>
+<span class="lineno">  318 </span><span class="decl"><span class="istickedoff">applyPiBody (VDependentPi f) x    = f x</span>
 <span class="lineno">  319 </span><span class="spaces"></span><span class="istickedoff">applyPiBody (VNondependentPi t) _ = pure t</span></span>
 <span class="lineno">  320 </span>
 <span class="lineno">  321 </span>-- | Return the 'FiniteType' corresponding to the given 'Value', if
