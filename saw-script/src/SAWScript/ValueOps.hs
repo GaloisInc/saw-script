@@ -56,6 +56,7 @@ import qualified Data.Text as Text (pack, unpack)
 import qualified Data.Map as Map
 --import Data.Set ( Set )
 
+import SAWSupport.Position
 import SAWCore.SharedTerm
 
 import CryptolSAWCore.CryptolEnv as CEnv
@@ -75,43 +76,53 @@ isVUnit :: Value -> Bool
 isVUnit (VTuple []) = True
 isVUnit _ = False
 
-indexValue :: SS.Pos -> Value -> Value -> Value
+indexValue :: SS.Pos -> Value -> Value -> TopLevel Value
 indexValue pos (VArray vs) (VInteger x)
-    | i < length vs = vs !! i
-    | otherwise = error $ show pos ++ ": Array index out of bounds"
+    | i < length vs = pure (vs !! i)
+    | otherwise = error $ Text.unpack $ ppPosition pos <> ": Array index out of bounds"
     where i = fromInteger x
-indexValue pos v1 v2 =
+indexValue pos v1 v2 = do
+    sc <- getSharedContext
+    opts <- gets rwPPOpts
+    v1' <- liftIO $ ppValue sc opts v1
+    v2' <- liftIO $ ppValue sc opts v2
     panic "indexValue" [
         "Type error that escaped the typechecker",
-        "Source position: " <> Text.pack (show pos),
-        "Array value: " <> Text.pack (show v1),
-        "Index value: " <> Text.pack (show v2)
-    ]
+        "Source position: " <> ppPosition pos,
+        "Array value: " <> v1',
+        "Index value: " <> v2'
+     ]
 
-lookupValue :: SS.Pos -> Value -> Text -> Value
+lookupValue :: SS.Pos -> Value -> Text -> TopLevel Value
 lookupValue pos (VRecord vm) name =
     case Map.lookup name vm of
-      Nothing -> error $ show pos ++ ": No such record field: " ++ Text.unpack name
-      Just x -> x
-lookupValue pos v1 v2 =
+      Nothing -> error $ Text.unpack $ ppPosition pos <> ": No such record field: " <> name
+      Just x -> pure x
+lookupValue pos v1 v2 = do
+    sc <- getSharedContext
+    opts <- gets rwPPOpts
+    v1' <- liftIO $ ppValue sc opts v1
     panic "lookupValue" [
         "Type error that escaped the typechecker",
-        "Source position: " <> Text.pack (show pos),
-        "Array value: " <> Text.pack (show v1),
-        "Index value: " <> Text.pack (show v2)
-    ]
+        "Source position: " <> ppPosition pos,
+        "Array value: " <> v1',
+        "Field: " <> v2
+     ]
 
-tupleLookupValue :: SS.Pos -> Value -> Integer -> Value
+tupleLookupValue :: SS.Pos -> Value -> Integer -> TopLevel Value
 tupleLookupValue pos (VTuple vs) i
-  | 0 <= i && fromIntegral i < length vs = vs !! fromIntegral i
-  | otherwise = error $ show pos ++ ": No such tuple index: " ++ show i
-tupleLookupValue pos v1 v2 =
+  | 0 <= i && fromIntegral i < length vs = pure (vs !! fromIntegral i)
+  | otherwise = error $ Text.unpack $ ppPosition pos <> ": No such tuple index: " <> Text.pack (show i)
+tupleLookupValue pos v1 v2 = do
+    sc <- getSharedContext
+    opts <- gets rwPPOpts
+    v1' <- liftIO $ ppValue sc opts v1
     panic "tupleLookupValue" [
         "Type error that escaped the typechecker",
-        "Source position: " <> Text.pack (show pos),
-        "Array value: " <> Text.pack (show v1),
-        "Index value: " <> Text.pack (show v2)
-    ]
+        "Source position: " <> ppPosition pos,
+        "Array value: " <> v1',
+        "Field number: " <> Text.pack (show v2)
+     ]
 
 -- | A version of 'Control.Exception.bracket' specialized to 'TopLevel'. We
 -- can't use 'Control.Monad.Catch.bracket' because it requires 'TopLevel' to

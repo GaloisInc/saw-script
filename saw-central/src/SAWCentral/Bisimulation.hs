@@ -159,7 +159,7 @@ proveAll script ts = do
     failProof :: ProofResult -> TopLevel ()
     failProof res = do
       opts <- rwPPOpts <$> getTopLevelRW
-      fail $ "prove_bisim failed.\n" ++ showsProofResult opts res ""
+      fail $ "prove_bisim failed.\n" ++ Text.unpack (ppProofResult opts res)
 
 -- | Generate 'Term' for application of a relation
 scRelation :: TypedTerm -> Term -> Term -> TopLevel Term

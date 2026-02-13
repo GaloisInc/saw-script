@@ -415,7 +415,7 @@ instance Pretty Pattern where
     PVar _ _ name mType ->
       prettyMaybeTypedArg (name, mType)
     PTuple _ pats ->
-      PP.tupled (map PP.pretty pats)
+      PP.parens $ PP.hsep $ PP.punctuate "," $ map PP.pretty pats
 
 instance Pretty Stmt where
    pretty = \case
