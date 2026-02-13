@@ -22,7 +22,6 @@ import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.), view, at)
 import Control.Monad (forM, foldM)
-import Control.Exception (throw)
 
 import Data.Functor.Const (Const(..))
 import qualified Data.Set as Set
@@ -103,7 +102,7 @@ sequentialReprs fs =
                        }
                  Some rest <- go ns
                  pure $ Some $ Ctx.extend rest field
-        _ -> throw $ YosysErrorInvalidStateFieldWidth nm
+        _ -> yosysError $ YosysErrorInvalidStateFieldWidth nm
 
 -- | Given information about field names and types alongside an
 -- appropriately-typed What4 struct value, explode that struct into a
@@ -130,7 +129,7 @@ ecBindingsOfFields sym sc pfx fs s inp =
            , W4.BaseBVRepr _nr <- sf ^. sequentialFieldTypeRepr ->
                do inpExpr <- W4.structField sym inp idx
                   pure . Sim.VWord $ W4.DBV inpExpr
-         _ -> throw $ YosysErrorTransitionSystemMissingField nm
+         _ -> yosysError $ YosysErrorTransitionSystemMissingField nm
      pure (baseName, (vn, ty, val))
 
 -- | Given a sequential circuit and a query, construct and write to
@@ -173,7 +172,7 @@ queryModelChecker sym sc sequential path query fixedInputs =
      let lookupBinding nm bindings =
            case Map.lookup nm bindings of
              Just (vn, tp, _) -> SC.scVariable sc vn tp
-             Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
+             Nothing -> yosysError $ YosysErrorTransitionSystemMissingField nm
      let ts = W4.TransitionSystem
            { W4.inputReprs = inputReprs
            , W4.inputNames = inputNames
@@ -193,7 +192,7 @@ queryModelChecker sym sc sequential path query fixedInputs =
                   sval <- SimW4.w4SolveBasic sym sc Map.empty args ref Set.empty cyclePred
                   case sval of
                     Sim.VBool b -> pure b
-                    _ -> throw YosysErrorTransitionSystemBadType
+                    _ -> yosysError YosysErrorTransitionSystemBadType
            , W4.stateTransitions = \input cur next ->
                do -- there is exactly one state transition, defined by the SAWCore function f representing the circuit
                   -- here, we assert that:
@@ -262,7 +261,7 @@ queryModelChecker sym sc sequential path query fixedInputs =
                   w4Conj <-
                     case sval of
                       Sim.VBool b -> pure b
-                      _ -> throw YosysErrorTransitionSystemBadType
+                      _ -> yosysError YosysErrorTransitionSystemBadType
                   pure
                     [ (W4.systemSymbol "default!", w4Conj)
                     ]
@@ -296,7 +295,7 @@ queryModelChecker sym sc sequential path query fixedInputs =
                   w4Pred <-
                     case sval of
                       Sim.VBool b -> pure b
-                      _ -> throw . YosysError $ "Invalid type when converting predicate to What4: " <> Text.pack (show sval)
+                      _ -> yosysError $ YosysError $ "Invalid type when converting predicate to What4: " <> Text.pack (show sval)
                   pure [w4Pred]
            }
      sts <- Sally.exportTransitionSystem sym Sally.mySallyNames ts

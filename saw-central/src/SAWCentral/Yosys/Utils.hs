@@ -19,6 +19,7 @@ import Control.Monad (forM, foldM)
 import Control.Exception (Exception, throwIO)
 
 import Data.Bifunctor (bimap)
+import Data.Char (digitToInt)
 import qualified Data.List as List
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -123,6 +124,9 @@ instance Show YosysError where
     , "This may represent a bug in SAW.\n"
     , reportBugText
     ]
+
+yosysError :: YosysError -> IO a
+yosysError = throwIO
 
 mapForWithKeyM :: Monad m => Map k a -> (k -> a -> m b) -> m (Map k b)
 mapForWithKeyM m f = sequence $ Map.mapWithKey f m
@@ -239,6 +243,9 @@ eqBvRecords sc cty a b =
 -- easier to manipulate state records, which are keyed by cell name.
 cellIdentifier :: Text -> Text
 cellIdentifier = Text.pack . zEncodeString . Text.unpack
+
+textBinNat :: Text -> Natural
+textBinNat = fromIntegral . Text.foldl' (\a x -> digitToInt x + a * 2) 0
 
 -- | Build a SAWCore type corresponding to the Cryptol record type
 -- with the given field types.

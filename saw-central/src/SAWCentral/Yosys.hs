@@ -30,7 +30,6 @@ module SAWCentral.Yosys
 import Control.Lens.TH (makeLenses)
 
 import Control.Lens (view, (^.))
-import Control.Exception (throw)
 import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 
@@ -149,7 +148,8 @@ yosysIRToSequential ::
   IO YosysSequential
 yosysIRToSequential sc ir nm =
   case Map.lookup nm $ ir ^. yosysModules of
-    Nothing -> throw . YosysError $ mconcat
+    Nothing ->
+      yosysError $ YosysError $ mconcat
       [ "Could not find module: "
       , nm
       ]

@@ -18,7 +18,6 @@ module SAWCentral.Yosys.Theorem where
 import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
-import Control.Exception (throw)
 
 import Data.Text (Text)
 import Data.Map (Map)
@@ -104,21 +103,21 @@ buildTheorem sc ymod newmod precond body = do
   cty <-
     case SC.ttType ymod of
       SC.TypedTermSchema (C.Forall [] [] cty) -> pure cty
-      _ -> throw YosysErrorInvalidOverrideTarget
+      _ -> yosysError YosysErrorInvalidOverrideTarget
   (cinpTy, coutTy) <-
     case cty of
       C.TCon (C.TC C.TCFun) [ci, co] -> pure (ci, co)
-      _ -> throw YosysErrorInvalidOverrideTarget
+      _ -> yosysError YosysErrorInvalidOverrideTarget
   inpTy <- CSC.importType sc CSC.emptyEnv cinpTy
   outTy <- CSC.importType sc CSC.emptyEnv coutTy
   nmi <-
     case reduceSelectors (SC.ttTerm ymod) of
       (R.asConstant -> Just (SC.Name _ nmi)) -> pure nmi
-      _ -> throw YosysErrorInvalidOverrideTarget
+      _ -> yosysError YosysErrorInvalidOverrideTarget
   uri <-
     case nmi of
       SC.ImportedName uri _ -> pure uri
-      _ -> throw YosysErrorInvalidOverrideTarget
+      _ -> yosysError YosysErrorInvalidOverrideTarget
   pure YosysTheorem
     { _theoremURI = uri
     , _theoremInputCryptolType = cinpTy
@@ -163,7 +162,7 @@ applyOverride sc thm t = do
   tidx <-
     do result <- SC.scResolveNameByURI sc $ thm ^. theoremURI
        case result of
-         Nothing -> throw . YosysErrorOverrideNameNotFound . URI.render $ thm ^. theoremURI
+         Nothing -> yosysError $ YosysErrorOverrideNameNotFound $ URI.render $ thm ^. theoremURI
          Just i -> pure i
   -- unfold everything except for theoremURI and prelude constants
   let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName

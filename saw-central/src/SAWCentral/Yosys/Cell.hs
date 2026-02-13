@@ -12,14 +12,9 @@ Stability   : experimental
 
 module SAWCentral.Yosys.Cell where
 
-import Control.Lens ((^.))
-
-import qualified Data.Aeson as Aeson
-import Data.Char (digitToInt)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
 
 import Numeric.Natural (Natural)
 
@@ -28,7 +23,6 @@ import qualified SAWCore.Name as SC
 
 import SAWCentral.Panic (panic)
 
-import SAWCentral.Yosys.Utils
 import SAWCentral.Yosys.IR
 
 -- | A SAWCore bitvector term along with its width and whether it should be interpreted as signed.
@@ -164,32 +158,21 @@ shift sc a b
     -- If the shift amount is unsigned, then unconditionally shift right.
     shr sc a b
 
--- | Given a primitive Yosys cell and a map of terms for its
--- arguments, construct a record term representing the output. If the
--- provided cell is not a primitive, return Nothing.
-primCellToTerm ::
-  forall b.
+-- | Translate a single combinational primitive cell into a SAWCore
+-- term, given 'CellTerm's for the inputs.
+combCellToTerm ::
   SC.SharedContext ->
-  Cell [b] {- ^ Cell type -} ->
-  Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
-  IO (Maybe SC.Term)
-primCellToTerm sc c args =
-  do mm <- primCellToMap sc c args
-     traverse (cryptolRecord sc) mm
-
-primCellToMap ::
-  forall b.
-  SC.SharedContext ->
-  Cell [b] {- ^ Cell type -} ->
-  Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
-  IO (Maybe (Map Text SC.Term))
-primCellToMap sc c args =
-  case c ^. cellType of
+  CellTypeCombinational {- ^ Cell type -} ->
+  Map Text CellTerm {- ^ Mapping of input names to input terms and bit widths -} ->
+  Natural {- ^ Output width -} ->
+  IO SC.Term
+combCellToTerm sc ctc args ywidth =
+  case ctc of
     CellTypeNot ->
       -- If output size is larger, then we must extend before inverting
       -- to compute the high bits correctly.
       -- If output size is smaller, truncating first is safe.
-      do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
+      do a <- extTrunc sc ywidth =<< input "A"
          output =<< liftUnary sc (SC.scBvNot sc) a
     CellTypePos ->
       do res <- input "A"
@@ -198,7 +181,7 @@ primCellToMap sc c args =
       -- If output size is larger, then we must extend before negating
       -- to compute the high bits correctly.
       -- If output size is smaller, truncating first is safe.
-      do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
+      do a <- extTrunc sc ywidth =<< input "A"
          output =<< bvneg sc a
     CellTypeAnd -> bvBinaryOp $ SC.scBvAnd sc
     CellTypeOr -> bvBinaryOp $ SC.scBvOr sc
@@ -228,48 +211,52 @@ primCellToMap sc c args =
       -- If output size is larger, then we must extend before shifting
       -- to avoid losing high bits.
       -- If output size is smaller, truncating first is safe.
-      do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
+      do a <- extTrunc sc ywidth =<< input "A"
          b <- input "B"
          output =<< shl sc a b
     CellTypeShr ->
       -- If output size is larger, we must extend before shifting to
       -- compute high bits correctly.
       -- If output size is smaller, we must shift before truncating.
-      do let w = max (connWidthNat "A") (connWidthNat "Y")
-         a <- extTrunc sc w =<< input "A"
+      do a <- input "A"
          b <- input "B"
-         output =<< shr sc a b
+         let w = max (cellTermWidth a) ywidth
+         a' <- extTrunc sc w a
+         output =<< shr sc a' b
     CellTypeSshl ->
       -- If output size is larger, then we must extend before shifting
       -- to avoid losing high bits.
       -- If output size is smaller, truncating first is safe.
-      do a <- extTrunc sc (connWidthNat "Y") =<< input "A"
+      do a <- extTrunc sc ywidth =<< input "A"
          b <- input "B"
          output =<< shl sc a b
     CellTypeSshr ->
       -- If output size is larger, we must extend before shifting to
       -- compute high bits correctly.
       -- If output size is smaller, we must shift before truncating.
-      do let w = max (connWidthNat "A") (connWidthNat "Y")
-         a <- extTrunc sc w =<< input "A"
+      do a <- input "A"
          b <- input "B"
-         output =<< sshr sc a b
+         let w = max (cellTermWidth a) ywidth
+         a' <- extTrunc sc w a
+         output =<< sshr sc a' b
     CellTypeShift ->
       -- If output size is larger, we must extend before shifting to
       -- compute high bits correctly.
       -- If output size is smaller, we must shift before truncating.
-      do let w = max (connWidthNat "A") (connWidthNat "Y")
-         a <- extTrunc sc w =<< input "A"
+      do a <- input "A"
          b <- input "B"
-         output =<< shift sc a b
+         let w = max (cellTermWidth a) ywidth
+         a' <- extTrunc sc w a
+         output =<< shift sc a' b
     CellTypeShiftx ->
       -- $shiftx is like $shift, but shifts in x bits instead of 0s.
       -- For SAW, we model x bits as 0 bits, so we translate the two
       -- cell types identically.
-      do let w = max (connWidthNat "A") (connWidthNat "Y")
-         a <- extTrunc sc w =<< input "A"
+      do a <- input "A"
          b <- input "B"
-         output =<< shift sc a b
+         let w = max (cellTermWidth a) ywidth
+         a' <- extTrunc sc w a
+         output =<< shift sc a' b
     CellTypeLt -> bvBinaryCmp . liftBinaryCmp sc $
       if signed then SC.scBvSLt sc else SC.scBvULt sc
     CellTypeLe -> bvBinaryCmp . liftBinaryCmp sc $
@@ -301,8 +288,8 @@ primCellToMap sc c args =
       else bvBinaryOp $ SC.scBvURem sc
     -- "$modfloor" -> _
     CellTypeLogicNot ->
-      do w <- connWidth "A"
-         ta <- cellTermTerm <$> input "A"
+      do CellTerm ta awidth _ <- input "A"
+         w <- SC.scNat sc awidth
          anz <- SC.scBvNonzero sc w ta
          res <- SC.scNot sc anz
          outputBit res
@@ -317,32 +304,30 @@ primCellToMap sc c args =
          ynz <- SC.scBvNonzero sc w y
          SC.scOr sc xnz ynz
     CellTypeMux ->
-      do ta <- cellTermTerm <$> input "A"
+      do CellTerm ta awidth _ <- input "A"
          tb <- cellTermTerm <$> input "B"
-         ts <- cellTermTerm <$> input "S"
-         swidth <- connWidth "S"
-         snz <- SC.scBvNonzero sc swidth ts
-         let width = connWidthNat "Y"
-         ty <- SC.scBitvector sc width
+         CellTerm ts swidth _ <- input "S"
+         swidth' <- SC.scNat sc swidth
+         snz <- SC.scBvNonzero sc swidth' ts
+         ty <- SC.scBitvector sc ywidth
          res <- SC.scIte sc ty snz tb ta
-         output $ CellTerm res (connWidthNat "A") (connSigned "A")
+         output $ CellTerm res awidth False
     CellTypePmux ->
-      do ta <- cellTermTerm <$> input "A"
-         tb <- cellTermTerm <$> input "B"
-         ts <- cellTermTerm <$> input "S"
-         width <- connWidth "A"
-         widthBv <- SC.scBitvector sc $ connWidthNat "A"
-         swidth <- connWidth "S"
+      do CellTerm ta awidth _ <- input "A"
+         CellTerm tb _ _ <- input "B"
+         CellTerm ts swidth _ <- input "S"
+         awidth' <- SC.scNat sc awidth
+         swidth' <- SC.scNat sc swidth
+         widthBv <- SC.scBitvector sc awidth
          bool <- SC.scBoolType sc
-         splitb <- SC.scSplit sc swidth width bool tb
+         splitb <- SC.scSplit sc swidth' awidth' bool tb
          scPmux <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "pmux"
-         res <- SC.scApplyAll sc scPmux [swidth, widthBv, ts, splitb, ta]
-         output $ CellTerm res (connWidthNat "A") (connSigned "Y")
+         res <- SC.scApplyAll sc scPmux [swidth', widthBv, ts, splitb, ta]
+         output $ CellTerm res awidth False
     CellTypeBmux ->
       do ia <- input "A"
          is <- input "S"
          let swidth = cellTermWidth is
-         let ywidth = connWidthNat "Y"
          -- Split input A into chunks
          chunks <- SC.scNat sc (2 ^ swidth)
          ywidth' <- SC.scNat sc ywidth
@@ -354,48 +339,20 @@ primCellToMap sc c args =
          -- Select chunk from output
          ixWidth <- SC.scNat sc swidth
          elt <- SC.scBvAt sc chunks outputType ixWidth revA (cellTermTerm is)
-         output (CellTerm elt ywidth (connSigned "Y"))
+         output (CellTerm elt ywidth False)
     -- "$demux" -> _
     -- "$lut" -> _
     -- "$slice" -> _
     -- "$concat" -> _
-    CellTypeDff -> pure Nothing
-    CellTypeFf -> pure Nothing
     CellTypeBUF ->
       do res <- input "A"
          output res
-    CellTypeUnsupportedPrimitive _ -> pure Nothing
-    CellTypeUserType _ -> pure Nothing
   where
     nm :: Text
-    nm = Text.pack $ show $ c ^. cellType
+    nm = ppCellTypeCombinational ctc
 
-    textBinNat :: Text -> Natural
-    textBinNat = fromIntegral . Text.foldl' (\a x -> digitToInt x + a * 2) 0
-    connSigned :: Text -> Bool
-    connSigned onm =
-      case Map.lookup (onm <> "_SIGNED") $ c ^. cellParameters of
-        Just (Aeson.Number n) -> n > 0
-        Just (Aeson.String t) -> textBinNat t > 0
-        Just v ->
-          -- XXX This should not be a panic, as it is possible to trigger this
-          -- with a malformed input file.
-          panic "cellToTerm"
-            [ "Expected SIGNED parameter to be a number or a string,"
-            , "but encountered " <> Text.pack (show v)
-            ]
-        Nothing -> False
-    connWidthNat :: Text -> Natural
-    connWidthNat onm =
-      case Map.lookup onm $ c ^. cellConnections of
-        -- XXX This should not be a panic, as it is possible to trigger this
-        -- with a malformed input file.
-        Nothing -> panic "cellToTerm" ["Missing expected output name for " <> nm <> " cell"]
-        Just bits -> fromIntegral $ length bits
-    connWidth :: Text -> IO SC.Term
-    connWidth onm = SC.scNat sc $ connWidthNat onm
     signed :: Bool
-    signed = connSigned "A" && connSigned "B"
+    signed = all cellTermSigned args
 
     input :: Text -> IO CellTerm
     input inpNm =
@@ -403,15 +360,13 @@ primCellToMap sc c args =
         -- XXX This should not be a panic, as it is possible to trigger this
         -- with a malformed input file.
         Nothing -> panic "cellToTerm" [nm <> " missing input " <> inpNm]
-        Just a -> pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)
+        Just ctrm -> pure ctrm
 
     -- | Extend or truncate a cell term as needed to fit the output @Y@ port.
-    output :: CellTerm -> IO (Maybe (Map Text SC.Term))
-    output res =
-      do CellTerm t _ _ <- extTrunc sc (connWidthNat "Y") res
-         pure (Just (Map.singleton "Y" t))
+    output :: CellTerm -> IO SC.Term
+    output res = cellTermTerm <$> extTrunc sc ywidth res
 
-    outputBit :: SC.Term -> IO (Maybe (Map Text SC.Term))
+    outputBit :: SC.Term -> IO SC.Term
     outputBit res =
       do bool <- SC.scBoolType sc
          vres <- SC.scSingle sc bool res
@@ -420,12 +375,11 @@ primCellToMap sc c args =
     -- Extend inputs to max of input and output widths, compute with
     -- width - 1 for signed output.
     bvBinaryOp' ::
-      Bool -> (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) ->
-      IO (Maybe (Map Text SC.Term))
+      Bool -> (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> IO SC.Term
     bvBinaryOp' isSignedOp f =
       do ta <- input "A"
          tb <- input "B"
-         let w = maximum [cellTermWidth ta, cellTermWidth tb, connWidthNat "Y"]
+         let w = maximum [cellTermWidth ta, cellTermWidth tb, ywidth]
          ta' <- extTrunc sc w ta
          tb' <- extTrunc sc w tb
          if w > 0
@@ -433,12 +387,12 @@ primCellToMap sc c args =
                    res <- f wt (cellTermTerm ta') $ cellTermTerm tb'
                    output ta' { cellTermTerm = res }
            else output ta'
-    bvBinaryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> IO (Maybe (Map Text SC.Term))
+    bvBinaryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> IO SC.Term
     bvBinaryOp = bvBinaryOp' False
-    bvBinarySOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> IO (Maybe (Map Text SC.Term))
+    bvBinarySOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> IO SC.Term
     bvBinarySOp = bvBinaryOp' True
     -- extend inputs to max input width, output is a single bit extended to the output width
-    bvBinaryCmp :: (CellTerm -> CellTerm -> IO SC.Term) -> IO (Maybe (Map Text SC.Term))
+    bvBinaryCmp :: (CellTerm -> CellTerm -> IO SC.Term) -> IO SC.Term
     bvBinaryCmp f =
       do ta <- input "A"
          tb <- input "B"
@@ -446,12 +400,12 @@ primCellToMap sc c args =
          outputBit res
     bvReduce' :: Bool -> SC.Term -> IO SC.Term
     bvReduce' boolIdentity boolFun =
-      do CellTerm t _ _ <- input "A"
-         w <- connWidth "A"
+      do CellTerm t twidth _ <- input "A"
+         w <- SC.scNat sc twidth
          boolTy <- SC.scBoolType sc
          identity <- SC.scBool sc boolIdentity
          scFoldr <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "foldr"
          SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
     -- | bvReduce', but extend or truncate output as necessary.
-    bvReduce :: Bool -> SC.Term -> IO (Maybe (Map Text SC.Term))
+    bvReduce :: Bool -> SC.Term -> IO SC.Term
     bvReduce boolIdentity boolFun = outputBit =<< bvReduce' boolIdentity boolFun
