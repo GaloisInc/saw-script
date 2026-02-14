@@ -64,7 +64,7 @@ import qualified Mir.Mir as MIR
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts, renderStdout)
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
 
@@ -127,8 +127,6 @@ import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
 import qualified Cryptol.Eval.Concrete as V (Concrete(..))
-
-import qualified Prettyprinter.Render.Text as PP (putDoc)
 
 import SAWScript.AutoMatch
 
@@ -2320,11 +2318,13 @@ dump_file_AST _bic opts filetxt = do
     stmts <- Loader.findAndLoadFileUnchecked opts file
     mapM_ print stmts
 
-parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> IO ()
+parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> TopLevel ()
 parser_printer_roundtrip _bic opts filetxt = do
     let file = Text.unpack filetxt
-    stmts <- Loader.findAndLoadFileUnchecked opts file
-    PP.putDoc $ SS.prettyWholeModule stmts
+    ppopts <- gets rwPPOpts
+    liftIO $ do
+      stmts <- Loader.findAndLoadFileUnchecked opts file
+      PPS.renderStdout ppopts $ SS.prettyWholeModule stmts
 
 exec :: Text -> [Text] -> Text -> IO Text
 exec name args input = do
