@@ -97,6 +97,7 @@ module SAWSupport.Pretty (
     prettyLetBlock,
     render,
     renderText,
+    renderStdout,
     pShow,
     pShowText,
     showCommaSep,
@@ -106,6 +107,7 @@ module SAWSupport.Pretty (
 
 import Prelude hiding (replicate)
 
+import System.IO (stdout)
 import Numeric (showIntAtBase)
 import Data.Text (Text)
 --import qualified Data.Text as Text
@@ -319,6 +321,14 @@ render opts doc =
 renderText :: Opts -> Doc -> Text
 renderText opts doc =
   PP.renderStrict (style (PP.layoutPretty layoutOpts doc))
+  where
+    -- ribbon width 64, with effectively unlimited right margin
+    layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
+    style = if ppColor opts then PP.reAnnotateS colorStyle else PP.unAnnotateS
+
+renderStdout :: Opts -> Doc -> IO ()
+renderStdout opts doc =
+  PP.renderIO stdout (style (PP.layoutPretty layoutOpts doc))
   where
     -- ribbon width 64, with effectively unlimited right margin
     layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
