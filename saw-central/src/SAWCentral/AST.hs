@@ -11,52 +11,52 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWCentral.AST
-       ( PrimitiveLifecycle(..)
-       , everythingAvailable
-       , defaultAvailable
+     ( PrimitiveLifecycle(..)
+     , everythingAvailable
+     , defaultAvailable
 
-       , Name
+     , Name
 
-       , Kind(..)
-       , kindStar, kindStarToStar
+     , Kind(..)
+     , kindStar, kindStarToStar
 
-       , TypeIndex
-       , Context(..)
-       , TyCon(..)
-       , Type(..)
-       , Schema(..)
-       , SchemaPattern(..)
-       , NamedType(..)
+     , TypeIndex
+     , Context(..)
+     , TyCon(..)
+     , Type(..)
+     , Schema(..)
+     , SchemaPattern(..)
+     , NamedType(..)
 
-       , Expr(..)
+     , Expr(..)
 
-       , Pattern(..)
+     , Pattern(..)
 
-       , Rebindable(..)
-       , Import(..)
-       , Stmt(..)
+     , Rebindable(..)
+     , Import(..)
+     , Stmt(..)
 
-       , Decl(..)
-       , DeclGroup(..)
+     , Decl(..)
+     , DeclGroup(..)
 
-       , ppKind
-       , ppTyCon
-       , ppType, prettyType
-       , ppSchema, prettySchema
-       , prettyNamedType
-       , ppExpr, prettyExpr
-       , ppPattern, prettyPattern
-       , prettyWholeModule
+     , ppKind
+     , ppTyCon
+     , ppType, prettyType
+     , ppSchema, prettySchema
+     , prettyNamedType
+     , ppExpr, prettyExpr
+     , ppPattern, prettyPattern
+     , prettyWholeModule
 
-       , tUnit, tTuple, tArray, tFun
-       , tString, tTerm, tType, tBool, tInt, tBlock
-       , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
-       , tContext
-       , tRecord, tVar
-       , tMono, tForall
+     , tUnit, tTuple, tArray, tFun
+     , tString, tTerm, tType, tBool, tInt, tBlock
+     , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
+     , tContext
+     , tRecord, tVar
+     , tMono, tForall
 
-       , isContext
-       ) where
+     , isContext
+     ) where
 
 import qualified SAWSupport.Pretty as PPS
 
@@ -270,8 +270,8 @@ data Pattern
 
 -- | Tracking/state type for the @let rebindable@ behavior.
 data Rebindable
-    = RebindableVar -- ^ produced by @let rebindable@
-    | ReadOnlyVar   -- ^ produced by ordinary @let@ and by @rec@
+  = RebindableVar -- ^ produced by @let rebindable@
+  | ReadOnlyVar   -- ^ produced by ordinary @let@ and by @rec@
   deriving (Eq, Show)
 
 data Import = Import
@@ -527,96 +527,96 @@ prettyExpr expr0 = case expr0 of
     CType _ s  -> PP.braces $ "|" <> PP.pretty s <> "|"
     Array _ xs -> PP.brackets $ PP.fillSep $ PP.punctuate "," (map prettyExpr xs)
     Block _ (stmts, lastexpr) ->
-      let stmts' = map prettyStmt stmts
-          lastexpr' = prettyExpr lastexpr <> ";"
-          body = PP.align $ PP.vsep (stmts' ++ [lastexpr'])
-          -- You would think this could unconditionally be `PP.nest 3
-          -- body`. But that doesn't work. If you use `PP.nest`,
-          -- `PP.group` throws away the indentation entirely (whether
-          -- or not it groups successfully); if you use `PP.indent`
-          -- instead, it indents when not grouped, but also generates
-          -- spaces when grouped. Explicit use of `PP.flatAlt` seems
-          -- to fix this, but ew. And you'd think this would work by
-          -- default, since folding small blocks to single lines is
-          -- one of the most basic prettyprinting operations.
-          body' = PP.flatAlt (PP.indent 3 body) body
-      in
-      PP.group $ "do" <+> PP.braces (PP.line <> body' <> PP.line)
+        let stmts' = map prettyStmt stmts
+            lastexpr' = prettyExpr lastexpr <> ";"
+            body = PP.align $ PP.vsep (stmts' ++ [lastexpr'])
+            -- You would think this could unconditionally be `PP.nest 3
+            -- body`. But that doesn't work. If you use `PP.nest`,
+            -- `PP.group` throws away the indentation entirely (whether
+            -- or not it groups successfully); if you use `PP.indent`
+            -- instead, it indents when not grouped, but also generates
+            -- spaces when grouped. Explicit use of `PP.flatAlt` seems
+            -- to fix this, but ew. And you'd think this would work by
+            -- default, since folding small blocks to single lines is
+            -- one of the most basic prettyprinting operations.
+            body' = PP.flatAlt (PP.indent 3 body) body
+        in
+        PP.group $ "do" <+> PP.braces (PP.line <> body' <> PP.line)
     Tuple _ exprs ->
-      PP.parens $ PP.fillSep $ PP.punctuate "," (map prettyExpr exprs)
+        PP.parens $ PP.fillSep $ PP.punctuate "," (map prettyExpr exprs)
     Record _ members ->
-      let prettyMember (name, value) =
-              PP.pretty name <+> "=" <+> prettyExpr value
-          members' = map prettyMember $ Map.assocs members
-          body = PP.sep $ PP.punctuate PP.comma members'
-          body' = PP.flatAlt (PP.indent 3 body) body
-      in
-      PP.group $ PP.braces (PP.line <> body' <> PP.line)
+        let prettyMember (name, value) =
+                PP.pretty name <+> "=" <+> prettyExpr value
+            members' = map prettyMember $ Map.assocs members
+            body = PP.sep $ PP.punctuate PP.comma members'
+            body' = PP.flatAlt (PP.indent 3 body) body
+        in
+        PP.group $ PP.braces (PP.line <> body' <> PP.line)
     Index _ _ _ ->
-      panic "prettyExpr" ["There is no concrete syntax for AST node 'Index'"]
+        panic "prettyExpr" ["There is no concrete syntax for AST node 'Index'"]
     Lookup _ expr name ->
-      let expr' = prettyExpr expr
-          name' = PP.pretty name
-      in
-      expr' <> PP.dot <> name'
+        let expr' = prettyExpr expr
+            name' = PP.pretty name
+        in
+        expr' <> PP.dot <> name'
     TLookup _ expr n ->
-      let expr' = prettyExpr expr
-          n' = PP.viaShow n
-      in      
-      expr' <> PP.dot <> n'
+        let expr' = prettyExpr expr
+            n' = PP.viaShow n
+        in      
+        expr' <> PP.dot <> n'
     Var _ name ->
-      PP.pretty name
+        PP.pretty name
     Lambda _ _mname pat expr ->
-      let pat' = prettyPattern pat
-          expr' = prettyExpr expr
-          line1 = "\\" <+> pat' <+> "->"
-          line2 = PP.flatAlt (PP.indent 3 expr') expr'
-      in
-      PP.group $ line1 <> PP.line <> line2
+        let pat' = prettyPattern pat
+            expr' = prettyExpr expr
+            line1 = "\\" <+> pat' <+> "->"
+            line2 = PP.flatAlt (PP.indent 3 expr') expr'
+        in
+        PP.group $ line1 <> PP.line <> line2
     Application _ f arg ->
-      -- XXX FIXME: use precedence to minimize parentheses
-      let f' = prettyExpr f
-          arg' = prettyExpr arg
-      in
-      PP.parens f' <+> arg'
+        -- XXX FIXME: use precedence to minimize parentheses
+        let f' = prettyExpr f
+            arg' = prettyExpr arg
+        in
+        PP.parens f' <+> arg'
     Let _ (NonRecursive decl) expr ->
-      let decl' = prettyDef decl
-          expr' = prettyExpr expr
-          -- Break after the "in" when it doesn't fit. Maybe I've
-          -- gotten too used to reading OCaml?
-          line1 = "let" <+> decl' <+> "in"
-          line2 = expr'
-      in
-      PP.group $ line1 <> PP.line <> line2
+        let decl' = prettyDef decl
+            expr' = prettyExpr expr
+            -- Break after the "in" when it doesn't fit. Maybe I've
+            -- gotten too used to reading OCaml?
+            line1 = "let" <+> decl' <+> "in"
+            line2 = expr'
+        in
+        PP.group $ line1 <> PP.line <> line2
     Let _ (Recursive decls) expr ->
-      let decls' = map prettyDef decls
-          expr' = prettyExpr expr
-          decls'' = case decls' of
-            [] -> []  -- (not actually possible)
-            first : rest -> ("rec" <+> first) : map (\d -> "and" <+> d) rest
-      in
-      PP.vsep decls'' <> PP.hardline <> "in" <> PP.hardline <> PP.nest 3 expr'
+        let decls' = map prettyDef decls
+            expr' = prettyExpr expr
+            decls'' = case decls' of
+              [] -> []  -- (not actually possible)
+              first : rest -> ("rec" <+> first) : map (\d -> "and" <+> d) rest
+        in
+        PP.vsep decls'' <> PP.hardline <> "in" <> PP.hardline <> PP.nest 3 expr'
     TSig _ expr ty ->
-      let expr' = prettyExpr expr
-          ty' =  prettyType ty
-      in
-      PP.parens (expr' <+> PP.colon <+> ty')
+        let expr' = prettyExpr expr
+            ty' =  prettyType ty
+        in
+        PP.parens (expr' <+> PP.colon <+> ty')
     IfThenElse _ e1 e2 e3 ->
-      let e1' = prettyExpr e1
-          e2' = prettyExpr e2
-          e3' = prettyExpr e3
-          -- plan for four lines
-          line1 = "if" <+> e1' <+> "then"
-          line2 = PP.flatAlt (PP.indent 3 e2') e2'
-          line3 = "else"
-          line4 = PP.flatAlt (PP.indent 3 e3') e3'
-      in
-      -- Use PP.sep so it'll fold to one line if it fits
-      PP.group $ PP.sep [line1, line2, line3, line4]
+        let e1' = prettyExpr e1
+            e2' = prettyExpr e2
+            e3' = prettyExpr e3
+            -- plan for four lines
+            line1 = "if" <+> e1' <+> "then"
+            line2 = PP.flatAlt (PP.indent 3 e2') e2'
+            line3 = "else"
+            line4 = PP.flatAlt (PP.indent 3 e3') e3'
+        in
+        -- Use PP.sep so it'll fold to one line if it fits
+        PP.group $ PP.sep [line1, line2, line3, line4]
 
 ppExpr :: Expr -> Text
 ppExpr e =
-  PPS.renderText PPS.defaultOpts $ prettyExpr e
+    PPS.renderText PPS.defaultOpts $ prettyExpr e
 
 prettyPattern :: Pattern -> PPS.Doc
 prettyPattern pat =
@@ -638,71 +638,71 @@ ppPattern pat =
 
 prettyStmt :: Stmt -> PPS.Doc
 prettyStmt s0 = case s0 of
-      StmtBind _ (PWild _ _ty) expr ->
-         -- Drop the _, even if it has an explicit type
-         prettyExpr expr <> ";"
-      StmtBind _ pat expr ->
-         let pat' = prettyPattern pat
-             expr' = prettyExpr expr
-             line1 = pat' <+> "<-"
-             line2 = PP.flatAlt (PP.indent 3 expr') expr'
-         in
-         PP.group $ line1 <> PP.line <> line2 <> ";"
-      StmtLet _ rebindable (NonRecursive decl) ->
-         let header = case rebindable of
-               RebindableVar -> "let rebindable"
-               ReadOnlyVar -> "let"
-             decl' = prettyDef decl
-         in
-         PP.group $ header <+> decl' <> ";"
-      StmtLet _ _ (Recursive decls) ->
-         let decls' = map prettyDef decls
-             decls'' = case decls' of
-               [] -> []  -- (not actually possible)
-               first : rest -> ("rec" <+> first) : map (\d -> "and" <+> d) rest
-         in
-         PP.vsep decls'' <> ";"
-      StmtCode _ _ code ->
-         let code' = PP.braces $ PP.braces $ PP.pretty code in
-         "let" <+> code' <> ";"
-      StmtImport _ imp ->
-         let prettyNames names =
-                 let prettyIdent name = PP.pretty $ P.identText name
-                     names' = PP.fillSep $ {- PP.punctuate "," $ -} map prettyIdent names
-                     long = PP.parens $ PP.line <> PP.indent 3 names' <> PP.line
-                     short = PP.parens names'
-                 in
-                 PP.flatAlt long short
-             prettyModName mn =
-                 PP.pretty (intercalate "::" (P.modNameChunks mn))
-             module' = case iModule imp of
-                 Left filepath -> PP.dquotes $ PP.pretty filepath
-                 Right modName -> prettyModName modName
-             as' = case iAs imp of
-                 Nothing -> PP.emptyDoc
-                 Just modName -> " as" <+> prettyModName modName
-             spec' = case iSpec imp of
-                 Nothing -> PP.emptyDoc
-                 Just (P.Hiding names) ->
-                      " hiding" <+> prettyNames names
-                 Just (P.Only names) ->
-                      " " <> prettyNames names
-         in
-         PP.group $ "import" <+> module' <> as' <> spec' <> ";"
-      StmtInclude _ name once ->
-          let inc = if once then "include_once" else "include"
-              name' = PP.dquotes $ PP.pretty name
-          in
-          inc <+> name' <> ";"
-      StmtTypedef _ _ name ty ->
-         let name' = PP.pretty name
-             ty' = prettyType ty
-         in
-         PP.group $ "typedef" <+> name' <+> "=" <+> ty' <> ";"
-      StmtPushdir _ dir ->
-         ".pushdir" <+> PP.pretty dir <> ";"
-      StmtPopdir _ ->
-         ".popdir;"
+    StmtBind _ (PWild _ _ty) expr ->
+       -- Drop the _, even if it has an explicit type
+       prettyExpr expr <> ";"
+    StmtBind _ pat expr ->
+       let pat' = prettyPattern pat
+           expr' = prettyExpr expr
+           line1 = pat' <+> "<-"
+           line2 = PP.flatAlt (PP.indent 3 expr') expr'
+       in
+       PP.group $ line1 <> PP.line <> line2 <> ";"
+    StmtLet _ rebindable (NonRecursive decl) ->
+       let header = case rebindable of
+             RebindableVar -> "let rebindable"
+             ReadOnlyVar -> "let"
+           decl' = prettyDef decl
+       in
+       PP.group $ header <+> decl' <> ";"
+    StmtLet _ _ (Recursive decls) ->
+       let decls' = map prettyDef decls
+           decls'' = case decls' of
+             [] -> []  -- (not actually possible)
+             first : rest -> ("rec" <+> first) : map (\d -> "and" <+> d) rest
+       in
+       PP.vsep decls'' <> ";"
+    StmtCode _ _ code ->
+       let code' = PP.braces $ PP.braces $ PP.pretty code in
+       "let" <+> code' <> ";"
+    StmtImport _ imp ->
+       let prettyNames names =
+               let prettyIdent name = PP.pretty $ P.identText name
+                   names' = PP.fillSep $ {- PP.punctuate "," $ -} map prettyIdent names
+                   long = PP.parens $ PP.line <> PP.indent 3 names' <> PP.line
+                   short = PP.parens names'
+               in
+               PP.flatAlt long short
+           prettyModName mn =
+               PP.pretty (intercalate "::" (P.modNameChunks mn))
+           module' = case iModule imp of
+               Left filepath -> PP.dquotes $ PP.pretty filepath
+               Right modName -> prettyModName modName
+           as' = case iAs imp of
+               Nothing -> PP.emptyDoc
+               Just modName -> " as" <+> prettyModName modName
+           spec' = case iSpec imp of
+               Nothing -> PP.emptyDoc
+               Just (P.Hiding names) ->
+                    " hiding" <+> prettyNames names
+               Just (P.Only names) ->
+                    " " <> prettyNames names
+       in
+       PP.group $ "import" <+> module' <> as' <> spec' <> ";"
+    StmtInclude _ name once ->
+        let inc = if once then "include_once" else "include"
+            name' = PP.dquotes $ PP.pretty name
+        in
+        inc <+> name' <> ";"
+    StmtTypedef _ _ name ty ->
+       let name' = PP.pretty name
+           ty' = prettyType ty
+       in
+       PP.group $ "typedef" <+> name' <+> "=" <+> ty' <> ";"
+    StmtPushdir _ dir ->
+       ".pushdir" <+> PP.pretty dir <> ";"
+    StmtPopdir _ ->
+       ".popdir;"
 
 prettyDef :: Decl -> PPS.Doc
 prettyDef (Decl _ pat0 _ def) =
