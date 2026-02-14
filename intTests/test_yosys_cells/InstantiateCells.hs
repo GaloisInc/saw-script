@@ -1,14 +1,3 @@
-#!/usr/bin/env cabal
-{- cabal:
-build-depends:
-  base,
-  aeson ^>=2.2,
-  aeson-pretty ^>=0.8,
-  bytestring ^>=0.12,
-  containers ^>=0.6,
-  mtl ^>=2.3,
-  text ^>=2.1
--}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -493,7 +482,7 @@ device = Device $ evalState (mapM wrapCell tests) mempty
 main :: IO ()
 main = do
     args <- getArgs
-    me <- fromMaybe <$> getProgName <*> (stripPrefix "cabal-script-" <$> getProgName)
+    me <- getProgName
     case args of
         [jsonPath, ysPath] -> do
             B.writeFile jsonPath $ encodePretty device

@@ -1,11 +1,3 @@
-#!/usr/bin/env cabal
-{- cabal:
-build-depends:
-  base,
-  containers ^>=0.6,
-  attoparsec ^>=0.14,
-  bytestring ^>=0.12
--}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
