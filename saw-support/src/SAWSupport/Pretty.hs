@@ -259,7 +259,14 @@ prettyTypeConstraint x tp =
 --   This is the formatting used by SAWScript.
 --   XXX: should probably unify with prettyTypeConstraint
 prettyTypeSig :: PP.Doc ann -> PP.Doc ann -> PP.Doc ann
-prettyTypeSig n t = n <+> PP.pretty ':' <+> t
+prettyTypeSig n t =
+    -- Allow it to split at the colon
+    let line1 = n <+> PP.pretty ':'
+        line2 = t
+        long = line1 <> PP.line <> PP.indent 3 (PP.align line2)
+        short = line1 <+> line2
+    in
+    PP.flatAlt long short
 
 -- | Concatenate n copies of a doc.
 replicate :: Integer -> PP.Doc ann -> PP.Doc ann

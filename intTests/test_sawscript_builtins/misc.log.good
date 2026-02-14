@@ -29,7 +29,7 @@ Environment variable not found: SAW_MISSING_ENV
 ("{| 2 |}", "2")
 ("{| [8] |}", "[8]")
 ("f", "\\ () -> ()")
-("do { return 0; }", "do {\n   (return 0);\n}")
+("do { return 0; }", "do { (return) 0; }")
 ("(record)", "{ x = 3, y = \"abc\" }")
 ("\\x -> 3", "\\ (x : t.7) -> 3")
 ("return 3", "return 3")

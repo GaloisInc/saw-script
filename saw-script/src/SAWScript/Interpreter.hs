@@ -64,7 +64,7 @@ import qualified Mir.Mir as MIR
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts, pShow, pShowText)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts)
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
 
@@ -128,7 +128,6 @@ import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
 import qualified Cryptol.Eval.Concrete as V (Concrete(..))
 
-import qualified Prettyprinter as PP (pretty)
 import qualified Prettyprinter.Render.Text as PP (putDoc)
 
 import SAWScript.AutoMatch
@@ -627,7 +626,7 @@ interpretExpr expr =
           env <- gets rwEnviron
           return $ VLambda env mname pat e
       SS.Application pos e1 e2 -> do
-          let v1info = "Expression: " <> PPS.pShowText e1
+          let v1info = "Expression: " <> SS.ppExpr e1
           v1 <- interpretExpr e1
           v2 <- interpretExpr e2
           let v2' = injectPositionIntoMonadicValue (SS.getPos e2) v2
@@ -653,7 +652,7 @@ interpretExpr expr =
                   "Ill-typed value in if-expression (should be Bool)",
                   "Source position: " <> ppPosition pos,
                   "Value found: " <> v1',
-                  "Expression: " <> PPS.pShowText e1
+                  "Expression: " <> SS.ppExpr e1
                ]
 
 -- Eval a "decl group", which is a let-binding or group of mutually
@@ -686,7 +685,7 @@ interpretDeclGroup rebindable dg = case dg of
                     panic "interpretDeclGroup" [
                         "Found non-function in a recursive declaration group",
                         "Name: " <> x,
-                        "Expression found: " <> PPS.pShowText e0
+                        "Expression found: " <> SS.ppExpr e0
                     ]
 
             -- Get the type (scheme) for one of the declarations.
@@ -707,7 +706,7 @@ interpretDeclGroup rebindable dg = case dg of
                 SS.PTuple{} ->
                     panic "interpretDeclGroup" [
                         "Found tuple pattern in a recursive declaration group",
-                        "Pattern: " <> Text.pack (show (PP.pretty pat))
+                        "Pattern: " <> SS.ppPattern pat
                     ]
 
             -- Get all the info for a decl.
@@ -965,7 +964,7 @@ processStmtBind printBinds pos pat expr = do
 
   -- Reject polymorphic values. XXX: as noted above this should either
   -- be inside the typechecker or restricted to the repl.
-  when (isPolymorphic ty) $ fail $ "Not a monomorphic type: " ++ PPS.pShow ty
+  when (isPolymorphic ty) $ fail $ "Not a monomorphic type: " ++ Text.unpack (SS.ppType ty)
 
   -- Now bind the resulting value using bindMonadAction.
   --
@@ -1001,7 +1000,7 @@ processStmtBind printBinds pos pat expr = do
     -- Print function type if result was a function
     case ty of
       SS.TyCon _ SS.FunCon _ ->
-        liftTopLevel $ printOutLnTop Info $ Text.unpack $ name <> " : " <> PPS.pShowText ty
+        liftTopLevel $ printOutLnTop Info $ Text.unpack $ name <> " : " <> SS.ppType ty
       _ -> return ()
 
   liftTopLevel $ bindPattern SS.ReadOnlyVar pat (Just (SS.tMono ty)) result
@@ -7482,7 +7481,7 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           HideDeprecated -> ["DEPRECATED AND UNAVAILABLE BY DEFAULT", ""]
           Experimental -> ["EXPERIMENTAL", ""]
       name n p = [
-          "    " <> n <> " : " <> PPS.pShowText (primitiveType p),
+          "    " <> n <> " : " <> SS.ppSchema (primitiveType p),
           ""
        ]
       doc n p =

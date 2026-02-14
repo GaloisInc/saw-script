@@ -726,8 +726,8 @@ prettyValue sc opts = visit (0 :: Int)
           pure $ PP.group $ PP.braces (PP.line <> body' <> PP.line)
 
       VLambda _env _mname pat e ->
-          let pat' = PP.pretty pat
-              e' = PP.pretty e
+          let pat' = SS.prettyPattern pat
+              e' = SS.prettyExpr e
               line1 = "\\" <+> pat' <+> "->"
               line2 = PP.flatAlt (PP.indent 3 e') e'
           in
@@ -752,7 +752,7 @@ prettyValue sc opts = visit (0 :: Int)
         let pos = SS.PosInternal "<<do-block>>"
             e = SS.Block pos body
         in
-        pure $ PP.pretty e
+        pure $ SS.prettyExpr e
       VBindOnce _pos _chain v1 v2 -> do
         v1' <- visit 0 v1
         v2' <- visit 0 v2
