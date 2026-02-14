@@ -151,7 +151,7 @@ import qualified What4.Config as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
 
-import SAWCore.FiniteValue (ppFirstOrderValue)
+import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer ((:*:)(..), asTupleType, asVecType)
 import SAWCore.SharedTerm
@@ -1496,7 +1496,7 @@ verifyObligations cc mspec tactic assumes asserts =
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
            opts <- rwPPOpts <$> getTopLevelRW
            let showVar x = Text.unpack (vnName x)
-           let showAssignment (name, val) = "  " ++ showVar name ++ ": " ++ show (ppFirstOrderValue opts val)
+           let showAssignment (name, val) = "  " ++ showVar name ++ ": " ++ show (prettyFirstOrderValue opts val)
            mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
            io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
          UnfinishedProof pst ->

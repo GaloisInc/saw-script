@@ -87,7 +87,6 @@ module SAWSupport.Pretty (
     Opts(..),
     defaultOpts,
     limitMaxDepth,
-    PrettyPrec(..),
     prettyNat,
     prettyTypeConstraint,
     prettyTypeSig,
@@ -97,25 +96,20 @@ module SAWSupport.Pretty (
     prettyLetBlock,
     render,
     renderText,
-    pShow,
-    pShowText,
-    showCommaSep,
-    showBrackets,
-    showBraces
+    renderStdout,
  ) where
 
 import Prelude hiding (replicate)
 
+import System.IO (stdout)
 import Numeric (showIntAtBase)
 import Data.Text (Text)
 --import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TextL
-import Data.List (intersperse)
 
 import Prettyprinter (pretty, (<+>) )
 import qualified Prettyprinter as PP
 import qualified Prettyprinter.Render.Terminal as PP
-import qualified Prettyprinter.Render.Text as PPT
 
 
 ------------------------------------------------------------
@@ -223,13 +217,6 @@ limitMaxDepth opts limit =
 
 
 ------------------------------------------------------------
--- Precedence prettyprinting
-
-class PrettyPrec p where
-  prettyPrec :: Int -> p -> PP.Doc ann
-
-
-------------------------------------------------------------
 -- Common prettyprint operations
 -- (for base types and common constructs not tied to any particular AST)
 
@@ -259,7 +246,14 @@ prettyTypeConstraint x tp =
 --   This is the formatting used by SAWScript.
 --   XXX: should probably unify with prettyTypeConstraint
 prettyTypeSig :: PP.Doc ann -> PP.Doc ann -> PP.Doc ann
-prettyTypeSig n t = n <+> PP.pretty ':' <+> t
+prettyTypeSig n t =
+    -- Allow it to split at the colon
+    let line1 = n <+> PP.pretty ':'
+        line2 = t
+        long = line1 <> PP.line <> PP.indent 3 (PP.align line2)
+        short = line1 <+> line2
+    in
+    PP.flatAlt long short
 
 -- | Concatenate n copies of a doc.
 replicate :: Integer -> PP.Doc ann -> PP.Doc ann
@@ -317,23 +311,11 @@ renderText opts doc =
     layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
     style = if ppColor opts then PP.reAnnotateS colorStyle else PP.unAnnotateS
 
-pShow :: PrettyPrec a => a -> String
-pShow = show . prettyPrec 0
-
-pShowText :: PrettyPrec a => a -> Text
-pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . prettyPrec 0
-
-
-------------------------------------------------------------
--- Show infrastructure
--- XXX: these should go away
-
-showCommaSep :: [ShowS] -> ShowS
-showCommaSep ss = foldr (.) id (intersperse (showString ",") ss)
-
-showBrackets :: ShowS -> ShowS
-showBrackets s = showString "[" . s . showString "]"
-
-showBraces :: ShowS -> ShowS
-showBraces s = showString "{" . s . showString "}"
+renderStdout :: Opts -> Doc -> IO ()
+renderStdout opts doc =
+  PP.renderIO stdout (style (PP.layoutPretty layoutOpts doc))
+  where
+    -- ribbon width 64, with effectively unlimited right margin
+    layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
+    style = if ppColor opts then PP.reAnnotateS colorStyle else PP.unAnnotateS
 

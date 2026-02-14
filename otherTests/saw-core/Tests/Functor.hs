@@ -12,13 +12,18 @@ module Tests.Functor (functorTests) where
 
 import Control.Monad (when)
 import Data.Hashable
+import Data.Text (Text)
+import qualified Data.Text as Text
 
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
+import SAWCore.Term.Pretty (ppTermPure)
 
 
 -- The Eq, Ord, and Hashable instances for Term/TermF/FlatTermF are
@@ -72,7 +77,7 @@ nmFoo = Name {
 --   do, rather than detecting one at a time.  However, that requires
 --   a good deal more glue as neither Either nor Maybe can be used
 --   that way.
-type Failure = (String, String, String)
+type Failure = (String, String, Text)
 type Result = Either Failure ()
 
 -- | Check a result.
@@ -80,36 +85,43 @@ check :: Failure -> Bool -> Result
 check _ True = Right ()
 check f False = Left f
 
--- | Check that two values are equal.
---   Hopefully the compiler doesn't eliminate any of the checks...
-checkEq :: (Show t, Eq t, Ord t, Hashable t) => t -> t -> Result
-checkEq a b = do
-  let f c = (show a, show b, c)
-  check (f "Eq") $ a == b
-  check (f "Ord") $ compare a b == EQ
-  check (f "Hashable") $ hash a == hash b
-
--- | Check that a comparison is as expected.
---   Hopefully the compiler doesn't eliminate any of the checks...
-checkComparison :: (Show t, Eq t, Ord t, Hashable t) => Ordering -> t -> t -> Result
-checkComparison comp a b = do
-  let f c = (show a, show b, c)
-  -- check the Eq instance
-  let eqr = case comp of
-        EQ -> a == b
-        _ -> a /= b
-  check (f "Eq") eqr
-  -- check the Ord instance
-  check (f "Ord") $ compare a b == comp
-  -- check the Hashable instance
-  case comp of
-      EQ -> check (f "Hashable") $ hash a == hash b
-      _ -> pure ()
-
 -- | Typeclass-polymorphic test function.
 --   Recurses consing more complex terms; the first argument is a
 --   depth limit.
-class (Show t, Eq t, Ord t, Hashable t) => TestIt t where
+class (Eq t, Ord t, Hashable t) => TestIt t where
+  -- | Promote back to Term for printing
+  rewrap :: t -> Term
+
+  -- | Check that two values are equal.
+  --   Hopefully the compiler doesn't eliminate any of the checks...
+  checkEq :: t -> t -> Result
+  checkEq a b = do
+    let a' = ppTermPure PPS.defaultOpts $ rewrap a
+        b' = ppTermPure PPS.defaultOpts $ rewrap b
+        f c = (a', b', c)
+    check (f "Eq") $ a == b
+    check (f "Ord") $ compare a b == EQ
+    check (f "Hashable") $ hash a == hash b
+
+  -- | Check that a comparison is as expected.
+  --   Hopefully the compiler doesn't eliminate any of the checks...
+  checkComparison :: Ordering -> t -> t -> Result
+  checkComparison comp a b = do
+    let a' = ppTermPure PPS.defaultOpts $ rewrap a
+        b' = ppTermPure PPS.defaultOpts $ rewrap b
+        f c = (a', b', c)
+    -- check the Eq instance
+    let eqr = case comp of
+          EQ -> a == b
+          _ -> a /= b
+    check (f "Eq") eqr
+    -- check the Ord instance
+    check (f "Ord") $ compare a b == comp
+    -- check the Hashable instance
+    case comp of
+        EQ -> check (f "Hashable") $ hash a == hash b
+        _ -> pure ()
+
   -- | Test a single term
   testOne :: Int -> t -> Result
   -- | Test two terms with a known comparison.
@@ -124,6 +136,8 @@ class (Show t, Eq t, Ord t, Hashable t) => TestIt t where
 
 -- | Test in FlatTermF
 instance TestIt (FlatTermF Term) where
+  rewrap t = shared 200 $ FTermF t
+
   testOne depth ff = do
       -- reflexivity
       checkEq ff ff
@@ -141,6 +155,8 @@ instance TestIt (FlatTermF Term) where
 
 -- | Test in TermF
 instance TestIt (TermF Term) where
+  rewrap t = shared 201 t
+
   testOne depth f = do
       -- reflexivity
       checkEq f f
@@ -167,6 +183,8 @@ instance TestIt (TermF Term) where
       testTwo depth comp u1 s2
 
 instance TestIt Term where
+  rewrap t = t
+
   testOne depth t = do
       -- reflexivity
       checkEq t t
@@ -225,7 +243,7 @@ runTests =
     case tests of
       Right () -> pure ()
       Left (t1, t2, class_) -> do
-          let msg = "Failed: " ++ class_ ++ " on " ++ t1 ++ " and " ++ t2
+          let msg = "Failed: " ++ Text.unpack class_ ++ " on " ++ t1 ++ " and " ++ t2
           assertFailure msg
 
 functorTests :: [TestTree]

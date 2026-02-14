@@ -124,6 +124,7 @@ module SAWCentral.Proof
 
   , CEX
   , ProofResult(..)
+  , prettyProofResult, ppProofResult
   , SolveResult(..)
 
   , predicateToSATQuery
@@ -146,11 +147,13 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Time.Clock
 
+-- XXX: hunt down the unqualified uses sometime
 import Prettyprinter
+import qualified Prettyprinter as PP
 
 import Data.Parameterized.Nonce
 
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
 
 import SAWCore.Recognizer
 import SAWCore.Rewriter
@@ -158,7 +161,7 @@ import SAWCore.SATQuery
 import SAWCore.Name (DisplayNameEnv, Name(..), VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import SAWCore.FiniteValue (FirstOrderValue)
+import SAWCore.FiniteValue (FirstOrderValue, prettyFirstOrderValue)
 import qualified SAWCore.Term.Certified as TC
 import SAWCore.Term.Pretty (prettyTermWithEnv, prettyTermContainerWithEnv)
 
@@ -1864,6 +1867,34 @@ data ProofResult
     -- | The proof was not completed, but we did not find
     --   a counterexample.
   | UnfinishedProof ProofState
+
+-- | Print a `CEX`
+prettyCEX :: PPS.Opts -> CEX -> PPS.Doc
+prettyCEX opts cex =
+    let once (x, v) =
+          let x' = PP.pretty $ vnName x
+              v' = prettyFirstOrderValue opts v
+          in
+          x' <+> "=" <+> v'
+    in
+    PP.vsep $ map once cex
+
+-- | Print a `ProofResult`
+prettyProofResult :: PPS.Opts -> ProofResult -> PPS.Doc
+prettyProofResult opts r = case r of
+    ValidProof _ _ ->
+        "Valid"
+    InvalidProof _ ts _ ->
+        let ts' = prettyCEX opts ts in
+        PP.vsep ["Invalid: [", PP.indent 3 ts', "]"]
+    UnfinishedProof st ->
+        let n' = PP.viaShow (length $ psGoals st) in
+        "Unfinished:" <+> n' <+> "goals remaining"
+
+-- | Print a `ProofResult` as `Text`
+ppProofResult :: PPS.Opts -> ProofResult -> Text
+ppProofResult opts r =
+    PPS.renderText opts $ prettyProofResult opts r
 
 -- | A @Tactic@ is a computation that examines, simplifies
 --   and/or solves a proof goal.  Given a goal, it does some

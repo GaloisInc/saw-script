@@ -228,9 +228,11 @@ instance Show (Extra l) => Show (TValue l) where
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
-      VDataType s ps vs
-        | null (ps++vs) -> shows s
-        | otherwise  -> shows s . showList (ps++vs)
+      VDataType s ps vs ->
+          let s' = Text.unpack $ toAbsoluteName (nameInfo s) in
+          case ps ++ vs of
+            [] -> shows s'
+            vs' -> shows s' . showList vs'
       VEmptyRecordType -> showString "{}"
       VRecordType fld _ _ ->
         showString "{" . showString (Text.unpack fld) . showString " :: _, ...}"

@@ -26,7 +26,8 @@ beta_reduce_term : Term -> Term
 bitblast : Term -> TopLevel AIG
 bitwuzla : ProofScript ()
 boolector : ProofScript ()
-caseProofResult : {b} ProofResult -> (Theorem -> b) -> (Term -> b) -> b
+caseProofResult :
+   {b} ProofResult -> (Theorem -> b) -> (Term -> b) -> b
 caseSatResult : {b} SatResult -> b -> (Term -> b) -> b
 check_convertible : Term -> Term -> TopLevel ()
 check_goal : ProofScript ()
@@ -40,10 +41,13 @@ crucible_alloc : LLVMType -> LLVMSetup LLVMValue
 crucible_alloc_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
 crucible_alloc_global : String -> LLVMSetup ()
 crucible_alloc_readonly : LLVMType -> LLVMSetup LLVMValue
-crucible_alloc_readonly_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
+crucible_alloc_readonly_aligned :
+   Int -> LLVMType -> LLVMSetup LLVMValue
 crucible_array : [LLVMValue] -> LLVMValue
-crucible_conditional_points_to : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
-crucible_conditional_points_to_untyped : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
+crucible_conditional_points_to :
+   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
+crucible_conditional_points_to_untyped :
+   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
 crucible_declare_ghost_state : String -> TopLevel Ghost
 crucible_elem : LLVMValue -> Int -> LLVMValue
 crucible_equal : LLVMValue -> LLVMValue -> LLVMSetup ()
@@ -57,19 +61,29 @@ crucible_global : String -> LLVMValue
 crucible_global_initializer : String -> LLVMValue
 crucible_java_extract : JavaClass -> String -> TopLevel Term
 crucible_llvm_extract : LLVMModule -> String -> TopLevel Term
-crucible_llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
-crucible_llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+crucible_llvm_unsafe_assume_spec :
+   LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
+crucible_llvm_verify :
+   LLVMModule ->
+   String ->
+   [LLVMSpec] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
 crucible_null : LLVMValue
 crucible_packed_struct : [LLVMValue] -> LLVMValue
 crucible_points_to : LLVMValue -> LLVMValue -> LLVMSetup ()
-crucible_points_to_untyped : LLVMValue -> LLVMValue -> LLVMSetup ()
+crucible_points_to_untyped :
+   LLVMValue -> LLVMValue -> LLVMSetup ()
 crucible_postcond : Term -> LLVMSetup ()
 crucible_precond : Term -> LLVMSetup ()
 crucible_return : LLVMValue -> LLVMSetup ()
 crucible_spec_size : LLVMSpec -> Int
 crucible_spec_solvers : LLVMSpec -> [String]
 crucible_struct : [LLVMValue] -> LLVMValue
-crucible_symbolic_alloc : Bool -> Int -> Term -> LLVMSetup LLVMValue
+crucible_symbolic_alloc :
+   Bool -> Int -> Term -> LLVMSetup LLVMValue
 crucible_term : Term -> LLVMValue
 cryptol_add_path : String -> TopLevel ()
 cryptol_extract : CryptolModule -> String -> TopLevel Term
@@ -161,8 +175,16 @@ jvm_return : JVMValue -> JVMSetup ()
 jvm_static_field_is : String -> JVMValue -> JVMSetup ()
 jvm_term : Term -> JVMValue
 jvm_unint : [String] -> JVMSetup ()
-jvm_unsafe_assume_spec : JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec
-jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
+jvm_unsafe_assume_spec :
+   JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec
+jvm_verify :
+   JavaClass ->
+   String ->
+   [JVMSpec] ->
+   Bool ->
+   JVMSetup () ->
+   ProofScript () ->
+   TopLevel JVMSpec
 lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
 length : {a} [a] -> Int
@@ -172,15 +194,19 @@ llvm_alloc : LLVMType -> LLVMSetup LLVMValue
 llvm_alloc_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
 llvm_alloc_global : String -> LLVMSetup ()
 llvm_alloc_readonly : LLVMType -> LLVMSetup LLVMValue
-llvm_alloc_readonly_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
+llvm_alloc_readonly_aligned :
+   Int -> LLVMType -> LLVMSetup LLVMValue
 llvm_array : Int -> LLVMType -> LLVMType
 llvm_array_value : [LLVMValue] -> LLVMValue
 llvm_assert : Term -> LLVMSetup ()
 llvm_cast_pointer : LLVMValue -> LLVMType -> LLVMValue
 llvm_cfg : LLVMModule -> String -> TopLevel CFG
-llvm_conditional_points_to : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
-llvm_conditional_points_to_at_type : Term -> LLVMValue -> LLVMType -> LLVMValue -> LLVMSetup ()
-llvm_conditional_points_to_untyped : Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
+llvm_conditional_points_to :
+   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
+llvm_conditional_points_to_at_type :
+   Term -> LLVMValue -> LLVMType -> LLVMValue -> LLVMSetup ()
+llvm_conditional_points_to_untyped :
+   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
 llvm_declare_ghost_state : String -> TopLevel Ghost
 llvm_double : LLVMType
 llvm_elem : LLVMValue -> Int -> LLVMValue
@@ -202,7 +228,8 @@ llvm_packed_struct_type : [LLVMType] -> LLVMType
 llvm_packed_struct_value : [LLVMValue] -> LLVMValue
 llvm_pointer : LLVMType -> LLVMType
 llvm_points_to : LLVMValue -> LLVMValue -> LLVMSetup ()
-llvm_points_to_at_type : LLVMValue -> LLVMType -> LLVMValue -> LLVMSetup ()
+llvm_points_to_at_type :
+   LLVMValue -> LLVMType -> LLVMValue -> LLVMSetup ()
 llvm_points_to_untyped : LLVMValue -> LLVMValue -> LLVMSetup ()
 llvm_postcond : Term -> LLVMSetup ()
 llvm_precond : Term -> LLVMSetup ()
@@ -218,17 +245,27 @@ llvm_term : Term -> LLVMValue
 llvm_type : String -> LLVMType
 llvm_unint : [String] -> LLVMSetup ()
 llvm_union : LLVMValue -> String -> LLVMValue
-llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
-llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+llvm_unsafe_assume_spec :
+   LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
+llvm_verify :
+   LLVMModule ->
+   String ->
+   [LLVMSpec] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
 load_aig : String -> TopLevel AIG
 mathsat : ProofScript ()
 mir_adt : MIRAdt -> MIRType
 mir_alloc : MIRType -> MIRSetup MIRValue
 mir_alloc_mut : MIRType -> MIRSetup MIRValue
 mir_alloc_raw_ptr_const : MIRType -> MIRSetup MIRValue
-mir_alloc_raw_ptr_const_multi : Int -> MIRType -> MIRSetup MIRValue
+mir_alloc_raw_ptr_const_multi :
+   Int -> MIRType -> MIRSetup MIRValue
 mir_alloc_raw_ptr_mut : MIRType -> MIRSetup MIRValue
-mir_alloc_raw_ptr_mut_multi : Int -> MIRType -> MIRSetup MIRValue
+mir_alloc_raw_ptr_mut_multi :
+   Int -> MIRType -> MIRSetup MIRValue
 mir_array : Int -> MIRType -> MIRType
 mir_array_value : MIRType -> [MIRValue] -> MIRValue
 mir_assert : Term -> MIRSetup ()
@@ -248,7 +285,8 @@ mir_find_adt : MIRModule -> String -> [MIRType] -> MIRAdt
 mir_find_mangled_adt : MIRModule -> String -> MIRAdt
 mir_find_name : MIRModule -> String -> [MIRType] -> String
 mir_fresh_cryptol_var : String -> Type -> MIRSetup Term
-mir_fresh_expanded_value : String -> MIRType -> MIRSetup MIRValue
+mir_fresh_expanded_value :
+   String -> MIRType -> MIRSetup MIRValue
 mir_fresh_var : String -> MIRType -> MIRSetup Term
 mir_ghost_value : Ghost -> Term -> MIRSetup ()
 mir_i128 : MIRType
@@ -288,10 +326,18 @@ mir_u32 : MIRType
 mir_u64 : MIRType
 mir_u8 : MIRType
 mir_unint : [String] -> MIRSetup ()
-mir_unsafe_assume_spec : MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec
+mir_unsafe_assume_spec :
+   MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec
 mir_usize : MIRType
 mir_vec : MIRModule -> MIRType -> MIRType
-mir_verify : MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec
+mir_verify :
+   MIRModule ->
+   String ->
+   [MIRSpec] ->
+   Bool ->
+   MIRSetup () ->
+   ProofScript () ->
+   TopLevel MIRSpec
 nat_to_term : Int -> Term
 nth : {a} [a] -> Int -> a
 null : {a} [a] -> Bool
@@ -381,7 +427,8 @@ term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
 term_size : Term -> Int
 term_tree_size : Term -> Int
-test_solver_cache_stats : Int -> Int -> Int -> Int -> Int -> TopLevel ()
+test_solver_cache_stats :
+   Int -> Int -> Int -> Int -> Int -> TopLevel ()
 time : {a} TopLevel a -> TopLevel a
 trivial : ProofScript ()
 true : Bool
@@ -412,16 +459,42 @@ write_aig : String -> Term -> TopLevel ()
 write_aig_external : String -> Term -> TopLevel ()
 write_cnf : String -> Term -> TopLevel ()
 write_cnf_external : String -> Term -> TopLevel ()
-write_coq_cryptol_module : String -> String -> [(String, String)] -> [String] -> TopLevel ()
-write_coq_cryptol_primitives_for_sawcore : String -> [(String, String)] -> [String] -> TopLevel ()
-write_coq_sawcore_prelude : String -> [(String, String)] -> [String] -> TopLevel ()
-write_coq_term : String -> [(String, String)] -> [String] -> String -> Term -> TopLevel ()
+write_coq_cryptol_module :
+   String ->
+   String ->
+   [(String, String)] ->
+   [String] ->
+   TopLevel ()
+write_coq_cryptol_primitives_for_sawcore :
+   String -> [(String, String)] -> [String] -> TopLevel ()
+write_coq_sawcore_prelude :
+   String -> [(String, String)] -> [String] -> TopLevel ()
+write_coq_term :
+   String ->
+   [(String, String)] ->
+   [String] ->
+   String ->
+   Term ->
+   TopLevel ()
 write_core : String -> Term -> TopLevel ()
 write_goal : String -> ProofScript ()
-write_rocq_cryptol_module : String -> String -> [(String, String)] -> [String] -> TopLevel ()
-write_rocq_cryptol_primitives_for_sawcore : String -> [(String, String)] -> [String] -> TopLevel ()
-write_rocq_sawcore_prelude : String -> [(String, String)] -> [String] -> TopLevel ()
-write_rocq_term : String -> [(String, String)] -> [String] -> String -> Term -> TopLevel ()
+write_rocq_cryptol_module :
+   String ->
+   String ->
+   [(String, String)] ->
+   [String] ->
+   TopLevel ()
+write_rocq_cryptol_primitives_for_sawcore :
+   String -> [(String, String)] -> [String] -> TopLevel ()
+write_rocq_sawcore_prelude :
+   String -> [(String, String)] -> [String] -> TopLevel ()
+write_rocq_term :
+   String ->
+   [(String, String)] ->
+   [String] ->
+   String ->
+   Term ->
+   TopLevel ()
 write_saig : String -> Term -> TopLevel ()
 write_saig' : String -> Term -> Int -> TopLevel ()
 write_smtlib2 : String -> Term -> TopLevel ()

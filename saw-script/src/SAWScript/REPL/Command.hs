@@ -44,13 +44,16 @@ import System.Directory (
     doesDirectoryExist
  )
 
-import qualified SAWSupport.Pretty as PPS (pShowText)
+import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
+
+import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ScopedMap as ScopedMap
 import qualified SAWSupport.Trie as Trie
 import SAWSupport.Trie (Trie)
 
 import qualified SAWCentral.AST as SS (Name, Schema)
-import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable)
+import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable, ppSchema, prettySchema, prettyNamedType)
 import SAWCentral.Value (Environ(..), TopLevelRO(..), TopLevelRW(..))
 
 import SAWScript.Panic (panic)
@@ -90,15 +93,25 @@ envCmd = do
 
       unless (null rbenv) $ do
           let printrb (x, ty) = do
-                let ty' = PPS.pShowText ty
-                TextIO.putStrLn (x <> " : rebindable " <> ty')
+                let x' = PP.pretty x
+                    ty' = prettySchema ty
+                    line1 = x' <+> ":"
+                    line2 = "rebindable" <+> ty'
+                    line2' = PP.flatAlt (PP.indent 3 line2) line2
+                    body = PP.group (line1 <> PP.line <> line2')
+                TextIO.putStrLn $ PPS.renderText PPS.defaultOpts body
           mapM_ printrb rbenv
           blankline
 
       let printscope entries = do
             let printentry (x, ty) = do
-                  let ty' = PPS.pShowText ty
-                  TextIO.putStrLn (x <> " : " <> ty')
+                  let x' = PP.pretty x
+                      ty' = prettySchema ty
+                      line1 = x' <+> ":"
+                      line2 = ty'
+                      line2' = PP.flatAlt (PP.indent 3 line2) line2
+                      body = PP.group (line1 <> PP.line <> line2')
+                  TextIO.putStrLn $ PPS.renderText PPS.defaultOpts body
             mapM_ printentry entries
 
       -- Insert a blank line in the output where there's a scope boundary
@@ -214,13 +227,23 @@ searchCmd str
              Map.foldrWithKey inspect empty allMatches
 
          printMatch (name, (lc, ty)) = do
-           let ty' = PPS.pShowText ty
+           let name' = PP.pretty name
+               ty' = prettySchema ty
                lc' = case lc of
-                   Current -> ""
-                   WarnDeprecated -> "  (DEPRECATED AND WILL WARN)"
-                   HideDeprecated -> "  (DEPRECATED AND UNAVAILABLE BY DEFAULT)"
-                   Experimental -> "  (EXPERIMENTAL)"
-           TextIO.putStrLn (name <> " : " <> ty' <> lc')
+                   Current -> Nothing
+                   WarnDeprecated -> Just "(DEPRECATED AND WILL WARN)"
+                   HideDeprecated -> Just "(DEPRECATED AND UNAVAILABLE BY DEFAULT)"
+                   Experimental -> Just "(EXPERIMENTAL)"
+               line1 = name' <+> ":"
+               line2long = PP.indent 3 $ case lc' of
+                   Nothing -> ty'
+                   Just banner -> ty' <> PP.line <> banner
+               line2short = case lc' of
+                   Nothing -> ty'
+                   Just banner -> ty' <> "  " <> banner  -- separate by 2 spaces
+               line2 = PP.flatAlt line2long line2short
+               body = PP.group (line1 <> PP.line <> line2)
+           TextIO.putStrLn $ PPS.renderText PPS.defaultOpts body
          printMatches matches =
            liftIO $ mapM_ printMatch (Map.assocs matches)
 
@@ -269,8 +292,11 @@ tenvCmd = do
 
       let printscope entries = do
             let printentry (x, ty) = do
-                  let ty' = PPS.pShowText ty
-                  TextIO.putStrLn (x <> " = " <> ty')
+                  let x' = PP.pretty x
+                      ty' = prettyNamedType ty
+                      body = x' <+> "=" <+> ty'
+                      body' = PP.group body
+                  TextIO.putStrLn $ PPS.renderText PPS.defaultOpts body'
             mapM_ printentry entries
 
       -- Insert a blank line in the output where there's a scope boundary
@@ -289,7 +315,7 @@ typeOfCmd str
          avail = rwPrimsAvail rw
      (schema, _expr) <- liftIO $
          Loader.readExpression opts replFileName environ rebindables avail str
-     liftIO $ TextIO.putStrLn $ PPS.pShowText schema
+     liftIO $ TextIO.putStrLn $ ppSchema schema
 
 
 ------------------------------------------------------------

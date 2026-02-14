@@ -46,9 +46,13 @@ return : {m, a} a -> m a
 -- {a} ProofScript a
 No matches.
 The following experimental matches require enable_experimental:
-goal_num_ite : {a} Int -> ProofScript a -> ProofScript a -> ProofScript a  (EXPERIMENTAL)
+goal_num_ite :
+   {a} Int -> ProofScript a -> ProofScript a -> ProofScript a
+   (EXPERIMENTAL)
 --------------------------------
 -- {a} a ProofScript
 No matches.
 The following experimental matches require enable_experimental:
-goal_num_ite : {a} Int -> ProofScript a -> ProofScript a -> ProofScript a  (EXPERIMENTAL)
+goal_num_ite :
+   {a} Int -> ProofScript a -> ProofScript a -> ProofScript a
+   (EXPERIMENTAL)

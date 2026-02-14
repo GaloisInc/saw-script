@@ -10,30 +10,67 @@ beta_reduce_goal : ProofScript ()
 bitwuzla : ProofScript ()
 boolector : ProofScript ()  (DEPRECATED AND WILL WARN)
 check_goal : ProofScript ()
-crucible_llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (DEPRECATED AND WILL WARN)
+crucible_llvm_verify :
+   LLVMModule ->
+   String ->
+   [LLVMSpec] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (DEPRECATED AND WILL WARN)
 cvc4 : ProofScript ()  (DEPRECATED AND WILL WARN)
 cvc5 : ProofScript ()
-external_aig_solver : String -> [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
-external_cnf_solver : String -> [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
+external_aig_solver :
+   String -> [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
+external_cnf_solver :
+   String -> [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 goal_eval : ProofScript ()
 goal_eval_unint : [String] -> ProofScript ()
 goal_num : ProofScript Int
-jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
-llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+jvm_verify :
+   JavaClass ->
+   String ->
+   [JVMSpec] ->
+   Bool ->
+   JVMSetup () ->
+   ProofScript () ->
+   TopLevel JVMSpec
+llvm_verify :
+   LLVMModule ->
+   String ->
+   [LLVMSpec] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
 mathsat : ProofScript ()
-mir_verify : MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec
+mir_verify :
+   MIRModule ->
+   String ->
+   [MIRSpec] ->
+   Bool ->
+   MIRSetup () ->
+   ProofScript () ->
+   TopLevel MIRSpec
 offline_aig : String -> ProofScript ()
 offline_aig_external : String -> ProofScript ()
 offline_cnf : String -> ProofScript ()
 offline_cnf_external : String -> ProofScript ()
-offline_coq : String -> ProofScript ()  (DEPRECATED AND WILL WARN)
+offline_coq :
+   String -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 offline_extcore : String -> ProofScript ()
 offline_rocq : String -> ProofScript ()
 offline_smtlib2 : String -> ProofScript ()
 offline_unint_smtlib2 : [String] -> String -> ProofScript ()
 offline_w4_smtlib2 : String -> ProofScript ()
 offline_w4_unint_bitwuzla : [String] -> String -> ProofScript ()
-offline_w4_unint_cvc4 : [String] -> String -> ProofScript ()  (DEPRECATED AND WILL WARN)
+offline_w4_unint_cvc4 :
+   [String] -> String -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 offline_w4_unint_cvc5 : [String] -> String -> ProofScript ()
 offline_w4_unint_yices : [String] -> String -> ProofScript ()
 offline_w4_unint_z3 : [String] -> String -> ProofScript ()
@@ -58,7 +95,9 @@ sbv_cvc4 : ProofScript ()  (DEPRECATED AND WILL WARN)
 sbv_cvc5 : ProofScript ()
 sbv_mathsat : ProofScript ()
 sbv_unint_bitwuzla : [String] -> ProofScript ()
-sbv_unint_cvc4 : [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
+sbv_unint_cvc4 :
+   [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 sbv_unint_cvc5 : [String] -> ProofScript ()
 sbv_unint_yices : [String] -> ProofScript ()
 sbv_unint_z3 : [String] -> ProofScript ()
@@ -70,7 +109,9 @@ trivial : ProofScript ()
 unfolding : [String] -> ProofScript ()
 unfolding_fix_once : [String] -> ProofScript ()
 unint_bitwuzla : [String] -> ProofScript ()
-unint_cvc4 : [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
+unint_cvc4 :
+   [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 unint_cvc5 : [String] -> ProofScript ()
 unint_yices : [String] -> ProofScript ()
 unint_z3 : [String] -> ProofScript ()
@@ -78,9 +119,13 @@ w4 : ProofScript ()
 w4_abc_aiger : ProofScript ()
 w4_abc_smtlib2 : ProofScript ()
 w4_abc_verilog : ProofScript ()
-w4_offline_smtlib2 : String -> ProofScript ()  (DEPRECATED AND WILL WARN)
+w4_offline_smtlib2 :
+   String -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 w4_unint_bitwuzla : [String] -> ProofScript ()
-w4_unint_cvc4 : [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
+w4_unint_cvc4 :
+   [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 w4_unint_cvc5 : [String] -> ProofScript ()
 w4_unint_rme : [String] -> ProofScript ()
 w4_unint_yices : [String] -> ProofScript ()
@@ -103,30 +148,67 @@ beta_reduce_goal : ProofScript ()
 bitwuzla : ProofScript ()
 boolector : ProofScript ()  (DEPRECATED AND WILL WARN)
 check_goal : ProofScript ()
-crucible_llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (DEPRECATED AND WILL WARN)
+crucible_llvm_verify :
+   LLVMModule ->
+   String ->
+   [LLVMSpec] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (DEPRECATED AND WILL WARN)
 cvc4 : ProofScript ()  (DEPRECATED AND WILL WARN)
 cvc5 : ProofScript ()
-external_aig_solver : String -> [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
-external_cnf_solver : String -> [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
+external_aig_solver :
+   String -> [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
+external_cnf_solver :
+   String -> [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 goal_eval : ProofScript ()
 goal_eval_unint : [String] -> ProofScript ()
 goal_num : ProofScript Int
-jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
-llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+jvm_verify :
+   JavaClass ->
+   String ->
+   [JVMSpec] ->
+   Bool ->
+   JVMSetup () ->
+   ProofScript () ->
+   TopLevel JVMSpec
+llvm_verify :
+   LLVMModule ->
+   String ->
+   [LLVMSpec] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
 mathsat : ProofScript ()
-mir_verify : MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec
+mir_verify :
+   MIRModule ->
+   String ->
+   [MIRSpec] ->
+   Bool ->
+   MIRSetup () ->
+   ProofScript () ->
+   TopLevel MIRSpec
 offline_aig : String -> ProofScript ()
 offline_aig_external : String -> ProofScript ()
 offline_cnf : String -> ProofScript ()
 offline_cnf_external : String -> ProofScript ()
-offline_coq : String -> ProofScript ()  (DEPRECATED AND WILL WARN)
+offline_coq :
+   String -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 offline_extcore : String -> ProofScript ()
 offline_rocq : String -> ProofScript ()
 offline_smtlib2 : String -> ProofScript ()
 offline_unint_smtlib2 : [String] -> String -> ProofScript ()
 offline_w4_smtlib2 : String -> ProofScript ()
 offline_w4_unint_bitwuzla : [String] -> String -> ProofScript ()
-offline_w4_unint_cvc4 : [String] -> String -> ProofScript ()  (DEPRECATED AND WILL WARN)
+offline_w4_unint_cvc4 :
+   [String] -> String -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 offline_w4_unint_cvc5 : [String] -> String -> ProofScript ()
 offline_w4_unint_yices : [String] -> String -> ProofScript ()
 offline_w4_unint_z3 : [String] -> String -> ProofScript ()
@@ -151,7 +233,9 @@ sbv_cvc4 : ProofScript ()  (DEPRECATED AND WILL WARN)
 sbv_cvc5 : ProofScript ()
 sbv_mathsat : ProofScript ()
 sbv_unint_bitwuzla : [String] -> ProofScript ()
-sbv_unint_cvc4 : [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
+sbv_unint_cvc4 :
+   [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 sbv_unint_cvc5 : [String] -> ProofScript ()
 sbv_unint_yices : [String] -> ProofScript ()
 sbv_unint_z3 : [String] -> ProofScript ()
@@ -163,7 +247,9 @@ trivial : ProofScript ()
 unfolding : [String] -> ProofScript ()
 unfolding_fix_once : [String] -> ProofScript ()
 unint_bitwuzla : [String] -> ProofScript ()
-unint_cvc4 : [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
+unint_cvc4 :
+   [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 unint_cvc5 : [String] -> ProofScript ()
 unint_yices : [String] -> ProofScript ()
 unint_z3 : [String] -> ProofScript ()
@@ -171,9 +257,13 @@ w4 : ProofScript ()
 w4_abc_aiger : ProofScript ()
 w4_abc_smtlib2 : ProofScript ()
 w4_abc_verilog : ProofScript ()
-w4_offline_smtlib2 : String -> ProofScript ()  (DEPRECATED AND WILL WARN)
+w4_offline_smtlib2 :
+   String -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 w4_unint_bitwuzla : [String] -> ProofScript ()
-w4_unint_cvc4 : [String] -> ProofScript ()  (DEPRECATED AND WILL WARN)
+w4_unint_cvc4 :
+   [String] -> ProofScript ()
+   (DEPRECATED AND WILL WARN)
 w4_unint_cvc5 : [String] -> ProofScript ()
 w4_unint_rme : [String] -> ProofScript ()
 w4_unint_yices : [String] -> ProofScript ()
@@ -199,11 +289,59 @@ goal_num : ProofScript Int
 -- ProofScript Int String
 No matches.
 The following experimental matches require enable_experimental:
-crucible_llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
-llvm_verify_fixpoint_chc_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
-llvm_verify_fixpoint_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
-llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
-llvm_verify_x86_with_invariant : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Int, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+crucible_llvm_verify_x86 :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)
+llvm_verify_fixpoint_chc_x86 :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   Term ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)
+llvm_verify_fixpoint_x86 :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   Term ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)
+llvm_verify_x86 :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)
+llvm_verify_x86_with_invariant :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   (String, Int, Term) ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)
 --------------------------------
 -- (ProofScript Int) String
 No matches.
@@ -211,8 +349,56 @@ No matches.
 -- Int String ProofScript
 No matches.
 The following experimental matches require enable_experimental:
-crucible_llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
-llvm_verify_fixpoint_chc_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
-llvm_verify_fixpoint_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
-llvm_verify_x86 : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
-llvm_verify_x86_with_invariant : LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Int, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec  (EXPERIMENTAL)
+crucible_llvm_verify_x86 :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)
+llvm_verify_fixpoint_chc_x86 :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   Term ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)
+llvm_verify_fixpoint_x86 :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   Term ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)
+llvm_verify_x86 :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)
+llvm_verify_x86_with_invariant :
+   LLVMModule ->
+   String ->
+   String ->
+   [(String, Int)] ->
+   Bool ->
+   (String, Int, Term) ->
+   LLVMSetup () ->
+   ProofScript () ->
+   TopLevel LLVMSpec
+   (EXPERIMENTAL)

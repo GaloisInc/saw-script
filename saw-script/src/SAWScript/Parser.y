@@ -18,6 +18,7 @@ import qualified Data.Text as Text
 import Data.Text (Text, pack, unpack)
 
 import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
 import qualified SAWSupport.Pretty as PPS
 import SAWScript.Token
@@ -378,20 +379,20 @@ prettyParseError eofName pe = case pe of
 	      t : _ts -> (Just (tokPos t), tokStr t)
             tstr' = PPS.squotesMatching $ PP.pretty tstr
 	    doc = case possibles of
-	      [] -> "Syntax error: unexpected" PP.<+> tstr'
-	      [p] -> "Syntax error: missing" PP.<+> PP.pretty p
+	      [] -> "Syntax error: unexpected" <+> tstr'
+	      [p] -> "Syntax error: missing" <+> PP.pretty p
 	      ps ->
                   let ps' =
                         "Some legal inputs at this point:" : map PP.pretty ps
                   in
 		  PP.vsep [
-                      "Syntax error: unexpected" PP.<+> tstr',
+                      "Syntax error: unexpected" <+> tstr',
 		      PP.nest 3 $ PP.group $ PP.fillSep $ ps'
 		  ]
         in
 	(optpos, doc)
     InvalidPattern pos e ->
-        (Just pos, "Parse error: invalid pattern" PP.<+> PPS.prettyPrec 0 e)
+        (Just pos, "Parse error: invalid pattern" <+> prettyExpr e)
     EmptyBlock pos ->
         (Just pos, "do block must include at least one expression")
     InvalidBlock pos ->
