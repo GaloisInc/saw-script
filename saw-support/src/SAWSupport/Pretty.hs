@@ -87,7 +87,6 @@ module SAWSupport.Pretty (
     Opts(..),
     defaultOpts,
     limitMaxDepth,
-    PrettyPrec(..),
     prettyNat,
     prettyTypeConstraint,
     prettyTypeSig,
@@ -98,11 +97,6 @@ module SAWSupport.Pretty (
     render,
     renderText,
     renderStdout,
-    pShow,
-    pShowText,
-    showCommaSep,
-    showBrackets,
-    showBraces
  ) where
 
 import Prelude hiding (replicate)
@@ -112,12 +106,10 @@ import Numeric (showIntAtBase)
 import Data.Text (Text)
 --import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TextL
-import Data.List (intersperse)
 
 import Prettyprinter (pretty, (<+>) )
 import qualified Prettyprinter as PP
 import qualified Prettyprinter.Render.Terminal as PP
-import qualified Prettyprinter.Render.Text as PPT
 
 
 ------------------------------------------------------------
@@ -225,13 +217,6 @@ limitMaxDepth opts limit =
 
 
 ------------------------------------------------------------
--- Precedence prettyprinting
-
-class PrettyPrec p where
-  prettyPrec :: Int -> p -> PP.Doc ann
-
-
-------------------------------------------------------------
 -- Common prettyprint operations
 -- (for base types and common constructs not tied to any particular AST)
 
@@ -333,24 +318,4 @@ renderStdout opts doc =
     -- ribbon width 64, with effectively unlimited right margin
     layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
     style = if ppColor opts then PP.reAnnotateS colorStyle else PP.unAnnotateS
-
-pShow :: PrettyPrec a => a -> String
-pShow = show . prettyPrec 0
-
-pShowText :: PrettyPrec a => a -> Text
-pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . prettyPrec 0
-
-
-------------------------------------------------------------
--- Show infrastructure
--- XXX: these should go away
-
-showCommaSep :: [ShowS] -> ShowS
-showCommaSep ss = foldr (.) id (intersperse (showString ",") ss)
-
-showBrackets :: ShowS -> ShowS
-showBrackets s = showString "[" . s . showString "]"
-
-showBraces :: ShowS -> ShowS
-showBraces s = showString "{" . s . showString "}"
 
