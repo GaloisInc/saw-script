@@ -268,32 +268,66 @@ readAIGPrim ftxt = do
 replacePrim :: TypedTerm -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 replacePrim pat replace t = do
   sc <- getSharedContext
+  opts <- gets rwPPOpts
 
   let tpat  = ttTerm pat
   let trepl = ttTerm replace
 
-  unless (closedTerm tpat) $ fail $ unlines
-    [ "pattern term is not closed", show tpat ]
+  unless (closedTerm tpat) $ do
+    tpat' <- liftIO $ Text.pack <$> ppTerm sc opts tpat
+    fail $ Text.unpack $ Text.unlines [
+        "Pattern term is:",
+        "   " <> tpat',
+        "It must be closed, and is not."
+     ]
 
-  unless (closedTerm trepl) $ fail $ unlines
-    [ "replacement term is not closed", show trepl ]
+  unless (closedTerm trepl) $ do
+    trepl' <- liftIO $ Text.pack <$> ppTerm sc opts trepl
+    fail $ Text.unpack $ Text.unlines [
+        "Replacement term is:",
+        "   " <> trepl',
+        "It must be closed, and is not."
+     ]
 
   io $ do
     ty1 <- scTypeOf sc tpat
     ty2 <- scTypeOf sc trepl
     c <- scConvertible sc ty1 ty2
-    unless c $ fail $ unlines
-      [ "terms do not have convertible types", show tpat, show ty1, show trepl, show ty2 ]
+    unless c $ do
+      tpat' <- liftIO $ Text.pack <$> ppTerm sc opts tpat
+      ty1' <- liftIO $ Text.pack <$> ppTerm sc opts ty1
+      trepl' <- liftIO $ Text.pack <$> ppTerm sc opts trepl
+      ty2' <- liftIO $ Text.pack <$> ppTerm sc opts ty2
+      fail $ Text.unpack $ Text.unlines [
+          "Pattern term is:",
+          "   " <> tpat',
+          "Its type is:",
+          "   " <> ty1',
+          "Replacement term is:",
+          "   " <> trepl',
+          "Its type is:",
+          "   " <> ty2',
+          "These types are not convertible."
+       ]
 
   let ss = emptySimpset :: SV.SAWSimpset
   (_,t') <- io $ replaceTerm sc ss (tpat, trepl) (ttTerm t)
 
   io $ do
-    ty  <- scTypeOf sc (ttTerm t)
-    ty' <- scTypeOf sc t'
-    c' <- scConvertible sc ty ty'
-    unless c' $ fail $ unlines
-      [ "term does not have the same type after replacement", show ty, show ty' ]
+    oldty <- scTypeOf sc (ttTerm t)
+    newty <- scTypeOf sc t'
+    c' <- scConvertible sc oldty newty
+    unless c' $ do
+      oldty' <- liftIO $ Text.pack <$> ppTerm sc opts oldty
+      newty' <- liftIO $ Text.pack <$> ppTerm sc opts newty
+      -- XXX: should this be a panic?
+      fail $ Text.unpack $ Text.unlines [
+          "Original type of term was:",
+          "   " <> oldty',
+          "After replacement it is:",
+          "   " <> newty',
+          "These should be the same!"
+       ]
 
   return t{ ttTerm = t' }
 
@@ -301,14 +335,24 @@ replacePrim pat replace t = do
 hoistIfsPrim :: TypedTerm -> TopLevel TypedTerm
 hoistIfsPrim t = do
   sc <- getSharedContext
+  opts <- gets rwPPOpts
   t' <- io $ hoistIfs sc (ttTerm t)
 
   io $ do
-    ty  <- scTypeOf sc (ttTerm t)
-    ty' <- scTypeOf sc t'
-    c' <- scConvertible sc ty ty'
-    unless c' $ fail $ unlines
-      [ "term does not have the same type after hoisting ifs", show ty, show ty' ]
+    oldty <- scTypeOf sc (ttTerm t)
+    newty <- scTypeOf sc t'
+    c' <- scConvertible sc oldty newty
+    unless c' $ do
+      oldty' <- ppTerm sc opts oldty
+      newty' <- ppTerm sc opts newty
+      -- XXX should this be a panic?
+      fail $ unlines [
+          "Type of original term:",
+          "   " <> oldty',
+          "Type after hoisting ifs:",
+          "   " <> newty',
+          "These should be the same!"
+       ]
 
   return t{ ttTerm = t' }
 
@@ -511,9 +555,14 @@ print_goal_depth n =
 printGoalConsts :: ProofScript ()
 printGoalConsts =
   execTactic $ tacticId $ \goal ->
-  do let cs = sequentConstantSet (goalSequent goal)
-     mapM_ (printOutLnTop Info) $
-       [ show nm | (_, nm) <- Map.toList cs ]
+  do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     let cs = sequentConstantSet (goalSequent goal)
+         printOne (idnum, info) = do
+             let nm = Name idnum info
+             nm' <- liftIO $ ppName sc opts nm
+             printOutLnTop Info (Text.unpack nm')
+     mapM_ printOne $ Map.toList cs
 
 printGoalSize :: ProofScript ()
 printGoalSize =
