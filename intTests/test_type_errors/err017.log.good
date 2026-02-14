@@ -1,10 +1,10 @@
 Loading file "err017.saw"
 err017.saw:27:11-27:12: Type mismatch.
     Mismatch of types.
-    err017.saw:20:13-23:2: The type {a : Int, b : Int} arises from this type annotation
+    err017.saw:20:13-23:2: The type { a : Int, b : Int } arises from this type annotation
     err017.saw:27:11-27:12: The type Int arises from the type of this term
 
-    Expected: {a : Int, b : Int}
+    Expected: { a : Int, b : Int }
     Found:    Int
 
     within "y" (err017.saw:27:5-27:6)

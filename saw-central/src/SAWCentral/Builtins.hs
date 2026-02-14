@@ -57,7 +57,7 @@ import qualified CryptolSAWCore.Simpset as Cryptol
 import qualified SAWSupport.PanicSupport as PanicSupport
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText, render, renderText)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), render, renderText)
 import qualified SAWSupport.ConsoleSupport as Cons
 
 -- saw-core
@@ -124,6 +124,7 @@ import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))
 import qualified SAWCentral.Crucible.Common as Common
 import SAWCentral.TopLevel
+import qualified SAWCentral.AST as SAST
 import qualified SAWCentral.Value as SV
 import SAWCentral.Value (ProofScript, printOutLnTop, AIGNetwork)
 import SAWCentral.SolverCache
@@ -1690,12 +1691,12 @@ envCmd = do
       io $ printOutLn opts Info $ "Rebindable globals:"
       io $ printOutLn opts Info $ ""
       let printRB (x, (_pos, ty, _v)) = do
-              let str = x <> " : rebindable " <> PPS.pShowText ty
+              let str = x <> " : rebindable " <> SAST.ppSchema ty
               printOutLn opts Info $ Text.unpack str
       io $ mapM_ printRB $ Map.assocs rbenv
 
   let printItem (x, (_pos, _lc, ty, _v, _doc)) =
-          printOutLn opts Info $ Text.unpack (x <> " : " <> PPS.pShowText ty)
+          printOutLn opts Info $ Text.unpack (x <> " : " <> SAST.ppSchema ty)
       -- Print only the visible objects
       keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
       -- Insert a blank line in the output where there's a scope boundary

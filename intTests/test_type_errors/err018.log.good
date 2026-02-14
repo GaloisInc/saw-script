@@ -7,8 +7,18 @@ err018.saw:26:11-26:12: Type mismatch.
     Expected: String
     Found:    Int
 
-    Expected: {amethyst : String, moonstone : String, obsidian : String, turquoise : String}
-    Found:    {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int}
+    Expected: {
+   amethyst : String,
+   moonstone : String,
+   obsidian : String,
+   turquoise : String
+}
+    Found:    {
+   amethyst : Int,
+   moonstone : Int,
+   obsidian : Int,
+   turquoise : Int
+}
 
     within "y" (err018.saw:26:5-26:6)
 
