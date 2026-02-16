@@ -141,44 +141,44 @@ span.spaces    { background: white }
 <span class="lineno">  122 </span>import qualified Data.Vector as V
 <span class="lineno">  123 </span>import Numeric.Natural (Natural)
 <span class="lineno">  124 </span>import Prelude hiding (maximum)
-<span class="lineno">  125 </span>import Text.URI
-<span class="lineno">  126 </span>
-<span class="lineno">  127 </span>import SAWSupport.IntRangeSet (IntRangeSet)
-<span class="lineno">  128 </span>import qualified SAWSupport.IntRangeSet as IntRangeSet
-<span class="lineno">  129 </span>
-<span class="lineno">  130 </span>import SAWCore.Cache
-<span class="lineno">  131 </span>import SAWCore.Module
-<span class="lineno">  132 </span>  ( dtName
-<span class="lineno">  133 </span>  , ctorNumParams
-<span class="lineno">  134 </span>  , ctorName
-<span class="lineno">  135 </span>  , emptyModuleMap
-<span class="lineno">  136 </span>  , moduleIsLoaded
-<span class="lineno">  137 </span>  , moduleName
-<span class="lineno">  138 </span>  , loadModule
-<span class="lineno">  139 </span>  , lookupVarIndexInMap
-<span class="lineno">  140 </span>  , insDefInMap
-<span class="lineno">  141 </span>  , insInjectCodeInMap
-<span class="lineno">  142 </span>  , insImportInMap
-<span class="lineno">  143 </span>  , insTypeDeclInMap
-<span class="lineno">  144 </span>  , resolvedNameType
-<span class="lineno">  145 </span>  , requireNameInMap
-<span class="lineno">  146 </span>  , CtorArg(..)
-<span class="lineno">  147 </span>  , CtorArgStruct(..)
-<span class="lineno">  148 </span>  , Ctor(..)
-<span class="lineno">  149 </span>  , DefQualifier(..)
-<span class="lineno">  150 </span>  , DataType(..)
-<span class="lineno">  151 </span>  , Def(..)
-<span class="lineno">  152 </span>  , Module
-<span class="lineno">  153 </span>  , ModuleMap
-<span class="lineno">  154 </span>  , ResolvedName(..)
-<span class="lineno">  155 </span>  )
-<span class="lineno">  156 </span>import SAWCore.Name
-<span class="lineno">  157 </span>import SAWCore.Panic (panic)
-<span class="lineno">  158 </span>import SAWCore.Prelude.Constants
-<span class="lineno">  159 </span>import SAWCore.Recognizer
-<span class="lineno">  160 </span>import SAWCore.Term.Functor
-<span class="lineno">  161 </span>import SAWCore.Term.Raw
-<span class="lineno">  162 </span>import SAWCore.Unique
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>import SAWSupport.IntRangeSet (IntRangeSet)
+<span class="lineno">  127 </span>import qualified SAWSupport.IntRangeSet as IntRangeSet
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span>import SAWCore.Cache
+<span class="lineno">  130 </span>import SAWCore.Module
+<span class="lineno">  131 </span>  ( dtName
+<span class="lineno">  132 </span>  , ctorNumParams
+<span class="lineno">  133 </span>  , ctorName
+<span class="lineno">  134 </span>  , emptyModuleMap
+<span class="lineno">  135 </span>  , moduleIsLoaded
+<span class="lineno">  136 </span>  , moduleName
+<span class="lineno">  137 </span>  , loadModule
+<span class="lineno">  138 </span>  , lookupVarIndexInMap
+<span class="lineno">  139 </span>  , insDefInMap
+<span class="lineno">  140 </span>  , insInjectCodeInMap
+<span class="lineno">  141 </span>  , insImportInMap
+<span class="lineno">  142 </span>  , insTypeDeclInMap
+<span class="lineno">  143 </span>  , resolvedNameType
+<span class="lineno">  144 </span>  , requireNameInMap
+<span class="lineno">  145 </span>  , CtorArg(..)
+<span class="lineno">  146 </span>  , CtorArgStruct(..)
+<span class="lineno">  147 </span>  , Ctor(..)
+<span class="lineno">  148 </span>  , DefQualifier(..)
+<span class="lineno">  149 </span>  , DataType(..)
+<span class="lineno">  150 </span>  , Def(..)
+<span class="lineno">  151 </span>  , Module
+<span class="lineno">  152 </span>  , ModuleMap
+<span class="lineno">  153 </span>  , ResolvedName(..)
+<span class="lineno">  154 </span>  )
+<span class="lineno">  155 </span>import SAWCore.Name
+<span class="lineno">  156 </span>import SAWCore.Panic (panic)
+<span class="lineno">  157 </span>import SAWCore.Prelude.Constants
+<span class="lineno">  158 </span>import SAWCore.Recognizer
+<span class="lineno">  159 </span>import SAWCore.Term.Functor
+<span class="lineno">  160 </span>import SAWCore.Term.Raw
+<span class="lineno">  161 </span>import SAWCore.Unique
+<span class="lineno">  162 </span>import SAWCore.URI
 <span class="lineno">  163 </span>
 <span class="lineno">  164 </span>----------------------------------------------------------------------
 <span class="lineno">  165 </span>
@@ -658,12 +658,12 @@ span.spaces    { background: white }
 <span class="lineno">  639 </span>
 <span class="lineno">  640 </span>-- | Create a unique global name with the given base name.
 <span class="lineno">  641 </span>scmFreshName :: Text -&gt; SCM Name
-<span class="lineno">  642 </span><span class="decl"><span class="nottickedoff">scmFreshName x =</span>
-<span class="lineno">  643 </span><span class="spaces">  </span><span class="nottickedoff">do i &lt;- scmFreshVarIndex</span>
-<span class="lineno">  644 </span><span class="spaces">     </span><span class="nottickedoff">let uri = scFreshNameURI x i</span>
-<span class="lineno">  645 </span><span class="spaces">     </span><span class="nottickedoff">let nmi = ImportedName uri [x, x &lt;&gt; &quot;#&quot; &lt;&gt;  Text.pack (show i)]</span>
-<span class="lineno">  646 </span><span class="spaces">     </span><span class="nottickedoff">scmRegisterNameWithIndex i nmi</span>
-<span class="lineno">  647 </span><span class="spaces">     </span><span class="nottickedoff">pure (Name i nmi)</span></span>
+<span class="lineno">  642 </span><span class="decl"><span class="istickedoff">scmFreshName x =</span>
+<span class="lineno">  643 </span><span class="spaces">  </span><span class="istickedoff">do i &lt;- scmFreshVarIndex</span>
+<span class="lineno">  644 </span><span class="spaces">     </span><span class="istickedoff">let uri = scFreshNameURI x i</span>
+<span class="lineno">  645 </span><span class="spaces">     </span><span class="istickedoff">let nmi = ImportedName uri [x, x &lt;&gt; &quot;#&quot; &lt;&gt;  Text.pack (show i)]</span>
+<span class="lineno">  646 </span><span class="spaces">     </span><span class="istickedoff">scmRegisterNameWithIndex i nmi</span>
+<span class="lineno">  647 </span><span class="spaces">     </span><span class="istickedoff">pure (Name i nmi)</span></span>
 <span class="lineno">  648 </span>
 <span class="lineno">  649 </span>-- | Create a 'VarName' with the given identifier (which may be &quot;_&quot;).
 <span class="lineno">  650 </span>scmFreshVarName :: Text -&gt; SCM VarName
@@ -1747,12 +1747,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1728 </span>  Text {- ^ The base name -} -&gt;
 <span class="lineno"> 1729 </span>  Term {- ^ The body -} -&gt;
 <span class="lineno"> 1730 </span>  SCM Term
-<span class="lineno"> 1731 </span><span class="decl"><span class="nottickedoff">scmFreshConstant name rhs =</span>
-<span class="lineno"> 1732 </span><span class="spaces">  </span><span class="nottickedoff">do scmEnsureValidTerm rhs</span>
-<span class="lineno"> 1733 </span><span class="spaces">     </span><span class="nottickedoff">nm &lt;- scmFreshName name</span>
-<span class="lineno"> 1734 </span><span class="spaces">     </span><span class="nottickedoff">unless (closedTerm rhs) $ scmError (ConstantNotClosed nm rhs)</span>
-<span class="lineno"> 1735 </span><span class="spaces">     </span><span class="nottickedoff">ty &lt;- scmTypeOf rhs</span>
-<span class="lineno"> 1736 </span><span class="spaces">     </span><span class="nottickedoff">scmDeclareDef nm NoQualifier ty (Just rhs)</span></span>
+<span class="lineno"> 1731 </span><span class="decl"><span class="istickedoff">scmFreshConstant name rhs =</span>
+<span class="lineno"> 1732 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm rhs</span>
+<span class="lineno"> 1733 </span><span class="spaces">     </span><span class="istickedoff">nm &lt;- scmFreshName name</span>
+<span class="lineno"> 1734 </span><span class="spaces">     </span><span class="istickedoff">unless (closedTerm rhs) $ <span class="nottickedoff">scmError (ConstantNotClosed nm rhs)</span></span>
+<span class="lineno"> 1735 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scmTypeOf rhs</span>
+<span class="lineno"> 1736 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty (Just rhs)</span></span>
 <span class="lineno"> 1737 </span>
 <span class="lineno"> 1738 </span>-- | Define a global constant with the specified name (as 'NameInfo')
 <span class="lineno"> 1739 </span>-- and body.
@@ -1785,7 +1785,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1766 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm ty</span>
 <span class="lineno"> 1767 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- scmEnsureSortType ty</span>
 <span class="lineno"> 1768 </span><span class="spaces">     </span><span class="istickedoff">nm &lt;- scmRegisterName nmi</span>
-<span class="lineno"> 1769 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno"> 1769 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty Nothing</span></span>
 <span class="lineno"> 1770 </span>
 <span class="lineno"> 1771 </span>-- | Create a function application term from a global identifier and a list of
 <span class="lineno"> 1772 </span>-- arguments (as 'Term's).

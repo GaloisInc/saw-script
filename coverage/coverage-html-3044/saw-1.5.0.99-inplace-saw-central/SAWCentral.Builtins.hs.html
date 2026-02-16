@@ -168,20 +168,20 @@ span.spaces    { background: white }
 <span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">return $ PPS.renderText opts v'</span></span>
 <span class="lineno">  150 </span>
 <span class="lineno">  151 </span>definePrim :: Text -&gt; TypedTerm -&gt; TopLevel TypedTerm
-<span class="lineno">  152 </span><span class="decl"><span class="nottickedoff">definePrim name (TypedTerm (TypedTermSchema schema) rhs) =</span>
-<span class="lineno">  153 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  154 </span><span class="spaces">     </span><span class="nottickedoff">ty &lt;- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema</span>
-<span class="lineno">  155 </span><span class="spaces">     </span><span class="nottickedoff">rhs' &lt;- io $ scAscribe sc rhs ty</span>
-<span class="lineno">  156 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- io $ scFreshConstant sc name rhs'</span>
-<span class="lineno">  157 </span><span class="spaces">     </span><span class="nottickedoff">return $ TypedTerm (TypedTermSchema schema) t</span>
-<span class="lineno">  158 </span><span class="spaces"></span><span class="nottickedoff">definePrim _name (TypedTerm tp _) = do</span>
-<span class="lineno">  159 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  160 </span><span class="spaces">  </span><span class="nottickedoff">opts &lt;- gets rwPPOpts</span>
-<span class="lineno">  161 </span><span class="spaces">  </span><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc opts tp</span>
-<span class="lineno">  162 </span><span class="spaces">  </span><span class="nottickedoff">fail $ unlines</span>
-<span class="lineno">  163 </span><span class="spaces">    </span><span class="nottickedoff">[ &quot;Expected term with Cryptol schema type, but got&quot;</span>
-<span class="lineno">  164 </span><span class="spaces">    </span><span class="nottickedoff">, PPS.render opts tp'</span>
-<span class="lineno">  165 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  152 </span><span class="decl"><span class="istickedoff">definePrim name (TypedTerm (TypedTermSchema schema) rhs) =</span>
+<span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  154 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema</span>
+<span class="lineno">  155 </span><span class="spaces">     </span><span class="istickedoff">rhs' &lt;- io $ scAscribe sc rhs ty</span>
+<span class="lineno">  156 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- io $ scFreshConstant sc name rhs'</span>
+<span class="lineno">  157 </span><span class="spaces">     </span><span class="istickedoff">return $ TypedTerm (TypedTermSchema schema) t</span>
+<span class="lineno">  158 </span><span class="spaces"></span><span class="istickedoff">definePrim _name (TypedTerm tp _) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">sc &lt;- getSharedContext</span></span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">opts &lt;- gets rwPPOpts</span></span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc opts tp</span></span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Expected term with Cryptol schema type, but got&quot;</span></span>
+<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PPS.render opts tp'</span></span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 <span class="lineno">  166 </span>
 <span class="lineno">  167 </span>readBytes :: Text -&gt; TopLevel TypedTerm
 <span class="lineno">  168 </span><span class="decl"><span class="istickedoff">readBytes pathtxt = do</span>
@@ -973,7 +973,7 @@ span.spaces    { background: white }
 <span class="lineno">  954 </span>
 <span class="lineno">  955 </span>-- | Bit-blast a proposition check its validity using the RME library.
 <span class="lineno">  956 </span>proveRME :: ProofScript ()
-<span class="lineno">  957 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] <span class="nottickedoff">Prover.proveRME</span> Set.empty</span></span>
+<span class="lineno">  957 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] Prover.proveRME Set.empty</span></span>
 <span class="lineno">  958 </span>
 <span class="lineno">  959 </span>codegenSBV :: SharedContext -&gt; Text -&gt; [Text] -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno">  960 </span><span class="decl"><span class="nottickedoff">codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do</span>
@@ -1130,7 +1130,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1111 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1112 </span>
 <span class="lineno"> 1113 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1114 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
+<span class="lineno"> 1114 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
 <span class="lineno"> 1115 </span>
 <span class="lineno"> 1116 </span>w4_unint_rme :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1117 </span><span class="decl"><span class="istickedoff">w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme</span></span>
@@ -1150,10 +1150,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1131 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1132 </span>
 <span class="lineno"> 1133 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1134 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
+<span class="lineno"> 1134 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
 <span class="lineno"> 1135 </span>
 <span class="lineno"> 1136 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1137 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
+<span class="lineno"> 1137 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
 <span class="lineno"> 1138 </span>
 <span class="lineno"> 1139 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1140 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1243,7 +1243,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1224 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1225 </span>
 <span class="lineno"> 1226 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1227 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
+<span class="lineno"> 1227 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
 <span class="lineno"> 1228 </span>
 <span class="lineno"> 1229 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1230 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>

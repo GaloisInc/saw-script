@@ -308,38 +308,38 @@ span.spaces    { background: white }
 <span class="lineno">  289 </span>import Numeric.Natural (Natural)
 <span class="lineno">  290 </span>import Prelude hiding (maximum)
 <span class="lineno">  291 </span>import qualified Prettyprinter as PP
-<span class="lineno">  292 </span>import Text.URI
-<span class="lineno">  293 </span>
-<span class="lineno">  294 </span>import qualified SAWSupport.IntRangeSet as IntRangeSet
-<span class="lineno">  295 </span>import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
-<span class="lineno">  296 </span>
-<span class="lineno">  297 </span>import SAWCore.Cache
-<span class="lineno">  298 </span>import SAWCore.Change
-<span class="lineno">  299 </span>import SAWCore.Module
-<span class="lineno">  300 </span>  ( ctorName
-<span class="lineno">  301 </span>  , moduleIsLoaded
-<span class="lineno">  302 </span>  , lookupVarIndexInMap
-<span class="lineno">  303 </span>  , findCtorInMap
-<span class="lineno">  304 </span>  , findDataTypeInMap
-<span class="lineno">  305 </span>  , findDefInMap
-<span class="lineno">  306 </span>  , findModule
-<span class="lineno">  307 </span>  , resolvedNameType
-<span class="lineno">  308 </span>  , resolveNameInMap
-<span class="lineno">  309 </span>  , CtorArg(..)
-<span class="lineno">  310 </span>  , CtorArgStruct(..)
-<span class="lineno">  311 </span>  , Ctor(..)
-<span class="lineno">  312 </span>  , DataType(..)
-<span class="lineno">  313 </span>  , Def(..)
-<span class="lineno">  314 </span>  , DefQualifier
-<span class="lineno">  315 </span>  , Module
-<span class="lineno">  316 </span>  , ResolvedName(..)
-<span class="lineno">  317 </span>  )
-<span class="lineno">  318 </span>import SAWCore.Name
-<span class="lineno">  319 </span>import SAWCore.Prelude.Constants
-<span class="lineno">  320 </span>import SAWCore.Recognizer
-<span class="lineno">  321 </span>import SAWCore.Term.Certified
-<span class="lineno">  322 </span>import SAWCore.Term.Functor
-<span class="lineno">  323 </span>import SAWCore.Term.Pretty
+<span class="lineno">  292 </span>
+<span class="lineno">  293 </span>import qualified SAWSupport.IntRangeSet as IntRangeSet
+<span class="lineno">  294 </span>import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
+<span class="lineno">  295 </span>
+<span class="lineno">  296 </span>import SAWCore.Cache
+<span class="lineno">  297 </span>import SAWCore.Change
+<span class="lineno">  298 </span>import SAWCore.Module
+<span class="lineno">  299 </span>  ( ctorName
+<span class="lineno">  300 </span>  , moduleIsLoaded
+<span class="lineno">  301 </span>  , lookupVarIndexInMap
+<span class="lineno">  302 </span>  , findCtorInMap
+<span class="lineno">  303 </span>  , findDataTypeInMap
+<span class="lineno">  304 </span>  , findDefInMap
+<span class="lineno">  305 </span>  , findModule
+<span class="lineno">  306 </span>  , resolvedNameType
+<span class="lineno">  307 </span>  , resolveNameInMap
+<span class="lineno">  308 </span>  , CtorArg(..)
+<span class="lineno">  309 </span>  , CtorArgStruct(..)
+<span class="lineno">  310 </span>  , Ctor(..)
+<span class="lineno">  311 </span>  , DataType(..)
+<span class="lineno">  312 </span>  , Def(..)
+<span class="lineno">  313 </span>  , DefQualifier
+<span class="lineno">  314 </span>  , Module
+<span class="lineno">  315 </span>  , ResolvedName(..)
+<span class="lineno">  316 </span>  )
+<span class="lineno">  317 </span>import SAWCore.Name
+<span class="lineno">  318 </span>import SAWCore.Prelude.Constants
+<span class="lineno">  319 </span>import SAWCore.Recognizer
+<span class="lineno">  320 </span>import SAWCore.Term.Certified
+<span class="lineno">  321 </span>import SAWCore.Term.Functor
+<span class="lineno">  322 </span>import SAWCore.Term.Pretty
+<span class="lineno">  323 </span>import SAWCore.URI
 <span class="lineno">  324 </span>
 <span class="lineno">  325 </span>--------------------------------------------------------------------------------
 <span class="lineno">  326 </span>
@@ -468,7 +468,7 @@ span.spaces    { background: white }
 <span class="lineno">  449 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">DuplicateURI uri -&gt;</span>
 <span class="lineno">  451 </span><span class="spaces">      </span><span class="istickedoff">[ &quot;Attempt to register name with duplicate URI&quot;</span>
-<span class="lineno">  452 </span><span class="spaces">      </span><span class="istickedoff">, PP.indent 2 $ PP.pretty (render uri)</span>
+<span class="lineno">  452 </span><span class="spaces">      </span><span class="istickedoff">, PP.indent 2 $ PP.pretty (renderURI uri)</span>
 <span class="lineno">  453 </span><span class="spaces">      </span><span class="istickedoff">]</span>
 <span class="lineno">  454 </span><span class="spaces">    </span><span class="istickedoff">AlreadyDefined nm -&gt;</span>
 <span class="lineno">  455 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Attempt to redefine existing constant&quot;</span></span>
@@ -780,7 +780,7 @@ span.spaces    { background: white }
 <span class="lineno">  761 </span>  Text {- ^ The base name -} -&gt;
 <span class="lineno">  762 </span>  Term {- ^ The body -} -&gt;
 <span class="lineno">  763 </span>  IO Term
-<span class="lineno">  764 </span><span class="decl"><span class="nottickedoff">scFreshConstant sc name rhs = execSCM sc (scmFreshConstant name rhs)</span></span>
+<span class="lineno">  764 </span><span class="decl"><span class="istickedoff">scFreshConstant sc name rhs = execSCM sc (scmFreshConstant name rhs)</span></span>
 <span class="lineno">  765 </span>
 <span class="lineno">  766 </span>-- | Define a global constant with the specified name (as 'NameInfo')
 <span class="lineno">  767 </span>-- and body.

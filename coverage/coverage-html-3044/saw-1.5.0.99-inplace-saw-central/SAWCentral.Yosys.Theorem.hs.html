@@ -41,14 +41,14 @@ span.spaces    { background: white }
 <span class="lineno">   22 </span>import Data.Text (Text)
 <span class="lineno">   23 </span>import Data.Map (Map)
 <span class="lineno">   24 </span>
-<span class="lineno">   25 </span>import qualified Text.URI as URI
-<span class="lineno">   26 </span>
-<span class="lineno">   27 </span>import qualified SAWCore.Cache as SC
-<span class="lineno">   28 </span>import qualified SAWCore.Name as SC
-<span class="lineno">   29 </span>import qualified SAWCore.Prelude.Constants as SC (preludeModuleName)
-<span class="lineno">   30 </span>import qualified SAWCore.SharedTerm as SC
-<span class="lineno">   31 </span>import qualified CryptolSAWCore.TypedTerm as SC
-<span class="lineno">   32 </span>import qualified SAWCore.Recognizer as R
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>import qualified SAWCore.Cache as SC
+<span class="lineno">   27 </span>import qualified SAWCore.Name as SC
+<span class="lineno">   28 </span>import qualified SAWCore.Prelude.Constants as SC (preludeModuleName)
+<span class="lineno">   29 </span>import qualified SAWCore.SharedTerm as SC
+<span class="lineno">   30 </span>import qualified CryptolSAWCore.TypedTerm as SC
+<span class="lineno">   31 </span>import qualified SAWCore.Recognizer as R
+<span class="lineno">   32 </span>import qualified SAWCore.URI as URI
 <span class="lineno">   33 </span>
 <span class="lineno">   34 </span>import qualified CryptolSAWCore.Cryptol as CSC
 <span class="lineno">   35 </span>
@@ -181,7 +181,7 @@ span.spaces    { background: white }
 <span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">tidx &lt;-</span>
 <span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">do result &lt;- SC.scResolveNameByURI sc $ thm ^. theoremURI</span>
 <span class="lineno">  164 </span><span class="spaces">       </span><span class="istickedoff">case result of</span>
-<span class="lineno">  165 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">yosysError $ YosysErrorOverrideNameNotFound $ URI.render $ thm ^. theoremURI</span></span>
+<span class="lineno">  165 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">yosysError $ YosysErrorOverrideNameNotFound $ URI.renderURI $ thm ^. theoremURI</span></span>
 <span class="lineno">  166 </span><span class="spaces">         </span><span class="istickedoff">Just i -&gt; pure i</span>
 <span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">-- unfold everything except for theoremURI and prelude constants</span>
 <span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName</span>

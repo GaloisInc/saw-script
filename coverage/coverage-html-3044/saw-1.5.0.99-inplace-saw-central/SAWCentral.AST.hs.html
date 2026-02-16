@@ -540,7 +540,7 @@ span.spaces    { background: white }
 <span class="lineno">  521 </span>prettyExpr :: Expr -&gt; PPS.Doc
 <span class="lineno">  522 </span><span class="decl"><span class="istickedoff">prettyExpr expr0 = case expr0 of</span>
 <span class="lineno">  523 </span><span class="spaces">    </span><span class="istickedoff">Bool _ b   -&gt; <span class="nottickedoff">PP.viaShow b</span></span>
-<span class="lineno">  524 </span><span class="spaces">    </span><span class="istickedoff">String _ s -&gt; PP.dquotes (PP.pretty s)</span>
+<span class="lineno">  524 </span><span class="spaces">    </span><span class="istickedoff">String _ s -&gt; PP.pretty $ PPS.ppStringLiteral s</span>
 <span class="lineno">  525 </span><span class="spaces">    </span><span class="istickedoff">Int _ i    -&gt; PP.pretty i</span>
 <span class="lineno">  526 </span><span class="spaces">    </span><span class="istickedoff">Code _ s   -&gt; PP.braces $ PP.braces $ PP.pretty s</span>
 <span class="lineno">  527 </span><span class="spaces">    </span><span class="istickedoff">CType _ s  -&gt; <span class="nottickedoff">PP.braces $ &quot;|&quot; &lt;&gt; PP.pretty s &lt;&gt; &quot;|&quot;</span></span>
