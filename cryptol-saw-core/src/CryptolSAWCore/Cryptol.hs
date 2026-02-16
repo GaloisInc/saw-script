@@ -266,9 +266,9 @@ importPC sc pc =
     C.PSignedCmp       -> scGlobalDef sc "Cryptol.PSignedCmp"
     C.PLiteral         -> scGlobalDef sc "Cryptol.PLiteral"
     C.PLiteralLessThan -> scGlobalDef sc "Cryptol.PLiteralLessThan"
+    C.PFLiteral        -> scGlobalDef sc "Cryptol.PFLiteral"
     C.PAnd             -> panic "importPC" ["found PAnd"]
     C.PTrue            -> panic "importPC" ["found PTrue"]
-    C.PFLiteral        -> panic "importPC" ["found PFLiteral"]
     C.PValidFloat      -> panic "importPC" ["found PValidFloat"]
 
 -- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
@@ -331,15 +331,20 @@ importType sc env ty =
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
         C.PC pc ->
           case pc of
-            -- Special cases for PLiteral and PLiteralLessThan: we
-            -- intentionally do not translate the first argument.
-            -- See Note [Literal and LiteralLessThan in SAWCore].
+            -- Special cases for PLiteral, PLiteralLessThan, and PFLiteral. For
+            -- PLiteral and PLiteralLessThan, we intentionally do not translate
+            -- the first argument, and for PFLiteral, we intentionally do not
+            -- translate the first three arguments.
+            -- See Note [Literal, LiteralLessThan, and FLiteral in SAWCore].
             C.PLiteral ->
               do a <- go (tyargs !! 1)
                  scGlobalApply sc "Cryptol.PLiteral" [a]
             C.PLiteralLessThan ->
               do a <- go (tyargs !! 1)
                  scGlobalApply sc "Cryptol.PLiteralLessThan" [a]
+            C.PFLiteral -> -- we omit the first three arguments to class FLiteral
+              do a <- go (tyargs !! 3)
+                 scGlobalApply sc "Cryptol.PFLiteral" [a]
             _ ->
               do pc' <- importPC sc pc
                  tyargs' <- traverse go tyargs
@@ -367,6 +372,7 @@ isErasedProp prop =
     C.TCon (C.PC C.PSignedCmp      ) _ -> False
     C.TCon (C.PC C.PLiteral        ) _ -> False
     C.TCon (C.PC C.PLiteralLessThan) _ -> False
+    C.TCon (C.PC C.PFLiteral       ) _ -> False
     _ -> True
 
 -- | Translate a 'Prop' containing a numeric constraint to a 'Term' that tests
@@ -726,7 +732,7 @@ provePropRec sc env prop0 prop =
 
         -- Note that in the Literal/LiteralLessThan instances below, we
         -- intentionally do not translate the first argument.
-        -- See Note [Literal and LiteralLessThan in SAWCore].
+        -- See Note [Literal, LiteralLessThan, and FLiteral in SAWCore].
 
         -- instance Literal val Bit
         (C.pIsLiteral -> Just (_, C.tIsBit -> True))
@@ -774,6 +780,19 @@ provePropRec sc env prop0 prop =
                 p' <- importType sc env p
                 scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
 
+        -- Note that in the FLiteral instances below, we intentionally do not
+        -- translate the first three arguments.
+        -- See Note [Literal, LiteralLessThan, and FLiteral in SAWCore].
+
+        -- instance (fin m, fin n, n >= 1) => FLiteral m n r Rational
+        (C.pIsFLiteral -> Just (_, _, _, C.tIsRational -> True))
+          -> do scGlobalApply sc "Cryptol.PFLiteralRational" []
+        -- instance ValidFloat e p => FLiteral m n r (Float e p) (with extra constraints)
+        (C.pIsFLiteral -> Just (_, _, _, C.tIsFloat -> Just (e, p)))
+          -> do e' <- importType sc env e
+                p' <- importType sc env p
+                scGlobalApply sc "Cryptol.PFLiteralFloat" [e', p']
+
         _ -> do
             let prop0' = "   " <> CryPP.pp prop0
                 prop' = "   " <> CryPP.pp prop
@@ -806,8 +825,8 @@ provePropRec sc env prop0 prop =
              pure (c, pc)
 
 {-
-Note [Literal and LiteralLessThan in SAWCore]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Note [Literal, LiteralLessThan, and FLiteral in SAWCore]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 In Cryptol, the `Literal val a` and `LiteralLessThan val a` constraints encode
 the literal value being constructed using a numeric type `val`. Somewhat
 counterintuitively, the Cryptol-to-SAWCore translation intentionally does not
@@ -868,7 +887,10 @@ certain illicit uses of PLiteral dictionaries. See
 https://github.com/GaloisInc/saw-script/issues/3081 for more on this.
 
 The same considerations also apply to the PLiteralLessThan dictionary, which is
-given the same definition as PLiteral.
+given the same definition as PLiteral. Similar considerations also apply to the
+PFLiteral dictionary, which encodes an Cryptol `FLiteral m n r a` constraint:
+we omit the numeric types `m`, `n`, and `r` from the translation, leaving only
+`a`.
 -}
 
 importPrimitive :: SharedContext -> ImportPrimitiveOptions -> Env -> C.Name -> C.Schema -> IO Term

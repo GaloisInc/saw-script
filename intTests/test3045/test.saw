@@ -1,0 +1,10 @@
+// A regression test for #3045. All this does is validate that
+// cryptol-saw-core's translation of the Cryptol `fraction` function
+// (implicitly used in the desugaring of fractional literals, such as `0.5`
+// below) results in a type-correct SAWCore term. Attempting to evaluate the
+// term itself will crash, however---see #1237.
+
+import Float;
+
+let x = {{ 0.5 : Rational }};
+let y = {{ 0.5 : Float32 }};
