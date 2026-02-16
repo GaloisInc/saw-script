@@ -176,8 +176,8 @@ data CellType
   = CellTypeCombinational CellTypeCombinational
   | CellTypeDff
   | CellTypeFf
-  | CellTypeUnsupportedPrimitive Text
-  | CellTypeUserType Text
+  | CellTypeUnsupportedPrimitive CellTypeName
+  | CellTypeUserType CellTypeName
   deriving (Eq, Ord)
 
 instance Aeson.FromJSON CellType where
@@ -260,7 +260,7 @@ instance Show CellType where
   show ct = Text.unpack (ppCellType ct)
 
 -- | Extract the name from a user-defined submodule 'CellType'
-asUserType :: CellType -> Text
+asUserType :: CellType -> CellTypeName
 asUserType cellType =
   case cellType of
     CellTypeUserType t -> t
@@ -320,7 +320,7 @@ instance Aeson.FromJSON Netname where
 data Module = Module
   { _moduleAttributes :: Maybe Aeson.Value -- currently unused
   , _modulePorts :: Map Text Port
-  , _moduleCells :: Map Text (Cell [Bitrep])
+  , _moduleCells :: Map CellInstName (Cell [Bitrep])
   , _moduleNetnames :: Map Text Netname
   } deriving (Show, Eq, Ord)
 
@@ -337,7 +337,7 @@ instance Aeson.FromJSON Module where
 -- | A collection of multiple HDL modules (possibly with dependencies on each other).
 data YosysIR = YosysIR
   { _yosysCreator :: Text
-  , _yosysModules :: Map Text Module
+  , _yosysModules :: Map CellTypeName Module
   } deriving (Show, Eq, Ord)
 
 makeLenses ''YosysIR

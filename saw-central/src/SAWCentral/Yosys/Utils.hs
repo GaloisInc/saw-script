@@ -44,15 +44,21 @@ reportBugText = "You should report this issue at: https://github.com/GaloisInc/s
 consultYosysManual :: Text
 consultYosysManual = "More information is available in the Yosys manual, at: https://yosyshq.net/yosys/documentation.html"
 
+-- | The name of a user-defined cell type.
+type CellTypeName = Text
+
+-- | The name of a cell instance.
+type CellInstName = Text
+
 data YosysBitvecConsumer
   = YosysBitvecConsumerOutputPort Text
-  | YosysBitvecConsumerCell Text Text
+  | YosysBitvecConsumerCell CellInstName Text
 
 data YosysError
   = YosysError Text
   | YosysErrorTypeError Text Text
   | YosysErrorNoSuchOutputBitvec Text YosysBitvecConsumer
-  | YosysErrorNoSuchSubmodule Text Text
+  | YosysErrorNoSuchSubmodule CellTypeName CellInstName
   | YosysErrorUnsupportedFF Text
   | YosysErrorInvalidOverrideTarget
   | YosysErrorOverrideNameNotFound Text
@@ -241,7 +247,7 @@ eqBvRecords sc cty a b =
 -- | Encode the given string such that is a valid Cryptol identifier.
 -- Since Yosys cell names often look like "\42", this makes it much
 -- easier to manipulate state records, which are keyed by cell name.
-cellIdentifier :: Text -> Text
+cellIdentifier :: CellInstName -> Text
 cellIdentifier = Text.pack . zEncodeString . Text.unpack
 
 textBinNat :: Text -> Natural

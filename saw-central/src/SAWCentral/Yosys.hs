@@ -67,7 +67,7 @@ import SAWCentral.Yosys.Netgraph
 
 data Modgraph = Modgraph
   { _modgraphGraph :: Graph.Graph
-  , _modgraphNodeFromVertex :: Graph.Vertex -> (Module, Text, [Text])
+  , _modgraphNodeFromVertex :: Graph.Vertex -> (Module, CellTypeName, [CellTypeName])
   -- , _modgraphVertexFromKey :: Text -> Maybe Graph.Vertex
   }
 makeLenses ''Modgraph
@@ -76,7 +76,7 @@ makeLenses ''Modgraph
 yosysIRModgraph :: YosysIR -> Modgraph
 yosysIRModgraph ir =
   let
-    moduleToNode :: (Text, Module) -> (Module, Text, [Text])
+    moduleToNode :: (CellTypeName, Module) -> (Module, CellTypeName, [CellTypeName])
     moduleToNode (nm, m) = (m, nm, deps)
       where
         deps = Text.pack . show . view cellType <$> Map.elems (m ^. moduleCells)
@@ -89,7 +89,7 @@ yosysIRModgraph ir =
 convertYosysIR ::
   SC.SharedContext ->
   YosysIR ->
-  IO (Map Text ConvertedModule)
+  IO (Map CellTypeName ConvertedModule)
 convertYosysIR sc ir =
   do let mg = yosysIRModgraph ir
      let sorted = reverseTopSort $ mg ^. modgraphGraph
@@ -139,7 +139,7 @@ yosysIRToRecordTerm sc ir =
 yosysIRToSequential ::
   SC.SharedContext ->
   YosysIR ->
-  Text ->
+  CellTypeName ->
   IO YosysSequential
 yosysIRToSequential sc ir nm =
   case Map.lookup nm $ ir ^. yosysModules of

@@ -27,7 +27,6 @@ import qualified Data.Maybe as Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
@@ -50,7 +49,7 @@ import SAWCentral.Yosys.Cell
 -- names.
 data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
-  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell [Bitrep], Text, [Text])
+  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell [Bitrep], CellInstName, [CellInstName])
   -- , _netgraphVertexFromKey :: Text -> Maybe Graph.Vertex
   }
 makeLenses ''Netgraph
@@ -58,14 +57,14 @@ makeLenses ''Netgraph
 moduleNetgraph :: Module -> Netgraph
 moduleNetgraph m =
   let
-    sources :: Map Bitrep Text
+    sources :: Map Bitrep CellInstName
     sources =
       Map.fromList $
       [ (b, cname)
       | (cname, c) <- Map.assocs (m ^. moduleCells)
       , b <- concat (Map.elems (cellOutputConnections c)) ]
 
-    cellDeps :: Cell [Bitrep] -> [Text]
+    cellDeps :: Cell [Bitrep] -> [CellInstName]
     cellDeps c
       | cellIsRegister c = []
       | otherwise =
@@ -73,7 +72,7 @@ moduleNetgraph m =
         Maybe.mapMaybe (flip Map.lookup sources) $
         concat $ Map.elems $ cellInputConnections c
 
-    nodes :: [(Cell [Bitrep], Text, [Text])]
+    nodes :: [(Cell [Bitrep], CellInstName, [CellInstName])]
     nodes = [ (c, cname, cellDeps c) | (cname, c) <- Map.assocs (m ^. moduleCells) ]
 
     (_netgraphGraph, _netgraphNodeFromVertex, _netgraphVertexFromKey) =
@@ -117,7 +116,7 @@ lookupPatternTerm sc loc pat ts =
 -- generated from the rest of the netgraph.
 netgraphToTerms ::
   SC.SharedContext ->
-  Map Text ConvertedModule ->
+  Map CellTypeName ConvertedModule ->
   Netgraph ->
   Map [Bitrep] Preterm ->
   IO (Map [Bitrep] Preterm)
@@ -196,7 +195,7 @@ netgraphToTerms sc env ng inputs
 
 convertModule ::
   SC.SharedContext ->
-  Map Text ConvertedModule ->
+  Map CellTypeName ConvertedModule ->
   Module ->
   IO ConvertedModule
 convertModule sc env m =
