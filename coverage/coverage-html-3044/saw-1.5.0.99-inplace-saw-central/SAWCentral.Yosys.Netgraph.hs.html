@@ -150,7 +150,7 @@ span.spaces    { background: white }
 <span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">doVertex :: Map [Bitrep] Preterm -&gt; Graph.Vertex -&gt; IO (Map [Bitrep] Preterm)</span>
 <span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">doVertex acc v =</span>
 <span class="lineno">  133 </span><span class="spaces">      </span><span class="istickedoff">do let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v</span>
-<span class="lineno">  134 </span><span class="spaces">         </span><span class="istickedoff">let outputFields = Map.filter <span class="nottickedoff">isOutput</span> (c ^. cellPortDirections)</span>
+<span class="lineno">  134 </span><span class="spaces">         </span><span class="istickedoff">let outputFields = Map.filter isOutput (c ^. cellPortDirections)</span>
 <span class="lineno">  135 </span><span class="spaces">         </span><span class="istickedoff">let lookupConn portname =</span>
 <span class="lineno">  136 </span><span class="spaces">               </span><span class="istickedoff">case Map.lookup portname (c ^. cellConnections) of</span>
 <span class="lineno">  137 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt;</span>

@@ -1793,7 +1793,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1774 </span>--
 <span class="lineno"> 1775 </span>-- &gt; bvSDiv : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Vec n Bool;
 <span class="lineno"> 1776 </span>scBvSDiv :: SharedContext -&gt; Term -&gt; Term -&gt; Term -&gt; IO Term
-<span class="lineno"> 1777 </span><span class="decl"><span class="nottickedoff">scBvSDiv sc n x y = scGlobalApply sc &quot;Prelude.bvSDiv&quot; [n, x, y]</span></span>
+<span class="lineno"> 1777 </span><span class="decl"><span class="istickedoff">scBvSDiv sc n x y = scGlobalApply sc &quot;Prelude.bvSDiv&quot; [n, x, y]</span></span>
 <span class="lineno"> 1778 </span>
 <span class="lineno"> 1779 </span>-- | Create a term applying the lg2 bitvector primitive.
 <span class="lineno"> 1780 </span>--
@@ -1888,13 +1888,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1869 </span>--
 <span class="lineno"> 1870 </span>-- &gt; bvsle : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Bool;
 <span class="lineno"> 1871 </span>scBvSLe :: SharedContext -&gt; Term -&gt; Term -&gt; Term -&gt; IO Term
-<span class="lineno"> 1872 </span><span class="decl"><span class="nottickedoff">scBvSLe sc n x y = scGlobalApply sc &quot;Prelude.bvsle&quot; [n, x, y]</span></span>
+<span class="lineno"> 1872 </span><span class="decl"><span class="istickedoff">scBvSLe sc n x y = scGlobalApply sc &quot;Prelude.bvsle&quot; [n, x, y]</span></span>
 <span class="lineno"> 1873 </span>
 <span class="lineno"> 1874 </span>-- | Create a term applying the bitvector (signed) greater-than primitive.
 <span class="lineno"> 1875 </span>--
 <span class="lineno"> 1876 </span>-- &gt; bvsgt : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Bool;
 <span class="lineno"> 1877 </span>scBvSGt :: SharedContext -&gt; Term -&gt; Term -&gt; Term -&gt; IO Term
-<span class="lineno"> 1878 </span><span class="decl"><span class="nottickedoff">scBvSGt sc n x y = scGlobalApply sc &quot;Prelude.bvsgt&quot; [n, x, y]</span></span>
+<span class="lineno"> 1878 </span><span class="decl"><span class="istickedoff">scBvSGt sc n x y = scGlobalApply sc &quot;Prelude.bvsgt&quot; [n, x, y]</span></span>
 <span class="lineno"> 1879 </span>
 <span class="lineno"> 1880 </span>-- | Create a term applying the bitvector (signed) less-than primitive.
 <span class="lineno"> 1881 </span>--
