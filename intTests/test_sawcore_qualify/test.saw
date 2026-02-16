@@ -1,0 +1,45 @@
+let require_convertible t1 t2 = do {
+  b <- is_convertible t1 t2;
+  if b then print "Terms are convertible"
+  else fail "Terms are NOT convertible";
+};
+
+let roundtrip t = do {
+  let s = show_term t;
+  let t' = parse_core s;
+  require_convertible t t';
+};
+
+let check2 t1 t2 = do {
+  roundtrip t1;
+  roundtrip t2;
+  require_convertible t1 t2;
+};
+
+enable_experimental;
+load_sawcore_from_file "test_qual1.sawcore";
+load_sawcore_from_file "test_qual2.sawcore";
+load_sawcore_from_file "test_qual.sawcore";
+
+fails (do {
+  let _ = parse_core "test_qual_nat";
+  print "Unexpected success";
+});
+
+let t = parse_core "test_qual::test_qual_nat";
+check2 (parse_core "4") t;
+let t_mod = parse_core_mod "test_qual" "test_qual_nat";
+check2 t t_mod;
+
+let t1 = parse_core "test_qual1::test_qual_nat";
+check2 (parse_core "1") t1;
+let t1_mod = parse_core_mod "test_qual1" "test_qual_nat";
+check2 t1 t1_mod;
+
+let t2 = parse_core "test_qual2::test_qual_nat";
+check2 (parse_core "3") t2;
+let t2_mod = parse_core_mod "test_qual2" "test_qual_nat";
+check2 t2 t2_mod;
+
+let _ = parse_core "test_qual_1";
+

@@ -43,6 +43,7 @@ module SAWCore.Module
   , moduleDefs
   , findDef
   , moduleDecls
+  , isLocal
     -- * Module Maps
   , ModuleMap
   , emptyModuleMap
@@ -329,13 +330,13 @@ insTypeDeclInMap dt mm0 =
 -- | Get the resolved names that are local to a module
 localResolvedNames :: Module -> [ResolvedName]
 localResolvedNames m =
-  filter isLocal (Map.elems (moduleResolveMap m))
-  where
-    isLocal :: ResolvedName -> Bool
-    isLocal r =
-      case resolvedNameInfo r of
-        ModuleIdentifier i -> identModule i == moduleName m
-        ImportedName{} -> False
+  filter (isLocal $ moduleName m) (Map.elems (moduleResolveMap m))
+
+isLocal :: ModuleName -> ResolvedName -> Bool
+isLocal mnm r =
+  case resolvedNameInfo r of
+    ModuleIdentifier i -> identModule i == mnm
+    ImportedName{} -> False
 
 -- | Get all definitions defined in a module
 moduleDefs :: Module -> [Def]

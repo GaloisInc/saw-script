@@ -36,11 +36,10 @@ import SAWCore.Panic (panic)
 import SAWCore.Module
   ( emptyModule
   , findDataTypeInMap
-  , resolveNameInMap
   , resolvedNameName
   , CtorArg(..)
   , DefQualifier(..)
-  , DataType(dtName)
+  , DataType(dtName), lookupVarIndexInMap, ResolvedName, isLocal
   )
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Name
@@ -52,6 +51,7 @@ import SAWCore.Recognizer
 import qualified SAWCore.Term.Certified as SC
 
 import Debug.Trace
+import Data.Maybe (catMaybes)
 
 -- | Infer the type of an untyped term and complete it to a 'Term'.
 inferCompleteTerm ::
@@ -86,6 +86,9 @@ prettyTCError opts ne e = helper Nothing e where
     case err of
       UnboundName str ->
         ppWithPos mp [ "Unbound name:" <+> pretty str ]
+      AmbiguousName str nms ->
+        ppWithPos mp $ [ "Ambiguous name:" <+> pretty str ]
+          ++ map (pretty . last . nameAliases . nameInfo . resolvedNameName) nms
       EmptyVectorLit ->
         ppWithPos mp [ "Empty vector literal"]
       NoSuchDataType d ->
@@ -119,6 +122,7 @@ data TCEnv =
 -- | Errors that can occur during type-checking
 data TCError
   = UnboundName Text
+  | AmbiguousName Text [ResolvedName]
   | EmptyVectorLit
   | NoSuchDataType NameInfo
   | DeclError Text String
@@ -191,20 +195,35 @@ liftSCM m =
 inferResolveName :: Text -> TCM Term
 inferResolveName n =
   do nctx <- askLocals
-     mnm <- getModuleName
      sc <- askSharedContext
      mm <- liftIO $ scGetModuleMap sc
-     let ident = mkIdent mnm n
-     case (Map.lookup n nctx, resolveNameInMap mm ident) of
-       (Just (vn, t, is_def), _) ->
-         case is_def of
-           True -> return t
-           False -> liftSCM $ SC.scmVariable vn t
-       (_, Just rn) ->
-         do let c = resolvedNameName rn
-            liftSCM $ SC.scmConst c
-       (Nothing, Nothing) ->
-         throwTCError $ UnboundName n
+     env <- liftIO $ SC.scGetNamingEnv sc
+     mnm <- getModuleName
+     let lookupName nm = 
+           catMaybes $ map (\vi -> lookupVarIndexInMap vi mm) $ resolveDisplayName env nm
+     let lookupIdent ident =
+           filter (isLocal (identModule ident)) (lookupName (identBaseName ident))
+     case parseMaybeQualIdent n of
+       Nothing ->
+        case Map.lookup n nctx of
+          Just (vn, t, is_def) ->
+            case is_def of
+              True -> return t
+              False -> liftSCM $ SC.scmVariable vn t
+          Nothing ->
+            case lookupName n of
+              [] -> throwTCError $ UnboundName n
+              [rn] -> resolved rn
+              rns -> case filter (isLocal mnm) rns of
+                [rn] -> resolved rn
+                _ -> throwTCError $ AmbiguousName n rns
+       Just ident | [rn] <- lookupIdent ident ->
+        resolved rn
+       _ -> throwTCError $ UnboundName n
+  where
+
+    resolved rn =
+      liftSCM $ SC.scmConst (resolvedNameName rn)
 
 -- | The debugging level
 debugLevel :: Int

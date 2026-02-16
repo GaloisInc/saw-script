@@ -1,0 +1,29 @@
+module test_qual where
+import Prelude;
+import test_qual1;
+import test_qual2;
+
+test_qual_nat : Nat;
+test_qual_nat = 4;
+
+-- allowed, since we disambiguate by preferring the name from this module
+test_qual_1 : Eq Nat 4 test_qual_nat;
+test_qual_1 = Refl Nat 4;
+
+test_qual1_1 : Eq Nat 0 test_qual1::test_qual1_nat;
+test_qual1_1 = Refl Nat 0;
+
+test_qual1_2 : Eq Nat 1 test_qual1::test_qual_nat;
+test_qual1_2 = Refl Nat 1;
+
+test_qual1_3 : Eq Nat 0 test_qual1_nat;
+test_qual1_3 = Refl Nat 0;
+
+test_qual2_1 : Eq Nat 2 test_qual2::test_qual2_nat;
+test_qual2_1 = Refl Nat 2;
+
+test_qual2_2 : Eq Nat 3 test_qual2::test_qual_nat;
+test_qual2_2 = Refl Nat 3;
+
+test_qual2_3 : Eq Nat 2 test_qual2_nat;
+test_qual2_3 = Refl Nat 2;
