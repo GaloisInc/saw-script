@@ -219,7 +219,6 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
-import qualified Data.Char as Char
 import Data.List.Extra ( dropEnd )
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -229,7 +228,6 @@ import qualified Data.Text as Text
 import Data.Parameterized.Some
 import Data.Sequence (Seq)
 import Data.Typeable
-import Numeric (showHex)
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 import System.FilePath((</>))
@@ -239,7 +237,7 @@ import qualified Data.AIG as AIG
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, Doc, renderText)
+import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, Doc, renderText, ppStringLiteral)
 import qualified SAWSupport.Console as Cons
 import qualified SAWSupport.ConsoleSupport as Cons (Fatal(..))
 
@@ -675,40 +673,13 @@ prettySimpset opts ss =
       in
       "*" <+> (PP.nest 2 $ PP.fillSep [lhs, "=" <+> rhs])
 
--- | Escape characters as needed to print a string literal.
-escape :: Text -> Text
-escape s = Text.concatMap escapeChar s
-  where
-    escapeChar c = case c of
-        -- Catch all the known cases first
-        '"' -> "\\\""
-        '\\' -> "\\\\"
-        '\a' -> "\\a"
-        '\b' -> "\\b"
-        '\t' -> "\\t"
-        '\n' -> "\\n"
-        '\v' -> "\\v"
-        '\f' -> "\\f"
-        '\r' -> "\\r"
-        _ ->
-          if Char.isPrint c then
-              Text.singleton c
-          else
-             let c' = showHex (Char.ord c) ""
-                 len = length c'
-                 -- Largest code point is 0x10ffff; always print 6 digits
-                 -- in case the next character is also a valid hex digit
-                 c'' = if len < 6 then (take (6 - len) "000000" ++ c') else c'
-             in
-             "\\x" <> Text.pack c''
-
 prettyValue :: SharedContext -> PPS.Opts -> Value -> IO PPS.Doc
 prettyValue sc opts = visit (0 :: Int)
   where
     visit prec v0 = case v0 of
       VBool True -> pure "true"
       VBool False -> pure "false"
-      VString s -> pure $ "\"" <> PP.pretty (escape s) <> "\""
+      VString s -> pure $ PP.pretty $ PPS.ppStringLiteral s
       VInteger n -> pure $ PP.viaShow n
       VArray vs -> do
           vs' <- mapM (visit 0) vs

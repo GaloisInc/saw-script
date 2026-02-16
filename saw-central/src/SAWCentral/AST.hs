@@ -521,7 +521,7 @@ ppNamedType ty =
 prettyExpr :: Expr -> PPS.Doc
 prettyExpr expr0 = case expr0 of
     Bool _ b   -> PP.viaShow b
-    String _ s -> PP.dquotes (PP.pretty s)
+    String _ s -> PP.pretty $ PPS.ppStringLiteral s
     Int _ i    -> PP.pretty i
     Code _ s   -> PP.braces $ PP.braces $ PP.pretty s
     CType _ s  -> PP.braces $ "|" <> PP.pretty s <> "|"

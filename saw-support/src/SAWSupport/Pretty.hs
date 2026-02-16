@@ -87,6 +87,7 @@ module SAWSupport.Pretty (
     Opts(..),
     defaultOpts,
     limitMaxDepth,
+    ppStringLiteral,
     prettyNat,
     prettyTypeConstraint,
     prettyTypeSig,
@@ -102,9 +103,10 @@ module SAWSupport.Pretty (
 import Prelude hiding (replicate)
 
 import System.IO (stdout)
-import Numeric (showIntAtBase)
+import Numeric (showIntAtBase, showHex)
+import qualified Data.Char as Char
 import Data.Text (Text)
---import qualified Data.Text as Text
+import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TextL
 
 import Prettyprinter (pretty, (<+>) )
@@ -219,6 +221,51 @@ limitMaxDepth opts limit =
 ------------------------------------------------------------
 -- Common prettyprint operations
 -- (for base types and common constructs not tied to any particular AST)
+
+-- | Print a string literal. Escape characters as needed so it comes
+--   out in a form that can be read back in.
+--
+--   Output Haskell-shaped escape sequences because that is (currently)
+--   what we read back in both SAWCore and SAWScript. (Whether that is
+--   the way it should be is debatable.)
+--
+--   Numeric escapes in Haskell string constants have unbounded
+--   length, it seems, and the only way to allow a digit to follow one
+--   is to insert the empty escape sequence @\&@ after it.
+--
+--   FUTURE: complexify the code so it only generates @\&@ if the next
+--   character is a hex digit.
+--
+ppStringLiteral :: Text -> Text
+ppStringLiteral s = "\"" <> Text.concatMap escapeChar s <> "\""
+  where
+    -- Note: there's a stdlib function `Data.Char.showLitChar` that
+    -- does this... mostly... but it has two fatal shortcomings for
+    -- use here: first, it doesn't escape quote '"', and second, it
+    -- doesn't terminate numeric escapes so a string with a digit
+    -- following something that appears as one comes out corrupted.
+    --
+    -- There is a `GHC.Show.showLitString` that attends to these
+    -- concerns, but isn't standard.
+    --
+    -- So do it by hand.
+    escapeChar c = case c of
+        -- Catch all the known cases first
+        '"' -> "\\\""
+        '\\' -> "\\\\"
+        '\a' -> "\\a"
+        '\b' -> "\\b"
+        '\t' -> "\\t"
+        '\n' -> "\\n"
+        '\v' -> "\\v"
+        '\f' -> "\\f"
+        '\r' -> "\\r"
+        _ ->
+          if Char.isPrint c then
+              Text.singleton c
+          else
+             let c' = showHex (Char.ord c) "" in
+             "\\x" <> Text.pack c' <> "\\&"
 
 -- | Pretty-print an integer in the correct base
 prettyNat :: Opts -> Integer -> Doc
