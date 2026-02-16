@@ -18,8 +18,8 @@ $(SAW_FILES): test.log YosysSpecs.hs yosys-cell-tests.cabal
 
 # Run the generated Yosys script to evaluate each module, generating
 # truth-tables.
-test.log: test.json test.ys
-	$(YOSYS) <test.ys >$@
+test.log: test.ys test.json
+	$(YOSYS) <$< >$@
 	grep -vzq ERROR $@
 
 # Generate Yosys JSON RTLIL output for evaluation by Yosys and SAW. To change
@@ -27,7 +27,7 @@ test.log: test.json test.ys
 # modify the definition of "tests" in instantiate_cells.hs.
 .PRECIOUS: test.json
 test.json test.ys: InstantiateCells.hs yosys-cell-tests.cabal
-	$(CABAL) run instantiate-cells $@ test.ys
+	$(CABAL) run instantiate-cells test.json test.ys
 
 .PHONY: clean
 clean:
