@@ -22,7 +22,6 @@ import Control.Lens ((^.))
 import Data.Text (Text)
 import Data.Map (Map)
 
-import qualified Text.URI as URI
 
 import qualified SAWCore.Cache as SC
 import qualified SAWCore.Name as SC
@@ -30,6 +29,7 @@ import qualified SAWCore.Prelude.Constants as SC (preludeModuleName)
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
 import qualified SAWCore.Recognizer as R
+import qualified SAWCore.URI as URI
 
 import qualified CryptolSAWCore.Cryptol as CSC
 
@@ -162,7 +162,7 @@ applyOverride sc thm t = do
   tidx <-
     do result <- SC.scResolveNameByURI sc $ thm ^. theoremURI
        case result of
-         Nothing -> yosysError $ YosysErrorOverrideNameNotFound $ URI.render $ thm ^. theoremURI
+         Nothing -> yosysError $ YosysErrorOverrideNameNotFound $ URI.renderURI $ thm ^. theoremURI
          Just i -> pure i
   -- unfold everything except for theoremURI and prelude constants
   let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName

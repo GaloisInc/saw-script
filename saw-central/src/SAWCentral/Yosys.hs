@@ -33,7 +33,6 @@ import Control.Lens (view, (^.))
 import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 
-import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -41,11 +40,11 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
-import qualified Text.URI as URI
 
 import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified SAWCore.SharedTerm as SC
+import qualified SAWCore.URI as URI
 import qualified CryptolSAWCore.TypedTerm as SC
 
 import qualified Cryptol.TypeCheck.Type as C
@@ -99,14 +98,10 @@ convertYosysIR sc ir =
           do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
              cm <- convertModule sc env m
              n <- Nonce.freshNonce Nonce.globalNonceGenerator
-             let frag = Text.pack . show $ Nonce.indexValue n
-             let uri = URI.URI
-                   { URI.uriScheme = URI.mkScheme "yosys"
-                   , URI.uriAuthority = Left True
-                   , URI.uriPath = (False,) <$> mapM URI.mkPathPiece (nm NE.:| [])
-                   , URI.uriQuery = []
-                   , URI.uriFragment = URI.mkFragment frag
-                   }
+             uri <- URI.mkURI
+              URI.NamespaceYosys
+              [nm]
+              (Just $ fromIntegral $ Nonce.indexValue n)
              let ni = SC.ImportedName uri [nm]
              body <- SC.scAscribe sc (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
              tc <- SC.scDefineConstant sc ni body

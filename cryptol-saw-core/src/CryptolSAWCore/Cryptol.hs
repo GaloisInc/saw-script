@@ -43,7 +43,6 @@ import Control.Monad (foldM, forM, zipWithM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
-import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromMaybe)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
@@ -54,7 +53,6 @@ import qualified Data.Vector as Vector
 import GHC.Stack
 import Prelude ()
 import Prelude.Compat
-import Text.URI
 
 -- cryptol
 import qualified Cryptol.Eval.Type as TV
@@ -90,6 +88,7 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName, Name(..))
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
+import SAWCore.URI
 
 -- local modules:
 import CryptolSAWCore.Panic
@@ -1424,28 +1423,11 @@ cryptolURI ::
 cryptolURI [] _ = panic "cryptolURI" ["Could not make URI from empty path"]
 cryptolURI (p:ps) Nothing =
   fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show (p:ps))]) $
-  do sch <- mkScheme "cryptol"
-     path' <- mapM mkPathPiece (p:|ps)
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left True -- absolute path
-       , uriPath = Just (False, path')
-       , uriQuery = []
-       , uriFragment = Nothing
-       }
-cryptolURI (p:ps) (Just uniq) =
-  fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show (p:ps)), "Fragment: " <> Text.pack (show uniq)]) $
-  do sch <- mkScheme "cryptol"
-     path' <- mapM mkPathPiece (p:|ps)
-     frag <- mkFragment (Text.pack (show uniq))
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left False -- relative path
-       , uriPath = Just (False, path')
-       , uriQuery = []
-       , uriFragment = Just frag
-       }
+    mkURI NamespaceCryptol (p:ps) Nothing
 
+cryptolURI (p:ps) (Just uniq) =
+  fromMaybe (panic "cryptolURI" ["Could not make URI from path: " <> Text.pack (show (p:ps)), "Fragment: " <> Text.pack (show uniq)]) $ do
+    mkURI NamespaceCryptol (p:ps) (Just uniq)
 
 importName :: C.Name -> IO NameInfo
 importName cnm =

@@ -70,12 +70,11 @@ import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           GHC.Generics (Generic)
-import           Text.URI
 import qualified Language.Haskell.TH.Syntax as TH
 import           Instances.TH.Lift () -- for instance TH.Lift Text
 
 import SAWCore.Panic (panic)
-
+import SAWCore.URI
 
 -- Module Names ----------------------------------------------------------------
 
@@ -215,38 +214,20 @@ nameAliases =
 
 toShortName :: NameInfo -> Text
 toShortName (ModuleIdentifier i) = identBaseName i
-toShortName (ImportedName uri []) = render uri
+toShortName (ImportedName uri []) = renderURI uri
 toShortName (ImportedName _ (x:_)) = x
 
 toAbsoluteName :: NameInfo -> Text
 toAbsoluteName (ModuleIdentifier i) = identText i
-toAbsoluteName (ImportedName uri _) = render uri
+toAbsoluteName (ImportedName uri _) = renderURI uri
 
 moduleIdentToURI :: Ident -> URI
 moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to construct ident URI: " <> identText ident]) $
-  do sch  <- mkScheme "sawcore"
-     path <- mapM mkPathPiece (identPieces ident)
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left True -- absolute path
-       , uriPath   = Just (False, path)
-       , uriQuery  = []
-       , uriFragment = Nothing
-       }
+  mkURI NamespaceCore (identPieces ident) Nothing
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $
-  do sch <- mkScheme "fresh"
-     nm' <- mkPathPiece (if Text.null nm then "_" else nm)
-     i'  <- mkFragment (Text.pack (show i))
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left False -- relative path
-       , uriPath   = Just (False, (nm' :| []))
-       , uriQuery  = []
-       , uriFragment = Just i'
-       }
-
+  mkURI NamespaceFresh [(if Text.null nm then "_" else nm)] (Just i)
 
 -- Global Names ----------------------------------------------------------------
 
