@@ -224,7 +224,7 @@ span.spaces    { background: white }
 <span class="lineno">  205 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvURem</span></span></span> :: VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  206 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvSDiv</span></span></span> :: VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  207 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvSRem</span></span></span> :: VWord l -&gt; VWord l -&gt; MWord l
-<span class="lineno">  208 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvLg2</span></span></span>  :: VWord l -&gt; MWord l
+<span class="lineno">  208 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvLg2</span></span></span>  :: VWord l -&gt; MWord l
 <span class="lineno">  209 </span>    -- Bitvector comparisons
 <span class="lineno">  210 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvEq</span></span></span>   :: VWord l -&gt; VWord l -&gt; MBool l
 <span class="lineno">  211 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvsle</span></span></span>  :: VWord l -&gt; VWord l -&gt; MBool l
@@ -307,7 +307,7 @@ span.spaces    { background: white }
 <span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvURem&quot;, wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvURem bp))</span>
 <span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSDiv&quot;, wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvSDiv bp))</span>
 <span class="lineno">  290 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSRem&quot;, wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvSRem bp))</span>
-<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvLg2&quot; , <span class="nottickedoff">wordUnOp  (bpPack bp) (bpBvLg2  bp)</span>)</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvLg2&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvLg2  bp))</span>
 <span class="lineno">  292 </span><span class="spaces">  </span><span class="istickedoff">-- Comparisons</span>
 <span class="lineno">  293 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvEq&quot;  , wordBinRel (bpPack bp) (bpBvEq  bp))</span>
 <span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvsle&quot; , wordBinRel <span class="nottickedoff">(bpPack bp)</span> (bpBvsle bp))</span>

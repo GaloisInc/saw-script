@@ -212,7 +212,7 @@ span.spaces    { background: white }
 <span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvURem = SW.bvURem sym</span>
 <span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSDiv = SW.bvSDiv sym</span>
 <span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSRem = SW.bvSRem sym</span>
-<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLg2  = <span class="nottickedoff">SW.bvLg2  sym</span></span>
+<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLg2  = SW.bvLg2  sym</span>
 <span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector comparisons</span>
 <span class="lineno">  198 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvEq   = SW.bvEq  sym</span>
 <span class="lineno">  199 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsle  = SW.bvsle sym</span>
@@ -225,8 +225,8 @@ span.spaces    { background: white }
 <span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvugt  = SW.bvugt sym</span>
 <span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector shift/rotate</span>
 <span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRolInt = liftRotate sym (SW.bvRol sym)</span>
-<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = <span class="nottickedoff">liftRotate sym (SW.bvRor sym)</span></span>
-<span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShlInt = <span class="nottickedoff">\z -&gt; liftShift sym (bvShl sym z)</span></span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = liftRotate sym (SW.bvRor sym)</span>
+<span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShlInt = \z -&gt; liftShift sym (bvShl sym z)</span>
 <span class="lineno">  211 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShrInt = \z -&gt; liftShift sym (bvShr sym z)</span>
 <span class="lineno">  212 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRol    = SW.bvRol sym</span>
 <span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRor    = <span class="nottickedoff">SW.bvRor sym</span></span>
@@ -503,11 +503,11 @@ span.spaces    { background: white }
 <span class="lineno">  484 </span><span class="decl"><span class="istickedoff">intDiv sym x y = do</span>
 <span class="lineno">  485 </span><span class="spaces">  </span><span class="istickedoff">neg &lt;- W.intLt sym y =&lt;&lt; W.intLit sym 0</span>
 <span class="lineno">  486 </span><span class="spaces">  </span><span class="istickedoff">case W.asConstantPred neg of</span>
-<span class="lineno">  487 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; <span class="nottickedoff">W.intDiv sym x y</span></span>
+<span class="lineno">  487 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; W.intDiv sym x y</span>
 <span class="lineno">  488 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt;</span>
-<span class="lineno">  489 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
-<span class="lineno">  490 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>
-<span class="lineno">  491 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">W.intDiv sym xneg yneg</span></span>
+<span class="lineno">  489 </span><span class="spaces">       </span><span class="istickedoff">do xneg &lt;- W.intNeg sym x</span>
+<span class="lineno">  490 </span><span class="spaces">          </span><span class="istickedoff">yneg &lt;- W.intNeg sym y</span>
+<span class="lineno">  491 </span><span class="spaces">          </span><span class="istickedoff">W.intDiv sym xneg yneg</span>
 <span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  493 </span><span class="spaces">       </span><span class="istickedoff">do xneg &lt;- W.intNeg sym x</span>
 <span class="lineno">  494 </span><span class="spaces">          </span><span class="istickedoff">yneg &lt;- W.intNeg sym y</span>
@@ -529,9 +529,9 @@ span.spaces    { background: white }
 <span class="lineno">  510 </span><span class="spaces">  </span><span class="istickedoff">case W.asConstantPred neg of</span>
 <span class="lineno">  511 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; W.intMod sym x y</span>
 <span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt;</span>
-<span class="lineno">  513 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
-<span class="lineno">  514 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>
-<span class="lineno">  515 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">W.intNeg sym =&lt;&lt; W.intMod sym xneg yneg</span></span>
+<span class="lineno">  513 </span><span class="spaces">       </span><span class="istickedoff">do xneg &lt;- W.intNeg sym x</span>
+<span class="lineno">  514 </span><span class="spaces">          </span><span class="istickedoff">yneg &lt;- W.intNeg sym y</span>
+<span class="lineno">  515 </span><span class="spaces">          </span><span class="istickedoff">W.intNeg sym =&lt;&lt; W.intMod sym xneg yneg</span>
 <span class="lineno">  516 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  517 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
 <span class="lineno">  518 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>
