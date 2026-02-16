@@ -1,0 +1,27 @@
+cabal-version: 3.0
+name:          yosys-cell-tests
+version:       0.1.0.0
+
+executable instantiate-cells
+  hs-source-dirs: .
+  ghc-options:    -Wall
+  main-is:        InstantiateCells.hs
+  build-depends:
+    base,
+    aeson        ^>=2.2,
+    aeson-pretty ^>=0.8,
+    bytestring   ^>=0.12,
+    containers   ^>=0.6,
+    mtl          ^>=2.3
+  default-language: Haskell2010
+
+executable yosys-specs
+  hs-source-dirs: .
+  ghc-options:    -Wall
+  main-is:        YosysSpecs.hs
+  build-depends:
+    base,
+    attoparsec ^>=0.14,
+    bytestring ^>=0.12,
+    filepath   ^>=1.5
+  default-language: Haskell2010
