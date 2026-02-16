@@ -1233,8 +1233,17 @@ PLiteralIntModNum num =
 PLiteralRational : PLiteral Rational;
 PLiteralRational = \ (x : Nat) -> error Rational "Unimplemented: Literal Rational";
 
--- TODO: FLiteral class
+-- FLiteral class
 
+-- Compared to the Cryptol class 'FLiteral m n r a', we omit the 'm', 'n', and
+-- 'r' parameters here.
+
+PFLiteral : (a : sort 0) -> sort 0;
+PFLiteral a = Nat -> Nat -> Nat -> a;
+
+PFLiteralRational : PFLiteral Rational;
+PFLiteralRational =
+  \ (m : Nat) (n : Nat) (r : Nat) -> ecRatio (natToInt m) (natToInt n);
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
@@ -1385,8 +1394,23 @@ ecZero a pa = pa;
 
 -- FLiteral
 
-ecFraction : (a : isort 0) -> a;
-ecFraction a = error a "Unimplemented: fraction";
+ecFraction : (m : Num) -> (n : Num) -> (r : Num) -> (a : isort 0) -> PFLiteral a -> a;
+ecFraction m n r a pa =
+  Num#rec
+    (\ (_ : Num) -> a)
+    (\ (m : Nat) ->
+       Num#rec
+         (\ (_ : Num) -> a)
+         (\ (n : Nat) ->
+            Num#rec
+              (\ (_ : Num) -> a)
+              (\ (r : Nat) -> pa m n r)
+              (error a "ecFraction: r should not be infinite")
+              r)
+         (error a "ecFraction: n should not be infinite")
+         n)
+    (error a "ecFraction: m should not be infinite")
+    m;
 
 
 -- Sequences
@@ -1867,6 +1891,9 @@ PRoundFloat e p =
 
 PLiteralFloat : (e p : Num) -> PLiteral (TCFloat e p);
 PLiteralFloat e p = \ (x : Nat) -> error (TCFloat e p) "Unimplemented: Literal Float";
+
+PFLiteralFloat : (e p : Num) -> PFLiteral (TCFloat e p);
+PFLiteralFloat _ _ = \ (m : Nat) (n : Nat) (r : Nat) -> ();
 
 ecFpNaN : (e : Num) -> (p : Num) -> TCFloat e p;
 ecFpNaN e p = error (TCFloat e p) "Unimplemented: fpNaN";
