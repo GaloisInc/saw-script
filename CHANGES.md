@@ -4,6 +4,13 @@ This release supports [version
 9](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#9) of (TODO RGS: Fix this)
 `mir-json`'s schema.
 
+## Bug Fixes
+
+* Using a fractional Cryptol literal (e.g., `0.5 : Rational`) no longer causes
+  SAW to emit a type error. Note that SAW does not currently support
+  _evaluating_ fractional values, however (see
+  [#1237](https://github.com/GaloisInc/saw-script/issues/1237)).
+
 # 1.5 -- 2026-01-31
 
 This release supports [version

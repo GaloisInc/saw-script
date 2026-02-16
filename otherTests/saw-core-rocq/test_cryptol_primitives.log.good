@@ -595,6 +595,12 @@ Definition PLiteralIntModNum : forall (num : Num), PLiteral (IntModNum num) :=
 Definition PLiteralRational : PLiteral Rational :=
   fun (x : Init.Datatypes.nat) => SAWCoreScaffolding.error Rational "Unimplemented: Literal Rational"%string.
 
+Definition PFLiteral : forall (a : Type), Type :=
+  fun (a : Type) => forall (_1 : Init.Datatypes.nat), forall (_2 : Init.Datatypes.nat), forall (_3 : Init.Datatypes.nat), a.
+
+Definition PFLiteralRational : PFLiteral Rational :=
+  fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (r : Init.Datatypes.nat) => ecRatio (SAWCoreScaffolding.natToInt m) (SAWCoreScaffolding.natToInt n).
+
 Definition ecNumber : forall (val : Num), forall (a : Type), forall (_1 : PLiteral a), a :=
   fun (val : Num) (a : Type) (pa : PLiteral a) => @CryptolPrimitivesForSAWCore.Num_rect (fun (_1 : Num) => a) pa (pa SAWCoreScaffolding.Zero) val.
 
@@ -697,8 +703,8 @@ Definition ecCompl : forall (a : Type), forall (_1 : PLogic a), forall (_2 : a),
 Definition ecZero : forall (a : Type), forall (_1 : PZero a), a :=
   fun (a : Type) (pa : PZero a) => pa.
 
-Definition ecFraction : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, a :=
-  fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) => SAWCoreScaffolding.error a "Unimplemented: fraction"%string.
+Definition ecFraction : forall (m : Num), forall (n : Num), forall (r : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : PFLiteral a), a :=
+  fun (m : Num) (n : Num) (r : Num) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (pa : PFLiteral a) => @CryptolPrimitivesForSAWCore.Num_rect (fun (_1 : Num) => a) (fun (m1 : Init.Datatypes.nat) => @CryptolPrimitivesForSAWCore.Num_rect (fun (_1 : Num) => a) (fun (n1 : Init.Datatypes.nat) => @CryptolPrimitivesForSAWCore.Num_rect (fun (_1 : Num) => a) (fun (r1 : Init.Datatypes.nat) => pa m1 n1 r1) (SAWCoreScaffolding.error a "ecFraction: r should not be infinite"%string) r) (SAWCoreScaffolding.error a "ecFraction: n should not be infinite"%string) n) (SAWCoreScaffolding.error a "ecFraction: m should not be infinite"%string) m.
 
 Definition ecShiftL : forall (m : Num), forall (ix : Type), forall (a : Type), forall (_1 : PIntegral ix), forall (_2 : PZero a), forall (_3 : seq m a), forall (_4 : ix), seq m a :=
   fun (m : Num) => @CryptolPrimitivesForSAWCore.Num_rect (fun (m1 : Num) => forall (ix : Type), forall (a : Type), forall (_1 : PIntegral ix), forall (_2 : PZero a), forall (_3 : seq m1 a), forall (_4 : ix), seq m1 a) (fun (m1 : Init.Datatypes.nat) (ix : Type) (a : Type) (pix : PIntegral ix) (pz : PZero a) (xs : SAWCoreVectorsAsRocqVectors.Vec m1 a) => let var__0   := ecZero a pz in
@@ -826,6 +832,9 @@ Definition PRoundFloat : forall (e : Num), forall (p : Num), PRound (TCFloat e p
 
 Definition PLiteralFloat : forall (e : Num), forall (p : Num), PLiteral (TCFloat e p) :=
   fun (e : Num) (p : Num) (x : Init.Datatypes.nat) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: Literal Float"%string.
+
+Definition PFLiteralFloat : forall (e : Num), forall (p : Num), PFLiteral (TCFloat e p) :=
+  fun (e : Num) (p : Num) (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (r : Init.Datatypes.nat) => tt.
 
 Definition ecFpNaN : forall (e : Num), forall (p : Num), TCFloat e p :=
   fun (e : Num) (p : Num) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpNaN"%string.
