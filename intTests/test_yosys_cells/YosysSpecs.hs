@@ -7,15 +7,21 @@ module Main (main) where
 
 import Control.Applicative (many, (<|>))
 import Control.Arrow (second)
+import Control.Monad (when, zipWithM_)
 import Data.Attoparsec.ByteString.Char8 (Parser, (<?>))
 import qualified Data.Attoparsec.ByteString.Char8 as A
 import Data.ByteString.Char8 (ByteString, pack, unpack)
 import qualified Data.ByteString.Char8 as B
+import Data.Function (on)
 import Data.Functor (($>))
-import Data.List (foldl')
+import Data.List (foldl', groupBy, sortOn)
 import Numeric (showBin)
 import Numeric.Natural (Natural)
-import System.Environment (getArgs)
+import System.Console.GetOpt (getOpt, usageInfo, OptDescr (..), ArgOrder (..), ArgDescr (..))
+import System.Environment (getArgs, getProgName)
+import System.Exit (exitFailure)
+import System.FilePath ((-<.>), (<.>))
+import System.IO (hPutStr, stderr)
 
 -- Yosys log, "eval -table" parsing.
 
@@ -102,7 +108,7 @@ anyWord = A.takeWhile1 (not . A.isSpace) <* hspace
 name :: Parser Id
 name = A.takeWhile1 isName <* hspace
 
-filePath :: Parser Id
+filePath :: Parser Path
 filePath = A.takeWhile1 isFilePath <* hspace
 
 value :: Parser Value
@@ -454,11 +460,50 @@ toLit (Value w v)
 toOpt :: Bit -> Expr
 toOpt = maybe (Ident "None") $ App (Ident "Some") . \b -> if b then One else Zero
 
+data Flag
+    = FlagHelp
+    | FlagNonFatal
+    | FlagSplit String
+    deriving Eq
+
+options :: [OptDescr Flag]
+options =
+    [ Option ['h'] ["help"]        (NoArg FlagHelp)       "Print this help message."
+    , Option []    ["non-fatal"]   (NoArg FlagNonFatal)   "In the generated SAW test script, don't exit on the first test failure."
+    , Option ['n'] ["split-tests"] (ReqArg FlagSplit "n") "Create <n> SAW test script files, splitting tests between them."
+    ]
+
+exitUsage :: [String] -> IO a
+exitUsage errs = do
+    mapM_ (hPutStr stderr . ("Error: " <>)) $ filter (/= "") errs
+    me <- getProgName
+    hPutStr stderr (usageInfo ("\nUsage: " <> me <> " [OPTION...]") options)
+    exitFailure
+
+getN :: [Flag] -> Natural
+getN = flip foldr 1 $ \case
+    FlagSplit (read -> n) | (n :: Natural) > 1 -> const n
+    _                                          -> id
+
+chunk :: Natural -> [Table] -> [[Table]]
+chunk n = map (snd <$>) . groupBy ((==) `on` fst) . sortOn fst . zip (cycle [1..n])
+
+writeSAW :: Bool -> Path -> Natural -> [Table] -> IO ()
+writeSAW nonFatal fp n = B.writeFile out . pretty . toSAW nonFatal . YosysLog fp
+    where
+      out :: FilePath
+      out = B.unpack fp -<.> (show n <.> "saw")
+
 main :: IO ()
 main = do
-    args <- getArgs
-    let nonFatal = "--non-fatal" `elem` args
-    result <- A.parseOnly yosysLog <$> B.getContents
-    case result of
-        Left err -> putStrLn $ "Error: " <> err
-        Right tbls -> B.putStrLn $ pretty $ toSAW nonFatal tbls
+    (flags, extra, errs) <- getOpt Permute options <$> getArgs
+
+    when (not $ null errs) $ exitUsage errs
+    when (not $ null extra) $ exitUsage $ ("Unknown argument: " <>) <$> extra
+
+    let nonFatal = FlagNonFatal `elem` flags
+        n        = getN flags
+
+    A.parseOnly yosysLog <$> B.getContents >>= \case
+        Left err                 -> putStrLn ("Error: " <> err) >> exitFailure
+        Right (YosysLog fp tbls) -> zipWithM_ (writeSAW nonFatal fp) [1..n] $ chunk n tbls

@@ -10,10 +10,9 @@ import Data.Aeson.Encode.Pretty (encodePretty)
 import Data.Aeson.Key (fromString)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as B
-import Data.List (stripPrefix, foldl')
+import Data.List (foldl')
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
 import Numeric (showBin)
 import Numeric.Natural (Natural)
 import System.Environment (getArgs, getProgName)

@@ -22,5 +22,6 @@ executable yosys-specs
   build-depends:
     base,
     attoparsec ^>=0.14,
-    bytestring ^>=0.12
+    bytestring ^>=0.12,
+    filepath   ^>=1.5
   default-language: Haskell2010

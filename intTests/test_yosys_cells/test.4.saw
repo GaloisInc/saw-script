@@ -1,0 +1,656 @@
+enable_experimental;
+m <- yosys_import "test.json";
+let {{
+  (===>) : {a, y} (fin y) => (a -> {Y: [y](Option Bit)}) -> (a -> {Y: [y]}) -> a -> Bit
+  (===>) spec impl a = and [i == fromOption i s | i <- (impl a).Y | s <- (spec a).Y]
+                       where
+                         fromOption : {b} b -> Option b -> b
+                         fromOption def opt = case opt of
+                                                Some x -> x
+                                                None   -> def
+
+  spec_eqx : {A: [0], B: [0]} -> {Y: [0](Option Bit)}
+  spec_eqx in = {Y = out}
+                where
+                  out = spec (in.A, in.B)
+                  spec a = []
+
+  spec_xnor : {A: [0], B: [0]} -> {Y: [0](Option Bit)}
+  spec_xnor in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = []
+
+  spec_le : {A: [0], B: [0]} -> {Y: [0](Option Bit)}
+  spec_le in = {Y = out}
+               where
+                 out = spec (in.A, in.B)
+                 spec a = []
+
+  spec_mul1 : {A: [0], B: [0]} -> {Y: [2](Option Bit)}
+  spec_mul1 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = [Some 0, Some 0]
+
+  spec_xor1 : {A: [0], B: [0]} -> {Y: [2](Option Bit)}
+  spec_xor1 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = [Some 0, Some 0]
+
+  spec_lt1 : {A: [0], B: [0]} -> {Y: [2](Option Bit)}
+  spec_lt1 in = {Y = out}
+                where
+                  out = spec (in.A, in.B)
+                  spec a = [Some 0, Some 0]
+
+  spec_ne2 : {A: [2], B: [2]} -> {Y: [2](Option Bit)}
+  spec_ne2 in = {Y = out}
+                where
+                  out = spec (in.A, in.B)
+                  spec a = if a == (0b00, 0b00) then [Some 0, Some 0]
+                            | a == (0b00, 0b01) then [Some 0, Some 1]
+                            | a == (0b00, 0b10) then [Some 0, Some 1]
+                            | a == (0b00, 0b11) then [Some 0, Some 1]
+                            | a == (0b01, 0b00) then [Some 0, Some 1]
+                            | a == (0b01, 0b01) then [Some 0, Some 0]
+                            | a == (0b01, 0b10) then [Some 0, Some 1]
+                            | a == (0b01, 0b11) then [Some 0, Some 1]
+                            | a == (0b10, 0b00) then [Some 0, Some 1]
+                            | a == (0b10, 0b01) then [Some 0, Some 1]
+                            | a == (0b10, 0b10) then [Some 0, Some 0]
+                            | a == (0b10, 0b11) then [Some 0, Some 1]
+                            | a == (0b11, 0b00) then [Some 0, Some 1]
+                            | a == (0b11, 0b01) then [Some 0, Some 1]
+                            | a == (0b11, 0b10) then [Some 0, Some 1]
+                            | a == (0b11, 0b11) then [Some 0, Some 0]
+                           else repeat None
+
+  spec_div2 : {A: [2], B: [2]} -> {Y: [2](Option Bit)}
+  spec_div2 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (0b00, 0b00) then [None, None]
+                             | a == (0b00, 0b01) then [Some 0, Some 0]
+                             | a == (0b00, 0b10) then [Some 0, Some 0]
+                             | a == (0b00, 0b11) then [Some 0, Some 0]
+                             | a == (0b01, 0b00) then [None, None]
+                             | a == (0b01, 0b01) then [Some 0, Some 1]
+                             | a == (0b01, 0b10) then [Some 0, Some 0]
+                             | a == (0b01, 0b11) then [Some 0, Some 0]
+                             | a == (0b10, 0b00) then [None, None]
+                             | a == (0b10, 0b01) then [Some 1, Some 0]
+                             | a == (0b10, 0b10) then [Some 0, Some 1]
+                             | a == (0b10, 0b11) then [Some 0, Some 0]
+                             | a == (0b11, 0b00) then [None, None]
+                             | a == (0b11, 0b01) then [Some 1, Some 1]
+                             | a == (0b11, 0b10) then [Some 0, Some 1]
+                             | a == (0b11, 0b11) then [Some 0, Some 1]
+                            else repeat None
+
+  spec_add3 : {A: [2], B: [0]} -> {Y: [1](Option Bit)}
+  spec_add3 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (0b00, zero) then [Some 0]
+                             | a == (0b01, zero) then [Some 1]
+                             | a == (0b10, zero) then [Some 0]
+                             | a == (0b11, zero) then [Some 1]
+                            else repeat None
+
+  spec_nex3 : {A: [2], B: [0]} -> {Y: [1](Option Bit)}
+  spec_nex3 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (0b00, zero) then [Some 0]
+                             | a == (0b01, zero) then [Some 1]
+                             | a == (0b10, zero) then [Some 1]
+                             | a == (0b11, zero) then [Some 1]
+                            else repeat None
+
+  spec_mod3 : {A: [2], B: [0]} -> {Y: [1](Option Bit)}
+  spec_mod3 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (0b00, zero) then [None]
+                             | a == (0b01, zero) then [None]
+                             | a == (0b10, zero) then [None]
+                             | a == (0b11, zero) then [None]
+                            else repeat None
+
+  spec_and4 : {A: [0], B: [2]} -> {Y: [1](Option Bit)}
+  spec_and4 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (zero, 0b00) then [Some 0]
+                             | a == (zero, 0b01) then [Some 0]
+                             | a == (zero, 0b10) then [Some 0]
+                             | a == (zero, 0b11) then [Some 0]
+                            else repeat None
+
+  spec_or4 : {A: [0], B: [2]} -> {Y: [1](Option Bit)}
+  spec_or4 in = {Y = out}
+                where
+                  out = spec (in.A, in.B)
+                  spec a = if a == (zero, 0b00) then [Some 0]
+                            | a == (zero, 0b01) then [Some 1]
+                            | a == (zero, 0b10) then [Some 0]
+                            | a == (zero, 0b11) then [Some 1]
+                           else repeat None
+
+  spec_ge4 : {A: [0], B: [2]} -> {Y: [1](Option Bit)}
+  spec_ge4 in = {Y = out}
+                where
+                  out = spec (in.A, in.B)
+                  spec a = if a == (zero, 0b00) then [Some 1]
+                            | a == (zero, 0b01) then [Some 0]
+                            | a == (zero, 0b10) then [Some 1]
+                            | a == (zero, 0b11) then [Some 1]
+                           else repeat None
+
+  spec_eq5 : {A: [2], B: [2]} -> {Y: [1](Option Bit)}
+  spec_eq5 in = {Y = out}
+                where
+                  out = spec (in.A, in.B)
+                  spec a = if a == (0b00, 0b00) then [Some 1]
+                            | a == (0b00, 0b01) then [Some 0]
+                            | a == (0b00, 0b10) then [Some 0]
+                            | a == (0b00, 0b11) then [Some 0]
+                            | a == (0b01, 0b00) then [Some 0]
+                            | a == (0b01, 0b01) then [Some 1]
+                            | a == (0b01, 0b10) then [Some 0]
+                            | a == (0b01, 0b11) then [Some 0]
+                            | a == (0b10, 0b00) then [Some 0]
+                            | a == (0b10, 0b01) then [Some 0]
+                            | a == (0b10, 0b10) then [Some 1]
+                            | a == (0b10, 0b11) then [Some 0]
+                            | a == (0b11, 0b00) then [Some 0]
+                            | a == (0b11, 0b01) then [Some 0]
+                            | a == (0b11, 0b10) then [Some 0]
+                            | a == (0b11, 0b11) then [Some 1]
+                           else repeat None
+
+  spec_sub5 : {A: [2], B: [2]} -> {Y: [1](Option Bit)}
+  spec_sub5 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (0b00, 0b00) then [Some 0]
+                             | a == (0b00, 0b01) then [Some 1]
+                             | a == (0b00, 0b10) then [Some 0]
+                             | a == (0b00, 0b11) then [Some 1]
+                             | a == (0b01, 0b00) then [Some 1]
+                             | a == (0b01, 0b01) then [Some 0]
+                             | a == (0b01, 0b10) then [Some 1]
+                             | a == (0b01, 0b11) then [Some 0]
+                             | a == (0b10, 0b00) then [Some 0]
+                             | a == (0b10, 0b01) then [Some 1]
+                             | a == (0b10, 0b10) then [Some 0]
+                             | a == (0b10, 0b11) then [Some 1]
+                             | a == (0b11, 0b00) then [Some 1]
+                             | a == (0b11, 0b01) then [Some 0]
+                             | a == (0b11, 0b10) then [Some 1]
+                             | a == (0b11, 0b11) then [Some 0]
+                            else repeat None
+
+  spec_gt5 : {A: [2], B: [2]} -> {Y: [1](Option Bit)}
+  spec_gt5 in = {Y = out}
+                where
+                  out = spec (in.A, in.B)
+                  spec a = if a == (0b00, 0b00) then [Some 0]
+                            | a == (0b00, 0b01) then [Some 0]
+                            | a == (0b00, 0b10) then [Some 1]
+                            | a == (0b00, 0b11) then [Some 1]
+                            | a == (0b01, 0b00) then [Some 1]
+                            | a == (0b01, 0b01) then [Some 0]
+                            | a == (0b01, 0b10) then [Some 1]
+                            | a == (0b01, 0b11) then [Some 1]
+                            | a == (0b10, 0b00) then [Some 0]
+                            | a == (0b10, 0b01) then [Some 0]
+                            | a == (0b10, 0b10) then [Some 0]
+                            | a == (0b10, 0b11) then [Some 0]
+                            | a == (0b11, 0b00) then [Some 0]
+                            | a == (0b11, 0b01) then [Some 0]
+                            | a == (0b11, 0b10) then [Some 1]
+                            | a == (0b11, 0b11) then [Some 0]
+                           else repeat None
+
+  spec_eqx6 : {A: [2], B: [2]} -> {Y: [3](Option Bit)}
+  spec_eqx6 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (0b00, 0b00) then [Some 0, Some 0, Some 1]
+                             | a == (0b00, 0b01) then [Some 0, Some 0, Some 0]
+                             | a == (0b00, 0b10) then [Some 0, Some 0, Some 0]
+                             | a == (0b00, 0b11) then [Some 0, Some 0, Some 0]
+                             | a == (0b01, 0b00) then [Some 0, Some 0, Some 0]
+                             | a == (0b01, 0b01) then [Some 0, Some 0, Some 1]
+                             | a == (0b01, 0b10) then [Some 0, Some 0, Some 0]
+                             | a == (0b01, 0b11) then [Some 0, Some 0, Some 0]
+                             | a == (0b10, 0b00) then [Some 0, Some 0, Some 0]
+                             | a == (0b10, 0b01) then [Some 0, Some 0, Some 0]
+                             | a == (0b10, 0b10) then [Some 0, Some 0, Some 1]
+                             | a == (0b10, 0b11) then [Some 0, Some 0, Some 0]
+                             | a == (0b11, 0b00) then [Some 0, Some 0, Some 0]
+                             | a == (0b11, 0b01) then [Some 0, Some 0, Some 0]
+                             | a == (0b11, 0b10) then [Some 0, Some 0, Some 0]
+                             | a == (0b11, 0b11) then [Some 0, Some 0, Some 1]
+                            else repeat None
+
+  spec_xnor6 : {A: [2], B: [2]} -> {Y: [3](Option Bit)}
+  spec_xnor6 in = {Y = out}
+                  where
+                    out = spec (in.A, in.B)
+                    spec a = if a == (0b00, 0b00) then [Some 1, Some 1, Some 1]
+                              | a == (0b00, 0b01) then [Some 1, Some 1, Some 0]
+                              | a == (0b00, 0b10) then [Some 0, Some 0, Some 1]
+                              | a == (0b00, 0b11) then [Some 0, Some 0, Some 0]
+                              | a == (0b01, 0b00) then [Some 1, Some 1, Some 0]
+                              | a == (0b01, 0b01) then [Some 1, Some 1, Some 1]
+                              | a == (0b01, 0b10) then [Some 0, Some 0, Some 0]
+                              | a == (0b01, 0b11) then [Some 0, Some 0, Some 1]
+                              | a == (0b10, 0b00) then [Some 0, Some 0, Some 1]
+                              | a == (0b10, 0b01) then [Some 0, Some 0, Some 0]
+                              | a == (0b10, 0b10) then [Some 1, Some 1, Some 1]
+                              | a == (0b10, 0b11) then [Some 1, Some 1, Some 0]
+                              | a == (0b11, 0b00) then [Some 0, Some 0, Some 0]
+                              | a == (0b11, 0b01) then [Some 0, Some 0, Some 1]
+                              | a == (0b11, 0b10) then [Some 1, Some 1, Some 0]
+                              | a == (0b11, 0b11) then [Some 1, Some 1, Some 1]
+                             else repeat None
+
+  spec_le6 : {A: [2], B: [2]} -> {Y: [3](Option Bit)}
+  spec_le6 in = {Y = out}
+                where
+                  out = spec (in.A, in.B)
+                  spec a = if a == (0b00, 0b00) then [Some 0, Some 0, Some 1]
+                            | a == (0b00, 0b01) then [Some 0, Some 0, Some 1]
+                            | a == (0b00, 0b10) then [Some 0, Some 0, Some 0]
+                            | a == (0b00, 0b11) then [Some 0, Some 0, Some 0]
+                            | a == (0b01, 0b00) then [Some 0, Some 0, Some 0]
+                            | a == (0b01, 0b01) then [Some 0, Some 0, Some 1]
+                            | a == (0b01, 0b10) then [Some 0, Some 0, Some 0]
+                            | a == (0b01, 0b11) then [Some 0, Some 0, Some 0]
+                            | a == (0b10, 0b00) then [Some 0, Some 0, Some 1]
+                            | a == (0b10, 0b01) then [Some 0, Some 0, Some 1]
+                            | a == (0b10, 0b10) then [Some 0, Some 0, Some 1]
+                            | a == (0b10, 0b11) then [Some 0, Some 0, Some 1]
+                            | a == (0b11, 0b00) then [Some 0, Some 0, Some 1]
+                            | a == (0b11, 0b01) then [Some 0, Some 0, Some 1]
+                            | a == (0b11, 0b10) then [Some 0, Some 0, Some 0]
+                            | a == (0b11, 0b11) then [Some 0, Some 0, Some 1]
+                           else repeat None
+
+  spec_logic_or1 : {A: [2], B: [2]} -> {Y: [1](Option Bit)}
+  spec_logic_or1 in = {Y = out}
+                      where
+                        out = spec (in.A, in.B)
+                        spec a = if a == (0b00, 0b00) then [Some 0]
+                                  | a == (0b00, 0b01) then [Some 1]
+                                  | a == (0b00, 0b10) then [Some 1]
+                                  | a == (0b00, 0b11) then [Some 1]
+                                  | a == (0b01, 0b00) then [Some 1]
+                                  | a == (0b01, 0b01) then [Some 1]
+                                  | a == (0b01, 0b10) then [Some 1]
+                                  | a == (0b01, 0b11) then [Some 1]
+                                  | a == (0b10, 0b00) then [Some 1]
+                                  | a == (0b10, 0b01) then [Some 1]
+                                  | a == (0b10, 0b10) then [Some 1]
+                                  | a == (0b10, 0b11) then [Some 1]
+                                  | a == (0b11, 0b00) then [Some 1]
+                                  | a == (0b11, 0b01) then [Some 1]
+                                  | a == (0b11, 0b10) then [Some 1]
+                                  | a == (0b11, 0b11) then [Some 1]
+                                 else repeat None
+
+  spec_logic_or3 : {A: [2], B: [2]} -> {Y: [3](Option Bit)}
+  spec_logic_or3 in = {Y = out}
+                      where
+                        out = spec (in.A, in.B)
+                        spec a = if a == (0b00, 0b00) then [Some 0, Some 0, Some 0]
+                                  | a == (0b00, 0b01) then [Some 0, Some 0, Some 1]
+                                  | a == (0b00, 0b10) then [Some 0, Some 0, Some 1]
+                                  | a == (0b00, 0b11) then [Some 0, Some 0, Some 1]
+                                  | a == (0b01, 0b00) then [Some 0, Some 0, Some 1]
+                                  | a == (0b01, 0b01) then [Some 0, Some 0, Some 1]
+                                  | a == (0b01, 0b10) then [Some 0, Some 0, Some 1]
+                                  | a == (0b01, 0b11) then [Some 0, Some 0, Some 1]
+                                  | a == (0b10, 0b00) then [Some 0, Some 0, Some 1]
+                                  | a == (0b10, 0b01) then [Some 0, Some 0, Some 1]
+                                  | a == (0b10, 0b10) then [Some 0, Some 0, Some 1]
+                                  | a == (0b10, 0b11) then [Some 0, Some 0, Some 1]
+                                  | a == (0b11, 0b00) then [Some 0, Some 0, Some 1]
+                                  | a == (0b11, 0b01) then [Some 0, Some 0, Some 1]
+                                  | a == (0b11, 0b10) then [Some 0, Some 0, Some 1]
+                                  | a == (0b11, 0b11) then [Some 0, Some 0, Some 1]
+                                 else repeat None
+
+  spec_logic_or5 : {A: [2], B: [2]} -> {Y: [3](Option Bit)}
+  spec_logic_or5 in = {Y = out}
+                      where
+                        out = spec (in.A, in.B)
+                        spec a = if a == (0b00, 0b00) then [Some 0, Some 0, Some 0]
+                                  | a == (0b00, 0b01) then [Some 0, Some 0, Some 1]
+                                  | a == (0b00, 0b10) then [Some 0, Some 0, Some 1]
+                                  | a == (0b00, 0b11) then [Some 0, Some 0, Some 1]
+                                  | a == (0b01, 0b00) then [Some 0, Some 0, Some 1]
+                                  | a == (0b01, 0b01) then [Some 0, Some 0, Some 1]
+                                  | a == (0b01, 0b10) then [Some 0, Some 0, Some 1]
+                                  | a == (0b01, 0b11) then [Some 0, Some 0, Some 1]
+                                  | a == (0b10, 0b00) then [Some 0, Some 0, Some 1]
+                                  | a == (0b10, 0b01) then [Some 0, Some 0, Some 1]
+                                  | a == (0b10, 0b10) then [Some 0, Some 0, Some 1]
+                                  | a == (0b10, 0b11) then [Some 0, Some 0, Some 1]
+                                  | a == (0b11, 0b00) then [Some 0, Some 0, Some 1]
+                                  | a == (0b11, 0b01) then [Some 0, Some 0, Some 1]
+                                  | a == (0b11, 0b10) then [Some 0, Some 0, Some 1]
+                                  | a == (0b11, 0b11) then [Some 0, Some 0, Some 1]
+                                 else repeat None
+
+  spec_neg : {A: [0]} -> {Y: [3](Option Bit)}
+  spec_neg in = {Y = out}
+                where
+                  out = spec in.A
+                  spec a = [Some 0, Some 0, Some 0]
+
+  spec_reduce_xnor : {A: [0]} -> {Y: [3](Option Bit)}
+  spec_reduce_xnor in = {Y = out}
+                        where
+                          out = spec in.A
+                          spec a = [Some 0, Some 0, Some 1]
+
+  spec_reduce_and1 : {A: [1]} -> {Y: [3](Option Bit)}
+  spec_reduce_and1 in = {Y = out}
+                        where
+                          out = spec in.A
+                          spec a = if a == 0b0 then [Some 0, Some 0, Some 0]
+                                    | a == 0b1 then [Some 0, Some 0, Some 1]
+                                   else repeat None
+
+  spec_neg2 : {A: [2]} -> {Y: [2](Option Bit)}
+  spec_neg2 in = {Y = out}
+                 where
+                   out = spec in.A
+                   spec a = if a == 0b00 then [Some 0, Some 0]
+                             | a == 0b01 then [Some 1, Some 1]
+                             | a == 0b10 then [Some 1, Some 0]
+                             | a == 0b11 then [Some 0, Some 1]
+                            else repeat None
+
+  spec_reduce_xnor2 : {A: [2]} -> {Y: [2](Option Bit)}
+  spec_reduce_xnor2 in = {Y = out}
+                         where
+                           out = spec in.A
+                           spec a = if a == 0b00 then [Some 0, Some 1]
+                                     | a == 0b01 then [Some 0, Some 0]
+                                     | a == 0b10 then [Some 0, Some 0]
+                                     | a == 0b11 then [Some 0, Some 1]
+                                    else repeat None
+
+  spec_reduce_and3 : {A: [3]} -> {Y: [1](Option Bit)}
+  spec_reduce_and3 in = {Y = out}
+                        where
+                          out = spec in.A
+                          spec a = if a == 0b000 then [Some 0]
+                                    | a == 0b001 then [Some 0]
+                                    | a == 0b010 then [Some 0]
+                                    | a == 0b011 then [Some 0]
+                                    | a == 0b100 then [Some 0]
+                                    | a == 0b101 then [Some 0]
+                                    | a == 0b110 then [Some 0]
+                                    | a == 0b111 then [Some 1]
+                                   else repeat None
+
+  spec_neg4 : {A: [0]} -> {Y: [3](Option Bit)}
+  spec_neg4 in = {Y = out}
+                 where
+                   out = spec in.A
+                   spec a = [Some 0, Some 0, Some 0]
+
+  spec_reduce_xnor4 : {A: [0]} -> {Y: [3](Option Bit)}
+  spec_reduce_xnor4 in = {Y = out}
+                         where
+                           out = spec in.A
+                           spec a = [Some 0, Some 0, Some 1]
+
+  spec_reduce_and5 : {A: [1]} -> {Y: [3](Option Bit)}
+  spec_reduce_and5 in = {Y = out}
+                        where
+                          out = spec in.A
+                          spec a = if a == 0b0 then [Some 0, Some 0, Some 0]
+                                    | a == 0b1 then [Some 0, Some 0, Some 1]
+                                   else repeat None
+
+  spec_neg6 : {A: [2]} -> {Y: [2](Option Bit)}
+  spec_neg6 in = {Y = out}
+                 where
+                   out = spec in.A
+                   spec a = if a == 0b00 then [Some 0, Some 0]
+                             | a == 0b01 then [Some 1, Some 1]
+                             | a == 0b10 then [Some 1, Some 0]
+                             | a == 0b11 then [Some 0, Some 1]
+                            else repeat None
+
+  spec_reduce_xnor6 : {A: [2]} -> {Y: [2](Option Bit)}
+  spec_reduce_xnor6 in = {Y = out}
+                         where
+                           out = spec in.A
+                           spec a = if a == 0b00 then [Some 0, Some 1]
+                                     | a == 0b01 then [Some 0, Some 0]
+                                     | a == 0b10 then [Some 0, Some 0]
+                                     | a == 0b11 then [Some 0, Some 1]
+                                    else repeat None
+
+  spec_reduce_and7 : {A: [3]} -> {Y: [1](Option Bit)}
+  spec_reduce_and7 in = {Y = out}
+                        where
+                          out = spec in.A
+                          spec a = if a == 0b000 then [Some 0]
+                                    | a == 0b001 then [Some 0]
+                                    | a == 0b010 then [Some 0]
+                                    | a == 0b011 then [Some 0]
+                                    | a == 0b100 then [Some 0]
+                                    | a == 0b101 then [Some 0]
+                                    | a == 0b110 then [Some 0]
+                                    | a == 0b111 then [Some 1]
+                                   else repeat None
+
+  spec_shr : {A: [0], B: [1]} -> {Y: [1](Option Bit)}
+  spec_shr in = {Y = out}
+                where
+                  out = spec (in.A, in.B)
+                  spec a = if a == (zero, 0b0) then [Some 0]
+                            | a == (zero, 0b1) then [Some 0]
+                           else repeat None
+
+  spec_sshr1 : {A: [1], B: [0]} -> {Y: [1](Option Bit)}
+  spec_sshr1 in = {Y = out}
+                  where
+                    out = spec (in.A, in.B)
+                    spec a = if a == (0b0, zero) then [Some 0]
+                              | a == (0b1, zero) then [Some 1]
+                             else repeat None
+
+  spec_shr3 : {A: [1], B: [2]} -> {Y: [3](Option Bit)}
+  spec_shr3 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (0b0, 0b00) then [Some 0, Some 0, Some 0]
+                             | a == (0b0, 0b01) then [Some 0, Some 0, Some 0]
+                             | a == (0b0, 0b10) then [Some 0, Some 0, Some 0]
+                             | a == (0b0, 0b11) then [Some 0, Some 0, Some 0]
+                             | a == (0b1, 0b00) then [Some 0, Some 0, Some 1]
+                             | a == (0b1, 0b01) then [Some 0, Some 0, Some 0]
+                             | a == (0b1, 0b10) then [Some 0, Some 0, Some 0]
+                             | a == (0b1, 0b11) then [Some 0, Some 0, Some 0]
+                            else repeat None
+
+  spec_sshr4 : {A: [2], B: [1]} -> {Y: [2](Option Bit)}
+  spec_sshr4 in = {Y = out}
+                  where
+                    out = spec (in.A, in.B)
+                    spec a = if a == (0b00, 0b0) then [Some 0, Some 0]
+                              | a == (0b00, 0b1) then [Some 0, Some 0]
+                              | a == (0b01, 0b0) then [Some 0, Some 1]
+                              | a == (0b01, 0b1) then [Some 0, Some 0]
+                              | a == (0b10, 0b0) then [Some 1, Some 0]
+                              | a == (0b10, 0b1) then [Some 0, Some 1]
+                              | a == (0b11, 0b0) then [Some 1, Some 1]
+                              | a == (0b11, 0b1) then [Some 0, Some 1]
+                             else repeat None
+
+  spec_shr6 : {A: [1], B: [0]} -> {Y: [1](Option Bit)}
+  spec_shr6 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (0b0, zero) then [Some 0]
+                             | a == (0b1, zero) then [Some 1]
+                            else repeat None
+
+  spec_sshr7 : {A: [1], B: [1]} -> {Y: [1](Option Bit)}
+  spec_sshr7 in = {Y = out}
+                  where
+                    out = spec (in.A, in.B)
+                    spec a = if a == (0b0, 0b0) then [Some 0]
+                              | a == (0b0, 0b1) then [Some 0]
+                              | a == (0b1, 0b0) then [Some 1]
+                              | a == (0b1, 0b1) then [Some 1]
+                             else repeat None
+
+  spec_shr9 : {A: [2], B: [1]} -> {Y: [2](Option Bit)}
+  spec_shr9 in = {Y = out}
+                 where
+                   out = spec (in.A, in.B)
+                   spec a = if a == (0b00, 0b0) then [Some 0, Some 0]
+                             | a == (0b00, 0b1) then [Some 0, Some 0]
+                             | a == (0b01, 0b0) then [Some 0, Some 1]
+                             | a == (0b01, 0b1) then [Some 0, Some 0]
+                             | a == (0b10, 0b0) then [Some 1, Some 0]
+                             | a == (0b10, 0b1) then [Some 0, Some 1]
+                             | a == (0b11, 0b0) then [Some 1, Some 1]
+                             | a == (0b11, 0b1) then [Some 0, Some 1]
+                            else repeat None
+
+  spec_shiftx3 : {A: [2], B: [1]} -> {Y: [3](Option Bit)}
+  spec_shiftx3 in = {Y = out}
+                    where
+                      out = spec (in.A, in.B)
+                      spec a = if a == (0b00, 0b0) then [None, Some 0, Some 0]
+                                | a == (0b00, 0b1) then [None, None, Some 0]
+                                | a == (0b01, 0b0) then [None, Some 0, Some 1]
+                                | a == (0b01, 0b1) then [None, None, Some 0]
+                                | a == (0b10, 0b0) then [None, Some 1, Some 0]
+                                | a == (0b10, 0b1) then [None, None, Some 1]
+                                | a == (0b11, 0b0) then [None, Some 1, Some 1]
+                                | a == (0b11, 0b1) then [None, None, Some 1]
+                               else repeat None
+
+  spec_shiftx9 : {A: [2], B: [1]} -> {Y: [3](Option Bit)}
+  spec_shiftx9 in = {Y = out}
+                    where
+                      out = spec (in.A, in.B)
+                      spec a = if a == (0b00, 0b0) then [None, Some 0, Some 0]
+                                | a == (0b00, 0b1) then [Some 0, Some 0, None]
+                                | a == (0b01, 0b0) then [None, Some 0, Some 1]
+                                | a == (0b01, 0b1) then [Some 0, Some 1, None]
+                                | a == (0b10, 0b0) then [None, Some 1, Some 0]
+                                | a == (0b10, 0b1) then [Some 1, Some 0, None]
+                                | a == (0b11, 0b0) then [None, Some 1, Some 1]
+                                | a == (0b11, 0b1) then [Some 1, Some 1, None]
+                               else repeat None
+
+  spec_bmux1 : {A: [2], S: [0]} -> {Y: [2](Option Bit)}
+  spec_bmux1 in = {Y = out}
+                  where
+                    out = spec (in.A, in.S)
+                    spec a = if a == (0b00, zero) then [Some 0, Some 0]
+                              | a == (0b01, zero) then [Some 0, Some 1]
+                              | a == (0b10, zero) then [Some 1, Some 0]
+                              | a == (0b11, zero) then [Some 1, Some 1]
+                             else repeat None
+
+  spec_bmux3 : {A: [4], S: [1]} -> {Y: [2](Option Bit)}
+  spec_bmux3 in = {Y = out}
+                  where
+                    out = spec (in.A, in.S)
+                    spec a = if a == (0b0000, 0b0) then [Some 0, Some 0]
+                              | a == (0b0000, 0b1) then [Some 0, Some 0]
+                              | a == (0b0001, 0b0) then [Some 0, Some 1]
+                              | a == (0b0001, 0b1) then [Some 0, Some 0]
+                              | a == (0b0010, 0b0) then [Some 1, Some 0]
+                              | a == (0b0010, 0b1) then [Some 0, Some 0]
+                              | a == (0b0011, 0b0) then [Some 1, Some 1]
+                              | a == (0b0011, 0b1) then [Some 0, Some 0]
+                              | a == (0b0100, 0b0) then [Some 0, Some 0]
+                              | a == (0b0100, 0b1) then [Some 0, Some 1]
+                              | a == (0b0101, 0b0) then [Some 0, Some 1]
+                              | a == (0b0101, 0b1) then [Some 0, Some 1]
+                              | a == (0b0110, 0b0) then [Some 1, Some 0]
+                              | a == (0b0110, 0b1) then [Some 0, Some 1]
+                              | a == (0b0111, 0b0) then [Some 1, Some 1]
+                              | a == (0b0111, 0b1) then [Some 0, Some 1]
+                              | a == (0b1000, 0b0) then [Some 0, Some 0]
+                              | a == (0b1000, 0b1) then [Some 1, Some 0]
+                              | a == (0b1001, 0b0) then [Some 0, Some 1]
+                              | a == (0b1001, 0b1) then [Some 1, Some 0]
+                              | a == (0b1010, 0b0) then [Some 1, Some 0]
+                              | a == (0b1010, 0b1) then [Some 1, Some 0]
+                              | a == (0b1011, 0b0) then [Some 1, Some 1]
+                              | a == (0b1011, 0b1) then [Some 1, Some 0]
+                              | a == (0b1100, 0b0) then [Some 0, Some 0]
+                              | a == (0b1100, 0b1) then [Some 1, Some 1]
+                              | a == (0b1101, 0b0) then [Some 0, Some 1]
+                              | a == (0b1101, 0b1) then [Some 1, Some 1]
+                              | a == (0b1110, 0b0) then [Some 1, Some 0]
+                              | a == (0b1110, 0b1) then [Some 1, Some 1]
+                              | a == (0b1111, 0b0) then [Some 1, Some 1]
+                              | a == (0b1111, 0b1) then [Some 1, Some 1]
+                             else repeat None
+
+}};
+prove_print w4 {{ spec_eqx ===> m.eqx }};
+prove_print w4 {{ spec_xnor ===> m.xnor }};
+prove_print w4 {{ spec_le ===> m.le }};
+prove_print w4 {{ spec_mul1 ===> m.mul1 }};
+prove_print w4 {{ spec_xor1 ===> m.xor1 }};
+prove_print w4 {{ spec_lt1 ===> m.lt1 }};
+prove_print w4 {{ spec_ne2 ===> m.ne2 }};
+prove_print w4 {{ spec_div2 ===> m.div2 }};
+prove_print w4 {{ spec_add3 ===> m.add3 }};
+prove_print w4 {{ spec_nex3 ===> m.nex3 }};
+prove_print w4 {{ spec_mod3 ===> m.mod3 }};
+prove_print w4 {{ spec_and4 ===> m.and4 }};
+prove_print w4 {{ spec_or4 ===> m.or4 }};
+prove_print w4 {{ spec_ge4 ===> m.ge4 }};
+prove_print w4 {{ spec_eq5 ===> m.eq5 }};
+prove_print w4 {{ spec_sub5 ===> m.sub5 }};
+prove_print w4 {{ spec_gt5 ===> m.gt5 }};
+prove_print w4 {{ spec_eqx6 ===> m.eqx6 }};
+prove_print w4 {{ spec_xnor6 ===> m.xnor6 }};
+prove_print w4 {{ spec_le6 ===> m.le6 }};
+prove_print w4 {{ spec_logic_or1 ===> m.logic_or1 }};
+prove_print w4 {{ spec_logic_or3 ===> m.logic_or3 }};
+prove_print w4 {{ spec_logic_or5 ===> m.logic_or5 }};
+prove_print w4 {{ spec_neg ===> m.neg }};
+prove_print w4 {{ spec_reduce_xnor ===> m.reduce_xnor }};
+prove_print w4 {{ spec_reduce_and1 ===> m.reduce_and1 }};
+prove_print w4 {{ spec_neg2 ===> m.neg2 }};
+prove_print w4 {{ spec_reduce_xnor2 ===> m.reduce_xnor2 }};
+prove_print w4 {{ spec_reduce_and3 ===> m.reduce_and3 }};
+prove_print w4 {{ spec_neg4 ===> m.neg4 }};
+prove_print w4 {{ spec_reduce_xnor4 ===> m.reduce_xnor4 }};
+prove_print w4 {{ spec_reduce_and5 ===> m.reduce_and5 }};
+prove_print w4 {{ spec_neg6 ===> m.neg6 }};
+prove_print w4 {{ spec_reduce_xnor6 ===> m.reduce_xnor6 }};
+prove_print w4 {{ spec_reduce_and7 ===> m.reduce_and7 }};
+prove_print w4 {{ spec_shr ===> m.shr }};
+prove_print w4 {{ spec_sshr1 ===> m.sshr1 }};
+prove_print w4 {{ spec_shr3 ===> m.shr3 }};
+prove_print w4 {{ spec_sshr4 ===> m.sshr4 }};
+prove_print w4 {{ spec_shr6 ===> m.shr6 }};
+prove_print w4 {{ spec_sshr7 ===> m.sshr7 }};
+prove_print w4 {{ spec_shr9 ===> m.shr9 }};
+prove_print w4 {{ spec_shiftx3 ===> m.shiftx3 }};
+prove_print w4 {{ spec_shiftx9 ===> m.shiftx9 }};
+prove_print w4 {{ spec_bmux1 ===> m.bmux1 }};
+prove_print w4 {{ spec_bmux3 ===> m.bmux3 }};
