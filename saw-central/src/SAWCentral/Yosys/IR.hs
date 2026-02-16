@@ -282,8 +282,8 @@ data Cell bs = Cell
     -- write_json using the -compat-int flag).
   , _cellParameters :: Map Text Aeson.Value -- ^ Metadata parameters
   , _cellAttributes :: Maybe Aeson.Value -- currently unused
-  , _cellPortDirections :: Map Text Direction -- ^ Direction for each cell connection
-  , _cellConnections :: Map Text bs -- ^ Bitrep for each cell connection
+  , _cellPortDirections :: Map PortName Direction -- ^ Direction for each cell connection
+  , _cellConnections :: Map PortName bs -- ^ Bitrep for each cell connection
   } deriving (Show, Eq, Ord, Functor)
 
 makeLenses ''Cell
@@ -319,7 +319,7 @@ instance Aeson.FromJSON Netname where
 -- | A single HDL module.
 data Module = Module
   { _moduleAttributes :: Maybe Aeson.Value -- currently unused
-  , _modulePorts :: Map Text Port
+  , _modulePorts :: Map PortName Port
   , _moduleCells :: Map CellInstName (Cell [Bitrep])
   , _moduleNetnames :: Map Text Netname
   } deriving (Show, Eq, Ord)
@@ -355,7 +355,7 @@ loadYosysIR p = Aeson.eitherDecodeFileStrict p >>= \case
   Right ir -> pure ir
 
 -- | Return the patterns for all of the input ports of a module
-moduleInputPorts :: Module -> Map Text [Bitrep]
+moduleInputPorts :: Module -> Map PortName [Bitrep]
 moduleInputPorts m =
   Map.mapMaybe
   ( \ip ->
@@ -366,7 +366,7 @@ moduleInputPorts m =
   $ m ^. modulePorts
 
 -- | Return the patterns for all of the output ports of a module
-moduleOutputPorts :: Module -> Map Text [Bitrep]
+moduleOutputPorts :: Module -> Map PortName [Bitrep]
 moduleOutputPorts m =
   Map.mapMaybe
   ( \ip ->
@@ -377,13 +377,13 @@ moduleOutputPorts m =
   $ m ^. modulePorts
 
 -- | Return the patterns for all of the input connections of a cell
-cellInputConnections :: Cell [b] -> Map Text [b]
+cellInputConnections :: Cell [b] -> Map PortName [b]
 cellInputConnections c = Map.intersection (c ^. cellConnections) inp
   where
     inp = Map.filter isInput (c ^. cellPortDirections)
 
 -- | Return the patterns for all of the output connections of a cell
-cellOutputConnections :: Ord b => Cell [b] -> Map Text [b]
+cellOutputConnections :: Ord b => Cell [b] -> Map PortName [b]
 cellOutputConnections c = Map.intersection (c ^. cellConnections) out
   where
     out = Map.filter isOutput (c ^. cellPortDirections)

@@ -50,9 +50,12 @@ type CellTypeName = Text
 -- | The name of a cell instance.
 type CellInstName = Text
 
+-- | The name of an input or output port.
+type PortName = Text
+
 data YosysBitvecConsumer
-  = YosysBitvecConsumerOutputPort Text
-  | YosysBitvecConsumerCell CellInstName Text
+  = YosysBitvecConsumerOutputPort PortName
+  | YosysBitvecConsumerCell CellInstName PortName
 
 data YosysError
   = YosysError Text

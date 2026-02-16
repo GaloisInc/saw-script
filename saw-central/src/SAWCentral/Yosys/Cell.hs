@@ -24,6 +24,7 @@ import qualified SAWCore.Name as SC
 import SAWCentral.Panic (panic)
 
 import SAWCentral.Yosys.IR
+import SAWCentral.Yosys.Utils (PortName)
 
 -- | A SAWCore bitvector term along with its width and whether it should be interpreted as signed.
 data CellTerm = CellTerm
@@ -163,7 +164,7 @@ shift sc a b
 combCellToTerm ::
   SC.SharedContext ->
   CellTypeCombinational {- ^ Cell type -} ->
-  Map Text CellTerm {- ^ Mapping of input names to input terms and bit widths -} ->
+  Map PortName CellTerm {- ^ Mapping of input names to input terms and bit widths -} ->
   Natural {- ^ Output width -} ->
   IO SC.Term
 combCellToTerm sc ctc args ywidth =
@@ -354,7 +355,7 @@ combCellToTerm sc ctc args ywidth =
     signed :: Bool
     signed = all cellTermSigned args
 
-    input :: Text -> IO CellTerm
+    input :: PortName -> IO CellTerm
     input inpNm =
       case Map.lookup inpNm args of
         -- XXX This should not be a panic, as it is possible to trigger this

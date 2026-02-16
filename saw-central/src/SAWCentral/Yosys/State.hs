@@ -48,13 +48,13 @@ data YosysSequential = YosysSequential
     -- includes a __state__ field in the input and output.
   , _yosysSequentialStateFields :: Map Text (SC.Term, C.Type)
     -- ^ A mapping from each state field name to a SAWCore and Cryptol type.
-  , _yosysSequentialInputFields :: Map Text (SC.Term, C.Type)
+  , _yosysSequentialInputFields :: Map PortName (SC.Term, C.Type)
     -- ^ A mapping from each input to a SAWCore and Cryptol type.
-  , _yosysSequentialOutputFields :: Map Text (SC.Term, C.Type)
+  , _yosysSequentialOutputFields :: Map PortName (SC.Term, C.Type)
     -- ^ A mapping from each output to a SAWCore and Cryptol type.
-  , _yosysSequentialInputWidths :: Map Text Natural
+  , _yosysSequentialInputWidths :: Map PortName Natural
     -- ^ A mapping from each input to a width.
-  , _yosysSequentialOutputWidths :: Map Text Natural
+  , _yosysSequentialOutputWidths :: Map PortName Natural
     -- ^ A mapping from each output to a width.
   , _yosysSequentialStateWidths :: Map Text Natural
     -- ^ A mapping from each state field to a width.
@@ -66,8 +66,8 @@ makeLenses ''YosysSequential
 insertStateField ::
   SC.SharedContext ->
   Map Text (SC.Term, C.Type) {- ^ The field types of "__states__" -} ->
-  Map Text (SC.Term, C.Type) {- ^ The mapping to update -} ->
-  IO (Map Text (SC.Term, C.Type))
+  Map PortName (SC.Term, C.Type) {- ^ The mapping to update -} ->
+  IO (Map PortName (SC.Term, C.Type))
 insertStateField sc stateFields fields =
   do stateRecordType <- fieldsToType sc stateFields
      stateRecordCryptolType <- fieldsToCryptolType stateFields
@@ -236,7 +236,7 @@ composeYosysSequentialHelper sc s n =
             let inpsWithSt = Map.insert "__state__" st inps
             cryptolRecord sc inpsWithSt
 
-       summarizeOutput :: SC.Term -> IO (SC.Term, Map Text SC.Term)
+       summarizeOutput :: SC.Term -> IO (SC.Term, Map PortName SC.Term)
        summarizeOutput outrec =
          do outstate <- cryptolRecordSelect sc codomainFields outrec "__state__"
             outputs <-
@@ -246,7 +246,7 @@ composeYosysSequentialHelper sc s n =
                  pure (nm, wrapped)
             pure (outstate, outputs)
 
-       compose1 :: Integer -> (SC.Term, Map Text SC.Term) -> IO (SC.Term, Map Text SC.Term)
+       compose1 :: Integer -> (SC.Term, Map PortName SC.Term) -> IO (SC.Term, Map PortName SC.Term)
        compose1 i (st, outs) =
          do inprec <- buildIntermediateInput i st
             outrec <- SC.scApply sc t inprec
