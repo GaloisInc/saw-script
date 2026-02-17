@@ -8,5 +8,9 @@ failures:
 [Crux]   Slice length mismatch:
 [Crux]     Expected: 2
 [Crux]     Actual  : 3
+[Crux] 
+[Crux]   Context:
+[Crux]     internal: cryptol_Cryptol_sum`{_,[8]}
+[Crux]     test/symb_eval/cryptol/size_poly_err_dyn1.rs:8:5: 8:19: size_poly_err_dyn1/<DISAMB>::test[0]
 
 [Crux] Overall status: Invalid.

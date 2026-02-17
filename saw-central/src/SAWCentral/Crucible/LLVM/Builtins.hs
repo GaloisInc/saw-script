@@ -146,6 +146,7 @@ import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.Breakpoint as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
+import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 -- crucible-llvm
 import qualified Lang.Crucible.LLVM.ArraySizeProfile as Crucible
@@ -1646,11 +1647,12 @@ getPoststateObligations sc bak mdMap invSubst =
   where
     sym = Crucible.backendGetSym bak
 
-    verifyObligation finalMdMap (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
+    verifyObligation finalMdMap (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err)) =
       do st <- Common.sawCoreState sym
          hypTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst =<< Crucible.assumptionsPred sym hyps
          conclTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst concl
          obligation <- scImplies sc hypTerm conclTerm
+         let loc = Crucible.simErrorLoc err
          let defaultMd = MS.ConditionMetadata
                          { MS.conditionLoc = loc
                          , MS.conditionTags = mempty
@@ -2005,7 +2007,7 @@ llvm_postcond term =
 llvm_unint :: [Text] -> LLVMCrucibleSetupM ()
 llvm_unint term =
   LLVMCrucibleSetupM (Setup.declare_unint "llvm_unint" ccUninterp term)
-          
+
 
 llvm_return ::
   AllLLVM MS.SetupValue ->

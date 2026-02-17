@@ -6,5 +6,8 @@ failures:
 [Crux] Found counterexample for verification goal
 [Crux]   test/symb_eval/cryptol/size_poly_err_dyn2.rs:8:5: 8:38: error: in size_poly_err_dyn2/<DISAMB>::test[0]
 [Crux]   Size parameter is not a concrete number
+[Crux]   Context:
+[Crux]     internal: cryptol_Cryptol_sum`{_,[8]}
+[Crux]     test/symb_eval/cryptol/size_poly_err_dyn2.rs:8:5: 8:38: size_poly_err_dyn2/<DISAMB>::test[0]
 
 [Crux] Overall status: Invalid.

@@ -554,17 +554,18 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
               _ -> (C.extensionExec defaultMacawExtensions_x86_64) s0 st
           }
         ctx :: C.SimContext (Macaw.MacawSimulatorState Sym) Sym (Macaw.MacawExt Macaw.X86_64)
-        ctx = C.SimContext
-              { C._ctxBackend = SomeBackend bak
-              , C.ctxSolverProof = \x -> x
-              , C.ctxIntrinsicTypes = C.LLVM.llvmIntrinsicTypes
-              , C.simHandleAllocator = halloc
-              , C.printHandle = stdout
-              , C.extensionImpl = sawMacawExtensions
-              , C._functionBindings = C.FnBindings $ C.insertHandleMap (C.cfgHandle cfg) (C.UseCFG cfg $ C.postdomInfo cfg) C.emptyHandleMap
-              , C._cruciblePersonality = Macaw.MacawSimulatorState
-              , C._profilingMetrics = Map.empty
-              }
+        ctx = C.initSimContext
+                bak
+                C.LLVM.llvmIntrinsicTypes
+                halloc
+                stdout
+                (C.FnBindings $
+                  C.insertHandleMap
+                    (C.cfgHandle cfg)
+                    (C.UseCFG cfg $ C.postdomInfo cfg)
+                    C.emptyHandleMap)
+                sawMacawExtensions
+                Macaw.MacawSimulatorState
 
       (globals, assumes) <-
           do let globals0 = C.insertGlobal mvar (preState ^. x86Mem) C.emptyGlobals

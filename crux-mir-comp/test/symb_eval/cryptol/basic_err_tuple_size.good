@@ -6,5 +6,8 @@ failures:
 [Crux] Found counterexample for verification goal
 [Crux]   test/symb_eval/cryptol/basic_err_tuple_size.rs:8:37: 8:68: error: in basic_err_tuple_size/<DISAMB>::test[0]
 [Crux]   error loading "tupleArg": type mismatch in argument 1: Cryptol type ([8], [8]) does not match Rust type (u8, u8, u8): tuple size 2 does not match 3
+[Crux]   Context:
+[Crux]     internal: cryptol_load
+[Crux]     test/symb_eval/cryptol/basic_err_tuple_size.rs:8:37: 8:68: basic_err_tuple_size/<DISAMB>::test[0]
 
 [Crux] Overall status: Invalid.

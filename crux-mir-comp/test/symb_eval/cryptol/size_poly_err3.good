@@ -12,5 +12,9 @@ failures:
 [Crux]     {n} (fin n) => [n][8] -> [8]
 [Crux]   Rust type:
 [Crux]     (usize, usize, &[u8]) -> u8 [RustAbi]
+[Crux] 
+[Crux]   Context:
+[Crux]     internal: cryptol_load
+[Crux]     test/symb_eval/cryptol/size_poly_err3.rs:6:42: 6:81: size_poly_err3/<DISAMB>::test[0]
 
 [Crux] Overall status: Invalid.

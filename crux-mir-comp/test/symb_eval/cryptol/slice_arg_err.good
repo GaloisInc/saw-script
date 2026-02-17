@@ -8,5 +8,11 @@ failures:
 [Crux]   Slice length mismatch:
 [Crux]     Expected: 3
 [Crux]     Actual  : 2
+[Crux] 
+[Crux]   Context:
+[Crux]     internal: slice_arg_err/<DISAMB>::f[0]
+[Crux]     ./libs/crucible/cryptol.rs:61:13: 61:34 !test/symb_eval/cryptol/slice_arg_err.rs:3:1: 6:2: slice_arg_err/<DISAMB>::f[0]
+[Crux]     test/symb_eval/cryptol/slice_arg_err.rs:8:22: 8:31: slice_arg_err/<DISAMB>::g[0]
+[Crux]     test/symb_eval/cryptol/slice_arg_err.rs:14:14: 14:18: slice_arg_err/<DISAMB>::bar[0]
 
 [Crux] Overall status: Invalid.
