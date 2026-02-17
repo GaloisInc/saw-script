@@ -932,6 +932,40 @@ executable extcore-info
   hs-source-dirs: saw-tools/extcore-info
   main-is: Main.hs
 
+-- instantiate-cells
+--
+-- A tool for generating arbitrary Yosys RTLIL JSON files, focused on
+-- instantiating examples of internal cell types with a range of concrete
+-- parameter values. Intended for testing SAW's RTLIL semantics. See
+-- `intTests/test_yosys_cells/Makefile` for example usage.
+executable instantiate-cells
+  hs-source-dirs: intTests/test_yosys_cells
+  ghc-options:    -Wall
+  main-is:        InstantiateCells.hs
+  build-depends:
+    base,
+    aeson,
+    aeson-pretty,
+    bytestring,
+    containers,
+    mtl
+  default-language: Haskell2010
+
+-- yosys-specs
+--
+-- A tool for generating Cryptol specifications for an RTLIL module based on
+-- Yosys `eval` output. Intended for testing SAW's RTLIL semantics. See
+-- `intTests/test_yosys_cells/Makefile` for example usage.
+executable yosys-specs
+  hs-source-dirs: intTests/test_yosys_cells
+  ghc-options:    -Wall
+  main-is:        YosysSpecs.hs
+  build-depends:
+    base,
+    attoparsec,
+    bytestring,
+    filepath
+  default-language: Haskell2010
 
 ------------------------------------------------------------
 -- test suites
