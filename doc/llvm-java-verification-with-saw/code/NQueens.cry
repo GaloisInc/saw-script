@@ -8,7 +8,7 @@
   :sat nQueens : (Solution n)
   where n is the board-size
 
-  You may find that cvc4 takes a long time for solutions bigger than 5.
+  You may find that cvc5 takes a long time for solutions bigger than 18.
   For those sizes, we have had good luck with both Yices and Z3.  
 
   To do that,

@@ -7,10 +7,11 @@ Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
-module SAWCentral.SolverVersions where
+module SAWCentral.SolverVersions (getSolverBackendVersions) where
 
 import Control.Exception (SomeException, try)
 import System.Process (readProcessWithExitCode)
@@ -20,6 +21,7 @@ import qualified Data.Map as Map
 
 import qualified Data.SBV.Dynamic as SBV
 
+import SAWCentral.Panic (panic)
 import SAWCentral.SolverCache
 import SAWVersion.GitRev
 
@@ -29,19 +31,24 @@ import SAWVersion.GitRev
 getSolverVersion :: SBV.Solver -> IO (Maybe String)
 getSolverVersion s =
   let s' = SBV.solver $ SBV.defaultSolverConfig s
+      nope what = panic "getSolverVersion" [
+             "Version request for unsupported solver " <> what
+           ]
+
       (args, pref) = case SBV.name s' of
         -- n.b. abc will return a non-zero exit code if asked for command usage.
         SBV.ABC       -> (["s", "-q", "version;quit"], "UC Berkeley, ABC ")
         SBV.Boolector -> (["--version"]              , "")
         SBV.Bitwuzla  -> (["--version"]              , "")
-        SBV.CVC4      -> (["--version"]              , "This is CVC4 version ")
+        SBV.CVC4      -> nope "CVC4"
         SBV.CVC5      -> (["--version"]              , "This is cvc5 version ")
         SBV.DReal     -> (["--version"]              , "dReal v")
         SBV.MathSAT   -> (["-version"]               , "MathSAT5 version ")
-        SBV.OpenSMT   -> error "opensmt not currently supported"
+        SBV.OpenSMT   -> nope "OpenSMT"
         SBV.Yices     -> (["--version"]              , "Yices ")
         SBV.Z3        -> (["--version"]              , "Z3 version ")
-  in try (readProcessWithExitCode (SBV.executable s') args "") >>= \case
+  in
+  try (readProcessWithExitCode (SBV.executable s') args "") >>= \case
     Right (ExitSuccess,o,_) | (l:_) <- lines o ->
       return $ Just $ dropPrefix pref l
     Right _                   -> return Nothing
