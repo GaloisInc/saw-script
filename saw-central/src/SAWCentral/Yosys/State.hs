@@ -79,7 +79,7 @@ convertModuleInline ::
   IO YosysSequential
 convertModuleInline sc m0 =
   do let m = renameDffInstances m0
-     let ng = moduleNetgraph m
+     let ng = moduleNetgraph Map.empty m
 
      -- construct SAWCore and Cryptol types
      let dffs = Map.filter cellIsRegister (m ^. moduleCells)
@@ -125,13 +125,8 @@ convertModuleInline sc m0 =
           deriveTermsByIndices sc inp t
 
      preStateRecord <- cryptolRecordSelect sc domainFields domainRecord "__state__"
-     derivedPreState <-
-       forM (Map.assocs dffs) $ \(cnm, c) ->
-       case Map.lookup "Q" $ c ^. cellConnections of
-         Nothing -> panic "convertModuleInline" ["Missing expected output name for $dff cell"]
-         Just b ->
-           do t <- cryptolRecordSelect sc stateFields preStateRecord cnm
-              deriveTermsByIndices sc b t
+     let doPrestate cnm _ = cryptolRecordSelect sc stateFields preStateRecord cnm
+     prestates <- Map.traverseWithKey doPrestate dffs
 
      oneBitType <- SC.scBitvector sc 1
      xMsg <- SC.scString sc "Attempted to read X bit"
@@ -147,10 +142,9 @@ convertModuleInline sc m0 =
                ]
              ]
            , derivedInputs
-           , derivedPreState
            ]
 
-     terms <- netgraphToTerms sc Map.empty ng inputs
+     terms <- netgraphToTerms sc Map.empty ng inputs prestates
 
      postStateFields <-
        mapForWithKeyM dffs $ \cnm c ->

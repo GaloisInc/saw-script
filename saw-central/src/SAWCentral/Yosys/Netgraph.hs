@@ -23,6 +23,7 @@ import Control.Lens ((^.))
 import Control.Monad (forM, foldM)
 
 import qualified Data.Aeson as Aeson
+import qualified Data.IntSet as IntSet
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -33,9 +34,7 @@ import qualified Data.Graph as Graph
 import qualified SAWCore.SharedTerm as SC
 import qualified SAWCore.Name as SC
 
-import qualified Cryptol.TypeCheck.Type as C
-import qualified Cryptol.Utils.Ident as C
-import qualified Cryptol.Utils.RecordMap as C
+import SAWCentral.Panic (panic)
 
 import SAWCentral.Yosys.Utils
 import SAWCentral.Yosys.IR
@@ -50,12 +49,12 @@ import SAWCentral.Yosys.Cell
 data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
   , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell [Bitrep], CellInstName, [CellInstName])
-  -- , _netgraphVertexFromKey :: Text -> Maybe Graph.Vertex
+  -- , _netgraphVertexFromKey :: CellInstName -> Maybe Graph.Vertex
   }
 makeLenses ''Netgraph
 
-moduleNetgraph :: Module -> Netgraph
-moduleNetgraph m =
+moduleNetgraph :: Map CellTypeName ConvertedModule -> Module -> Netgraph
+moduleNetgraph env m =
   let
     sources :: Map Bitrep CellInstName
     sources =
@@ -64,9 +63,22 @@ moduleNetgraph m =
       | (cname, c) <- Map.assocs (m ^. moduleCells)
       , b <- concat (Map.elems (cellOutputConnections c)) ]
 
+    isMooreMachine :: CellType -> Bool
+    isMooreMachine ct =
+      case ct of
+        CellTypeUserType t ->
+          case Map.lookup t env of
+            Nothing -> False
+            Just cm ->
+              case _convertedModuleState cm of
+                Nothing -> False
+                Just (mt, _) -> mt == Moore
+        _ -> False
+
     cellDeps :: Cell [Bitrep] -> [CellInstName]
     cellDeps c
       | cellIsRegister c = []
+      | isMooreMachine (c ^. cellType) = []
       | otherwise =
         Set.toAscList $ Set.fromList $
         Maybe.mapMaybe (flip Map.lookup sources) $
@@ -83,19 +95,34 @@ moduleNetgraph m =
 --------------------------------------------------------------------------------
 -- ** Building a SAWCore term from a network graph
 
+-- | A Mealy machine allows same-cycle data flow from inputs to
+-- outputs, while a Moore machine only allows the outputs to depend on
+-- the internal state.
+data MachineType = Mealy | Moore
+  deriving Eq
+
+-- | A SAWCore translation of a module imported from the Yosys JSON format.
 data ConvertedModule = ConvertedModule
   { _convertedModuleTerm :: SC.Term
-  , _convertedModuleType :: SC.Term
-  , _convertedModuleCryptolType :: C.Type
+    -- ^ A SAWCore term representing the module semantics, of type
+    -- @Input -> Output@ for combinational modules, @{step : Input ->
+    -- State -> State, out : Input -> State -> Output}@ for Mealy
+    -- machines, or @{step : Input -> State -> State, out : State ->
+    -- Output}@ for Moore machines.
+  , _convertedModuleState :: Maybe (MachineType, SC.Term)
+    -- ^ The module's state type represented in both SAWCore and
+    -- Cryptol, or 'Nothing' if the module is purely combinational.
   }
 makeLenses ''ConvertedModule
 
+-- | A mapping from wires to their corresponding terms.
+type WireEnv = Map [Bitrep] Preterm
+
 lookupPatternTerm ::
-  (Ord b, Show b) =>
   SC.SharedContext ->
   YosysBitvecConsumer ->
-  [b] ->
-  Map [b] Preterm ->
+  [Bitrep] ->
+  WireEnv ->
   IO SC.Term
 lookupPatternTerm sc loc pat ts =
   case Map.lookup pat ts of
@@ -118,16 +145,17 @@ netgraphToTerms ::
   SC.SharedContext ->
   Map CellTypeName ConvertedModule ->
   Netgraph ->
-  Map [Bitrep] Preterm ->
-  IO (Map [Bitrep] Preterm)
-netgraphToTerms sc env ng inputs
+  WireEnv ->
+  Map CellInstName SC.Term {- ^ state inputs -} ->
+  IO WireEnv
+netgraphToTerms sc env ng inputs states
   | length (Graph.scc $ ng ^. netgraphGraph) /= length (ng ^. netgraphGraph)
   = yosysError $ YosysError "Network graph contains a cycle after splitting on DFFs; SAW does not currently support analysis of this circuit"
   | otherwise =
       let sorted = reverseTopSort $ ng ^. netgraphGraph
       in foldM doVertex inputs sorted
   where
-    doVertex :: Map [Bitrep] Preterm -> Graph.Vertex -> IO (Map [Bitrep] Preterm)
+    doVertex :: WireEnv -> Graph.Vertex -> IO WireEnv
     doVertex acc v =
       do let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v
          let outputFields = Map.filter isOutput (c ^. cellPortDirections)
@@ -158,18 +186,22 @@ netgraphToTerms sc env ng inputs
                 t <- combCellToTerm sc ctc args ywidth
                 ts <- deriveTermsByIndices sc bs t
                 pure $ Map.union ts acc
-           -- special handling for $dff/$ff nodes - we read their
-           -- /output/ from the inputs map, and later detect and write
-           -- their /input/ to the state
            CellTypeDff ->
-             do dffout <- lookupConn "Q"
-                r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") dffout acc
-                ts <- deriveTermsByIndices sc dffout r
+             do r <-
+                  case Map.lookup cnm states of
+                    Nothing ->
+                      panic "netgraphToTerms" ["missing state for dff cell " <> cnm]
+                    Just r -> pure r
+                bs <- lookupConn "Q"
+                ts <- deriveTermsByIndices sc bs r
                 pure $ Map.union ts acc
            CellTypeFf ->
-             do ffout <- lookupConn "Q"
-                r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") ffout acc
-                ts <- deriveTermsByIndices sc ffout r
+             do r <-
+                  case Map.lookup cnm states of
+                    Nothing -> panic "netgraphToTerms" ["missing state for ff cell " <> cnm]
+                    Just r -> pure r
+                bs <- lookupConn "Q"
+                ts <- deriveTermsByIndices sc bs r
                 pure $ Map.union ts acc
            CellTypeUnsupportedPrimitive nm
              | Map.null outputFields ->
@@ -182,10 +214,21 @@ netgraphToTerms sc env ng inputs
                Nothing ->
                  yosysError $ YosysErrorNoSuchSubmodule submoduleName cnm
                Just cm ->
-                 do let doInput inm i = lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
-                    args <- Map.traverseWithKey doInput (cellInputConnections c)
-                    rin <- cryptolRecord sc args
-                    r <- SC.scApply sc (cm ^. convertedModuleTerm) rin
+                 do inputArgs <-
+                      case cm ^. convertedModuleState of
+                        Just (Moore, _) -> pure []
+                        _ ->
+                          do let doInput inm i = lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
+                             args <- Map.traverseWithKey doInput (cellInputConnections c)
+                             rin <- cryptolRecord sc args
+                             pure [rin]
+                    let stateArgs = Maybe.maybeToList (Map.lookup cnm states)
+                    f <-
+                      case cm ^. convertedModuleState of
+                        Nothing -> pure (cm ^. convertedModuleTerm)
+                        Just _ -> SC.scRecordSelect sc (cm ^. convertedModuleTerm) "out"
+                    r <- SC.scApplyAll sc f (inputArgs ++ stateArgs)
+
                     -- once we've built a term, insert it along with each of its bits
                     ts <-
                       forM (Map.assocs $ cellOutputConnections c) $ \(o, out) ->
@@ -193,33 +236,103 @@ netgraphToTerms sc env ng inputs
                          deriveTermsByIndices sc out t
                     pure $ Map.union (Map.unions ts) acc
 
+-- | Compute the new state value for a stateful cell type.
+cellNewState ::
+  SC.SharedContext ->
+  Map CellTypeName ConvertedModule ->
+  WireEnv ->
+  CellInstName ->
+  (Cell [Bitrep], SC.Term) ->
+  IO SC.Term
+cellNewState sc env terms cnm (c, prevState) =
+  case c ^. cellType of
+    CellTypeDff ->
+      do bs <- lookupConn "D"
+         lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
+    CellTypeFf ->
+      do bs <- lookupConn "D"
+         lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
+    CellTypeCombinational _ ->
+      panic "cellNewState" ["unexpected combinational cell"]
+    CellTypeUnsupportedPrimitive _ ->
+      panic "cellNewState" ["unexpected unsupported cell"]
+    CellTypeUserType submoduleName ->
+      case Map.lookup submoduleName env of
+        Nothing ->
+          yosysError $ YosysErrorNoSuchSubmodule submoduleName cnm
+        Just cm ->
+          do -- Both Mealy and Moore machines have a "step" field of type `Input -> State -> State`
+             f <- SC.scRecordSelect sc (cm ^. convertedModuleTerm) "step"
+             let doInput inm i = lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i terms
+             args <- Map.traverseWithKey doInput (cellInputConnections c)
+             rin <- cryptolRecord sc args
+             SC.scApplyAll sc f [rin, prevState]
+  where
+    lookupConn portname =
+      case Map.lookup portname (c ^. cellConnections) of
+        Nothing ->
+          yosysError $
+          YosysError $
+          "Malformed Yosys file: Missing port " <> portname <> " for cell " <> cnm
+        Just bs ->
+          pure bs
+
 convertModule ::
   SC.SharedContext ->
   Map CellTypeName ConvertedModule ->
   Module ->
   IO ConvertedModule
-convertModule sc env m =
-  do let ng = moduleNetgraph m
+convertModule sc env m0 =
+  do let m = renameDffInstances m0
+     let ng = moduleNetgraph env m
 
      let inputPorts = moduleInputPorts m
      let outputPorts = moduleOutputPorts m
 
-     inputFields <- forM inputPorts
-       (\inp ->
-           SC.scBitvector sc . fromIntegral $ length inp
-       )
-     outputFields <- forM outputPorts
-       (\out ->
-           SC.scBitvector sc . fromIntegral $ length out
-       )
+     let
+       f :: [Bitrep] -> IO SC.Term
+       f = SC.scBitvector sc . fromIntegral . length
+
+     inputFields <- traverse f inputPorts
      inputRecordType <- cryptolRecordType sc inputFields
-     outputRecordType <- cryptolRecordType sc outputFields
-     inputRecord <- SC.scFreshVariable sc "input" inputRecordType
+     inputVarName <- SC.scFreshVarName sc "input"
+     inputRecord <- SC.scVariable sc inputVarName inputRecordType
 
      derivedInputs <-
        forM (Map.assocs inputPorts) $ \(nm, inp) ->
        do t <- cryptolRecordSelect sc inputFields inputRecord nm
           deriveTermsByIndices sc inp t
+
+     -- Collect state types from all register cells in this module
+     let
+       registerCells :: Map CellInstName (Cell [Bitrep])
+       registerCells = Map.filter cellIsRegister (m ^. moduleCells)
+       registerPorts :: Map CellInstName [Bitrep]
+       registerPorts = Map.mapMaybe (\c -> Map.lookup "Q" (c ^. cellConnections)) registerCells
+     -- stateFields1 :: Map CellInstName SC.Term
+     stateFields1 <- traverse f registerPorts
+
+     -- Collect state types from all submodules
+     let
+       getSubmodule :: Cell [Bitrep] -> Maybe ConvertedModule
+       getSubmodule c =
+         case c ^. cellType of
+           CellTypeUserType t -> Map.lookup t env
+           _ -> Nothing
+       submodules :: Map CellInstName ConvertedModule
+       submodules = Map.mapMaybe getSubmodule (m ^. moduleCells)
+       stateSubmodules :: Map CellInstName (MachineType, SC.Term)
+       stateSubmodules = Map.mapMaybe (\cm -> cm ^. convertedModuleState) submodules
+       stateFields2 :: Map CellInstName SC.Term
+       stateFields2 = fmap snd stateSubmodules
+       stateFields :: Map CellInstName SC.Term
+       stateFields = stateFields1 <> stateFields2
+
+     stateRecordType <- cryptolRecordType sc stateFields
+     stateVarName <- SC.scFreshVarName sc "state"
+     stateRecord <- SC.scVariable sc stateVarName stateRecordType
+     oldstates <-
+       Map.traverseWithKey (\nm _inp -> cryptolRecordSelect sc stateFields stateRecord nm) stateFields
 
      oneBitType <- SC.scBitvector sc 1
      xMsg <- SC.scString sc "Attempted to read X bit"
@@ -237,19 +350,45 @@ convertModule sc env m =
            , derivedInputs
            ]
 
-     terms <- netgraphToTerms sc env ng inputs
+     -- translate outputs of all cells in dependency order
+     terms <- netgraphToTerms sc env ng inputs oldstates
+     -- assemble the final output
      outputRecord <- cryptolRecord sc =<< mapForWithKeyM outputPorts
        (\onm out -> lookupPatternTerm sc (YosysBitvecConsumerOutputPort onm) out terms)
 
-     t <- SC.scAbstractTerms sc [inputRecord] outputRecord
-     ty <- SC.scFun sc inputRecordType outputRecordType
+     -- translate the new state components of all stateful cells (if any)
+     newstates <-
+       Map.traverseWithKey (cellNewState sc env terms) $
+       Map.intersectionWith (,) (m ^. moduleCells) oldstates
+     newstateRecord <- cryptolRecord sc newstates
 
-     let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)
-     let cty = C.tFun
-           (C.tRec . C.recordFromFields $ toCryptol <$> Map.assocs inputPorts)
-           (C.tRec . C.recordFromFields $ toCryptol <$> Map.assocs outputPorts)
-     pure ConvertedModule
-       { _convertedModuleTerm = t
-       , _convertedModuleType = ty
-       , _convertedModuleCryptolType = cty
-       }
+     case Map.null newstates of
+       True ->
+         -- No state; term for combinational module is function `Input -> Output`
+         do t <- SC.scAbstractTerms sc [inputRecord] outputRecord
+            pure $
+              ConvertedModule
+              { _convertedModuleTerm = t
+              , _convertedModuleState = Nothing
+              }
+       False ->
+         do step <- SC.scAbstractTerms sc [inputRecord, stateRecord] newstateRecord
+            case IntSet.member (SC.vnIndex inputVarName) (SC.freeVars outputRecord) of
+              True ->
+                -- Output depends on input, so we have a Mealy machine
+                do out <- SC.scAbstractTerms sc [inputRecord, stateRecord] outputRecord
+                   t <- SC.scRecordValue sc [("out", out), ("step", step)]
+                   pure $
+                     ConvertedModule
+                     { _convertedModuleTerm = t
+                     , _convertedModuleState = Just (Mealy, stateRecordType)
+                     }
+              False ->
+                -- Output does not depend on input, so we have a Moore machine
+                do out <- SC.scAbstractTerms sc [stateRecord] outputRecord
+                   t <- SC.scRecordValue sc [("out", out), ("step", step)]
+                   pure $
+                     ConvertedModule
+                     { _convertedModuleTerm = t
+                     , _convertedModuleState = Just (Moore, stateRecordType)
+                     }
