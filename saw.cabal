@@ -943,11 +943,11 @@ executable instantiate-cells
   main-is:        InstantiateCells.hs
   build-depends:
     base,
-    aeson        ^>=2.2,
-    aeson-pretty ^>=0.8,
-    bytestring   ^>=0.12,
-    containers   ^>=0.6,
-    mtl          ^>=2.3
+    aeson,
+    aeson-pretty,
+    bytestring,
+    containers,
+    mtl
   default-language: Haskell2010
 
 -- yosys-specs
@@ -961,8 +961,8 @@ executable yosys-specs
   main-is:        YosysSpecs.hs
   build-depends:
     base,
-    attoparsec ^>=0.14,
-    bytestring ^>=0.12,
+    attoparsec,
+    bytestring,
     filepath
   default-language: Haskell2010
 
