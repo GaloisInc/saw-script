@@ -156,14 +156,14 @@ span.spaces    { background: white }
 <span class="lineno">  137 </span>import Data.Macaw.X86.ArchTypes(X86_64)
 <span class="lineno">  138 </span>import qualified Data.Macaw.Types as M
 <span class="lineno">  139 </span>
-<span class="lineno">  140 </span>import CryptolSAWCore.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
-<span class="lineno">  141 </span>import SAWCoreWhat4.ReturnTrip
-<span class="lineno">  142 </span>
-<span class="lineno">  143 </span>import Cryptol.ModuleSystem.Name(Name)
-<span class="lineno">  144 </span>import Cryptol.ModuleSystem.Interface(ifTySyns)
-<span class="lineno">  145 </span>import Cryptol.TypeCheck.AST(TySyn(tsDef))
-<span class="lineno">  146 </span>import Cryptol.TypeCheck.TypePat(aNat)
-<span class="lineno">  147 </span>import Cryptol.Utils.PP(pp)
+<span class="lineno">  140 </span>import qualified CryptolSAWCore.Pretty as CryPP
+<span class="lineno">  141 </span>import CryptolSAWCore.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
+<span class="lineno">  142 </span>import SAWCoreWhat4.ReturnTrip
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>import Cryptol.ModuleSystem.Name(Name)
+<span class="lineno">  145 </span>import Cryptol.ModuleSystem.Interface(ifTySyns)
+<span class="lineno">  146 </span>import Cryptol.TypeCheck.AST(TySyn(tsDef))
+<span class="lineno">  147 </span>import Cryptol.TypeCheck.TypePat(aNat)
 <span class="lineno">  148 </span>import Cryptol.Utils.Patterns(matchMaybe)
 <span class="lineno">  149 </span>
 <span class="lineno">  150 </span>import SAWCentral.Crucible.Common (Sym, sawCoreState)
@@ -1357,7 +1357,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1338 </span><span class="spaces">                                   </span><span class="nottickedoff">)</span>
 <span class="lineno"> 1339 </span><span class="spaces">    </span><span class="nottickedoff">Right a -&gt; Right a</span>
 <span class="lineno"> 1340 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1341 </span><span class="spaces">  </span><span class="nottickedoff">where ppName = Text.pack . show . pp</span></span>
+<span class="lineno"> 1341 </span><span class="spaces">  </span><span class="nottickedoff">where ppName n = CryPP.pp n</span></span>
 <span class="lineno"> 1342 </span>
 <span class="lineno"> 1343 </span>
 <span class="lineno"> 1344 </span>

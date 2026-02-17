@@ -54,12 +54,12 @@ span.spaces    { background: white }
 <span class="lineno">   35 </span>
 <span class="lineno">   36 </span>import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalValType)
 <span class="lineno">   37 </span>import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
-<span class="lineno">   38 </span>import qualified Cryptol.Utils.PP as Cryptol (pp)
-<span class="lineno">   39 </span>
-<span class="lineno">   40 </span>import qualified What4.BaseTypes as W4
-<span class="lineno">   41 </span>import qualified What4.Interface as W4
-<span class="lineno">   42 </span>
-<span class="lineno">   43 </span>import SAWCore.SharedTerm
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>import qualified What4.BaseTypes as W4
+<span class="lineno">   40 </span>import qualified What4.Interface as W4
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>import SAWCore.SharedTerm
+<span class="lineno">   43 </span>import qualified CryptolSAWCore.Pretty as CryPP
 <span class="lineno">   44 </span>import CryptolSAWCore.TypedTerm
 <span class="lineno">   45 </span>
 <span class="lineno">   46 </span>-- crucible
@@ -107,12 +107,12 @@ span.spaces    { background: white }
 <span class="lineno">   88 </span><span class="spaces">    </span><span class="istickedoff">unlines</span>
 <span class="lineno">   89 </span><span class="spaces">    </span><span class="istickedoff">[ &quot;Expected monomorphic term&quot;</span>
 <span class="lineno">   90 </span><span class="spaces">    </span><span class="istickedoff">, &quot;instead got:&quot;</span>
-<span class="lineno">   91 </span><span class="spaces">    </span><span class="istickedoff">, show (Cryptol.pp s)</span>
+<span class="lineno">   91 </span><span class="spaces">    </span><span class="istickedoff">, Text.unpack (CryPP.pp s)</span>
 <span class="lineno">   92 </span><span class="spaces">    </span><span class="istickedoff">]</span>
 <span class="lineno">   93 </span><span class="spaces">  </span><span class="istickedoff">show (JVMNonRepresentableType ty) =</span>
 <span class="lineno">   94 </span><span class="spaces">    </span><span class="istickedoff">unlines</span>
 <span class="lineno">   95 </span><span class="spaces">    </span><span class="istickedoff">[ &quot;Type not representable in JVM:&quot;</span>
-<span class="lineno">   96 </span><span class="spaces">    </span><span class="istickedoff">, show (Cryptol.pp ty)</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="istickedoff">, Text.unpack (CryPP.pp ty)</span>
 <span class="lineno">   97 </span><span class="spaces">    </span><span class="istickedoff">]</span>
 <span class="lineno">   98 </span><span class="spaces">  </span><span class="istickedoff">show (JVMInvalidTypedTerm tp) =</span>
 <span class="lineno">   99 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>

@@ -96,25 +96,25 @@ span.spaces    { background: white }
 <span class="lineno">   77 </span>
 <span class="lineno">   78 </span>import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 <span class="lineno">   79 </span>import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
-<span class="lineno">   80 </span>import qualified Cryptol.Utils.PP as Cryptol (pp)
-<span class="lineno">   81 </span>import Lang.Crucible.Simulator
-<span class="lineno">   82 </span>  ( GlobalVar(..), RegValue, RegValue'(..), SymGlobalState
-<span class="lineno">   83 </span>  , VariantBranch(..), injectVariant
-<span class="lineno">   84 </span>  )
-<span class="lineno">   85 </span>import Lang.Crucible.Simulator.RegMap (muxRegForType)
-<span class="lineno">   86 </span>import Lang.Crucible.Types (TypeRepr(..))
-<span class="lineno">   87 </span>import qualified Mir.DefId as Mir
-<span class="lineno">   88 </span>import qualified Mir.FancyMuxTree as Mir
-<span class="lineno">   89 </span>import qualified Mir.Generator as Mir
-<span class="lineno">   90 </span>import qualified Mir.Intrinsics as Mir
-<span class="lineno">   91 </span>import Mir.Intrinsics (MIR)
-<span class="lineno">   92 </span>import qualified Mir.Mir as Mir
-<span class="lineno">   93 </span>import qualified Mir.TransTy as Mir
-<span class="lineno">   94 </span>
-<span class="lineno">   95 </span>import qualified What4.BaseTypes as W4
-<span class="lineno">   96 </span>import qualified What4.Interface as W4
-<span class="lineno">   97 </span>import qualified What4.Partial as W4
-<span class="lineno">   98 </span>
+<span class="lineno">   80 </span>import Lang.Crucible.Simulator
+<span class="lineno">   81 </span>  ( GlobalVar(..), RegValue, RegValue'(..), SymGlobalState
+<span class="lineno">   82 </span>  , VariantBranch(..), injectVariant
+<span class="lineno">   83 </span>  )
+<span class="lineno">   84 </span>import Lang.Crucible.Simulator.RegMap (muxRegForType)
+<span class="lineno">   85 </span>import Lang.Crucible.Types (TypeRepr(..))
+<span class="lineno">   86 </span>import qualified Mir.DefId as Mir
+<span class="lineno">   87 </span>import qualified Mir.FancyMuxTree as Mir
+<span class="lineno">   88 </span>import qualified Mir.Generator as Mir
+<span class="lineno">   89 </span>import qualified Mir.Intrinsics as Mir
+<span class="lineno">   90 </span>import Mir.Intrinsics (MIR)
+<span class="lineno">   91 </span>import qualified Mir.Mir as Mir
+<span class="lineno">   92 </span>import qualified Mir.TransTy as Mir
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>import qualified What4.BaseTypes as W4
+<span class="lineno">   95 </span>import qualified What4.Interface as W4
+<span class="lineno">   96 </span>import qualified What4.Partial as W4
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>import qualified CryptolSAWCore.Pretty as CryPP
 <span class="lineno">   99 </span>import CryptolSAWCore.Cryptol (importType, emptyEnv)
 <span class="lineno">  100 </span>import SAWCore.SharedTerm
 <span class="lineno">  101 </span>import SAWCoreWhat4.ReturnTrip
@@ -321,12 +321,12 @@ span.spaces    { background: white }
 <span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
 <span class="lineno">  303 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Expected monomorphic term&quot;</span></span>
 <span class="lineno">  304 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;instead got:&quot;</span></span>
-<span class="lineno">  305 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, show (Cryptol.pp s)</span></span>
+<span class="lineno">  305 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, Text.unpack (CryPP.pp s)</span></span>
 <span class="lineno">  306 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  307 </span><span class="spaces">  </span><span class="istickedoff">show (MIRNonRepresentableType ty err) =</span>
 <span class="lineno">  308 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">unlines</span></span>
 <span class="lineno">  309 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Type not representable in MIR:&quot;</span></span>
-<span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, show (Cryptol.pp ty)</span></span>
+<span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, Text.unpack (CryPP.pp ty)</span></span>
 <span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, toMIRTypeErrToString err</span></span>
 <span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  313 </span><span class="spaces">  </span><span class="istickedoff">show (MIRInvalidTypedTerm tp) =</span>

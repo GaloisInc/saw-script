@@ -87,40 +87,40 @@ span.spaces    { background: white }
 <span class="lineno">   68 </span>-- cryptol
 <span class="lineno">   69 </span>import qualified Cryptol.Eval.Type as Cryptol (evalValType)
 <span class="lineno">   70 </span>import qualified Cryptol.TypeCheck.Type as Cryptol
-<span class="lineno">   71 </span>import qualified Cryptol.Utils.PP as Cryptol (pp)
-<span class="lineno">   72 </span>
-<span class="lineno">   73 </span>-- what4
-<span class="lineno">   74 </span>import qualified What4.Partial as W4
-<span class="lineno">   75 </span>import qualified What4.ProgramLoc as W4
-<span class="lineno">   76 </span>import qualified What4.Interface as W4
-<span class="lineno">   77 </span>import qualified What4.Utils.StringLiteral as W4S
-<span class="lineno">   78 </span>
-<span class="lineno">   79 </span>-- jvm-parser
-<span class="lineno">   80 </span>import qualified Language.JVM.Parser as J
-<span class="lineno">   81 </span>import qualified Language.JVM.Common as J (dotsToSlashes)
-<span class="lineno">   82 </span>
-<span class="lineno">   83 </span>-- crucible
-<span class="lineno">   84 </span>import qualified Lang.Crucible.Backend as Crucible
-<span class="lineno">   85 </span>import qualified Lang.Crucible.Backend.Online as Crucible
-<span class="lineno">   86 </span>import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(..))
-<span class="lineno">   87 </span>import qualified Lang.Crucible.FunctionHandle as Crucible
-<span class="lineno">   88 </span>import qualified Lang.Crucible.Simulator as Crucible
-<span class="lineno">   89 </span>import qualified Lang.Crucible.Simulator.GlobalState as Crucible
-<span class="lineno">   90 </span>import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
-<span class="lineno">   91 </span>import qualified Lang.Crucible.Simulator.SimError as Crucible
-<span class="lineno">   92 </span>
-<span class="lineno">   93 </span>-- crucible-jvm
-<span class="lineno">   94 </span>import qualified Lang.JVM.Codebase as CB
-<span class="lineno">   95 </span>import qualified Lang.Crucible.JVM as CJ
-<span class="lineno">   96 </span>
-<span class="lineno">   97 </span>-- parameterized-utils
-<span class="lineno">   98 </span>import           Data.Parameterized.Classes
-<span class="lineno">   99 </span>import qualified Data.Parameterized.Context as Ctx
-<span class="lineno">  100 </span>
-<span class="lineno">  101 </span>import SAWCore.FiniteValue (prettyFirstOrderValue)
-<span class="lineno">  102 </span>import SAWCore.Name (VarName(..))
-<span class="lineno">  103 </span>import SAWCore.SharedTerm
-<span class="lineno">  104 </span>import CryptolSAWCore.TypedTerm
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>-- what4
+<span class="lineno">   73 </span>import qualified What4.Partial as W4
+<span class="lineno">   74 </span>import qualified What4.ProgramLoc as W4
+<span class="lineno">   75 </span>import qualified What4.Interface as W4
+<span class="lineno">   76 </span>import qualified What4.Utils.StringLiteral as W4S
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>-- jvm-parser
+<span class="lineno">   79 </span>import qualified Language.JVM.Parser as J
+<span class="lineno">   80 </span>import qualified Language.JVM.Common as J (dotsToSlashes)
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>-- crucible
+<span class="lineno">   83 </span>import qualified Lang.Crucible.Backend as Crucible
+<span class="lineno">   84 </span>import qualified Lang.Crucible.Backend.Online as Crucible
+<span class="lineno">   85 </span>import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(..))
+<span class="lineno">   86 </span>import qualified Lang.Crucible.FunctionHandle as Crucible
+<span class="lineno">   87 </span>import qualified Lang.Crucible.Simulator as Crucible
+<span class="lineno">   88 </span>import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+<span class="lineno">   89 </span>import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
+<span class="lineno">   90 </span>import qualified Lang.Crucible.Simulator.SimError as Crucible
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>-- crucible-jvm
+<span class="lineno">   93 </span>import qualified Lang.JVM.Codebase as CB
+<span class="lineno">   94 </span>import qualified Lang.Crucible.JVM as CJ
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>-- parameterized-utils
+<span class="lineno">   97 </span>import           Data.Parameterized.Classes
+<span class="lineno">   98 </span>import qualified Data.Parameterized.Context as Ctx
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>import SAWCore.FiniteValue (prettyFirstOrderValue)
+<span class="lineno">  101 </span>import SAWCore.Name (VarName(..))
+<span class="lineno">  102 </span>import SAWCore.SharedTerm
+<span class="lineno">  103 </span>import CryptolSAWCore.TypedTerm
+<span class="lineno">  104 </span>import qualified CryptolSAWCore.Pretty as CryPP
 <span class="lineno">  105 </span>
 <span class="lineno">  106 </span>import SAWCoreWhat4.ReturnTrip
 <span class="lineno">  107 </span>
@@ -1066,7 +1066,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1047 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;jvm_array_is: Specified value does not have the expected type&quot;</span>
 <span class="lineno"> 1048 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected array length: &quot; ++ show len</span>
 <span class="lineno"> 1049 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected element type: &quot; ++ show ty</span>
-<span class="lineno"> 1050 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Given type: &quot; ++ show (Cryptol.pp schema)</span>
+<span class="lineno"> 1050 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Given type: &quot; ++ Text.unpack (CryPP.pp schema)</span>
 <span class="lineno"> 1051 </span><span class="spaces">        </span><span class="istickedoff">]</span>
 <span class="lineno"> 1052 </span><span class="spaces">      </span><span class="istickedoff">JVMArrayMultiple _ptr -&gt;</span>
 <span class="lineno"> 1053 </span><span class="spaces">        </span><span class="istickedoff">&quot;jvm_array_is: Multiple specifications for the same array reference&quot;</span>

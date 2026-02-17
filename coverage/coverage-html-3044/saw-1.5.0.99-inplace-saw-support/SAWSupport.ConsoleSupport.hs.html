@@ -132,8 +132,8 @@ span.spaces    { background: white }
 <span class="lineno">  113 </span>-- | Backend for `warnN` in `SAWConsole` in terms of a function `say`
 <span class="lineno">  114 </span>--   for issuing a single message.
 <span class="lineno">  115 </span>warnN :: SayFunc m -&gt; Text -&gt; m ()
-<span class="lineno">  116 </span><span class="decl"><span class="nottickedoff">warnN say msg =</span>
-<span class="lineno">  117 </span><span class="spaces">    </span><span class="nottickedoff">say $ &quot;Warning: &quot; &lt;&gt; msg</span></span>
+<span class="lineno">  116 </span><span class="decl"><span class="istickedoff">warnN say msg =</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">say $ &quot;Warning: &quot; &lt;&gt; msg</span></span>
 <span class="lineno">  118 </span>
 <span class="lineno">  119 </span>-- | Backend for `warnP` and `warnX` in `SAWConsole` in terms of a
 <span class="lineno">  120 </span>--   function `say` for issuing a single message.
@@ -174,7 +174,7 @@ span.spaces    { background: white }
 <span class="lineno">  155 </span>--   rather then Text.
 <span class="lineno">  156 </span>--
 <span class="lineno">  157 </span>errN' :: SayFunc m -&gt; PPS.Opts -&gt; PPS.Doc -&gt; m ()
-<span class="lineno">  158 </span><span class="decl"><span class="nottickedoff">errN' say opts msg = errN say $ PPS.renderText opts msg</span></span>
+<span class="lineno">  158 </span><span class="decl"><span class="istickedoff">errN' say opts msg = errN say $ PPS.renderText opts msg</span></span>
 <span class="lineno">  159 </span>
 <span class="lineno">  160 </span>-- | Backend for `errP'`, `errDP'`, `errX'`, and `errDX'` in
 <span class="lineno">  161 </span>--   `SAWConsole` in terms of a function `say` for issuing a single
@@ -193,7 +193,7 @@ span.spaces    { background: white }
 <span class="lineno">  174 </span>--   XXX: as in errN'
 <span class="lineno">  175 </span>--
 <span class="lineno">  176 </span>warnN' :: SayFunc m -&gt; PPS.Opts -&gt; PPS.Doc -&gt; m ()
-<span class="lineno">  177 </span><span class="decl"><span class="nottickedoff">warnN' say opts msg = warnN say $ PPS.renderText opts msg</span></span>
+<span class="lineno">  177 </span><span class="decl"><span class="istickedoff">warnN' say opts msg = warnN say $ PPS.renderText opts msg</span></span>
 <span class="lineno">  178 </span>
 <span class="lineno">  179 </span>-- | Backend for `warnP'` and `warnX'` in `SAWConsole` in terms of a
 <span class="lineno">  180 </span>--   function `say` for issuing a single message.

@@ -83,15 +83,15 @@ span.spaces    { background: white }
 <span class="lineno">   64 </span>import           Cryptol.TypeCheck.Solver.InfNat
 <span class="lineno">   65 </span>import qualified Cryptol.TypeCheck.Type               as Cry
 <span class="lineno">   66 </span>import           Cryptol.Utils.Ident                  as Cry
-<span class="lineno">   67 </span>import           Cryptol.Utils.PP                     (pretty)
-<span class="lineno">   68 </span>import           Cryptol.Utils.RecordMap
-<span class="lineno">   69 </span>
-<span class="lineno">   70 </span>import           SAWCentral.Crucible.Common.MethodSpec
-<span class="lineno">   71 </span>import           SAWCentral.Crucible.LLVM.Builtins
-<span class="lineno">   72 </span>import           SAWCentral.Crucible.LLVM.MethodSpecIR
-<span class="lineno">   73 </span>import           SAWCentral.LLVMBuiltins
-<span class="lineno">   74 </span>import           SAWCentral.Panic
-<span class="lineno">   75 </span>import           SAWCentral.Value
+<span class="lineno">   67 </span>import           Cryptol.Utils.RecordMap
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>import           SAWCentral.Crucible.Common.MethodSpec
+<span class="lineno">   70 </span>import           SAWCentral.Crucible.LLVM.Builtins
+<span class="lineno">   71 </span>import           SAWCentral.Crucible.LLVM.MethodSpecIR
+<span class="lineno">   72 </span>import           SAWCentral.LLVMBuiltins
+<span class="lineno">   73 </span>import           SAWCentral.Panic
+<span class="lineno">   74 </span>import           SAWCentral.Value
+<span class="lineno">   75 </span>import qualified CryptolSAWCore.Pretty as CryPP
 <span class="lineno">   76 </span>import           CryptolSAWCore.CryptolEnv
 <span class="lineno">   77 </span>import           SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 <span class="lineno">   78 </span>import           SAWCore.Name (Name(..))
@@ -221,7 +221,7 @@ span.spaces    { background: white }
 <span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;Not a numeric literal type argument: &quot; ++ argTerm'</span></span>
 <span class="lineno">  203 </span><span class="spaces"></span><span class="istickedoff">buildTypeEnv params [] = <span class="nottickedoff">throwFFISetup $</span></span>
 <span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">&quot;Foreign function not fully instantiated;\n&quot;</span></span>
-<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">++ &quot;Missing type arguments for: &quot; ++ intercalate &quot;, &quot; (map pretty params)</span></span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">++ &quot;Missing type arguments for: &quot; ++ intercalate &quot;, &quot; (map (Text.unpack . CryPP.pp) params)</span></span>
 <span class="lineno">  206 </span><span class="spaces"></span><span class="istickedoff">buildTypeEnv [] _ = <span class="nottickedoff">throwFFISetup &quot;Too many (type) arguments&quot;</span></span></span>
 <span class="lineno">  207 </span>
 <span class="lineno">  208 </span>-- | Given a Cryptol type argument as a term, return the corresponding size_t
