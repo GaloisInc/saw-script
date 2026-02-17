@@ -73,8 +73,10 @@ import Lang.Crucible.Simulator.ExecutionTree
           (ExecResult(..), SimContext(..), FnState(..)
           , ExecState(InitialState)
           , FunctionBindings(..)
+          , initSimContext
           )
-import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
+import Lang.Crucible.Simulator.SimError
+          (SimErrorReason, simErrorLoc, simErrorReason)
 import Lang.Crucible.Backend
           (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,goalsToList
           ,assumptionsPred,IsSymBackend(..),SomeBackend(..),HasSymInterface(..))
@@ -470,7 +472,8 @@ doSim ::
   State ->
   (State -> IO ()) ->
   IO Integer
-doSim opts elf sfs name (globs,overs) st checkPost =
+doSim opts elf sfs name (globs,overs) st checkPost
+  | SomeBackend bak <- backend opts =
   do say "  Looking for address... "
      let path = fileName opts
      addr <- findSymbol path (symMap elf) name
@@ -489,7 +492,7 @@ doSim opts elf sfs name (globs,overs) st checkPost =
 
      -- writeFile "XXX.hs" (show cfg)
 
-     let sym  = case backend opts of SomeBackend bak -> backendGetSym bak
+     let sym  = backendGetSym bak
          mvar = memvar opts
 
      setSimulatorVerbosity 0 sym
@@ -516,17 +519,18 @@ doSim opts elf sfs name (globs,overs) st checkPost =
                       , lazilyPopulateGlobalMem = \_ _ -> pure
                       }
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
-           ctx = SimContext { _ctxBackend = backend opts
-                              , ctxSolverProof = \a -> a
-                              , ctxIntrinsicTypes = llvmIntrinsicTypes
-                              , simHandleAllocator = allocator opts
-                              , printHandle = stdout
-                              , extensionImpl = macawExtensions archEvalFns mvar mmConf
-                              , _functionBindings = FnBindings $
-                                insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) emptyHandleMap
-                              , _cruciblePersonality = MacawSimulatorState
-                              , _profilingMetrics = Map.empty
-                              }
+           ctx = initSimContext
+                   bak
+                   llvmIntrinsicTypes
+                   (allocator opts)
+                   stdout
+                   (FnBindings $
+                     insertHandleMap
+                       (cfgHandle cfg)
+                       (UseCFG cfg (postdomInfo cfg))
+                       emptyHandleMap)
+                   (macawExtensions archEvalFns mvar mmConf)
+                   MacawSimulatorState
        let initGlobals = insertGlobal mvar (stateMem st) emptyGlobals
 
        executeCrucible []
@@ -623,7 +627,9 @@ getGoals (SomeBackend bak) mdMap =
   toGoal st finalMdMap (ProofGoal asmps g) =
     do a1 <- toSC sym st =<< assumptionsPred sym asmps
        p  <- toSC sym st (g ^. labeledPred)
-       let SimError loc msg = g^.labeledPredMsg
+       let simErr = g^.labeledPredMsg
+       let loc = simErrorLoc simErr
+       let msg = simErrorReason simErr
        let defaultMd = ConditionMetadata
                        { conditionLoc = loc
                        , conditionTags = mempty

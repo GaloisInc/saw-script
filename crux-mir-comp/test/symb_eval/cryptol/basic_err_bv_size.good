@@ -6,5 +6,8 @@ failures:
 [Crux] Found counterexample for verification goal
 [Crux]   test/symb_eval/cryptol/basic_err_bv_size.rs:8:32: 8:62: error: in basic_err_bv_size/<DISAMB>::test[0]
 [Crux]   error loading "addByte": type mismatch in argument 2: Cryptol type [8] does not match Rust type u16: bitvector width 8 does not match 16
+[Crux]   Context:
+[Crux]     internal: cryptol_load
+[Crux]     test/symb_eval/cryptol/basic_err_bv_size.rs:8:32: 8:62: basic_err_bv_size/<DISAMB>::test[0]
 
 [Crux] Overall status: Invalid.

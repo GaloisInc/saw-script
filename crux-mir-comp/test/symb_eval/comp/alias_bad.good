@@ -7,6 +7,9 @@ failures:
 [Crux] Found counterexample for verification goal
 [Crux]   test/symb_eval/comp/alias_bad.rs:45:5: 45:14: error: in alias_bad/<DISAMB>::use_f[0]
 [Crux]   references AllocIndex 0 and AllocIndex 1 must not overlap
+[Crux]   Context:
+[Crux]     internal: alias_bad/<DISAMB>::f[0]
+[Crux]     test/symb_eval/comp/alias_bad.rs:45:5: 45:14: alias_bad/<DISAMB>::use_f[0]
 [Crux] Found counterexample for verification goal
 [Crux]   ./libs/crucible/lib.rs:45:9: 45:79 !test/symb_eval/comp/alias_bad.rs:46:5: 46:34: error: in alias_bad/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/alias_bad.rs:46:5:

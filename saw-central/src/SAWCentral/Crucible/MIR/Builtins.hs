@@ -1560,11 +1560,13 @@ verifyPoststate cc mspec env0 globals ret mdMap =
     sym = cc^.mccSym
 
     verifyObligation sc finalMdMap
-      (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError loc err))) =
+      (Crucible.ProofGoal hyps (Crucible.LabeledPred concl simErr)) =
       do st         <- sawCoreState sym
          hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
          conclTerm  <- toSC sym st concl
          obligation <- scImplies sc hypTerm conclTerm
+         let loc = Crucible.simErrorLoc simErr
+         let err = Crucible.simErrorReason simErr
          let defaultMd = MS.ConditionMetadata
                          { MS.conditionLoc = loc
                          , MS.conditionTags = mempty

@@ -10,5 +10,9 @@ failures:
 [Crux]     {n, a} (fin n, Eq a, Ring a) => [n]a -> a
 [Crux]   Unsupported parameters:
 [Crux]     a: *
+[Crux] 
+[Crux]   Context:
+[Crux]     internal: cryptol_load
+[Crux]     test/symb_eval/cryptol/size_poly_err4.rs:6:42: 6:73: size_poly_err4/<DISAMB>::test[0]
 
 [Crux] Overall status: Invalid.

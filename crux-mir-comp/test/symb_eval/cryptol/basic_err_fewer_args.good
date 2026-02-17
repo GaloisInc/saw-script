@@ -12,5 +12,9 @@ failures:
 [Crux]     [8] -> [8] -> [8]
 [Crux]   Rust type:
 [Crux]     (u8, u8, u8) -> u8 [RustAbi]
+[Crux] 
+[Crux]   Context:
+[Crux]     internal: cryptol_load
+[Crux]     test/symb_eval/cryptol/basic_err_fewer_args.rs:8:35: 8:65: basic_err_fewer_args/<DISAMB>::test[0]
 
 [Crux] Overall status: Invalid.
