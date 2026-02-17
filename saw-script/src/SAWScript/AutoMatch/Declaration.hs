@@ -9,14 +9,15 @@ module SAWScript.AutoMatch.Declaration
   , declSig
   ) where
 
-import Data.Text (Text, unpack)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Arrow ( (&&&) )
 
 import Cryptol.TypeCheck.AST (Type(..), TCon(..), TC(..))
-import Cryptol.Utils.PP
+import qualified CryptolSAWCore.Pretty as CryPP
 
 -- | Names are strings (for which we'll use Text)
 type Name = Text
@@ -29,9 +30,9 @@ data Arg = Arg { argName :: Name
 instance Show Arg where
    showsPrec d (Arg n t) =
       showParen (d > app_prec) $
-         showString (unpack n)
+         showString (Text.unpack n)
          . showString " : "
-         . showString (pretty t)
+         . showString (Text.unpack $ CryPP.pp t)
       where app_prec = 10
 
 -- | Declarations have a name, a return type, and a list of arguments
@@ -43,13 +44,13 @@ data Decl = Decl { declName :: Name
 instance Show Decl where
    showsPrec d (Decl n t as) =
       showParen (d > app_prec) $
-         showString (unpack n)
+         showString (Text.unpack n)
          . showString " : "
          . showString "("
          . showString (intercalate ", " (map show as))
          . showString ")"
          . showString " -> "
-         . showString (pretty t)
+         . showString (Text.unpack $ CryPP.pp t)
       where
          app_prec = 10
 

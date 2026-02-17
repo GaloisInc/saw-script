@@ -1633,7 +1633,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
           [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
           _ -> let showVar x = Text.unpack (vnName x) in
                let showAssignment (x, val) =
-                     mconcat [ " ", showVar x, ": ", show $ ppFirstOrderValue ppOpts val ]
+                     mconcat [ " ", showVar x, ": ", show $ prettyFirstOrderValue ppOpts val ]
                in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
         printOutLnTop OnlyCounterExamples "----------------------------------"
         throwTopLevel "Proof failed."

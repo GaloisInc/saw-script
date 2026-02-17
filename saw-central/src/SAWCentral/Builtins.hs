@@ -23,7 +23,6 @@ import Control.Monad.State (MonadState(..), gets, modify)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf, isInfixOf, sort, intersperse)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
@@ -48,7 +47,9 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
-import qualified Cryptol.Utils.PP as CryptolPP
+--import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
+
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
@@ -57,7 +58,7 @@ import qualified CryptolSAWCore.Simpset as Cryptol
 import qualified SAWSupport.PanicSupport as PanicSupport
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShowText, render)
+import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ConsoleSupport as Cons
 
 -- saw-core
@@ -83,6 +84,7 @@ import SAWCore.Rewriter
 import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
 
 -- cryptol-saw-core
+import qualified CryptolSAWCore.Pretty as CryPP
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 -- saw-core-sbv
@@ -101,7 +103,6 @@ import qualified Data.AIG as AIG
 import qualified Cryptol.ModuleSystem.Env as C (meSearchPath)
 import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
 import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
@@ -124,6 +125,7 @@ import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))
 import qualified SAWCentral.Crucible.Common as Common
 import SAWCentral.TopLevel
+import qualified SAWCentral.AST as SAST
 import qualified SAWCentral.Value as SV
 import SAWCentral.Value (ProofScript, printOutLnTop, AIGNetwork)
 import SAWCentral.SolverCache
@@ -143,8 +145,9 @@ import SAWCentral.VerificationSummary
 showPrim :: SV.Value -> TopLevel Text
 showPrim v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  nenv <- io . scGetNamingEnv =<< getSharedContext
-  return $ Text.pack $ SV.showsPrecValue opts nenv 0 v ""
+  sc <- getSharedContext
+  v' <- liftIO $ SV.prettyValue sc opts v
+  return $ PPS.renderText opts v'
 
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
@@ -266,32 +269,66 @@ readAIGPrim ftxt = do
 replacePrim :: TypedTerm -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 replacePrim pat replace t = do
   sc <- getSharedContext
+  opts <- gets rwPPOpts
 
   let tpat  = ttTerm pat
   let trepl = ttTerm replace
 
-  unless (closedTerm tpat) $ fail $ unlines
-    [ "pattern term is not closed", show tpat ]
+  unless (closedTerm tpat) $ do
+    tpat' <- liftIO $ Text.pack <$> ppTerm sc opts tpat
+    fail $ Text.unpack $ Text.unlines [
+        "Pattern term is:",
+        "   " <> tpat',
+        "It must be closed, and is not."
+     ]
 
-  unless (closedTerm trepl) $ fail $ unlines
-    [ "replacement term is not closed", show trepl ]
+  unless (closedTerm trepl) $ do
+    trepl' <- liftIO $ Text.pack <$> ppTerm sc opts trepl
+    fail $ Text.unpack $ Text.unlines [
+        "Replacement term is:",
+        "   " <> trepl',
+        "It must be closed, and is not."
+     ]
 
   io $ do
     ty1 <- scTypeOf sc tpat
     ty2 <- scTypeOf sc trepl
     c <- scConvertible sc ty1 ty2
-    unless c $ fail $ unlines
-      [ "terms do not have convertible types", show tpat, show ty1, show trepl, show ty2 ]
+    unless c $ do
+      tpat' <- liftIO $ Text.pack <$> ppTerm sc opts tpat
+      ty1' <- liftIO $ Text.pack <$> ppTerm sc opts ty1
+      trepl' <- liftIO $ Text.pack <$> ppTerm sc opts trepl
+      ty2' <- liftIO $ Text.pack <$> ppTerm sc opts ty2
+      fail $ Text.unpack $ Text.unlines [
+          "Pattern term is:",
+          "   " <> tpat',
+          "Its type is:",
+          "   " <> ty1',
+          "Replacement term is:",
+          "   " <> trepl',
+          "Its type is:",
+          "   " <> ty2',
+          "These types are not convertible."
+       ]
 
   let ss = emptySimpset :: SV.SAWSimpset
   (_,t') <- io $ replaceTerm sc ss (tpat, trepl) (ttTerm t)
 
   io $ do
-    ty  <- scTypeOf sc (ttTerm t)
-    ty' <- scTypeOf sc t'
-    c' <- scConvertible sc ty ty'
-    unless c' $ fail $ unlines
-      [ "term does not have the same type after replacement", show ty, show ty' ]
+    oldty <- scTypeOf sc (ttTerm t)
+    newty <- scTypeOf sc t'
+    c' <- scConvertible sc oldty newty
+    unless c' $ do
+      oldty' <- liftIO $ Text.pack <$> ppTerm sc opts oldty
+      newty' <- liftIO $ Text.pack <$> ppTerm sc opts newty
+      -- XXX: should this be a panic?
+      fail $ Text.unpack $ Text.unlines [
+          "Original type of term was:",
+          "   " <> oldty',
+          "After replacement it is:",
+          "   " <> newty',
+          "These should be the same!"
+       ]
 
   return t{ ttTerm = t' }
 
@@ -299,14 +336,24 @@ replacePrim pat replace t = do
 hoistIfsPrim :: TypedTerm -> TopLevel TypedTerm
 hoistIfsPrim t = do
   sc <- getSharedContext
+  opts <- gets rwPPOpts
   t' <- io $ hoistIfs sc (ttTerm t)
 
   io $ do
-    ty  <- scTypeOf sc (ttTerm t)
-    ty' <- scTypeOf sc t'
-    c' <- scConvertible sc ty ty'
-    unless c' $ fail $ unlines
-      [ "term does not have the same type after hoisting ifs", show ty, show ty' ]
+    oldty <- scTypeOf sc (ttTerm t)
+    newty <- scTypeOf sc t'
+    c' <- scConvertible sc oldty newty
+    unless c' $ do
+      oldty' <- ppTerm sc opts oldty
+      newty' <- ppTerm sc opts newty
+      -- XXX should this be a panic?
+      fail $ unlines [
+          "Type of original term:",
+          "   " <> oldty',
+          "Type after hoisting ifs:",
+          "   " <> newty',
+          "These should be the same!"
+       ]
 
   return t{ ttTerm = t' }
 
@@ -509,9 +556,14 @@ print_goal_depth n =
 printGoalConsts :: ProofScript ()
 printGoalConsts =
   execTactic $ tacticId $ \goal ->
-  do let cs = sequentConstantSet (goalSequent goal)
-     mapM_ (printOutLnTop Info) $
-       [ show nm | (_, nm) <- Map.toList cs ]
+  do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     let cs = sequentConstantSet (goalSequent goal)
+         printOne (idnum, info) = do
+             let nm = Name idnum info
+             nm' <- liftIO $ ppName sc opts nm
+             printOutLnTop Info (Text.unpack nm')
+     mapM_ printOne $ Map.toList cs
 
 printGoalSize :: ProofScript ()
 printGoalSize =
@@ -1228,7 +1280,7 @@ proveHelper nm script t f = do
   res <- SV.runProofScript script prop goal Nothing (Text.pack nm) True False
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                          ++ SV.showsProofResult opts res ""
+                          ++ Text.unpack (ppProofResult opts res)
   case res of
     ValidProof _stats thm ->
       do
@@ -1460,7 +1512,7 @@ satPrintPrim ::
 satPrintPrim script t = do
   result <- satPrim script t
   opts <- getTopLevelPPOpts
-  printOutLnTop Info (SV.showsSatResult opts result "")
+  printOutLnTop Info (Text.unpack $ SV.ppSatResult opts result)
 
 -- | Quick check (random test) a term and print the result. The
 -- 'Integer' parameter is the number of random tests to run.
@@ -1689,12 +1741,12 @@ envCmd = do
       io $ printOutLn opts Info $ "Rebindable globals:"
       io $ printOutLn opts Info $ ""
       let printRB (x, (_pos, ty, _v)) = do
-              let str = x <> " : rebindable " <> PPS.pShowText ty
+              let str = x <> " : rebindable " <> SAST.ppSchema ty
               printOutLn opts Info $ Text.unpack str
       io $ mapM_ printRB $ Map.assocs rbenv
 
   let printItem (x, (_pos, _lc, ty, _v, _doc)) =
-          printOutLn opts Info $ Text.unpack (x <> " : " <> PPS.pShowText ty)
+          printOutLn opts Info $ Text.unpack (x <> " : " <> SAST.ppSchema ty)
       -- Print only the visible objects
       keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
       -- Insert a blank line in the output where there's a scope boundary
@@ -1748,7 +1800,10 @@ failsPrim m = do
               -- Avoid trapping panics
               throwM e
       | Just (_ :: Cons.Fatal) <- Ex.fromException ex -> do
-              liftIO $ TextIO.putStrLn "== Anticipated failure =="
+              -- The message has already been printed if we get a Fatal,
+              -- so don't print this like it's a heading; it will appear
+              -- after.
+              liftIO $ TextIO.putStrLn "(Failure was expected, continuing)"
       | otherwise -> do
               liftIO $ TextIO.putStrLn "== Anticipated failure message =="
               liftIO $ print ex
@@ -1871,7 +1926,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
     Nothing -> return (TypedTerm (TypedTermSchema schema) trm)
     Just tys -> do
       let vars = C.sVars schema
-      let nms = C.addTNames CryptolPP.defaultPPCfg vars IntMap.empty
+      let nms = CryPP.addTNames vars CryPP.emptyNameMap
       mapM_ (warnDefault nms) (zip vars tys)
       let applyType :: Term -> C.Type -> IO Term
           applyType t ty = do
@@ -1889,7 +1944,12 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
       return (TypedTerm (TypedTermSchema schema') trm'')
   where
     warnDefault ns (x,t) =
-      printOutLn opts Info $ show $ C.text "Assuming" C.<+> C.ppWithNames ns (x :: C.TParam) C.<+> C.text "=" C.<+> C.pp t
+      let x' = CryPP.prettyWithNames ns (x :: C.TParam)
+          t' = CryPP.pretty t
+          msg = "Assuming" <+> x' <+> "=" <+> t'
+      in
+      printOutLn opts Info $ PPS.render PPS.defaultOpts msg
+          
     -- Apply a substitution to a type *without* simplifying
     -- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to
     -- 'apSubst', which performs simplifications wherever possible.)
@@ -2020,7 +2080,7 @@ prove_core script input =
      res <- SV.runProofScript script p goal Nothing "prove_core" True False
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                                  ++ SV.showsProofResult opts res ""
+                                  ++ Text.unpack (ppProofResult opts res)
      case res of
        ValidProof _ thm -> SV.returnTheoremProof thm
        InvalidProof _ _ pst -> failProof pst

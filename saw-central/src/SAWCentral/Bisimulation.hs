@@ -87,7 +87,6 @@ import Data.Maybe (mapMaybe)
 import qualified Data.Text as Text
 
 import qualified Cryptol.TypeCheck.Type as C
-import qualified Cryptol.Utils.PP as C
 
 import qualified SAWSupport.Pretty as PPS
 
@@ -96,6 +95,7 @@ import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Recognizer
 
+import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.TypedTerm
 import qualified CryptolSAWCore.Cryptol as C
 
@@ -159,7 +159,7 @@ proveAll script ts = do
     failProof :: ProofResult -> TopLevel ()
     failProof res = do
       opts <- rwPPOpts <$> getTopLevelRW
-      fail $ "prove_bisim failed.\n" ++ showsProofResult opts res ""
+      fail $ "prove_bisim failed.\n" ++ Text.unpack (ppProofResult opts res)
 
 -- | Generate 'Term' for application of a relation
 scRelation :: TypedTerm -> Term -> Term -> TopLevel Term
@@ -555,8 +555,8 @@ proveBisimulation script bthms srel orel lhs rhs = do
   (rhsName, rhsInputType) <- typecheckSide rhs rhsStateType outputType
   unless (lhsInputType == rhsInputType) $
     fail $ unlines [ "Error: Mismatched input types in bisimulation terms."
-                   , "  LHS input type: " ++ C.pretty lhsInputType
-                   , "  RHS input type: " ++ C.pretty rhsInputType ]
+                   , "  LHS input type: " ++ Text.unpack (CryPP.pp lhsInputType)
+                   , "  RHS input type: " ++ Text.unpack (CryPP.pp rhsInputType) ]
 
   let bt = BisimTheorem
            { bisimTheoremStateRelation = srel
@@ -609,8 +609,8 @@ proveBisimulation script bthms srel orel lhs rhs = do
                 , C.TCon (C.TC C.TCBit) []]])) -> do
           unless (o1 == o2) $ fail $ unlines
             [ "Error: Mismatched output types in relation."
-            , "LHS output type: " ++ C.pretty o1
-            , "RHS output type: " ++ C.pretty o2 ]
+            , "LHS output type: " ++ Text.unpack (CryPP.pp o1)
+            , "RHS output type: " ++ Text.unpack (CryPP.pp o2) ]
 
           return (s1, s2, o1)
         _ -> do
@@ -637,13 +637,13 @@ proveBisimulation script bthms srel orel lhs rhs = do
                 [ s2, C.TCon (C.TC C.TCBit) []]])) -> do
           unless (s1 == lhsStateType) $ fail $ unlines
             [ "Error: LHS of state relation and output relations have incompatible state types:"
-            , "  State relation LHS state type: " ++ C.pretty s1
-            , "  Output relation LHS state type: " ++ C.pretty lhsStateType ]
+            , "  State relation LHS state type: " ++ Text.unpack (CryPP.pp s1)
+            , "  Output relation LHS state type: " ++ Text.unpack (CryPP.pp lhsStateType) ]
 
           unless (s2 == rhsStateType) $ fail $ unlines
             [ "Error: RHS of state relation and output relations have incompatible state types:"
-            , "  State relation RHS state type: " ++ C.pretty s2
-            , "  Output relation RHS state type: " ++ C.pretty rhsStateType ]
+            , "  State relation RHS state type: " ++ Text.unpack (CryPP.pp s2)
+            , "  Output relation RHS state type: " ++ Text.unpack (CryPP.pp rhsStateType) ]
         _ -> do
             sc <- getSharedContext
             opts <- State.gets rwPPOpts
@@ -675,24 +675,24 @@ proveBisimulation script bthms srel orel lhs rhs = do
               , C.TCon (C.TC (C.TCTuple 2)) [s', o] ])) -> do
           unless (s == stateType) $ fail $ unlines
             [ "Error: State type in bisimulation term input does not match state type in relation."
-            , "  Expected: " ++ C.pretty stateType
-            , "  Actual: " ++ C.pretty s]
+            , "  Expected: " ++ Text.unpack (CryPP.pp stateType)
+            , "  Actual: " ++ Text.unpack (CryPP.pp s)]
 
           unless (s' == stateType) $ fail $ unlines
             [ "Error: State type in bisimulation term output does not match state type in relation."
-            , "  Expected: " ++ C.pretty stateType
-            , "  Actual: " ++ C.pretty s']
+            , "  Expected: " ++ Text.unpack (CryPP.pp stateType)
+            , "  Actual: " ++ Text.unpack (CryPP.pp s')]
 
           unless (o == outputType) $ fail $ unlines
             [ "Error: Output type in bisimulation term does not match output type in relation."
-            ,"  Expected: " ++ C.pretty outputType
-            , "  Actual: " ++ C.pretty o ]
+            ,"  Expected: " ++ Text.unpack (CryPP.pp outputType)
+            , "  Actual: " ++ Text.unpack (CryPP.pp o) ]
 
           return (name, i)
         _ -> do
           sc <- getSharedContext
           opts <- State.gets rwPPOpts
-          let stStr = C.pretty stateType
+          let stStr = Text.unpack $ CryPP.pp stateType
           side' <- liftIO $ PPS.render opts <$> prettyTypedTermType sc opts (ttType side)
           fail $ unlines [
               "Error: Unexpected bisimulation term type.",

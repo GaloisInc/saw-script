@@ -137,6 +137,7 @@ import Data.Macaw.X86.Symbolic
 import Data.Macaw.X86.ArchTypes(X86_64)
 import qualified Data.Macaw.Types as M
 
+import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
 import SAWCoreWhat4.ReturnTrip
 
@@ -144,7 +145,6 @@ import Cryptol.ModuleSystem.Name(Name)
 import Cryptol.ModuleSystem.Interface(ifTySyns)
 import Cryptol.TypeCheck.AST(TySyn(tsDef))
 import Cryptol.TypeCheck.TypePat(aNat)
-import Cryptol.Utils.PP(pp)
 import Cryptol.Utils.Patterns(matchMaybe)
 
 import SAWCentral.Crucible.Common (Sym, sawCoreState)
@@ -1338,7 +1338,7 @@ lookupCry x mp =
                                    )
     Right a -> Right a
 
-  where ppName = Text.pack . show . pp
+  where ppName n = CryPP.pp n
 
 
 

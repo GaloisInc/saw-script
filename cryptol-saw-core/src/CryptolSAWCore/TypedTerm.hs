@@ -16,6 +16,7 @@ module CryptolSAWCore.TypedTerm (
     prettyTypedTermPure,
     prettyTypedTermTypePure,
     prettyTypedVariable,
+    ppTypedTermType,
 
     ttTypeAsTerm,
     ttTermLens,
@@ -34,19 +35,21 @@ module CryptolSAWCore.TypedTerm (
   ) where
 
 import Control.Monad (foldM)
+import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
 
 import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
 import Cryptol.ModuleSystem.Name (nameIdent)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.Utils.PP as C (pp, ppPrec)
 import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
-import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts)
+import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, renderText)
 
+import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
 import SAWCore.FiniteValue
 import SAWCore.Name (VarName(..))
@@ -86,13 +89,13 @@ prettyTypedTerm :: SharedContext -> PPS.Opts -> TypedTerm -> IO (PP.Doc ann)
 prettyTypedTerm sc opts (TypedTerm tp tm) = do
   tm' <- prettyTerm sc opts tm
   tp' <- prettyTypedTermType sc opts tp
-  pure $ PP.unAnnotate tm' PP.<+> ":" PP.<+> tp'
+  pure $ PP.unAnnotate tm' <+> ":" <+> tp'
 
 prettyTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO (PP.Doc ann)
 prettyTypedTermType _sc _opts (TypedTermSchema sch) =
-  pure $ PP.viaShow (C.ppPrec 0 sch)
+  pure $ CryPP.pretty sch
 prettyTypedTermType _sc _opts (TypedTermKind k) =
-  pure $ PP.viaShow (C.ppPrec 0 k)
+  pure $ CryPP.pretty k
 prettyTypedTermType sc opts (TypedTermOther tp) = do
   tp' <- prettyTerm sc opts tp
   pure $ PP.unAnnotate tp'
@@ -100,22 +103,26 @@ prettyTypedTermType sc opts (TypedTermOther tp) = do
 prettyTypedTermPure :: TypedTerm -> PP.Doc ann
 prettyTypedTermPure (TypedTerm tp tm) =
   PP.unAnnotate (prettyTermPure PPS.defaultOpts tm)
-  PP.<+> ":" PP.<+>
+  <+> ":" <+>
   prettyTypedTermTypePure tp
 
 prettyTypedTermTypePure :: TypedTermType -> PP.Doc ann
 prettyTypedTermTypePure (TypedTermSchema sch) =
-  PP.viaShow (C.ppPrec 0 sch)
+  CryPP.pretty sch
 prettyTypedTermTypePure (TypedTermKind k) =
-  PP.viaShow (C.ppPrec 0 k)
+  CryPP.pretty k
 prettyTypedTermTypePure (TypedTermOther tp) =
   PP.unAnnotate (prettyTermPure PPS.defaultOpts tp)
 
 prettyTypedVariable :: TypedVariable -> PP.Doc ann
 prettyTypedVariable (TypedVariable ctp vn _tp) =
   PP.unAnnotate (PP.pretty (vnName vn))
-  PP.<+> ":" PP.<+>
-  PP.viaShow (C.ppPrec 0 ctp)
+  <+> ":" <+>
+  CryPP.pretty ctp
+
+ppTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO Text
+ppTypedTermType sc opts ty =
+  PPS.renderText opts <$> prettyTypedTermType sc opts ty
 
 
 -- | Convert the 'ttType' field of a 'TypedTerm' to a SAW core term
@@ -249,16 +256,18 @@ data CryptolModule =
 --
 prettyCryptolModule :: CryptolModule -> PP.Doc ann
 prettyCryptolModule (CryptolModule sm tm) =
-  let cpp item = PP.viaShow $ C.pp item
-      prettyTSyn (C.TySyn name params _props rhs _doc) =
-        let name' = cpp (nameIdent name)
-            params' = map cpp params
-            rhs' = cpp rhs
+  let prettyTSyn (C.TySyn name params _props rhs _doc) =
+        let name' = CryPP.pretty (nameIdent name)
+            params' = map CryPP.pretty params
+            rhs' = CryPP.pretty rhs
         in
-        PP.indent 4 $ PP.hsep (name' : params') PP.<+> "=" PP.<+> rhs'
+        PP.indent 4 $ PP.hsep (name' : params') <+> "=" <+> rhs'
 
       prettyBinding (name, TypedTerm (TypedTermSchema schema) _) =
-        [PP.indent 4 $ cpp (nameIdent name) PP.<+> ":" PP.<+> cpp schema]
+        let name' = CryPP.pretty (nameIdent name)
+            schema' = CryPP.pretty schema
+        in
+        [PP.indent 4 $ name' <+> ":" <+> schema']
       prettyBinding _ =
         []
       synonyms =

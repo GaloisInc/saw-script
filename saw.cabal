@@ -245,6 +245,7 @@ library cryptol-saw-core
     CryptolSAWCore.Cryptol
     CryptolSAWCore.CryptolEnv
     CryptolSAWCore.Prelude
+    CryptolSAWCore.Pretty
     CryptolSAWCore.Simpset
     CryptolSAWCore.TypedTerm
   other-modules:
@@ -985,6 +986,7 @@ test-suite saw-core-tests
     tasty-ant-xml >= 1.1.0,
     tasty-hunit,
     tasty-quickcheck,
+    text,
     time,
     unordered-containers,
     vector,

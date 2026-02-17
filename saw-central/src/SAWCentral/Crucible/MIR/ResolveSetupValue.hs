@@ -77,7 +77,6 @@ import qualified Prettyprinter as PP
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
-import qualified Cryptol.Utils.PP as Cryptol (pp)
 import Lang.Crucible.Simulator
   ( GlobalVar(..), RegValue, RegValue'(..), SymGlobalState
   , VariantBranch(..), injectVariant
@@ -96,6 +95,7 @@ import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.Partial as W4
 
+import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.Cryptol (importType, emptyEnv)
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip
@@ -302,12 +302,12 @@ instance Show MIRTypeOfError where
     unlines
     [ "Expected monomorphic term"
     , "instead got:"
-    , show (Cryptol.pp s)
+    , Text.unpack (CryPP.pp s)
     ]
   show (MIRNonRepresentableType ty err) =
     unlines
     [ "Type not representable in MIR:"
-    , show (Cryptol.pp ty)
+    , Text.unpack (CryPP.pp ty)
     , toMIRTypeErrToString err
     ]
   show (MIRInvalidTypedTerm tp) =

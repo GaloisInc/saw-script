@@ -1,10 +1,10 @@
 Loading file "lists.saw"
 null:
-(true,true)
-(false,false)
+(true, true)
+(false, false)
 nth:
-(1,1)
-(4,4)
+(1, 1)
+(4, 4)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in nth
@@ -22,8 +22,8 @@ Stack trace:
 nth: index too large
 
 head:
-(1,1)
-(3,3)
+(1, 1)
+(3, 3)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in head
@@ -33,8 +33,8 @@ Stack trace:
 head: empty list
 
 tail:
-([],[])
-([4,5],[4,5])
+([], [])
+([4, 5], [4, 5])
 == Anticipated failure message ==
 Stack trace:
    (builtin) in tail
@@ -44,23 +44,23 @@ Stack trace:
 tail: empty list
 
 length
-(0,0)
-(1,1)
-(5,5)
+(0, 0)
+(1, 1)
+(5, 5)
 concat:
-([],[])
-([1],[1])
-([1],[1])
-([2,1],[2,1])
-([2,4,6,8,1,2,3],[2,4,6,8,1,2,3])
+([], [])
+([1], [1])
+([1], [1])
+([2, 1], [2, 1])
+([2, 4, 6, 8, 1, 2, 3], [2, 4, 6, 8, 1, 2, 3])
 str_concat:
-("","")
-("a","a")
-("a","a")
-("ba","ba")
-("defgabc","defgabc")
-("","")
-("abc","abc")
+("", "")
+("a", "a")
+("a", "a")
+("ba", "ba")
+("defgabc", "defgabc")
+("", "")
+("abc", "abc")
 *** for (empty) ***
 *** for (one) ***
 1
@@ -70,7 +70,7 @@ str_concat:
 *** end for ***
 **** map ****
 []
-[2,3]
+[2, 3]
 **** foldl ****
 zero
 zeroalpha

@@ -163,7 +163,7 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
 -- saw-core
-import SAWCore.FiniteValue (ppFirstOrderValue)
+import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
@@ -827,7 +827,7 @@ verifyObligations cc mspec tactic assumes asserts =
                    printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
                  else
                    let showVar x = Text.unpack (vnName x) in
-                   let showAssignment (x, val) = "  " ++ showVar x ++ ": " ++ show (ppFirstOrderValue opts val) in
+                   let showAssignment (x, val) = "  " ++ showVar x ++ ": " ++ show (prettyFirstOrderValue opts val) in
                    mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
                  printOutLnTop OnlyCounterExamples "----------------------------------"
                  throwTopLevel "Proof failed." -- Mirroring behavior of llvm_verify

@@ -1,13 +1,12 @@
 Loading file "leak04.saw"
 should be unbound
-== Anticipated failure message ==
+Error: Cryptol: [error] at leak04.saw:10:26--10:27
+    Type not in scope: x
 Stack trace:
    (builtin) in (callback)
    (builtin) in fails
    leak04.saw:10:4-10:33 in f
    leak04.saw:14:1-14:5 (at top level)
-Cryptol error:
-[error] at leak04.saw:10:26--10:27
-    Type not in scope: x
 
+(Failure was expected, continuing)
 (exit)

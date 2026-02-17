@@ -15,6 +15,7 @@ import Data.List (sortBy)
 import Data.Maybe
 import Data.Ord
 import Data.Text (Text)
+import qualified Data.Text as Text
 
 import Cryptol.Eval (EvalOpts(..))
 import qualified Cryptol.ModuleSystem as M
@@ -23,8 +24,8 @@ import Cryptol.Utils.Ident (identText)
 import Cryptol.Utils.Logger (quietLogger)
 import qualified Cryptol.TypeCheck.AST as AST
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
-import Cryptol.Utils.PP
 
+import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.CryptolEnv( meSolverConfig )
 
 
@@ -32,7 +33,7 @@ import CryptolSAWCore.CryptolEnv( meSolverConfig )
 --   Yields an Interaction so that we can talk to the user about what went wrong
 getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
 getDeclsCryptol path = do
-   let evalOpts = EvalOpts quietLogger defaultPPOpts
+   let evalOpts = EvalOpts quietLogger CryPP.defaultPPOpts
    modEnv <- M.initialModuleEnv
    let minp solver = M.ModuleInput {
            minpCallStacks = True,
@@ -46,9 +47,9 @@ getDeclsCryptol path = do
      SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
          M.loadModuleByPath path (minp solver)
    return $ do
-      forM_ warnings $ liftF . flip Warning () . pretty
+      forM_ warnings $ liftF . flip Warning () . Text.unpack . CryPP.pp
       case result of
-         Left err -> liftF $ Failure True (pretty err) Nothing
+         Left err -> liftF $ Failure True (Text.unpack $ CryPP.pp err) Nothing
          Right ((_, top), _) ->
             case top of
               AST.TCTopSignature {} ->

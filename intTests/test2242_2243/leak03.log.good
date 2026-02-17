@@ -1,6 +1,7 @@
 Loading file "leak03.saw"
 this should fail
-== Anticipated failure message ==
+Error: Cryptol: [error] at leak03.saw:8:54--8:59
+    Value not in scope: quack
 Stack trace:
    (builtin) in (callback)
    (builtin) in fails
@@ -10,18 +11,15 @@ Stack trace:
    (builtin) in prove_print
    leak03.saw:6:4-10:16 in foo
    leak03.saw:18:1-18:7 (at top level)
-Cryptol error:
-[error] at leak03.saw:8:54--8:59
-    Value not in scope: quack
 
+(Failure was expected, continuing)
 this should also fail
-== Anticipated failure message ==
+Error: Cryptol: [error] at leak03.saw:14:13--14:18
+    Value not in scope: quack
 Stack trace:
    (builtin) in bar
    leak03.saw:20:8-20:14 in (callback)
    (builtin) in fails
    leak03.saw:20:1-20:14 (at top level)
-Cryptol error:
-[error] at leak03.saw:14:13--14:18
-    Value not in scope: quack
 
+(Failure was expected, continuing)

@@ -23,6 +23,7 @@ module SAWCentral.Value (
 
     -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWServer.SAWServer
     SAWSimpset,
+    prettySimpset,
     -- used by SAWCentral.Builtins
     AIGNetwork(..),
     -- used by SAWCentral.Prover.Exporter, SAWCentral.Builtins,
@@ -33,14 +34,14 @@ module SAWCentral.Value (
     -- used by SAWScript.Interpreter
     --    SAWServer.SAWServer, SAWServer.*CrucibleSetup
     BuiltinContext(..),
-    -- used by SAWCentral.Builtins.hs, and appears in the Value type and showsSatResult
+    -- used by SAWCentral.Builtins.hs, and appears in the Value type and prettySatResult
     SatResult(..),
-    -- used by SAWCentral.Bisimulation, SAWCentral.Builtins, SAWScript.REPL.Monad
-    showsProofResult,
     -- used by SAWCentral.Builtins
-    showsSatResult,
+    ppSatResult,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
-    showsPrecValue,
+    ppValue,
+    prettyValue,
+    uglyValue,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
     evaluateTypedTerm,
     -- used by SAWScript.Search, SAWScript.Typechecker
@@ -228,13 +229,15 @@ import Data.Parameterized.Some
 import Data.Sequence (Seq)
 import Data.Typeable
 import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 import System.FilePath((</>))
 
 import qualified Data.AIG as AIG
 
+import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
+import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, Doc, renderText, ppStringLiteral)
 import qualified SAWSupport.Console as Cons
 import qualified SAWSupport.ConsoleSupport as Cons (Fatal(..))
 
@@ -269,9 +272,9 @@ import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
 
-import SAWCore.Name (VarName(..), DisplayNameEnv, emptyDisplayNameEnv)
+import SAWCore.Name (VarName(..))
 import CryptolSAWCore.CryptolEnv as CEnv
-import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
+import SAWCore.FiniteValue (FirstOrderValue, prettyFirstOrderValue)
 import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, ctxtRewriteRule, listRules)
 import SAWCore.SharedTerm
 import qualified SAWCore.Term.Pretty as SAWCorePP
@@ -280,10 +283,11 @@ import CryptolSAWCore.TypedTerm
 import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
 import qualified Cryptol.Eval.Concrete as C
-import CryptolSAWCore.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.Ident as T (mkIdent, packModName)
-import Cryptol.Utils.PP (pretty)
+
+import CryptolSAWCore.Cryptol (exportValueWithSchema)
+import qualified CryptolSAWCore.Pretty as CryPP
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
@@ -636,131 +640,194 @@ data SatResult
   = Unsat SolverStats
   | Sat SolverStats [(VarName, FirstOrderValue)]
   | SatUnknown
-    deriving (Show)
+--    deriving (Show)
 
-showsProofResult :: PPS.Opts -> ProofResult -> ShowS
-showsProofResult opts r =
-  case r of
-    ValidProof _ _ -> showString "Valid"
-    InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
-    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining"
+prettySatResult :: PPS.Opts -> SatResult -> PPS.Doc
+prettySatResult opts r = case r of
+    Unsat _ -> "Unsat"
+    SatUnknown  -> "Unknown"
+    Sat _ ts ->
+        let prettyModelEntry (x, v) =
+                let x' = PP.pretty $ vnName x in
+                x' <+> "=" <+> prettyFirstOrderValue opts v
+            ts' = map prettyModelEntry ts
+        in
+        PP.vsep (["Sat: ["] ++ ts' ++ ["]"])
+
+ppSatResult :: PPS.Opts -> SatResult -> Text
+ppSatResult opts r =
+    PPS.renderText opts $ prettySatResult opts r
+
+prettySimpset :: PPS.Opts -> Simpset a -> PPS.Doc
+prettySimpset opts ss =
+  PP.vsep ([
+      "Rewrite Rules",
+      "============="
+   ] ++ map prettyRule (listRules ss))
   where
-    showVal t = shows (ppFirstOrderValue opts t)
-    showEqn (x, t) = showVarName x . showString " = " . showVal t
-    showVarName vn = showString (Text.unpack (vnName vn))
+    -- XXX: shouldn't this print using _all_ the vars over all the rules?
+    prettyTerm' vars t = SAWCorePP.prettyTermWithNameList opts vars t
+    prettyRule r =
+      let vars = map fst (ctxtRewriteRule r)
+          lhs = prettyTerm' vars (lhsRewriteRule r)
+          rhs = prettyTerm' vars (rhsRewriteRule r)
+      in
+      "*" <+> (PP.nest 2 $ PP.fillSep [lhs, "=" <+> rhs])
 
-    showMulti _ [] = showString "]"
-    showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
-
-showsSatResult :: PPS.Opts -> SatResult -> ShowS
-showsSatResult opts r =
-  case r of
-    Unsat _ -> showString "Unsat"
-    Sat _ ts -> showString "Sat: [" . showMulti "" ts
-    SatUnknown  -> showString "Unknown"
+prettyValue :: SharedContext -> PPS.Opts -> Value -> IO PPS.Doc
+prettyValue sc opts = visit (0 :: Int)
   where
-    showVal t = shows (ppFirstOrderValue opts t)
-    showVarName vn = showString (Text.unpack (vnName vn))
-    showEqn (x, t) = showVarName x . showString " = " . showVal t
-    showMulti _ [] = showString "]"
-    showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
+    visit prec v0 = case v0 of
+      VBool True -> pure "true"
+      VBool False -> pure "false"
+      VString s -> pure $ PP.pretty $ PPS.ppStringLiteral s
+      VInteger n -> pure $ PP.viaShow n
+      VArray vs -> do
+          vs' <- mapM (visit 0) vs
+          pure $ PP.brackets $ PP.fillSep $ PP.punctuate "," vs'
+      VTuple vs -> do
+          vs' <- mapM (visit 0) vs
+          pure $ PP.parens $ PP.fillSep $ PP.punctuate "," vs'
+      VRecord fields -> do
+          let prettyField (n, fv) = do
+                fv' <- visit 0 fv
+                pure $ PP.pretty n <+> "=" <+> fv'
+          fields' <- mapM prettyField (Map.toList fields)
+          let body = PP.sep $ PP.punctuate "," fields'
+              body' = PP.flatAlt (PP.indent 3 body) body
+          pure $ PP.group $ PP.braces (PP.line <> body' <> PP.line)
 
-showSimpset :: PPS.Opts -> Simpset a -> String
-showSimpset opts ss =
-  unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
-  where
-    ppRule r =
-      PP.pretty '*' PP.<+>
-      (PP.nest 2 $ PP.fillSep
-       [ ppTerm' vars (lhsRewriteRule r)
-       , PP.pretty '=' PP.<+> ppTerm' vars (rhsRewriteRule r) ])
-      where vars = map fst (ctxtRewriteRule r)
-    ppTerm' vars t = SAWCorePP.prettyTermWithNameList opts vars t
+      VLambda _env _mname pat e ->
+          let pat' = SS.prettyPattern pat
+              e' = SS.prettyExpr e
+              line1 = "\\" <+> pat' <+> "->"
+              line2 = PP.flatAlt (PP.indent 3 e') e'
+          in
+          pure $ PP.group (line1 <> PP.line <> line2)
 
--- XXX the precedence in here needs to be cleaned up
-showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
-showsPrecValue opts nenv p v =
-  case v of
-    VBool True -> showString "true"
-    VBool False -> showString "false"
-    VString s -> shows s
-    VInteger n -> shows n
-    VArray vs -> PPS.showBrackets $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
-    VTuple vs -> showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
-    VRecord m ->
-      PPS.showBraces $ PPS.showCommaSep $ map showFld (Map.toList m)
-        where
-          showFld (n, fv) =
-            showString (Text.unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
+      VBuiltin name _args _wrapper ->
+          let name' = PP.pretty name in
+          pure $ PP.sep ["<<", "builtin", name', ">>"]
 
-    VLambda _env _mname pat e ->
-      let pat' = PP.pretty pat
-          e' = PP.pretty e
-      in
-      shows $ PP.sep ["\\", pat', "->", e']
+      VTerm t ->
+          prettyTerm sc opts (ttTerm t)
+      VType sig ->
+          pure $ CryPP.pretty sig
+      VReturn _pos _chain v -> do
+          v' <- visit (prec + 1) v
+          pure $ "return" <+> v'
+      VDo _chain _env body ->
+        -- The printer for expressions doesn't print positions, so we can
+        -- feed in a dummy.
+        let pos = SS.PosInternal "<<do-block>>"
+            e = SS.Block pos body
+        in
+        pure $ SS.prettyExpr e
+      VBindOnce _pos _chain v1 v2 -> do
+        v1' <- visit 0 v1
+        v2' <- visit 0 v2
+        pure $ v1' <+> ">>=" <+> v2'
+      VTopLevel {} -> pure "<<TopLevel>>"
+      VSimpset ss -> pure $ prettySimpset opts ss
+      VProofScript {} -> pure "<<proof script>>"
+      VTheorem thm -> do
+        nenv <- scGetNamingEnv sc
+        pure $ "Theorem" <+> PP.parens (prettyProp opts nenv (thmProp thm))
+      VBisimTheorem _ -> pure "<<Bisimulation theorem>>"
+      VLLVMCrucibleSetup{} -> pure "<<LLVM Setup>>"
+      VLLVMCrucibleSetupValue{} -> pure "<<LLVM Value>>"
+      VLLVMCrucibleMethodSpec{} -> pure "<<LLVM MethodSpec>>"
+      VLLVMModuleSkeleton s -> pure $ PP.viaShow s
+      VLLVMFunctionSkeleton s -> pure $ PP.viaShow s
+      VLLVMSkeletonState _ -> pure "<<Skeleton state>>"
+      VLLVMFunctionProfile _ -> pure "<<Array sizes for function>>"
+      VJavaType {} -> pure "<<Java type>>"
+      VLLVMType t -> pure $ PP.viaShow (Crucible.LLVM.ppType t)
+      VMIRType t -> pure $ PP.pretty t
+      VCryptolModule m -> pure $ CEnv.prettyExtCryptolModule m
+      VLLVMModule (Some m) -> pure $ PP.pretty $ CMSLLVM.showLLVMModule m
+      VMIRModule m -> pure $ PP.pretty (m^.rmCS^.collection)
+      VMIRAdt adt -> pure $ PP.pretty adt
+      VJavaClass c -> pure $ prettyClass c
+      VProofResult r -> pure $ prettyProofResult opts r
+      VSatResult r -> pure $ prettySatResult opts r
+      VAIG _ -> pure "<<AIG>>"
+      VCFG (LLVM_CFG g) -> pure $ PP.viaShow g
+      VCFG (JVM_CFG g) -> pure $ PP.viaShow g
+      VGhostVar x ->
+          let x' = "Ghost" <+> PP.viaShow (showsPrec 11 x) in
+          pure (if prec > 10 then PP.parens x' else x')
+      VYosysModule _ -> pure "<<Yosys module>>"
+      VYosysImport _ -> pure "<<Yosys import>>"
+      VYosysSequential _ -> pure "<<Yosys sequential>>"
+      VYosysTheorem _ -> pure "<<Yosys theorem>>"
+      VJVMSetup{}      -> pure "<<JVM Setup>>"
+      VJVMMethodSpec _ -> pure "<<JVM MethodSpec>>"
+      VJVMSetupValue x -> pure $ PP.pretty $ show x
+      VMIRSetup{} -> pure "<<MIR Setup>>"
+      VMIRMethodSpec{} -> pure "<<MIR MethodSpec>>"
+      VMIRSetupValue x -> pure $ PP.pretty $ show x
 
-    VBuiltin name _args _wrapper ->
-      let name' = PP.pretty name in
-      shows $ PP.sep ["<<", "builtin", name', ">>"]
+-- | Print a value to `Text`.
+ppValue :: SharedContext -> PPS.Opts -> Value -> IO Text
+ppValue sc opts v = do
+    v' <- prettyValue sc opts v
+    pure $ PPS.renderText opts v'
 
-    VTerm t -> showString (SAWCorePP.ppTermWithEnv opts nenv (ttTerm t))
-    VType sig -> showString (pretty sig)
-    VReturn _pos _chain v' ->
-      showString "return " . showsPrecValue opts nenv (p + 1) v'
-    VDo _chain _env body ->
-      -- The printer for expressions doesn't print positions, so we can
-      -- feed in a dummy.
-      let pos = SS.PosInternal "<<do-block>>"
-          e = SS.Block pos body
-      in
-      shows (PP.pretty e)
-    VBindOnce _pos _chain v1 v2 ->
-      let v1' = showsPrecValue opts nenv 0 v1
-          v2' = showsPrecValue opts nenv 0 v2
-      in
-      v1' . showString " >>= " . v2'
-    VTopLevel {} -> showString "<<TopLevel>>"
-    VSimpset ss -> showString (showSimpset opts ss)
-    VProofScript {} -> showString "<<proof script>>"
-    VTheorem thm ->
-      showString "Theorem " .
-      showParen True (showString (ppProp opts nenv (thmProp thm)))
-    VBisimTheorem _ -> showString "<<Bisimulation theorem>>"
-    VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
-    VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
-    VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
-    VLLVMModuleSkeleton s -> shows s
-    VLLVMFunctionSkeleton s -> shows s
-    VLLVMSkeletonState _ -> showString "<<Skeleton state>>"
-    VLLVMFunctionProfile _ -> showString "<<Array sizes for function>>"
-    VJavaType {} -> showString "<<Java type>>"
-    VLLVMType t -> showString (show (Crucible.LLVM.ppType t))
-    VMIRType t -> showString (show (PP.pretty t))
-    VCryptolModule m -> showString (CEnv.showExtCryptolModule m)
-    VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
-    VMIRModule m -> shows (PP.pretty (m^.rmCS^.collection))
-    VMIRAdt adt -> shows (PP.pretty adt)
-    VJavaClass c -> shows (prettyClass c)
-    VProofResult r -> showsProofResult opts r
-    VSatResult r -> showsSatResult opts r
-    VAIG _ -> showString "<<AIG>>"
-    VCFG (LLVM_CFG g) -> showString (show g)
-    VCFG (JVM_CFG g) -> showString (show g)
-    VGhostVar x -> showParen (p > 10)
-                 $ showString "Ghost " . showsPrec 11 x
-    VYosysModule _ -> showString "<<Yosys module>>"
-    VYosysImport _ -> showString "<<Yosys import>>"
-    VYosysSequential _ -> showString "<<Yosys sequential>>"
-    VYosysTheorem _ -> showString "<<Yosys theorem>>"
-    VJVMSetup{}      -> showString "<<JVM Setup>>"
-    VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
-    VJVMSetupValue x -> shows x
-    VMIRSetup{} -> showString "<<MIR Setup>>"
-    VMIRMethodSpec{} -> showString "<<MIR MethodSpec>>"
-    VMIRSetupValue x -> shows x
-
-instance Show Value where
-    showsPrec p v = showsPrecValue PPS.defaultOpts emptyDisplayNameEnv p v
+-- | Ugly-print a value. This is for use in a few cases (below, and in
+--   the interpreter) where `IO` is really not available but printing
+--   in detail is probably not actually necessary.
+uglyValue :: Value -> Text
+uglyValue v0 = case v0 of
+    VBool True -> "true"
+    VBool False -> "false"
+    VString s -> "\"" <> s <> "\""
+    VInteger n -> Text.pack $ show n
+    VArray{} -> "<<Array>>"
+    VTuple{} -> "<<Tuple>>"
+    VRecord{} -> "<<Record>>"
+    VLambda{} -> "<<Lambda>>"
+    VBuiltin{} -> "<<Builtin>>"
+    VTerm{} -> "<<Term>>"
+    VType{} -> "<<Type>>"
+    VReturn{} -> "<<return>>"
+    VDo{} -> "<<do>>"
+    VBindOnce{} -> "<<bind>>"
+    VTopLevel{} -> "<<TopLevel>>"
+    VSimpset{} -> "<<Simpset>>"
+    VProofScript{} -> "<<proof script>>"
+    VTheorem{} -> "<<Theorem>>"
+    VBisimTheorem{} -> "<<Bisimulation theorem>>"
+    VLLVMCrucibleSetup{} -> "<<LLVM Setup>>"
+    VLLVMCrucibleSetupValue{} -> "<<LLVM Value>>"
+    VLLVMCrucibleMethodSpec{} -> "<<LLVM MethodSpec>>"
+    VLLVMModuleSkeleton{} -> "<<Module skeleton>>"
+    VLLVMFunctionSkeleton{} -> "<<Function skeleton>>"
+    VLLVMSkeletonState{} -> "<<Skeleton state>>"
+    VLLVMFunctionProfile{} -> "<<Array sizes for function>>"
+    VJavaType{} -> "<<Java type>>"
+    VLLVMType{} -> "<<LLVM type>>"
+    VMIRType{} -> "<<MIR type>>"
+    VCryptolModule{} -> "<<Cryptol module>>"
+    VLLVMModule{} -> "<<LLVM module>>"
+    VMIRModule{} -> "<<MIR module>>"
+    VMIRAdt{} -> "<<MIR ADT>>"
+    VJavaClass{} -> "<<Java class>>"
+    VProofResult{} -> "<<ProofResult>>"
+    VSatResult{} -> "<<SatResult>>"
+    VAIG{} -> "<<AIG>>"
+    VCFG{} -> "<CFG>>"
+    VGhostVar{} -> "<<Ghost>>"
+    VYosysModule{} -> "<<Yosys module>>"
+    VYosysImport{} -> "<<Yosys import>>"
+    VYosysSequential{} -> "<<Yosys sequential>>"
+    VYosysTheorem{}  -> "<<Yosys theorem>>"
+    VJVMSetup{}      -> "<<JVM Setup>>"
+    VJVMMethodSpec{} -> "<<JVM MethodSpec>>"
+    VJVMSetupValue{} -> "<<JVM MethodSpec>>"
+    VMIRSetup{}      -> "<<MIR Setup>>"
+    VMIRMethodSpec{} -> "<<MIR MethodSpec>>"
+    VMIRSetupValue{} -> "<<MIR Value>>"
 
 evaluateTerm:: SharedContext -> Term -> IO Concrete.CValue
 evaluateTerm sc t =
@@ -1408,9 +1475,15 @@ extendEnvMulti bindings = do
                  v' = case v of
                      VLambda{} -> v
                      _ ->
+                         -- Because we need IO to print values
+                         -- properly, and we can't have IO (or any
+                         -- monad) in here because it will mess up the
+                         -- circular reference, we'll have to
+                         -- ugly-print the value. Should be enough if
+                         -- the panic does ever happen somehow...
                          panic "extendEnvMulti" [
-                             "Non-lambda value: " <> Text.pack (show v),
-                             "Source position: " <> Text.pack (show pos)
+                             "Non-lambda value: " <> uglyValue v,
+                             "Source position: " <> ppPosition pos
                          ]
                  v'' = case rb of
                      SS.ReadOnlyVar -> v'
@@ -1418,7 +1491,7 @@ extendEnvMulti bindings = do
                          -- "rec" declarations can't be rebindable
                          panic "extendEnvMulti" [
                              "Rebindable variable: " <> name,
-                             "Source position: " <> Text.pack (show pos)
+                             "Source position: " <> ppPosition pos
                          ]
              in
              ScopedMap.insert name (pos, SS.Current, ty, v'', doc) tmpenv

@@ -35,12 +35,12 @@ import           Data.Void (absurd)
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
-import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 
 import SAWCore.SharedTerm
+import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.TypedTerm
 
 -- crucible
@@ -88,12 +88,12 @@ instance Show JVMTypeOfError where
     unlines
     [ "Expected monomorphic term"
     , "instead got:"
-    , show (Cryptol.pp s)
+    , Text.unpack (CryPP.pp s)
     ]
   show (JVMNonRepresentableType ty) =
     unlines
     [ "Type not representable in JVM:"
-    , show (Cryptol.pp ty)
+    , Text.unpack (CryPP.pp ty)
     ]
   show (JVMInvalidTypedTerm tp) =
     unlines

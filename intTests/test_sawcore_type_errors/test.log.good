@@ -25,7 +25,7 @@ Stack trace:
 While typechecking term:
   String#rec Bool True False
 .:1:0:
-No such data type: ModuleIdentifier Cryptol.String
+No such data type: Cryptol.String
 
 Partially-applied recursors are permitted
 Either#rec Nat
@@ -159,7 +159,7 @@ While typechecking term:
 .:1:0:
 Invalid recursor with disallowed propositional elimination
 Data type:
-  Prelude.IsLeNat
+  IsLeNat
 Elimination sort:
   sort 0
 

@@ -2,40 +2,36 @@ Loading file "testQualifiedImports.saw"
 2114
 12114
 14229
-== Anticipated failure message ==
+Error: Cryptol: [error] at testQualifiedImports.saw:12:23--12:29
+    Value not in scope: MyD::a
 Stack trace:
    (builtin) in (callback)
    (builtin) in fails
    testQualifiedImports.saw:12:1-12:34 (at top level)
-Cryptol error:
-[error] at testQualifiedImports.saw:12:23--12:29
-    Value not in scope: MyD::a
 
-== Anticipated failure message ==
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testQualifiedImports.saw:13:22--13:29
+    Value not in scope: MyD::d2
 Stack trace:
    (builtin) in (callback)
    (builtin) in fails
    testQualifiedImports.saw:13:1-13:34 (at top level)
-Cryptol error:
-[error] at testQualifiedImports.saw:13:22--13:29
-    Value not in scope: MyD::d2
 
-== Anticipated failure message ==
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testQualifiedImports.saw:14:22--14:37
+    Value not in scope: MyD::D2::D3::d2
 Stack trace:
    (builtin) in (callback)
    (builtin) in fails
    testQualifiedImports.saw:14:1-14:42 (at top level)
-Cryptol error:
-[error] at testQualifiedImports.saw:14:22--14:37
-    Value not in scope: MyD::D2::D3::d2
 
-== Anticipated failure message ==
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testQualifiedImports.saw:15:22--15:35
+    Value not in scope: NOTINSCOPEVar
 Stack trace:
    (builtin) in (callback)
    (builtin) in fails
    testQualifiedImports.saw:15:1-15:40 (at top level)
-Cryptol error:
-[error] at testQualifiedImports.saw:15:22--15:35
-    Value not in scope: NOTINSCOPEVar
 
+(Failure was expected, continuing)
 done

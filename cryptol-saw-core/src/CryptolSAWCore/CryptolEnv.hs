@@ -16,7 +16,7 @@ module CryptolSAWCore.CryptolEnv
   , CryptolEnv(..)
 
   , ExtCryptolModule(..)
-  , showExtCryptolModule
+  , prettyExtCryptolModule
   , initCryptolEnv
   , loadCryptolModule
   , loadExtCryptolModule
@@ -64,7 +64,9 @@ import System.Environment.Executable (splitExecutablePath)
 import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
 import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
+import SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
 
 import CryptolSAWCore.Panic
@@ -101,13 +103,13 @@ import qualified Cryptol.ModuleSystem.Renamer as MR
 
 import qualified Cryptol.Utils.Ident as C
 
-import Cryptol.Utils.PP hiding ((</>))
 import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
                            , mkIdent, interactiveName, identText
                            , textToModName
                            , prelPrim)
 import Cryptol.Utils.Logger (quietLogger)
 
+import qualified CryptolSAWCore.Pretty as CryPP
 --import SAWScript.REPL.Monad (REPLException(..))
 import CryptolSAWCore.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
@@ -525,7 +527,7 @@ data ExtCryptolModule =
     -- | source is parsed/loaded
     ECM_LoadedModule
         (P.Located C.ModName)
-        String      -- ^ how we show this on SAWScript CLI.
+        PPS.Doc      -- ^ how we show this on SAWScript CLI.
 
     -- | source is internal/constructed (e.g., via cryptol_prims)
   | ECM_CryptolModule  CryptolModule
@@ -533,7 +535,7 @@ data ExtCryptolModule =
 -- | create the string needed for display in the CLI.
 --
 --  - FIXME: This function, with the ECM_LoadedModule constructor, are
---    a bit ad hoc!  Currently `ExtCrytpolModule` is exposed to the
+--    a bit ad hoc!  Currently `ExtCryptolModule` is exposed to the
 --    CLI *and* requires a way to show this type to the user (as
 --    implemented here) to support the user interface.  As the state
 --    isn't available when we want to display this value, we compute
@@ -543,15 +545,21 @@ data ExtCryptolModule =
 --    order to both improve the user interface and remove this awkward code.
 --    Implementing #2680 will also address Issue #2700.
 --
-showExtCryptolModule :: ExtCryptolModule -> String
-showExtCryptolModule =
+--  - Update: this is still problematic but now it's at least a ppdoc
+--    and not a string. Note that it uses PPS.Doc (wired to the
+--    SAWCore annotations) rather than a generic `PP.Doc ann` because
+--    we're storing the doc in the `ExtCryptolModule` and making it
+--    polymorphic there creates pointless complications.
+--
+prettyExtCryptolModule :: ExtCryptolModule -> PPS.Doc
+prettyExtCryptolModule =
   \case
-    ECM_LoadedModule name s ->
-      unlines ["Loaded module '" ++ show(pp (P.thing name)) ++ "':"
-              , s
-              ]
+    ECM_LoadedModule name doc ->
+      -- Cryptol's prettyprinter is not compatible with ours
+      let name' = CryPP.pretty (P.thing name) in
+      "Loaded module" <+> PP.squotes name' <> ":" <> PP.hardline <> doc
     ECM_CryptolModule cm  ->
-      PPS.render PPS.defaultOpts $ PP.vsep [
+      PP.vsep [
           "Internal module:",
           prettyCryptolModule cm
       ]
@@ -577,7 +585,7 @@ loadExtCryptolModule ::
 loadExtCryptolModule sc env path =
   do
   (m, env') <- loadAndTranslateModule sc env (Left path)
-  let s = PPS.render PPS.defaultOpts $ PP.vsep [
+  let doc = PP.vsep [
               "Public interface",
               prettyCryptolModule (mkCryptolModule m env')
           ]
@@ -591,7 +599,7 @@ loadExtCryptolModule sc env path =
           --
           -- FUTURE: there's no remaining barrier to giving
           -- prettyCryptolModule access to whatever state it wants.
-  return (ECM_LoadedModule (locatedUnknown (T.mName m)) s, env')
+  return (ECM_LoadedModule (locatedUnknown (T.mName m)) doc, env')
 
 
 -- | loadCryptolModule
@@ -1166,10 +1174,10 @@ defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
 moduleCmdResult :: M.ModuleRes a -> IO (a, ME.ModuleEnv)
 moduleCmdResult (res, ws) = do
-  mapM_ (print . pp) (concatMap suppressDefaulting ws)
+  mapM_ (warnN' . CryPP.pretty) (concatMap suppressDefaulting ws)
   case res of
     Right (a, me) -> return (a, me)
-    Left err      -> fail $ "Cryptol error:\n" ++ show (pp err) -- X.throwIO (ModuleSystemError err)
+    Left err      -> errX' $ "Cryptol:" <+> CryPP.pretty err
   where
     -- If all warnings are about type defaults, pretend there are no warnings at
     -- all to avoid displaying an empty warning container.

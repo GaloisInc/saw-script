@@ -1,6 +1,6 @@
 Loading file "err028.saw"
 Type errors:
-  err028.saw:5:9-5:15: Kind mismatch: expected "* -> *" but found "*"
+  err028.saw:5:9-5:15: Kind mismatch: expected * -> * but found *
   err028.saw:5:22-5:27: Type mismatch.
     Mismatch of type constructors. Expected: <Block> but got String
     err028.saw:5:9-5:19: The type t.0 Int arises from this type annotation

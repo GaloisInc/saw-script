@@ -1,7 +1,9 @@
 --------------------------------
 -- (LLVMSpec -> _)
 crucible_spec_size : LLVMSpec -> Int  (DEPRECATED AND WILL WARN)
-crucible_spec_solvers : LLVMSpec -> [String]  (DEPRECATED AND WILL WARN)
+crucible_spec_solvers :
+   LLVMSpec -> [String]
+   (DEPRECATED AND WILL WARN)
 llvm_spec_size : LLVMSpec -> Int
 llvm_spec_solvers : LLVMSpec -> [String]
 --------------------------------
@@ -29,8 +31,16 @@ jvm_precond : Term -> JVMSetup ()
 jvm_return : JVMValue -> JVMSetup ()
 jvm_static_field_is : String -> JVMValue -> JVMSetup ()
 jvm_unint : [String] -> JVMSetup ()
-jvm_unsafe_assume_spec : JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec
-jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
+jvm_unsafe_assume_spec :
+   JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec
+jvm_verify :
+   JavaClass ->
+   String ->
+   [JVMSpec] ->
+   Bool ->
+   JVMSetup () ->
+   ProofScript () ->
+   TopLevel JVMSpec
 2 more matches tagged experimental; use enable_experimental to see them
 --------------------------------
 -- (JVMSetup _)
@@ -53,6 +63,14 @@ jvm_precond : Term -> JVMSetup ()
 jvm_return : JVMValue -> JVMSetup ()
 jvm_static_field_is : String -> JVMValue -> JVMSetup ()
 jvm_unint : [String] -> JVMSetup ()
-jvm_unsafe_assume_spec : JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec
-jvm_verify : JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec
+jvm_unsafe_assume_spec :
+   JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec
+jvm_verify :
+   JavaClass ->
+   String ->
+   [JVMSpec] ->
+   Bool ->
+   JVMSetup () ->
+   ProofScript () ->
+   TopLevel JVMSpec
 2 more matches tagged experimental; use enable_experimental to see them

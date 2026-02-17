@@ -12,6 +12,10 @@ module Tests.Rewriter
   ( rewriter_tests
   ) where
 
+import Control.Monad (when)
+import qualified Data.Text as Text
+
+import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.OpenTerm (OpenTerm)
 import qualified SAWCore.OpenTerm as OT
@@ -56,4 +60,11 @@ prelude_bveq_sameL_test =
           ]
     (_, lhs_term) <- rewriteSharedTerm sc ss =<< scMkTerm sc lhs
     (_, rhs_term) <- rewriteSharedTerm sc ss =<< scMkTerm sc rhs
-    assertEqual "Incorrect conversion\n" lhs_term rhs_term
+    when (lhs_term /= rhs_term) $ do
+        lhs_term' <- ppTerm sc PPS.defaultOpts lhs_term
+        rhs_term' <- ppTerm sc PPS.defaultOpts rhs_term
+        assertFailure $ Text.unpack $ Text.unlines [
+            "Incorrect conversion:",
+            "   " <> Text.pack lhs_term',
+            "   " <> Text.pack rhs_term'
+         ]

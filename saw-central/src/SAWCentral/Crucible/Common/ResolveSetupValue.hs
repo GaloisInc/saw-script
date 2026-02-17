@@ -8,6 +8,7 @@ module SAWCentral.Crucible.Common.ResolveSetupValue (
   ResolveRewrite(..),
   ) where
 
+import qualified Data.Text as Text
 import           Data.Set(Set)
 import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Some (Some(..))
@@ -35,7 +36,7 @@ import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
 
 import Cryptol.TypeCheck.Type (tIsBit, tIsSeq, tIsNum)
 import CryptolSAWCore.TypedTerm (mkTypedTerm, ttType, ttIsMono, prettyTypedTermType)
-import qualified Cryptol.Utils.PP as PP
+import qualified CryptolSAWCore.Pretty as CryPP
 
 
 -- | Optional rewrites to do when resolving a term
@@ -106,10 +107,10 @@ resolveTerm sym unint bt rr tm =
             | Just (n,el) <- (tIsSeq ty)
             , tIsBit el, Just i <- tIsNum n, W4.BaseBVRepr w <- bt
             , intValue w == i -> pure ()
-            | otherwise -> typeError (show (PP.pp ty)) :: IO ()
+            | otherwise -> typeError (Text.unpack (CryPP.pp ty)) :: IO ()
           Nothing -> do
             schema' <- prettyTypedTermType sc PPS.defaultOpts schema
-            typeError (show schema')
+            typeError (PPS.render PPS.defaultOpts schema')
 
   typeError :: String -> IO a
   typeError t = fail $ unlines [

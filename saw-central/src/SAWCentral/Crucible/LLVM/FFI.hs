@@ -64,7 +64,6 @@ import           Cryptol.TypeCheck.FFI.FFIType
 import           Cryptol.TypeCheck.Solver.InfNat
 import qualified Cryptol.TypeCheck.Type               as Cry
 import           Cryptol.Utils.Ident                  as Cry
-import           Cryptol.Utils.PP                     (pretty)
 import           Cryptol.Utils.RecordMap
 
 import           SAWCentral.Crucible.Common.MethodSpec
@@ -73,6 +72,7 @@ import           SAWCentral.Crucible.LLVM.MethodSpecIR
 import           SAWCentral.LLVMBuiltins
 import           SAWCentral.Panic
 import           SAWCentral.Value
+import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.CryptolEnv
 import           SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import           SAWCore.Name (Name(..))
@@ -202,7 +202,7 @@ buildTypeEnv (param:params) (argTerm:argTerms) =
         "Not a numeric literal type argument: " ++ argTerm'
 buildTypeEnv params [] = throwFFISetup $
   "Foreign function not fully instantiated;\n"
-  ++ "Missing type arguments for: " ++ intercalate ", " (map pretty params)
+  ++ "Missing type arguments for: " ++ intercalate ", " (map (Text.unpack . CryPP.pp) params)
 buildTypeEnv [] _ = throwFFISetup "Too many (type) arguments"
 
 -- | Given a Cryptol type argument as a term, return the corresponding size_t

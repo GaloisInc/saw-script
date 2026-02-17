@@ -33,9 +33,9 @@ import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 
+import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import SAWSupport.Pretty (pShow)
 
 import SAWCentral.AST
 import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), SubstituteTyVars'(..), isDeprecated)
@@ -561,8 +561,8 @@ data FailMGU = FailMGU
 -- common code for printing expected/found types
 showTypes :: Type -> Type -> [String]
 showTypes ty1 ty2 =
-  let expected = "Expected: " ++ pShow ty1
-      found    = "Found:    " ++ pShow ty2
+  let expected = "Expected: " ++ Text.unpack (ppType ty1)
+      found    = "Found:    " ++ Text.unpack (ppType ty2)
   in
   [expected, found, ""]
 
@@ -570,7 +570,38 @@ showTypes ty1 ty2 =
 showTypeDetails :: Type -> String
 showTypeDetails ty =
   let pr pos what =
-        show pos ++ ": The type " ++ pShow ty ++ " arises from " ++ what
+        -- XXX: just doing ppType here uglifies the message for
+        -- records the prettyprinter thinks don't fit on one line; it
+        -- splits them, but in doing so it doesn't know that there's a
+        -- reindent downstream of here, so all but the first line of
+        -- the message ends up reindented. However, sending the whole
+        -- message here through the prettyprinter makes things worse;
+        -- then if the whole message doesn't fit on a line, which is
+        -- routinely the case, it gets split... and only at points
+        -- within the type, so if e.g. the type is a pair it gets
+        -- split between the components, only, with seriously
+        -- unsightly results.
+        --
+        -- This is also not improved by the prettyprinter currently
+        -- limiting itself to 64 characters wide when it knows how to
+        -- break lines.
+        --
+        -- There's also an additional concern: we don't really want
+        -- line breaks in these messages at all; the idea is that the
+        -- file and line number appears at the front of the message to
+        -- be recognizable by editors/IDEs and the rest of the message
+        -- goes on the same line. If we want to move away from that we
+        -- ought to rethink the layout of the error reporting more
+        -- deeply. And maybe we should because there will be e.g.
+        -- record types where trying to print the type on one line is
+        -- doomed.
+        --
+        -- Blah.
+        --
+        let pos' = ppPosition pos
+            ty' = ppType ty
+        in
+        Text.unpack $ pos' <> ": The type " <> ty' <> " arises from " <> what
   in
   case getPos ty of
     PosInferred InfFresh pos -> pr pos "a fresh type variable introduced here"
@@ -643,8 +674,8 @@ mgu t1 t2 = case (t1, t2) of
       case resolveUnificationVar i t2 of
           Just someSubst -> return someSubst
           Nothing -> do
-              let t1' = pShow t1
-                  t2' = pShow t2
+              let t1' = Text.unpack $ ppType t1
+                  t2' = Text.unpack $ ppType t2
               let msg = "Occurs check failure: cannot unify " ++ t1' ++
                         " with " ++ t2' ++ " because " ++ t1' ++
                         " appears within " ++ t2'
@@ -655,8 +686,8 @@ mgu t1 t2 = case (t1, t2) of
       case resolveUnificationVar i t1 of
           Just someSubst -> return someSubst
           Nothing -> do
-              let t1' = pShow t1
-                  t2' = pShow t2
+              let t1' = Text.unpack $ ppType t1
+                  t2' = Text.unpack $ ppType t2
               let msg = "Occurs check failure: cannot unify " ++ t1' ++
                         " with " ++ t2' ++ " because " ++ t2' ++
                         " appears within " ++ t1'
@@ -692,8 +723,8 @@ mgu t1 t2 = case (t1, t2) of
           failMGU ("Term is not a function. (Maybe a function is applied " ++
                    "to too many arguments?)") t1 t2
         _ ->
-          failMGU ("Mismatch of type constructors. Expected: " ++ pShow tc1 ++
-                   " but got " ++ pShow tc2) t1 t2
+          failMGU ("Mismatch of type constructors. Expected: " ++ Text.unpack (ppTyCon tc1) ++
+                   " but got " ++ Text.unpack (ppTyCon tc2)) t1 t2
 
   (TyVar _ a, TyVar _ b) | a == b ->
       -- Same named variable
@@ -1050,7 +1081,7 @@ inferExpr (ln, expr) = case expr of
               getErrorTyVar pos
           _ -> do
               recordError pos $
-                  "Record lookup on non-record value of type " ++ pShow t1
+                  "Record lookup on non-record value of type " ++ Text.unpack (ppType t1)
               getErrorTyVar pos
       return (Lookup pos e1 n, elTy)
 
@@ -1073,7 +1104,7 @@ inferExpr (ln, expr) = case expr of
               getErrorTyVar pos
           _ -> do
               recordError pos $ 
-                  "Tuple lookup on non-tuple value of type " ++ pShow t1
+                  "Tuple lookup on non-tuple value of type " ++ Text.unpack (ppType t1)
               getErrorTyVar pos
       return (TLookup pos e1 i, elTy)
 
@@ -1365,8 +1396,8 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
             -- The special case for the wrong monad
             let allowWrongMonad ctx' valty' = do
                   recordError spos $ "Monadic bind with the wrong monad; " ++
-                                     "found " ++ pShow ctx' ++
-                                     " but expected " ++ pShow ctx
+                                     "found " ++ Text.unpack (ppType ctx') ++
+                                     " but expected " ++ Text.unpack (ppType ctx)
                   recordError spos $ "This creates the action but does " ++
                                      "not execute it; if you meant to do " ++
                                      "that, prefix the " ++
@@ -1826,18 +1857,18 @@ checkType kind ty = case ty of
           case (tycon, args) of
               (BlockCon, arg : _) ->
                   recordError pos ("Too many type arguments for type " ++
-                                   "constructor " ++ pShow arg ++
+                                   "constructor " ++ Text.unpack (ppType arg) ++
                                    "; found " ++ show (nargs - 1) ++
                                    " but expected only " ++ show (nparams - 1))
               (_, _) ->
                   recordError pos ("Too many type arguments for type " ++
-                                   "constructor " ++ pShow tycon ++
+                                   "constructor " ++ Text.unpack (ppTyCon tycon) ++
                                    "; found " ++ show nargs ++
                                    " but expected only " ++ show nparams)
           getErrorTyVar pos
       else if nargs + argsleft /= nparams then do
-          recordError pos ("Kind mismatch: expected " ++ pShow kind ++
-                           " but found " ++ (pShow $ Kind (nparams - nargs)))
+          recordError pos ("Kind mismatch: expected " ++ Text.unpack (ppKind kind) ++
+                           " but found " ++ Text.unpack (ppKind $ Kind (nparams - nargs)))
           getErrorTyVar pos
       else do
           -- note that this will ignore the extra params, and return
@@ -1847,8 +1878,8 @@ checkType kind ty = case ty of
 
   TyRecord pos fields -> do
       if kind /= kindStar then do
-          recordError pos ("Kind mismatch: expected " ++ pShow kind ++
-                           " but found " ++ pShow kindStar)
+          recordError pos ("Kind mismatch: expected " ++ Text.unpack (ppKind kind) ++
+                           " but found " ++ Text.unpack (ppKind kindStar))
           getErrorTyVar pos
       else do
           -- Someone upstream had better have checked for duplicate
@@ -1891,8 +1922,8 @@ checkType kind ty = case ty of
                     AbstractType kf -> kf
 
               if kind /= kindFound then do
-                  recordError pos ("Kind mismatch: expected " ++ pShow kind ++
-                                   " but found " ++ pShow kindFound)
+                  recordError pos ("Kind mismatch: expected " ++ Text.unpack (ppKind kind) ++
+                                   " but found " ++ Text.unpack (ppKind kindFound))
                   getErrorTyVar pos
               else
                   -- We do _not_ want to expand typedefs when checking,
