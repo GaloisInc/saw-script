@@ -210,8 +210,8 @@ newtype Device = Device [Module] deriving (Semigroup)
 
 data Module = Module
     { modName :: Id
-    , modPorts :: Ports
-    , modCells :: Cells
+    , _modPorts :: Ports
+    , _modCells :: Cells
     }
 
 newtype Ports = Ports [Signal] deriving (Semigroup)
@@ -220,7 +220,7 @@ newtype Cells = Cells [Cell] deriving (Semigroup)
 
 data Cell = Cell
     { cellType :: Id
-    , cellParams :: Params
+    , _cellParams :: Params
     , cellSigs :: [Signal]
     }
 
@@ -228,14 +228,14 @@ data Signal = Signal
     { sigName :: Id
     , sigDir :: Direction
     , sigWidth :: Width
-    , sigWidthParam :: Maybe Id
+    , _sigWidthParam :: Maybe Id
     }
 
 newtype Params = Params [Param] deriving (Semigroup)
 
 data Param = Param
     { paramName :: Id
-    , paramValue :: ParamValue
+    , _paramValue :: ParamValue
     }
 
 data ParamValue

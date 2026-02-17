@@ -13,7 +13,7 @@ run: $(SAW_FILES) test.json test.sh
 
 # Parses Yosys truth-table output to generate Cryptol specs for each module.
 # Add "--non-fatal" arg to "cabal run" to see all failures.
-$(SAW_FILES): test.log YosysSpecs.hs yosys-cell-tests.cabal
+$(SAW_FILES): test.log YosysSpecs.hs
 	$(CABAL) run yosys-specs -- -n $(NFILES) <$<
 
 # Run the generated Yosys script to evaluate each module, generating
@@ -24,9 +24,9 @@ test.log: test.ys test.json
 
 # Generate Yosys JSON RTLIL output for evaluation by Yosys and SAW. To change
 # the set of cells instantiated and tested (at various parameter values),
-# modify the definition of "tests" in instantiate_cells.hs.
+# modify the definition of "tests" in InstantiateCells.hs.
 .PRECIOUS: test.json
-test.json test.ys: InstantiateCells.hs yosys-cell-tests.cabal
+test.json test.ys: InstantiateCells.hs
 	$(CABAL) run instantiate-cells test.json test.ys
 
 .PHONY: clean
