@@ -66,6 +66,7 @@ import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
+import SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
 
 import CryptolSAWCore.Panic
@@ -102,13 +103,13 @@ import qualified Cryptol.ModuleSystem.Renamer as MR
 
 import qualified Cryptol.Utils.Ident as C
 
-import Cryptol.Utils.PP hiding ((</>), (<+>))
 import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
                            , mkIdent, interactiveName, identText
                            , textToModName
                            , prelPrim)
 import Cryptol.Utils.Logger (quietLogger)
 
+import qualified CryptolSAWCore.Pretty as CryPP
 --import SAWScript.REPL.Monad (REPLException(..))
 import CryptolSAWCore.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
@@ -555,7 +556,7 @@ prettyExtCryptolModule =
   \case
     ECM_LoadedModule name doc ->
       -- Cryptol's prettyprinter is not compatible with ours
-      let name' = PP.viaShow $ pp (P.thing name) in
+      let name' = CryPP.pretty (P.thing name) in
       "Loaded module" <+> PP.squotes name' <> ":" <> PP.hardline <> doc
     ECM_CryptolModule cm  ->
       PP.vsep [
@@ -1173,10 +1174,10 @@ defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
 moduleCmdResult :: M.ModuleRes a -> IO (a, ME.ModuleEnv)
 moduleCmdResult (res, ws) = do
-  mapM_ (print . pp) (concatMap suppressDefaulting ws)
+  mapM_ (warnN' . CryPP.pretty) (concatMap suppressDefaulting ws)
   case res of
     Right (a, me) -> return (a, me)
-    Left err      -> fail $ "Cryptol error:\n" ++ show (pp err) -- X.throwIO (ModuleSystemError err)
+    Left err      -> errX' $ "Cryptol:" <+> CryPP.pretty err
   where
     -- If all warnings are about type defaults, pretend there are no warnings at
     -- all to avoid displaying an empty warning container.

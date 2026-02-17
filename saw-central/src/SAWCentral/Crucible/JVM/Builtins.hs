@@ -68,7 +68,6 @@ import           System.IO
 -- cryptol
 import qualified Cryptol.Eval.Type as Cryptol (evalValType)
 import qualified Cryptol.TypeCheck.Type as Cryptol
-import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 -- what4
 import qualified What4.Partial as W4
@@ -102,6 +101,7 @@ import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import CryptolSAWCore.TypedTerm
+import qualified CryptolSAWCore.Pretty as CryPP
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -1047,7 +1047,7 @@ instance Show JVMSetupError where
         [ "jvm_array_is: Specified value does not have the expected type"
         , "Expected array length: " ++ show len
         , "Expected element type: " ++ show ty
-        , "Given type: " ++ show (Cryptol.pp schema)
+        , "Given type: " ++ Text.unpack (CryPP.pp schema)
         ]
       JVMArrayMultiple _ptr ->
         "jvm_array_is: Multiple specifications for the same array reference"

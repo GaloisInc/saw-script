@@ -54,6 +54,9 @@ import GHC.Stack
 import Prelude ()
 import Prelude.Compat
 
+import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
+
 -- cryptol
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Backend.Monad as V
@@ -77,8 +80,9 @@ import qualified Cryptol.Utils.Ident as C
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
-import qualified Cryptol.Utils.PP as PP
-import Cryptol.Utils.PP (pretty, pp)
+
+-- saw-support
+import qualified SAWSupport.Pretty as PPS
 
 -- saw-core
 import qualified SAWCore.Simulator.Concrete as SC
@@ -92,6 +96,7 @@ import SAWCore.URI
 
 -- local modules:
 import CryptolSAWCore.Panic
+import qualified CryptolSAWCore.Pretty as CryPP
 
 -- Type-check the Prelude and Cryptol modules at compile time
 import Language.Haskell.TH
@@ -274,13 +279,13 @@ importType sc env ty =
       case tvar of
         C.TVFree{} {- Int Kind (Set TVar) Doc -} ->
             panic "importType" [
-                "TVFree in TVar is not supported: " <> Text.pack (pretty ty)
+                "TVFree in TVar is not supported: " <> CryPP.pp ty
             ]
         C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
             Just t -> pure t
             Nothing ->
               panic "importType" [
-                  "found TVar that's TVBound but doesn't exist: " <> Text.pack (show $ pp v)
+                  "found TVar that's TVBound but doesn't exist: " <> CryPP.pp v
               ]
     C.TUser _ _ t  -> go t -- look through type synonyms
     C.TRec fm ->
@@ -302,7 +307,7 @@ importType sc env ty =
                scApplyAllBeta sc t =<< traverse go ts
              | True -> panic "importType" [
                            "Unknown primitive type: " <> Text.pack (show n),
-                           "Full type: " <> Text.pack (pretty ty)
+                           "Full type: " <> CryPP.pp ty
                        ]
 
     C.TCon tcon tyargs ->
@@ -389,7 +394,7 @@ importNumericConstraintAsBool sc env prop =
     C.TUser _ _ t -> importNumericConstraintAsBool sc env t
     _ ->
         panic "importNumericConstraintAsBool" [
-            "Called with non-numeric constraint: " <> Text.pack (pretty prop)
+            "Called with non-numeric constraint: " <> CryPP.pp prop
         ]
   where
     -- | Construct a term for equality of two types
@@ -763,9 +768,9 @@ provePropRec sc env prop0 prop =
                 scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
 
         _ -> do
-            let prop0' = "   " <> Text.pack (pretty prop0)
-                prop' = "   " <> Text.pack (pretty prop)
-                env' = map (\p -> "   " <> Text.pack (pretty p)) $ Map.keys $ envP env
+            let prop0' = "   " <> CryPP.pp prop0
+                prop' = "   " <> CryPP.pp prop
+                env' = map (\p -> "   " <> CryPP.pp p) $ Map.keys $ envP env
                 message = [
                     "Cannot find or infer typeclass instance",
                     "Property needed:",
@@ -1076,7 +1081,7 @@ importExpr sc env expr =
                Just ts -> scTupleSelector sc e' (i+1) (length ts)
                Nothing -> panic "importExpr" [
                               "Invalid tuple selector: " <> Text.pack (show i),
-                              "Type: " <> Text.pack (pretty t)
+                              "Type: " <> CryPP.pp t
                           ]
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
@@ -1088,7 +1093,7 @@ importExpr sc env expr =
                  Just (n, a) -> return (n, a)
                  Nothing -> panic "importExpr" [
                                 "ListSel: not a list type",
-                                "Type: " <> Text.pack (pretty t)
+                                "Type: " <> CryPP.pp t
                             ]
              a' <- importType sc env a
              n' <- importType sc env n
@@ -1106,7 +1111,7 @@ importExpr sc env expr =
                Nothing ->
                     panic "importExpr" [
                         "ESet/TupleSel: not a tuple type",
-                        "Type: " <> Text.pack (pretty t1)
+                        "Type: " <> CryPP.pp t1
                     ]
                Just ts ->
                  do ts' <- traverse (importType sc env) ts
@@ -1122,7 +1127,7 @@ importExpr sc env expr =
                Nothing ->
                     panic "importExpr" [
                         "ESet/RecordSel: not a record type",
-                        "Type: " <> Text.pack (pretty t1)
+                        "Type: " <> CryPP.pp t1
                     ]
                Just tm ->
                  do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields tm)
@@ -1133,10 +1138,8 @@ importExpr sc env expr =
                     g <- recordUpdate sc f x' fields'
                     scApply sc g e1'
         C.ListSel _i _maybeLen ->
-          panic "importExpr" [
-              "ListSel is unsupported in ESet:",
-              "   " <> Text.pack (pretty expr)
-          ]
+          let expr' = PPS.renderText PPS.defaultOpts $ PP.indent 3 $ CryPP.pretty expr in
+          panic "importExpr" ("ListSel is unsupported in ESet:" : Text.lines expr')
 
     C.EIf e1 e2 e3 ->
       do let ty = fastTypeOf (envC env) e2
@@ -1173,7 +1176,7 @@ importExpr sc env expr =
              Nothing ->
                  panic "importExpr" [
                      "EApp: expected function type",
-                     "Type: " <> Text.pack (pretty t1)
+                     "Type: " <> CryPP.pp t1
                  ]
          e2' <- importExpr' sc env (C.tMono t1a) e2
          scApply sc e1' e2'
@@ -1199,11 +1202,18 @@ importExpr sc env expr =
                prf <- proveProp sc env p
                scApply sc e' prf
         s ->
-            panic "importExpr" [
-                "EProofApp: invalid type",
-                "Expr: " <> Text.pack (pretty expr),
-                "Schema: " <> Text.pack (pretty s)
-            ]
+            -- XXX: `PP.align` is probably not the nicest way to print
+            -- this, but it beats failing to indent at all and it's
+            -- not exactly easy to test. (Especially since I just
+            -- found that `PP.nest` doesn't work as documented and needs
+            -- an explicit `PP.flatAlt`. See comments in SAWScript.AST)
+            let info = PP.vsep [
+                    "Expr:" <+> (PP.align $ CryPP.pretty expr),
+                    "Schema:" <+> (PP.align $ CryPP.pretty s)
+                 ]
+                info' = Text.lines $ PPS.renderText PPS.defaultOpts info
+            in
+            panic "importExpr" ("EProofApp: invalid type" : info')
 
     C.EWhere e dgs ->
       do env' <- importDeclGroups sc env dgs
@@ -1323,7 +1333,7 @@ importExpr' sc env schema expr =
                     "Internal type error: unexpected schema in EProofAbs",
                     "   Found " <> nas <> " variables, expected none",
                     "   Found " <> nps <> " predicates, expected at least one",
-                    "Schema: " <> Text.pack (pretty schema)
+                    "Schema: " <> CryPP.pp schema
                 ]
          if isErasedProp prop
            then importExpr' sc env schema' e
@@ -1481,7 +1491,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
         C.DPrim ->
           panic "importDeclGroup" [
               "Primitive declarations cannot be recursive (single decl): " <> Text.pack (show (C.dName decl)),
-              "   " <> Text.pack (pretty decl)
+              "   " <> CryPP.pp decl
           ]
 
         C.DForeign _ mexpr ->
@@ -1560,7 +1570,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                       panic "importDeclGroup" [
                         "Primitive declarations cannot be recursive (multiple decls): "
                         <> Text.pack (show (C.dName decl))
-                      , "   " <> Text.pack (pretty decl)
+                      , "   " <> CryPP.pp decl
                       ]
 
             traverse extractDeclExpr decls
@@ -1598,7 +1608,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
   panicForeignNoExpr decl = panic "importDeclGroup" [
       "Foreign declaration without Cryptol body in recursive group: " <>
           Text.pack (show (C.dName decl)),
-      "   " <> Text.pack (pretty decl)
+      "   " <> CryPP.pp decl
     ]
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) = do
@@ -1739,7 +1749,7 @@ proveEq sc env t1 t2
        C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_)) ->
         panic "proveEq" [
             "Enum types unsupported.",
-            "Found: " <> Text.pack (pretty t1) <> " and " <> Text.pack (pretty t2)
+            "Found: " <> CryPP.pp t1 <> " and " <> CryPP.pp t2
         ]
 
         -- XXX: add a case for `enum`
@@ -1755,8 +1765,8 @@ proveEq sc env t1 t2
       (_, _) ->
         panic "proveEq" [
             "Internal type error:",
-            "t1: " <> Text.pack (pretty t1),
-            "t2: " <> Text.pack (pretty t2)
+            "t1: " <> CryPP.pp t1,
+            "t2: " <> CryPP.pp t2
         ]
 
 
@@ -1771,7 +1781,7 @@ tNoUser initialTy =
         else
             -- XXX: We should instantiate, see #2019
             panic "tNoUser" [
-                "Nominal type with parameters: " <> Text.pack (pretty initialTy)
+                "Nominal type with parameters: " <> CryPP.pp initialTy
             ]
     t -> t
 
@@ -1873,7 +1883,7 @@ importMatches sc env [C.From name _len _eltty expr] = do
     Nothing ->
       panic "importMatches" [
           "Type mismatch (From): " <> Text.pack (show (fastTypeOf (envC env) expr)),
-          "   " <> Text.pack (pretty expr)
+          "   " <> CryPP.pp expr
       ]
   xs <- importExpr sc env expr
   return (xs, len, ty, [(name, ty)])
@@ -1884,7 +1894,7 @@ importMatches sc env (C.From name _len _eltty expr : matches) = do
     Nothing ->
       panic "importMatches" [
           "Type mismatch (From): " <> Text.pack (show (fastTypeOf (envC env) expr)),
-          "   " <> Text.pack (pretty expr)
+          "   " <> CryPP.pp expr
       ]
   m <- importType sc env len1
   a <- importType sc env ty1
@@ -1902,7 +1912,7 @@ importMatches sc env [C.Let decl]
   | C.DPrim <- C.dDefinition decl =
      panic "importMatches" [
          "Primitive declarations not allowed in 'let':" <> Text.pack (show (C.dName decl)),
-         "   " <> Text.pack (pretty decl)
+         "   " <> CryPP.pp decl
      ]
   | C.DExpr expr <- C.dDefinition decl = do
      e <- importExpr sc env expr
@@ -1910,7 +1920,7 @@ importMatches sc env [C.Let decl]
               C.Forall [] [] ty1 -> return ty1
               _ -> panic "importMatches" [
                        "Unimplemented: polymorphic Let",
-                       "   " <> Text.pack (pretty decl)
+                       "   " <> CryPP.pp decl
                    ]
      a <- importType sc env ty1
      result <- scGlobalApply sc "Prelude.single" [a, e]
@@ -1922,13 +1932,13 @@ importMatches sc env (C.Let decl : matches) =
     C.DForeign {} ->
       panic "importMatches" [
           "Foreign declarations not allowed in 'let':" <> Text.pack (show (C.dName decl)),
-          "   " <> Text.pack (pretty decl)
+          "   " <> CryPP.pp decl
       ]
 
     C.DPrim ->
       panic "importMatches" [
           "Primitive declarations not allowed in 'let':" <> Text.pack (show (C.dName decl)),
-          "   " <> Text.pack (pretty decl)
+          "   " <> CryPP.pp decl
       ]
 
     C.DExpr expr -> do
@@ -1937,7 +1947,7 @@ importMatches sc env (C.Let decl : matches) =
               C.Forall [] [] ty1 -> return ty1
               _ -> panic "importMatches" [
                        "Unimplemented: polymorphic Let",
-                       "   " <> Text.pack (pretty decl)
+                       "   " <> CryPP.pp decl
                    ]
      (env', v, _) <- bindName sc (C.dName decl) (C.dSignature decl) env
      (body, len, ty2, args) <- importMatches sc env' matches
@@ -2042,7 +2052,7 @@ exportValue ty v = case ty of
   TV.TVIntMod _modulus ->
     pure (V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod"))
 
-  TV.TVArray{} -> panic "exportValue" ["Not yet implemented: array type: " <> Text.pack (pretty (TV.tValTy ty))]
+  TV.TVArray{} -> panic "exportValue" ["Not yet implemented: array type: " <> CryPP.pp (TV.tValTy ty)]
 
   TV.TVRational -> panic "exportValue" ["Not yet implemented: Rational"]
 
@@ -2503,7 +2513,7 @@ importCase sc env b scrutinee altsMap mDfltAlt =
       _ ->
           panic "importCase" [
               "`case` expression scrutinee is not an Enum type",
-              Text.pack (pretty scrutineeTy)
+              CryPP.pp scrutineeTy
           ]
 
   -- Create a sequential set of `C.CaseAlt`s that exactly match the
@@ -2550,7 +2560,7 @@ importCase sc env b scrutinee altsMap mDfltAlt =
                 panic "importCase" [
                     "Unsupported style of case expression: " <>
                         "default case alternative that binds scrutinee",
-                    "pattern: " <> Text.pack (pretty nm)
+                    "pattern: " <> CryPP.pp nm
                 ]
 
           where
@@ -2567,11 +2577,11 @@ importCase sc env b scrutinee altsMap mDfltAlt =
             --    too general.
 
         Just (C.CaseAlt nts _) ->
-            panic "importCase" [
+            let nts' = map (\(n, _t) -> "   " <> CryPP.pp n) nts in
+            panic "importCase" $ [
                 "Default CaseAlt breaks invariant: " <>
-                    "(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt",
-                Text.pack (show $ PP.ppList $ map PP.pp (map fst nts))
-            ]
+                    "(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt"
+            ] ++ nts'
 
   -- now create one alternative ('CaseAlt') for each ctor:
   alts <- forM ctors $ \ctor->

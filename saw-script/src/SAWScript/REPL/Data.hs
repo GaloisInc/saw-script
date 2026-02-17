@@ -30,14 +30,14 @@ import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 --import Data.Map (Map)
-import qualified Data.Text as Text
+--import qualified Data.Text as Text
 import Data.Text (Text)
 
 import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import Cryptol.Utils.Ident (Namespace(..))
-import Cryptol.Utils.PP
 
 import qualified SAWSupport.ScopedMap as ScopedMap
+import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.CryptolEnv
 
 import qualified SAWCentral.AST as AST
@@ -51,14 +51,14 @@ getCryptolExprNames :: REPL [Text]
 getCryptolExprNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
      let keys = Map.keys (MN.namespaceMap NSValue fNames)
-     return (map (Text.pack . show . pp) keys)
+     return (map CryPP.pp keys)
 
 -- | Get visible Cryptol type names.
 getCryptolTypeNames :: REPL [Text]
 getCryptolTypeNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
      let keys = Map.keys (MN.namespaceMap NSType fNames)
-     return (map (Text.pack . show . pp) keys)
+     return (map CryPP.pp keys)
 
 -- | Get visible variable names for Haskeline completion.
 getSAWScriptValueNames :: REPL [Text]

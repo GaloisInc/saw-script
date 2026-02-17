@@ -117,6 +117,12 @@ In SAW we generally need ready access to both the `Doc` and `Text`
 forms, so we need two sets of names, and the convention we have
 chosen best matches existing practices.
 
+To print Cryptol values, import `CryptolSAWCore.Pretty`
+(conventionally qualified as `CryPP`) and use `CryPP.pp` to print to
+`Text` and `CryPP.pretty` for a Doc.
+This avoids both the naming confusion and also various technical
+issues interfacing the printers.
+
 For further discussion of all these points, see [pretty.md](pretty.md).
 
 ## Naming conventions for dumping

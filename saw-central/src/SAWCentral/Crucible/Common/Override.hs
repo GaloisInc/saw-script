@@ -95,6 +95,7 @@ import           Data.Maybe (fromMaybe)
 import           Data.Proxy (Proxy(..))
 import qualified Data.Set as Set
 import           Data.Set (Set)
+import qualified Data.Text as Text
 import           Data.Typeable (Typeable)
 import           Data.Void
 import           GHC.Generics (Generic, Generic1)
@@ -111,8 +112,7 @@ import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCore.Term.Pretty (prettyTermPure)
 import           CryptolSAWCore.TypedTerm as SAWVerifier
-
-import qualified Cryptol.Utils.PP as Cryptol (pp)
+import qualified CryptolSAWCore.Pretty as CryPP
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.Online as Crucible
@@ -667,8 +667,8 @@ learnGhost sc md prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =
   do (sch,tm) <- readGlobal var
      when (sch /= schEx) $ fail $ unlines $
        [ "Ghost variable had the wrong type:"
-       , "- Expected: " ++ show (Cryptol.pp schEx)
-       , "- Actual:   " ++ show (Cryptol.pp sch)
+       , "- Expected: " ++ Text.unpack (CryPP.pp schEx)
+       , "- Actual:   " ++ Text.unpack (CryPP.pp sch)
        ]
      instantiateExtMatchTerm sc md prepost tm tmEx
 learnGhost sc _md _prepost _var (TypedTerm tp _)

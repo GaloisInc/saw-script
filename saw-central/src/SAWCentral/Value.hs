@@ -283,10 +283,11 @@ import CryptolSAWCore.TypedTerm
 import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
 import qualified Cryptol.Eval.Concrete as C
-import CryptolSAWCore.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.Ident as T (mkIdent, packModName)
-import qualified Cryptol.Utils.PP as CryPP (pretty)
+
+import CryptolSAWCore.Cryptol (exportValueWithSchema)
+import qualified CryptolSAWCore.Pretty as CryPP
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
@@ -711,9 +712,7 @@ prettyValue sc opts = visit (0 :: Int)
       VTerm t ->
           prettyTerm sc opts (ttTerm t)
       VType sig ->
-          -- Cryptol's prettyprinter isn't compatible with ours
-          -- (note: CryPP.pretty produces String, not a Doc; use CryPP.pp for Doc)
-          pure $ PP.pretty $ CryPP.pretty sig
+          pure $ CryPP.pretty sig
       VReturn _pos _chain v -> do
           v' <- visit (prec + 1) v
           pure $ "return" <+> v'

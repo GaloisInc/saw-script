@@ -29,7 +29,8 @@ import Cryptol.TypeCheck.Monad (InferOutput(..), inpVars, inpTSyns)
 import Cryptol.TypeCheck.Solver.SMT (withSolver)
 import Cryptol.Utils.Ident (interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
-import Cryptol.Utils.PP ( defaultPPOpts, pp )
+
+import qualified CryptolSAWCore.Pretty as CryPP
 import SAWCentral.Value (biSharedContext, rwGetCryptolEnv)
 import CryptolSAWCore.CryptolEnv
     ( getAllIfaceDecls,
@@ -100,13 +101,14 @@ getTypedTermOfCExp fileReader sc cenv expr =
 moduleCmdResult :: ModuleRes a -> Argo.Command SAWState (a, ModuleEnv)
 moduleCmdResult (result, warnings) =
   do -- TODO: Printing warnings directly to stdout here is questionable (#2129)
-     mapM_ (liftIO . print . pp) warnings
+     -- XXX: also it should not (implicitly) use `show` to render the PP doc
+     mapM_ (liftIO . print . CryPP.pretty) warnings
      case result of
        Right (a, me) -> return (a, me)
        Left err      -> Argo.raise $ cryptolError err warnings
 
 defaultEvalOpts :: EvalOpts
-defaultEvalOpts = EvalOpts quietLogger defaultPPOpts
+defaultEvalOpts = EvalOpts quietLogger CryPP.defaultPPOpts
 
 runInferOutput :: InferOutput a -> ModuleM a
 runInferOutput out =

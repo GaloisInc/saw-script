@@ -23,7 +23,6 @@ import Control.Monad.State (MonadState(..), gets, modify)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf, isInfixOf, sort, intersperse)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
@@ -48,7 +47,9 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
-import qualified Cryptol.Utils.PP as CryptolPP
+--import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
+
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
@@ -57,7 +58,7 @@ import qualified CryptolSAWCore.Simpset as Cryptol
 import qualified SAWSupport.PanicSupport as PanicSupport
 import qualified SAWSupport.ScopedMap as ScopedMap
 --import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), render, renderText)
+import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ConsoleSupport as Cons
 
 -- saw-core
@@ -83,6 +84,7 @@ import SAWCore.Rewriter
 import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
 
 -- cryptol-saw-core
+import qualified CryptolSAWCore.Pretty as CryPP
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 -- saw-core-sbv
@@ -101,7 +103,6 @@ import qualified Data.AIG as AIG
 import qualified Cryptol.ModuleSystem.Env as C (meSearchPath)
 import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
 import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
@@ -1799,7 +1800,10 @@ failsPrim m = do
               -- Avoid trapping panics
               throwM e
       | Just (_ :: Cons.Fatal) <- Ex.fromException ex -> do
-              liftIO $ TextIO.putStrLn "== Anticipated failure =="
+              -- The message has already been printed if we get a Fatal,
+              -- so don't print this like it's a heading; it will appear
+              -- after.
+              liftIO $ TextIO.putStrLn "(Failure was expected, continuing)"
       | otherwise -> do
               liftIO $ TextIO.putStrLn "== Anticipated failure message =="
               liftIO $ print ex
@@ -1922,7 +1926,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
     Nothing -> return (TypedTerm (TypedTermSchema schema) trm)
     Just tys -> do
       let vars = C.sVars schema
-      let nms = C.addTNames CryptolPP.defaultPPCfg vars IntMap.empty
+      let nms = CryPP.addTNames vars CryPP.emptyNameMap
       mapM_ (warnDefault nms) (zip vars tys)
       let applyType :: Term -> C.Type -> IO Term
           applyType t ty = do
@@ -1940,7 +1944,12 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
       return (TypedTerm (TypedTermSchema schema') trm'')
   where
     warnDefault ns (x,t) =
-      printOutLn opts Info $ show $ C.text "Assuming" C.<+> C.ppWithNames ns (x :: C.TParam) C.<+> C.text "=" C.<+> C.pp t
+      let x' = CryPP.prettyWithNames ns (x :: C.TParam)
+          t' = CryPP.pretty t
+          msg = "Assuming" <+> x' <+> "=" <+> t'
+      in
+      printOutLn opts Info $ PPS.render PPS.defaultOpts msg
+          
     -- Apply a substitution to a type *without* simplifying
     -- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to
     -- 'apSubst', which performs simplifications wherever possible.)

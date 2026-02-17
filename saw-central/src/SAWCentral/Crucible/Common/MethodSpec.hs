@@ -115,6 +115,7 @@ import           Data.Kind (Type)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
+import qualified Data.Text as Text
 import           Data.Time.Clock
 import           Data.Void (absurd)
 
@@ -137,8 +138,8 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 import           Mir.Intrinsics (MIR)
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
-import qualified Cryptol.Utils.PP as Cryptol
 
+import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCoreWhat4.ReturnTrip as SAWVerifier
@@ -374,8 +375,8 @@ instance Crucible.IntrinsicClass Sym GhostValue where
   muxIntrinsic sym _ _namerep _ctx prd (thnSch,thn) (elsSch,els) =
     do when (thnSch /= elsSch) $ fail $ unlines $
          [ "Attempted to mux ghost variables of different types:"
-         , show (Cryptol.pp thnSch)
-         , show (Cryptol.pp elsSch)
+         , Text.unpack (CryPP.pp thnSch)
+         , Text.unpack (CryPP.pp elsSch)
          ]
        st <- sawCoreState sym
        let sc  = saw_ctx st

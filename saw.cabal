@@ -245,6 +245,7 @@ library cryptol-saw-core
     CryptolSAWCore.Cryptol
     CryptolSAWCore.CryptolEnv
     CryptolSAWCore.Prelude
+    CryptolSAWCore.Pretty
     CryptolSAWCore.Simpset
     CryptolSAWCore.TypedTerm
   other-modules:

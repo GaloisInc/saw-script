@@ -30,10 +30,13 @@ import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Nonce as Nonce
 import           Data.Parameterized.Nonce (NonceGenerator, withSTNonceGenerator)
 
-import qualified SAWCentral.AST as SAWScript
 import qualified Cryptol.Parser.AST      as Cryptol
 import qualified Cryptol.Parser.Position as Cryptol
-import qualified Cryptol.Utils.PP        as Cryptol
+
+import qualified SAWSupport.Pretty as PPS
+
+import qualified CryptolSAWCore.Pretty as CryPP
+import qualified SAWCentral.AST as SAWScript
 import SAWCentral.Position
 import SAWCentral.Utils
 import SAWCentral.TopLevel
@@ -415,7 +418,7 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
          returning theoremName . tell $
             [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos theoremName Nothing) .
                 SAWScript.Code triggerPos .
-                   Text.pack . show . Cryptol.ppPrec 0 .
+                   PPS.renderText PPS.defaultOpts . CryPP.pretty .
                       cryptolAbstractNamesSAW leftArgs .
                          cryptolApplyFunction (Cryptol.EParens . Cryptol.EVar . nameCryptolFromSAW $ "==") $
                             [ cryptolApplyFunctionSAW leftFunction  leftArgs
