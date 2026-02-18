@@ -371,11 +371,11 @@ prettyIdent = viaShow
 prettyMemoVar :: MemoVar -> PPM PPS.Doc
 prettyMemoVar MemoVar{..} = asks (PPS.ppMemoStyle . ppOpts) >>= \case
   PPS.Incremental ->
-    pure ("x@" <> pretty memoFresh)
+    pure ("x`" <> pretty memoFresh)
   PPS.Hash prefixLen ->
-    pure ("x@" <> pretty (take prefixLen hashStr))
+    pure ("x`" <> pretty (take prefixLen hashStr))
   PPS.HashIncremental prefixLen ->
-    pure ("x" <> pretty memoFresh <> "@" <> pretty (take prefixLen hashStr))
+    pure ("x" <> pretty memoFresh <> "`" <> pretty (take prefixLen hashStr))
   where
     hashStr = showHex (abs memoHash) ""
 
@@ -511,7 +511,7 @@ prettyBestName nm =
 
 prettyName :: NameInfo -> PPS.Doc
 prettyName (ModuleIdentifier i) = prettyIdent i
-prettyName (ImportedName qName _) = pretty (QN.render qName)
+prettyName (ImportedName qName _) = pretty (QN.ppQualName qName)
 
 -- | Pretty-print a non-shared term
 prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc

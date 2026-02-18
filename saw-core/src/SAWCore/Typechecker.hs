@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
 Module      : SAWCore.Typechecker
@@ -24,6 +25,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 
@@ -36,14 +38,14 @@ import SAWCore.Panic (panic)
 import SAWCore.Module
   ( emptyModule
   , findDataTypeInMap
-  , resolveNameInMap
   , resolvedNameName
   , CtorArg(..)
   , DefQualifier(..)
-  , DataType(dtName)
+  , DataType(dtName), ResolvedName, lookupVarIndexInMap, resolvedNameInfo
   )
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Name
+import qualified SAWCore.QualName as QN
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTermPureDefaults)
@@ -84,8 +86,11 @@ prettyTCError opts ne e = helper Nothing e where
   helper :: Maybe Pos -> TCError -> PPS.Doc
   helper mp err =
     case err of
-      UnboundName str ->
+      AmbiguousName str [] ->
         ppWithPos mp [ "Unbound name:" <+> pretty str ]
+      AmbiguousName str rnms ->
+        ppWithPos mp $ [ "Ambiguous name:" <+> pretty str, "Possible matches:"] ++
+          map (pretty . toAbsoluteName . resolvedNameInfo) rnms
       EmptyVectorLit ->
         ppWithPos mp [ "Empty vector literal"]
       NoSuchDataType d ->
@@ -122,7 +127,7 @@ data TCEnv =
 
 -- | Errors that can occur during type-checking
 data TCError
-  = UnboundName Text
+  = AmbiguousName Text [ResolvedName]
   | EmptyVectorLit
   | NoSuchDataType Ident
   | DeclError Text String
@@ -194,21 +199,54 @@ liftSCM m =
 -- | Resolve a name.
 inferResolveName :: Text -> TCM Term
 inferResolveName n =
-  do nctx <- askLocals
-     mnm <- getModuleName
-     sc <- askSharedContext
-     mm <- liftIO $ scGetModuleMap sc
-     let ident = mkIdent mnm n
-     case (Map.lookup n nctx, resolveNameInMap mm ident) of
-       (Just (vn, t, is_def), _) ->
-         case is_def of
-           True -> return t
-           False -> liftSCM $ SC.scmVariable vn t
-       (_, Just rn) ->
-         do let c = resolvedNameName rn
-            liftSCM $ SC.scmConst c
-       (Nothing, Nothing) ->
-         throwTCError $ UnboundName n
+  inferResolveQualName $ QN.QualName [] [] n Nothing Nothing
+
+-- | Resolve a name to a locally-bound variable
+resolveLocalName :: Text -> TCM (Maybe Term)
+resolveLocalName n = do
+  nctx <- askLocals
+  case Map.lookup n nctx of
+    Just (vn, t, is_def) ->
+      case is_def of
+        True -> return $ Just t
+        False -> Just <$> (liftSCM $ SC.scmVariable vn t)
+    Nothing -> return Nothing
+
+-- | Resolve a name to a list of possible globals
+resolveGlobalName :: Text -> TCM [ResolvedName]
+resolveGlobalName n = do
+  sc <- askSharedContext
+  env <- liftIO $ scGetNamingEnv sc
+  mm <- liftIO $ scGetModuleMap sc
+  let vis = resolveDisplayName env n
+  return $ mapMaybe (\vi -> lookupVarIndexInMap vi mm) vis
+
+-- | Resolve a partially qualified name
+inferResolveQualName :: QN.QualName -> TCM Term
+inferResolveQualName qn = do
+  let n = QN.ppQualName qn
+  resolveLocalName n >>= \case
+    Just t -> return t
+    Nothing -> resolveGlobalName n >>= \case
+      [rn] -> rnToTerm rn
+      rns -> resolveAliases qn >>= \case
+        Just t -> return t
+        Nothing | Nothing <- QN.namespace qn ->
+          resolveAliases (qn { QN.namespace = Just QN.NamespaceCore }) >>= \case
+            Just t -> return t
+            Nothing -> throwTCError $ AmbiguousName n rns
+        _ -> throwTCError $ AmbiguousName n rns
+  where
+    rnToTerm rn = do
+      let c = resolvedNameName rn
+      liftSCM $ SC.scmConst c
+
+    resolveAliases q = uniqueGlobal (reverse (QN.aliases q))
+
+    uniqueGlobal (n:ns) = resolveGlobalName n >>= \case
+      [rn] -> Just <$> rnToTerm rn
+      _ -> uniqueGlobal ns
+    uniqueGlobal [] = return Nothing
 
 -- | The debugging level
 debugLevel :: Int
@@ -237,6 +275,8 @@ typeInferCompleteTerm uterm =
   case uterm of
     Un.Name (PosPair _ n) ->
       inferResolveName n
+    Un.QName (PosPair _ n) ->
+      inferResolveQualName n
 
     Un.Sort _ srt h ->
       liftSCM $ SC.scmSortWithFlags srt h
@@ -273,8 +313,10 @@ typeInferCompleteTerm uterm =
 
     Un.Let _ [] t ->
       typeInferCompleteUTerm t
-    Un.Let p ((Un.termVarLocalName -> x, def) : bs) t ->
-      do vn <- liftSCM $ SC.scmFreshVarName x
+    Un.Let p ( PosPair _ ((nm,midx), def) : bs) t ->
+      do let qn = QN.QualName [] [] nm midx Nothing
+         let x = QN.ppQualName qn
+         vn <- liftSCM $ SC.scmFreshVarName x
          def' <- typeInferCompleteUTerm def
          withDefinedVar x vn def' $
            typeInferCompleteTerm $ Un.Let p bs t

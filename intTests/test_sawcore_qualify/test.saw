@@ -1,0 +1,83 @@
+let require_convertible t1 t2 = do {
+  b <- is_convertible t1 t2;
+  if b then return () else
+  fail (str_concats
+    [ "Terms are not convertible: "
+    , show_term t1
+    , " vs. "
+    , show_term t2
+    ]);
+};
+
+let no_parse s =
+  fails (do { let _ = parse_core s; print "Unexpected success"; } );
+
+let parse_as s t2 = do {
+  let t1 = parse_core s;
+  require_convertible t1 t2;
+  let t1' = parse_core (show_term t1);
+  require_convertible t1' t1;
+  let t2' = parse_core (show_term t2);
+  require_convertible t2' t2;
+  return t1;
+};
+
+import "A/B.cry";
+
+x_cryptol <- parse_as "x" {{ 0x1 }};
+parse_as "A::B::|::C::x@cryptol" x_cryptol;
+parse_as "|::C::x@cryptol" x_cryptol;
+
+print_term x_cryptol;
+
+x_fresh <- define "x" {{ 0 : Integer }};
+
+print_term x_cryptol;
+
+no_parse "x";
+
+parse_as "x@cryptol" x_cryptol;
+parse_as "A::B::|::C::x" x_cryptol;
+parse_as "x@fresh" x_fresh;
+
+no_parse "x@core";
+
+enable_experimental;
+
+import "A.cry";
+
+no_parse "x@cryptol";
+
+A_x_cryptol <- parse_as "A::x" {{ 0x2 }};
+parse_as "A::B::x" x_cryptol;
+parse_as "|::C::x" x_cryptol;
+
+load_sawcore_from_file "A.sawcore";
+
+// as a special case, we attempt to disambiguate names
+// by adding @core implicitly
+x_core <- parse_as "x" (parse_core "True");
+parse_as "A::x" x_core;
+parse_as "x@core" x_core;
+
+parse_as "A::x@cryptol" A_x_cryptol;
+parse_as "A::B::x" x_cryptol;
+parse_as "x@fresh" x_fresh;
+
+load_sawcore_from_file "B.sawcore";
+
+// now 'x' is no longer unambiguous, even with @core
+no_parse "x";
+no_parse "x@core";
+
+parse_as "A::x" x_core;
+
+import "D.cry";
+
+let bang_huh = {{ \a b -> a !? b }};
+
+parse_as "!?\"!?\"" bang_huh;
+parse_as "D::!?\"!?\"" bang_huh;
+parse_as "D::!?\"!?\"@cryptol" bang_huh;
+
+print "Success";

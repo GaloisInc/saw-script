@@ -1,0 +1,84 @@
+Loading file "test.saw"
+x
+x@cryptol
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:37:1-37:13 (at top level)
+.:1:0:
+While typechecking term:
+  x
+.:1:0:
+Ambiguous name: x
+Possible matches:
+A::B::|::C::x@cryptol
+x`5857@fresh
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:43:1-43:18 (at top level)
+.:1:0:
+While typechecking term:
+  x@core
+.:1:0:
+Unbound name: x@core
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:49:1-49:21 (at top level)
+.:1:0:
+While typechecking term:
+  x@cryptol
+.:1:0:
+Ambiguous name: x@cryptol
+Possible matches:
+A::B::|::C::x@cryptol
+A::x@cryptol
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:70:1-70:13 (at top level)
+.:1:0:
+While typechecking term:
+  x
+.:1:0:
+Ambiguous name: x
+Possible matches:
+A::B::|::C::x@cryptol
+x`5857@fresh
+A::x@cryptol
+A::x@core
+B::x@core
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:71:1-71:18 (at top level)
+.:1:0:
+While typechecking term:
+  x@core
+.:1:0:
+Ambiguous name: x@core
+Possible matches:
+A::x@core
+B::x@core
+
+Success
