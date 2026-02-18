@@ -229,24 +229,18 @@ inferResolveQualName qn = do
     Just t -> return t
     Nothing -> resolveGlobalName n >>= \case
       [rn] -> rnToTerm rn
-      rns -> resolveAliases qn >>= \case
-        Just t -> return t
-        Nothing | Nothing <- QN.namespace qn ->
-          resolveAliases (qn { QN.namespace = Just QN.NamespaceCore }) >>= \case
-            Just t -> return t
-            Nothing -> throwTCError $ AmbiguousName n rns
-        _ -> throwTCError $ AmbiguousName n rns
+      -- as a special case, attempt to disambiguate a name without
+      -- a namespace qualifier by assuming it is in the "core" namespace
+      rns | Nothing <- QN.namespace qn ->
+        let n' = QN.ppQualName (qn { QN.namespace = Just QN.NamespaceCore })
+        in resolveGlobalName n' >>= \case
+          [rn] -> rnToTerm rn
+          _ -> throwTCError $ AmbiguousName n rns
+      rns -> throwTCError $ AmbiguousName n rns
   where
     rnToTerm rn = do
       let c = resolvedNameName rn
       liftSCM $ SC.scmConst c
-
-    resolveAliases q = uniqueGlobal (reverse (QN.aliases q))
-
-    uniqueGlobal (n:ns) = resolveGlobalName n >>= \case
-      [rn] -> Just <$> rnToTerm rn
-      _ -> uniqueGlobal ns
-    uniqueGlobal [] = return Nothing
 
 -- | The debugging level
 debugLevel :: Int
