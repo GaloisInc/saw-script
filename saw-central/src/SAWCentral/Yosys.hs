@@ -98,15 +98,10 @@ convertYosysIR sc ir =
           do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
              cm <- convertModule sc env m
              n <- Nonce.freshNonce Nonce.globalNonceGenerator
-             let mqn = QN.indexedQualName
+             let qn = QN.fromNameIndex
                    QN.NamespaceYosys
                    nm
                    (fromIntegral $ Nonce.indexValue n)
-             qn <- case mqn of
-              Left errs ->
-                fail $ Text.unpack $
-                  Text.intercalate "\n" $ ("convertYosysIR: failed to make qualified name: " <> nm):errs
-              Right qn -> return qn
              let ni = SC.mkImportedName qn
              body <- SC.scAscribe sc (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
              tc <- SC.scDefineConstant sc ni body

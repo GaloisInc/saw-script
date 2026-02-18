@@ -16,56 +16,32 @@ Qualified names with namespaces,paths and subpaths.
 module SAWCore.QualName
   ( Namespace(..)
   , readNamespace
-  , QualName
-  , qnNamespace
-  , qnBaseName
-  , qnPath
-  , qnSubPath
-  , qnIndex
-  , qnFullPath
-  , qnFullPathNE
-  , pathToQualName
-  , indexedQualName
-  , mkQualName
-  , qualifyName
-  , splitQualName
-  , parse
-  , render
-  , renderPath
+  , QualName(..)
+  , fullPath
+  , fullPathNE
+  , fromPath
+  , fromNameIndex
+  , qualify
+  , split
+  , ppQualName
   , aliases
   ) where
 
-import qualified Data.Foldable as Foldable
+import Data.Char (isAlpha, isAlphaNum, isPrint, ord)
 import           Data.Hashable
 import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.Read as Text
-import Control.Monad.Except
-import Control.Monad (unless)
+
 import qualified Data.List.NonEmpty as NE
 
 import qualified Language.Haskell.TH.Syntax as TH
-import Data.Char (isAlpha, isAlphaNum)
 
-{-# INLINE debugParse #-}
-debugParse :: Bool
-debugParse = True
 
-type ParseM = Either [Text]
-
-rethrow :: Text -> ParseM a -> ParseM a
-rethrow e f  = f `catchError` \e' -> throwError (e:e')
-
-throwOne :: Text -> ParseM a
-throwOne e = throwError [e]
-
--- | Hide parse errors for exported functions unless debugging is enabled.
-squelch :: ParseM a -> ParseM a
-squelch f | debugParse = f
-squelch f = f `catchError` \_ -> throwError []
+import qualified Prettyprinter as PP
+import Text.Printf (printf)
 
 data Namespace =
   NamespaceCore | NamespaceCryptol | NamespaceFresh | NamespaceYosys | NamespaceLLVM
@@ -88,68 +64,24 @@ instance Show Namespace where
 namespaceMap :: Map Text Namespace
 namespaceMap = Map.fromList $ map (\ns -> (renderNamespace ns, ns)) [minBound..maxBound]
 
-readNamespace :: Text -> ParseM Namespace
-readNamespace txt = case Map.lookup txt namespaceMap of
-  Just ns -> pure ns
-  Nothing -> throwOne $ "readNamespace: namespace not found: " <> txt
+readNamespace :: Text -> Maybe Namespace
+readNamespace txt = Map.lookup txt namespaceMap
 
-splitM :: Bool -> Char -> Text -> ParseM (Text,Text)
-splitM fwd c txt = rethrow err $ do
-  nonEmpty txt
-  let txt' = if fwd then txt else Text.reverse txt
-  let (lhs,rhs) = Text.break (==c) txt'
-  case Text.uncons rhs of
-    Nothing -> throwOne $ "empty rhs"
-    Just(_,rhs') -> case fwd of
-      True -> return (lhs, rhs')
-      False -> return (Text.reverse rhs', Text.reverse lhs)
-  where
-    err = "splitM: failed to split on char '" <> Text.singleton c <> "' in '"
-      <> txt
-
-splitOnM :: Text -> Text -> ParseM [Text]
-splitOnM _ txt | Text.null txt = throwOne "splitOnM: empty argument"
-splitOnM sep txt = return $ Text.splitOn sep txt
-
-unsnocM :: [a] -> ParseM ([a], a)
-unsnocM [] = throwOne "unsnocM: empty list"
-unsnocM xs = return $ (List.init xs, List.last xs)
-
-splitFirst :: (a -> Maybe a) -> [a] -> Maybe ([a],[a])
-splitFirst f xs = go [] xs
-  where
-    go pref ys = case ys of
-      [] -> Nothing
-      (y:ys') -> case f y of
-        Just y' -> Just (List.reverse pref,y':ys')
-        Nothing -> go (y:pref) ys'
-
-parsePath :: Text -> ParseM ([Text], [Text], Text)
-parsePath txt0 = rethrow ("parsePath: failed to parse: " <> txt0) $ do
-  path_nm <- splitOnM "::" txt0
-  (path_subpath,nm) <- unsnocM path_nm
-  case splitFirst (Text.stripSuffix "[") path_subpath of
-    Just (path, subpath_) -> do
-      (subpath,subpath_last_) <- unsnocM subpath_
-      case (Text.stripSuffix "]" subpath_last_) of
-        Just subpath_last -> return (path, subpath ++ [subpath_last], nm)
-        Nothing -> throwOne "could not find closing bracket in subpath"
-    Nothing -> return (path_subpath, [], nm)
-
+-- | A name with optional additional qualification
 data QualName = QualName
-  { qnNamespace :: Namespace
-  , qnBaseName :: Text
-  , qnPath :: [Text]
-  , qnSubPath :: [Text]
-  , qnIndex :: Maybe Int
+  { path :: [Text]
+  , subPath :: [Text]
+  , baseName :: Text
+  , index :: Maybe Int
+  , namespace :: Maybe Namespace
   }
   deriving (Eq, Ord, TH.Lift)
 
-qnFullPath :: QualName -> [Text]
-qnFullPath qn = qnPath qn ++ qnSubPath qn ++ [qnBaseName qn]
+fullPath :: QualName -> [Text]
+fullPath qn = path qn ++ subPath qn ++ [baseName qn]
 
-qnFullPathNE :: QualName -> NE.NonEmpty Text
-qnFullPathNE qn = NE.fromList (qnFullPath qn)
+fullPathNE :: QualName -> NE.NonEmpty Text
+fullPathNE qn = NE.fromList (fullPath qn)
 
 instance Hashable QualName where
   hashWithSalt s (QualName a b c d e) = s
@@ -159,158 +91,108 @@ instance Hashable QualName where
     `hashWithSalt` d
     `hashWithSalt` e
 
+fromPath :: Namespace -> NE.NonEmpty Text -> QualName
+fromPath ns ps = QualName (NE.init ps) [] (NE.last ps) Nothing (Just ns)
 
-validPathElem :: Text -> Bool
-validPathElem txt =
-     not (Text.null txt)
-  && Text.all (\c -> not (c == '[' || c == ']')) txt
-  && (not (Text.isInfixOf "::" txt))
-
-validQualifierElem :: Text -> Bool
-validQualifierElem txt = validPathElem txt && Text.all isAlpha txt
-
--- Pulled from Cryptol.Parser.Lexer.x
-validNameSymbols :: [Char]
-validNameSymbols = ['!','#','$','%','&','*','-','.',':','<','=','>','?','@','^','~','\\','/']
-
-validBaseName :: Text -> Bool
-validBaseName txt = validPathElem txt && case Text.uncons txt of
-  Nothing -> False
-  Just (c,txt') -> case isAlpha c of
-    True -> Text.all (\c_ -> isAlphaNum c_ || c_ == '\'' || c_== '_') txt'
-    False -> (c == '_' && Text.null txt') ||
-      Text.all (\c_ -> List.elem c_ validNameSymbols) txt
-
-pathToQualName :: (Foldable t) => Namespace -> t Text -> Either [Text] QualName
-pathToQualName ns ps = squelch $ case ps' of
-  [] -> throwOne "pathToQualName: empty path"
-  _ -> mkQualName ns (List.init ps') [] (List.last ps') Nothing
-  where
-    ps' = Foldable.toList ps
-
-indexedQualName :: Namespace -> Text -> Int -> Either [Text] QualName
-indexedQualName ns nm i = squelch $ mkQualName ns [] [] nm (Just i)
-
-mkQualName :: Namespace -> [Text] -> [Text] -> Text -> Maybe Int -> Either [Text] QualName
-mkQualName ns ps sps nm idx = squelch $ rethrow err $ do
-  unless (validBaseName nm) $
-    throwOne $ "mkQualName: invalid base name: " <> nm
-  mapM_ checkQual (ps ++ sps)
-  return $ QualName ns nm ps sps idx
-  where
-    err = Text.intercalate " " $
-      [ "mkQualName failed: "
-      , renderNamespace ns
-      , "[" <> Text.intercalate ", " ps <> "]"
-      , "[" <> Text.intercalate ", " sps <> "]"
-      , nm
-      , Text.pack (show idx)
-      ]
-
-    checkQual txt = unless (validQualifierElem txt) $
-      throwOne $ "mkQualName: invalid path qualifier element: " <> txt
+fromNameIndex :: Namespace -> Text -> Int -> QualName
+fromNameIndex ns nm i = QualName [] [] nm (Just i) (Just ns)
 
 -- | Append a base name to a given 'QualName', pushing the existing
 --   base name into the path (or subpath, if it is nonempty).
-qualifyName :: QualName -> Text -> Either [Text] QualName
-qualifyName qn txt = do
-  let prevBaseName = qnBaseName qn
-  unless (validBaseName txt) $
-    throwOne $ "qualifyName: invalid base name: " <> txt
-  unless (validQualifierElem prevBaseName) $
-    throwOne $ "qualifyName: cannot convert base name to qualifier element: " <> prevBaseName
-  case qnSubPath qn of
-    [] -> return $ qn { qnPath = qnPath qn ++ [prevBaseName], qnBaseName = txt }
-    sps -> return $ qn { qnSubPath = sps ++ [prevBaseName], qnBaseName = txt }
+qualify :: QualName -> Text -> QualName
+qualify qn txt = do
+  let prevBaseName = baseName qn
+  case subPath qn of
+    [] -> qn { path = path qn ++ [prevBaseName], baseName = txt }
+    sps -> qn { subPath = sps ++ [prevBaseName], baseName = txt }
 
 -- | Split a qualified name into a qualifier and base name.
-splitQualName :: QualName -> Either [Text] (QualName, Text)
-splitQualName qn = case qnSubPath qn of
-  [] -> case qnPath qn of
-    (p:ps) | validBaseName p ->
-      return $ (qn { qnPath = ps, qnBaseName = p }, qnBaseName qn)
-    _ -> bad
-  (p:sps) | validBaseName p ->
-    return $ (qn { qnSubPath = sps, qnBaseName = p }, qnBaseName qn)
-  _ -> bad
+split :: QualName -> Maybe (QualName, Text)
+split qn = case subPath qn of
+  [] -> case path qn of
+    (p:ps) ->
+      Just $ (qn { path = ps, baseName = p }, baseName qn)
+    _ -> Nothing
+  (p:sps) ->
+    Just $ (qn { subPath = sps, baseName = p }, baseName qn)
+
+-- | True if the given path element may be printed directly. If not, it
+-- must be prefixed with '!?', quoted and escaped.
+validPathElem :: Text -> Bool
+validPathElem txt = case Text.uncons txt of
+  Just (c, txt') ->
+    (isAlpha c || c == '_') &&
+    Text.all (\c_ -> isAlphaNum c_ || c_ == '\'' || c_ == '_') txt'
+  Nothing -> False
+
+
+escapeInnerString :: Text -> Text
+escapeInnerString = Text.concatMap go
   where
-    bad = throwOne $ "splitQualName: cannot split qualified name: " <> render qn
+    go c = case c of
+      '"' -> "\\\""
+      '\\' -> "\\\\"
+      '\a' -> "\\a"
+      '\b' -> "\\b"
+      '\t' -> "\\t"
+      '\n' -> "\\n"
+      '\v' -> "\\v"
+      '\f' -> "\\f"
+      '\r' -> "\\r"
+      _ -> case isPrint c of
+        True -> Text.singleton c
+        False -> "\\x" <> Text.pack (printf "%06X" (ord c))
 
-nonEmpty :: Text -> ParseM ()
-nonEmpty txt = case Text.null txt of
-  True -> throwOne "nonEmpty: unexpected empty Text"
-  False -> return ()
-
-
-parse :: Text -> Either [Text] QualName
-parse txt0 = squelch $ rethrow err $ do
-  (txt1, ns_txt) <- splitM False '@' txt0
-  ns <- readNamespace ns_txt
-  let (mi, txt3) = case splitM False '#' txt1 of
-        Right (txt2,si)
-          | Right (i,s) <- Text.decimal si
-          , Text.null s
-         -> (Just i, txt2)
-        _ -> (Nothing, txt1)
-  (path,subpath,nm) <- parsePath txt3
-  mkQualName ns path subpath nm mi
-  where
-    err = "parse: failed to parse qualified name: " <> txt0
-
-data RenderOpts = RenderOpts { optRenderNamespace :: Maybe Bool }
-
-defaultRenderOpts :: RenderOpts
-defaultRenderOpts = RenderOpts Nothing
-
--- | Valid aliases for a qualified name, from most to least precise
-aliasesRev :: RenderOpts -> QualName -> [Text]
-aliasesRev opts qn = do
+-- | Valid aliases for a partially-qualified name, from most to least precise
+aliasesRev :: QualName -> [Text]
+aliasesRev qn = do
   sps <- subPathText
   ps <- pathText
   ix <- indexSuffix
   ns <- namespaceSuffix
-  let bn = qnBaseName qn
+  let bn = pathElem $ baseName qn
   return $ ps <> sps <> bn <> ix <> ns
   where
-    opt :: Maybe Bool -> Maybe Text -> [Text]
-    opt mopt mtxt = case mtxt of
+    opt :: Maybe Text -> [Text]
+    opt mtxt = case mtxt of
       Nothing -> [Text.empty]
-      Just txt -> case mopt of
-        Nothing -> [txt, Text.empty]
-        Just True -> [txt]
-        Just False -> [Text.empty]
+      Just txt -> [txt, Text.empty]
 
     indexSuffix :: [Text]
-    indexSuffix = opt Nothing $
-      fmap (\i -> "#" <> Text.pack (show i)) (qnIndex qn)
+    indexSuffix = opt $
+      fmap (\i -> "`" <> Text.pack (show i)) (index qn)
 
     namespaceSuffix :: [Text]
-    namespaceSuffix = opt (optRenderNamespace opts) $
-      Just $ "@" <> renderNamespace (qnNamespace qn)
+    namespaceSuffix = opt $
+      (fmap (\ns -> "@" <> renderNamespace ns) (namespace qn))
+
+    pathElem :: Text -> Text
+    pathElem txt = case validPathElem txt of
+      True -> txt
+      False -> "!?\"" <> escapeInnerString txt <> "\""
 
     pathText :: [Text]
-    pathText = opt Nothing $
-      case qnPath qn of
+    pathText = opt $
+      case path qn of
         [] -> Nothing
-        ps -> Just $ Text.intercalate "::" ps <> "::"
+        ps -> Just $ Text.intercalate "::" (map pathElem ps) <> "::"
 
     subPathText :: [Text]
-    subPathText = opt Nothing $
-      case qnSubPath qn of
+    subPathText = opt $
+      case subPath qn of
         [] -> Nothing
-        sp -> Just $ "[" <> Text.intercalate "::" sp <> "]" <> "::"
+        sp -> Just $ "|::" <> Text.intercalate "::" (map pathElem sp) <> "::"
 
 -- | Valid aliases for a qualified name, from least to most precise
 aliases :: QualName -> [Text]
-aliases qn = List.reverse (aliasesRev defaultRenderOpts qn)
+aliases qn = List.reverse (aliasesRev qn)
 
 -- | Fully-qualified rendering of a qualified name, including namespace
-render :: QualName -> Text
-render qn = List.head (aliasesRev defaultRenderOpts qn)
+ppQualName :: QualName -> Text
+ppQualName qn = List.head (aliasesRev qn)
 
--- | Fully-qualified rendering of a qualified name, without namespace
-renderPath :: QualName -> Text
-renderPath qn = List.head (aliasesRev (defaultRenderOpts { optRenderNamespace = Just False }) qn)
+instance PP.Pretty QualName where
+  pretty qn = PP.pretty $ List.head (aliasesRev qn)
 
 instance Show QualName where
-  show qn = Text.unpack (render qn)
+  show qn = Text.unpack (ppQualName qn)

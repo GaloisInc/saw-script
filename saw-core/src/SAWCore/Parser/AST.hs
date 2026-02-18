@@ -65,13 +65,16 @@ import SAWCore.Term.Functor
   , FieldName
   , LocalName
   )
+import SAWCore.QualName (QualName)
+import qualified SAWCore.QualName as QN
 
 data UTerm
   = Name (PosPair Text)
+  | QName (PosPair QualName)
   | Sort Pos Sort SortFlags
   | App UTerm UTerm
   | Lambda Pos UTermCtx UTerm
-  | Let Pos [(UTermVar, UTerm)] UTerm
+  | Let Pos [PosPair ((Text,Maybe Int),UTerm)] UTerm
   | Pi Pos UTermCtx UTerm
   | Recursor (PosPair Text) Sort
   | UnitValue Pos
@@ -119,6 +122,7 @@ instance Positioned UTerm where
   pos t =
     case t of
       Name i               -> pos i
+      QName x              -> pos x
       Sort p _ _           -> p
       Lambda p _ _         -> p
       Let p _ _            -> p
@@ -356,6 +360,7 @@ prettyPrecUTerm :: Int -> UTerm -> PPS.Doc
 prettyPrecUTerm prec uterm =
   case uterm of
     Name x -> PP.pretty (val x)
+    QName qn -> PP.pretty (val qn)
     Sort _ s flags -> PP.pretty (flagsPrefix flags <> ppSort s)
     App _ _ ->
       let (e, es) = asApps uterm
@@ -363,7 +368,7 @@ prettyPrecUTerm prec uterm =
     Lambda _ ctx body ->
       PP.nest 1 (wrap prec 1 ("\\" PP.<+> prettyUTermCtx ctx PP.<+> "->" </> prettyPrecUTerm 1 body))
     Let _ binds body -> PPS.prettyLetBlock
-      (map (\(var,def) -> (prettyUTermVar var, prettyPrecUTerm 1 def)) binds)
+      (map (\(PosPair _  ((txt,idx),def)) -> (PP.pretty (QN.QualName [] [] txt idx Nothing), prettyPrecUTerm 1 def)) binds)
       (prettyPrecUTerm 1 body)
     Pi _ ctx body ->
       wrap prec 1 (foldr (\a b -> a PP.<+> "->" </> b) (prettyPrecUTerm 1 body) (map prettyPiBinding ctx))

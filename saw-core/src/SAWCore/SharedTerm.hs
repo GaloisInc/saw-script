@@ -453,7 +453,7 @@ prettyTermError opts ne err =
       ]
     DuplicateQualName qn ->
       [ "Attempt to register name with duplicate qualified name"
-      , PP.indent 2 $ PP.pretty (QN.render qn)
+      , PP.indent 2 $ PP.pretty (QN.ppQualName qn)
       ]
     AlreadyDefined nm ->
       [ "Attempt to redefine existing constant"

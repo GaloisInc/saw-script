@@ -1,0 +1,6 @@
+module D where
+
+infixr 65 !?
+
+(!?) : Integer -> Integer -> Integer
+x !? y = x + y

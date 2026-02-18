@@ -18,14 +18,19 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
 import Data.Text (Text)
 import qualified Data.Vector as V
 import Text.Read (readEither, readMaybe)
 
 import SAWCore.Name
+import qualified SAWCore.Parser.AST as AST
+import SAWCore.Parser.Grammar ( parseSAWTerm )
+import SAWCore.Parser.Position (PosPair(..))
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
 import qualified SAWCore.QualName as QN
+
 
 --------------------------------------------------------------------------------
 -- External text format
@@ -40,7 +45,14 @@ renderNames nms = show
  where
    f (Left s) = Left s
    f (Right (ModuleIdentifier i))  = Right (Left (show i))
-   f (Right (ImportedName qn _)) = Right (Right (QN.render qn))
+   f (Right (ImportedName qn _)) = Right (Right (QN.ppQualName qn))
+
+parseQualName :: Text -> Either String QN.QualName
+parseQualName txt = case parseSAWTerm [] [] (LText.fromStrict txt) of
+  Right (AST.Name (PosPair _ nm)) -> Right $ QN.QualName [] [] nm Nothing Nothing
+  Right (AST.QName (PosPair _ qnm)) -> Right qnm
+  Right _ -> Left $ "Expected identifier: " ++ Text.unpack txt
+  Left (PosPair _ err) -> Left (show err)
 
 readNames :: String -> Either String (Map VarIndex (Either Text NameInfo))
 readNames xs = Map.fromList <$> (mapM readName =<< readEither xs)
@@ -48,9 +60,9 @@ readNames xs = Map.fromList <$> (mapM readName =<< readEither xs)
    readName :: (VarIndex, Either Text (Either Text (Text))) -> Either String (VarIndex, Either Text NameInfo)
    readName (idx, Left x) = pure (idx, Left x)
    readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))
-   readName (idx, Right (Right (qn_txt))) = case QN.parse qn_txt of
+   readName (idx, Right (Right (qn_txt))) = case parseQualName qn_txt of
     Right qn -> pure (idx, Right (mkImportedName qn))
-    Left errs -> Left $ Text.unpack (Text.intercalate (Text.pack "\n") errs)
+    Left err -> Left err
 
 -- | Render to external text format
 scWriteExternal :: Term -> String

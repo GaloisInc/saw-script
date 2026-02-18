@@ -95,6 +95,7 @@ import qualified Data.IntMap as IntMap
 import           Data.IORef
 import           Data.List (find, nub, partition)
 import           Data.List.Extra (nubOrd)
+import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import           Data.Maybe
 import           Data.String
@@ -349,10 +350,7 @@ llvm_array_size_profile assume (Some lm) nm lemmas setup = do
     pure $ Map.toList profiles
 
 llvmQualName :: Text -> QN.QualName
-llvmQualName symbol_name = case QN.pathToQualName QN.NamespaceLLVM [symbol_name] of
-  Right qn -> qn
-  Left errs ->
-    panic "llvmQualName" $ ("Could not create LLVM symbol name " <> symbol_name):errs
+llvmQualName symbol_name = QN.fromPath QN.NamespaceLLVM (symbol_name :| [])
 
 llvmNameInfo :: Text -> NameInfo
 llvmNameInfo symbol_name = mkImportedName (llvmQualName symbol_name)

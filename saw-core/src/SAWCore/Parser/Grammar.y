@@ -23,7 +23,8 @@ import Control.Monad ()
 import Control.Monad.State (State, get, gets, modify, put, runState, evalState)
 import Control.Monad.Except (ExceptT, throwError, runExceptT)
 import qualified Data.ByteString.Lazy.UTF8 as B
-import Data.Maybe (isJust)
+import qualified Data.List as List
+import Data.Maybe (isJust,isNothing,fromJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
@@ -37,6 +38,8 @@ import Prelude hiding (mapM, sequence)
 import SAWCore.Panic
 import SAWCore.Parser.AST
 import SAWCore.Parser.Lexer
+import SAWCore.QualName (QualName,Namespace)
+import qualified SAWCore.QualName as QN
 
 }
 
@@ -69,6 +72,11 @@ import SAWCore.Parser.Lexer
   '}'           { PosPair _ (TKey "}") }
   '|'           { PosPair _ (TKey "|") }
   '*'           { PosPair _ (TKey "*") }
+  '@'           { PosPair _ (TKey "@") }
+  '!?'          { PosPair _ (TKey "!?") }
+  '`'           { PosPair _ (TKey "`") }
+  '::'          { PosPair _ (TKey "::") }
+
   'data'        { PosPair _ (TKey "data") }
   'hiding'      { PosPair _ (TKey "hiding") }
   'import'      { PosPair _ (TKey "import") }
@@ -89,7 +97,6 @@ import SAWCore.Parser.Lexer
   bvlit         { PosPair _ (TBitvector _) }
   '_'           { PosPair _ (TIdent "_") }
   rawident      { PosPair _ (TIdent _) }
-  rawletident   { PosPair _ (TLetIdent _) }
   rawidentrec   { PosPair _ (TRecursor _) }
   rawidentind   { PosPair _ (TInductor _) }
   string        { PosPair _ (TString _) }
@@ -167,9 +174,29 @@ VarCtxItem :: { [(UTermVar, UTerm)] } :
 CtorDecl :: { CtorDecl } :
   Ident VarCtx ':' LTerm ';'                    { Ctor $1 $2 $4 }
 
-LetBind :: { (UTermVar, UTerm) } :
-    TermVar '=' LTerm ';'                       { ($1,$3) }
-  | LetIdent '=' LTerm ';'                      { (TermVar $1,$3) }
+PathElem :: { PosPair (Maybe Text) } :
+    Ident                                       { fmap Just $1 }
+  | '!?' string                                 { fmap (Just . Text.pack . tokString) $2 }
+  -- subpath separator is handled outside the grammar by mkPath to prevent
+  -- reduce/reduce errors
+  | '|'                                         { fmap (\_ -> Nothing) $1 }
+
+Path :: { PosPair ([Text],[Text], Text) } :
+  sepBy1(PathElem, '::')                        {% mkPath $1 }
+
+Namespace :: { Maybe Namespace } :
+    {- empty -}                                 { Nothing }
+  | '@' Ident                                   {% mkNameSpace $2 }
+
+VarSuffix :: { Maybe Int } :
+    {- empty -}                                 { Nothing }
+  | '`' nat                                     { Just (fromIntegral (tokNat (val $2))) }
+
+QualName :: { PosPair QualName } :
+    Path VarSuffix Namespace                    { mkQualName $1 $2 $3 }
+
+LetBind :: { PosPair ((Text, Maybe Int), UTerm) } :
+    QualName '=' LTerm ';'                      {% mkLetBind $1 $3 }
 
 -- Full term (possibly including a type annotation)
 Term :: { UTerm } :
@@ -198,8 +225,7 @@ AtomTerm :: { UTerm } :
     nat                                         { NatLit (pos $1) (tokNat (val $1)) }
   | bvlit                                       { BVLit (pos $1) (tokBits (val $1)) }
   | string                                      { mkString $1 }
-  | Ident                                       { Name $1 }
-  | LetIdent                                    { Name $1 }
+  | QualName                                    { mkName $1 }
   | IdentRec                                    { Recursor (fmap fst $1) (mkSort (snd (val $1))) }
   | IdentInd                                    { Recursor $1 propSort }
   | 'Prop'                                      { Sort (pos $1) propSort noFlags }
@@ -216,10 +242,6 @@ AtomTerm :: { UTerm } :
 -- Identifier (wrapper to extract the text)
 Ident :: { PosPair Text } :
   rawident                                      { fmap (Text.pack . tokIdent) $1 }
-
--- Let-binding identifier (wrapper to extract the text)
-LetIdent :: { PosPair Text } :
-  rawletident                                   { fmap (Text.pack . tokLetIdent) $1 }
 
 -- Recursor identifier (wrapper to extract the text)
 IdentRec :: { PosPair (Text, Natural) } :
@@ -397,5 +419,41 @@ mkInject a b =
 
 mkString :: PosPair Token -> UTerm
 mkString t = StringLit (pos t) (Text.pack (tokString (val t)))
+
+mkName :: PosPair QualName -> UTerm
+mkName (PosPair p qnm) = case qnm of
+  QN.QualName [] [] nm Nothing Nothing -> Name (PosPair p nm)
+  _ -> QName (PosPair p qnm)
+
+mkNameSpace :: PosPair Text -> Parser (Maybe Namespace)
+mkNameSpace t = case QN.readNamespace (val t) of
+  Just ns -> return $ Just ns
+  Nothing -> do
+    addParseError (pos t) "unknown namespace"
+    return Nothing
+
+mkLetBind :: PosPair QualName -> UTerm -> Parser (PosPair ((Text, Maybe Int), UTerm))
+mkLetBind (PosPair p qnm) rhs = case qnm of
+  QN.QualName [] [] nm midx Nothing -> return $ PosPair p ((nm,midx),rhs)
+  _ -> do
+    addParseError p "invalid let-bound variable name"
+    return $ PosPair p ((Text.empty,Nothing), badTerm p)
+
+mkPath :: [PosPair (Maybe Text)] -> Parser (PosPair ([Text], [Text], Text))
+mkPath ps = fmap (PosPair p) $ case List.findIndices isNothing xs of
+  [] -> return (List.init (fj xs), [], fromJust (List.last xs) )
+  [i] | (lhs, _:rhs) <- splitAt i xs, not (List.null rhs) ->
+    return (fj lhs, List.init (fj rhs), fromJust (List.last rhs))
+  _ -> do
+    addParseError p "invalid qualified path"
+    return $ ([],[],Text.empty)
+  where
+    xs = map val ps
+    fj = map fromJust
+    PosPair p _ = List.last ps
+
+mkQualName :: PosPair ([Text],[Text], Text) -> Maybe Int -> Maybe Namespace -> PosPair QualName
+mkQualName (PosPair p (path,subpath,basename)) midx mnms =
+  PosPair p (QN.QualName path subpath basename midx mnms )
 
 }

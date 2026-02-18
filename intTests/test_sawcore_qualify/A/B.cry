@@ -1,0 +1,4 @@
+module A::B where
+
+submodule C where
+  x = 0x1

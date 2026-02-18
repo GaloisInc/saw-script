@@ -162,7 +162,7 @@ applyOverride sc thm t = do
   tidx <-
     do result <- SC.scResolveQualName sc $ thm ^. theoremQualName
        case result of
-         Nothing -> yosysError . YosysErrorOverrideNameNotFound . QN.render $ thm ^. theoremQualName
+         Nothing -> yosysError . YosysErrorOverrideNameNotFound . QN.ppQualName $ thm ^. theoremQualName
          Just i -> pure i
   -- unfold everything except for theoremQualName and prelude constants
   let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName

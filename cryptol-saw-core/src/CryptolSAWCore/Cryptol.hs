@@ -1432,16 +1432,7 @@ cryptolQualName ::
   Maybe Int {- ^ unique integer for dynamic names -} ->
   QN.QualName
 cryptolQualName ps sps nm midx =
-  case QN.mkQualName QN.NamespaceCryptol ps sps nm midx of
-    Right qn -> qn
-    Left errs ->
-      panic "cryptolQualName" (err:errs)
-      where
-        err = "Could not make qualified name from path: "
-          <> Text.pack (show ps) <> " subpath: " <> Text.pack (show ps)
-          <> case midx of
-            Just idx -> " and index: " <> Text.pack (show idx)
-            Nothing -> Text.empty
+  QN.QualName ps sps nm midx (Just QN.NamespaceCryptol)
 
 importName :: C.Name -> IO NameInfo
 importName cnm =
