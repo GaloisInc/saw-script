@@ -90,13 +90,13 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span><span class="spaces">            </span><span class="istickedoff">Just cm -&gt;</span>
 <span class="lineno">   72 </span><span class="spaces">              </span><span class="istickedoff">case _convertedModuleState cm of</span>
 <span class="lineno">   73 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; False</span>
-<span class="lineno">   74 </span><span class="spaces">                </span><span class="istickedoff">Just (mt, _) -&gt; <span class="nottickedoff">mt == Moore</span></span>
+<span class="lineno">   74 </span><span class="spaces">                </span><span class="istickedoff">Just (mt, _) -&gt; mt == Moore</span>
 <span class="lineno">   75 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; False</span>
 <span class="lineno">   76 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   77 </span><span class="spaces">    </span><span class="istickedoff">cellDeps :: Cell [Bitrep] -&gt; [CellInstName]</span>
 <span class="lineno">   78 </span><span class="spaces">    </span><span class="istickedoff">cellDeps c</span>
 <span class="lineno">   79 </span><span class="spaces">      </span><span class="istickedoff">| cellIsRegister c = []</span>
-<span class="lineno">   80 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlyfalse">isMooreMachine (c ^. cellType)</span> = <span class="nottickedoff">[]</span></span>
+<span class="lineno">   80 </span><span class="spaces">      </span><span class="istickedoff">| isMooreMachine (c ^. cellType) = []</span>
 <span class="lineno">   81 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
 <span class="lineno">   82 </span><span class="spaces">        </span><span class="istickedoff">Set.toAscList $ Set.fromList $</span>
 <span class="lineno">   83 </span><span class="spaces">        </span><span class="istickedoff">Maybe.mapMaybe (flip Map.lookup sources) $</span>
@@ -117,7 +117,7 @@ span.spaces    { background: white }
 <span class="lineno">   98 </span>-- outputs, while a Moore machine only allows the outputs to depend on
 <span class="lineno">   99 </span>-- the internal state.
 <span class="lineno">  100 </span>data MachineType = Mealy | Moore
-<span class="lineno">  101 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
+<span class="lineno">  101 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
 <span class="lineno">  102 </span>
 <span class="lineno">  103 </span>-- | A SAWCore translation of a module imported from the Yosys JSON format.
 <span class="lineno">  104 </span>data ConvertedModule = ConvertedModule
@@ -234,7 +234,7 @@ span.spaces    { background: white }
 <span class="lineno">  215 </span><span class="spaces">               </span><span class="istickedoff">Just cm -&gt;</span>
 <span class="lineno">  216 </span><span class="spaces">                 </span><span class="istickedoff">do inputArgs &lt;-</span>
 <span class="lineno">  217 </span><span class="spaces">                      </span><span class="istickedoff">case cm ^. convertedModuleState of</span>
-<span class="lineno">  218 </span><span class="spaces">                        </span><span class="istickedoff">Just (Moore, _) -&gt; <span class="nottickedoff">pure []</span></span>
+<span class="lineno">  218 </span><span class="spaces">                        </span><span class="istickedoff">Just (Moore, _) -&gt; pure []</span>
 <span class="lineno">  219 </span><span class="spaces">                        </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno">  220 </span><span class="spaces">                          </span><span class="istickedoff">do let doInput inm i = lookupPatternTerm sc <span class="nottickedoff">(YosysBitvecConsumerCell cnm inm)</span> i acc</span>
 <span class="lineno">  221 </span><span class="spaces">                             </span><span class="istickedoff">args &lt;- Map.traverseWithKey doInput (cellInputConnections c)</span>
@@ -244,7 +244,7 @@ span.spaces    { background: white }
 <span class="lineno">  225 </span><span class="spaces">                    </span><span class="istickedoff">f &lt;-</span>
 <span class="lineno">  226 </span><span class="spaces">                      </span><span class="istickedoff">case cm ^. convertedModuleState of</span>
 <span class="lineno">  227 </span><span class="spaces">                        </span><span class="istickedoff">Nothing -&gt; pure (cm ^. convertedModuleTerm)</span>
-<span class="lineno">  228 </span><span class="spaces">                        </span><span class="istickedoff">Just _ -&gt; <span class="nottickedoff">SC.scRecordSelect sc (cm ^. convertedModuleTerm) &quot;out&quot;</span></span>
+<span class="lineno">  228 </span><span class="spaces">                        </span><span class="istickedoff">Just _ -&gt; SC.scRecordSelect sc (cm ^. convertedModuleTerm) &quot;out&quot;</span>
 <span class="lineno">  229 </span><span class="spaces">                    </span><span class="istickedoff">r &lt;- SC.scApplyAll sc f (inputArgs ++ stateArgs)</span>
 <span class="lineno">  230 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  231 </span><span class="spaces">                    </span><span class="istickedoff">-- once we've built a term, insert it along with each of its bits</span>
@@ -262,38 +262,38 @@ span.spaces    { background: white }
 <span class="lineno">  243 </span>  CellInstName -&gt;
 <span class="lineno">  244 </span>  (Cell [Bitrep], SC.Term) -&gt;
 <span class="lineno">  245 </span>  IO SC.Term
-<span class="lineno">  246 </span><span class="decl"><span class="nottickedoff">cellNewState sc env terms cnm (c, prevState) =</span>
-<span class="lineno">  247 </span><span class="spaces">  </span><span class="nottickedoff">case c ^. cellType of</span>
-<span class="lineno">  248 </span><span class="spaces">    </span><span class="nottickedoff">CellTypeDff -&gt;</span>
-<span class="lineno">  249 </span><span class="spaces">      </span><span class="nottickedoff">do bs &lt;- lookupConn &quot;D&quot;</span>
-<span class="lineno">  250 </span><span class="spaces">         </span><span class="nottickedoff">lookupPatternTerm sc (YosysBitvecConsumerCell cnm &quot;D&quot;) bs terms</span>
-<span class="lineno">  251 </span><span class="spaces">    </span><span class="nottickedoff">CellTypeFf -&gt;</span>
-<span class="lineno">  252 </span><span class="spaces">      </span><span class="nottickedoff">do bs &lt;- lookupConn &quot;D&quot;</span>
-<span class="lineno">  253 </span><span class="spaces">         </span><span class="nottickedoff">lookupPatternTerm sc (YosysBitvecConsumerCell cnm &quot;D&quot;) bs terms</span>
-<span class="lineno">  254 </span><span class="spaces">    </span><span class="nottickedoff">CellTypeCombinational _ -&gt;</span>
-<span class="lineno">  255 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;cellNewState&quot; [&quot;unexpected combinational cell&quot;]</span>
-<span class="lineno">  256 </span><span class="spaces">    </span><span class="nottickedoff">CellTypeUnsupportedPrimitive _ -&gt;</span>
-<span class="lineno">  257 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;cellNewState&quot; [&quot;unexpected unsupported cell&quot;]</span>
-<span class="lineno">  258 </span><span class="spaces">    </span><span class="nottickedoff">CellTypeUserType submoduleName -&gt;</span>
-<span class="lineno">  259 </span><span class="spaces">      </span><span class="nottickedoff">case Map.lookup submoduleName env of</span>
-<span class="lineno">  260 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt;</span>
-<span class="lineno">  261 </span><span class="spaces">          </span><span class="nottickedoff">yosysError $ YosysErrorNoSuchSubmodule submoduleName cnm</span>
-<span class="lineno">  262 </span><span class="spaces">        </span><span class="nottickedoff">Just cm -&gt;</span>
-<span class="lineno">  263 </span><span class="spaces">          </span><span class="nottickedoff">do -- Both Mealy and Moore machines have a &quot;step&quot; field of type `Input -&gt; State -&gt; State`</span>
-<span class="lineno">  264 </span><span class="spaces">             </span><span class="nottickedoff">f &lt;- SC.scRecordSelect sc (cm ^. convertedModuleTerm) &quot;step&quot;</span>
-<span class="lineno">  265 </span><span class="spaces">             </span><span class="nottickedoff">let doInput inm i = lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i terms</span>
-<span class="lineno">  266 </span><span class="spaces">             </span><span class="nottickedoff">args &lt;- Map.traverseWithKey doInput (cellInputConnections c)</span>
-<span class="lineno">  267 </span><span class="spaces">             </span><span class="nottickedoff">rin &lt;- cryptolRecord sc args</span>
-<span class="lineno">  268 </span><span class="spaces">             </span><span class="nottickedoff">SC.scApplyAll sc f [rin, prevState]</span>
-<span class="lineno">  269 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  270 </span><span class="spaces">    </span><span class="nottickedoff">lookupConn portname =</span>
-<span class="lineno">  271 </span><span class="spaces">      </span><span class="nottickedoff">case Map.lookup portname (c ^. cellConnections) of</span>
-<span class="lineno">  272 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt;</span>
-<span class="lineno">  273 </span><span class="spaces">          </span><span class="nottickedoff">yosysError $</span>
-<span class="lineno">  274 </span><span class="spaces">          </span><span class="nottickedoff">YosysError $</span>
-<span class="lineno">  275 </span><span class="spaces">          </span><span class="nottickedoff">&quot;Malformed Yosys file: Missing port &quot; &lt;&gt; portname &lt;&gt; &quot; for cell &quot; &lt;&gt; cnm</span>
-<span class="lineno">  276 </span><span class="spaces">        </span><span class="nottickedoff">Just bs -&gt;</span>
-<span class="lineno">  277 </span><span class="spaces">          </span><span class="nottickedoff">pure bs</span></span>
+<span class="lineno">  246 </span><span class="decl"><span class="istickedoff">cellNewState sc env terms cnm (c, prevState) =</span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">case c ^. cellType of</span>
+<span class="lineno">  248 </span><span class="spaces">    </span><span class="istickedoff">CellTypeDff -&gt;</span>
+<span class="lineno">  249 </span><span class="spaces">      </span><span class="istickedoff">do bs &lt;- lookupConn &quot;D&quot;</span>
+<span class="lineno">  250 </span><span class="spaces">         </span><span class="istickedoff">lookupPatternTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">(YosysBitvecConsumerCell cnm &quot;D&quot;)</span> bs terms</span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="istickedoff">CellTypeFf -&gt;</span>
+<span class="lineno">  252 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do bs &lt;- lookupConn &quot;D&quot;</span></span>
+<span class="lineno">  253 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">lookupPatternTerm sc (YosysBitvecConsumerCell cnm &quot;D&quot;) bs terms</span></span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">CellTypeCombinational _ -&gt;</span>
+<span class="lineno">  255 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;cellNewState&quot; [&quot;unexpected combinational cell&quot;]</span></span>
+<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUnsupportedPrimitive _ -&gt;</span>
+<span class="lineno">  257 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;cellNewState&quot; [&quot;unexpected unsupported cell&quot;]</span></span>
+<span class="lineno">  258 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUserType submoduleName -&gt;</span>
+<span class="lineno">  259 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup submoduleName env of</span>
+<span class="lineno">  260 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  261 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yosysError $ YosysErrorNoSuchSubmodule submoduleName cnm</span></span>
+<span class="lineno">  262 </span><span class="spaces">        </span><span class="istickedoff">Just cm -&gt;</span>
+<span class="lineno">  263 </span><span class="spaces">          </span><span class="istickedoff">do -- Both Mealy and Moore machines have a &quot;step&quot; field of type `Input -&gt; State -&gt; State`</span>
+<span class="lineno">  264 </span><span class="spaces">             </span><span class="istickedoff">f &lt;- SC.scRecordSelect sc (cm ^. convertedModuleTerm) &quot;step&quot;</span>
+<span class="lineno">  265 </span><span class="spaces">             </span><span class="istickedoff">let doInput inm i = lookupPatternTerm sc <span class="nottickedoff">(YosysBitvecConsumerCell cnm inm)</span> i terms</span>
+<span class="lineno">  266 </span><span class="spaces">             </span><span class="istickedoff">args &lt;- Map.traverseWithKey doInput (cellInputConnections c)</span>
+<span class="lineno">  267 </span><span class="spaces">             </span><span class="istickedoff">rin &lt;- cryptolRecord sc args</span>
+<span class="lineno">  268 </span><span class="spaces">             </span><span class="istickedoff">SC.scApplyAll sc f [rin, prevState]</span>
+<span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">lookupConn portname =</span>
+<span class="lineno">  271 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup portname (c ^. cellConnections) of</span>
+<span class="lineno">  272 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  273 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yosysError $</span></span>
+<span class="lineno">  274 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">YosysError $</span></span>
+<span class="lineno">  275 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Malformed Yosys file: Missing port &quot; &lt;&gt; portname &lt;&gt; &quot; for cell &quot; &lt;&gt; cnm</span></span>
+<span class="lineno">  276 </span><span class="spaces">        </span><span class="istickedoff">Just bs -&gt;</span>
+<span class="lineno">  277 </span><span class="spaces">          </span><span class="istickedoff">pure bs</span></span>
 <span class="lineno">  278 </span>
 <span class="lineno">  279 </span>convertModule ::
 <span class="lineno">  280 </span>  SC.SharedContext -&gt;
@@ -326,8 +326,8 @@ span.spaces    { background: white }
 <span class="lineno">  307 </span><span class="spaces">       </span><span class="istickedoff">registerCells :: Map CellInstName (Cell [Bitrep])</span>
 <span class="lineno">  308 </span><span class="spaces">       </span><span class="istickedoff">registerCells = Map.filter cellIsRegister (m ^. moduleCells)</span>
 <span class="lineno">  309 </span><span class="spaces">       </span><span class="istickedoff">registerPorts :: Map CellInstName [Bitrep]</span>
-<span class="lineno">  310 </span><span class="spaces">       </span><span class="istickedoff">registerPorts = Map.mapMaybe <span class="nottickedoff">(\c -&gt; Map.lookup &quot;Q&quot; (c ^. cellConnections))</span> registerCells</span>
-<span class="lineno">  311 </span><span class="spaces">     </span><span class="istickedoff">(stateFields1 :: Map CellInstName SC.Term) &lt;- traverse <span class="nottickedoff">f</span> registerPorts</span>
+<span class="lineno">  310 </span><span class="spaces">       </span><span class="istickedoff">registerPorts = Map.mapMaybe (\c -&gt; Map.lookup &quot;Q&quot; (c ^. cellConnections)) registerCells</span>
+<span class="lineno">  311 </span><span class="spaces">     </span><span class="istickedoff">(stateFields1 :: Map CellInstName SC.Term) &lt;- traverse f registerPorts</span>
 <span class="lineno">  312 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  313 </span><span class="spaces">     </span><span class="istickedoff">-- Collect state types from all submodules</span>
 <span class="lineno">  314 </span><span class="spaces">     </span><span class="istickedoff">let</span>
@@ -341,7 +341,7 @@ span.spaces    { background: white }
 <span class="lineno">  322 </span><span class="spaces">       </span><span class="istickedoff">stateSubmodules :: Map CellInstName (MachineType, SC.Term)</span>
 <span class="lineno">  323 </span><span class="spaces">       </span><span class="istickedoff">stateSubmodules = Map.mapMaybe (\cm -&gt; cm ^. convertedModuleState) submodules</span>
 <span class="lineno">  324 </span><span class="spaces">       </span><span class="istickedoff">stateFields2 :: Map CellInstName SC.Term</span>
-<span class="lineno">  325 </span><span class="spaces">       </span><span class="istickedoff">stateFields2 = fmap <span class="nottickedoff">snd</span> stateSubmodules</span>
+<span class="lineno">  325 </span><span class="spaces">       </span><span class="istickedoff">stateFields2 = fmap snd stateSubmodules</span>
 <span class="lineno">  326 </span><span class="spaces">       </span><span class="istickedoff">stateFields :: Map CellInstName SC.Term</span>
 <span class="lineno">  327 </span><span class="spaces">       </span><span class="istickedoff">stateFields = stateFields1 &lt;&gt; stateFields2</span>
 <span class="lineno">  328 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -349,7 +349,7 @@ span.spaces    { background: white }
 <span class="lineno">  330 </span><span class="spaces">     </span><span class="istickedoff">stateVarName &lt;- SC.scFreshVarName sc &quot;state&quot;</span>
 <span class="lineno">  331 </span><span class="spaces">     </span><span class="istickedoff">stateRecord &lt;- SC.scVariable sc stateVarName stateRecordType</span>
 <span class="lineno">  332 </span><span class="spaces">     </span><span class="istickedoff">oldstates &lt;-</span>
-<span class="lineno">  333 </span><span class="spaces">       </span><span class="istickedoff">Map.traverseWithKey <span class="nottickedoff">(\nm _inp -&gt; cryptolRecordSelect sc stateFields stateRecord nm)</span> stateFields</span>
+<span class="lineno">  333 </span><span class="spaces">       </span><span class="istickedoff">Map.traverseWithKey (\nm _inp -&gt; cryptolRecordSelect sc <span class="nottickedoff">stateFields</span> stateRecord nm) stateFields</span>
 <span class="lineno">  334 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  335 </span><span class="spaces">     </span><span class="istickedoff">oneBitType &lt;- SC.scBitvector sc 1</span>
 <span class="lineno">  336 </span><span class="spaces">     </span><span class="istickedoff">xMsg &lt;- SC.scString sc &quot;Attempted to read X bit&quot;</span>
@@ -375,8 +375,8 @@ span.spaces    { background: white }
 <span class="lineno">  356 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  357 </span><span class="spaces">     </span><span class="istickedoff">-- translate the new state components of all stateful cells (if any)</span>
 <span class="lineno">  358 </span><span class="spaces">     </span><span class="istickedoff">newstates &lt;-</span>
-<span class="lineno">  359 </span><span class="spaces">       </span><span class="istickedoff">Map.traverseWithKey <span class="nottickedoff">(cellNewState sc env terms)</span> $</span>
-<span class="lineno">  360 </span><span class="spaces">       </span><span class="istickedoff">Map.intersectionWith <span class="nottickedoff">(,)</span> (m ^. moduleCells) oldstates</span>
+<span class="lineno">  359 </span><span class="spaces">       </span><span class="istickedoff">Map.traverseWithKey (cellNewState sc env terms) $</span>
+<span class="lineno">  360 </span><span class="spaces">       </span><span class="istickedoff">Map.intersectionWith (,) (m ^. moduleCells) oldstates</span>
 <span class="lineno">  361 </span><span class="spaces">     </span><span class="istickedoff">newstateRecord &lt;- cryptolRecord sc newstates</span>
 <span class="lineno">  362 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  363 </span><span class="spaces">     </span><span class="istickedoff">case Map.null newstates of</span>
@@ -389,26 +389,26 @@ span.spaces    { background: white }
 <span class="lineno">  370 </span><span class="spaces">              </span><span class="istickedoff">, _convertedModuleState = Nothing</span>
 <span class="lineno">  371 </span><span class="spaces">              </span><span class="istickedoff">}</span>
 <span class="lineno">  372 </span><span class="spaces">       </span><span class="istickedoff">False -&gt;</span>
-<span class="lineno">  373 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do step &lt;- SC.scAbstractTerms sc [inputRecord, stateRecord] newstateRecord</span></span>
-<span class="lineno">  374 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case IntSet.member (SC.vnIndex inputVarName) (SC.freeVars outputRecord) of</span></span>
-<span class="lineno">  375 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">True -&gt;</span></span>
-<span class="lineno">  376 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">-- Output depends on input, so we have a Mealy machine</span></span>
-<span class="lineno">  377 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">do out &lt;- SC.scAbstractTerms sc [inputRecord, stateRecord] outputRecord</span></span>
-<span class="lineno">  378 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">t &lt;- SC.scRecordValue sc [(&quot;out&quot;, out), (&quot;step&quot;, step)]</span></span>
-<span class="lineno">  379 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">pure $</span></span>
-<span class="lineno">  380 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">ConvertedModule</span></span>
-<span class="lineno">  381 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">{ _convertedModuleTerm = t</span></span>
-<span class="lineno">  382 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">, _convertedModuleState = Just (Mealy, stateRecordType)</span></span>
-<span class="lineno">  383 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">}</span></span>
-<span class="lineno">  384 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">False -&gt;</span></span>
-<span class="lineno">  385 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">-- Output does not depend on input, so we have a Moore machine</span></span>
-<span class="lineno">  386 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">do out &lt;- SC.scAbstractTerms sc [stateRecord] outputRecord</span></span>
-<span class="lineno">  387 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">t &lt;- SC.scRecordValue sc [(&quot;out&quot;, out), (&quot;step&quot;, step)]</span></span>
-<span class="lineno">  388 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">pure $</span></span>
-<span class="lineno">  389 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">ConvertedModule</span></span>
-<span class="lineno">  390 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">{ _convertedModuleTerm = t</span></span>
-<span class="lineno">  391 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">, _convertedModuleState = Just (Moore, stateRecordType)</span></span>
-<span class="lineno">  392 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">}</span></span></span>
+<span class="lineno">  373 </span><span class="spaces">         </span><span class="istickedoff">do step &lt;- SC.scAbstractTerms sc [inputRecord, stateRecord] newstateRecord</span>
+<span class="lineno">  374 </span><span class="spaces">            </span><span class="istickedoff">case IntSet.member (SC.vnIndex inputVarName) (SC.freeVars outputRecord) of</span>
+<span class="lineno">  375 </span><span class="spaces">              </span><span class="istickedoff">True -&gt;</span>
+<span class="lineno">  376 </span><span class="spaces">                </span><span class="istickedoff">-- Output depends on input, so we have a Mealy machine</span>
+<span class="lineno">  377 </span><span class="spaces">                </span><span class="istickedoff">do out &lt;- SC.scAbstractTerms sc [inputRecord, stateRecord] outputRecord</span>
+<span class="lineno">  378 </span><span class="spaces">                   </span><span class="istickedoff">t &lt;- SC.scRecordValue sc [(&quot;out&quot;, out), (&quot;step&quot;, step)]</span>
+<span class="lineno">  379 </span><span class="spaces">                   </span><span class="istickedoff">pure $</span>
+<span class="lineno">  380 </span><span class="spaces">                     </span><span class="istickedoff">ConvertedModule</span>
+<span class="lineno">  381 </span><span class="spaces">                     </span><span class="istickedoff">{ _convertedModuleTerm = t</span>
+<span class="lineno">  382 </span><span class="spaces">                     </span><span class="istickedoff">, _convertedModuleState = Just (Mealy, stateRecordType)</span>
+<span class="lineno">  383 </span><span class="spaces">                     </span><span class="istickedoff">}</span>
+<span class="lineno">  384 </span><span class="spaces">              </span><span class="istickedoff">False -&gt;</span>
+<span class="lineno">  385 </span><span class="spaces">                </span><span class="istickedoff">-- Output does not depend on input, so we have a Moore machine</span>
+<span class="lineno">  386 </span><span class="spaces">                </span><span class="istickedoff">do out &lt;- SC.scAbstractTerms sc [stateRecord] outputRecord</span>
+<span class="lineno">  387 </span><span class="spaces">                   </span><span class="istickedoff">t &lt;- SC.scRecordValue sc [(&quot;out&quot;, out), (&quot;step&quot;, step)]</span>
+<span class="lineno">  388 </span><span class="spaces">                   </span><span class="istickedoff">pure $</span>
+<span class="lineno">  389 </span><span class="spaces">                     </span><span class="istickedoff">ConvertedModule</span>
+<span class="lineno">  390 </span><span class="spaces">                     </span><span class="istickedoff">{ _convertedModuleTerm = t</span>
+<span class="lineno">  391 </span><span class="spaces">                     </span><span class="istickedoff">, _convertedModuleState = Just (Moore, stateRecordType)</span>
+<span class="lineno">  392 </span><span class="spaces">                     </span><span class="istickedoff">}</span></span>
 
 </pre>
 </body>
