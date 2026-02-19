@@ -4925,8 +4925,19 @@ primitives = Map.fromList $
     , "Yosys 'write_json' command. The resulting term is a Cryptol"
     , "record, where each field corresponds to one HDL module exported"
     , "by Yosys. Each HDL module is in turn represented by a function"
-    , "from a record of input port values to a record of output port"
-    , "values."
+    , "of an appropriate type using records of input and output port"
+    , "types and state register types:"
+    , ""
+    , "Combinational:"
+    , "  f : Input -> Output"
+    , ""
+    , "Sequential where output depends only on state (Moore machine):"
+    , "  f : { out : State -> Output"
+    , "      , step : Input -> State -> State }"
+    , ""
+    , "Sequential where output depends on input (Mealy machine):"
+    , "  f : { out : Input -> State -> Output"
+    , "      , step : Input -> State -> State }"
     ]
 
   , prim "yosys_verify"  ("Term -> [Term] -> Term -> [YosysTheorem] -> " <>
