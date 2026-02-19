@@ -57,6 +57,7 @@ import Data.Kind (Type)
 import Data.List (genericTake,intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ratio ((%))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
@@ -1054,12 +1055,13 @@ countUninterpreted ::
 countUninterpreted scale count ty =
   case ty of
     VPiType {}      -> count
-    VBoolType       -> add BaseBoolRepr
-    VIntType        -> add BaseIntegerRepr
-    VIntModType {}  -> add BaseIntegerRepr
+    VBoolType       -> add BaseBoolRepr count
+    VIntType        -> add BaseIntegerRepr count
+    VIntModType {}  -> add BaseIntegerRepr count
+    VRationalType   -> add BaseIntegerRepr (add BaseIntegerRepr count)
     VVecType n VBoolType ->
       case somePosNat n of
-        Just (Some (PosNat w)) -> add (BaseBVRepr w)
+        Just (Some (PosNat w)) -> add (BaseBVRepr w) count
         _                      -> count
 
     VVecType n et -> if n == 0 then count else countUninterpreted (n * scale) count et
@@ -1067,7 +1069,7 @@ countUninterpreted scale count ty =
     VArrayType ity ety
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
-      -> add (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
+      -> add (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr) count
 
     VDataType (ModuleIdentifier "Prelude.UnitType") [] [] -> count
 
@@ -1080,11 +1082,14 @@ countUninterpreted scale count ty =
 
     _ -> count
   where
-  add :: BaseTypeRepr tc -> MapF BaseTypeRepr UnintCount
+  add ::
+    BaseTypeRepr tc ->
+    MapF BaseTypeRepr UnintCount ->
+    MapF BaseTypeRepr UnintCount
   add bt =
     MapF.insertWith
       (\(UnintCount x) (UnintCount y) -> UnintCount (x + y))
-      bt (UnintCount scale) count
+      bt (UnintCount scale)
 
 -- Note that this doesn't really use IO, except for the `fail`.
 parseUninterpreted' ::
@@ -1112,6 +1117,12 @@ parseUninterpreted' sym ref app ty =
 
     VIntModType n
       -> VIntMod n <$> mkUninterpreted BaseIntegerRepr
+
+    VRationalType
+      -> do numer <- mkUninterpreted BaseIntegerRepr
+            -- TODO(#2433): Assert that the denominator is non-zero.
+            denom <- mkUninterpreted BaseIntegerRepr
+            pure $ VRational numer denom
 
     VVecType n VBoolType ->
       case somePosNat n of
@@ -1199,6 +1210,9 @@ applyUnintApp sym app0 v =
     VIntMod n si              -> do n' <- W.intLit sym (toInteger n)
                                     si' <- W.intMod sym si n'
                                     return (extendUnintApp app0 si' BaseIntegerRepr)
+    VRational numer denom     -> do app1 <- applyUnintApp sym app0 (VInt numer)
+                                    app2 <- applyUnintApp sym app1 (VInt denom)
+                                    pure app2
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
@@ -1312,6 +1326,11 @@ boundFOTs sym vars =
        FOTBit -> VBool <$> freshBnd x BaseBoolRepr
        FOTInt -> VInt  <$> freshBnd x BaseIntegerRepr
        FOTIntMod m -> VIntMod m <$> freshBnd x BaseIntegerRepr
+       FOTRational ->
+         do numer <- freshBnd x BaseIntegerRepr
+            -- TODO(#2433): Assert that the denominator is non-zero.
+            denom <- freshBnd x BaseIntegerRepr
+            pure $ VRational numer denom
 
        FOTVec n FOTBit ->
          case somePosNat n of
@@ -1420,6 +1439,7 @@ data Labeler sym
   = BaseLabel (TypedExpr sym)
   | ZeroWidthBVLabel
   | IntModLabel Natural (SymInteger sym)
+  | RationalLabel (SymInteger sym) (SymInteger sym)
   | VecLabel
       FirstOrderType
       -- ^ The element type. It is necessary to store this in case the Vec is
@@ -1458,6 +1478,15 @@ newVarFOT sym (FOTIntMod n)
        si <- lift $ mkConstant sym nm r
        return (IntModLabel n si, VIntMod n si)
 
+newVarFOT sym FOTRational
+  = do numerNm <- nextId
+       denomNm <- nextId
+       let r = BaseIntegerRepr
+       sNumer <- lift $ mkConstant sym numerNm r
+       -- TODO(#2433): Assert that the denominator is non-zero.
+       sDenom <- lift $ mkConstant sym denomNm r
+       return (RationalLabel sNumer sDenom, VRational sNumer sDenom)
+
 newVarFOT sym fot
   | Just (Some r) <- fotToBaseType fot
   = do nm <- nextId
@@ -1486,6 +1515,10 @@ getLabelValues f =
       FOVRec <$> traverse (getLabelValues f) labels
     IntModLabel n x ->
       FOVIntMod n <$> groundEval f x
+    RationalLabel sNumer sDenom ->
+      do numer <- groundEval f sNumer
+         denom <- groundEval f sDenom
+         pure $ FOVRational (numer % denom)
     ZeroWidthBVLabel -> pure $ FOVWord 0 0
     BaseLabel (TypedExpr ty bv) ->
       do gv <- groundEval f bv
@@ -1579,6 +1612,8 @@ rebuildTerm sym st sc tv sv =
       chokeOn "VBVToNat"
     VIntToNat _ ->
       chokeOn "VIntToNat"
+    VRational{} ->
+      chokeOn "VRational"
     VNat n ->
       scNat sc n
     VInt x ->
@@ -1722,6 +1757,12 @@ parseUninterpretedSAW sym st sc ref trm app ty =
     VIntModType n
       -> VIntMod n <$> mkUninterpretedSAW sym st sc ref (ArgTermFromIntMod n trm) app BaseIntegerRepr
 
+    VRationalType
+      -> do numer <- mkUninterpretedSAW sym st sc ref trm (suffixUnintApp "_numer" app) BaseIntegerRepr
+            -- TODO(#2433): Assert that the denominator is non-zero.
+            denom <- mkUninterpretedSAW sym st sc ref trm (suffixUnintApp "_denom" app) BaseIntegerRepr
+            pure $ VRational numer denom
+
     -- 0 width bitvector is a constant
     VVecType 0 VBoolType
       -> return $ VWord ZBV
@@ -1792,6 +1833,7 @@ data ArgTerm
   | ArgTermBVZero -- ^ scBvNat 0 0
   | ArgTermToIntMod Natural ArgTerm -- ^ toIntMod n x
   | ArgTermFromIntMod Natural ArgTerm -- ^ fromIntMod n x
+  | ArgTermRational ArgTerm ArgTerm -- ^ numerator, denominator
   | ArgTermVector Term [ArgTerm] -- ^ element type, elements
   | ArgTermUnit
   | ArgTermPair ArgTerm ArgTerm
@@ -1836,6 +1878,11 @@ reconstructArgTerm atrm sc ts =
              (x1, ts1) <- parse at1 ts0
              x <- scFromIntMod sc n' x1
              pure (x, ts1)
+        ArgTermRational numer denom ->
+          do (numer', ts1) <- parse numer ts0
+             (denom', ts2) <- parse denom ts1
+             rat <- scRational sc numer' denom'
+             pure (rat, ts2)
         ArgTermVector ty ats ->
           do (xs, ts1) <- parseList ats ts0
              x <- scVectorReduced sc ty xs
@@ -1900,7 +1947,7 @@ reconstructArgTerm atrm sc ts =
 -- 'ArgTerm' that builds a term of that type from local variables with
 -- base types. The number of 'ArgTermVar' constructors should match
 -- the number of arguments appended by 'applyUnintApp'.
-mkArgTerm :: SharedContext -> TValue (What4 sym) -> SValue sym -> IO ArgTerm
+mkArgTerm :: forall sym. SharedContext -> TValue (What4 sym) -> SValue sym -> IO ArgTerm
 mkArgTerm sc ty val =
   case (ty, val) of
     (VBoolType, VBool _) -> return ArgTermVar
@@ -1909,6 +1956,10 @@ mkArgTerm sc ty val =
     (_, VWord (DBV _))   -> return ArgTermVar
     (_, VArray{})        -> return ArgTermVar
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
+    (VRationalType, VRational numer denom) ->
+      do numer' <- mkArgTerm @sym sc VIntType (VInt numer)
+         denom' <- mkArgTerm @sym sc VIntType (VInt denom)
+         pure (ArgTermRational numer' denom')
 
     (VVecType _ ety, VVector vv) ->
       do vs <- traverse force (V.toList vv)
@@ -1971,6 +2022,7 @@ termOfTValue sc val =
   case val of
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
+    VRationalType -> scRationalType sc
     VVecType n a ->
       do n' <- scNat sc n
          a' <- termOfTValue sc a

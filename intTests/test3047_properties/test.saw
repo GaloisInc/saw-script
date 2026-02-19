@@ -1,0 +1,27 @@
+// Adapted from Cryptol's tests/regression/rational_properties.icry
+import "Test.cry";
+
+prove_print (w4_unint_cvc5 []) {{ QaddUnit }};
+prove_print (w4_unint_cvc5 []) {{ QaddComm }};
+prove_print (w4_unint_cvc5 []) {{ QaddAssoc }};
+prove_print (w4_unint_cvc5 []) {{ Qneg }};
+prove_print (w4_unint_cvc5 []) {{ QmulUnit }};
+prove_print (w4_unint_cvc5 []) {{ QmulComm }};
+prove_print (w4_unint_cvc5 []) {{ QmulAssoc }};
+prove_print (w4_unint_cvc5 []) {{ Qdistrib }};
+prove_print (w4_unint_cvc5 []) {{ Qrecip }};
+prove_print (w4_unint_cvc5 []) {{ QdivisionEquiv }};
+prove_print (w4_unint_cvc5 []) {{ QordEquiv1 }};
+prove_print (w4_unint_cvc5 []) {{ QordEquiv2 }};
+prove_print (w4_unint_cvc5 []) {{ QordIrreflexive }};
+prove_print (w4_unint_cvc5 []) {{ QordExclusive }};
+
+// CVC5 times out on the property below. While Z3 *should* be up to the task of
+// proving this, in practice, SAW currently fails with:
+//
+//   prove: 1 unsolved subgoal(s)
+//   saw: Ratio has zero denominator
+//
+// TODO(#2433): Fix this.
+//
+// prove_print (w4_unint_z3 []) {{ QordTrans }};
