@@ -129,6 +129,12 @@ intModFun = PrimFilterFun "expected IntMod" r
   where r (VIntMod _ i) = pure i
         r _ = mzero
 
+-- | A primitive that requires a rational argument
+ratFun :: VMonad l => ((VInt l, VInt l) -> Prim l) -> Prim l
+ratFun = PrimFilterFun "expected Rational" r
+  where r (VRational numer denom) = pure (numer, denom)
+        r _ = mzero
+
 -- | A primitive that requires a type argument
 tvalFun :: VMonad l => (TValue l -> Prim l) -> Prim l
 tvalFun = PrimFilterFun "expected type value" r
@@ -343,6 +349,11 @@ constMap bp = Map.fromList
   , ("Prelude.intLt" , intBinCmp (bpIntLt bp))
   , ("Prelude.intMin", intBinOp (bpIntMin bp))
   , ("Prelude.intMax", intBinOp (bpIntMax bp))
+  -- Rationals
+  , ("Prelude.Rational", PrimValue (TValue VRationalType))
+  , ("Prelude.ratio", ratioOp)
+  , ("Prelude.numerator", numeratorOp)
+  , ("Prelude.denominator", denominatorOp)
   -- Modular Integers
   , ("Prelude.IntMod", natFun $ \n -> PrimValue (TValue (VIntModType n)))
   -- Vectors
@@ -1334,6 +1345,26 @@ intToNatOp =
   intFun $ \x -> PrimValue $!
     if x >= 0 then VNat (fromInteger x) else VNat 0
 
+-- primitive ratio : Integer -> Integer -> Rational;
+ratioOp :: VMonad l => Prim l
+ratioOp =
+  intFun $ \numer ->
+  intFun $ \denom ->
+    -- TODO(#2433): Assert that the denominator is non-zero.
+    PrimValue (VRational numer denom)
+
+-- primitive numerator : Rational -> Integer;
+numeratorOp :: VMonad l => Prim l
+numeratorOp =
+  ratFun $ \(numer, _denom) ->
+    PrimValue (VInt numer)
+
+-- primitive denominator : Rational -> Integer;
+denominatorOp :: VMonad l => Prim l
+denominatorOp =
+  ratFun $ \(_numer, denom) ->
+    PrimValue (VInt denom)
+
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: (VMonad l, VInt l ~ Integer) => Prim l
 natToIntOp = natFun $ \x -> PrimValue $ VInt (toInteger x)
@@ -1446,6 +1477,9 @@ muxValue bp b x0 y0 = value x0 y0
     value (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
     value (VArray x)        (VArray y)        = VArray <$> bpMuxArray bp b x y
     value (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
+
+    value (VRational xNumer xDenom) (VRational yNumer yDenom) =
+      VRational <$> bpMuxInt bp b xNumer yNumer <*> bpMuxInt bp b xDenom yDenom
 
     value x@(VWord _)       y                 = do xv <- toVector' x
                                                    value (VVector xv) y

@@ -33,6 +33,7 @@ import Data.Functor.Compose (Compose(..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Ratio ((%))
 import qualified Data.Set as Set
 import System.Random.TF (newTFGen, TFGen)
 
@@ -46,6 +47,8 @@ randomFirstOrderValue FOTInt =
   Compose (Just (FOVInt <$> randomInt))
 randomFirstOrderValue (FOTIntMod m) =
   Compose (Just (FOVIntMod m <$> getRandomR (0, toInteger m - 1)))
+randomFirstOrderValue FOTRational =
+  Compose (Just (FOVRational <$> randomRational))
 randomFirstOrderValue (FOTVec n FOTBit) =
   Compose (Just (FOVWord n <$> getRandomR (0, 2^n - 1)))
 randomFirstOrderValue (FOTVec n t) =
@@ -57,9 +60,15 @@ randomFirstOrderValue (FOTRec fs) =
 randomFirstOrderValue (FOTArray _ _) = Compose Nothing
 
 
--- TODO this is really a hack
+-- TODO these are really hacks
 randomInt :: MonadRandom m => m Integer
 randomInt = getRandomR (-10^(6::Int), 10^(6::Int))
+
+randomRational :: MonadRandom m => m Rational
+randomRational = do
+  numer <- randomInt
+  denom <- getRandomR (1, 10^(6 :: Int))
+  pure (numer % denom)
 
 
 
