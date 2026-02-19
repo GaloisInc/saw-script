@@ -198,7 +198,7 @@ span.spaces    { background: white }
 <span class="lineno">  179 </span><span class="decl"><span class="istickedoff">toFiniteType FOTBit        = pure FTBit</span>
 <span class="lineno">  180 </span><span class="spaces"></span><span class="istickedoff">toFiniteType (FOTVec n t)  = FTVec n &lt;$&gt; toFiniteType t</span>
 <span class="lineno">  181 </span><span class="spaces"></span><span class="istickedoff">toFiniteType (FOTTuple ts) = <span class="nottickedoff">FTTuple &lt;$&gt; traverse toFiniteType ts</span></span>
-<span class="lineno">  182 </span><span class="spaces"></span><span class="istickedoff">toFiniteType (FOTRec fs)   = FTRec   &lt;$&gt; traverse toFiniteType fs</span>
+<span class="lineno">  182 </span><span class="spaces"></span><span class="istickedoff">toFiniteType (FOTRec fs)   = <span class="nottickedoff">FTRec   &lt;$&gt; traverse toFiniteType fs</span></span>
 <span class="lineno">  183 </span><span class="spaces"></span><span class="istickedoff">toFiniteType FOTInt{}      = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  184 </span><span class="spaces"></span><span class="istickedoff">toFiniteType FOTIntMod{}   = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  185 </span><span class="spaces"></span><span class="istickedoff">toFiniteType FOTArray{}    = <span class="nottickedoff">Nothing</span></span></span>

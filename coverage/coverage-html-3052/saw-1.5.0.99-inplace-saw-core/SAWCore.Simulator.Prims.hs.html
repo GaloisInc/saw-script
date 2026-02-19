@@ -296,7 +296,7 @@ span.spaces    { background: white }
 <span class="lineno">  277 </span><span class="spaces">  </span><span class="istickedoff">-- Bitwise</span>
 <span class="lineno">  278 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvAnd&quot; , wordBinOp (bpPack bp) (bpBvAnd bp))</span>
 <span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvOr&quot;  , wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvOr  bp))</span>
-<span class="lineno">  280 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvXor&quot; , wordBinOp (bpPack bp) (bpBvXor bp))</span>
+<span class="lineno">  280 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvXor&quot; , wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvXor bp))</span>
 <span class="lineno">  281 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNot&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvNot bp))</span>
 <span class="lineno">  282 </span><span class="spaces">  </span><span class="istickedoff">-- Arithmetic</span>
 <span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNeg&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvNeg bp))</span>
@@ -377,7 +377,7 @@ span.spaces    { background: white }
 <span class="lineno">  358 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.split&quot;, splitOp bp)</span>
 <span class="lineno">  359 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.zip&quot;, vZipOp <span class="nottickedoff">(bpUnpack bp)</span>)</span>
 <span class="lineno">  360 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.foldr&quot;, foldrOp <span class="nottickedoff">(bpUnpack bp)</span>)</span>
-<span class="lineno">  361 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.foldl&quot;, foldlOp (bpUnpack bp))</span>
+<span class="lineno">  361 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.foldl&quot;, foldlOp <span class="nottickedoff">(bpUnpack bp)</span>)</span>
 <span class="lineno">  362 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.scanl&quot;, <span class="nottickedoff">scanlOp (bpUnpack bp)</span>)</span>
 <span class="lineno">  363 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.rotateL&quot;, rotateLOp bp)</span>
 <span class="lineno">  364 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.rotateR&quot;, rotateROp <span class="nottickedoff">bp</span>)</span>
@@ -1002,7 +1002,7 @@ span.spaces    { background: white }
 <span class="lineno">  983 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \v -&gt;</span>
 <span class="lineno">  984 </span><span class="spaces">  </span><span class="istickedoff">PrimExcept $</span>
 <span class="lineno">  985 </span><span class="spaces">    </span><span class="istickedoff">case v of</span>
-<span class="lineno">  986 </span><span class="spaces">      </span><span class="istickedoff">VVector vv -&gt; return (VVector (V.take m vv))</span>
+<span class="lineno">  986 </span><span class="spaces">      </span><span class="istickedoff">VVector vv -&gt; <span class="nottickedoff">return (VVector (V.take m vv))</span></span>
 <span class="lineno">  987 </span><span class="spaces">      </span><span class="istickedoff">VWord vw -&gt; lift (VWord &lt;$&gt; bpBvSlice bp 0 m vw)</span>
 <span class="lineno">  988 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $ &quot;takeOp: &quot; &lt;&gt; Text.pack (show v)</span></span></span>
 <span class="lineno">  989 </span>
@@ -1015,7 +1015,7 @@ span.spaces    { background: white }
 <span class="lineno">  996 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \v -&gt;</span>
 <span class="lineno">  997 </span><span class="spaces">  </span><span class="istickedoff">PrimExcept $</span>
 <span class="lineno">  998 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
-<span class="lineno">  999 </span><span class="spaces">    </span><span class="istickedoff">VVector vv -&gt; return (VVector (V.drop m vv))</span>
+<span class="lineno">  999 </span><span class="spaces">    </span><span class="istickedoff">VVector vv -&gt; <span class="nottickedoff">return (VVector (V.drop m vv))</span></span>
 <span class="lineno"> 1000 </span><span class="spaces">    </span><span class="istickedoff">VWord vw -&gt; lift (VWord &lt;$&gt; bpBvSlice bp m (bpBvSize bp vw - m) vw)</span>
 <span class="lineno"> 1001 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $ &quot;dropOp: &quot; &lt;&gt; Text.pack (show v)</span></span></span>
 <span class="lineno"> 1002 </span>
@@ -1037,7 +1037,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1018 </span><span class="spaces">    </span><span class="istickedoff">(VWord xw, VWord yw) -&gt; lift (VWord &lt;$&gt; bpBvJoin bp xw yw)</span>
 <span class="lineno"> 1019 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, VVector yv) -&gt; return $ VVector ((V.++) xv yv)</span>
 <span class="lineno"> 1020 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, VWord yw) -&gt; lift (liftM (\yv -&gt; VVector ((V.++) xv (fmap (ready . VBool) yv))) (bpUnpack bp yw))</span>
-<span class="lineno"> 1021 </span><span class="spaces">    </span><span class="istickedoff">(VWord xw, VVector yv) -&gt; lift (liftM (\xv -&gt; VVector ((V.++) (fmap (ready . VBool) xv) yv)) (bpUnpack bp xw))</span>
+<span class="lineno"> 1021 </span><span class="spaces">    </span><span class="istickedoff">(VWord xw, VVector yv) -&gt; <span class="nottickedoff">lift (liftM (\xv -&gt; VVector ((V.++) (fmap (ready . VBool) xv) yv)) (bpUnpack bp xw))</span></span>
 <span class="lineno"> 1022 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $ &quot;SAWCore.Simulator.Prims.appendOp: &quot; &lt;&gt; Text.pack (show xs) &lt;&gt; &quot;, &quot; &lt;&gt; Text.pack (show ys)</span></span></span>
 <span class="lineno"> 1023 </span>
 <span class="lineno"> 1024 </span>-- join  :: (m n :: Nat) -&gt; (a :: sort 0) -&gt; Vec m (Vec n a) -&gt; Vec (mulNat m n) a;
@@ -1266,8 +1266,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1247 </span><span class="decl"><span class="istickedoff">vRotateR xs i = vRotateL xs (- i)</span></span>
 <span class="lineno"> 1248 </span>
 <span class="lineno"> 1249 </span>vShiftL :: a -&gt; Vector a -&gt; Integer -&gt; Vector a
-<span class="lineno"> 1250 </span><span class="decl"><span class="istickedoff">vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)</span>
-<span class="lineno"> 1251 </span><span class="spaces">  </span><span class="istickedoff">where j = fromInteger (i `min` toInteger (V.length xs))</span></span>
+<span class="lineno"> 1250 </span><span class="decl"><span class="nottickedoff">vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)</span>
+<span class="lineno"> 1251 </span><span class="spaces">  </span><span class="nottickedoff">where j = fromInteger (i `min` toInteger (V.length xs))</span></span>
 <span class="lineno"> 1252 </span>
 <span class="lineno"> 1253 </span>vShiftR :: a -&gt; Vector a -&gt; Integer -&gt; Vector a
 <span class="lineno"> 1254 </span><span class="decl"><span class="nottickedoff">vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)</span>
@@ -1314,7 +1314,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1295 </span><span class="spaces">  </span><span class="istickedoff">PrimExcept $ do</span>
 <span class="lineno"> 1296 </span><span class="spaces">    </span><span class="istickedoff">let g m x = do f1 &lt;- apply f =&lt;&lt; delay m</span>
 <span class="lineno"> 1297 </span><span class="spaces">                   </span><span class="istickedoff">apply f1 x</span>
-<span class="lineno"> 1298 </span><span class="spaces">    </span><span class="istickedoff">xv &lt;- toVector unpack xs</span>
+<span class="lineno"> 1298 </span><span class="spaces">    </span><span class="istickedoff">xv &lt;- toVector <span class="nottickedoff">unpack</span> xs</span>
 <span class="lineno"> 1299 </span><span class="spaces">    </span><span class="istickedoff">lift (V.foldl g (force z) xv)</span></span>
 <span class="lineno"> 1300 </span>
 <span class="lineno"> 1301 </span>-- scanl : (a b : sort 0) -&gt; (n : Nat) -&gt; (b -&gt; a -&gt; b) -&gt; b -&gt; Vec n a -&gt; Vec (addNat n 1) b;
@@ -1476,8 +1476,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1457 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1458 </span><span class="spaces">    </span><span class="istickedoff">value x@(VWord _)       y                 = do xv &lt;- toVector' x</span>
 <span class="lineno"> 1459 </span><span class="spaces">                                                   </span><span class="istickedoff">value (VVector xv) y</span>
-<span class="lineno"> 1460 </span><span class="spaces">    </span><span class="istickedoff">value x                 y@(VWord _)       = do yv &lt;- toVector' y</span>
-<span class="lineno"> 1461 </span><span class="spaces">                                                   </span><span class="istickedoff">value x (VVector yv)</span>
+<span class="lineno"> 1460 </span><span class="spaces">    </span><span class="istickedoff">value x                 y@(VWord _)       = <span class="nottickedoff">do yv &lt;- toVector' y</span></span>
+<span class="lineno"> 1461 </span><span class="spaces">                                                   </span><span class="istickedoff"><span class="nottickedoff">value x (VVector yv)</span></span>
 <span class="lineno"> 1462 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1463 </span><span class="spaces">    </span><span class="istickedoff">value x@(VNat _)        y                 = <span class="nottickedoff">nat x y</span></span>
 <span class="lineno"> 1464 </span><span class="spaces">    </span><span class="istickedoff">value x@(VBVToNat _ _)  y                 = <span class="nottickedoff">nat x y</span></span>
