@@ -309,8 +309,7 @@ convertModule sc env m0 =
        registerCells = Map.filter cellIsRegister (m ^. moduleCells)
        registerPorts :: Map CellInstName [Bitrep]
        registerPorts = Map.mapMaybe (\c -> Map.lookup "Q" (c ^. cellConnections)) registerCells
-     -- stateFields1 :: Map CellInstName SC.Term
-     stateFields1 <- traverse f registerPorts
+     (stateFields1 :: Map CellInstName SC.Term) <- traverse f registerPorts
 
      -- Collect state types from all submodules
      let
