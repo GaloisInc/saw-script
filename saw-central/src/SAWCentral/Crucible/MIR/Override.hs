@@ -1224,16 +1224,16 @@ matchArg opts sc cc cs prepost md = go False []
                 _ -> fail_
 
         (_, _, MS.SetupElem mode z i) ->
-          case mode of
+          case (mode, projStack) of
 
             -- match value SetupElem by pushing MatchIndex onto the projection
             -- stack
-            MirIndexIntoVal ->
+            (MirIndexIntoVal, _) ->
               go inCast (MatchIndex i : projStack) actual z
 
             -- match reference SetupElem by getting the reference to the
             -- containing vector
-            MirIndexIntoRef ->
+            (MirIndexIntoRef, []) ->
               case actual of
                 MIRVal (RefShape elemRefTy elemTy elemMutbl _elemTpr) elemRef -> do
                   arrRefTy <- typeOfSetupValue cc tyenv nameEnv z
@@ -1260,8 +1260,10 @@ matchArg opts sc cc cs prepost md = go False []
                     _ -> fail_
                 _ -> fail_
 
-            MirIndexOffsetRef ->
+            (MirIndexOffsetRef, _) ->
               panic "matchArg" ["MirIndexOffsetRef not yet implemented"]
+
+            _ -> fail_
 
         -- match the underlying, non-zero-sized field of a repr(transparent)
         -- struct
