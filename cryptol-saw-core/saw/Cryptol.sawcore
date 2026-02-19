@@ -261,39 +261,6 @@ IntModNum : (num : Num) -> sort 0;
 IntModNum num =
   Num#rec1 (\ (n : Num) -> sort 0) IntMod Integer num;
 
--------------------------------------------------------------------------------
--- Rationals (TODO)
-
-Rational : sort 0;
-Rational = #();
-
-ecRatio : Integer -> Integer -> Rational;
-ecRatio x y = ();
-
-eqRational : Rational -> Rational -> Bool;
-eqRational x y = error Bool "Unimplemented: (==) Rational";
-
-leRational : Rational -> Rational -> Bool;
-leRational x y = error Bool "Unimplemented: (<=) Rational";
-
-ltRational : Rational -> Rational -> Bool;
-ltRational x y = error Bool "Unimplemented: (<) Rational";
-
-addRational : Rational -> Rational -> Rational;
-addRational x y = error Rational "Unimplemented: (+) Rational";
-
-subRational : Rational -> Rational -> Rational;
-subRational x y = error Rational "Unimplemented: (-) Rational";
-
-mulRational : Rational -> Rational -> Rational;
-mulRational x y = error Rational "Unimplemented: (*) Rational";
-
-negRational : Rational -> Rational;
-negRational x = error Rational "Unimplemented: negate Rational";
-
-integerToRational : Integer -> Rational;
-integerToRational x = error Rational "Unimplemented: fromInteger Rational";
-
 --------------------------------------------------------------------------------
 -- Type coercions
 
@@ -551,7 +518,7 @@ integerCmp : Integer -> Integer -> Bool -> Bool;
 integerCmp x y k = or (intLt x y) (and (intEq x y) k);
 
 rationalCmp : Rational -> Rational -> Bool -> Bool;
-rationalCmp x y k = or (ltRational x y) (and (eqRational x y) k);
+rationalCmp x y k = or (rationalLt x y) (and (rationalEq x y) k);
 
 bvCmp : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool -> Bool;
 bvCmp n x y k = or (bvult n x y) (and (bvEq n x y) k);
@@ -646,7 +613,7 @@ PEqInteger : PEq Integer;
 PEqInteger = { eq = intEq };
 
 PEqRational : PEq Rational;
-PEqRational = { eq = eqRational };
+PEqRational = { eq = rationalEq };
 
 PEqIntMod : (n : Nat) -> PEq (IntMod n);
 PEqIntMod n = { eq = intModEq n };
@@ -706,7 +673,7 @@ PCmpInteger : PCmp Integer;
 PCmpInteger = { cmpEq = PEqInteger, cmp = integerCmp, le = intLe, lt = intLt };
 
 PCmpRational : PCmp Rational;
-PCmpRational = { cmpEq = PEqRational, cmp = rationalCmp, le = leRational, lt = ltRational };
+PCmpRational = { cmpEq = PEqRational, cmp = rationalCmp, le = rationalLe, lt = rationalLt };
 
 PCmpVec : (n : Nat) -> (a : isort 0) -> PCmp a -> PCmp (Vec n a);
 PCmpVec n a pa =
@@ -831,7 +798,7 @@ PZeroIntMod : (n : Nat) -> PZero (IntMod n);
 PZeroIntMod n = toIntMod n (natToInt 0);
 
 PZeroRational : PZero Rational;
-PZeroRational = integerToRational (natToInt 0);
+PZeroRational = rationalZero;
 
 PZeroIntModNum : (num : Num) -> PZero (IntModNum num);
 PZeroIntModNum num = Num#rec1 (\ (n : Num) -> PZero (IntModNum n)) PZeroIntMod PZeroInteger num;
@@ -994,10 +961,10 @@ PRingIntModNum num =
 PRingRational : PRing Rational;
 PRingRational =
   { ringZero = PZeroRational
-  , add = addRational
-  , sub = subRational
-  , mul = mulRational
-  , neg = negRational
+  , add = rationalAdd
+  , sub = rationalSub
+  , mul = rationalMul
+  , neg = rationalNeg
   , int = integerToRational
   };
 
@@ -1156,8 +1123,8 @@ PField a =
 PFieldRational : PField Rational;
 PFieldRational =
   { fieldRing = PRingRational
-  , recip     = \(x : Rational) -> error Rational "Unimplemented: recip Rational"
-  , fieldDiv  = \(x y : Rational) -> error Rational "Unimplemented: (/.) Rational"
+  , recip     = rationalRecip
+  , fieldDiv  = rationalDiv
   };
 
 
@@ -1192,11 +1159,11 @@ PRoundRational : PRound Rational;
 PRoundRational =
   { roundField  = PFieldRational
   , roundCmp    = PCmpRational
-  , floor       = \(x : Rational) -> error Integer "Unimplemented: floor Rational"
-  , ceiling     = \(x : Rational) -> error Integer "Unimplemented: ceiling Rational"
-  , trunc       = \(x : Rational) -> error Integer "Unimplemented: trunc Rational"
-  , roundAway   = \(x : Rational) -> error Integer "Unimplemented: roundAway Rational"
-  , roundToEven = \(x : Rational) -> error Integer "Unimplemented: roundToEven Rational"
+  , floor       = rationalFloor
+  , ceiling     = rationalCeiling
+  , trunc       = rationalTrunc
+  , roundAway   = rationalRoundAway
+  , roundToEven = rationalRoundToEven
   };
 
 
@@ -1231,7 +1198,7 @@ PLiteralIntModNum num =
   Num#rec1 (\ (n : Num) -> PLiteral (IntModNum n)) PLiteralIntMod PLiteralInteger num;
 
 PLiteralRational : PLiteral Rational;
-PLiteralRational = \ (x : Nat) -> error Rational "Unimplemented: Literal Rational";
+PLiteralRational = \ (x : Nat) -> integerToRational (natToInt x);
 
 -- FLiteral class
 
@@ -1243,7 +1210,7 @@ PFLiteral a = Nat -> Nat -> Nat -> a;
 
 PFLiteralRational : PFLiteral Rational;
 PFLiteralRational =
-  \ (m : Nat) (n : Nat) (r : Nat) -> ecRatio (natToInt m) (natToInt n);
+  \ (m : Nat) (n : Nat) (r : Nat) -> ratio (natToInt m) (natToInt n);
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions

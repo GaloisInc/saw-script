@@ -128,6 +128,12 @@ intModFun = PrimFilterFun "expected IntMod" r
   where r (VIntMod _ i) = pure i
         r _ = mzero
 
+-- | A primitive that requires a rational argument
+ratFun :: VMonad l => ((VInt l, VInt l) -> Prim l) -> Prim l
+ratFun = PrimFilterFun "expected Rational" r
+  where r (VRational numer denom) = pure (numer, denom)
+        r _ = mzero
+
 -- | A primitive that requires a type argument
 tvalFun :: VMonad l => (TValue l -> Prim l) -> Prim l
 tvalFun = PrimFilterFun "expected type value" r
@@ -328,6 +334,7 @@ constMap bp = Map.fromList
   , ("Prelude.Nat__rec", natRecOp)
   , ("Prelude.equalNat", equalNatOp bp)
   , ("Prelude.ltNat", ltNatOp bp)
+  , ("Prelude.if0Nat", if0NatOp)
   -- Integers
   , ("Prelude.Integer", PrimValue (TValue VIntType))
   , ("Prelude.intAdd", intBinOp (bpIntAdd bp))
@@ -342,6 +349,11 @@ constMap bp = Map.fromList
   , ("Prelude.intLt" , intBinCmp (bpIntLt bp))
   , ("Prelude.intMin", intBinOp (bpIntMin bp))
   , ("Prelude.intMax", intBinOp (bpIntMax bp))
+  -- Rationals
+  , ("Prelude.Rational", PrimValue (TValue VRationalType))
+  , ("Prelude.ratio", ratioOp)
+  , ("Prelude.numerator", numeratorOp)
+  , ("Prelude.denominator", denominatorOp)
   -- Modular Integers
   , ("Prelude.IntMod", natFun $ \n -> PrimValue (TValue (VIntModType n)))
   -- Vectors
@@ -736,6 +748,17 @@ equalNatOp bp = binNatOp bp max (\i j -> VBool <$> bpBool bp (i == j))
 ltNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
 ltNatOp bp = binNatOp bp max (\i j -> VBool <$> bpBool bp (i < j))
                              (\_ x1 x2 -> VBool <$> bpBvult bp x1 x2)
+
+-- if0Nat : (a : sort 0) -> Nat -> a -> a -> a;
+if0NatOp :: VMonad l => Prim l
+if0NatOp =
+  constFun $
+  natFun $ \n ->
+  primFun $ \x ->
+  primFun $ \y -> Prim $
+  if n == 0
+  then force x
+  else force y
 
 -- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
 natCaseOp :: (VMonad l, Show (Extra l)) => Prim l
@@ -1342,6 +1365,26 @@ intToNatOp =
   intFun $ \x -> PrimValue $!
     if x >= 0 then VNat (fromInteger x) else VNat 0
 
+-- primitive ratio : Integer -> Integer -> Rational;
+ratioOp :: VMonad l => Prim l
+ratioOp =
+  intFun $ \numer ->
+  intFun $ \denom ->
+    -- TODO(#2433): Assert that the denominator is non-zero.
+    PrimValue (VRational numer denom)
+
+-- primitive numerator : Rational -> Integer;
+numeratorOp :: VMonad l => Prim l
+numeratorOp =
+  ratFun $ \(numer, _denom) ->
+    PrimValue (VInt numer)
+
+-- primitive denominator : Rational -> Integer;
+denominatorOp :: VMonad l => Prim l
+denominatorOp =
+  ratFun $ \(_numer, denom) ->
+    PrimValue (VInt denom)
+
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: (VMonad l, VInt l ~ Integer) => Prim l
 natToIntOp = natFun $ \x -> PrimValue $ VInt (toInteger x)
@@ -1454,6 +1497,9 @@ muxValue bp b x0 y0 = value x0 y0
     value (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
     value (VArray x)        (VArray y)        = VArray <$> bpMuxArray bp b x y
     value (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
+
+    value (VRational xNumer xDenom) (VRational yNumer yDenom) =
+      VRational <$> bpMuxInt bp b xNumer yNumer <*> bpMuxInt bp b xDenom yDenom
 
     value x@(VWord _)       y                 = do xv <- toVector' x
                                                    value (VVector xv) y

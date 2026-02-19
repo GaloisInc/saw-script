@@ -2024,6 +2024,9 @@ primitive bvToInt : (n:Nat) -> Vec n Bool -> Integer;
 -- return the 2's complement signed value of the bitvector as an integer
 primitive sbvToInt : (n:Nat) -> Vec n Bool -> Integer;
 
+intEven : Integer -> Bool;
+intEven x = intEq (intMod x (natToInt 2)) (natToInt 0);
+
 
 --------------------------------------------------------------------------------
 -- Integers mod n
@@ -2413,6 +2416,210 @@ primitive arrayCopy : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n
 primitive arraySet : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> a -> Vec n Bool -> Array (Vec n Bool) a;
 primitive arrayRangeEq : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Bool;
 primitive arrayEq     : (a b : sort 0) -> (Array a b) -> (Array a b) -> Bool;
+
+--------------------------------------------------------------------------------
+-- Rationals
+
+-- The type of rational numbers.
+primitive Rational : sort 0;
+
+-- Compute the ratio of two Integers as a Rational. This is undefined if the
+-- denominator is zero.
+primitive ratio : Integer -> Integer -> Rational;
+
+-- Return the numerator or denominator of a Rational value. Note that these
+-- values will not be reduced. For instance, calling @numerator (ratio 2 4)@
+-- will return @2@, not @1@. For this reason, it is recommended that you only
+-- use these primitives in ways where the lack of reduction does not impact the
+-- overall result.
+primitive numerator : Rational -> Integer;
+primitive denominator : Rational -> Integer;
+
+-- A unary function over a Rational value. The callback takes two Integers as
+-- arguments, where the first Integer is the numerator and the second Integer
+-- is the denominator.
+unaryRationalFun : (a : sort 0) -> (Integer -> Integer -> a) -> Rational -> a;
+unaryRationalFun a f x = f (numerator x) (denominator x);
+
+-- A binary function over Rationals. The callback takes four Integers as
+-- arguments, where the first two Integers are the numerator and denominator
+-- of the first Rational, and the last two Integers are the numerator and
+-- denominator of the second Rational.
+binaryRationalFun :
+  (a : sort 0) ->
+  (Integer -> Integer -> Integer -> Integer -> a) ->
+  Rational ->
+  Rational ->
+  a;
+binaryRationalFun a f x y =
+  f (numerator x) (denominator x) (numerator y) (denominator y);
+
+rationalEq : Rational -> Rational -> Bool;
+rationalEq =
+  binaryRationalFun
+    Bool
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      intEq (intMul xNumer yDenom) (intMul xDenom yNumer));
+
+-- Normalize a Rational such that the sign of its denominator value is always
+-- positive. For instance:
+--
+-- * @ratio -1 2@ is normalized to @ratio -1 2@.
+--
+-- * @ratio 1 -2@ is normalized to @ratio -1 2@.
+--
+-- * @ratio -1 -2@ is normalized to @ratio 1 2@.
+--
+-- * @ratio 1 2@ is normalized to @ratio 1 2@.
+--
+-- Most Rational operations do not care about the signedness of the numerator
+-- or denominator (and therefore do not need to call normalizeSign), but a
+-- notable exception to this rule is ltRational, where getting the signs in the
+-- right places is important.
+normalizeSign : Rational -> Rational;
+normalizeSign =
+  unaryRationalFun
+    Rational
+    (\(numer denom : Integer) ->
+      let { p = intLt denom (natToInt 0); } in
+      ratio
+        (ite
+          Integer
+          p
+          (intNeg numer)
+          numer)
+        (ite
+          Integer
+          p
+          (intNeg denom)
+          denom));
+
+rationalLe : Rational -> Rational -> Bool;
+rationalLe x y =
+  binaryRationalFun
+    Bool
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      intLe (intMul xNumer yDenom) (intMul xDenom yNumer))
+    (normalizeSign x)
+    (normalizeSign y);
+
+rationalLt : Rational -> Rational -> Bool;
+rationalLt x y =
+  binaryRationalFun
+    Bool
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      intLt (intMul xNumer yDenom) (intMul xDenom yNumer))
+    (normalizeSign x)
+    (normalizeSign y);
+
+rationalAdd : Rational -> Rational -> Rational;
+rationalAdd =
+  binaryRationalFun
+    Rational
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      ratio
+        (intAdd
+          (intMul xNumer yDenom)
+          (intMul xDenom yNumer))
+        (intMul xDenom yDenom));
+
+rationalSub : Rational -> Rational -> Rational;
+rationalSub =
+  binaryRationalFun
+    Rational
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      ratio
+        (intSub
+          (intMul xNumer yDenom)
+          (intMul xDenom yNumer))
+        (intMul xDenom yDenom));
+
+rationalMul : Rational -> Rational -> Rational;
+rationalMul =
+  binaryRationalFun
+    Rational
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      ratio
+        (intMul xNumer yNumer)
+        (intMul xDenom yDenom));
+
+rationalNeg : Rational -> Rational;
+rationalNeg =
+  unaryRationalFun
+    Rational
+    (\(numer denom : Integer) ->
+      ratio (intNeg numer) denom);
+
+integerToRational : Integer -> Rational;
+integerToRational x = ratio x (natToInt 1);
+
+-- 0/1
+rationalZero : Rational;
+rationalZero = ratio (natToInt 0) (natToInt 1);
+
+-- 1/2
+rationalHalf : Rational;
+rationalHalf = ratio (natToInt 1) (natToInt 2);
+
+-- This is undefined if the argument is zero.
+rationalRecip : Rational -> Rational;
+rationalRecip =
+  unaryRationalFun
+    Rational
+    (\(numer denom : Integer) ->
+      ratio denom numer);
+
+-- This is undefined if the second argument is zero.
+rationalDiv : Rational -> Rational -> Rational;
+rationalDiv x y =
+  rationalMul x (rationalRecip y);
+
+rationalFloor : Rational -> Integer;
+rationalFloor =
+  unaryRationalFun
+    Integer
+    (\(numer denom : Integer) ->
+      intDiv numer denom);
+
+rationalCeiling : Rational -> Integer;
+rationalCeiling r =
+  intNeg (rationalFloor (rationalNeg r));
+
+rationalTrunc : Rational -> Integer;
+rationalTrunc r =
+  ite
+    Integer
+    (rationalLt r rationalZero)
+    (rationalCeiling r)
+    (rationalFloor r);
+
+rationalRoundAway : Rational -> Integer;
+rationalRoundAway r =
+  ite
+    Integer
+    (rationalLt r rationalZero)
+    (rationalCeiling (rationalSub r rationalHalf))
+    (rationalFloor (rationalAdd r rationalHalf));
+
+rationalRoundToEven : Rational -> Integer;
+rationalRoundToEven r =
+  let { lo = rationalFloor r;
+        hi = intAdd lo (natToInt 1);
+        diff = rationalSub r (integerToRational lo);
+      } in
+  ite
+    Integer
+    (rationalLt diff rationalHalf)
+    lo
+    (ite
+      Integer
+      (rationalLt rationalHalf diff)
+      hi
+      (ite
+        Integer
+        (intEven lo)
+        lo
+        hi));
 
 --------------------------------------------------------------------------------
 -- General axioms

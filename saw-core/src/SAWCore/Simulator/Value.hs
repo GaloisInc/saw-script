@@ -106,6 +106,7 @@ data Value l
   | VNat !Natural
   | VInt (VInt l)
   | VIntMod !Natural (VInt l)
+  | VRational (VInt l) (VInt l)
   | VArray (VArray l)
   | VString !Text
   | VEmptyRecord
@@ -125,6 +126,7 @@ data TValue l
   | VBoolType
   | VIntType
   | VIntModType !Natural
+  | VRationalType
   | VArrayType !(TValue l) !(TValue l)
   | VPiType !(TValue l) !(PiBody l)
   | VStringType
@@ -206,6 +208,7 @@ instance Show (Extra l) => Show (Value l) where
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
+      VRational{}    -> showString "<<rational>>"
       VArray{}       -> showString "<<array>>"
       VString s      -> shows s
       VEmptyRecord   -> showString "{}"
@@ -223,6 +226,7 @@ instance Show (Extra l) => Show (TValue l) where
       VStringType    -> showString "String"
       VIntType       -> showString "Integer"
       VIntModType n  -> showParen True (showString "IntMod " . shows n)
+      VRationalType  -> showString "Rational"
       VArrayType{}   -> showString "Array"
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
@@ -369,6 +373,7 @@ asFiniteTypeTValue v =
     VTyTerm{}     -> Nothing
     VIntType      -> Nothing
     VIntModType{} -> Nothing
+    VRationalType{} -> Nothing
     VArrayType{}  -> Nothing
   where
 
@@ -385,6 +390,7 @@ asFirstOrderTypeTValue v =
     VVecType n v1 -> FOTVec n <$> asFirstOrderTypeTValue v1
     VIntType      -> return FOTInt
     VIntModType m -> return (FOTIntMod m)
+    VRationalType -> return FOTRational
     VArrayType a b ->
       FOTArray <$> asFirstOrderTypeTValue a <*> asFirstOrderTypeTValue b
     VUnitType -> return (FOTTuple [])
@@ -432,6 +438,7 @@ suffixTValue tv =
     VBoolType -> Just "_Bool"
     VIntType -> Just "_Int"
     VIntModType n -> Just ("_IntMod_" ++ show n)
+    VRationalType -> Just "_Rational"
     VArrayType a b ->
       do a' <- suffixTValue a
          b' <- suffixTValue b

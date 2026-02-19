@@ -260,6 +260,10 @@ module SAWCore.SharedTerm
   , scArrayCopy
   , scArraySet
   , scArrayRangeEq
+    -- ** Rationals
+  , scRational
+  , scRationalConst
+  , scRationalType
   -- * Miscellaneous
   , alistAllFields
   , scImport
@@ -281,6 +285,7 @@ import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ratio (numerator, denominator)
 import Data.Ref ( C )
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -668,6 +673,22 @@ scPos sc n
     do arg <- scPos sc (div n 2)
        let ident = if even n then "Prelude.Bit0" else "Prelude.Bit1"
        scGlobalApply sc ident [arg]
+
+-- | Create a @Rational@ term from a numerator and denominator 'Term'.
+scRational :: SharedContext -> Term -> Term -> IO Term
+scRational sc numer denom = scGlobalApply sc "Prelude.ratio" [numer, denom]
+
+-- | Create a saw-core @Rational@ constant term from a Haskell 'Rational'
+-- value.
+scRationalConst :: SharedContext -> Rational -> IO Term
+scRationalConst sc r =
+  do numer <- scIntegerConst sc (numerator r)
+     denom <- scIntegerConst sc (denominator r)
+     scRational sc numer denom
+
+-- | Create a term representing the saw-core type @Rational@.
+scRationalType :: SharedContext -> IO Term
+scRationalType sc = scGlobalDef sc "Prelude.Rational"
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term

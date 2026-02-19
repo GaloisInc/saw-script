@@ -38,6 +38,7 @@ import Data.Bits
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ratio ((%))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
@@ -667,6 +668,12 @@ parseUninterpreted cws nm ty =
     VIntModType n
       -> return $ VIntMod n $ mkUninterpreted KUnbounded cws nm
 
+    VRationalType
+      -> do let numer = mkUninterpreted KUnbounded cws (nm ++ ".numer")
+            -- TODO(#2433): Assert that the denominator is non-zero.
+            let denom = mkUninterpreted KUnbounded cws (nm ++ ".denom")
+            pure $ VRational numer denom
+
     (VVecType n VBoolType)
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
 
@@ -747,6 +754,7 @@ sbvSATQuery sc addlPrims query =
 data Labeler
    = BoolLabel String
    | IntegerLabel String
+   | RationalLabel String String
    | WordLabel String
    | ZeroWidthWordLabel
    | VecLabel
@@ -777,6 +785,13 @@ newVars nm fot =
       nextId' nm <&> \s -> (IntegerLabel s, vInteger <$> existsSInteger s)
     FOTIntMod n ->
       nextId' nm <&> \s -> (IntegerLabel s, VIntMod n <$> existsSInteger s)
+    FOTRational ->
+      do sNumer <- nextId' nm
+         sDenom <- nextId' nm
+         -- TODO(#2433): Assert that the denominator is non-zero.
+         let existsSRational =
+               VRational <$> existsSInteger sNumer <*> existsSInteger sDenom
+         pure (RationalLabel sNumer sDenom, existsSRational)
     FOTVec 0 FOTBit ->
       pure (ZeroWidthWordLabel, pure (vWord (literalSWord 0 0)))
     FOTVec n FOTBit ->
@@ -813,6 +828,11 @@ getLabels ls d args
 
   getLabel (BoolLabel s)    = FOVBit (cvToBool (d Map.! s))
   getLabel (IntegerLabel s) = FOVInt (cvToInteger (d Map.! s))
+  getLabel (RationalLabel sNumer sDenom) = FOVRational (numer % denom)
+    where
+      numer = cvToInteger (d Map.! sNumer)
+      denom = cvToInteger (d Map.! sDenom)
+
 
   getLabel (WordLabel s)    = FOVWord (cvKind cv) (cvToInteger cv)
     where cv = d Map.! s
@@ -842,6 +862,14 @@ newCodeGenVars :: (Natural -> Bool) -> FirstOrderType -> StateT Int IO (SBVCodeG
 newCodeGenVars _checkSz FOTBit = nextId <&> \s -> (vBool <$> svCgInput KBool s)
 newCodeGenVars _checkSz FOTInt = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
 newCodeGenVars _checkSz (FOTIntMod _) = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
+newCodeGenVars _checkSz FOTRational = do
+  sNumer <- nextId
+  sDenom <- nextId
+  pure $ do
+    numer <- svCgInput KUnbounded sNumer
+    -- TODO(#2433): Assert that the denominator is non-zero.
+    denom <- svCgInput KUnbounded sDenom
+    pure $ VRational numer denom
 newCodeGenVars checkSz (FOTVec n FOTBit)
   | n == 0    = nextId <&> \_ -> return (vWord (literalSWord 0 0))
   | checkSz n = nextId <&> \s -> vWord <$> cgInputSWord s (fromIntegral n)

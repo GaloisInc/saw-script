@@ -18,6 +18,7 @@ import qualified Control.Monad.State as S
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ratio (numerator, denominator)
 import qualified Data.Text as Text
 import Numeric.Natural (Natural)
 
@@ -60,6 +61,7 @@ data FirstOrderType
   = FOTBit
   | FOTInt
   | FOTIntMod Natural
+  | FOTRational
   | FOTVec Natural FirstOrderType
   | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
@@ -84,6 +86,7 @@ data FirstOrderValue
   = FOVBit Bool
   | FOVInt Integer
   | FOVIntMod Natural Integer
+  | FOVRational Rational
   | FOVWord Natural Integer -- ^ a more efficient special case for 'FOVVec FOTBit _'.
   | FOVVec FirstOrderType [FirstOrderValue]
   | FOVArray FirstOrderType FirstOrderValue (Map FirstOrderValue FirstOrderValue)
@@ -182,6 +185,7 @@ toFiniteType (FOTTuple ts) = FTTuple <$> traverse toFiniteType ts
 toFiniteType (FOTRec fs)   = FTRec   <$> traverse toFiniteType fs
 toFiniteType FOTInt{}      = Nothing
 toFiniteType FOTIntMod{}   = Nothing
+toFiniteType FOTRational{} = Nothing
 toFiniteType FOTArray{}    = Nothing
 
 instance Show FiniteValue where
@@ -193,6 +197,7 @@ instance Show FirstOrderValue where
       FOVBit b    -> shows b
       FOVInt i    -> shows i
       FOVIntMod _ i -> shows i
+      FOVRational r -> shows r
       FOVWord _ x -> shows x
       FOVVec _ vs -> showString "[" . commaSep (map shows vs) . showString "]"
       FOVArray _kty d vs ->
@@ -221,6 +226,8 @@ prettyFirstOrderValue opts = loop
      | otherwise -> pretty "False"
    FOVInt i      -> pretty i
    FOVIntMod _ i -> pretty i
+   FOVRational r ->
+     pretty (numerator r) <+> pretty "%" <+> pretty (denominator r)
    FOVWord _w i  -> prettyNat opts i
    FOVVec _ xs   -> brackets (sep (punctuate comma (map loop xs)))
    FOVArray _kty d vs ->
@@ -306,6 +313,7 @@ firstOrderTypeOf fv =
     FOVBit _    -> FOTBit
     FOVInt _    -> FOTInt
     FOVIntMod n _ -> FOTIntMod n
+    FOVRational _ -> FOTRational
     FOVWord n _ -> FOTVec n FOTBit
     FOVVec t vs -> FOTVec (fromIntegral (length vs)) t
     FOVArray tk d _vs -> FOTArray tk (firstOrderTypeOf d)
@@ -356,6 +364,8 @@ asFirstOrderTypeMaybe sc t =
          -> return FOTInt
        (R.asIntModType -> Just n)
          -> return (FOTIntMod n)
+       (R.asRationalType -> Just ())
+         -> return FOTRational
        (R.isVecType return -> Just (n R.:*: tp))
          -> FOTVec n <$> asFirstOrderTypeMaybe sc tp
        (R.asArrayType -> Just (tp1 R.:*: tp2)) -> do
@@ -394,6 +404,7 @@ scFirstOrderType sc ft =
     FOTBit      -> scBoolType sc
     FOTInt      -> scIntegerType sc
     FOTIntMod n -> scIntModType sc =<< scNat sc n
+    FOTRational -> scRationalType sc
     FOTVec n t  -> do n' <- scNat sc n
                       t' <- scFirstOrderType sc t
                       scVecType sc n' t'
@@ -423,6 +434,7 @@ scFirstOrderValue sc fv =
       do n' <- scNat sc n
          i' <- scNatToInt sc =<< scNat sc (fromInteger (i `mod` toInteger n))
          scToIntMod sc n' i'
+    FOVRational r -> scRationalConst sc r
     FOVWord n x -> scBvConst sc n x
     FOVVec t vs -> do t' <- scFirstOrderType sc t
                       vs' <- traverse (scFirstOrderValue sc) vs
