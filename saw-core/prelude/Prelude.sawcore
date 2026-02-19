@@ -2024,6 +2024,9 @@ primitive bvToInt : (n:Nat) -> Vec n Bool -> Integer;
 -- return the 2's complement signed value of the bitvector as an integer
 primitive sbvToInt : (n:Nat) -> Vec n Bool -> Integer;
 
+intEven : Integer -> Bool;
+intEven x = intEq (intMod x (natToInt 2)) (natToInt 0);
+
 
 --------------------------------------------------------------------------------
 -- Integers mod n
@@ -2413,6 +2416,232 @@ primitive arrayCopy : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n
 primitive arraySet : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> a -> Vec n Bool -> Array (Vec n Bool) a;
 primitive arrayRangeEq : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Bool;
 primitive arrayEq     : (a b : sort 0) -> (Array a b) -> (Array a b) -> Bool;
+
+--------------------------------------------------------------------------------
+-- Rationals
+
+-- The type of rational numbers. The representation here is directly inspired
+-- by Cryptol: the first Integer field is the numerator, and the second Integer
+-- field is the denominator. This type inherits the same Cryptol conventions,
+-- namely:
+--
+-- 1. There is an invariant that the denominator is non-zero. If you construct
+--    a Rational value directly using MkRational, then make sure to uphold this
+--    invariant. If you can't be sure if this invariant will be upheld, then
+--    use the ratio function instead of MkRational.
+--
+-- 2. It is possible for two Rational values that are equal according to
+--    eqRational to have different internal representations. For example,
+--    @eqRational (MkRational 1 2) (MkRational 2 4)@ is True, but the two
+--    Rational values will have different numerator and denominator values.
+--
+--    Having the choice to use different internal representations for the same
+--    values allows us to issue simpler SMT queries in certain places. On the
+--    flip side, we may need to explicitly normalize a value when performing
+--    certain operations. For instance, the normalizeSign function is used to
+--    normalize values like @MkRational -1 -2@ to @MkRational 1 2@, which is
+--    important to do when comparing Rational values for equality (e.g., in the
+--    ltRational function).
+data Rational : sort 0 where {
+  MkRational : Integer -> Integer -> Rational;
+}
+
+-- Compute the ratio of two Integers as a Rational. This is undefined if the
+-- denominator is zero.
+--
+-- TODO(#2433): This function ought to be implemented as a primitive that, in
+-- addition to constructing the Rational value, will assert a side condition
+-- that the denominator is non-zero. At present, this goes unchecked.
+ratio : Integer -> Integer -> Rational;
+ratio = MkRational;
+
+-- A binary function over Rationals. The callback takes four Integers as
+-- arguments, where the first two Integers are the numerator and denominator
+-- of the first Rational, adn the last two Integers are the numerator and
+-- denominator of the second Rational.
+binaryRationalFun :
+  (a : sort 0) ->
+  (Integer -> Integer -> Integer -> Integer -> a) ->
+  Rational ->
+  Rational ->
+  a;
+binaryRationalFun a f x y =
+  Rational#rec
+    (\(_ : Rational) -> a)
+    (\(xNumer xDenom : Integer) ->
+      Rational#rec
+        (\(_ : Rational) -> a)
+        (\(yNumer yDenom : Integer) ->
+          f xNumer xDenom yNumer yDenom)
+        y)
+    x;
+
+eqRational : Rational -> Rational -> Bool;
+eqRational =
+  binaryRationalFun
+    Bool
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      intEq (intMul xNumer yDenom) (intMul xDenom yNumer));
+
+-- Normalize a Rational such that the sign of its denominator value is always
+-- positive. For instance:
+--
+-- * @MkRational -1 2@ is normalized to @MkRational -1 2@.
+--
+-- * @MkRational 1 -2@ is normalized to @MkRational -1 2@.
+--
+-- * @MkRational -1 -2@ is normalized to @MkRational 1 2@.
+--
+-- * @MkRational 1 2@ is normalized to @MkRational 1 2@.
+--
+-- Most Rational operations do not care about the signedness of the numerator
+-- or denominator (and therefore do not need to call normalizeSign), but a
+-- notable exception to this rule is ltRational, where getting the signs in the
+-- right places is important.
+normalizeSign : Rational -> Rational;
+normalizeSign =
+  Rational#rec
+    (\(_ : Rational) -> Rational)
+    (\(numer denom : Integer) ->
+      let { p = intLt denom (natToInt 0); } in
+      MkRational
+        (ite
+          Integer
+          p
+          (intNeg numer)
+          numer)
+        (ite
+          Integer
+          p
+          (intNeg denom)
+          denom));
+
+leRational : Rational -> Rational -> Bool;
+leRational x y =
+  binaryRationalFun
+    Bool
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      intLe (intMul xNumer yDenom) (intMul xDenom yNumer))
+    (normalizeSign x)
+    (normalizeSign y);
+
+ltRational : Rational -> Rational -> Bool;
+ltRational x y =
+  binaryRationalFun
+    Bool
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      intLt (intMul xNumer yDenom) (intMul xDenom yNumer))
+    (normalizeSign x)
+    (normalizeSign y);
+
+addRational : Rational -> Rational -> Rational;
+addRational =
+  binaryRationalFun
+    Rational
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      MkRational
+        (intAdd
+          (intMul xNumer yDenom)
+          (intMul xDenom yNumer))
+        (intMul xDenom yDenom));
+
+subRational : Rational -> Rational -> Rational;
+subRational =
+  binaryRationalFun
+    Rational
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      MkRational
+        (intSub
+          (intMul xNumer yDenom)
+          (intMul xDenom yNumer))
+        (intMul xDenom yDenom));
+
+mulRational : Rational -> Rational -> Rational;
+mulRational =
+  binaryRationalFun
+    Rational
+    (\(xNumer xDenom yNumer yDenom : Integer) ->
+      MkRational
+        (intMul xNumer yNumer)
+        (intMul xDenom yDenom));
+
+negRational : Rational -> Rational;
+negRational =
+  Rational#rec
+    (\(_ : Rational) -> Rational)
+    (\(numer denom : Integer) ->
+      MkRational (intNeg numer) denom);
+
+integerToRational : Integer -> Rational;
+integerToRational x = MkRational x (natToInt 1);
+
+-- 0/1
+zeroRational : Rational;
+zeroRational = MkRational (natToInt 0) (natToInt 1);
+
+-- 1/2
+halfRational : Rational;
+halfRational = MkRational (natToInt 1) (natToInt 2);
+
+-- This is undefined if the argument is zero.
+recipRational : Rational -> Rational;
+recipRational =
+  Rational#rec
+    (\(_ : Rational) -> Rational)
+    (\(numer denom : Integer) ->
+      ratio denom numer);
+
+-- This is undefined if the second argument is zero.
+divRational : Rational -> Rational -> Rational;
+divRational x y =
+  mulRational x (recipRational y);
+
+floorRational : Rational -> Integer;
+floorRational =
+  Rational#rec
+    (\(_ : Rational) -> Integer)
+    (\(numer denom : Integer) ->
+      intDiv numer denom);
+
+ceilingRational : Rational -> Integer;
+ceilingRational r =
+  intNeg (floorRational (negRational r));
+
+truncRational : Rational -> Integer;
+truncRational r =
+  ite
+    Integer
+    (ltRational r zeroRational)
+    (ceilingRational r)
+    (floorRational r);
+
+roundAwayRational : Rational -> Integer;
+roundAwayRational r =
+  ite
+    Integer
+    (ltRational r zeroRational)
+    (ceilingRational (subRational r halfRational))
+    (floorRational (addRational r halfRational));
+
+roundToEvenRational : Rational -> Integer;
+roundToEvenRational r =
+  let { lo = floorRational r;
+        hi = intAdd lo (natToInt 1);
+        diff = subRational r (integerToRational lo);
+      } in
+  ite
+    Integer
+    (ltRational diff halfRational)
+    lo
+    (ite
+      Integer
+      (ltRational halfRational diff)
+      hi
+      (ite
+        Integer
+        (intEven lo)
+        lo
+        hi));
 
 --------------------------------------------------------------------------------
 -- General axioms

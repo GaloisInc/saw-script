@@ -59,6 +59,7 @@ import Prettyprinter ((<+>))
 
 -- cryptol
 import qualified Cryptol.Eval.Type as TV
+import qualified Cryptol.Backend as V
 import qualified Cryptol.Backend.Monad as V
 import qualified Cryptol.Backend.SeqMap as V
 import qualified Cryptol.Backend.WordValue as V
@@ -323,7 +324,7 @@ importType sc env ty =
             C.TCArray    -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scArrayType sc a b
-            C.TCRational -> scGlobalApply sc "Cryptol.Rational" []
+            C.TCRational -> scRationalType sc
             C.TCSeq      -> scGlobalApply sc "Cryptol.seq" =<< traverse go tyargs
             C.TCFun      -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
@@ -2012,6 +2013,8 @@ scCryptolType sc t =
       SC.VDataType (nameInfo -> ModuleIdentifier "Cryptol.Num") [] [] ->
         return (Left C.KNum)
 
+      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.Rational") [] [] ->
+        return (Right C.tRational)
       SC.VDataType {} -> Nothing
 
       SC.VUnitType -> return (Right (C.tTuple []))
@@ -2067,7 +2070,18 @@ exportValue ty v = case ty of
 
   TV.TVArray{} -> panic "exportValue" ["Not yet implemented: array type: " <> CryPP.pp (TV.tValTy ty)]
 
-  TV.TVRational -> panic "exportValue" ["Not yet implemented: Rational"]
+  TV.TVRational ->
+    case v of
+      SC.VCtorApp (nameInfo -> ModuleIdentifier "Prelude.MkRational") _ [] [numerThunk, denomThunk] -> do
+        let numerV = SC.runIdentity $ force numerThunk
+        let denomV = SC.runIdentity $ force denomThunk
+        case (numerV, denomV) of
+          (SC.VInt numer, SC.VInt denom) ->
+            pure $ V.VRational $ V.SRational numer denom
+          _ ->
+            error $ "exportValue: rational with non-integer fields: " ++
+                    show numerV ++ " and " ++ show denomV
+      _ -> error $ "exportValue: expected rational, received " ++ show ty
 
   TV.TVFloat _ _ -> panic "exportValue" ["Not yet implemented: Float"]
 

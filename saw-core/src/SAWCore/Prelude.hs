@@ -75,6 +75,12 @@ scDecEq sc fot args = case fot of
          Nothing    -> scApply sc fn m'
          Just (x,y) -> scApplyAll sc fn [m',x,y]
 
+  FOTRational ->
+    do fn <- scGlobalDef sc "Prelude.eqRational" -- TODO RGS: Weird naming convention?
+       case args of
+         Nothing    -> return fn
+         Just (x,y) -> scApplyAll sc fn [x,y]
+
   FOTVec w FOTBit ->
     do fn <- scGlobalDef sc "Prelude.bvEq"
        w' <- scNat sc w

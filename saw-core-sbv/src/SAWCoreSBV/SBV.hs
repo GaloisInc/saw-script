@@ -38,6 +38,7 @@ import Data.Bits
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ratio ((%))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
@@ -50,6 +51,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
 
+import SAWCore.Module (Ctor(..))
 import SAWCore.Name (Name(..), VarName(..), toShortName)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
@@ -711,7 +713,7 @@ sbvSATQuery sc addlPrims query =
   do t <- liftIO (satQueryAsTerm sc query)
      let qvars = Map.toList (satVariables query)
      let unintSet = satUninterp query
-     let mkVars (vn, fot) = newVars (Text.unpack (vnName vn)) fot
+     let mkVars (vn, fot) = newVars sc (Text.unpack (vnName vn)) fot
 
      (labels, vars) <-
        flip evalStateT 0 $ unzip <$>
@@ -747,6 +749,7 @@ sbvSATQuery sc addlPrims query =
 data Labeler
    = BoolLabel String
    | IntegerLabel String
+   | RationalLabel String String
    | WordLabel String
    | ZeroWidthWordLabel
    | VecLabel
@@ -768,8 +771,12 @@ nextId' nm = nextId <&> \s -> s ++ "_" ++ nm
 unzipMap :: Map k (a, b) -> (Map k a, Map k b)
 unzipMap m = (fmap fst m, fmap snd m)
 
-newVars :: String -> FirstOrderType -> StateT Int IO (Labeler, Symbolic SValue)
-newVars nm fot =
+newVars ::
+  SharedContext ->
+  String ->
+  FirstOrderType ->
+  StateT Int IO (Labeler, Symbolic SValue)
+newVars sc nm fot =
   case fot of
     FOTBit ->
       nextId' nm <&> \s -> (BoolLabel s, vBool <$> existsSBool s)
@@ -777,22 +784,37 @@ newVars nm fot =
       nextId' nm <&> \s -> (IntegerLabel s, vInteger <$> existsSInteger s)
     FOTIntMod n ->
       nextId' nm <&> \s -> (IntegerLabel s, VIntMod n <$> existsSInteger s)
+    FOTRational ->
+      do sNumer <- nextId' nm
+         sDenom <- nextId' nm
+         mkRationalCtor <- liftIO $ scRequireCtor sc "Prelude.MkRational"
+         let rationalTy = VDataType (ctorDataType mkRationalCtor) [] []
+         let existsSRational = do
+               numer <- vInteger <$> existsSInteger sNumer
+               denom <- vInteger <$> existsSInteger sDenom
+               pure $
+                 VCtorApp
+                   (ctorName mkRationalCtor)
+                   rationalTy
+                   []
+                   [ready numer, ready denom]
+         pure (RationalLabel sNumer sDenom, existsSRational)
     FOTVec 0 FOTBit ->
       pure (ZeroWidthWordLabel, pure (vWord (literalSWord 0 0)))
     FOTVec n FOTBit ->
       nextId' nm <&> \s -> (WordLabel s, vWord <$> existsSWord s (fromIntegral n))
     FOTVec n tp ->
-      do let f i = newVars (nm ++ "." ++ show i) tp
+      do let f i = newVars sc (nm ++ "." ++ show i) tp
          (labels, vals) <- V.unzip <$> V.generateM (fromIntegral n) f
          pure (VecLabel tp labels, VVector <$> traverse (fmap ready) vals)
     FOTArray{} ->
       fail "FOTArray unimplemented for backend"
     FOTTuple ts ->
-      do let f i t = newVars (nm ++ "." ++ show i) t
+      do let f i t = newVars sc (nm ++ "." ++ show i) t
          (labels, vals) <- V.unzip <$> V.imapM f (V.fromList ts)
          pure (TupleLabel labels, vTuple <$> traverse (fmap ready) (V.toList vals))
     FOTRec tm ->
-      do let f k t = newVars (nm ++ "." ++ Text.unpack k) t
+      do let f k t = newVars sc (nm ++ "." ++ Text.unpack k) t
          (labels, vals) <- unzipMap <$> (Map.traverseWithKey f tm)
          pure (RecLabel labels, vRecord <$> traverse (fmap ready) vals)
 
@@ -813,6 +835,11 @@ getLabels ls d args
 
   getLabel (BoolLabel s)    = FOVBit (cvToBool (d Map.! s))
   getLabel (IntegerLabel s) = FOVInt (cvToInteger (d Map.! s))
+  getLabel (RationalLabel sNumer sDenom) = FOVRational (numer % denom)
+    where
+      numer = cvToInteger (d Map.! sNumer)
+      denom = cvToInteger (d Map.! sDenom)
+
 
   getLabel (WordLabel s)    = FOVWord (cvKind cv) (cvToInteger cv)
     where cv = d Map.! s
@@ -838,30 +865,48 @@ getLabels ls d args
 ------------------------------------------------------------
 -- Code Generation
 
-newCodeGenVars :: (Natural -> Bool) -> FirstOrderType -> StateT Int IO (SBVCodeGen SValue)
-newCodeGenVars _checkSz FOTBit = nextId <&> \s -> (vBool <$> svCgInput KBool s)
-newCodeGenVars _checkSz FOTInt = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
-newCodeGenVars _checkSz (FOTIntMod _) = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
-newCodeGenVars checkSz (FOTVec n FOTBit)
+newCodeGenVars ::
+  SharedContext ->
+  (Natural -> Bool) ->
+  FirstOrderType ->
+  StateT Int IO (SBVCodeGen SValue)
+newCodeGenVars _sc _checkSz FOTBit = nextId <&> \s -> (vBool <$> svCgInput KBool s)
+newCodeGenVars _sc _checkSz FOTInt = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
+newCodeGenVars _sc _checkSz (FOTIntMod _) = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
+newCodeGenVars sc _checkSz FOTRational = do
+  sNumer <- nextId
+  sDenom <- nextId
+  mkRationalCtor <- liftIO $ scRequireCtor sc "Prelude.MkRational"
+  let rationalTy = VDataType (ctorDataType mkRationalCtor) [] []
+  pure $ do
+    numer <- svCgInput KUnbounded sNumer
+    denom <- svCgInput KUnbounded sDenom
+    pure $
+      VCtorApp
+        (ctorName mkRationalCtor)
+        rationalTy
+        []
+        [ready (vInteger numer), ready (vInteger denom)]
+newCodeGenVars _sc checkSz (FOTVec n FOTBit)
   | n == 0    = nextId <&> \_ -> return (vWord (literalSWord 0 0))
   | checkSz n = nextId <&> \s -> vWord <$> cgInputSWord s (fromIntegral n)
   | otherwise = nextId <&> \s -> fail $ "Invalid codegen bit width for input variable \'" ++ s ++ "\': " ++ show n
-newCodeGenVars checkSz (FOTVec n (FOTVec m FOTBit))
+newCodeGenVars _sc checkSz (FOTVec n (FOTVec m FOTBit))
   | m == 0    = nextId <&> \_ -> return (VVector $ V.fromList $ replicate (fromIntegral n) (ready $ vWord (literalSWord 0 0)))
   | checkSz m = do
       let k = KBounded False (fromIntegral m)
       vals <- nextId <&> \s -> svCgInputArr k (fromIntegral n) s
       return (VVector . V.fromList . fmap (ready . vWord) <$> vals)
   | otherwise = nextId <&> \s -> fail $ "Invalid codegen bit width for input variable array \'" ++ s ++ "\': " ++ show n
-newCodeGenVars checkSz (FOTVec n tp) = do
-  vals <- V.replicateM (fromIntegral n) (newCodeGenVars checkSz tp)
+newCodeGenVars sc checkSz (FOTVec n tp) = do
+  vals <- V.replicateM (fromIntegral n) (newCodeGenVars sc checkSz tp)
   return (VVector <$> traverse (fmap ready) vals)
-newCodeGenVars _ (FOTArray{}) = fail "FOTArray unimplemented for backend"
-newCodeGenVars checkSz (FOTTuple ts) = do
-  vals <- traverse (newCodeGenVars checkSz) ts
+newCodeGenVars _ _ (FOTArray{}) = fail "FOTArray unimplemented for backend"
+newCodeGenVars sc checkSz (FOTTuple ts) = do
+  vals <- traverse (newCodeGenVars sc checkSz) ts
   return (vTuple <$> traverse (fmap ready) vals)
-newCodeGenVars checkSz (FOTRec tm) = do
-  vals <- traverse (newCodeGenVars checkSz) tm
+newCodeGenVars sc checkSz (FOTRec tm) = do
+  vals <- traverse (newCodeGenVars sc checkSz) tm
   return (vRecord <$> traverse (fmap ready) vals)
 
 cgInputSWord :: String -> Int -> SBVCodeGen SWord
@@ -889,7 +934,7 @@ sbvCodeGen_definition sc addlPrims unintSet t checkSz = do
   shapes <- traverse (asFirstOrderType sc) argTs
   resultShape <- asFirstOrderType sc resTy
   bval <- sbvSolveBasic sc addlPrims unintSet t
-  vars <- evalStateT (traverse (newCodeGenVars checkSz) shapes) 0
+  vars <- evalStateT (traverse (newCodeGenVars sc checkSz) shapes) 0
   let codegen = do
         args <- traverse (fmap ready) vars
         bval' <- liftIO (applyAll bval args)

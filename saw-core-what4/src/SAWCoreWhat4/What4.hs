@@ -59,6 +59,7 @@ import Data.Kind (Type)
 import Data.List (genericTake,intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ratio ((%))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
@@ -81,7 +82,8 @@ import SAWCore.SATQuery
 import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
-import SAWCore.Module (ModuleMap, ResolvedName(..), ctorName, lookupVarIndexInMap)
+import SAWCore.Module (Ctor(..), ModuleMap, ResolvedName(..), ctorName,
+                       lookupVarIndexInMap)
 import SAWCore.Name (Name(..), VarName(..), toAbsoluteName, toShortName)
 import SAWCore.Term.Functor (FieldName)
 
@@ -1239,7 +1241,7 @@ w4Solve :: forall sym.
   IO ([(VarName, (Labeler sym, SValue sym))], [SBool sym])
 w4Solve sym sc satq =
   do let varList  = Map.toList (satVariables satq)
-     vars <- evalStateT (traverse (traverse (newVarFOT sym)) varList) 0
+     vars <- evalStateT (traverse (traverse (newVarFOT sym sc)) varList) 0
      let varMap   = Map.fromList [ (vnIndex x, v) | (x, (_,v)) <- vars ]
      ref <- newIORef Map.empty
 
@@ -1267,7 +1269,7 @@ w4SolveAssert sym sc varMap ref uninterp (UniversalAssert vars hyps concl) =
             [] -> return concl
             _  -> do h <- scAndList sc hyps
                      scImplies sc h concl
-     (svals,bndvars) <- boundFOTs sym vars
+     (svals,bndvars) <- boundFOTs sym sc vars
      let varMap' = foldl (\m ((vn,_fot), sval) -> Map.insert (vnIndex vn) sval m)
                          varMap
                          (zip vars svals) -- NB, boundFOTs will construct these lists to be the same length
@@ -1296,9 +1298,10 @@ w4SolveAssert sym sc varMap ref uninterp (UniversalAssert vars hyps concl) =
 boundFOTs :: forall sym.
   IsSymExprBuilder sym =>
   sym ->
+  SharedContext ->
   [(VarName, FirstOrderType)] ->
   IO ([SValue sym], [Some (BoundVar sym)])
-boundFOTs sym vars =
+boundFOTs sym sc vars =
   do (svals,(bndvars,_)) <- runStateT (mapM (uncurry handleVar) vars) ([], 0)
      return (svals, bndvars)
 
@@ -1317,6 +1320,17 @@ boundFOTs sym vars =
        FOTBit -> VBool <$> freshBnd x BaseBoolRepr
        FOTInt -> VInt  <$> freshBnd x BaseIntegerRepr
        FOTIntMod m -> VIntMod m <$> freshBnd x BaseIntegerRepr
+       FOTRational ->
+         do mkRationalCtor <- lift $ scRequireCtor sc "Prelude.MkRational"
+            let rationalTy = VDataType (ctorDataType mkRationalCtor) [] []
+            numer <- VInt <$> freshBnd x BaseIntegerRepr
+            denom <- VInt <$> freshBnd x BaseIntegerRepr
+            pure $
+              VCtorApp
+                (ctorName mkRationalCtor)
+                rationalTy
+                []
+                [ready numer, ready denom]
 
        FOTVec n FOTBit ->
          case somePosNat n of
@@ -1406,12 +1420,13 @@ nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 
 newVarsForType :: forall sym. IsSymExprBuilder sym =>
   sym ->
+  SharedContext ->
   IORef (SymFnCache sym) ->
   TValue (What4 sym) -> String -> StateT Int IO (Maybe (Labeler sym), SValue sym)
-newVarsForType sym ref v nm =
+newVarsForType sym sc ref v nm =
   case vAsFirstOrderType v of
     Just fot -> do
-      do (te,sv) <- newVarFOT sym fot
+      do (te,sv) <- newVarFOT sym sc fot
          return (Just te, sv)
 
     Nothing ->
@@ -1425,6 +1440,7 @@ data Labeler sym
   = BaseLabel (TypedExpr sym)
   | ZeroWidthBVLabel
   | IntModLabel Natural (SymInteger sym)
+  | RationalLabel (SymInteger sym) (SymInteger sym)
   | VecLabel
       FirstOrderType
       -- ^ The element type. It is necessary to store this in case the Vec is
@@ -1436,34 +1452,55 @@ data Labeler sym
 
 
 newVarFOT :: forall sym. IsSymExprBuilder sym =>
-   sym -> FirstOrderType -> StateT Int IO (Labeler sym, SValue sym)
+   sym ->
+   SharedContext ->
+   FirstOrderType ->
+   StateT Int IO (Labeler sym, SValue sym)
 
-newVarFOT sym (FOTTuple ts) = do
-  (labels,vals) <- V.unzip <$> traverse (newVarFOT sym) (V.fromList ts)
+newVarFOT sym sc (FOTTuple ts) = do
+  (labels,vals) <- V.unzip <$> traverse (newVarFOT sym sc) (V.fromList ts)
   args <- traverse (return . ready) (V.toList vals)
   return (TupleLabel labels, vTuple args)
 
-newVarFOT _sym (FOTVec 0 FOTBit)
+newVarFOT _sym _sc (FOTVec 0 FOTBit)
   = return (ZeroWidthBVLabel, VWord ZBV)
 
-newVarFOT sym (FOTVec n tp)
+newVarFOT sym sc (FOTVec n tp)
   | tp /= FOTBit
-  = do (labels,vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVarFOT sym tp)
+  = do (labels,vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVarFOT sym sc tp)
        args <- traverse @Vector @(StateT Int IO) (return . ready) vals
        return (VecLabel tp labels, VVector args)
 
-newVarFOT sym (FOTRec tm)
-  = do (labels, vals) <- myfun <$> traverse (newVarFOT sym) tm
+newVarFOT sym sc (FOTRec tm)
+  = do (labels, vals) <- myfun <$> traverse (newVarFOT sym sc) tm
        args <- traverse (return . ready) (vals :: (Map FieldName (SValue sym)))
        return (RecLabel labels, vRecord args)
 
-newVarFOT sym (FOTIntMod n)
+newVarFOT sym _sc (FOTIntMod n)
   = do nm <- nextId
        let r = BaseIntegerRepr
        si <- lift $ mkConstant sym nm r
        return (IntModLabel n si, VIntMod n si)
 
-newVarFOT sym fot
+newVarFOT sym sc FOTRational
+  = do numerNm <- nextId
+       denomNm <- nextId
+       let r = BaseIntegerRepr
+       sNumer <- lift $ mkConstant sym numerNm r
+       sDenom <- lift $ mkConstant sym denomNm r
+       numer <- lift $ typedToSValue $ TypedExpr r sNumer
+       denom <- lift $ typedToSValue $ TypedExpr r sDenom
+       mkRationalCtor <- lift $ scRequireCtor sc "Prelude.MkRational"
+       let rationalTy = VDataType (ctorDataType mkRationalCtor) [] []
+       let var =
+             VCtorApp
+               (ctorName mkRationalCtor)
+               rationalTy
+               []
+               [ready numer, ready denom]
+       return (RationalLabel sNumer sDenom, var)
+
+newVarFOT sym _sc fot
   | Just (Some r) <- fotToBaseType fot
   = do nm <- nextId
        te <- lift $ freshVar sym r nm
@@ -1491,6 +1528,10 @@ getLabelValues f =
       FOVRec <$> traverse (getLabelValues f) labels
     IntModLabel n x ->
       FOVIntMod n <$> groundEval f x
+    RationalLabel sNumer sDenom ->
+      do numer <- groundEval f sNumer
+         denom <- groundEval f sDenom
+         pure $ FOVRational (numer % denom)
     ZeroWidthBVLabel -> pure $ FOVWord 0 0
     BaseLabel (TypedExpr ty bv) ->
       do gv <- groundEval f bv
@@ -1635,7 +1676,7 @@ w4EvalAny sym st sc ps unintSet t =
      -- construct symbolic expressions for the variables
      vars' <-
        flip evalStateT 0 $
-       sequence (zipWith (newVarsForType sym ref) argTs argNames)
+       sequence (zipWith (newVarsForType sym sc ref) argTs argNames)
 
      -- symbolically evaluate
      bval <- eval t
@@ -2020,6 +2061,8 @@ termOfTValue sc val =
             a' <- termOfTValue sc a
             b' <- termOfTValue sc b
             scGlobalApply sc "Prelude.RecordType" [fname', a', b']
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.Rational") [] []
+      -> scRationalType sc
     _ -> fail $ "termOfTValue: " ++ show val
 
 termOfSValue :: SharedContext -> SValue sym -> IO Term

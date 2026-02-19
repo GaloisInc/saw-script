@@ -406,6 +406,8 @@ asFirstOrderTypeTValue v =
          case t2 of
            FOTRec tm | lessThanKeys fname tm -> Just (FOTRec (Map.insert fname t1 tm))
            _ -> Nothing
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.Rational") [] [] ->
+      Just FOTRational
 
     VStringType -> Nothing
     VPiType{}   -> Nothing

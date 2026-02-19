@@ -262,37 +262,11 @@ IntModNum num =
   Num#rec1 (\ (n : Num) -> sort 0) IntMod Integer num;
 
 -------------------------------------------------------------------------------
--- Rationals (TODO)
+-- Rationals
 
-Rational : sort 0;
-Rational = #();
-
+-- This is undefined if the second argument is zero.
 ecRatio : Integer -> Integer -> Rational;
-ecRatio x y = ();
-
-eqRational : Rational -> Rational -> Bool;
-eqRational x y = error Bool "Unimplemented: (==) Rational";
-
-leRational : Rational -> Rational -> Bool;
-leRational x y = error Bool "Unimplemented: (<=) Rational";
-
-ltRational : Rational -> Rational -> Bool;
-ltRational x y = error Bool "Unimplemented: (<) Rational";
-
-addRational : Rational -> Rational -> Rational;
-addRational x y = error Rational "Unimplemented: (+) Rational";
-
-subRational : Rational -> Rational -> Rational;
-subRational x y = error Rational "Unimplemented: (-) Rational";
-
-mulRational : Rational -> Rational -> Rational;
-mulRational x y = error Rational "Unimplemented: (*) Rational";
-
-negRational : Rational -> Rational;
-negRational x = error Rational "Unimplemented: negate Rational";
-
-integerToRational : Integer -> Rational;
-integerToRational x = error Rational "Unimplemented: fromInteger Rational";
+ecRatio = ratio;
 
 --------------------------------------------------------------------------------
 -- Type coercions
@@ -831,7 +805,7 @@ PZeroIntMod : (n : Nat) -> PZero (IntMod n);
 PZeroIntMod n = toIntMod n (natToInt 0);
 
 PZeroRational : PZero Rational;
-PZeroRational = integerToRational (natToInt 0);
+PZeroRational = zeroRational;
 
 PZeroIntModNum : (num : Num) -> PZero (IntModNum num);
 PZeroIntModNum num = Num#rec1 (\ (n : Num) -> PZero (IntModNum n)) PZeroIntMod PZeroInteger num;
@@ -1156,8 +1130,8 @@ PField a =
 PFieldRational : PField Rational;
 PFieldRational =
   { fieldRing = PRingRational
-  , recip     = \(x : Rational) -> error Rational "Unimplemented: recip Rational"
-  , fieldDiv  = \(x y : Rational) -> error Rational "Unimplemented: (/.) Rational"
+  , recip     = recipRational
+  , fieldDiv  = divRational
   };
 
 
@@ -1192,11 +1166,11 @@ PRoundRational : PRound Rational;
 PRoundRational =
   { roundField  = PFieldRational
   , roundCmp    = PCmpRational
-  , floor       = \(x : Rational) -> error Integer "Unimplemented: floor Rational"
-  , ceiling     = \(x : Rational) -> error Integer "Unimplemented: ceiling Rational"
-  , trunc       = \(x : Rational) -> error Integer "Unimplemented: trunc Rational"
-  , roundAway   = \(x : Rational) -> error Integer "Unimplemented: roundAway Rational"
-  , roundToEven = \(x : Rational) -> error Integer "Unimplemented: roundToEven Rational"
+  , floor       = floorRational
+  , ceiling     = ceilingRational
+  , trunc       = truncRational
+  , roundAway   = roundAwayRational
+  , roundToEven = roundToEvenRational
   };
 
 
@@ -1231,7 +1205,7 @@ PLiteralIntModNum num =
   Num#rec1 (\ (n : Num) -> PLiteral (IntModNum n)) PLiteralIntMod PLiteralInteger num;
 
 PLiteralRational : PLiteral Rational;
-PLiteralRational = \ (x : Nat) -> error Rational "Unimplemented: Literal Rational";
+PLiteralRational = \ (x : Nat) -> integerToRational (natToInt x);
 
 -- FLiteral class
 
