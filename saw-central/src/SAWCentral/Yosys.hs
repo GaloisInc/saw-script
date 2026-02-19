@@ -47,10 +47,6 @@ import qualified SAWCore.SharedTerm as SC
 import qualified SAWCore.URI as URI
 import qualified CryptolSAWCore.TypedTerm as SC
 
-import qualified Cryptol.TypeCheck.Type as C
-import qualified Cryptol.Utils.Ident as C
-import qualified Cryptol.Utils.RecordMap as C
-
 import SAWCentral.Value
 import qualified SAWCentral.Builtins as Builtins
 import qualified SAWCentral.Crucible.Common as Common
@@ -67,7 +63,7 @@ import SAWCentral.Yosys.Netgraph
 
 data Modgraph = Modgraph
   { _modgraphGraph :: Graph.Graph
-  , _modgraphNodeFromVertex :: Graph.Vertex -> (Module, Text, [Text])
+  , _modgraphNodeFromVertex :: Graph.Vertex -> (Module, CellTypeName, [CellTypeName])
   -- , _modgraphVertexFromKey :: Text -> Maybe Graph.Vertex
   }
 makeLenses ''Modgraph
@@ -76,7 +72,7 @@ makeLenses ''Modgraph
 yosysIRModgraph :: YosysIR -> Modgraph
 yosysIRModgraph ir =
   let
-    moduleToNode :: (Text, Module) -> (Module, Text, [Text])
+    moduleToNode :: (CellTypeName, Module) -> (Module, CellTypeName, [CellTypeName])
     moduleToNode (nm, m) = (m, nm, deps)
       where
         deps = Text.pack . show . view cellType <$> Map.elems (m ^. moduleCells)
@@ -89,7 +85,7 @@ yosysIRModgraph ir =
 convertYosysIR ::
   SC.SharedContext ->
   YosysIR ->
-  IO (Map Text ConvertedModule)
+  IO (Map CellTypeName ConvertedModule)
 convertYosysIR sc ir =
   do let mg = yosysIRModgraph ir
      let sorted = reverseTopSort $ mg ^. modgraphGraph
@@ -103,7 +99,7 @@ convertYosysIR sc ir =
               [nm]
               (Just $ fromIntegral $ Nonce.indexValue n)
              let ni = SC.ImportedName uri [nm]
-             body <- SC.scAscribe sc (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
+             let body = cm ^. convertedModuleTerm
              tc <- SC.scDefineConstant sc ni body
              let cm' = cm { _convertedModuleTerm = tc }
              pure $ Map.insert nm cm' env
@@ -118,10 +114,7 @@ yosysIRToTypedTerms ::
   IO (Map Text SC.TypedTerm)
 yosysIRToTypedTerms sc ir =
   do env <- convertYosysIR sc ir
-     pure $ flip fmap env $ \cm ->
-       SC.TypedTerm
-       (SC.TypedTermSchema $ C.tMono $ cm ^. convertedModuleCryptolType)
-       $ cm ^. convertedModuleTerm
+     traverse (\cm -> SC.mkTypedTerm sc (cm ^. convertedModuleTerm)) env
 
 -- | Given a Yosys IR, construct a SAWCore record containing terms for each module
 yosysIRToRecordTerm ::
@@ -131,15 +124,13 @@ yosysIRToRecordTerm ::
 yosysIRToRecordTerm sc ir =
   do env <- convertYosysIR sc ir
      record <- cryptolRecord sc $ view convertedModuleTerm <$> env
-     let cty = C.tRec . C.recordFromFields $ (\(nm, cm) -> (C.mkIdent nm, cm ^. convertedModuleCryptolType)) <$> Map.assocs env
-     let tt = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) record
-     pure tt
+     SC.mkTypedTerm sc record
 
 -- | Given a Yosys IR, construct a value representing a specific module with all submodules inlined
 yosysIRToSequential ::
   SC.SharedContext ->
   YosysIR ->
-  Text ->
+  CellTypeName ->
   IO YosysSequential
 yosysIRToSequential sc ir nm =
   case Map.lookup nm $ ir ^. yosysModules of

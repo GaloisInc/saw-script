@@ -1,0 +1,6 @@
+read -sv kclmul.sv
+prep -top kclmul16
+write_json kclmul.json
+read -sv kclmulr.sv
+prep -top kclmul16r
+write_json kclmulr.json

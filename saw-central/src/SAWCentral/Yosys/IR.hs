@@ -18,7 +18,7 @@ module SAWCentral.Yosys.IR where
 
 import Control.Lens.TH (makeLenses)
 
-import Control.Lens ((^.))
+import Control.Lens ((^.), set)
 
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
@@ -176,8 +176,8 @@ data CellType
   = CellTypeCombinational CellTypeCombinational
   | CellTypeDff
   | CellTypeFf
-  | CellTypeUnsupportedPrimitive Text
-  | CellTypeUserType Text
+  | CellTypeUnsupportedPrimitive CellTypeName
+  | CellTypeUserType CellTypeName
   deriving (Eq, Ord)
 
 instance Aeson.FromJSON CellType where
@@ -260,7 +260,7 @@ instance Show CellType where
   show ct = Text.unpack (ppCellType ct)
 
 -- | Extract the name from a user-defined submodule 'CellType'
-asUserType :: CellType -> Text
+asUserType :: CellType -> CellTypeName
 asUserType cellType =
   case cellType of
     CellTypeUserType t -> t
@@ -282,8 +282,8 @@ data Cell bs = Cell
     -- write_json using the -compat-int flag).
   , _cellParameters :: Map Text Aeson.Value -- ^ Metadata parameters
   , _cellAttributes :: Maybe Aeson.Value -- currently unused
-  , _cellPortDirections :: Map Text Direction -- ^ Direction for each cell connection
-  , _cellConnections :: Map Text bs -- ^ Bitrep for each cell connection
+  , _cellPortDirections :: Map PortName Direction -- ^ Direction for each cell connection
+  , _cellConnections :: Map PortName bs -- ^ Bitrep for each cell connection
   } deriving (Show, Eq, Ord, Functor)
 
 makeLenses ''Cell
@@ -319,8 +319,8 @@ instance Aeson.FromJSON Netname where
 -- | A single HDL module.
 data Module = Module
   { _moduleAttributes :: Maybe Aeson.Value -- currently unused
-  , _modulePorts :: Map Text Port
-  , _moduleCells :: Map Text (Cell [Bitrep])
+  , _modulePorts :: Map PortName Port
+  , _moduleCells :: Map CellInstName (Cell [Bitrep])
   , _moduleNetnames :: Map Text Netname
   } deriving (Show, Eq, Ord)
 
@@ -337,7 +337,7 @@ instance Aeson.FromJSON Module where
 -- | A collection of multiple HDL modules (possibly with dependencies on each other).
 data YosysIR = YosysIR
   { _yosysCreator :: Text
-  , _yosysModules :: Map Text Module
+  , _yosysModules :: Map CellTypeName Module
   } deriving (Show, Eq, Ord)
 
 makeLenses ''YosysIR
@@ -355,7 +355,7 @@ loadYosysIR p = Aeson.eitherDecodeFileStrict p >>= \case
   Right ir -> pure ir
 
 -- | Return the patterns for all of the input ports of a module
-moduleInputPorts :: Module -> Map Text [Bitrep]
+moduleInputPorts :: Module -> Map PortName [Bitrep]
 moduleInputPorts m =
   Map.mapMaybe
   ( \ip ->
@@ -366,7 +366,7 @@ moduleInputPorts m =
   $ m ^. modulePorts
 
 -- | Return the patterns for all of the output ports of a module
-moduleOutputPorts :: Module -> Map Text [Bitrep]
+moduleOutputPorts :: Module -> Map PortName [Bitrep]
 moduleOutputPorts m =
   Map.mapMaybe
   ( \ip ->
@@ -377,13 +377,13 @@ moduleOutputPorts m =
   $ m ^. modulePorts
 
 -- | Return the patterns for all of the input connections of a cell
-cellInputConnections :: Cell [b] -> Map Text [b]
+cellInputConnections :: Cell [b] -> Map PortName [b]
 cellInputConnections c = Map.intersection (c ^. cellConnections) inp
   where
     inp = Map.filter isInput (c ^. cellPortDirections)
 
 -- | Return the patterns for all of the output connections of a cell
-cellOutputConnections :: Ord b => Cell [b] -> Map Text [b]
+cellOutputConnections :: Ord b => Cell [b] -> Map PortName [b]
 cellOutputConnections c = Map.intersection (c ^. cellConnections) out
   where
     out = Map.filter isOutput (c ^. cellPortDirections)
@@ -395,3 +395,31 @@ cellIsRegister c =
     CellTypeDff -> True
     CellTypeFf -> True
     _ -> False
+
+-- | Swap out machine-generated names of DFF cells for user-provided
+-- names from the netnames section of the module, wherever possible.
+-- If no suitable name exists in the netnames table, then use function
+-- 'cellIdentifier' to produce a lexically-valid field name.
+renameDffInstances :: Module -> Module
+renameDffInstances m = set moduleCells cells' m
+  where
+    cells' :: Map CellInstName (Cell [Bitrep])
+    cells' =
+      Map.fromList $
+      map (\(t, c) -> (bestName t c, c)) $
+      Map.toList (m ^. moduleCells)
+
+    netnames :: Map [Bitrep] CellInstName
+    netnames =
+      Map.fromList
+      [ (n ^. netnameBits, t)
+      | (t, n) <- Map.assocs (m ^. moduleNetnames), not (n ^. netnameHideName) ]
+
+    bestName :: CellInstName -> Cell [Bitrep] -> CellInstName
+    bestName t c
+      | cellIsRegister c =
+          Maybe.fromMaybe (cellIdentifier t) $
+          do bs <- Map.lookup "Q" (c ^. cellConnections)
+             Map.lookup bs netnames
+      | otherwise =
+          t

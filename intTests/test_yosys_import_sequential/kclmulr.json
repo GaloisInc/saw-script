@@ -1,0 +1,1144 @@
+{
+  "creator": "Yosys 0.62 (git sha1 7326bb7d6641500ecb285c291a54a662cb1e76cf, clang++ 17.0.0 -fPIC -O3)",
+  "modules": {
+    "kclmul16r": {
+      "attributes": {
+        "hdlname": "kclmul16r",
+        "top": "00000000000000000000000000000001",
+        "src": "kclmulr.sv:59.1-84.10"
+      },
+      "ports": {
+        "clk": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "reset": {
+          "direction": "input",
+          "bits": [ 3 ]
+        },
+        "x": {
+          "direction": "input",
+          "bits": [ 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 ]
+        },
+        "y": {
+          "direction": "input",
+          "bits": [ 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 ]
+        },
+        "z": {
+          "direction": "output",
+          "bits": [ 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67 ]
+        }
+      },
+      "cells": {
+        "$ternary$kclmulr.sv:82$41": {
+          "hide_name": 1,
+          "type": "$mux",
+          "parameters": {
+            "WIDTH": "00000000000000000000000000100000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:82.15-82.41"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99 ],
+            "B": [ "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0" ],
+            "S": [ 3 ],
+            "Y": [ 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67 ]
+          }
+        },
+        "$xor$kclmulr.sv:76$36": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000001000",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000001000",
+            "Y_WIDTH": "00000000000000000000000000001000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:76.46-76.51"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 4, 5, 6, 7, 8, 9, 10, 11 ],
+            "B": [ 12, 13, 14, 15, 16, 17, 18, 19 ],
+            "Y": [ 100, 101, 102, 103, 104, 105, 106, 107 ]
+          }
+        },
+        "$xor$kclmulr.sv:76$37": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000001000",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000001000",
+            "Y_WIDTH": "00000000000000000000000000001000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:76.57-76.62"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 20, 21, 22, 23, 24, 25, 26, 27 ],
+            "B": [ 28, 29, 30, 31, 32, 33, 34, 35 ],
+            "Y": [ 108, 109, 110, 111, 112, 113, 114, 115 ]
+          }
+        },
+        "$xor$kclmulr.sv:80$38": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000010000",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000010000",
+            "Y_WIDTH": "00000000000000000000000000010000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:80.26-80.33"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131 ],
+            "B": [ 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147 ],
+            "Y": [ 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163 ]
+          }
+        },
+        "$xor$kclmulr.sv:80$39": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000010000",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000010000",
+            "Y_WIDTH": "00000000000000000000000000010000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:80.26-80.38"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163 ],
+            "B": [ 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179 ],
+            "Y": [ 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195 ]
+          }
+        },
+        "$xor$kclmulr.sv:82$40": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000100000",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000011000",
+            "Y_WIDTH": "00000000000000000000000000100000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:82.28-82.41"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147 ],
+            "B": [ "0", "0", "0", "0", "0", "0", "0", "0", 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195 ],
+            "Y": [ 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99 ]
+          }
+        },
+        "m1": {
+          "hide_name": 0,
+          "type": "kclmul8r",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "kclmulr.sv:74.13-74.66"
+          },
+          "port_directions": {
+            "clk": "input",
+            "reset": "input",
+            "x": "input",
+            "y": "input",
+            "z": "output"
+          },
+          "connections": {
+            "clk": [ 2 ],
+            "reset": [ 3 ],
+            "x": [ 4, 5, 6, 7, 8, 9, 10, 11 ],
+            "y": [ 20, 21, 22, 23, 24, 25, 26, 27 ],
+            "z": [ 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131 ]
+          }
+        },
+        "m2": {
+          "hide_name": 0,
+          "type": "kclmul8r",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "kclmulr.sv:75.13-75.66"
+          },
+          "port_directions": {
+            "clk": "input",
+            "reset": "input",
+            "x": "input",
+            "y": "input",
+            "z": "output"
+          },
+          "connections": {
+            "clk": [ 2 ],
+            "reset": [ 3 ],
+            "x": [ 12, 13, 14, 15, 16, 17, 18, 19 ],
+            "y": [ 28, 29, 30, 31, 32, 33, 34, 35 ],
+            "z": [ 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147 ]
+          }
+        },
+        "m3": {
+          "hide_name": 0,
+          "type": "kclmul8r",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "kclmulr.sv:76.13-76.72"
+          },
+          "port_directions": {
+            "clk": "input",
+            "reset": "input",
+            "x": "input",
+            "y": "input",
+            "z": "output"
+          },
+          "connections": {
+            "clk": [ 2 ],
+            "reset": [ 3 ],
+            "x": [ 100, 101, 102, 103, 104, 105, 106, 107 ],
+            "y": [ 108, 109, 110, 111, 112, 113, 114, 115 ],
+            "z": [ 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179 ]
+          }
+        }
+      },
+      "netnames": {
+        "$auto$wreduce.cc:514:run$67": {
+          "hide_name": 1,
+          "bits": [ 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179 ],
+          "attributes": {
+            "src": "kclmulr.sv:72.30-72.32"
+          }
+        },
+        "$xor$kclmulr.sv:76$36_Y": {
+          "hide_name": 1,
+          "bits": [ 100, 101, 102, 103, 104, 105, 106, 107 ],
+          "attributes": {
+            "src": "kclmulr.sv:76.46-76.51"
+          }
+        },
+        "$xor$kclmulr.sv:76$37_Y": {
+          "hide_name": 1,
+          "bits": [ 108, 109, 110, 111, 112, 113, 114, 115 ],
+          "attributes": {
+            "src": "kclmulr.sv:76.57-76.62"
+          }
+        },
+        "$xor$kclmulr.sv:80$38_Y": {
+          "hide_name": 1,
+          "bits": [ 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163 ],
+          "attributes": {
+            "src": "kclmulr.sv:80.26-80.33"
+          }
+        },
+        "$xor$kclmulr.sv:82$40_Y": {
+          "hide_name": 1,
+          "bits": [ 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99 ],
+          "attributes": {
+            "src": "kclmulr.sv:82.28-82.41"
+          }
+        },
+        "clk": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "src": "kclmulr.sv:60.24-60.27"
+          }
+        },
+        "reset": {
+          "hide_name": 0,
+          "bits": [ 3 ],
+          "attributes": {
+            "src": "kclmulr.sv:61.24-61.29"
+          }
+        },
+        "term0": {
+          "hide_name": 0,
+          "bits": [ 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147 ],
+          "attributes": {
+            "src": "kclmulr.sv:78.22-78.27"
+          }
+        },
+        "term1": {
+          "hide_name": 0,
+          "bits": [ "0", "0", "0", "0", "0", "0", "0", "0", 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195 ],
+          "attributes": {
+          }
+        },
+        "x": {
+          "hide_name": 0,
+          "bits": [ 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 ],
+          "attributes": {
+            "src": "kclmulr.sv:62.24-62.25"
+          }
+        },
+        "xh": {
+          "hide_name": 0,
+          "bits": [ 12, 13, 14, 15, 16, 17, 18, 19 ],
+          "attributes": {
+            "src": "kclmulr.sv:66.25-66.27"
+          }
+        },
+        "xl": {
+          "hide_name": 0,
+          "bits": [ 4, 5, 6, 7, 8, 9, 10, 11 ],
+          "attributes": {
+            "src": "kclmulr.sv:66.21-66.23"
+          }
+        },
+        "y": {
+          "hide_name": 0,
+          "bits": [ 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 ],
+          "attributes": {
+            "src": "kclmulr.sv:63.24-63.25"
+          }
+        },
+        "yh": {
+          "hide_name": 0,
+          "bits": [ 28, 29, 30, 31, 32, 33, 34, 35 ],
+          "attributes": {
+            "src": "kclmulr.sv:66.33-66.35"
+          }
+        },
+        "yl": {
+          "hide_name": 0,
+          "bits": [ 20, 21, 22, 23, 24, 25, 26, 27 ],
+          "attributes": {
+            "src": "kclmulr.sv:66.29-66.31"
+          }
+        },
+        "z": {
+          "hide_name": 0,
+          "bits": [ 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67 ],
+          "attributes": {
+            "src": "kclmulr.sv:64.24-64.25"
+          }
+        },
+        "z1": {
+          "hide_name": 0,
+          "bits": [ 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131 ],
+          "attributes": {
+            "src": "kclmulr.sv:72.22-72.24"
+          }
+        },
+        "z2": {
+          "hide_name": 0,
+          "bits": [ 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147 ],
+          "attributes": {
+            "src": "kclmulr.sv:72.26-72.28"
+          }
+        },
+        "z3": {
+          "hide_name": 0,
+          "bits": [ 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177 ],
+          "attributes": {
+          }
+        }
+      }
+    },
+    "kclmul4r": {
+      "attributes": {
+        "hdlname": "kclmul4r",
+        "src": "kclmulr.sv:4.1-30.10"
+      },
+      "ports": {
+        "clk": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "reset": {
+          "direction": "input",
+          "bits": [ 3 ]
+        },
+        "x": {
+          "direction": "input",
+          "bits": [ 4, 5, 6, 7 ]
+        },
+        "y": {
+          "direction": "input",
+          "bits": [ 8, 9, 10, 11 ]
+        },
+        "z": {
+          "direction": "output",
+          "bits": [ 12, 13, 14, 15, 16, 17, 18, 19 ]
+        }
+      },
+      "cells": {
+        "$procdff$64": {
+          "hide_name": 1,
+          "type": "$dff",
+          "parameters": {
+            "CLK_POLARITY": "1",
+            "WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "always_ff": "00000000000000000000000000000001",
+            "src": "kclmulr.sv:12.4-15.7"
+          },
+          "port_directions": {
+            "CLK": "input",
+            "D": "input",
+            "Q": "output"
+          },
+          "connections": {
+            "CLK": [ 2 ],
+            "D": [ 20, 21, 22, 23 ],
+            "Q": [ 24, 25, 26, 27 ]
+          }
+        },
+        "$procdff$65": {
+          "hide_name": 1,
+          "type": "$dff",
+          "parameters": {
+            "CLK_POLARITY": "1",
+            "WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "always_ff": "00000000000000000000000000000001",
+            "src": "kclmulr.sv:12.4-15.7"
+          },
+          "port_directions": {
+            "CLK": "input",
+            "D": "input",
+            "Q": "output"
+          },
+          "connections": {
+            "CLK": [ 2 ],
+            "D": [ 28, 29, 30, 31 ],
+            "Q": [ 32, 33, 34, 35 ]
+          }
+        },
+        "$ternary$kclmulr.sv:13$49": {
+          "hide_name": 1,
+          "type": "$mux",
+          "parameters": {
+            "WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:13.14-13.28"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 4, 5, 6, 7 ],
+            "B": [ "0", "0", "0", "0" ],
+            "S": [ 3 ],
+            "Y": [ 20, 21, 22, 23 ]
+          }
+        },
+        "$ternary$kclmulr.sv:14$50": {
+          "hide_name": 1,
+          "type": "$mux",
+          "parameters": {
+            "WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:14.14-14.28"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 8, 9, 10, 11 ],
+            "B": [ "0", "0", "0", "0" ],
+            "S": [ 3 ],
+            "Y": [ 28, 29, 30, 31 ]
+          }
+        },
+        "$ternary$kclmulr.sv:19$52": {
+          "hide_name": 1,
+          "type": "$mux",
+          "parameters": {
+            "WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:19.22-19.41"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ "0", "0", "0", "0" ],
+            "B": [ 32, 33, 34, 35 ],
+            "S": [ 24 ],
+            "Y": [ 36, 37, 38, 39 ]
+          }
+        },
+        "$ternary$kclmulr.sv:19$53": {
+          "hide_name": 1,
+          "type": "$mux",
+          "parameters": {
+            "WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:19.22-19.41"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ "0", "0", "0", "0" ],
+            "B": [ 32, 33, 34, 35 ],
+            "S": [ 25 ],
+            "Y": [ 40, 41, 42, 43 ]
+          }
+        },
+        "$ternary$kclmulr.sv:19$54": {
+          "hide_name": 1,
+          "type": "$mux",
+          "parameters": {
+            "WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:19.22-19.41"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ "0", "0", "0", "0" ],
+            "B": [ 32, 33, 34, 35 ],
+            "S": [ 26 ],
+            "Y": [ 44, 45, 46, 47 ]
+          }
+        },
+        "$ternary$kclmulr.sv:19$55": {
+          "hide_name": 1,
+          "type": "$mux",
+          "parameters": {
+            "WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:19.22-19.41"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ "0", "0", "0", "0" ],
+            "B": [ 32, 33, 34, 35 ],
+            "S": [ 27 ],
+            "Y": [ 48, 49, 50, 51 ]
+          }
+        },
+        "$ternary$kclmulr.sv:28$51": {
+          "hide_name": 1,
+          "type": "$mux",
+          "parameters": {
+            "WIDTH": "00000000000000000000000000001000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:28.15-28.32"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 52, 53, 54, 55, 56, 57, 58, "0" ],
+            "B": [ "0", "0", "0", "0", "0", "0", "0", "0" ],
+            "S": [ 3 ],
+            "Y": [ 12, 13, 14, 15, 16, 17, 18, 19 ]
+          }
+        },
+        "$xor$kclmulr.sv:25$59": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000100",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000000101",
+            "Y_WIDTH": "00000000000000000000000000000101"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:25.23-25.42"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 36, 37, 38, 39 ],
+            "B": [ "0", 40, 41, 42, 43 ],
+            "Y": [ 59, 60, 61, 62, 63 ]
+          }
+        },
+        "$xor$kclmulr.sv:25$61": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000101",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000000110",
+            "Y_WIDTH": "00000000000000000000000000000110"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:25.23-25.42"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 59, 60, 61, 62, 63 ],
+            "B": [ "0", "0", 44, 45, 46, 47 ],
+            "Y": [ 64, 65, 66, 67, 68, 69 ]
+          }
+        },
+        "$xor$kclmulr.sv:25$63": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000110",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000000111",
+            "Y_WIDTH": "00000000000000000000000000000111"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:25.23-25.42"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 64, 65, 66, 67, 68, 69 ],
+            "B": [ "0", "0", "0", 48, 49, 50, 51 ],
+            "Y": [ 52, 53, 54, 55, 56, 57, 58 ]
+          }
+        }
+      },
+      "netnames": {
+        "$0\\x_r[3:0]": {
+          "hide_name": 1,
+          "bits": [ 20, 21, 22, 23 ],
+          "attributes": {
+            "src": "kclmulr.sv:12.4-15.7"
+          }
+        },
+        "$0\\y_r[3:0]": {
+          "hide_name": 1,
+          "bits": [ 28, 29, 30, 31 ],
+          "attributes": {
+            "src": "kclmulr.sv:12.4-15.7"
+          }
+        },
+        "$auto$wreduce.cc:514:run$69": {
+          "hide_name": 1,
+          "bits": [ 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51 ],
+          "attributes": {
+            "src": "kclmulr.sv:17.21-17.23"
+          }
+        },
+        "clk": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "src": "kclmulr.sv:5.23-5.26"
+          }
+        },
+        "p": {
+          "hide_name": 0,
+          "bits": [ "0", "0", "0", "0", "0", "0", "0", "0", 36, 37, 38, 39, "0", "0", "0", "0", 59, 60, 61, 62, 63, "0", "0", "0", 64, 65, 66, 67, 68, 69, "0", "0", 52, 53, 54, 55, 56, 57, 58 ],
+          "attributes": {
+          }
+        },
+        "pp": {
+          "hide_name": 0,
+          "bits": [ 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47 ],
+          "attributes": {
+          }
+        },
+        "reset": {
+          "hide_name": 0,
+          "bits": [ 3 ],
+          "attributes": {
+            "src": "kclmulr.sv:6.23-6.28"
+          }
+        },
+        "x": {
+          "hide_name": 0,
+          "bits": [ 4, 5, 6, 7 ],
+          "attributes": {
+            "src": "kclmulr.sv:7.23-7.24"
+          }
+        },
+        "x_r": {
+          "hide_name": 0,
+          "bits": [ 24, 25, 26, 27 ],
+          "attributes": {
+            "src": "kclmulr.sv:11.16-11.19"
+          }
+        },
+        "y": {
+          "hide_name": 0,
+          "bits": [ 8, 9, 10, 11 ],
+          "attributes": {
+            "src": "kclmulr.sv:8.23-8.24"
+          }
+        },
+        "y_r": {
+          "hide_name": 0,
+          "bits": [ 32, 33, 34, 35 ],
+          "attributes": {
+            "src": "kclmulr.sv:11.21-11.24"
+          }
+        },
+        "z": {
+          "hide_name": 0,
+          "bits": [ 12, 13, 14, 15, 16, 17, 18, 19 ],
+          "attributes": {
+            "src": "kclmulr.sv:9.23-9.24"
+          }
+        }
+      }
+    },
+    "kclmul8r": {
+      "attributes": {
+        "hdlname": "kclmul8r",
+        "src": "kclmulr.sv:32.1-57.10"
+      },
+      "ports": {
+        "clk": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "reset": {
+          "direction": "input",
+          "bits": [ 3 ]
+        },
+        "x": {
+          "direction": "input",
+          "bits": [ 4, 5, 6, 7, 8, 9, 10, 11 ]
+        },
+        "y": {
+          "direction": "input",
+          "bits": [ 12, 13, 14, 15, 16, 17, 18, 19 ]
+        },
+        "z": {
+          "direction": "output",
+          "bits": [ 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 ]
+        }
+      },
+      "cells": {
+        "$ternary$kclmulr.sv:55$47": {
+          "hide_name": 1,
+          "type": "$mux",
+          "parameters": {
+            "WIDTH": "00000000000000000000000000010000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:55.15-55.41"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51 ],
+            "B": [ "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0" ],
+            "S": [ 3 ],
+            "Y": [ 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 ]
+          }
+        },
+        "$xor$kclmulr.sv:49$42": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000100",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000000100",
+            "Y_WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:49.46-49.51"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 4, 5, 6, 7 ],
+            "B": [ 8, 9, 10, 11 ],
+            "Y": [ 52, 53, 54, 55 ]
+          }
+        },
+        "$xor$kclmulr.sv:49$43": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000100",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000000100",
+            "Y_WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:49.57-49.62"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 12, 13, 14, 15 ],
+            "B": [ 16, 17, 18, 19 ],
+            "Y": [ 56, 57, 58, 59 ]
+          }
+        },
+        "$xor$kclmulr.sv:53$44": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000001000",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000001000",
+            "Y_WIDTH": "00000000000000000000000000001000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:53.26-53.33"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 60, 61, 62, 63, 64, 65, 66, 67 ],
+            "B": [ 68, 69, 70, 71, 72, 73, 74, 75 ],
+            "Y": [ 76, 77, 78, 79, 80, 81, 82, 83 ]
+          }
+        },
+        "$xor$kclmulr.sv:53$45": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000001000",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000001000",
+            "Y_WIDTH": "00000000000000000000000000001000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:53.26-53.38"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 76, 77, 78, 79, 80, 81, 82, 83 ],
+            "B": [ 84, 85, 86, 87, 88, 89, 90, 91 ],
+            "Y": [ 92, 93, 94, 95, 96, 97, 98, 99 ]
+          }
+        },
+        "$xor$kclmulr.sv:55$46": {
+          "hide_name": 1,
+          "type": "$xor",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000010000",
+            "B_SIGNED": "00000000000000000000000000000000",
+            "B_WIDTH": "00000000000000000000000000001100",
+            "Y_WIDTH": "00000000000000000000000000010000"
+          },
+          "attributes": {
+            "src": "kclmulr.sv:55.28-55.41"
+          },
+          "port_directions": {
+            "A": "input",
+            "B": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75 ],
+            "B": [ "0", "0", "0", "0", 92, 93, 94, 95, 96, 97, 98, 99 ],
+            "Y": [ 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51 ]
+          }
+        },
+        "m1": {
+          "hide_name": 0,
+          "type": "kclmul4r",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "kclmulr.sv:47.13-47.66"
+          },
+          "port_directions": {
+            "clk": "input",
+            "reset": "input",
+            "x": "input",
+            "y": "input",
+            "z": "output"
+          },
+          "connections": {
+            "clk": [ 2 ],
+            "reset": [ 3 ],
+            "x": [ 4, 5, 6, 7 ],
+            "y": [ 12, 13, 14, 15 ],
+            "z": [ 60, 61, 62, 63, 64, 65, 66, 67 ]
+          }
+        },
+        "m2": {
+          "hide_name": 0,
+          "type": "kclmul4r",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "kclmulr.sv:48.13-48.66"
+          },
+          "port_directions": {
+            "clk": "input",
+            "reset": "input",
+            "x": "input",
+            "y": "input",
+            "z": "output"
+          },
+          "connections": {
+            "clk": [ 2 ],
+            "reset": [ 3 ],
+            "x": [ 8, 9, 10, 11 ],
+            "y": [ 16, 17, 18, 19 ],
+            "z": [ 68, 69, 70, 71, 72, 73, 74, 75 ]
+          }
+        },
+        "m3": {
+          "hide_name": 0,
+          "type": "kclmul4r",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "kclmulr.sv:49.13-49.72"
+          },
+          "port_directions": {
+            "clk": "input",
+            "reset": "input",
+            "x": "input",
+            "y": "input",
+            "z": "output"
+          },
+          "connections": {
+            "clk": [ 2 ],
+            "reset": [ 3 ],
+            "x": [ 52, 53, 54, 55 ],
+            "y": [ 56, 57, 58, 59 ],
+            "z": [ 84, 85, 86, 87, 88, 89, 90, 91 ]
+          }
+        }
+      },
+      "netnames": {
+        "$auto$wreduce.cc:514:run$71": {
+          "hide_name": 1,
+          "bits": [ 84, 85, 86, 87, 88, 89, 90, 91 ],
+          "attributes": {
+            "src": "kclmulr.sv:45.29-45.31"
+          }
+        },
+        "$xor$kclmulr.sv:49$42_Y": {
+          "hide_name": 1,
+          "bits": [ 52, 53, 54, 55 ],
+          "attributes": {
+            "src": "kclmulr.sv:49.46-49.51"
+          }
+        },
+        "$xor$kclmulr.sv:49$43_Y": {
+          "hide_name": 1,
+          "bits": [ 56, 57, 58, 59 ],
+          "attributes": {
+            "src": "kclmulr.sv:49.57-49.62"
+          }
+        },
+        "$xor$kclmulr.sv:53$44_Y": {
+          "hide_name": 1,
+          "bits": [ 76, 77, 78, 79, 80, 81, 82, 83 ],
+          "attributes": {
+            "src": "kclmulr.sv:53.26-53.33"
+          }
+        },
+        "$xor$kclmulr.sv:55$46_Y": {
+          "hide_name": 1,
+          "bits": [ 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51 ],
+          "attributes": {
+            "src": "kclmulr.sv:55.28-55.41"
+          }
+        },
+        "clk": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "src": "kclmulr.sv:33.24-33.27"
+          }
+        },
+        "reset": {
+          "hide_name": 0,
+          "bits": [ 3 ],
+          "attributes": {
+            "src": "kclmulr.sv:34.24-34.29"
+          }
+        },
+        "term0": {
+          "hide_name": 0,
+          "bits": [ 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75 ],
+          "attributes": {
+            "src": "kclmulr.sv:51.22-51.27"
+          }
+        },
+        "term1": {
+          "hide_name": 0,
+          "bits": [ "0", "0", "0", "0", 92, 93, 94, 95, 96, 97, 98, 99 ],
+          "attributes": {
+          }
+        },
+        "x": {
+          "hide_name": 0,
+          "bits": [ 4, 5, 6, 7, 8, 9, 10, 11 ],
+          "attributes": {
+            "src": "kclmulr.sv:35.24-35.25"
+          }
+        },
+        "xh": {
+          "hide_name": 0,
+          "bits": [ 8, 9, 10, 11 ],
+          "attributes": {
+            "src": "kclmulr.sv:39.25-39.27"
+          }
+        },
+        "xl": {
+          "hide_name": 0,
+          "bits": [ 4, 5, 6, 7 ],
+          "attributes": {
+            "src": "kclmulr.sv:39.21-39.23"
+          }
+        },
+        "y": {
+          "hide_name": 0,
+          "bits": [ 12, 13, 14, 15, 16, 17, 18, 19 ],
+          "attributes": {
+            "src": "kclmulr.sv:36.24-36.25"
+          }
+        },
+        "yh": {
+          "hide_name": 0,
+          "bits": [ 16, 17, 18, 19 ],
+          "attributes": {
+            "src": "kclmulr.sv:39.33-39.35"
+          }
+        },
+        "yl": {
+          "hide_name": 0,
+          "bits": [ 12, 13, 14, 15 ],
+          "attributes": {
+            "src": "kclmulr.sv:39.29-39.31"
+          }
+        },
+        "z": {
+          "hide_name": 0,
+          "bits": [ 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 ],
+          "attributes": {
+            "src": "kclmulr.sv:37.24-37.25"
+          }
+        },
+        "z1": {
+          "hide_name": 0,
+          "bits": [ 60, 61, 62, 63, 64, 65, 66, 67 ],
+          "attributes": {
+            "src": "kclmulr.sv:45.21-45.23"
+          }
+        },
+        "z2": {
+          "hide_name": 0,
+          "bits": [ 68, 69, 70, 71, 72, 73, 74, 75 ],
+          "attributes": {
+            "src": "kclmulr.sv:45.25-45.27"
+          }
+        },
+        "z3": {
+          "hide_name": 0,
+          "bits": [ 84, 85, 86, 87, 88, 89 ],
+          "attributes": {
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,66 @@
+enable_experimental;
+
+//////////////////////////////////////////////////////////////////////
+m <- yosys_import "kclmul.json";
+
+let kclmul4 = rewrite empty_ss {{ m.kclmul4 }};
+let kclmul8 = rewrite empty_ss {{ m.kclmul8 }};
+let kclmul16 = rewrite empty_ss {{ m.kclmul16 }};
+
+// The kclmul<n> circuits are Moore machines, i.e. there is no direct
+// data flow from input ports to output ports; all data passes through
+// state registers first.
+// Accordingly, kclmul<n>.out has a type of the form State -> Output.
+
+kclmul4_correct <-
+  prove_print rme {{ \s i -> kclmul4.out (kclmul4.step i s) == {z = zext (pmult i.x i.y)} }};
+print kclmul4_correct;
+
+kclmul8_correct <-
+  prove_print rme {{ \s i -> kclmul8.out (kclmul8.step i s) == {z = zext (pmult i.x i.y)} }};
+print kclmul8_correct;
+
+kclmul16_correct <-
+  prove_print
+  do {
+    unfolding ["kclmul16"];
+    simplify (addsimps [kclmul8_correct] empty_ss);
+    rme;
+  }
+  {{ \s i -> kclmul16.out (kclmul16.step i s) == {z = zext (pmult i.x i.y)} }};
+print kclmul16_correct;
+
+
+//////////////////////////////////////////////////////////////////////
+m2 <- yosys_import "kclmulr.json";
+
+let kclmul4r = rewrite empty_ss {{ m2.kclmul4r }};
+let kclmul8r = rewrite empty_ss {{ m2.kclmul8r }};
+let kclmul16r = rewrite empty_ss {{ m2.kclmul16r }};
+
+// The kclmulr<n> circuits are Mealy machines, i.e. there is a direct
+// data flow from input ports to output ports, because of the reset.
+// Accordingly, kclmul<n>r.out has a type of the form Input -> State -> Output.
+
+kclmul4r_correct <-
+  prove_print rme
+  {{ \s0 i0 i1 -> kclmul4r.out i1 (kclmul4r.step i0 s0) ==
+     {z = if i0.reset == 1 \/ i1.reset == 1 then 0 else zext (pmult i0.x i0.y)} }};
+print kclmul4r_correct;
+
+kclmul8r_correct <-
+  prove_print rme
+  {{ \s0 i0 i1 -> kclmul8r.out i1 (kclmul8r.step i0 s0) ==
+     {z = if i0.reset == 1 \/ i1.reset == 1 then 0 else zext (pmult i0.x i0.y)} }};
+print kclmul8r_correct;
+
+kclmul16r_correct <-
+  prove_print
+  do {
+    unfolding ["kclmul16r"];
+    simplify (addsimps [kclmul8r_correct] empty_ss);
+    rme;
+  }
+  {{ \s0 i0 i1 -> kclmul16r.out i1 (kclmul16r.step i0 s0) ==
+     {z = if i0.reset == 1 \/ i1.reset == 1 then 0 else zext (pmult i0.x i0.y)} }};
+print kclmul16r_correct;
