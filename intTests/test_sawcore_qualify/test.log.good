@@ -81,4 +81,10 @@ Possible matches:
 A::x@core
 B::x@core
 
+\(a : Integer) -> \(b : Integer) -> !?"!\\" a b
+let { x`1 = (!?"a\nb",!?"!?"); } in (x`1,!?"a\nb",!?"a\nb",x`1)
+let { x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
+      x`2 = (x`1,!?"!?");
+    }
+ in (x`2,x`1,x`1,x`2)
 Success

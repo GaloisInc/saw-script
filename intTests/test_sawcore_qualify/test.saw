@@ -80,4 +80,25 @@ parse_as "!?\"!?\"" bang_huh;
 parse_as "D::!?\"!?\"" bang_huh;
 parse_as "D::!?\"!?\"@cryptol" bang_huh;
 
+let bang_backslash = {{ \a b -> a !\ b }};
+
+write_core "D.extcore" bang_backslash;
+bang_backslash2 <- read_core "D.extcore";
+
+let s = show_term bang_backslash;
+print s;
+
+ab <- define "a\nb" {{ \a b -> a !? b }};
+parse_as "!?\"a\\nb\"" ab;
+
+let garble_s = "let { !?\"a\\nc\" = (!?\"a\\nb\",!?\"!?\"); x = (!?\"a\\nb\",!?\"a\\nc\"); } in (!?\"a\\nc\",!?\"a\\nb\",x)";
+let garble = parse_core garble_s;
+print_term garble;
+
+parse_as garble_s garble;
+
+let garble2 = unfold_term ["!?\"a\\nb\""] garble;
+print_term garble2;
+parse_as garble_s garble2;
+
 print "Success";
