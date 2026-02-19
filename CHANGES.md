@@ -12,6 +12,14 @@ This release supports [version
 
 ## Changes
 
+* `yosys_import` now supports loading of hierarchical sequential
+  circuits from JSON files.
+  Each combinational module is still modeled as a single function from
+  a record of inputs to a record of outputs.
+  In contrast, each sequential circuit is modeled as a record of two
+  functions: an `out` function to compute the module outputs, and a
+  `step` function to compute the state for the next clock cycle.
+
 * `mir_verify` now enforces correctness checks that match the existing
   behavior of `llvm_verify` and `jvm_verify`:
 
