@@ -7020,6 +7020,25 @@ primitives = Map.fromList $
     , "value."
     ]
 
+  , prim "mir_field_value" "MIRValue -> String -> MIRValue"
+    (pureVal mir_field_value)
+    Current
+    [ "Given a MIR struct value and a field name, return the value of that"
+    , "field."
+    ]
+
+  , prim "mir_field_ref" "MIRValue -> String -> MIRValue"
+    (pureVal mir_field_ref)
+    Current
+    [ "Given a reference (or raw pointer) to a MIR struct, and a field name,"
+    , "return a reference (resp. raw pointer) to that field in the struct."
+    , ""
+    , "Note: If the given reference (or raw pointer) has been created"
+    , "with 'mir_alloc' or 'mir_alloc_raw_ptr', the whole reference"
+    , "(resp. raw pointer) must be initialized with 'mir_points_to'"
+    , "before 'mir_field_ref' can be used on it."
+    ]
+
   , prim "mir_mux_values" "Term -> MIRValue -> MIRValue -> MIRValue"
     (pureVal mir_mux_values)
     Current

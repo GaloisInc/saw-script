@@ -35,6 +35,7 @@ import Control.Monad.Trans.Maybe (MaybeT(..))
 import qualified Data.BitVector.Sized as BV
 import Data.Either (partitionEithers)
 import qualified Data.Text as Text
+import Data.Text (Text)
 import qualified Data.Foldable as F
 import qualified Data.Functor.Product as Functor
 import qualified Data.IntMap as IntMap
@@ -936,7 +937,8 @@ instantiateSetupValue sc s v =
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal _ _                -> return v
     MS.SetupElem m a i                -> MS.SetupElem m <$> instantiateSetupValue sc s a <*> pure i
-    MS.SetupField _ _ _               -> return v
+    MS.SetupField m struct fld        -> MS.SetupField m <$> instantiateSetupValue sc s struct
+                                                         <*> pure fld
     MS.SetupCast _ _                  -> return v
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer _ _     -> return v
@@ -1103,9 +1105,13 @@ learnSetupCondition opts sc cc spec prepost cond =
     MS.SetupCond_Ghost md var val   -> learnGhost sc md prepost var val
 
 -- | Which part of a 'SetupValue' to match against.
-newtype MatchProj
+data MatchProj
   -- | Match against the given index of the array 'SetupValue'.
-  = MatchIndex Int
+  = MatchArrayIndex Int
+  -- | Match against the given field of the struct 'SetupValue'. The field name
+  -- here is the short name (what the user would specify in @mir_field_value@),
+  -- not the full 'Mir.DefId'.
+  | MatchFieldName Text
 
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
@@ -1132,10 +1138,10 @@ matchArg opts sc cc cs prepost md = go False []
     -- inside a SetupCast.
     Bool ->
     -- Due to projection SetupValue constructors like SetupElem, which may be
-    -- arbitrarily nested, we keep a stack of MatchProjs to track which part
-    -- of the given SetupValue we are trying to match against. For instance,
-    -- [MatchIndex 3, MatchIndex 7] means we are trying to match the MIRVal
-    -- against index 7 of index 3 of the SetupValue.
+    -- arbitrarily nested, we keep a stack of MatchProjs to track which part of
+    -- the given SetupValue we are trying to match against. For instance,
+    -- [MatchArrayIndex 3, MatchArrayIndex 7] means we are trying to match the
+    -- MIRVal against index 7 of index 3 of the SetupValue.
     --
     -- At a high level, we are peeling off value projection SetupValue
     -- constructors from `expected` when we encounter them and pushing them onto
@@ -1145,7 +1151,10 @@ matchArg opts sc cc cs prepost md = go False []
     --   the SAWCore term.
     -- * When we reach a base case where the expected value is a MIRVal, such as
     --   SetupGlobalInitializer, we apply the MatchProjs to the MIRVal.
-    -- * When we reach a SetupArray case, we can index into the SetupArray.
+    -- * When we reach a SetupArray case, we can apply MatchArrayIndex by
+    --   indexing into the SetupArray.
+    -- * When we reach a SetupStruct case, we can apply MatchFieldName by
+    --   performing a field access on the SetupStruct.
     -- * When we have a match failure, we reapply the projStack back onto
     --   `expected` as value projection SetupValue constructors, for the error
     --   message to make sense.
@@ -1171,11 +1180,11 @@ matchArg opts sc cc cs prepost md = go False []
       -- `expected`. So, for instance, if there is a case where
       -- `typeOfSetupValue expected` might be `Mir.TyArray`, then it should
       -- handle the possibility of the top of the `projStack` being
-      -- `MatchIndex`, since it is valid to apply `SetupElem MirIndexIntoVal` on
-      -- `expected`. On the other hand, for cases where `expected` can never be
-      -- an array type, `projStack` should be matched to `[]`, so if the user
-      -- attempted to index into it, the pattern match would fail and an error
-      -- would be reported.
+      -- `MatchArrayIndex`, since it is valid to apply `SetupElem
+      -- MirIndexIntoVal` on `expected`. On the other hand, for cases where
+      -- `expected` can never be an array type, `projStack` should be matched to
+      -- `[]`, so if the user attempted to index into it, the pattern match
+      -- would fail and an error would be reported.
       case (projStack, actual, expected) of
         ([], MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, MS.SetupVar var)
           | inCast ->
@@ -1207,11 +1216,13 @@ matchArg opts sc cc cs prepost md = go False []
         (_, _, MS.SetupArray _elemTy zs) ->
           case projStack of
 
-            -- match an index of a SetupArray by just indexing into it
-            MatchIndex i : restProjStack ->
-              case zs ^? ix i of
-                Just z -> go inCast restProjStack actual z
-                Nothing -> fail_
+            proj : restProjStack ->
+              case proj of
+                -- match an index of a SetupArray by just indexing into it
+                MatchArrayIndex i
+                  | Just z <- zs ^? ix i ->
+                    go inCast restProjStack actual z
+                _ -> fail_
 
             -- match arrays point-wise
             [] ->
@@ -1226,10 +1237,10 @@ matchArg opts sc cc cs prepost md = go False []
         (_, _, MS.SetupElem mode z i) ->
           case (mode, projStack) of
 
-            -- match value SetupElem by pushing MatchIndex onto the projection
-            -- stack
+            -- match value SetupElem by pushing MatchArrayIndex onto the
+            -- projection stack
             (MirIndexIntoVal, _) ->
-              go inCast (MatchIndex i : projStack) actual z
+              go inCast (MatchArrayIndex i : projStack) actual z
 
             -- match reference SetupElem by getting the reference to the
             -- containing aggregate
@@ -1265,16 +1276,78 @@ matchArg opts sc cc cs prepost md = go False []
 
             _ -> fail_
 
-        -- match the underlying, non-zero-sized field of a repr(transparent)
-        -- struct
-        ([], MIRVal (TransparentShape _ shp) val, MS.SetupStruct adt zs)
-          | Just i <- Mir.findReprTransparentField col adt
-          , Just z <- zs ^? ix i ->
-            go inCast [] (MIRVal shp val) z
+        (_, _, MS.SetupStruct adt zs) ->
+          case projStack of
 
-        -- match the fields of a struct point-wise
-        ([], MIRVal (StructShape _ _ xsFldShps) xs, MS.SetupStruct _ zs) ->
-          matchFields sym xsFldShps xs zs
+            proj : restProjStack ->
+              case proj of
+                -- match a field of a SetupStruct by just looking it up in the
+                -- list of fields
+                MatchFieldName name
+                  | [var] <- adt ^. Mir.adtvariants
+                  , Just (_, z) <- F.find matchesName (zip (var ^. Mir.vfields) zs) ->
+                    go inCast restProjStack actual z
+                  where
+                    matchesName (fld, _) =
+                      fieldOrVariantShortName (fld ^. Mir.fName) == name
+                _ -> fail_
+
+            [] ->
+              case actual of
+
+                -- match the underlying primary field of a repr(transparent)
+                -- struct
+                MIRVal (TransparentShape _ shp) val
+                  | Just i <- Mir.findReprTransparentField col adt
+                  , Just z <- zs ^? ix i ->
+                    go inCast [] (MIRVal shp val) z
+
+                -- match the fields of a struct point-wise
+                MIRVal (StructShape _ _ xsFldShps) xs ->
+                  matchFields sym xsFldShps xs zs
+
+                _ -> fail_
+
+        (_, _, MS.SetupField mode z fieldName) ->
+          case (mode, projStack) of
+
+            -- match value SetupField by pushing MatchFieldName onto the
+            -- projection stack
+            (MirFieldAccessByVal, _) ->
+              go inCast (MatchFieldName fieldName : projStack) actual z
+
+            -- match reference SetupField by getting the reference to the
+            -- containing struct
+            (MirFieldAccessByRef, []) ->
+              case actual of
+                MIRVal (RefShape fieldRefTy fieldTy fieldMutbl _) fieldRef -> do
+                  structRefTy <- typeOfSetupValue cc tyenv nameEnv z
+                  case tyToShape col structRefTy of
+                    Some structRefShp@(RefShape _ structTy structMutbl structRepr)
+                      | tyToPtrKind fieldRefTy == tyToPtrKind structRefTy
+                      , fieldMutbl == structMutbl -> do
+                        (fieldTy', iInt, adt) <- findStructField col mode structTy fieldName
+                        unless (fieldTy == fieldTy') fail_
+                        case tyToShapeEq col structTy structRepr of
+                          TransparentShape _ _ ->
+                            go inCast [] (MIRVal structRefShp fieldRef) z
+                          StructShape _ _ fieldShps -> do
+                            Some i <- pure $ structFieldShapeIntIndex adt iInt fieldShps
+                            fieldRef' <-
+                              case fieldShps Ctx.! i of
+                                ReqField _ ->
+                                  pure fieldRef
+                                OptField shp -> liftIO $
+                                  Mir.mirRef_peelJustIO bak iTypes (shapeType shp) fieldRef
+                            let Crucible.StructRepr fieldReprs = structRepr
+                            structRef <- liftIO $
+                              Mir.mirRef_peelFieldIO bak iTypes fieldReprs i fieldRef'
+                            go inCast [] (MIRVal structRefShp structRef) z
+                          _ -> fail_
+                    _ -> fail_
+                _ -> fail_
+
+            _ -> fail_
 
         -- In order to match an enum value, we first check to see if the
         -- expected value is a specific enum variant or a symbolic enum...
@@ -1459,7 +1532,7 @@ matchArg opts sc cc cs prepost md = go False []
         (_, MIRVal actualShp _, MS.SetupGlobalInitializer () name) -> do
           static <- findStatic colState name
           staticInitMirVal <- findStaticInitializer cc static
-          projRes <- runMaybeT $ applyProjToMIRVal sym projStack staticInitMirVal
+          projRes <- runMaybeT $ applyProjToMIRVal sym col projStack staticInitMirVal
           case projRes of
             Just staticInitMirVal'@(MIRVal expectedShp _)
               | checkCompatibleTys (shapeMirTy actualShp) (shapeMirTy expectedShp) -> do
@@ -1985,32 +2058,41 @@ applyProjToTerm ::
   Term ->
   OverrideMatcher MIR w (Cryptol.TValue, Term)
     -- ^ result term and its Cryptol type
-applyProjToTerm sym fail_ projStack tp term =
-  case projStack of
-    [] -> pure (tp, term)
-    MatchIndex i : restProjStack ->
-      case tp of
-        Cryptol.TVSeq sz elemTp
-          | i >= 0 && fromIntegral i < sz -> do
-            doIndex <- liftIO $ indexSeqTerm sym (sz, elemTp) term
-            term' <- liftIO $ doIndex i
-            applyProjToTerm sym fail_ restProjStack elemTp term'
-        _ -> fail_
+applyProjToTerm sym fail_ projStack tp term = F.foldlM app (tp, term) projStack
+  where
+    app (tp', term') proj =
+      case proj of
+        MatchArrayIndex i ->
+          case tp' of
+            Cryptol.TVSeq sz elemTp
+              | i >= 0 && fromIntegral i < sz -> do
+                doIndex <- liftIO $ indexSeqTerm sym (sz, elemTp) term'
+                term'' <- liftIO $ doIndex i
+                pure (elemTp, term'')
+            _ -> fail_
+        MatchFieldName _ ->
+          -- MIR structs cannot be represented as a Term
+          fail_
 
 -- | Apply a stack of projections to a 'MIRVal'.
 applyProjToMIRVal ::
-  MonadIO m =>
   Sym ->
+  Mir.Collection ->
   [MatchProj] {- ^ stack of projections -} ->
   MIRVal ->
-  MaybeT m MIRVal
-applyProjToMIRVal _ [] mv = pure mv
-applyProjToMIRVal sym (MatchIndex i : projStack) (MIRVal shp vec) =
-  case shp of
-    ArrayShape _ _ elemSz elemShp _ ->
-      applyProjToMIRVal sym projStack =<< indexMirArray sym i elemSz elemShp vec
-    _ ->
-      Applicative.empty
+  MaybeT (OverrideMatcher' Sym MIR w IO) MIRVal
+applyProjToMIRVal sym col = flip (F.foldlM app)
+  where
+    app mv proj =
+      case proj of
+        MatchArrayIndex i ->
+          case mv of
+            MIRVal (ArrayShape _ _ elemSz elemShp _) ag ->
+              MaybeT $ pure $ indexMirArray sym i elemSz elemShp ag
+            _ ->
+              Applicative.empty
+        MatchFieldName fieldName ->
+          MaybeT $ accessMirStructFieldVal sym col fieldName mv
 
 -- | Apply a stack of projections to a 'SetupValue'. Does not actually extract
 -- anything from the given 'SetupValue', but rather just applies projection
@@ -2021,4 +2103,5 @@ reapplyProjToSetupValue ::
   SetupValue
 reapplyProjToSetupValue = flip (foldl projToCtor)
   where
-    projToCtor sv (MatchIndex i) = MS.SetupElem MirIndexIntoVal sv i
+    projToCtor sv (MatchArrayIndex i) = MS.SetupElem MirIndexIntoVal sv i
+    projToCtor sv (MatchFieldName nm) = MS.SetupField MirFieldAccessByVal sv nm

@@ -149,7 +149,9 @@ import           SAWCentral.Crucible.Common.Setup.Value
 import           SAWCentral.Crucible.LLVM.Setup.Value (LLVM)
 import           SAWCentral.Crucible.JVM.Setup.Value ()
 import           SAWCentral.Crucible.MIR.Setup.Value
-  (MirSetupEnum(..), MirSetupSlice(..), MirIndexingMode(..))
+  ( MirSetupEnum(..), MirSetupSlice(..), MirIndexingMode(..)
+  , MirFieldAccessMode(..)
+  )
 import           SAWCentral.Options
 import           SAWCentral.Prover.SolverStats
 import           SAWCentral.Utils (bullets)
@@ -245,7 +247,21 @@ prettySetupValue setupval = case setupval of
     where
       ppv :: PP.Doc ann
       ppv = PP.parens (prettySetupValue v)
-  SetupField _ v f -> PP.parens (prettySetupValue v) PP.<> PP.pretty ("." <> f)
+  SetupField x v f ->
+    case (ext, x) of
+      (LLVMExt, ()) ->
+        vDotF
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, m) ->
+        case m of
+          MirFieldAccessByVal ->
+            vDotF
+          MirFieldAccessByRef ->
+            "&" <> vDotF
+    where
+      vDotF :: PP.Doc ann
+      vDotF = PP.parens (prettySetupValue v) PP.<> PP.pretty ("." <> f)
   SetupUnion _ v u -> PP.parens (prettySetupValue v) PP.<> PP.pretty ("." <> u)
   SetupCast x v ->
     case (ext, x) of
