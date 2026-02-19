@@ -1232,7 +1232,7 @@ matchArg opts sc cc cs prepost md = go False []
               go inCast (MatchIndex i : projStack) actual z
 
             -- match reference SetupElem by getting the reference to the
-            -- containing vector
+            -- containing aggregate
             (MirIndexIntoRef, []) ->
               case actual of
                 MIRVal (RefShape elemRefTy elemTy elemMutbl _elemTpr) elemRef -> do
@@ -1245,7 +1245,7 @@ matchArg opts sc cc cs prepost md = go False []
                       | tyToPtrKind elemRefTy == tyToPtrKind arrRefTy
                       , checkCompatibleTys elemTy elemTy'
                       , elemMutbl == arrMutbl -> do
-                        -- get the reference to the containing vector and the
+                        -- get the reference to the containing aggregate and the
                         -- index of the current reference within it
                         Ctx.Empty Ctx.:> Crucible.RV arrRef
                                   Ctx.:> Crucible.RV i'_sym <-
