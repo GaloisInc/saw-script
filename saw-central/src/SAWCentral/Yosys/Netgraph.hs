@@ -49,7 +49,6 @@ import SAWCentral.Yosys.Cell
 data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
   , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell [Bitrep], CellInstName, [CellInstName])
-  -- , _netgraphVertexFromKey :: CellInstName -> Maybe Graph.Vertex
   }
 makeLenses ''Netgraph
 
