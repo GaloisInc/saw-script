@@ -190,6 +190,10 @@ baseSCType sym sc bt =
     BaseBoolRepr -> SC.scBoolType sc
     BaseBVRepr w -> SC.scBitvector sc $ fromIntegral (natValue w)
     BaseIntegerRepr -> SC.scIntegerType sc
+    BaseFloatRepr (FloatingPointPrecisionRepr e p) ->
+      do e' <- SC.scNat sc (natValue e)
+         p' <- SC.scNat sc (natValue p)
+         SC.scFloatType sc e' p'
     BaseArrayRepr indexTypes range
       | Ctx.Empty Ctx.:> idx_type <- indexTypes ->
         do sc_idx_type <- baseSCType sym sc idx_type
@@ -197,8 +201,6 @@ baseSCType sym sc bt =
            SC.scArrayType sc sc_idx_type sc_elm_type
       | otherwise ->
         unsupported sym "SAW backend does not support multidimensional Arrays: baseSCType"
-    BaseFloatRepr _ ->
-      unsupported sym "SAW backend does not support IEEE-754 floating point values: baseSCType"
     BaseStringRepr _ ->
       unsupported sym "SAW backend does not support string values: baseSCType"
     BaseComplexRepr  ->
@@ -445,6 +447,11 @@ scEq sym sc tp x y =
          let SAWExpr y' = y
          w' <- SC.scNat sc $ fromIntegral (natValue w)
          SAWExpr <$> SC.scBvEq sc w' x' y'
+    BaseFloatRepr fpp ->
+      do let SAWExpr x' = x
+         let SAWExpr y' = y
+         (e', p') <- scFloatPrecisionRepr sc fpp
+         SAWExpr <$> SC.scFpLogicalEq sc e' p' x' y'
     _ -> unsupported sym ("SAW backend: equality comparison on unsupported type:" ++ show tp)
 
 
@@ -513,6 +520,29 @@ scBvXor ::
 scBvXor sc w (SAWExpr x) (SAWExpr y) =
   do n <- SC.scNat sc (natValue w)
      SAWExpr <$> SC.scBvXor sc n x y
+
+-- | Convert the number of exponent and precision (significand) bits in a
+-- 'FloatPrecisionRepr' to 'SC.Term's.
+scFloatPrecisionRepr ::
+  SC.SharedContext ->
+  FloatPrecisionRepr fpp ->
+  IO (SC.Term, SC.Term)
+scFloatPrecisionRepr sc (FloatingPointPrecisionRepr e p) =
+  do e' <- SC.scNat sc (natValue e)
+     p' <- SC.scNat sc (natValue p)
+     pure (e', p')
+
+scRoundingMode ::
+  SC.SharedContext ->
+  RoundingMode ->
+  IO SC.Term
+scRoundingMode sc rm =
+  case rm of
+    RNE -> SC.scRoundNearestEven sc
+    RNA -> SC.scRoundNearestAway sc
+    RTP -> SC.scRoundPositive sc
+    RTN -> SC.scRoundNegative sc
+    RTZ -> SC.scRoundZero sc
 
 termOfSAWExpr ::
   sym ->
@@ -592,9 +622,6 @@ evaluateExpr sym st sc cache = f Map.empty
     cplxFail :: IO a
     cplxFail = unsupported sym "SAW backend does not support complex values"
 
-    floatFail :: IO a
-    floatFail = unsupported sym "SAW backend does not support floating-point values"
-
     stringFail :: IO a
     stringFail = unsupported sym "SAW backend does not support string values"
 
@@ -614,8 +641,9 @@ evaluateExpr sym st sc cache = f Map.empty
     go _ (B.StringExpr{}) =
       unsupported sym "SAW backend does not support string values"
 
-    go _ (B.FloatExpr{}) =
-      unsupported sym "SAW backend does not support floating-point values"
+    go _ (B.FloatExpr fpp bf _) =
+      do (e', p') <- scFloatPrecisionRepr sc fpp
+         SAWExpr <$> SC.scFloat sc e' p' bf
 
     go env (B.BoundVarExpr bv) =
       case B.bvarKind bv of
@@ -858,7 +886,7 @@ evaluateExpr sym st sc cache = f Map.empty
                sc_elm <- f env v
                SAWExpr <$> SC.scArrayConstant sc sc_idx_type sc_elm_type sc_elm
           | otherwise -> unimplemented "multidimensional ConstantArray"
-        
+
         B.SelectArray range arr indexTerms
           | Ctx.Empty Ctx.:> idx <- indexTerms
           , idx_type <- exprType idx ->
@@ -968,36 +996,154 @@ evaluateExpr sym st sc cache = f Map.empty
         ------------------------------------------------------------------------
         -- Floating point operations
 
-        B.FloatNeg{}  -> floatFail
-        B.FloatAbs{}  -> floatFail
-        B.FloatSqrt{}  -> floatFail
-        B.FloatAdd{}  -> floatFail
-        B.FloatSub{}  -> floatFail
-        B.FloatMul{}  -> floatFail
-        B.FloatDiv{}  -> floatFail
-        B.FloatRem{}  -> floatFail
-        B.FloatFMA{}  -> floatFail
-        B.FloatFpEq{}  -> floatFail
-        B.FloatLe{}  -> floatFail
-        B.FloatLt{}  -> floatFail
-        B.FloatIsNaN{}  -> floatFail
-        B.FloatIsInf{}  -> floatFail
-        B.FloatIsZero{}  -> floatFail
-        B.FloatIsPos{}  -> floatFail
-        B.FloatIsNeg{}  -> floatFail
-        B.FloatIsSubnorm{}  -> floatFail
-        B.FloatIsNorm{}  -> floatFail
-        B.FloatCast{}  -> floatFail
-        B.FloatRound{} -> floatFail
-        B.FloatFromBinary{}  -> floatFail
-        B.BVToFloat{}  -> floatFail
-        B.SBVToFloat{}  -> floatFail
-        B.RealToFloat{}  -> floatFail
-        B.FloatToBV{} -> floatFail
-        B.FloatToSBV{} -> floatFail
-        B.FloatToReal{} -> floatFail
-        B.FloatToBinary{} -> floatFail
-        B.FloatSpecialFunction{} -> floatFail
+        B.FloatNeg fpp x ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             x' <- f env x
+             SAWExpr <$> SC.scFpNeg sc e' p' x'
+        B.FloatAbs fpp x ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             x' <- f env x
+             SAWExpr <$> SC.scFpAbs sc e' p' x'
+        B.FloatSqrt fpp m x ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             SAWExpr <$> SC.scFpSqrt sc e' p' m' x'
+        B.FloatAdd fpp m x y ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpAdd sc e' p' m' x' y'
+        B.FloatSub fpp m x y ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpSub sc e' p' m' x' y'
+        B.FloatMul fpp m x y ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpMul sc e' p' m' x' y'
+        B.FloatDiv fpp m x y ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpDiv sc e' p' m' x' y'
+        B.FloatRem fpp x y ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpRem sc e' p' x' y'
+        B.FloatFMA fpp m x y z ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             y' <- f env y
+             z' <- f env z
+             SAWExpr <$> SC.scFpFMA sc e' p' m' x' y' z'
+        B.FloatFpEq x y ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpIeeeEq sc e' p' x' y'
+        B.FloatLe x y ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpLe sc e' p' x' y'
+        B.FloatLt x y ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpLt sc e' p' x' y'
+        B.FloatIsNaN x ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsNaN sc e' p' x'
+        B.FloatIsInf x ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsInf sc e' p' x'
+        B.FloatIsZero x ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsZero sc e' p' x'
+        B.FloatIsPos x ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsPos sc e' p' x'
+        B.FloatIsNeg x ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsNeg sc e' p' x'
+        B.FloatIsSubnorm x ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsSubnormal sc e' p' x'
+        B.FloatIsNorm x ->
+          do (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsNormal sc e' p' x'
+        B.FloatCast fpp m x ->
+          do (e1', p1') <- scFloatPrecisionRepr sc (floatPrecision x)
+             (e2', p2') <- scFloatPrecisionRepr sc fpp
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             SAWExpr <$> SC.scFpCast sc e1' p1' e2' p2' m' x'
+        B.FloatRound fpp m x ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             SAWExpr <$> SC.scFpRound sc e' p' m' x'
+        B.BVToFloat fpp m x ->
+          do -- NB: fpFromBV applies 'Succ' to its bitvector width argument, so
+             -- we need to subtract 1 to make the types match.
+             BaseBVRepr n <- pure (exprType x)
+             (e', p') <- scFloatPrecisionRepr sc fpp
+             n' <- SC.scNat sc (natValue n - 1)
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             SAWExpr <$> SC.scFpFromBV sc n' e' p' m' x'
+        B.SBVToFloat fpp m x ->
+          do -- NB: fpFromSBV applies 'Succ' to its bitvector width argument,
+             -- so we need to subtract 1 to make the types match.
+             BaseBVRepr n <- pure (exprType x)
+             n' <- SC.scNat sc (natValue n - 1)
+             (e', p') <- scFloatPrecisionRepr sc fpp
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             SAWExpr <$> SC.scFpFromSBV sc n' e' p' m' x'
+        B.FloatToBV n m x ->
+          do -- NB: fpToBV applies 'Succ' to its bitvector width argument, so
+             -- we need to subtract 1 to make the types match.
+             n' <- SC.scNat sc (natValue n - 1)
+             (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             SAWExpr <$> SC.scFpToBV sc n' e' p' m' x'
+        B.FloatToSBV n m x ->
+          do -- NB: fpToSBV applies 'Succ' to its bitvector width argument, so
+             -- we need to subtract 1 to make the types match.
+             n' <- SC.scNat sc (natValue n)
+             (e', p') <- scFloatPrecisionRepr sc (floatPrecision x)
+             m' <- scRoundingMode sc m
+             x' <- f env x
+             SAWExpr <$> SC.scFpToSBV sc n' e' p' m' x'
+        B.FloatFromBinary fpp x ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             x' <- f env x
+             SAWExpr <$> SC.scFpFromBits sc e' p' x'
+        B.FloatToBinary fpp x ->
+          do (e', p') <- scFloatPrecisionRepr sc fpp
+             x' <- f env x
+             SAWExpr <$> SC.scFpToBits sc e' p' x'
+        B.FloatToReal{} -> realFail
+        B.RealToFloat{} -> realFail
+        B.FloatSpecialFunction{} -> unimplemented "FloatSpecialFunction"
 
         B.RoundReal{} -> realFail
         B.RoundEvenReal{} -> realFail

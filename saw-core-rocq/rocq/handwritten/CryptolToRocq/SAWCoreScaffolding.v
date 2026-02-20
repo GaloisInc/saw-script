@@ -1,11 +1,18 @@
 From Stdlib Require Import ZArith.
 From Stdlib Require Import NArith.
 From Stdlib Require Import QArith.QArith_base.
+From Stdlib Require Import QArith.Qround.
 From Stdlib Require Import Lists.List.
 From Stdlib Require        Numbers.NatInt.NZLog.
 From Stdlib Require Import Strings.String.
 From Stdlib Require Export Logic.Eqdep.
 From Stdlib Require Import Arith.
+From Stdlib Require Import Lia.
+#[local] Set Warnings "stdlib-vector".
+From Flocq Require Import IEEE754.BinarySingleNaN.
+
+From CryptolToRocq Require Import IEEE754.BitsExtra.
+From CryptolToRocq Require Import IEEE754.BitsSingleNaN.
 
 (* This defines notations that clash with nat's notations. *)
 Close Scope Q_scope.
@@ -443,6 +450,236 @@ Definition rationalRecip : Rational -> Rational := Qinv.
 
 Definition rationalFloor (r : Rational) : Integer :=
   (Qnum r / Zpos (Qden r))%Z.
+
+(***
+ *** Floats
+ ***)
+
+(* We use the Flocq library to formalize IEEE-754 floating-point values.
+ * Specifically, we use IEEE754.BinarySingleNaN's binary_float float, which
+ * encodes floats with a single, distinguished NaN value. Flocq provides most
+ * (but not all) operations that SAWCore needs.
+ *
+ * This is defined in a very specific way so that it can be substituted into
+ * the type of binary_float_of_bits without needing to perform rewrites in
+ * order to make the type-level numbers equal.
+ *)
+Definition Float (e p : nat) :=
+  binary_float (Z.pos (Pos.succ (Pos.of_nat p - 1))) (2 ^ (Z.pos (Pos.of_nat e) - 1)).
+
+Global Instance Inhabited_binary_float (prec emax : Z) : Inhabited (binary_float prec emax) :=
+  MkInhabited (binary_float prec emax) (B754_zero false).
+Global Instance Inhabited_Float (e p : nat) : Inhabited (Float e p) :=
+  MkInhabited (Float e p) (B754_zero false).
+
+(* Float operations. Note that Flocq has no knowledge of our Vec or
+ * RoundingMode types, so some operations below are instead defined in terms of
+ * Z (for bitvector-related operations) or mode (for operations that may
+ * perform rounding). In CryptolToRocq.SAWCoreVectorsAsRocqVectors, we define
+ * wrapper functions that interface with our bitvector-related types.
+ *)
+
+Definition fpAbs (e p : nat) : Float e p -> Float e p :=
+  Babs.
+
+Definition fpAdd_mode (e p : nat) : mode -> Float e p -> Float e p -> Float e p :=
+  Bplus.
+
+Definition fpDiv_mode (e p : nat) : mode -> Float e p -> Float e p -> Float e p :=
+  Bdiv.
+
+Definition fpFMA_mode (e p : nat) : mode -> Float e p -> Float e p -> Float e p -> Float e p :=
+  Bfma.
+
+(* A helper lemma used in the definition of fpFromBits_Z. *)
+Theorem emax_gt_1 (e : nat) : (1 < 2 ^ (Z.pos (Pos.of_nat (S (S e))) - 1))%Z.
+Proof.
+change 1%Z with (2^(1 - 1))%Z at 1.
+apply Z.pow_lt_mono_r; lia.
+Qed.
+
+(* While most of Flocq's binary_float operations work on any number of exponent
+ * or precision bits, binary_float_of_bits is an exception, as it requires at
+ * least 2 exponent bits. To accomplish this, we match on the number of
+ * exponent bits below, and if the number of bits is too small, then we return
+ * an unspecified value. This makes the Rocq version more well-defined than
+ * SAWCore's version.
+ *)
+Definition fpFromBits_Z (e p : nat) (bits : Z) : Float e p :=
+  match e with
+  | S (S e') => binary_float_of_bits _ _ (emax_gt_1 e') bits
+  | _ => B754_zero false
+  end.
+
+Definition fpFromInteger_mode (e p : nat) (rm : mode) (z : Z) : Float e p :=
+  binary_normalize _ _ rm z 0 false.
+
+Definition fpFromRational_mode (e p : nat) (rm : mode) (q : Q) : Float e p :=
+  match Qnum q with
+  | Z0 => B754_zero false
+  | Zpos num => SF2B _ (proj1 (Bdiv_correct_aux _ _ rm false num 0 false (Qden q) 0))
+  | Zneg num => SF2B _ (proj1 (Bdiv_correct_aux _ _ rm true  num 0 false (Qden q) 0))
+  end.
+
+Definition fpIeeeEq (e p : nat) : Float e p -> Float e p -> bool :=
+  Beqb.
+
+Definition fpIsInf (e p : nat) (f : Float e p) : bool :=
+  match f with
+  | B754_infinity _ => true
+  | _ => false
+  end.
+
+Definition fpIsNaN (e p : nat) (f : Float e p) : bool :=
+  is_nan f.
+
+Definition fpIsNeg (e p : nat) (f : Float e p) : bool :=
+  match f with
+  | B754_nan => false
+  | B754_infinity neg => neg
+  | B754_finite neg _ _ _ => neg
+  | B754_zero neg => neg
+  end.
+
+(* This should probably be defined in SpecFloat, but isn't *)
+Definition SFnormal (prec : Z) (m : positive) : bool :=
+  (SpecFloat.digits2_pos m =? Z.to_pos prec)%positive.
+
+Definition fpIsNormal (e p : nat) (f : Float e p) : bool :=
+  match f with
+  | B754_nan => false
+  | B754_infinity _ => false
+  | B754_finite _ m _ _ => SFnormal (Z.pos (Pos.succ (Pos.of_nat p - 1))) m
+  | B754_zero _ => false
+  end.
+
+Definition fpIsPos (e p : nat) (f : Float e p) : bool :=
+  match f with
+  | B754_nan => false
+  | B754_infinity neg => negb neg
+  | B754_finite neg _ _ _ => negb neg
+  | B754_zero neg => negb neg
+  end.
+
+Definition fpIsSubnormal (e p : nat) (f : Float e p) : bool :=
+  match f with
+  | B754_nan => false
+  | B754_infinity _ => false
+  | B754_finite _ m _ _ => negb (SFnormal (Z.pos (Pos.succ (Pos.of_nat p - 1))) m)
+  | B754_zero _ => false
+  end.
+
+Definition fpIsZero (e p : nat) (f : Float e p) : bool :=
+  match f with
+  | B754_zero _ => true
+  | _ => false
+  end.
+
+Definition fpLogicalEq (e p : nat) (f1 : Float e p) (f2 : Float e p) : bool :=
+  match f1, f2 with
+  | B754_nan, B754_nan => true
+  | B754_infinity neg1, B754_infinity neg2 => Bool.eqb neg1 neg2
+  | B754_finite s1 m1 e1 _, B754_finite s2 m2 e2 _ => andb (Bool.eqb s1 s2) (andb (Pos.eqb m1 m2) (Z.eqb e1 e2))
+  | B754_zero neg1, B754_zero neg2 => Bool.eqb neg1 neg2
+
+  | B754_nan, _ => false
+  | B754_infinity _, _ => false
+  | B754_finite _ _ _ _, _ => false
+  | B754_zero _, _ => false
+  end.
+
+Definition fpLt (e p : nat) : Float e p -> Float e p -> bool :=
+  Bltb.
+
+Definition fpMul_mode (e p : nat) : mode -> Float e p -> Float e p -> Float e p :=
+  Bmult.
+
+Definition fpNaN (e p : nat) : Float e p :=
+  B754_nan.
+
+Definition fpNeg (e p : nat) : Float e p -> Float e p :=
+  Bopp.
+
+Definition fpPosInf (e p : nat) : Float e p :=
+  B754_infinity false.
+
+Definition fpPosZero (e p : nat) : Float e p :=
+  B754_zero false.
+
+Definition fpSqrt_mode (e p : nat) : mode -> Float e p -> Float e p :=
+  Bsqrt.
+
+Definition fpSub_mode (e p : nat) : mode -> Float e p -> Float e p -> Float e p :=
+  Bminus.
+
+Definition fpToBits_Z (e p : nat) (f : Float e p) : Z :=
+  bits_of_binary_float _ _ (default_nan_pl _ _) f.
+
+(* Adapted from Flocq's Btrunc, but generalized to work over any rounding mode.
+ * Note that this is more well-defined than SAWCore's implementation of
+ * fpToInteger, which will error if given an infinite or NaN argument. This
+ * Rocq implementation will instead return an unspecified result.
+ *)
+Definition fpToInteger_mode (e p : nat) (rm : mode) (f : Float e p) : Z :=
+  match f with
+  | B754_finite s m e' _ =>
+      SpecFloat.cond_Zopp s (SFnearbyint_binary_aux (Z.pos (Pos.succ (Pos.of_nat p - 1))) rm s m e')
+  | _ => 0
+  end.
+
+(* Note that this is more well-defined than SAWCore's implementation of
+ * fpToRational, which will error if given an infinite or NaN argument. This
+ * Rocq implementation will instead return an unspecified result.
+ *)
+Definition fpToRational (e p : nat) (f : Float e p) : Q :=
+  match f with
+  | B754_finite s m e' _ =>
+      let q := (inject_Z (Zpos m) * Qpower 2 e')%Q in
+      if s then Qopp q else q
+  | _ => 0
+  end.
+
+(* Flocq lacks implementations of the following, so we provide (likely
+ * inefficient) reference implementations below.
+ *)
+
+Definition fpCast_mode (e1 p1 e2 p2 : nat) (rm : mode) (f : Float e1 p1) : Float e2 p2 :=
+  match f with
+  | B754_nan => B754_nan
+  | B754_infinity neg => B754_infinity neg
+  | B754_zero neg => B754_zero neg
+  | B754_finite _ _ _ _ => fpFromRational_mode e2 p2 rm (fpToRational e1 p1 f)
+  end.
+
+Definition Qfloor_frac_part (x:Q) := let (n,d) := x in Qmake (Z.modulo n (Zpos d)) d.
+
+(* Surprisingly, Qround doesn't define this
+ * (see https://github.com/rocq-prover/stdlib/issues/283)
+ *)
+Definition Qround_to_even (x:Q) :=
+  match Qcompare (Qfloor_frac_part x) 0.5 with
+  | Datatypes.Lt => Qfloor x
+  | Datatypes.Gt => Qceiling x
+  | Datatypes.Eq => if Z.even (Qfloor x) then Qfloor x else Qceiling x
+  end.
+
+Definition fpRem (e p : nat) (f1 : Float e p) (f2 : Float e p) : Float e p :=
+  match f1, f2 with
+  | B754_finite _ _ _ _, B754_infinity _ => f1
+  | B754_zero _, B754_infinity _ => f1
+  | B754_infinity _, _ | B754_nan, _ | _, B754_zero _ | _, B754_nan => B754_nan
+
+  | B754_zero _, B754_finite _ _ _ _ => f1
+  | B754_finite _ m1 _ _, B754_finite _ m2 _ _ =>
+      fpFromRational_mode e p mode_NE (fpToRational e p f1 - fpToRational e p f2 * inject_Z (Qround_to_even (fpToRational e p f1 / fpToRational e p f2)))
+  end.
+
+Definition fpRound_mode (e p : nat) (rm : mode) (f : Float e p) : Float e p :=
+  match f with
+  | B754_finite s m e' _ =>
+      fpFromInteger_mode e p rm (fpToInteger_mode e p rm f)
+  | _ => f
+  end.
 
 (***
  *** A simple typeclass-based implementation of SAW record types

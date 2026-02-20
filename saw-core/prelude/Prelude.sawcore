@@ -2147,25 +2147,6 @@ updBvFun : (n:Nat) -> (a:sort 0)
 updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
 
 --------------------------------------------------------------------------------
--- Floating-point values
---    Currently commented out because they are not implemented...
-
-primitive Float : sort 0;
-
--- mkFloat m e = m * 2^^e
-primitive mkFloat : Integer -> Integer -> Float;
--- primitive bvToFloat : Vec 32 Bool -> Float;
--- primitive floatToBV : Float -> Vec 32 Bool;
-
-primitive Double : sort 0;
-
--- mkDouble m e = m * 2^^e
-primitive mkDouble : Integer -> Integer -> Float;
--- primitive bvToDouble : Vec 64 Bool -> Double;
--- primitive doubleToBV : Double -> Vec 64 Bool;
-
-
---------------------------------------------------------------------------------
 -- Lists
 
 data List (a : sort 0) : sort 0
@@ -2588,6 +2569,184 @@ rationalRoundToEven r =
         (intEven lo)
         lo
         hi));
+
+--------------------------------------------------------------------------------
+-- Floating point
+
+-- | An IEEE-754 floating-point value, where the first Nat encodes the number
+-- of exponent bits, and the second Nat encodes the number of significand
+-- (precision) bits.
+--
+-- Note that while Float accepts any number of bits, in practice, various
+-- floating-point libraries require the numbers of bits to be above certain
+-- minimum values. See Note [Minimum number of Float bits].
+primitive Float : Nat -> Nat -> sort 0;
+
+-- Note [Minimum number of Float bits]
+--
+-- While the Float type accepts any number of bits, the various floating-point
+-- libraries that SAWCore interfaces with do not:
+--
+-- * LibBF requires at least 3 exponent bits
+--   (https://github.com/GaloisInc/libBF-hs/blob/9952c4d3c15abe40e11df3b39a55a0224b4e8ae8/libbf-quickjs-2021-03-27/libbf.h#L64-L65)
+--   and at least 2 significand bits
+--   (https://github.com/GaloisInc/libBF-hs/blob/9952c4d3c15abe40e11df3b39a55a0224b4e8ae8/libbf-quickjs-2021-03-27/libbf.h#L70-L71).
+--
+-- * SMT-LIB requires at least 2 exponent and significand bits. Per the SMT-LIB
+--   FloatingPoint theory (https://smt-lib.org/theories-FloatingPoint.shtml),
+--   "All nullary sort symbols of the form
+--
+--     (_ FloatingPoint eb sb),
+--
+--   where eb and sb are numerals greater than 1."
+--
+--   The what4 library also encodes these constraints into the definition of
+--   FloatPrecisionRepr
+--   (https://github.com/GaloisInc/what4/blob/905ff37a92b193a142f833b85429b50b5510bb46/what4/src/What4/BaseTypes.hs#L197).
+--
+-- * Flocq requires at least 2 exponent bits
+--   (https://gitlab.inria.fr/flocq/flocq/-/blob/27143972fc1dc96e281626d5194b5b371f05db80/src/IEEE754/BinarySingleNaN.v#L43)
+--   and at least 1 significand bit
+--   (https://gitlab.inria.fr/flocq/flocq/-/blob/27143972fc1dc96e281626d5194b5b371f05db80/src/IEEE754/BinarySingleNaN.v#L42).
+--
+-- What should we do at the SAWCore level? One approach would be to encode the
+-- minimum number of bits into the types of all floating-point operations. For
+-- instance, we could require a minimum of 3 exponent bits and 2 significand
+-- bits in the type of fpPosZero like so:
+--
+--   primitive fpPosZero : (e : Nat) -> (p : Nat) -> Float (addNat e 3) (addNat p 2);
+--
+-- We ultimately rejected this idea, as it would require adding or subtracting
+-- the minimum number of bits in many different parts of the code, and this
+-- imposes a non-trivial amount of additional bookkeeping.
+--
+-- Instead, we allow floating-point operations to take whatever number of bits
+-- they like. If a user supplies an insufficient number of bits, then the
+-- backend library (e.g., LibBF or what4) will raise an error. We expect this
+-- corner case to be rare, as most users will be using a pre-baked
+-- floating-point configuration like Float16, Float32, Float64, etc., all of
+-- which meet the minimum bit requirements.
+--
+-- One final wrinkle in this story is how to translate Cryptol's ValidFloat
+-- constraint (which encodes the minimum number of bits at the type level) with
+-- cryptol-saw-core. cryptol-saw-core currently discards such constraints
+-- during translation, but after
+-- https://github.com/GaloisInc/saw-script/pull/3202 lands, we may want to
+-- revisit this.
+
+-- How to round a IEEE-754 floating-point value. We adopt Cryptol's convention
+-- of representing RoundingModes as 3-bit words.
+RoundingMode : sort 0;
+RoundingMode = Vec 3 Bool;
+
+roundNearestEven : RoundingMode;
+roundNearestEven = bvNat 3 0;
+
+roundNearestAway : RoundingMode;
+roundNearestAway = bvNat 3 1;
+
+roundPositive : RoundingMode;
+roundPositive = bvNat 3 2;
+
+roundNegative : RoundingMode;
+roundNegative = bvNat 3 3;
+
+roundZero : RoundingMode;
+roundZero = bvNat 3 4;
+
+rne : RoundingMode;
+rne = roundNearestEven;
+
+rna : RoundingMode;
+rna = roundNearestAway;
+
+rtp : RoundingMode;
+rtp = roundPositive;
+
+rtn : RoundingMode;
+rtn = roundNegative;
+
+rtz : RoundingMode;
+rtz = roundZero;
+
+----- Floating-point primitives from Cryptol's Float.cry
+
+primitive fpNaN : (e : Nat) -> (p : Nat) -> Float e p;
+primitive fpPosInf : (e : Nat) -> (p : Nat) -> Float e p;
+primitive fpFromBits : (e : Nat) -> (p : Nat) -> Vec (addNat e p) Bool -> Float e p;
+primitive fpToBits : (e : Nat) -> (p : Nat) -> Float e p -> Vec (addNat e p) Bool;
+
+-- | fpLogicalEq is the equivalent of Cryptol's (=.=) function. That is, it
+-- checks if two floating-point values are representationally the same.
+-- According to fpLogicalEq, fpNaN is equal to itself, and fpPosZero is not
+-- equal to fpNegZero. (Contrast this with fpIeeeEq, which checks if two
+-- floating-point values are equal according to IEEE-754's notion of equality.)
+primitive fpLogicalEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+
+primitive fpIsNaN : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsInf : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsZero : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsNeg : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsNormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsSubnormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpAdd : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpSub : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpMul : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpDiv : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpFMA : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p -> Float e p;
+primitive fpAbs : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+primitive fpSqrt : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
+primitive fpToRational : (e : Nat) -> (p : Nat) -> Float e p -> Rational;
+primitive fpFromRational : (e : Nat) -> (p : Nat) -> RoundingMode -> Rational -> Float e p;
+
+----- Additional floating-point operations needed for Cryptol class instances
+
+-- Zero
+primitive fpPosZero : (e : Nat) -> (p : Nat) -> Float e p;
+
+-- Eq
+
+-- | fpIeeeEq is the equivalent of Cryptol's (==) function over Floats. That
+-- is, checks if two floating-point values are equal according to how IEEE-754
+-- defines equality. According to fpIeeeEq, fpNaN is not equal to itself, and
+-- fpPosZero is equal to fpNegZero. (Contrast this with fpLogicalEq, which
+-- checks if two floating-point values are representationally the same.)
+primitive fpIeeeEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+
+-- Cmp
+primitive fpLt : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+
+fpLe : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+fpLe e p x y = or (fpIeeeEq e p x y) (fpLt e p x y);
+
+fpCmp : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool -> Bool;
+fpCmp e p x y k = or (fpLt e p x y) (and (fpIeeeEq e p x y) k);
+
+-- Ring
+primitive fpNeg : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+primitive fpFromInteger : (e : Nat) -> (p : Nat) -> RoundingMode -> Integer -> Float e p;
+
+-- Round
+primitive fpToInteger : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Integer;
+
+----- Other floating-point operations
+
+-- Additional what4 operations
+primitive fpIsPos : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpRem : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Float e p;
+primitive fpCast : (e1 : Nat) -> (p1 : Nat) -> (e2 : Nat) -> (p2 : Nat) -> RoundingMode -> Float e1 p1 -> Float e2 p2;
+primitive fpRound : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
+primitive fpFromBV : (n : Nat) -> (e : Nat) -> (p : Nat) -> RoundingMode -> Vec (Succ n) Bool -> Float e p;
+primitive fpFromSBV : (n : Nat) -> (e : Nat) -> (p : Nat) -> RoundingMode -> Vec (Succ n) Bool -> Float e p;
+primitive fpToBV : (n : Nat) -> (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Vec (Succ n) Bool;
+primitive fpToSBV : (n : Nat) -> (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Vec (Succ n) Bool;
+
+-- Needed for 'scFloatConst'
+fpNegInf : (e : Nat) -> (p : Nat) -> Float e p;
+fpNegInf e p = fpNeg e p (fpPosInf e p);
+
+fpNegZero : (e : Nat) -> (p : Nat) -> Float e p;
+fpNegZero e p = fpNeg e p (fpPosZero e p);
 
 --------------------------------------------------------------------------------
 -- General axioms
