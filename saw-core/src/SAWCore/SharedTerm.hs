@@ -260,6 +260,8 @@ module SAWCore.SharedTerm
   , scArrayCopy
   , scArraySet
   , scArrayRangeEq
+    -- ** Rationals
+  , scRationalType
   -- * Miscellaneous
   , alistAllFields
   , scImport
@@ -668,6 +670,10 @@ scPos sc n
     do arg <- scPos sc (div n 2)
        let ident = if even n then "Prelude.Bit0" else "Prelude.Bit1"
        scGlobalApply sc ident [arg]
+
+-- | Create a term representing the saw-core type @Rational@.
+scRationalType :: SharedContext -> IO Term
+scRationalType sc = scGlobalDef sc "Prelude.Rational"
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term

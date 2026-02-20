@@ -323,7 +323,7 @@ importType sc env ty =
             C.TCArray    -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scArrayType sc a b
-            C.TCRational -> scGlobalApply sc "Cryptol.Rational" []
+            C.TCRational -> scRationalType sc
             C.TCSeq      -> scGlobalApply sc "Cryptol.seq" =<< traverse go tyargs
             C.TCFun      -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)

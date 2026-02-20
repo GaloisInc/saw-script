@@ -2051,6 +2051,39 @@ updBvFun : (n:Nat) -> (a:sort 0)
 	 -> (Vec n Bool -> a) -> Vec n Bool -> a -> (Vec n Bool -> a);
 updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
 
+-------------------------------------------------------------------------------
+-- Rationals (TODO: #3047)
+
+Rational : sort 0;
+Rational = #();
+
+ratio : Integer -> Integer -> Rational;
+ratio x y = ();
+
+eqRational : Rational -> Rational -> Bool;
+eqRational x y = error Bool "Unimplemented: (==) Rational";
+
+leRational : Rational -> Rational -> Bool;
+leRational x y = error Bool "Unimplemented: (<=) Rational";
+
+ltRational : Rational -> Rational -> Bool;
+ltRational x y = error Bool "Unimplemented: (<) Rational";
+
+addRational : Rational -> Rational -> Rational;
+addRational x y = error Rational "Unimplemented: (+) Rational";
+
+subRational : Rational -> Rational -> Rational;
+subRational x y = error Rational "Unimplemented: (-) Rational";
+
+mulRational : Rational -> Rational -> Rational;
+mulRational x y = error Rational "Unimplemented: (*) Rational";
+
+negRational : Rational -> Rational;
+negRational x = error Rational "Unimplemented: negate Rational";
+
+integerToRational : Integer -> Rational;
+integerToRational x = error Rational "Unimplemented: fromInteger Rational";
+
 --------------------------------------------------------------------------------
 -- Floating-point values
 --    Currently commented out because they are not implemented...
