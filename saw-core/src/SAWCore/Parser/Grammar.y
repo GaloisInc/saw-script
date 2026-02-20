@@ -76,6 +76,8 @@ import qualified SAWCore.QualName as QN
   '!?'          { PosPair _ (TKey "!?") }
   '`'           { PosPair _ (TKey "`") }
   '::'          { PosPair _ (TKey "::") }
+  ':|:'         { PosPair _ (TKey ":|:") }
+  '|:'          { PosPair _ (TKey "|:") }
 
   'data'        { PosPair _ (TKey "data") }
   'hiding'      { PosPair _ (TKey "hiding") }
@@ -174,26 +176,31 @@ VarCtxItem :: { [(UTermVar, UTerm)] } :
 CtorDecl :: { CtorDecl } :
   Ident VarCtx ':' LTerm ';'                    { Ctor $1 $2 $4 }
 
-PathElem :: { PosPair (Maybe Text) } :
-    Ident                                       { fmap Just $1 }
-  | '!?' string                                 { fmap (Just . Text.pack . tokString) $2 }
-  -- subpath separator is handled outside the grammar by mkPath to prevent
-  -- reduce/reduce errors
-  | '|'                                         { fmap (\_ -> Nothing) $1 }
+PathElem :: { PosPair Text } :
+    Ident                                       { $1 }
+  | '!?' string                                 { fmap (Text.pack . tokString) $2 }
 
-Path :: { PosPair ([Text],[Text], Text) } :
-  sepBy1(PathElem, '::')                        {% mkPath $1 }
+-- Part of a module path (either side of the submodule divider)
+PartialPath :: { [PosPair Text] } :
+   sepBy1(PathElem, '::')                        { $1 }
 
-Namespace :: { Maybe Namespace } :
-    {- empty -}                                 { Nothing }
-  | '@' Ident                                   {% mkNameSpace $2 }
+-- Module path for qualified name
+Path :: { PosPair ([Text], [Text], Text) } :
+    PartialPath                                 { mkPath $1 [] }
+  | PartialPath ':|:' PartialPath               { mkPath $1 $3 }
+  | '|:' PartialPath                            { mkPath [] $2 }
 
-VarSuffix :: { Maybe Int } :
-    {- empty -}                                 { Nothing }
-  | '`' nat                                     { Just (fromIntegral (tokNat (val $2))) }
+Namespace :: { Namespace } :
+  '@' Ident                                     {% mkNameSpace $2 }
+
+VarSuffix :: { Int } :
+  '`' nat                                       { fromIntegral (tokNat (val $2)) }
 
 QualName :: { PosPair QualName } :
-    Path VarSuffix Namespace                    { mkQualName $1 $2 $3 }
+    Path VarSuffix Namespace                    { mkQualName $1 (Just $2) (Just $3) }
+  | Path Namespace                              { mkQualName $1 Nothing (Just $2) }
+  | Path VarSuffix                              { mkQualName $1 (Just $2) Nothing }
+  | Path                                        { mkQualName $1 Nothing Nothing }
 
 LetBind :: { PosPair ((Text, Maybe Int), UTerm) } :
     QualName '=' LTerm ';'                      {% mkLetBind $1 $3 }
@@ -425,12 +432,12 @@ mkName (PosPair p qnm) = case qnm of
   QN.QualName [] [] nm Nothing Nothing -> Name (PosPair p nm)
   _ -> QName (PosPair p qnm)
 
-mkNameSpace :: PosPair Text -> Parser (Maybe Namespace)
+mkNameSpace :: PosPair Text -> Parser Namespace
 mkNameSpace t = case QN.readNamespace (val t) of
-  Just ns -> return $ Just ns
+  Just ns -> return ns
   Nothing -> do
     addParseError (pos t) "unknown namespace"
-    return Nothing
+    return QN.NamespaceCore
 
 mkLetBind :: PosPair QualName -> UTerm -> Parser (PosPair ((Text, Maybe Int), UTerm))
 mkLetBind (PosPair p qnm) rhs = case qnm of
@@ -439,18 +446,14 @@ mkLetBind (PosPair p qnm) rhs = case qnm of
     addParseError p "invalid let-bound variable name"
     return $ PosPair p ((Text.empty,Nothing), badTerm p)
 
-mkPath :: [PosPair (Maybe Text)] -> Parser (PosPair ([Text], [Text], Text))
-mkPath ps = fmap (PosPair p) $ case List.findIndices isNothing xs of
-  [] -> return (List.init (fj xs), [], fromJust (List.last xs) )
-  [i] | (lhs, _:rhs) <- splitAt i xs, not (List.null rhs) ->
-    return (fj lhs, List.init (fj rhs), fromJust (List.last rhs))
-  _ -> do
-    addParseError p "invalid qualified path"
-    return $ ([],[],Text.empty)
-  where
-    xs = map val ps
-    fj = map fromJust
-    PosPair p _ = List.last ps
+mkPath :: [PosPair Text] -> [PosPair Text] -> (PosPair ([Text], [Text], Text))
+mkPath ps sps = case (ps,sps) of
+  ([],[]) -> panic "mkPath" ["Empty path"]
+  (_,_:_) -> PosPair (pos (List.last sps))
+    (map val $ ps,map val $ List.init sps, val $ List.last sps)
+  (_:_,[]) -> PosPair (pos (List.last ps))
+    (map val $ List.init ps,[] , val $ List.last ps)
+
 
 mkQualName :: PosPair ([Text],[Text], Text) -> Maybe Int -> Maybe Namespace -> PosPair QualName
 mkQualName (PosPair p (path,subpath,basename)) midx mnms =

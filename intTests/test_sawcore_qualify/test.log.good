@@ -14,7 +14,7 @@ While typechecking term:
 .:1:0:
 Ambiguous name: x
 Possible matches:
-A::B::|::C::x@cryptol
+A::B:|:C::x@cryptol
 x`5857@fresh
 
 == Anticipated failure message ==
@@ -43,7 +43,7 @@ While typechecking term:
 .:1:0:
 Ambiguous name: x@cryptol
 Possible matches:
-A::B::|::C::x@cryptol
+A::B:|:C::x@cryptol
 A::x@cryptol
 
 == Anticipated failure message ==
@@ -59,7 +59,7 @@ While typechecking term:
 .:1:0:
 Ambiguous name: x
 Possible matches:
-A::B::|::C::x@cryptol
+A::B:|:C::x@cryptol
 x`5857@fresh
 A::x@cryptol
 A::x@core

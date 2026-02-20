@@ -27,25 +27,23 @@ module SAWCore.QualName
   , aliases
   ) where
 
-import Data.Char (isAlpha, isAlphaNum, isPrint, ord)
+import           Data.Char (isAlpha, isAlphaNum)
 import           Data.Hashable
 import qualified Data.List as List
+import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Text (Text)
 import qualified Data.Text as Text
-
-import qualified Data.List.NonEmpty as NE
-
-import qualified Language.Haskell.TH.Syntax as TH
-
-
+import           Language.Haskell.TH.Syntax (Lift)
 import qualified Prettyprinter as PP
-import Text.Printf (printf)
+
+import           SAWSupport.Pretty (ppStringLiteral)
+import Control.Applicative ((<|>))
 
 data Namespace =
   NamespaceCore | NamespaceCryptol | NamespaceFresh | NamespaceYosys | NamespaceLLVM
-  deriving (Eq, Ord, Enum, Bounded, TH.Lift)
+  deriving (Eq, Ord, Enum, Bounded, Lift)
 
 instance Hashable Namespace where
   hashWithSalt s ns = hashWithSalt s (fromEnum ns)
@@ -75,7 +73,7 @@ data QualName = QualName
   , index :: Maybe Int
   , namespace :: Maybe Namespace
   }
-  deriving (Eq, Ord, TH.Lift)
+  deriving (Eq, Ord, Lift)
 
 fullPath :: QualName -> [Text]
 fullPath qn = path qn ++ subPath qn ++ [baseName qn]
@@ -108,13 +106,14 @@ qualify qn txt = do
 
 -- | Split a qualified name into a qualifier and base name.
 split :: QualName -> Maybe (QualName, Text)
-split qn = case subPath qn of
-  [] -> case path qn of
-    (p:ps) ->
-      Just $ (qn { path = ps, baseName = p }, baseName qn)
-    _ -> Nothing
-  (p:sps) ->
-    Just $ (qn { subPath = sps, baseName = p }, baseName qn)
+split qn = do
+  path' <-
+    do sps@(_:_) <- return $ subPath qn
+       return $ qn { subPath = List.init sps, baseName = List.last sps }
+    <|>
+    do ps@(_:_) <- return $ path qn
+       return $ qn { path = List.init ps, baseName = List.last ps }
+  return $ (path', baseName qn)
 
 -- | True if the given path element may be printed directly. If not, it
 -- must be prefixed with '!?', quoted and escaped.
@@ -125,24 +124,6 @@ validPathElem txt = case Text.uncons txt of
     Text.all (\c_ -> isAlphaNum c_ || c_ == '\'' || c_ == '_') txt'
   Nothing -> False
 
-
-escapeInnerString :: Text -> Text
-escapeInnerString = Text.concatMap go
-  where
-    go c = case c of
-      '"' -> "\\\""
-      '\\' -> "\\\\"
-      '\a' -> "\\a"
-      '\b' -> "\\b"
-      '\t' -> "\\t"
-      '\n' -> "\\n"
-      '\v' -> "\\v"
-      '\f' -> "\\f"
-      '\r' -> "\\r"
-      _ -> case isPrint c of
-        True -> Text.singleton c
-        False -> "\\x" <> Text.pack (printf "%06X" (ord c))
-
 -- | Valid aliases for a partially-qualified name, from most to least precise
 aliasesRev :: QualName -> [Text]
 aliasesRev qn = do
@@ -150,8 +131,9 @@ aliasesRev qn = do
   ps <- pathText
   ix <- indexSuffix
   ns <- namespaceSuffix
+  let pathSuffix = if Text.null sps && Text.null ps then Text.empty else ":"
   let bn = pathElem $ baseName qn
-  return $ ps <> sps <> bn <> ix <> ns
+  return $ ps <> sps <> pathSuffix <> bn <> ix <> ns
   where
     opt :: Maybe Text -> [Text]
     opt mtxt = case mtxt of
@@ -169,19 +151,19 @@ aliasesRev qn = do
     pathElem :: Text -> Text
     pathElem txt = case validPathElem txt of
       True -> txt
-      False -> "!?\"" <> escapeInnerString txt <> "\""
+      False -> "!?" <> ppStringLiteral txt
 
     pathText :: [Text]
     pathText = opt $
       case path qn of
         [] -> Nothing
-        ps -> Just $ Text.intercalate "::" (map pathElem ps) <> "::"
+        ps -> Just $ Text.intercalate "::" (map pathElem ps) <> ":"
 
     subPathText :: [Text]
     subPathText = opt $
       case subPath qn of
         [] -> Nothing
-        sp -> Just $ "|::" <> Text.intercalate "::" (map pathElem sp) <> "::"
+        sp -> Just $ "|:" <> Text.intercalate "::" (map pathElem sp) <> ":"
 
 -- | Valid aliases for a qualified name, from least to most precise
 aliases :: QualName -> [Text]

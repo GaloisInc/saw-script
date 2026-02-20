@@ -79,7 +79,8 @@ $idfirst   = [$alpha \_]
 $idchar    = [$alpha $digit $unidigit $unitick \' \_]
 @ident     = $idfirst $idchar*
 @punct = "#" | "," | "->" | "." | ";" | ":" | "=" | "*"
-       | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|" | "@" | "!?" | "`" | "::"
+       | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"
+       | "@" | "!?" | "`" | "::" | ":|:" | "|:"
 @keywords = "data" | "hiding" | "import" | "module" | "injectCode"
           | "sort" | "isort" | "qsort" | "qisort"
           | "Prop" | "where" | "primitive" | "axiom" | "let" | "in"
