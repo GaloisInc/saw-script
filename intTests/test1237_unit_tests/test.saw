@@ -1,0 +1,122 @@
+// Non-symbolic unit tests involving Cryptol's Float module.
+
+import Float;
+
+let prove_it = prove_print (w4_unint_cvc5 []);
+
+// fpFromBits
+prove_it {{ fpFromBits 0x40D03A98FB4D2934 == (16618.390338220823 : Float64) }};
+
+// fpToBits
+prove_it {{ fpToBits (16618.390338220823 : Float64) == 0x40d03a98fb4d2934 }};
+
+// (=.=)
+prove_it {{ (25.0 : Float64) =.= 25.0 }};
+prove_it {{ (fpNaN : Float64) =.= fpNaN }};
+prove_it {{ ~ ((fpPosZero : Float64) =.= fpNegZero) }};
+
+// fpIsNaN
+prove_it {{ fpIsNaN (fpNaN : Float64) }};
+prove_it {{ ~ fpIsNaN (25.0 : Float64) }};
+
+// fpIsInf
+prove_it {{ fpIsInf (fpPosInf : Float64) }};
+prove_it {{ ~ fpIsInf (25.0 : Float64) }};
+
+// fpIsFinite
+prove_it {{ fpIsFinite (25.0 : Float64) }};
+prove_it {{ ~ fpIsFinite (fpPosInf : Float64) }};
+
+// fpIsPos
+prove_it {{ ~ fpIsPos (-25.0 : Float64) }};
+prove_it {{ fpIsPos (25.0 : Float64) }};
+
+// fpIsNeg
+prove_it {{ fpIsNeg (-25.0 : Float64) }};
+prove_it {{ ~ fpIsNeg (25.0 : Float64) }};
+
+// fpIsNormal
+prove_it {{ fpIsNormal (25.0 : Float64) }};
+prove_it {{ ~ fpIsNormal (4.9406564584124654e-324 : Float64) }};
+
+// fpIsSubnormal
+prove_it {{ fpIsSubnormal (4.9406564584124654e-324 : Float64) }};
+prove_it {{ ~ fpIsSubnormal (25.0 : Float64) }};
+
+// fpAdd
+prove_it {{ fpAdd rne (2.5 : Float64) 3.0 == 5.5 }};
+
+// fpSub
+prove_it {{ fpSub rne (2.5 : Float64) 3.0 == -0.5 }};
+
+// fpMul
+prove_it {{ fpMul rne (2.5 : Float64) 3.0 == 7.5 }};
+
+// fpDiv
+prove_it {{ fpDiv rne (2.5 : Float64) 3.0 == 0.83333333333333337 }};
+
+// fpRem
+prove_it {{ fpRem (4 : Float64) 3 == 1 }};
+
+// fpFMA
+prove_it {{ fpFMA rne (2.5 : Float64) 3.0 3.5 == 11 }};
+
+// fpAbs
+prove_it {{ fpAbs (-25.0 : Float64) == 25.0 }};
+
+// fpSqrt
+prove_it {{ fpSqrt rne (25.0 : Float64) == 5.0 }};
+
+// fpFromRational
+prove_it {{ fpFromRational rne (ratio 5 2) == (2.5 : Float64) }};
+
+// fpCast
+prove_it {{ fpCast rne (2.5 : Float32) == (2.5 : Float64) }};
+
+// fpRound
+prove_it {{ fpRound rne (2.5 : Float64) == 2 }};
+
+// fpFromBV
+prove_it {{ fpFromBV rne (-1 : [64]) == (18446744073709551616 : Float64) }};
+
+// fpFromSBV
+prove_it {{ fpFromSBV rne (-1 : [64]) == (-1 : Float64) }};
+
+// Eq instance
+prove_it {{ (1.5 : Float64) == 1.5 }};
+prove_it {{ (fpPosZero : Float64) == fpNegZero }};
+prove_it {{ (fpNaN : Float64) != fpNaN }};
+
+// Cmp instance
+prove_it {{ (1.5 : Float64) <  2.5 }};
+prove_it {{ (1.5 : Float64) <= 2.5 }};
+prove_it {{ (2.5 : Float64) >  1.5 }};
+prove_it {{ (2.5 : Float64) >= 1.5 }};
+prove_it {{ ~ ((fpPosZero : Float64) < fpNegZero) }};
+prove_it {{ ~ ((fpNegZero : Float64) < fpPosZero) }};
+prove_it {{ ~ ((fpPosZero : Float64) > fpNegZero) }};
+prove_it {{ ~ ((fpNegZero : Float64) > fpPosZero) }};
+prove_it {{ (fpPosZero : Float64) <= fpNegZero }};
+prove_it {{ (fpNegZero : Float64) <= fpPosZero }};
+prove_it {{ (fpPosZero : Float64) >= fpNegZero }};
+prove_it {{ (fpNegZero : Float64) >= fpPosZero }};
+prove_it {{ ~ ((fpNaN : Float64) <  fpNaN) }};
+prove_it {{ ~ ((fpNaN : Float64) <= fpNaN) }};
+prove_it {{ ~ ((fpNaN : Float64) >  fpNaN) }};
+prove_it {{ ~ ((fpNaN : Float64) >= fpNaN) }};
+
+// Zero instance
+prove_it {{ (zero : Float64) == fpPosZero }};
+
+// Ring instance
+prove_it {{ (fromInteger 25 : Float64) == 25.0 }};
+
+// Field instance
+prove_it {{ recip (2.0 : Float64) == 0.5 }};
+
+// Round instance
+prove_it {{ floor (3.5 : Float64) == 3 }};
+prove_it {{ ceiling (3.5 : Float64) == 4 }};
+prove_it {{ trunc (3.5 : Float64) == 3 }};
+prove_it {{ roundToEven (3.5 : Float64) == 4 }};
+prove_it {{ roundAway (3.5 : Float64) == 4 }};

@@ -173,6 +173,7 @@ prims be =
   , Prims.bpMuxBool  = \b x y -> AIG.lazyMux be b (pure x) (pure y)
   , Prims.bpMuxWord  = \b x y -> AIG.iteM be b (pure x) (pure y)
   , Prims.bpMuxInt   = muxInt
+  , Prims.bpMuxFloat = unsupportedAIGPrimitive "bpMuxFloat"
   , Prims.bpMuxArray = unsupportedAIGPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = muxBExtra be
     -- Booleans
@@ -237,6 +238,42 @@ prims be =
   , Prims.bpIntMin = pure2 min
   , Prims.bpIntMax = pure2 max
   , Prims.bpNatToInt = pure1 toInteger
+
+    -- Float operations
+  , Prims.bpFpAbs = unsupportedAIGPrimitive "bpFpAbs"
+  , Prims.bpFpAdd = unsupportedAIGPrimitive "bpFpAdd"
+  , Prims.bpFpCast = unsupportedAIGPrimitive "bpFpCast"
+  , Prims.bpFpDiv = unsupportedAIGPrimitive "bpFpDiv"
+  , Prims.bpFpFMA = unsupportedAIGPrimitive "bpFpFMA"
+  , Prims.bpFpFromBits = unsupportedAIGPrimitive "bpFpFromBits"
+  , Prims.bpFpFromBV = unsupportedAIGPrimitive "bpFpFromBV"
+  , Prims.bpFpFromInteger = unsupportedAIGPrimitive "bpFpFromInteger"
+  , Prims.bpFpFromRational = unsupportedAIGPrimitive "bpFpFromRational"
+  , Prims.bpFpFromSBV = unsupportedAIGPrimitive "bpFpFromSBV"
+  , Prims.bpFpIeeeEq = unsupportedAIGPrimitive "bpFpIeeeEq"
+  , Prims.bpFpIsInf = unsupportedAIGPrimitive "bpFpIsInf"
+  , Prims.bpFpIsNaN = unsupportedAIGPrimitive "bpFpIsNaN"
+  , Prims.bpFpIsNeg = unsupportedAIGPrimitive "bpFpIsNeg"
+  , Prims.bpFpIsNormal = unsupportedAIGPrimitive "bpFpIsNormal"
+  , Prims.bpFpIsPos = unsupportedAIGPrimitive "bpFpIsPos"
+  , Prims.bpFpIsSubnormal = unsupportedAIGPrimitive "bpFpIsSubnormal"
+  , Prims.bpFpIsZero = unsupportedAIGPrimitive "bpFpIsZero"
+  , Prims.bpFpLt = unsupportedAIGPrimitive "bpFpLt"
+  , Prims.bpFpLogicalEq = unsupportedAIGPrimitive "bpFpLogicalEq"
+  , Prims.bpFpMul = unsupportedAIGPrimitive "bpFpMul"
+  , Prims.bpFpNaN = unsupportedAIGPrimitive "bpFpNaN"
+  , Prims.bpFpNeg = unsupportedAIGPrimitive "bpFpNeg"
+  , Prims.bpFpPosInf = unsupportedAIGPrimitive "bpFpPosInf"
+  , Prims.bpFpPosZero = unsupportedAIGPrimitive "bpFpPosZero"
+  , Prims.bpFpRem = unsupportedAIGPrimitive "bpFpRem"
+  , Prims.bpFpRound = unsupportedAIGPrimitive "bpFpRound"
+  , Prims.bpFpSqrt = unsupportedAIGPrimitive "bpFpSqrt"
+  , Prims.bpFpSub = unsupportedAIGPrimitive "bpFpSub"
+  , Prims.bpFpToBits = unsupportedAIGPrimitive "bpFpToBits"
+  , Prims.bpFpToBV = unsupportedAIGPrimitive "bpFpToBV"
+  , Prims.bpFpToInteger = unsupportedAIGPrimitive "bpFpToInteger"
+  , Prims.bpFpToRational = unsupportedAIGPrimitive "bpFpToRational"
+  , Prims.bpFpToSBV = unsupportedAIGPrimitive "bpFpToSBV"
 
     -- Array operations
   , Prims.bpArrayConstant = unsupportedAIGPrimitive "bpArrayConstant"

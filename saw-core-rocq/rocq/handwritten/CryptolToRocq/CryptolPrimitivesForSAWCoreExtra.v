@@ -84,6 +84,9 @@ Ltac solveUnsafeAssumePGEq :=
 Ltac solveUnsafeAssumePNeq :=
   reflexivity.
 
+Ltac solveUnsafeAssumePValidFloat :=
+  reflexivity.
+
 Fixpoint iterNat {a : Type} (n : nat) (f : a -> a) : a -> a :=
   match n with
   | O    => fun x => x
