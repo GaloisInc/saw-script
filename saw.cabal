@@ -139,6 +139,9 @@ library saw-core
     utf8-string,
     vector,
 
+    -- galois packages from hackage
+    libBF,
+
     -- packages in git submodules
     parameterized-utils,
     rme,
@@ -153,6 +156,7 @@ library saw-core
     SAWCore.Conversion
     SAWCore.Cache
     SAWCore.FiniteValue
+    SAWCore.FloatHelpers
     SAWCore.Module
     SAWCore.Name
     SAWCore.Parser.AST
@@ -318,6 +322,9 @@ library saw-core-aig
     containers,
     text,
     vector,
+
+    -- galois packages from hackage
+    libBF,
 
     -- packages in git submodules
     aig,

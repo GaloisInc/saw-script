@@ -2085,23 +2085,89 @@ integerToRational : Integer -> Rational;
 integerToRational x = error Rational "Unimplemented: fromInteger Rational";
 
 --------------------------------------------------------------------------------
--- Floating-point values
---    Currently commented out because they are not implemented...
+-- Floating point
 
-primitive Float : sort 0;
+primitive Float : Nat -> Nat -> sort 0;
 
--- mkFloat m e = m * 2^^e
-primitive mkFloat : Integer -> Integer -> Float;
--- primitive bvToFloat : Vec 32 Bool -> Float;
--- primitive floatToBV : Float -> Vec 32 Bool;
+RoundingMode : sort 0;
+RoundingMode = Vec 3 Bool;
 
-primitive Double : sort 0;
+roundNearestEven : RoundingMode;
+roundNearestEven = bvNat 3 0;
 
--- mkDouble m e = m * 2^^e
-primitive mkDouble : Integer -> Integer -> Float;
--- primitive bvToDouble : Vec 64 Bool -> Double;
--- primitive doubleToBV : Double -> Vec 64 Bool;
+roundNearestAway : RoundingMode;
+roundNearestAway = bvNat 3 1;
 
+roundPositive : RoundingMode;
+roundPositive = bvNat 3 2;
+
+roundNegative : RoundingMode;
+roundNegative = bvNat 3 3;
+
+roundZero : RoundingMode;
+roundZero = bvNat 3 4;
+
+rne : RoundingMode;
+rne = roundNearestEven;
+
+rna : RoundingMode;
+rna = roundNearestAway;
+
+rtp : RoundingMode;
+rtp = roundPositive;
+
+rtn : RoundingMode;
+rtn = roundNegative;
+
+rtz : RoundingMode;
+rtz = roundZero;
+
+primitive fpEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+primitive fpLt : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+primitive fpNeg : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+primitive fpNaN : (e : Nat) -> (p : Nat) -> Float e p;
+primitive fpPosInf : (e : Nat) -> (p : Nat) -> Float e p;
+
+fpLe : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+fpLe e p x y = or (fpEq e p x y) (fpLt e p x y);
+
+fpCmp : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool -> Bool;
+fpCmp e p x y k = or (fpLt e p x y) (and (fpEq e p x y) k);
+
+fpNegInf : (e : Nat) -> (p : Nat) -> Float e p;
+fpNegInf e p = fpNeg e p (fpPosInf e p);
+
+primitive fpPosZero : (e : Nat) -> (p : Nat) -> Float e p;
+
+fpNegZero : (e : Nat) -> (p : Nat) -> Float e p;
+fpNegZero e p = fpNeg e p (fpPosZero e p);
+
+primitive fpFromBits : (e : Nat) -> (p : Nat) -> Vec (addNat e p) Bool -> Float e p;
+primitive fpToBits : (e : Nat) -> (p : Nat) -> Float e p -> Vec (addNat e p) Bool;
+primitive fpEqIEEE : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+primitive fpIsNaN : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsInf : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsZero : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsNeg : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsNormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsSubnormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+
+fpIsFinite : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+fpIsFinite e p x = not (or (fpIsNaN e p x) (fpIsInf e p x));
+
+primitive fpAdd : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpSub : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpMul : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpDiv : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpFMA :
+  (e : Nat) -> (p : Nat) -> RoundingMode ->
+  Float e p -> Float e p -> Float e p -> Float e p;
+primitive fpAbs : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+primitive fpSqrt : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
+primitive fpToRational : (e : Nat) -> (p : Nat) -> Float e p -> Rational;
+primitive fpFromRational : (e : Nat) -> (p : Nat) -> RoundingMode -> Rational -> Float e p;
+primitive fpToInteger : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Integer;
+primitive fpFromInteger : (e : Nat) -> (p : Nat) -> Integer -> Float e p;
 
 --------------------------------------------------------------------------------
 -- Lists

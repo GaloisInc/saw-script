@@ -24,6 +24,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Vector as V
+import LibBF (BigFloat)
 import Numeric.Natural (Natural)
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
@@ -89,6 +90,7 @@ type instance EvalM (BitBlast l) = IO
 type instance VBool (BitBlast l) = l
 type instance VWord (BitBlast l) = LitVector l
 type instance VInt  (BitBlast l) = Integer
+type instance VFloat (BitBlast l) = BigFloat
 type instance Extra (BitBlast l) = BExtra l
 
 type BValue l = Value (BitBlast l)
@@ -351,7 +353,7 @@ sbvToIntOp g =
 intToBvOp :: AIG.IsAIG l g => g s -> BPrim (l s)
 intToBvOp g =
   Prims.natFun $ \n ->
-  Prims.intFun $ \x -> Prims.Prim 
+  Prims.intFun $ \x -> Prims.Prim
     (VWord <$>
      if n >= 0 then return (AIG.bvFromInteger g (fromIntegral n) x)
                else AIG.neg g (AIG.bvFromInteger g (fromIntegral n) (negate x)))

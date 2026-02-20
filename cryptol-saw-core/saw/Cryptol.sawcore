@@ -621,6 +621,9 @@ PEqInteger = { eq = intEq };
 PEqRational : PEq Rational;
 PEqRational = { eq = eqRational };
 
+PEqFloat : (e p : Nat) -> PEq (Float e p);
+PEqFloat e p = { eq = fpEq e p };
+
 PEqIntMod : (n : Nat) -> PEq (IntMod n);
 PEqIntMod n = { eq = intModEq n };
 
@@ -680,6 +683,14 @@ PCmpInteger = { cmpEq = PEqInteger, cmp = integerCmp, le = intLe, lt = intLt };
 
 PCmpRational : PCmp Rational;
 PCmpRational = { cmpEq = PEqRational, cmp = rationalCmp, le = leRational, lt = ltRational };
+
+PCmpFloat : (e p : Nat) -> PCmp (Float e p);
+PCmpFloat e p =
+  { cmpEq = PEqFloat e p
+  , cmp = fpCmp e p
+  , le = fpLe e p
+  , lt = fpLt e p
+  };
 
 PCmpVec : (n : Nat) -> (a : isort 0) -> PCmp a -> PCmp (Vec n a);
 PCmpVec n a pa =
@@ -805,6 +816,9 @@ PZeroIntMod n = toIntMod n (natToInt 0);
 
 PZeroRational : PZero Rational;
 PZeroRational = integerToRational (natToInt 0);
+
+PZeroFloat : (e p : Nat) -> PZero (Float e p);
+PZeroFloat e p = fpPosZero e p;
 
 PZeroIntModNum : (num : Num) -> PZero (IntModNum num);
 PZeroIntModNum num = Num#rec1 (\ (n : Num) -> PZero (IntModNum n)) PZeroIntMod PZeroInteger num;
@@ -974,6 +988,16 @@ PRingRational =
   , int = integerToRational
   };
 
+PRingFloat : (e p : Nat) -> PRing (Float e p);
+PRingFloat e p =
+  { ringZero = PZeroFloat e p
+  , add = fpAdd e p rne
+  , sub = fpSub e p rne
+  , mul = fpMul e p rne
+  , neg = fpNeg e p
+  , int = fpFromInteger e p
+  };
+
 PRingVec : (n : Nat) -> (a : isort 0) -> PRing a -> PRing (Vec n a);
 PRingVec n a pa =
   { ringZero = replicate n a pa.ringZero
@@ -1133,6 +1157,12 @@ PFieldRational =
   , fieldDiv  = \(x y : Rational) -> error Rational "Unimplemented: (/.) Rational"
   };
 
+PFieldFloat : (e p : Nat) -> PField (Float e p);
+PFieldFloat e p =
+  { fieldRing = PRingFloat e p
+  , recip     = fpDiv e p rne (fpFromInteger e p (natToInt 1))
+  , fieldDiv  = fpDiv e p rne
+  };
 
 PFieldIntMod : (n : Nat) -> PField (IntMod n);
 PFieldIntMod n =
@@ -1172,6 +1202,16 @@ PRoundRational =
   , roundToEven = \(x : Rational) -> error Integer "Unimplemented: roundToEven Rational"
   };
 
+PRoundFloat : (e p : Nat) -> PRound (Float e p);
+PRoundFloat e p =
+  { roundField  = PFieldFloat e p
+  , roundCmp    = PCmpFloat e p
+  , floor       = fpToInteger e p rtn
+  , ceiling     = fpToInteger e p rtp
+  , trunc       = fpToInteger e p rtz
+  , roundAway   = fpToInteger e p rna
+  , roundToEven = fpToInteger e p rne
+  };
 
 -- Literal class
 
@@ -1206,6 +1246,9 @@ PLiteralIntModNum num =
 PLiteralRational : PLiteral Rational;
 PLiteralRational = \ (x : Nat) -> error Rational "Unimplemented: Literal Rational";
 
+PLiteralFloat : (e p : Nat) -> PLiteral (Float e p);
+PLiteralFloat e p = \ (x : Nat) -> fpFromInteger e p (natToInt x);
+
 -- FLiteral class
 
 -- Compared to the Cryptol class 'FLiteral m n r a', we omit the 'm', 'n', and
@@ -1219,6 +1262,10 @@ PFLiteral a = Nat -> Nat -> Nat -> a;
 PFLiteralRational : PFLiteral Rational;
 PFLiteralRational =
   \ (m : Nat) (n : Nat) (r : Nat) -> ecRatio (natToInt m) (natToInt n);
+
+PFLiteralFloat : (e p : Nat) -> PFLiteral (Float e p);
+PFLiteralFloat e p = \ (m : Nat) (n : Nat) (r : Nat) ->
+  fpFromRational e p rne (ratio (natToInt m) (natToInt n));
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
@@ -1817,121 +1864,254 @@ ecScanl n a b f z =
     n;
 
 --------------------------------------------------------------------------------
--- Floating point primitives (TODO)
+-- Floating point
 
-TCFloat : Num -> Num -> sort 0;
-TCFloat _ _ = #();
+FloatNum : Num -> Num -> sort 0;
+FloatNum e p =
+  Num#rec1
+    (\ (_ : Num) -> sort 0)
+    (\ (e : Nat) ->
+      Num#rec1
+        (\ (_ : Num) -> sort 0)
+        (Float e)
+        (error (sort 0) "p should not be infinite")
+        p)
+    (error (sort 0) "e should not be infinite")
+    e;
 
-PEqFloat : (e p : Num) -> PEq (TCFloat e p);
-PEqFloat e p = { eq = \(x y : TCFloat e p) -> error Bool "Unimplemented: (==) Float" };
+floatNumFunction :
+  (motive : Num -> Num -> sort 0) ->
+  ((e p : Nat) -> motive (TCNum e) (TCNum p)) ->
+  (e p : Num) -> motive e p;
+floatNumFunction motive f e p =
+  Num#rec1
+    (\ (e : Num) -> motive e p)
+    (\ (e : Nat) ->
+      Num#rec1
+        (motive (TCNum e))
+        (f e)
+        (error (motive (TCNum e) TCInf) "p should not be infinite")
+        p)
+    (error (motive TCInf p) "e should not be infinite")
+    e;
 
-PCmpFloat : (e p : Num) -> PCmp (TCFloat e p);
-PCmpFloat e p =
-  { cmpEq = PEqFloat e p
-  , cmp = \(x y : TCFloat e p) (k : Bool) -> error Bool "Unimplemented: Cmp Float"
-  , le = \(x y : TCFloat e p) -> error Bool "Unimplemented: Cmp Float"
-  , lt = \(x y : TCFloat e p) -> error Bool "Unimplemented: Cmp Float"
+ecFpEq : (e : Num) -> (p : Num) -> FloatNum e p -> FloatNum e p -> Bool;
+ecFpEq =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> FloatNum e p -> Bool)
+    fpEq;
+
+ecFpLt : (e : Num) -> (p : Num) -> FloatNum e p -> FloatNum e p -> Bool;
+ecFpLt =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> FloatNum e p -> Bool)
+    fpLt;
+
+ecFpNeg : (e : Num) -> (p : Num) -> FloatNum e p -> FloatNum e p;
+ecFpNeg =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> FloatNum e p)
+    fpNeg;
+
+ecFpNaN : (e : Num) -> (p : Num) -> FloatNum e p;
+ecFpNaN =
+  floatNumFunction
+    FloatNum
+    fpNaN;
+
+ecFpPosInf : (e : Num) -> (p : Num) -> FloatNum e p;
+ecFpPosInf =
+  floatNumFunction
+    FloatNum
+    fpPosInf;
+
+ecFpLe : (e : Num) -> (p : Num) -> FloatNum e p -> FloatNum e p -> Bool;
+ecFpLe =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> FloatNum e p -> Bool)
+    fpLe;
+
+ecFpCmp : (e : Num) -> (p : Num) -> FloatNum e p -> FloatNum e p -> Bool -> Bool;
+ecFpCmp =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> FloatNum e p -> Bool -> Bool)
+    fpCmp;
+
+ecFpPosZero : (e : Num) -> (p : Num) -> FloatNum e p;
+ecFpPosZero =
+  floatNumFunction
+    FloatNum
+    fpPosZero;
+
+ecFpFromBits : (e : Num) -> (p : Num) -> seq (tcAdd e p) Bool -> FloatNum e p;
+ecFpFromBits =
+  floatNumFunction
+    (\ (e p : Num) -> seq (tcAdd e p) Bool -> FloatNum e p)
+    fpFromBits;
+
+ecFpToBits : (e : Num) -> (p : Num) -> FloatNum e p -> seq (tcAdd e p) Bool;
+ecFpToBits =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> seq (tcAdd e p) Bool)
+    fpToBits;
+
+ecFpEqIEEE : (e : Num) -> (p : Num) -> FloatNum e p -> FloatNum e p -> Bool;
+ecFpEqIEEE =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> FloatNum e p -> Bool)
+    fpEqIEEE;
+
+ecFpIsNaN : (e : Num) -> (p : Num) -> FloatNum e p -> Bool;
+ecFpIsNaN =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsNaN;
+
+ecFpIsInf : (e : Num) -> (p : Num) -> FloatNum e p -> Bool;
+ecFpIsInf =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsInf;
+
+ecFpIsZero : (e : Num) -> (p : Num) -> FloatNum e p -> Bool;
+ecFpIsZero =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsZero;
+
+ecFpIsNeg : (e : Num) -> (p : Num) -> FloatNum e p -> Bool;
+ecFpIsNeg =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsNeg;
+
+ecFpIsNormal : (e : Num) -> (p : Num) -> FloatNum e p -> Bool;
+ecFpIsNormal =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsNormal;
+
+ecFpIsSubnormal : (e : Num) -> (p : Num) -> FloatNum e p -> Bool;
+ecFpIsSubnormal =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsSubnormal;
+
+ecFpAdd : (e : Num) -> (p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpAdd =
+  floatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpAdd;
+
+ecFpSub : (e : Num) -> (p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpSub =
+  floatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpSub;
+
+ecFpMul : (e : Num) -> (p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpMul =
+  floatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpMul;
+
+ecFpDiv : (e : Num) -> (p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpDiv =
+  floatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpDiv;
+
+ecFpFMA : (e : Num) -> (p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpFMA =
+  floatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpFMA;
+
+ecFpAbs : (e : Num) -> (p : Num) -> FloatNum e p -> FloatNum e p;
+ecFpAbs =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> FloatNum e p)
+    fpAbs;
+
+ecFpSqrt : (e : Num) -> (p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p;
+ecFpSqrt =
+  floatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p)
+    fpSqrt;
+
+ecFpToRational : (e : Num) -> (p : Num) -> FloatNum e p -> Rational;
+ecFpToRational =
+  floatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Rational)
+    fpToRational;
+
+ecFpFromRational : (e : Num) -> (p : Num) -> RoundingMode -> Rational -> FloatNum e p;
+ecFpFromRational =
+  floatNumFunction
+    (\ (e p : Num) -> RoundingMode -> Rational -> FloatNum e p)
+    fpFromRational;
+
+ecFpToInteger : (e : Num) -> (p : Num) -> RoundingMode -> FloatNum e p -> Integer;
+ecFpToInteger =
+  floatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> Integer)
+    fpToInteger;
+
+
+ecFpFromInteger : (e : Num) -> (p : Num) -> Integer -> FloatNum e p;
+ecFpFromInteger =
+  floatNumFunction
+    (\ (e p : Num) -> Integer -> FloatNum e p)
+    fpFromInteger;
+
+PEqFloatNum : (e p : Num) -> PEq (FloatNum e p);
+PEqFloatNum e p = { eq = ecFpEq e p };
+
+PCmpFloatNum : (e p : Num) -> PCmp (FloatNum e p);
+PCmpFloatNum e p =
+  { cmpEq = PEqFloatNum e p
+  , cmp = ecFpCmp e p
+  , le = ecFpLe e p
+  , lt = ecFpLt e p
   };
 
-PZeroFloat : (e p : Num) -> PZero (TCFloat e p);
-PZeroFloat e p = error (TCFloat e p) "Unimplemented: Zero Float";
+PZeroFloatNum : (e p : Num) -> PZero (FloatNum e p);
+PZeroFloatNum e p = ecFpPosZero e p;
 
-PRingFloat : (e p : Num) -> PRing (TCFloat e p);
-PRingFloat e p =
-  { ringZero = PZeroFloat e p
-  , add = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (+) Float"
-  , sub = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (-) Float"
-  , mul = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (*) Float"
-  , neg = \(x : TCFloat e p) -> error (TCFloat e p) "Unimplemented: neg Float"
-  , int = \ (i : Integer) -> error (TCFloat e p) "Unimplemented: toInteger Float"
+PRingFloatNum : (e p : Num) -> PRing (FloatNum e p);
+PRingFloatNum e p =
+  { ringZero = PZeroFloatNum e p
+  , add = ecFpAdd e p rne
+  , sub = ecFpSub e p rne
+  , mul = ecFpMul e p rne
+  , neg = ecFpNeg e p
+  , int = ecFpFromInteger e p
   };
 
-PFieldFloat : (e p : Num) -> PField (TCFloat e p);
-PFieldFloat e p =
-  { fieldRing = PRingFloat e p
-  , recip     = \(x : TCFloat e p) -> error (TCFloat e p) "Unimplemented: recip Float"
-  , fieldDiv  = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (/.) Float"
+PFieldFloatNum : (e p : Num) -> PField (FloatNum e p);
+PFieldFloatNum e p =
+  { fieldRing = PRingFloatNum e p
+  , recip     = ecFpDiv e p rne (ecFpFromInteger e p (natToInt 1))
+  , fieldDiv  = ecFpDiv e p rne
   };
 
-PRoundFloat : (e p : Num) -> PRound (TCFloat e p);
-PRoundFloat e p =
-  { roundField  = PFieldFloat e p
-  , roundCmp    = PCmpFloat e p
-  , floor       = \(x : TCFloat e p) -> error Integer "Unimplemented: floor Float"
-  , ceiling     = \(x : TCFloat e p) -> error Integer "Unimplemented: ceiling Float"
-  , trunc       = \(x : TCFloat e p) -> error Integer "Unimplemented: trunc Float"
-  , roundAway   = \(x : TCFloat e p) -> error Integer "Unimplemented: roundAway Float"
-  , roundToEven = \(x : TCFloat e p) -> error Integer "Unimplemented: roundToEven Float"
+PRoundFloatNum : (e p : Num) -> PRound (FloatNum e p);
+PRoundFloatNum e p =
+  { roundField  = PFieldFloatNum e p
+  , roundCmp    = PCmpFloatNum e p
+  , floor       = ecFpToInteger e p rtn
+  , ceiling     = ecFpToInteger e p rtp
+  , trunc       = ecFpToInteger e p rtz
+  , roundAway   = ecFpToInteger e p rna
+  , roundToEven = ecFpToInteger e p rne
   };
 
-PLiteralFloat : (e p : Num) -> PLiteral (TCFloat e p);
-PLiteralFloat e p = \ (x : Nat) -> error (TCFloat e p) "Unimplemented: Literal Float";
+PLiteralFloatNum : (e p : Num) -> PLiteral (FloatNum e p);
+PLiteralFloatNum e p = \ (x : Nat) -> ecFpFromInteger e p (natToInt x);
 
-PFLiteralFloat : (e p : Num) -> PFLiteral (TCFloat e p);
-PFLiteralFloat _ _ = \ (m : Nat) (n : Nat) (r : Nat) -> ();
-
-ecFpNaN : (e : Num) -> (p : Num) -> TCFloat e p;
-ecFpNaN e p = error (TCFloat e p) "Unimplemented: fpNaN";
-
-ecFpPosInf : (e : Num) -> (p : Num) -> TCFloat e p;
-ecFpPosInf e p = error (TCFloat e p) "Unimplemented: fpPosInf";
-
-ecFpFromBits : (e : Num) -> (p : Num) -> seq (tcAdd e p) Bool -> TCFloat e p;
-ecFpFromBits e p _ = error (TCFloat e p) "Unimplemented: fpFromBits";
-
-ecFpToBits : (e : Num) -> (p : Num) -> TCFloat e p -> seq (tcAdd e p) Bool;
-ecFpToBits e p _ = error (seq (tcAdd e p) Bool) "Unimplemented: fpToBits";
-
-ecFpEq : (e : Num) -> (p : Num) -> TCFloat e p -> TCFloat e p -> Bool;
-ecFpEq e p _ _ = error Bool "Unimplemented: =.=";
-
-ecFpAdd : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-ecFpAdd e p _ _ _ = error (TCFloat e p) "Unimplemented: fpAdd";
-
-ecFpSub : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-ecFpSub e p _ _ _ = error (TCFloat e p) "Unimplemented: fpSub";
-
-ecFpMul : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-ecFpMul e p _ _ _ = error (TCFloat e p) "Unimplemented: fpMul";
-
-ecFpDiv : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-ecFpDiv e p _ _ _ = error (TCFloat e p) "Unimplemented: fpDiv";
-
-ecFpToRational : (e : Num) -> (p : Num) -> TCFloat e p -> Rational;
-ecFpToRational e p _ = error Rational "Unimplemented: fpToRational";
-
-ecFpFromRational : (e : Num) -> (p : Num) -> Vec 3 Bool -> Rational -> TCFloat e p;
-ecFpFromRational e p _ _ = error (TCFloat e p) "Unimplemented: fpFromRational";
-
-fpIsNaN : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsNaN e p x = error Bool "Unimplemented: fpIsNaN";
-
-fpIsInf : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsInf e p x = error Bool "Unimplemented: fpIsInf";
-
-fpIsZero : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsZero e p x = error Bool "Unimplemented: fpIsZero";
-
-fpIsNeg : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsNeg e p x = error Bool "Unimplemented: fpIsNeg";
-
-fpIsNormal : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsNormal e p x = error Bool "Unimplemented: fpIsNormal";
-
-fpIsSubnormal : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsSubnormal e p x = error Bool "Unimplemented: fpIsSubnormal";
-
-fpFMA :
-  (e : Num) -> (p : Num) -> Vec 3 Bool ->
-  TCFloat e p -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-fpFMA e p r x y z = error (TCFloat e p) "Unimplemented: fpFMA";
-
-fpAbs : (e : Num) -> (p : Num) -> TCFloat e p -> TCFloat e p;
-fpAbs e p x = error (TCFloat e p) "Unimplemented: fpAbs";
-
-fpSqrt : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p;
-fpSqrt e p r x = error (TCFloat e p) "Unimplemented: fpSqrt";
-
+PFLiteralFloatNum : (e p : Num) -> PFLiteral (FloatNum e p);
+PFLiteralFloatNum e p = \ (m : Nat) (n : Nat) (r : Nat) ->
+  ecFpFromRational e p rne (ecRatio (natToInt m) (natToInt n));
 
 --------------------------------------------------------------------------------
 -- Extra primitives

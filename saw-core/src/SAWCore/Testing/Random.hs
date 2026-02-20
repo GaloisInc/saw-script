@@ -1,4 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module      :  SAWCore.Testing.Random
@@ -15,8 +18,11 @@
 module SAWCore.Testing.Random where
 
 import SAWCore.FiniteValue
-  ( FirstOrderType(..), FirstOrderValue(..), scFirstOrderValue )
+  ( FirstOrderFloat(..), FirstOrderType(..), FirstOrderValue(..)
+  , scFirstOrderValue
+  )
 
+import SAWCore.FloatHelpers (fpCheckStatus, fpOpts)
 import SAWCore.Module (ModuleMap)
 import SAWCore.Name (VarName(..))
 import SAWCore.SATQuery
@@ -29,11 +35,15 @@ import SAWCore.Simulator.Value (Value(..)) -- , TValue(..))
 
 import qualified Control.Monad.Fail as F
 import Control.Monad.Random
+import Data.Bits (Bits(..))
 import Data.Functor.Compose (Compose(..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Ratio (numerator, denominator)
 import qualified Data.Set as Set
+import LibBF
+import Numeric.Natural (Natural)
 import System.Random.TF (newTFGen, TFGen)
 
 
@@ -46,6 +56,8 @@ randomFirstOrderValue FOTInt =
   Compose (Just (FOVInt <$> randomInt))
 randomFirstOrderValue (FOTIntMod m) =
   Compose (Just (FOVIntMod m <$> getRandomR (0, toInteger m - 1)))
+randomFirstOrderValue (FOTFloat e p) =
+  Compose (Just ((FOVFloat . FirstOrderFloat e p) <$> randomBigFloat e p))
 randomFirstOrderValue (FOTVec n FOTBit) =
   Compose (Just (FOVWord n <$> getRandomR (0, 2^n - 1)))
 randomFirstOrderValue (FOTVec n t) =
@@ -61,7 +73,76 @@ randomFirstOrderValue (FOTArray _ _) = Compose Nothing
 randomInt :: MonadRandom m => m Integer
 randomInt = getRandomR (-10^(6::Int), 10^(6::Int))
 
+randomBigFloat ::
+  forall m.
+  MonadRandom m =>
+  -- | Exponent width
+  Natural ->
+  -- | Precision width
+  Natural ->
+  m BigFloat
+randomBigFloat e p = do
+  let sz :: Integer
+      sz = 5
+  x <- getRandomR (0, 10*(sz+1))
+  if | x < 2    -> pure bfNaN
+     | x < 4    -> pure bfPosInf
+     | x < 6    -> pure bfNegInf
+     | x < 8    -> pure bfPosZero
+     | x < 10   -> pure bfNegZero
+     | x <= sz       -> randomSubnormal  -- about 10% of the time
+     | x <= 4*(sz+1) -> randomBinary     -- about 40%
+     | otherwise     -> randomNormal (toInteger sz)  -- remaining ~50%
+  where
+    opts = fpOpts e p NearEven
 
+    eInt = fromIntegral @Natural @Int e
+    pInt = fromIntegral @Natural @Int p
+
+    emax = bit eInt - 1
+    smax = bit pInt - 1
+
+    -- Generates floats uniformly chosen from among all bitpatterns.
+    randomBinary :: m BigFloat
+    randomBinary = do
+      v <- getRandomR (0, bit (eInt+pInt) - 1)
+      pure $ bfFromBits opts v
+
+    -- Generates floats corresponding to subnormal values. These are values
+    -- with 0 biased exponent and nonzero mantissa.
+    randomSubnormal :: m BigFloat
+    randomSubnormal = do
+      sgn <- getRandom
+      v <- getRandomR (1, bit pInt - 1)
+      let bf = bfFromBits opts v
+      let bf' = if sgn then bfNeg bf else bf
+      pure bf'
+
+    -- Generates floats where the exponent and mantissa are scaled by the size.
+    randomNormal :: Integer -> m BigFloat
+    randomNormal sz = do
+      sgn <- getRandom
+      ex <- getRandomR ((1-emax)*sz `div` 100, (sz*emax) `div` 100)
+      mag <- getRandomR (1, max 1 ((sz*smax) `div` 100))
+      let r  = fromInteger mag ^^ (ex - widthInteger mag)
+      let r' = if sgn then negate r else r
+      let bf = fpCheckStatus $
+               bfDiv
+                 opts
+                 (bfFromInteger (numerator r'))
+                 (bfFromInteger (denominator r'))
+      pure bf
+
+    -- Compute the number of bits required to represent the given integer.
+    widthInteger :: Integer -> Integer
+    widthInteger x = go' 0 (if x < 0 then complement x else x)
+      where
+        go s 0 = s
+        go s n = let s' = s + 1 in s' `seq` go s' (n `shiftR` 1)
+
+        go' s n
+          | n < bit 32 = go s n
+          | otherwise  = let s' = s + 32 in s' `seq` go' s' (n `shiftR` 32)
 
 execTest ::
   (F.MonadFail m, MonadRandom m, MonadIO m) =>

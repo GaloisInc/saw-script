@@ -262,6 +262,8 @@ module SAWCore.SharedTerm
   , scArrayRangeEq
     -- ** Rationals
   , scRationalType
+    -- ** Floats
+  , scFloatType
   -- * Miscellaneous
   , alistAllFields
   , scImport
@@ -1990,6 +1992,10 @@ scArraySet sc n a f i e l = scGlobalApply sc "Prelude.arraySet" [n, a, f, i, e, 
 -- > arrayRangeEq n a lhs_arr lhs_idx rhs_arr rhs_idx len
 scArrayRangeEq :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
 scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a, f, i, g, j, l]
+
+-- | Create a term representing the saw-core type @Float@.
+scFloatType :: SharedContext -> Term -> Term -> IO Term
+scFloatType sc e p = scGlobalApply sc "Prelude.Float" [e, p]
 
 ------------------------------------------------------------
 

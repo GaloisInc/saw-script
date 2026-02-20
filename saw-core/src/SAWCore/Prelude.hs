@@ -75,6 +75,14 @@ scDecEq sc fot args = case fot of
          Nothing    -> scApply sc fn m'
          Just (x,y) -> scApplyAll sc fn [m',x,y]
 
+  FOTFloat e p ->
+    do fn <- scGlobalDef sc "Prelude.fpEq"
+       e' <- scNat sc e
+       p' <- scNat sc p
+       case args of
+         Nothing    -> scApplyAll sc fn [e',p']
+         Just (x,y) -> scApplyAll sc fn [e',p',x,y]
+
   FOTVec w FOTBit ->
     do fn <- scGlobalDef sc "Prelude.bvEq"
        w' <- scNat sc w

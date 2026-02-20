@@ -25,6 +25,7 @@ module SAWCore.Simulator.Value
   , VBool
   , VWord
   , VInt
+  , VFloat
   , VArray
   , Extra
   , WithM
@@ -34,6 +35,7 @@ module SAWCore.Simulator.Value
   , MBool
   , MWord
   , MInt
+  , MFloat
   , MArray
   , VMonad
   , VMonadLazy
@@ -106,6 +108,7 @@ data Value l
   | VNat !Natural
   | VInt (VInt l)
   | VIntMod !Natural (VInt l)
+  | VFloat (VFloat l)
   | VArray (VArray l)
   | VString !Text
   | VEmptyRecord
@@ -125,6 +128,7 @@ data TValue l
   | VBoolType
   | VIntType
   | VIntModType !Natural
+  | VFloatType !Natural !Natural
   | VArrayType !(TValue l) !(TValue l)
   | VPiType !(TValue l) !(PiBody l)
   | VStringType
@@ -150,6 +154,8 @@ type family VBool l :: Type
 type family VWord l :: Type
 -- | Integers for value instantiation 'l'
 type family VInt  l :: Type
+-- | Floats for value instantiation 'l'
+type family VFloat l :: Type
 -- | SMT arrays for value instantiation 'l'
 type family VArray l :: Type
 -- | Additional constructors for instantiation 'l'
@@ -166,6 +172,9 @@ type MWord l      = EvalM l (VWord l)
 
 -- | Short-hand for a monadic integer.
 type MInt l       = EvalM l (VInt  l)
+
+-- | Short-hand for a monadic float.
+type MFloat l     = EvalM l (VFloat l)
 
 -- | Short-hand for a monadic array.
 type MArray l     = EvalM l (VArray l)
@@ -185,6 +194,7 @@ type instance EvalM (WithM m l) = m
 type instance VBool (WithM m l) = VBool l
 type instance VWord (WithM m l) = VWord l
 type instance VInt  (WithM m l) = VInt l
+type instance VFloat (WithM m l) = VFloat l
 type instance VArray (WithM m l) = VArray l
 type instance Extra (WithM m l) = Extra l
 
@@ -206,6 +216,7 @@ instance Show (Extra l) => Show (Value l) where
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
+      VFloat{}       -> showString "<<float>>"
       VArray{}       -> showString "<<array>>"
       VString s      -> shows s
       VEmptyRecord   -> showString "{}"
@@ -223,6 +234,8 @@ instance Show (Extra l) => Show (TValue l) where
       VStringType    -> showString "String"
       VIntType       -> showString "Integer"
       VIntModType n  -> showParen True (showString "IntMod " . shows n)
+      VFloatType e' p' ->
+        showParen True (showString "Float " . shows e' . showChar ' ' . shows p')
       VArrayType{}   -> showString "Array"
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
@@ -369,6 +382,7 @@ asFiniteTypeTValue v =
     VTyTerm{}     -> Nothing
     VIntType      -> Nothing
     VIntModType{} -> Nothing
+    VFloatType{}  -> Nothing
     VArrayType{}  -> Nothing
   where
 
@@ -385,6 +399,7 @@ asFirstOrderTypeTValue v =
     VVecType n v1 -> FOTVec n <$> asFirstOrderTypeTValue v1
     VIntType      -> return FOTInt
     VIntModType m -> return (FOTIntMod m)
+    VFloatType e p -> pure (FOTFloat e p)
     VArrayType a b ->
       FOTArray <$> asFirstOrderTypeTValue a <*> asFirstOrderTypeTValue b
     VUnitType -> return (FOTTuple [])
@@ -432,6 +447,7 @@ suffixTValue tv =
     VBoolType -> Just "_Bool"
     VIntType -> Just "_Int"
     VIntModType n -> Just ("_IntMod_" ++ show n)
+    VFloatType e p -> Just ("_Float_" ++ show e ++ "_" ++ show p)
     VArrayType a b ->
       do a' <- suffixTValue a
          b' <- suffixTValue b

@@ -58,6 +58,7 @@ module SAWCore.Recognizer
   , asNatType
   , asIntegerType
   , asIntModType
+  , asFloatType
   , asBitvectorType
   , asVectorType
   , asVecType
@@ -401,6 +402,9 @@ asIntegerType = isGlobalDef "Prelude.Integer"
 
 asIntModType :: Recognizer Term Natural
 asIntModType = isGlobalDef "Prelude.IntMod" @> asNat
+
+asFloatType :: Recognizer Term (Natural, Natural)
+asFloatType = fmap toPair . ((isGlobalDef "Prelude.Float" @> asNat) <@> asNat)
 
 asVectorType :: Recognizer Term (Term, Term)
 asVectorType = fmap toPair . ((isGlobalDef "Prelude.Vec" @> return) <@> return)

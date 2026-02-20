@@ -30,6 +30,7 @@ import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
+import LibBF (BigFloat)
 
 import SAWCore.Module (ModuleMap)
 import SAWCore.Name
@@ -77,6 +78,7 @@ type instance EvalM Concrete = Identity
 type instance VBool Concrete = Bool
 type instance VWord Concrete = BitVector
 type instance VInt  Concrete = Integer
+type instance VFloat Concrete = BigFloat
 type instance VArray Concrete = ()
 type instance Extra Concrete = CExtra
 

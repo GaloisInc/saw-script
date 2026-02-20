@@ -33,6 +33,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import LibBF (BigFloat)
 
 import Data.RME (RME)
 import qualified Data.RME as RME
@@ -77,6 +78,7 @@ type instance EvalM ReedMuller = Identity
 type instance VBool ReedMuller = RME
 type instance VWord ReedMuller = Vector RME
 type instance VInt  ReedMuller = Integer
+type instance VFloat ReedMuller = BigFloat
 type instance VArray ReedMuller = ()
 type instance Extra ReedMuller = RExtra
 

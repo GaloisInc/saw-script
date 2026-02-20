@@ -178,6 +178,7 @@ cryptolTypeOfFirstOrderType fot =
     FOTBit -> C.tBit
     FOTInt -> C.tInteger
     FOTIntMod n -> C.tIntMod (C.tNum n)
+    FOTFloat e p -> C.tFloat (C.tNum e) (C.tNum p)
     FOTVec n t -> C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)
     -- NB, special case, don't produce 1-tuples
     FOTTuple [x] -> cryptolTypeOfFirstOrderType x
