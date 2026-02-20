@@ -65,8 +65,9 @@ module SAWCentral.Crucible.MIR.Setup.Value
   , MirSetupSlice(..)
   , MirSliceInfo(..)
 
-    -- * @MirIndexingMode@
+    -- * @MirIndexingMode@, @MirFieldAccessMode@
   , MirIndexingMode(..)
+  , MirFieldAccessMode(..)
   ) where
 
 import Control.Lens (makeLenses)
@@ -97,7 +98,7 @@ type instance MS.XSetupSlice MIR = MirSetupSlice
 -- The 'M.Ty' represents the type of array elements.
 type instance MS.XSetupArray MIR = M.Ty
 type instance MS.XSetupElem MIR = MirIndexingMode
-type instance MS.XSetupField MIR = ()
+type instance MS.XSetupField MIR = MirFieldAccessMode
 -- The 'M.Ty' represents the pointee type after the cast.
 -- See Note [Raw pointer casts].
 type instance MS.XSetupCast MIR = M.Ty
@@ -299,6 +300,15 @@ data MirIndexingMode
   --
   -- Only used by @crucible-mir-comp@ for now.
   | MirIndexOffsetRef
+  deriving (Eq, Show)
+
+-- | How to do field access.
+data MirFieldAccessMode
+  -- | Take a MIR struct value and return the value of one of its fields.
+  = MirFieldAccessByVal
+  -- | Take a reference/pointer to a MIR struct value and return a
+  -- reference/pointer to one of its fields.
+  | MirFieldAccessByRef
   deriving (Eq, Show)
 
 makeLenses ''MIRCrucibleContext
