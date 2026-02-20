@@ -235,7 +235,7 @@ evalTermF cfg lam recEval tf env =
         Nothing ->
           case argv of
             VCtorMux _ps branches ->
-              do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)
+              do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.assocs branches)
                  combineAlts alts
             VBVToNat{} ->
               panic "evalTerF / evalRecursor"
@@ -246,18 +246,17 @@ evalTermF cfg lam recEval tf env =
 
     evalCtorMuxBranch ::
       VRecursor l ->
-      (VBool l, Name, TValue l, [Thunk l]) ->
+      (VarIndex, (VBool l, TValue l, [Thunk l])) ->
       EvalM l (VBool l, EvalM l (Value l))
-    evalCtorMuxBranch r (p, c, _ct, args) =
+    evalCtorMuxBranch r (i, (p, _ct, args)) =
       case r of
         VRecursor _d _nixs ps_fs ->
-          do let i = nameIndex c
-             case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
-               (Just (ResolvedCtor ctor), Just elim) ->
-                 do elimv <- force elim
-                    pure (p, reduceRecursor (evalRecursor r) elimv args (ctorArgStruct ctor))
-               _ -> panic "evalTermF / evalCtorMuxBranch"
-                    ["could not find info for constructor: " <> toAbsoluteName (nameInfo c)]
+          case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
+            (Just (ResolvedCtor ctor), Just elim) ->
+              do elimv <- force elim
+                 pure (p, reduceRecursor (evalRecursor r) elimv args (ctorArgStruct ctor))
+            _ -> panic "evalTermF / evalCtorMuxBranch"
+                 ["could not find info for constructor with index: " <> Text.pack (show i)]
 
     combineAlts :: [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
     combineAlts [] = panic "evalTermF / combineAlts" ["no alternatives"]

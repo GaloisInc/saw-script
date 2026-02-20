@@ -1424,12 +1424,12 @@ muxValue bp b x0 y0 = value x0 y0
       | otherwise =
         do b' <- bpNot bp b
            pure $ VCtorMux ps $ IntMap.fromList $
-             [(nameIndex i, (b, i, itv, xv)), (nameIndex j, (b', j, jtv, yv))]
+             [(nameIndex i, (b, itv, xv)), (nameIndex j, (b', jtv, yv))]
     value (VCtorApp i tv ps xv) (VCtorMux _ ym) =
-      do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, i, tv, xv)
+      do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, tv, xv)
          VCtorMux ps <$> branches ps xm ym
     value (VCtorMux ps xm) (VCtorApp j tv _ yv) =
-      do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, j, tv, yv)
+      do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, tv, yv)
          VCtorMux ps <$> branches ps xm ym
     value (VCtorMux ps xm) (VCtorMux _ ym) =
       do VCtorMux ps <$> branches ps xm ym
@@ -1464,20 +1464,20 @@ muxValue bp b x0 y0 = value x0 y0
 
     branches ::
       [Thunk l] ->
-      IntMap (VBool l, Name, TValue l, [Thunk l]) ->
-      IntMap (VBool l, Name, TValue l, [Thunk l]) ->
-      EvalM l (IntMap (VBool l, Name, TValue l, [Thunk l]))
+      IntMap (VBool l, TValue l, [Thunk l]) ->
+      IntMap (VBool l, TValue l, [Thunk l]) ->
+      EvalM l (IntMap (VBool l, TValue l, [Thunk l]))
     branches ps xm ym =
       do b' <- bpNot bp b
-         let andPred p1 (p2, c, ty, args) =
+         let andPred p1 (p2, ty, args) =
                do p <- bpAnd bp p1 p2
-                  pure (p, c, ty, args)
+                  pure (p, ty, args)
          let merge x y =
-               do (xp, i, itp, xv) <- x
-                  (yp, _, _tp, yv) <- y
+               do (xp, itp, xv) <- x
+                  (yp, _tp, yv) <- y
                   zp <- bpOr bp xp yp
                   zv <- ctorArgs itp ps xv yv
-                  pure (zp, i, itp, zv)
+                  pure (zp, itp, zv)
          let xm' = fmap (andPred b) xm
          let ym' = fmap (andPred b') ym
          sequenceA (IntMap.unionWith merge xm' ym')

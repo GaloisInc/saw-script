@@ -92,7 +92,7 @@ data Value l
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
   | VCtorApp !Name !(TValue l) ![Thunk l] ![Thunk l]
-  | VCtorMux ![Thunk l] !(IntMap (VBool l, Name, TValue l, [Thunk l]))
+  | VCtorMux ![Thunk l] !(IntMap (VBool l, TValue l, [Thunk l]))
     -- ^ A mux tree of possible constructor values of a data type.
     -- The list of data type parameters is kept outside the mux.
     -- The 'IntMap' keys are 'VarIndex'es of each constructor name.
