@@ -735,7 +735,8 @@ Definition joinLittleEndian : forall (m : Init.Datatypes.nat), forall (n : Init.
 Definition splitLittleEndian : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.mulNat m n) a), SAWCoreVectorsAsRocqVectors.Vec m (SAWCoreVectorsAsRocqVectors.Vec n a) :=
   fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.mulNat m n) a) => reverse m (SAWCoreVectorsAsRocqVectors.Vec n a) (split m n a v).
 
-(* "Prelude.pmux" was skipped *)
+Definition pmux : forall (n : Init.Datatypes.nat), forall (a : Type), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n a), forall (_3 : a), a :=
+  fun (n : Init.Datatypes.nat) (a : Type) (conds : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (xs : SAWCoreVectorsAsRocqVectors.Vec n a) (default : a) => SAWCoreVectorsAsRocqVectors.foldr (forall (_1 : a), a) a n (Init.Datatypes.id (forall (_1 : a), a)) default (zipWith Init.Datatypes.bool a (forall (_1 : a), a) (SAWCoreScaffolding.ite a) n conds xs).
 
 (* "Prelude.appendString" was skipped *)
 
