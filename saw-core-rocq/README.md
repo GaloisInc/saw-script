@@ -17,9 +17,10 @@ support libraries must be compiled by Rocq in order to use them.
 ## Installing Dependencies
 
 To compile the Rocq support libraries, Rocq must be installed, as must the
-following library:
+following libraries:
 
 * [coq-bits](https://github.com/rocq-community/bits)
+* [coq-flocq](https://gitlab.inria.fr/flocq/flocq)
 
 The recommended way to install Rocq and these dependencies is using `opam`. This
 can be done with the following steps, which will not only install `opam`, Rocq, and
@@ -33,14 +34,17 @@ opam init
 opam pin add rocq-prover 9.0.0
 opam install rocq-core=9.1.0 rocq-stdlib=9.0.0
 opam repo add rocq-released https://rocq-prover.org/opam/released
+opam install flocq=4.2.2
 ```
 
-Installing the required version of `coq-bits` (linked above) also requires
-installing the `coq` package, which includes compatibility shims to support the
-Coq to Rocq transition (e.g. the `coqc` and `coq_makefile` executables):
+Installing the required versions of `coq-bits` and `coq-flocq` (linked above)
+also requires installing the `coq` package, which includes compatibility shims
+to support the Coq to Rocq transition (e.g. the `coqc` and `coq_makefile`
+executables):
 ```
 opam install coq=9.1.0
 opam pin coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
+opam install coq-flocq=4.2.2
 ```
 
 If you run into any issue that is probably due to the version mismatch between the `ocamlc`

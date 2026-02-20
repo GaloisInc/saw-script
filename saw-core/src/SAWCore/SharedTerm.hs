@@ -280,6 +280,42 @@ module SAWCore.SharedTerm
   , scRational
   , scRationalConst
   , scRationalType
+    -- ** Floats
+  , scFloatConst
+  , scFloatType
+  , scFpAdd
+  , scFpAbs
+  , scFpCast
+  , scFpDiv
+  , scFpFromBits
+  , scFpFromBV
+  , scFpFromSBV
+  , scFpIeeeEq
+  , scFpIsInf
+  , scFpIsNaN
+  , scFpIsNeg
+  , scFpIsNormal
+  , scFpIsPos
+  , scFpIsSubnormal
+  , scFpIsZero
+  , scFpFMA
+  , scFpLe
+  , scFpLt
+  , scFpLogicalEq
+  , scFpMul
+  , scFpNeg
+  , scFpRem
+  , scFpRound
+  , scFpSqrt
+  , scFpSub
+  , scFpToBits
+  , scFpToBV
+  , scFpToSBV
+  , scRoundNearestEven
+  , scRoundNearestAway
+  , scRoundPositive
+  , scRoundNegative
+  , scRoundZero
   -- * Miscellaneous
   , alistAllFields
   , scImport
@@ -312,6 +348,7 @@ import qualified Data.Text as Text
 import Data.Typeable
 import Data.Set (Set)
 import qualified Data.Set as Set
+import LibBF (BigFloat, Sign(..))
 import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 
@@ -320,6 +357,7 @@ import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, rende
 
 import SAWCore.Cache
 import SAWCore.Change
+import SAWCore.FloatHelpers (NotRationalError(..), floatToRational)
 import SAWCore.Module
   ( ctorNumParams
   , moduleIsLoaded
@@ -601,7 +639,7 @@ ppTermError :: SharedContext -> TermError -> IO Text
 ppTermError sc err = do
   ppopts <- scGetPPOpts sc
   err' <- prettyTermError sc err
-  pure $ PPS.renderText ppopts err'  
+  pure $ PPS.renderText ppopts err'
 
 execSCM :: SharedContext -> SCM a -> IO a
 execSCM sc m =
@@ -1015,7 +1053,7 @@ instance IsMetadata PrettyOpts where
 
 -- | Update the prettyprinter options.
 scModifyPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO ()
-scModifyPPOpts sc f = scUpdateData sc $ \(PrettyOpts opts) -> 
+scModifyPPOpts sc f = scUpdateData sc $ \(PrettyOpts opts) ->
   PrettyOpts $ f opts
 
 -- | Get the current prettyprinter options
@@ -1027,7 +1065,7 @@ scGetPPOpts sc = do
 -- | Wrap an operation in different prettyprinter options.
 scWithPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO a -> IO a
 scWithPPOpts sc alter action = do
-  old <- scGetPPOpts sc 
+  old <- scGetPPOpts sc
   scModifyPPOpts sc alter
   a <- action
   scModifyPPOpts sc (\_ -> old)
@@ -2094,6 +2132,157 @@ scArraySet sc n a f i e l = scGlobalApply sc "Prelude.arraySet" [n, a, f, i, e, 
 -- > arrayRangeEq n a lhs_arr lhs_idx rhs_arr rhs_idx len
 scArrayRangeEq :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
 scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a, f, i, g, j, l]
+
+-- | Create an floating-point constant term from a 'BigFloat', along with the
+-- sizes of its exponent and precision.
+scFloatConst :: SharedContext -> Natural -> Natural -> BigFloat -> IO Term
+scFloatConst sc e p bf = do
+  e' <- scNat sc e
+  p' <- scNat sc p
+  case floatToRational bf of
+    Left IsNaN -> scGlobalApply sc "Prelude.fpNaN" [e', p']
+    Left (IsInf Pos) -> scGlobalApply sc "Prelude.fpPosInf" [e', p']
+    Left (IsInf Neg) -> scGlobalApply sc "Prelude.fpNegInf" [e', p']
+    Right r -> do
+      r' <- scRationalConst sc r
+      mode <- scGlobalDef sc "Prelude.rne"
+      scGlobalApply sc "Prelude.fpFromRational" [e', p', mode, r']
+
+-- | Create a term representing the saw-core type @Float@.
+scFloatType :: SharedContext -> Term -> Term -> IO Term
+scFloatType sc e p = scGlobalApply sc "Prelude.Float" [e, p]
+
+-- primitive fpAdd : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+scFpAdd :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpAdd sc e p m f1 f2 = scGlobalApply sc "Prelude.fpAdd" [e, p, m, f1, f2]
+
+-- primitive fpAbs : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+scFpAbs :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpAbs sc e p f = scGlobalApply sc "Prelude.fpAbs" [e, p, f]
+
+-- primitive fpCast : (e1 : Nat) (p1 : Nat) (e2 : Nat) (p2 : Nat) -> RoundingMode -> Float e1 p1 -> Float e2 p2;
+scFpCast :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpCast sc e1 p1 e2 p2 m f = scGlobalApply sc "Prelude.fpCast" [e1, p1, e2, p2, m, f]
+
+-- primitive fpDiv : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+scFpDiv :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpDiv sc e p m f1 f2 = scGlobalApply sc "Prelude.fpDiv" [e, p, m, f1, f2]
+
+-- primitive fpFromBits : (e : Nat) -> (p : Nat) -> Vec (addNat e p) Bool -> Float e p;
+scFpFromBits :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpFromBits sc e p v = scGlobalApply sc "Prelude.fpFromBits" [e, p, v]
+
+-- primitive fpFromBV : (w : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Vec w Bool -> Float e p;
+scFpFromBV :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpFromBV sc w e p m v = scGlobalApply sc "Prelude.fpFromBV" [w, e, p, m, v]
+
+-- primitive fpFromSBV : (w : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Vec w Bool -> Float e p;
+scFpFromSBV :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpFromSBV sc w e p m v = scGlobalApply sc "Prelude.fpFromSBV" [w, e, p, m, v]
+
+-- primitive fpIeeeEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+scFpIeeeEq :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scFpIeeeEq sc e p f1 f2 = scGlobalApply sc "Prelude.fpIeeeEq" [e, p, f1, f2]
+
+-- primitive fpIsInf : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+scFpIsInf :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpIsInf sc e p f = scGlobalApply sc "Prelude.fpIsInf" [e, p, f]
+
+-- primitive fpIsNaN : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+scFpIsNaN :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpIsNaN sc e p f = scGlobalApply sc "Prelude.fpIsNaN" [e, p, f]
+
+-- primitive fpIsNeg : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+scFpIsNeg :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpIsNeg sc e p f = scGlobalApply sc "Prelude.fpIsNeg" [e, p, f]
+
+-- primitive fpIsNormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+scFpIsNormal :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpIsNormal sc e p f = scGlobalApply sc "Prelude.fpIsNormal" [e, p, f]
+
+-- fpIsPos : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+scFpIsPos :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpIsPos sc e p f = scGlobalApply sc "Prelude.fpIsPos" [e, p, f]
+
+-- primitive fpIsSubnormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+scFpIsSubnormal :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpIsSubnormal sc e p f = scGlobalApply sc "Prelude.fpIsSubnormal" [e, p, f]
+
+-- primitive fpIsZero : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+scFpIsZero :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpIsZero sc e p f = scGlobalApply sc "Prelude.fpIsZero" [e, p, f]
+
+-- primitive fpFMA : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p -> Float e p;
+scFpFMA :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpFMA sc e p m f1 f2 f3 = scGlobalApply sc "Prelude.fpFMA" [e, p, m, f1, f2, f3]
+
+-- fpLe : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+scFpLe :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scFpLe sc e p f1 f2 = scGlobalApply sc "Prelude.fpLe" [e, p, f1, f2]
+
+-- primitive fpLt : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+scFpLt :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scFpLt sc e p f1 f2 = scGlobalApply sc "Prelude.fpLt" [e, p, f1, f2]
+
+-- primitive fpLogicalEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+scFpLogicalEq :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scFpLogicalEq sc e p f1 f2 = scGlobalApply sc "Prelude.fpLogicalEq" [e, p, f1, f2]
+
+-- primitive fpMul : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+scFpMul :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpMul sc e p m f1 f2 = scGlobalApply sc "Prelude.fpMul" [e, p, m, f1, f2]
+
+-- primitive fpNeg : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+scFpNeg :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpNeg sc e p f = scGlobalApply sc "Prelude.fpNeg" [e, p, f]
+
+-- primitive fpRem : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Float e p;
+scFpRem :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scFpRem sc e p f1 f2 = scGlobalApply sc "Prelude.fpRem" [e, p, f1, f2]
+
+-- primitive fpRound : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
+scFpRound :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scFpRound sc e p m f = scGlobalApply sc "Prelude.fpRound" [e, p, m, f]
+
+-- primitive fpSqrt : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
+scFpSqrt :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scFpSqrt sc e p m f = scGlobalApply sc "Prelude.fpSqrt" [e, p, m, f]
+
+-- primitive fpSub : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+scFpSub :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpSub sc e p m f1 f2 = scGlobalApply sc "Prelude.fpSub" [e, p, m, f1, f2]
+
+-- primitive fpToBits : (e : Nat) -> (p : Nat) -> Float e p -> Vec (addNat e p) Bool;
+scFpToBits :: SharedContext -> Term -> Term -> Term -> IO Term
+scFpToBits sc e p f = scGlobalApply sc "Prelude.fpToBits" [e, p, f]
+
+-- primitive fpToBV : (e : Nat) -> (p : Nat) (w : Nat) -> RoundingMode -> Float e p -> Vec w Bool;
+scFpToBV :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpToBV sc e p w m f = scGlobalApply sc "Prelude.fpToBV" [e, p, w, m, f]
+
+-- primitive fpToSBV : (e : Nat) -> (p : Nat) (w : Nat) -> RoundingMode -> Float e p -> Vec w Bool;
+scFpToSBV :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scFpToSBV sc e p w m f = scGlobalApply sc "Prelude.fpToSBV" [e, p, w, m, f]
+
+-- roundNearestEven : RoundingMode;
+scRoundNearestEven :: SharedContext -> IO Term
+scRoundNearestEven sc = scGlobalDef sc "Prelude.roundNearestEven"
+
+-- roundNearestAway : RoundingMode;
+scRoundNearestAway :: SharedContext -> IO Term
+scRoundNearestAway sc = scGlobalDef sc "Prelude.roundNearestAway"
+
+-- roundPositive : RoundingMode;
+scRoundPositive :: SharedContext -> IO Term
+scRoundPositive sc = scGlobalDef sc "Prelude.roundPositive"
+
+-- roundNegative : RoundingMode;
+scRoundNegative :: SharedContext -> IO Term
+scRoundNegative sc = scGlobalDef sc "Prelude.roundNegative"
+
+-- roundZero : RoundingMode;
+scRoundZero :: SharedContext -> IO Term
+scRoundZero sc = scGlobalDef sc "Prelude.roundZero"
 
 ------------------------------------------------------------
 

@@ -85,6 +85,8 @@ import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
                                  IsExprBuilder,IsSymExprBuilder, BoundVar)
 import qualified What4.Interface as W
 import           What4.BaseTypes
+import qualified What4.SFloat as SF
+import           What4.SFloat (SFloat(..))
 import qualified What4.SWord as SW
 import           What4.SWord (SWord(..))
 
@@ -123,6 +125,7 @@ prims sym =
   , Prims.bpMuxBool  = W.itePred sym
   , Prims.bpMuxWord  = SW.bvIte  sym
   , Prims.bpMuxInt   = W.intIte  sym
+  , Prims.bpMuxFloat = SF.fpIte sym
   , Prims.bpMuxArray = arrayIte sym
   , Prims.bpMuxExtra = muxWhat4Extra sym
     -- Booleans
@@ -958,6 +961,16 @@ boundFOTs sym vars =
             -- TODO(#2433): Assert that the denominator is non-zero.
             denom <- freshBnd x BaseIntegerRepr
             pure $ VRational numer denom
+       FOTFloat e p ->
+         case (someNat e, someNat p) of
+           (Just (Some e'), Just (Some p'))
+             | Just LeqProof <- testLeq (knownNat @2) e'
+             , Just LeqProof <- testLeq (knownNat @2) p' ->
+                 VFloat . SFloat <$>
+                   freshBnd x (BaseFloatRepr (FloatingPointPrecisionRepr e' p'))
+           _ -> fail $
+                  "boundFOTs: float type with unsupported exponent size " ++
+                  "(" ++ show e ++ ") or precision size (" ++ show p ++ ")"
 
        FOTVec n FOTBit ->
          case somePosNat n of
@@ -1242,6 +1255,8 @@ rebuildTerm sym st sc tv sv =
       chokeOn "VIntToNat"
     VRational{} ->
       chokeOn "VRational"
+    VFloat (SFloat f) ->
+      toSC sym st f
     VNat n ->
       scNat sc n
     VInt x ->
@@ -1353,4 +1368,3 @@ w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
        Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
                         variable' uninterpreted (recursor sym) primHandler mux
      Sim.evalSharedTerm cfg t
-

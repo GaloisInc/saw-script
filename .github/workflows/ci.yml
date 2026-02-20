@@ -550,12 +550,14 @@ jobs:
       - run: opam pin add -y rocq-prover 9.0.0
       - run: opam install -y rocq-core=9.1.0 rocq-stdlib=9.0.0
 
-      # Install coq-bits from source. FIXME: replace with compatible
-      # opam-released version when available.
+      # Install coq-bits from source and install coq-flocq from opam.
+      # FIXME: replace pinned coq-bits with compatible opam-released version
+      # when available.
       - working-directory: saw-core-rocq/rocq
         run: |
           opam install -y coq=9.1.0 # coq-* packages include compatibility shims (e.g., coq_makefile).
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
+          opam install -y coq-flocq=4.2.2
 
       # FIXME: the following steps generate Rocq libraries for the SAWCore to
       # Rocq translator and builds them; if we do other Rocq tests, these steps

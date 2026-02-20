@@ -499,6 +499,12 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("rationalFloor", mapsTo sawDefinitionsModule "rationalFloor")
   ]
 
+  -- Floats
+  ++
+  -- TODO RGS: Finish this
+  [ ("Float", mapsTo sawDefinitionsModule "Float")
+  ]
+
   -- Axioms currently skipped
   ++
   [ ("drop0",                skip)

@@ -189,6 +189,7 @@ data BasePrims l =
   , bpMuxBool  :: VBool l -> VBool l -> VBool l -> MBool l
   , bpMuxWord  :: VBool l -> VWord l -> VWord l -> MWord l
   , bpMuxInt   :: VBool l -> VInt l -> VInt l -> MInt l
+  , bpMuxFloat :: VBool l -> VFloat l -> VFloat l -> MFloat l
   , bpMuxArray :: VBool l -> VArray l -> VArray l -> MArray l
   , bpMuxExtra :: VBool l -> Extra l -> Extra l -> EvalM l (Extra l)
     -- Booleans
@@ -252,6 +253,8 @@ data BasePrims l =
   , bpIntMin :: VInt l -> VInt l -> MInt l
   , bpIntMax :: VInt l -> VInt l -> MInt l
   , bpNatToInt :: Natural -> MInt l
+    -- Float operations
+-- TODO RGS: Finish me
     -- Array operations
   , bpArrayConstant :: TValue l -> TValue l -> Value l -> MArray l
   , bpArrayLookup :: VArray l -> Value l -> MValue l
@@ -364,6 +367,8 @@ constMap bp = Map.fromList
   , ("Prelude.rationalNeg", rationalNegOp bp)
   , ("Prelude.rationalRecip", rationalRecipOp)
   , ("Prelude.rationalFloor", rationalFloorOp bp)
+  -- Floats
+  , ("Prelude.Float", floatTypeOp)
   -- Modular Integers
   , ("Prelude.IntMod", natFun $ \n -> PrimValue (TValue (VIntModType n)))
   -- Vectors
@@ -1340,6 +1345,13 @@ intToNatOp =
   intFun $ \x -> PrimValue $!
     if x >= 0 then VNat (fromInteger x) else VNat 0
 
+-- primitive Float : Nat -> Nat -> sort 0;
+floatTypeOp :: VMonad l => Prim l
+floatTypeOp =
+  natFun $ \e ->
+  natFun $ \p ->
+    PrimValue (TValue (VFloatType e p))
+
 -- primitive ratio : Integer -> Integer -> Rational;
 ratioOp :: VMonad l => Prim l
 ratioOp =
@@ -1567,6 +1579,8 @@ muxValue bp b x0 y0 = value x0 y0
 
     value (VRational xNumer xDenom) (VRational yNumer yDenom) =
       VRational <$> bpMuxInt bp b xNumer yNumer <*> bpMuxInt bp b xDenom yDenom
+
+    value (VFloat x) (VFloat y)               = VFloat <$> bpMuxFloat bp b x y
 
     value x@(VWord _)       y                 = do xv <- toVector' x
                                                    value (VVector xv) y

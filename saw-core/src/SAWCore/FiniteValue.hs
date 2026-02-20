@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 {- |
 Module      : SAWCore.FiniteValue
@@ -14,6 +15,7 @@ module SAWCore.FiniteValue (
     FiniteValue(..),
     FirstOrderType(..),
     FirstOrderValue(..),
+    FirstOrderFloat(..),
 
     toFirstOrderValue,
     toFiniteType,
@@ -50,6 +52,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ratio (numerator, denominator)
 import qualified Data.Text as Text
+import LibBF (BigFloat, pattern NearEven, bfFromBits, bfToBits)
 import Numeric.Natural (Natural)
 
 import Data.Foldable.WithIndex (ifoldrM)
@@ -62,6 +65,7 @@ import qualified Data.Aeson as JSON
 import SAWSupport.Pretty (prettyInteger)
 import qualified SAWSupport.Pretty as PPS (Doc, Opts)
 
+import SAWCore.FloatHelpers (fpOpts)
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
@@ -92,6 +96,9 @@ data FirstOrderType
   | FOTInt
   | FOTIntMod Natural
   | FOTRational
+  | FOTFloat Natural Natural
+    -- ^ The first 'Natural' is the exponent, and the second 'Natural' is the
+    -- precision.
   | FOTVec Natural FirstOrderType
   | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
@@ -117,6 +124,7 @@ data FirstOrderValue
   | FOVInt Integer
   | FOVIntMod Natural Integer
   | FOVRational Rational
+  | FOVFloat FirstOrderFloat
   | FOVWord Natural Integer -- ^ a more efficient special case for 'FOVVec FOTBit _'.
   | FOVVec FirstOrderType [FirstOrderValue]
   | FOVArray FirstOrderType FirstOrderValue (Map FirstOrderValue FirstOrderValue)
@@ -124,6 +132,43 @@ data FirstOrderValue
   | FOVTuple [FirstOrderValue]
   | FOVRec (Map FieldName FirstOrderValue)
   deriving (Eq, Ord, Generic)
+
+-- | A 'BigFloat' paired with its exponent and precision. It is convenient to
+-- define this as its own data type for the sake of giving it a 'ToJSON'
+-- instance.
+
+-- (Note that this data type is intentionally very similar to Cryptol's
+-- Cryptol.Backend.FloatHelpers.BF.)
+data FirstOrderFloat = FirstOrderFloat
+  { fofExp :: !Natural
+  , fofPrec :: !Natural
+  , fofValue :: !BigFloat
+  } deriving (Eq, Ord)
+
+instance Pretty FirstOrderFloat where
+  pretty = viaShow . fofValue
+
+instance Show FirstOrderFloat where
+  showsPrec p = showsPrec p . fofValue
+
+instance FromJSON FirstOrderFloat where
+  parseJSON = JSON.withObject "FirstOrderFloat" $ \o -> do
+    e <- o JSON..: "exp"
+    p <- o JSON..: "prec"
+    bits <- o JSON..: "value"
+    pure $ FirstOrderFloat
+      { fofExp = e
+      , fofPrec = p
+      , fofValue = bfFromBits (fpOpts e p NearEven) bits
+      }
+
+instance ToJSON FirstOrderFloat where
+  toJSON (FirstOrderFloat e p v) =
+    JSON.object
+      [ "exp" JSON..= e
+      , "prec" JSON..= p
+      , "value" JSON..= bfToBits (fpOpts e p NearEven) v
+      ]
 
 --
 -- Note [FOVArray]
@@ -216,6 +261,7 @@ toFiniteType (FOTRec fs)   = FTRec   <$> traverse toFiniteType fs
 toFiniteType FOTInt{}      = Nothing
 toFiniteType FOTIntMod{}   = Nothing
 toFiniteType FOTRational{} = Nothing
+toFiniteType FOTFloat{}    = Nothing
 toFiniteType FOTArray{}    = Nothing
 
 instance Show FiniteValue where
@@ -228,6 +274,7 @@ instance Show FirstOrderValue where
       FOVInt i    -> shows i
       FOVIntMod _ i -> shows i
       FOVRational r -> shows r
+      FOVFloat fof -> shows fof
       FOVWord _ x -> shows x
       FOVVec _ vs -> showString "[" . commaSep (map shows vs) . showString "]"
       FOVArray _kty d vs ->
@@ -259,6 +306,7 @@ prettyFirstOrderValue opts = loop
         FOVInt i      -> pretty i
         FOVIntMod _ i -> pretty i
         FOVRational r -> pretty (numerator r) <+> "%" <+> pretty (denominator r)
+        FOVFloat fof  -> pretty fof
         FOVWord _w i  -> prettyInteger opts i
         FOVVec _ xs   -> brackets (align (sep (punctuate comma (map loop xs))))
         FOVArray _kty d vs ->
@@ -335,6 +383,7 @@ firstOrderTypeOf fv =
     FOVInt _    -> FOTInt
     FOVIntMod n _ -> FOTIntMod n
     FOVRational _ -> FOTRational
+    FOVFloat (FirstOrderFloat e p _) -> FOTFloat e p
     FOVWord n _ -> FOTVec n FOTBit
     FOVVec t vs -> FOTVec (fromIntegral (length vs)) t
     FOVArray tk d _vs -> FOTArray tk (firstOrderTypeOf d)
@@ -387,6 +436,8 @@ asFirstOrderTypeMaybe sc t =
          -> return (FOTIntMod n)
        (R.asRationalType -> Just ())
          -> return FOTRational
+       (R.asFloatType -> Just (e, p))
+         -> return (FOTFloat e p)
        (R.isVecType return -> Just (n R.:*: tp))
          -> FOTVec n <$> asFirstOrderTypeMaybe sc tp
        (R.asArrayType -> Just (tp1 R.:*: tp2)) -> do
@@ -426,6 +477,9 @@ scFirstOrderType sc ft =
     FOTInt      -> scIntegerType sc
     FOTIntMod n -> scIntModType sc =<< scNat sc n
     FOTRational -> scRationalType sc
+    FOTFloat e p -> do e' <- scNat sc e
+                       p' <- scNat sc p
+                       scFloatType sc e' p'
     FOTVec n t  -> do n' <- scNat sc n
                       t' <- scFirstOrderType sc t
                       scVecType sc n' t'
@@ -452,6 +506,7 @@ scFirstOrderValue sc fv =
          i' <- scNatToInt sc =<< scNat sc (fromInteger (i `mod` toInteger n))
          scToIntMod sc n' i'
     FOVRational r -> scRationalConst sc r
+    FOVFloat (FirstOrderFloat e p bf) -> scFloatConst sc e p bf
     FOVWord n x -> scBvConst sc n x
     FOVVec t vs -> do t' <- scFirstOrderType sc t
                       vs' <- traverse (scFirstOrderValue sc) vs

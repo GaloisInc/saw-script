@@ -35,7 +35,7 @@ we'd end up with:
   g_0 a0 .. a1023
   g_1 a0 .. a1023
   ..
-  g_1023 a0 .. a1023  
+  g_1023 a0 .. a1023
 
 Note that this has 1024 * 1024 terms.  With the array translation, we
 should end up with:
@@ -62,7 +62,7 @@ new uninterpreted symbols, but reuse the old ones.  This is not an optimization,
 but is crucial for the correct behavior of the algorithm.
 
 The `UnintApp` type is used to collect the arguments to a function, and also
-compute the root name for the function.   For ordinary (non-dependent) 
+compute the root name for the function.   For ordinary (non-dependent)
 function applications we just collect the arguments in the `UnintApp`.  However,
 for dependent applications (e.g., to handle a size polymorphic function),
 we instead modify the root name of the function.  This means that different
@@ -163,6 +163,7 @@ import qualified What4.Expr.Builder as B
 import           What4.Interface(SymExpr,SymFnWrapper(..),IsSymExprBuilder)
 import qualified What4.Interface as W
 import           What4.BaseTypes
+import           What4.SFloat (SFloat(..))
 import           What4.SWord (SWord(..))
 
 -- parameterized-utils
@@ -213,7 +214,7 @@ data ReturnTrip sym =
     -- ^ We should reinterpret terms back into SAW Core.
     -- The boolean flag indicates that this is a symbolic variable
     -- (instead of constant), which has special handling without arguments.
-  
+
 withSym :: IsSymExprBuilder sym => ReturnTrip sym -> (sym -> a) -> a
 withSym xs k =
   case xs of
@@ -272,7 +273,7 @@ parseUninterpretedTop rt@(DoReturnTrip _ True _ _ _) ref app@(UnintApp _ _ argTy
   case testEquality Ctx.empty argTys of
     Just Refl -> evalStateT (parseUninterpreted' rt ref app ty) MapF.empty
     Nothing   -> fail "At present, we do not support symbolic variables with parameters"
-    
+
 parseUninterpretedTop saw ref app ty =
   do
     count <-
@@ -295,10 +296,10 @@ parseUninterpretedTop saw ref app ty =
                   _   -> pure (UninterpMany ixW elTy (V.fromList terms))
 
     pure val
-    
+
 
 -- | Track how many uninterpreted results we need for each base type.
-newtype UnintCount (tc :: BaseType) = UnintCount Natural 
+newtype UnintCount (tc :: BaseType) = UnintCount Natural
 
 -- | Count how many uninterpreted symbols we need to represent a value
 -- of the given type.  Note that this function should match exactly what
@@ -313,6 +314,13 @@ countUninterpreted scale count ty =
     VIntType        -> add BaseIntegerRepr count
     VIntModType {}  -> add BaseIntegerRepr count
     VRationalType   -> add BaseIntegerRepr (add BaseIntegerRepr count)
+    VFloatType e p  ->
+      case (someNat e, someNat p) of
+        (Just (Some e'), Just (Some p'))
+          | Just LeqProof <- testLeq (knownNat @2) e'
+          , Just LeqProof <- testLeq (knownNat @2) p' ->
+             add (BaseFloatRepr (FloatingPointPrecisionRepr e' p')) count
+        _ -> count
     VVecType n VBoolType ->
       case somePosNat n of
         Just (Some (PosNat w)) -> add (BaseBVRepr w) count
@@ -458,7 +466,7 @@ parseUninterpreted' saw ref app ty =
       do
         -- See:
         -- https://github.com/GaloisInc/saw-script/issues/3206
-        -- https://github.com/GaloisInc/what4/issues/364 
+        -- https://github.com/GaloisInc/what4/issues/364
         -- Note that the `bad` would only matter if we use a rational in the
         -- result of an uninterpreted function, and we need to import the
         -- resulting What4 term back into What4
@@ -467,6 +475,14 @@ parseUninterpreted' saw ref app ty =
         -- TODO(#2433): Assert that the denominator is non-zero.
         denom <- mkUninterpreted BaseIntegerRepr (mapArgTerm (\_ -> bad) saw)
         pure $ VRational numer denom
+
+    VFloatType e p
+      | Just (Some e') <- someNat e
+      , Just (Some p') <- someNat p
+      , Just LeqProof <- testLeq (knownNat @2) e'
+      , Just LeqProof <- testLeq (knownNat @2) p'
+      -> (VFloat . SFloat) <$>
+           mkUninterpreted (BaseFloatRepr (FloatingPointPrecisionRepr e' p')) saw
 
     VVecType n VBoolType ->
       case somePosNat n of
@@ -482,11 +498,11 @@ parseUninterpreted' saw ref app ty =
             elTy <- lift (termOfTValue sc et)
             V.generateM (fromIntegral n) (\i ->
               do
-                let newArg = ArgTermAt n elTy arg (fromIntegral i) 
+                let newArg = ArgTermAt n elTy arg (fromIntegral i)
                 el <- parseUninterpreted' (DoReturnTrip sym isVar st sc newArg) ref app et
                 pure (ready el)
               )
-          
+
     VArrayType ity ety
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
@@ -525,7 +541,7 @@ parseUninterpreted' saw ref app ty =
         Nothing
           | DoReturnTrip sym True st sc arg <- saw ->
             lift (bindSAWTerm sym st tyr =<< reconstructArgTerm arg sc [])
-            
+
         Just (Arr fn w (x : xs) atms) ->
           do
             let newTerm =
@@ -592,6 +608,7 @@ applyUnintApp sym app0 v =
     VRational numer denom     -> do app1 <- applyUnintApp sym app0 (VInt numer)
                                     app2 <- applyUnintApp sym app1 (VInt denom)
                                     pure app2
+    VFloat (SFloat sf)        -> return (extendUnintApp app0 sf (W.exprType sf))
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
@@ -621,7 +638,7 @@ applyUnintApp sym app0 v =
 
 --------------------------------------------------------------------------------
 -- `ArgTerms` are used to remember the mappings between low-level symbolic
--- terms and SAW core terms. 
+-- terms and SAW core terms.
 
 
 -- | An 'ArgTerm' is a description of how to reassemble a saw-core
@@ -755,6 +772,7 @@ mkArgTerm sc ty val =
     (VIntType, VInt _)   -> return ArgTermVar
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
+    (_, VFloat{})        -> return ArgTermVar
     (_, VArray{})        -> return ArgTermVar
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
     (VRationalType, VRational numer denom) ->

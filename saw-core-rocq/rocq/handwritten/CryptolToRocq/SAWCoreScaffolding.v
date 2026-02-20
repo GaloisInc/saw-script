@@ -6,6 +6,7 @@ From Stdlib Require        Numbers.NatInt.NZLog.
 From Stdlib Require Import Strings.String.
 From Stdlib Require Export Logic.Eqdep.
 From Stdlib Require Import Arith.
+From Flocq Require Import BinarySingleNaN.
 
 (* This defines notations that clash with nat's notations. *)
 Close Scope Q_scope.
@@ -444,6 +445,12 @@ Definition rationalRecip : Rational -> Rational := Qinv.
 
 Definition rationalFloor (r : Rational) : Integer :=
   (Qnum r / Zpos (Qden r))%Z.
+
+(***
+ *** Floats
+ ***)
+ 
+(* TODO RGS: Finish me *)
 
 (***
  *** A simple typeclass-based implementation of SAW record types
