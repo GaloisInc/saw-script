@@ -1083,6 +1083,9 @@ instance TestEquality TypeShape where
         , (TypeApp (TypeApp (ConType [t|Assignment|]) AnyType) AnyType, [|testEquality|])
         , (TypeApp (ConType [t|TypeRepr|]) AnyType, [|testEquality|])
         , (TypeApp (ConType [t|CtxRepr|]) AnyType, [|testEquality|])
+          -- See #1976 for why we use checkCompatibleTys to compare MIR types
+          -- instead of (==).
+        , (ConType [t|M.Ty|], [| \x y -> if checkCompatibleTys x y then Just Refl else Nothing |])
         ])
 
 instance TestEquality VariantShape where
