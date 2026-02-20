@@ -457,8 +457,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("tail",          mapsTo vectorsModule "tail")
   , ("head_gen",      mapsTo vectorsModule "head_gen")
   , ("tail_gen",      mapsTo vectorsModule "tail_gen")
-  -- workaround to avoid issue translating partially-applied "ite"
-  , ("pmux",          skip)
   ]
 
   -- Streams
