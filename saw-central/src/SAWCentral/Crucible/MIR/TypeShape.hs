@@ -48,6 +48,7 @@ module SAWCentral.Crucible.MIR.TypeShape
   , accessMirAggregateArray
   , accessMirAggregateArray'
   -- Misc helpers
+  , checkCompatibleTys
   , readMaybeType
   , readPartExprMaybe
   ) where
@@ -58,6 +59,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (isJust)
 import Data.Text (Text)
@@ -68,6 +70,7 @@ import Data.Parameterized.Some
 import Data.Parameterized.TH.GADT
 import Data.Parameterized.TraversableFC
 import GHC.Stack (HasCallStack)
+import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 
 import qualified What4.Interface as W4
@@ -77,6 +80,7 @@ import Lang.Crucible.Backend (IsSymInterface)
 import Lang.Crucible.Simulator.RegValue (RegValue)
 import Lang.Crucible.Types
 
+import qualified Mir.DefId as M
 import Mir.Intrinsics
 import qualified Mir.Mir as M
 import Mir.TransTy ( tyListToCtx, tyToRepr, tyToReprCont, canInitialize
@@ -878,6 +882,197 @@ readPartExprMaybe _sym (W4.PE p v)
 
 
 $(pure [])
+
+-- | Check if two 'M.Ty's are compatible in SAW. This is a slightly coarser
+-- notion of equality to reflect the fact that MIR's type system is richer than
+-- Cryptol's type system, and some types which would be distinct in MIR are in
+-- fact equal when converted to the equivalent Cryptol types. In particular:
+--
+-- 1. A @u<N>@ type is always compatible with an @i<N>@ type. For instance, @u8@
+--    is compatible with @i8@, and @u16@ is compatible with @i16@. Note that the
+--    bit sizes of both types must be the same. For instance, @u8@ is /not/
+--    compatible with @i16@.
+--
+-- 2. The @usize@/@isize@ types are always compatible with @u<N>@/@i<N>@, where
+--    @N@ is the number of bits corresponding to the 'SizeBits' type in
+--    "M.Intrinsics". (This is a bit unsavory, as the actual size of
+--    @usize@/@isize@ is platform-dependent, but this is the current approach.)
+--
+-- 3. Compatibility applies recursively. For instance, @[ty_1; N]@ is compatible
+--    with @[ty_2; N]@ iff @ty_1@ and @ty_2@ are compatibile. Similarly, a tuple
+--    typle @(ty_1_a, ..., ty_n_a)@ is compatible with @(ty_1_b, ..., ty_n_b)@
+--    iff @ty_1_a@ is compatible with @ty_1_b@, ..., and @ty_n_a@ is compatible
+--    with @ty_n_b@.
+--
+-- See also @checkRegisterCompatibility@ in "SAWCentral.Crucible.LLVM.Builtins"
+-- and @registerCompatible@ in "SAWCentral.Crucible.JVM.Builtins", which fill a
+-- similar niche in the LLVM and JVM backends, respectively.
+checkCompatibleTys :: M.Ty -> M.Ty -> Bool
+checkCompatibleTys ty1 ty2 = tyView ty1 == tyView ty2
+
+-- | Like 'M.Ty', but where:
+--
+-- * The 'TyInt' and 'TyUint' constructors have been collapsed into a single
+--   'TyViewInt' constructor.
+--
+-- * 'TyViewInt' uses 'BaseSizeView' instead of 'M.BaseSize'.
+--
+-- * Recursive occurrences of 'M.Ty' use 'TyView' instead. This also applies
+--   to fields of type 'SubstsView' and 'FnSigView', which also replace 'M.Ty'
+--   with 'TyView' in their definitions.
+--
+-- This provides a coarser notion of equality than what the 'Eq' instance for
+-- 'M.Ty' provides, which distinguishes the two sorts of integer types.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+data TyView
+  = TyViewBool
+  | TyViewChar
+    -- | The sole integer type. Both 'TyInt' and 'TyUint' are mapped to
+    -- 'TyViewInt', and 'BaseSizeView' is used instead of 'M.BaseSize'.
+  | TyViewInt !BaseSizeView
+  | TyViewTuple ![TyView]
+  | TyViewSlice !TyView
+  | TyViewArray !TyView !Int
+  | TyViewRef !TyView !M.Mutability
+  | TyViewAdt !M.DefId !M.DefId !SubstsView
+  | TyViewFnDef !M.DefId
+  | TyViewClosure [TyView]
+  | TyViewStr
+  | TyViewFnPtr !FnSigView
+  | TyViewDynamic !M.TraitName
+  | TyViewRawPtr !TyView !M.Mutability
+  | TyViewFloat !M.FloatKind
+  | TyViewDowncast !TyView !Integer
+  | TyViewNever
+  | TyViewForeign
+  | TyViewLifetime
+  | TyViewConst !M.ConstVal
+  | TyViewCoroutine !CoroutineArgsView
+  | TyViewCoroutineClosure [TyView]
+  | TyViewErased
+  | TyViewInterned M.TyName
+  deriving Eq
+
+-- | Like 'M.BaseSize', but without a special case for @usize@/@isize@.
+-- Instead, these are mapped to their actual size, which is determined by the
+-- number of bits in the 'SizeBits' type in "M.Intrinsics". (This is a bit
+-- unsavory, as the actual size of @usize@/@isize@ is platform-dependent, but
+-- this is the current approach.)
+data BaseSizeView
+  = B8View
+  | B16View
+  | B32View
+  | B64View
+  | B128View
+  deriving Eq
+
+-- | Like 'M.Substs', but using 'TyView's instead of 'M.Ty'.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+newtype SubstsView = SubstsView [TyView]
+  deriving Eq
+
+-- | Like 'M.FnSig', but using 'TyView's instead of 'M.Ty'.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+data FnSigView = FnSigView {
+    _fsvarg_tys    :: ![TyView]
+  , _fsvreturn_ty  :: !TyView
+  , _fsvabi        :: M.Abi
+  }
+  deriving Eq
+
+-- | Like 'M.CoroutineArgs', but using 'TyView's instead of 'M.Ty'.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+data CoroutineArgsView = CoroutineArgsView
+  { _cavDiscrTy :: !TyView
+  , _cavUpvarTys :: ![TyView]
+  , _cavSavedTys :: ![TyView]
+  , _cavFieldMap :: !(Map (Int, Int) Int)
+  } deriving Eq
+
+-- | Convert a 'M.Ty' value to a 'TyView' value.
+tyView :: M.Ty -> TyView
+-- The two most important cases. Both sorts of integers are mapped to TyViewInt.
+tyView (M.TyInt  bs) = TyViewInt (baseSizeView bs)
+tyView (M.TyUint bs) = TyViewInt (baseSizeView bs)
+-- All other cases are straightforward.
+tyView M.TyBool = TyViewBool
+tyView M.TyChar = TyViewChar
+tyView (M.TyTuple tys) = TyViewTuple (map tyView tys)
+tyView (M.TySlice ty) = TyViewSlice (tyView ty)
+tyView (M.TyArray ty n) = TyViewArray (tyView ty) n
+tyView (M.TyRef ty mut) = TyViewRef (tyView ty) mut
+tyView (M.TyAdt monoDid origDid substs) =
+  TyViewAdt monoDid origDid (substsView substs)
+tyView (M.TyFnDef did) = TyViewFnDef did
+tyView (M.TyClosure tys) = TyViewClosure (map tyView tys)
+tyView M.TyStr = TyViewStr
+tyView (M.TyFnPtr sig) = TyViewFnPtr (fnSigView sig)
+tyView (M.TyDynamic trait) = TyViewDynamic trait
+tyView (M.TyRawPtr ty mut) = TyViewRawPtr (tyView ty) mut
+tyView (M.TyFloat fk) = TyViewFloat fk
+tyView (M.TyDowncast ty n) = TyViewDowncast (tyView ty) n
+tyView M.TyNever = TyViewNever
+tyView M.TyForeign = TyViewForeign
+tyView M.TyLifetime = TyViewLifetime
+tyView (M.TyConst c) = TyViewConst c
+tyView (M.TyCoroutine ca) = TyViewCoroutine (coroutineArgsView ca)
+tyView (M.TyCoroutineClosure tys) = TyViewCoroutineClosure (map tyView tys)
+tyView M.TyErased = TyViewErased
+tyView (M.TyInterned nm) = TyViewInterned nm
+
+-- | Convert a 'M.BaseSize' value to a 'BaseSizeView' value.
+baseSizeView :: M.BaseSize -> BaseSizeView
+baseSizeView M.B8    = B8View
+baseSizeView M.B16   = B16View
+baseSizeView M.B32   = B32View
+baseSizeView M.B64   = B64View
+baseSizeView M.B128  = B128View
+baseSizeView M.USize =
+  case Map.lookup (W4.natValue sizeBitsRepr) bitSizesMap of
+    Just bsv -> bsv
+    Nothing ->
+      error $ "M.Intrinsics.BaseSize bit size not supported: " ++ show sizeBitsRepr
+  where
+    sizeBitsRepr = W4.knownNat @SizeBits
+
+    bitSizesMap :: Map Natural BaseSizeView
+    bitSizesMap = Map.fromList
+      [ (W4.natValue (W4.knownNat @8),   B8View)
+      , (W4.natValue (W4.knownNat @16),  B16View)
+      , (W4.natValue (W4.knownNat @32),  B32View)
+      , (W4.natValue (W4.knownNat @64),  B64View)
+      , (W4.natValue (W4.knownNat @128), B128View)
+      ]
+
+-- | Convert a 'M.Substs' value to a 'SubstsView' value.
+substsView :: M.Substs -> SubstsView
+substsView (M.Substs tys) = SubstsView (map tyView tys)
+
+-- | Convert a 'M.FnSig' value to a 'FnSigView' value.
+fnSigView :: M.FnSig -> FnSigView
+fnSigView (M.FnSig argTys retTy abi) =
+  FnSigView (map tyView argTys) (tyView retTy) abi
+
+-- | Convert a 'M.CoroutineArgs' value to a 'CoroutineArgsView' value.
+coroutineArgsView :: M.CoroutineArgs -> CoroutineArgsView
+coroutineArgsView (M.CoroutineArgs discrTy upvarTys savedTys fieldMap) =
+  CoroutineArgsView
+    (tyView discrTy)
+    (map tyView upvarTys)
+    (map tyView savedTys)
+    fieldMap
 
 instance TestEquality TypeShape where
   testEquality =
