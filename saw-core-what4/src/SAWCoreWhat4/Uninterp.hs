@@ -164,6 +164,7 @@ import qualified What4.Expr.Builder as B
 import           What4.Interface(SymExpr,SymFnWrapper(..),IsSymExprBuilder)
 import qualified What4.Interface as W
 import           What4.BaseTypes
+import           What4.SFloat (SFloat(..))
 import           What4.SWord (SWord(..), bvPackBE)
 
 -- parameterized-utils
@@ -314,6 +315,13 @@ countUninterpreted scale count ty =
     VIntType        -> add BaseIntegerRepr count
     VIntModType {}  -> add BaseIntegerRepr count
     VRationalType   -> add BaseIntegerRepr (add BaseIntegerRepr count)
+    VFloatType e p  ->
+      case (someNat e, someNat p) of
+        (Just (Some e'), Just (Some p'))
+          | Just LeqProof <- testLeq (knownNat @2) e'
+          , Just LeqProof <- testLeq (knownNat @2) p' ->
+             add (BaseFloatRepr (FloatingPointPrecisionRepr e' p')) count
+        _ -> count
     VVecType n VBoolType ->
       case somePosNat n of
         Just (Some (PosNat w)) -> add (BaseBVRepr w) count
@@ -469,6 +477,14 @@ parseUninterpreted' saw ref app ty =
         denom <- mkUninterpreted BaseIntegerRepr (mapArgTerm (\_ -> bad) saw)
         pure $ VRational numer denom
 
+    VFloatType e p
+      | Just (Some e') <- someNat e
+      , Just (Some p') <- someNat p
+      , Just LeqProof <- testLeq (knownNat @2) e'
+      , Just LeqProof <- testLeq (knownNat @2) p'
+      -> (VFloat . SFloat) <$>
+           mkUninterpreted (BaseFloatRepr (FloatingPointPrecisionRepr e' p')) saw
+
     VVecType n VBoolType ->
       case somePosNat n of
         Just (Some (PosNat w)) -> VWord . DBV <$> mkUninterpreted (BaseBVRepr w) saw
@@ -609,6 +625,7 @@ applyUnintApp sym app0 v =
     VRational numer denom     -> do app1 <- applyUnintApp sym app0 (VInt numer)
                                     app2 <- applyUnintApp sym app1 (VInt denom)
                                     pure app2
+    VFloat (SFloat sf)        -> return (extendUnintApp app0 sf (W.exprType sf))
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
@@ -776,6 +793,7 @@ mkArgTerm sc ty val =
     (VIntType, VInt _)   -> return ArgTermVar
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
+    (_, VFloat{})        -> return ArgTermVar
     (_, VArray{})        -> return ArgTermVar
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
     (VRationalType, VRational numer denom) ->

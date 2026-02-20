@@ -38,25 +38,25 @@ Definition TestSeq_UpdateFirst:
       CryptolPrimitivesForSAWCore.TCNum 
          (Stdlib.PArith.BinPos.Pos.to_nat 
             (Stdlib.PArith.BinPos.xO 
-               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))
+               (Stdlib.PArith.BinPos.xO 
+                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
    in
    let var__1
       :=
       CryptolPrimitivesForSAWCore.TCNum 
          (Stdlib.PArith.BinPos.Pos.to_nat 
             (Stdlib.PArith.BinPos.xO 
-               (Stdlib.PArith.BinPos.xO 
-                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))
    in
    let var__2
       :=
-      CryptolPrimitivesForSAWCore.seq var__1 Init.Datatypes.bool
+      CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
    in
    let var__3
       :=
-      CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1
+      CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
    in
-   CryptolPrimitivesForSAWCore.ecUpdate var__0 var__2 SAWCoreScaffolding.Integer
+   CryptolPrimitivesForSAWCore.ecUpdate var__1 var__2 SAWCoreScaffolding.Integer
       CryptolPrimitivesForSAWCore.PIntegralInteger [
          CryptolPrimitivesForSAWCore.ecNumber 
             (CryptolPrimitivesForSAWCore.TCNum 
@@ -72,7 +72,7 @@ Definition TestSeq_UpdateFirst:
                (Stdlib.PArith.BinPos.Pos.to_nat 
                   (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))) var__2
             var__3;
-         CryptolPrimitivesForSAWCore.ecNumber var__0 var__2 var__3
+         CryptolPrimitivesForSAWCore.ecNumber var__1 var__2 var__3
       ] (CryptolPrimitivesForSAWCore.ecNumber 
          (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero)
          SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger)
