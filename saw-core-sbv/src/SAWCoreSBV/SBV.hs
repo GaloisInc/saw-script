@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -41,6 +42,7 @@ module SAWCoreSBV.SBV
 
 import Data.SBV.Dynamic
 import qualified Data.SBV.Dynamic as SBV
+import qualified Data.SBV.Float as SBV
 import qualified Data.SBV.Internals as SBV
 #if MIN_VERSION_sbv(10,0,0)
 import Data.SBV.Internals (UICodeKind(..))
@@ -77,7 +79,7 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.Term.Functor (FieldName)
 import SAWCore.FiniteValue
-            (FirstOrderType(..), FirstOrderValue(..)
+            (FirstOrderType(..), FirstOrderValue(..), FirstOrderFloat(..)
             , fovVec, asFirstOrderType
             )
 
@@ -89,6 +91,7 @@ type instance EvalM SBV = IO
 type instance VBool SBV = SBool
 type instance VWord SBV = SWord
 type instance VInt  SBV = SInteger
+type instance VFloat SBV = SFloat
 type instance Extra SBV = SbvExtra
 
 type SValue = Value SBV
@@ -126,6 +129,7 @@ prims =
   , Prims.bpMuxBool  = pure3 svIte
   , Prims.bpMuxWord  = pure3 svIte
   , Prims.bpMuxInt   = pure3 svIte
+  , Prims.bpMuxFloat = pure3 svIte
   , Prims.bpMuxArray = unsupportedSBVPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = muxSbvExtra
     -- Booleans
@@ -304,6 +308,9 @@ vBool l = VBool l
 
 vInteger :: SInteger -> SValue
 vInteger x = VInt x
+
+vFloat :: SFloat -> SValue
+vFloat l = VFloat l
 
 ------------------------------------------------------------
 -- Function constructors
@@ -683,6 +690,11 @@ parseUninterpreted cws nm ty =
             let denom = mkUninterpreted KUnbounded cws (nm ++ ".denom")
             pure $ VRational numer denom
 
+    VFloatType e p
+      -> do let e' = fromIntegral @Natural @Int e
+            let p' = fromIntegral @Natural @Int p
+            return $ vFloat $ mkUninterpreted (KFP e' p') cws nm
+
     (VVecType n VBoolType)
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
 
@@ -764,6 +776,7 @@ data Labeler
    = BoolLabel String
    | IntegerLabel String
    | RationalLabel String String
+   | FloatLabel String
    | WordLabel String
    | ZeroWidthWordLabel
    | VecLabel
@@ -801,6 +814,11 @@ newVars nm fot =
          let existsSRational =
                VRational <$> existsSInteger sNumer <*> existsSInteger sDenom
          pure (RationalLabel sNumer sDenom, existsSRational)
+    FOTFloat e p ->
+      do s <- nextId' nm
+         let e' = fromIntegral @Natural @Int e
+         let p' = fromIntegral @Natural @Int p
+         pure (FloatLabel s, vFloat <$> existsSFloat s e' p')
     FOTVec 0 FOTBit ->
       pure (ZeroWidthWordLabel, pure (vWord (literalSWord 0 0)))
     FOTVec n FOTBit ->
@@ -842,6 +860,14 @@ getLabels ls d args
       numer = cvToInteger (d Map.! sNumer)
       denom = cvToInteger (d Map.! sDenom)
 
+  getLabel (FloatLabel s) = FOVFloat $
+    FirstOrderFloat
+      { fofExp = fromIntegral @Int @Natural $ SBV.fpExponentSize fp
+      , fofPrec = fromIntegral @Int @Natural $ SBV.fpSignificandSize fp
+      , fofValue = SBV.fpValue fp
+      }
+    where fp = cvToFP (d Map.! s)
+
   getLabel (WordLabel s)    = FOVWord (cvKind cv) (cvToInteger cv)
     where cv = d Map.! s
 
@@ -862,6 +888,11 @@ getLabels ls d args
       CInteger i -> i
       _               -> error "cvToInteger"
 
+  cvToFP cv =
+    case cvVal cv of
+      CFP fp -> fp
+      _ -> error "cvToFP"
+
 
 ------------------------------------------------------------
 -- Code Generation
@@ -878,6 +909,11 @@ newCodeGenVars _checkSz FOTRational = do
     -- TODO(#2433): Assert that the denominator is non-zero.
     denom <- svCgInput KUnbounded sDenom
     pure $ VRational numer denom
+newCodeGenVars _checkSz (FOTFloat e p) = do
+  s <- nextId
+  let e' = fromIntegral @Natural @Int e
+  let p' = fromIntegral @Natural @Int p
+  pure (vFloat <$> svCgInput (KFP e' p') s)
 newCodeGenVars checkSz (FOTVec n FOTBit)
   | n == 0    = nextId <&> \_ -> return (vWord (literalSWord 0 0))
   | checkSz n = nextId <&> \s -> vWord <$> cgInputSWord s (fromIntegral n)

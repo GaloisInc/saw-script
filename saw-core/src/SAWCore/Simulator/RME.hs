@@ -33,11 +33,14 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import LibBF (BigFloat)
+import qualified LibBF as BF
 
 import Data.RME (RME)
 import qualified Data.RME as RME
 import qualified Data.RME.Vector as RMEV
 
+import SAWCore.FloatHelpers (fpCheckStatus, fpOpts)
 import SAWCore.Module (ModuleMap)
 import SAWCore.Name
 import SAWCore.Panic (panic)
@@ -77,6 +80,7 @@ type instance EvalM ReedMuller = Identity
 type instance VBool ReedMuller = RME
 type instance VWord ReedMuller = Vector RME
 type instance VInt  ReedMuller = Integer
+type instance VFloat ReedMuller = BigFloat
 type instance VArray ReedMuller = ()
 type instance Extra ReedMuller = RExtra
 
@@ -160,6 +164,7 @@ prims =
   , Prims.bpMuxBool  = pure3 RME.mux
   , Prims.bpMuxWord  = pure3 muxRMEV
   , Prims.bpMuxInt   = pure3 muxInt
+  , Prims.bpMuxFloat = pure3 muxFloat
   , Prims.bpMuxArray = unsupportedRMEPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = pure3 muxExtra
     -- Booleans
@@ -223,6 +228,11 @@ prims =
   , Prims.bpIntMin = pure2 min
   , Prims.bpIntMax = pure2 max
   , Prims.bpNatToInt = pure1 toInteger
+    -- Float operations
+  , Prims.bpFpAdd = pure3 $ \m x y ->
+      let opts = fpOpts (BF.bfExpWidth x) (BF.bfPrecWidth x) m in
+      fpCheckStatus $ BF.bfAdd opts x y
+  -- TODO RGS: Finish me
     -- Array operations
   , Prims.bpArrayConstant = unsupportedRMEPrimitive "bpArrayConstant"
   , Prims.bpArrayLookup = unsupportedRMEPrimitive "bpArrayLookup"
@@ -294,6 +304,14 @@ muxInt b x y =
   case RME.isBool b of
     Just c -> if c then x else y
     Nothing -> if x == y then x else error $ "muxRValue: VInt " ++ show (x, y)
+
+muxFloat :: RME -> BigFloat -> BigFloat -> BigFloat
+muxFloat b x y =
+  case RME.isBool b of
+    Just c -> if c then x else y
+    Nothing -> if BF.bfCompare x y == EQ
+                 then x
+                 else error $ "muxRValue: VFloat " ++ show (x, y)
 
 muxExtra :: RME -> RExtra -> RExtra -> RExtra
 muxExtra b (AStream xs) (AStream ys) =

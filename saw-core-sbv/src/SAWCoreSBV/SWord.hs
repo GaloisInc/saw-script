@@ -7,12 +7,13 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 module SAWCoreSBV.SWord
-  ( SBool, SWord, SInteger
+  ( SBool, SWord, SInteger, SFloat
   , literalSWord, literalSInteger
   , fromBitsLE
   , forallSWord, existsSWord, forallSWord_, existsSWord_
   , forallSBool, existsSBool, forallSBool_, existsSBool_
   , forallSInteger, existsSInteger, forallSInteger_, existsSInteger_
+  , forallSFloat, existsSFloat, forallSFloat_, existsSFloat_
   ) where
 
 -- FUTURE: this and the explicit import from Data.Foldable can be
@@ -31,6 +32,7 @@ import Data.SBV.Dynamic
 type SBool = SVal
 type SWord = SVal
 type SInteger = SVal
+type SFloat = SVal
 
 fromBitsLE :: [SBool] -> SWord
 fromBitsLE bs = foldl' f (literalSWord 0 0) bs
@@ -77,3 +79,15 @@ forallSInteger_ = symbolicEnv >>= liftIO . svMkSymVar (NonQueryVar (Just ALL)) K
 
 existsSInteger_ :: Symbolic SInteger
 existsSInteger_ = symbolicEnv >>= liftIO . svMkSymVar (NonQueryVar (Just EX)) KUnbounded Nothing
+
+forallSFloat :: String -> Int -> Int -> Symbolic SFloat
+forallSFloat nm e p = symbolicEnv >>= liftIO . svMkSymVar (NonQueryVar (Just ALL)) (KFP e p) (Just nm)
+
+existsSFloat :: String -> Int -> Int -> Symbolic SFloat
+existsSFloat nm e p = symbolicEnv >>= liftIO . svMkSymVar (NonQueryVar (Just EX)) (KFP e p) (Just nm)
+
+forallSFloat_ :: Int -> Int -> Symbolic SFloat
+forallSFloat_ e p = symbolicEnv >>= liftIO . svMkSymVar (NonQueryVar (Just ALL)) (KFP e p) Nothing
+
+existsSFloat_ :: Int -> Int -> Symbolic SFloat
+existsSFloat_ e p = symbolicEnv >>= liftIO . svMkSymVar (NonQueryVar (Just EX)) (KFP e p) Nothing

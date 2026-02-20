@@ -24,6 +24,8 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Vector as V
+import LibBF (BigFloat)
+import qualified LibBF as BF
 import Numeric.Natural (Natural)
 
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
@@ -87,6 +89,7 @@ type instance EvalM (BitBlast l) = IO
 type instance VBool (BitBlast l) = l
 type instance VWord (BitBlast l) = LitVector l
 type instance VInt  (BitBlast l) = Integer
+type instance VFloat (BitBlast l) = BigFloat
 type instance Extra (BitBlast l) = BExtra l
 
 type BValue l = Value (BitBlast l)
@@ -173,6 +176,7 @@ prims be =
   , Prims.bpMuxBool  = \b x y -> AIG.lazyMux be b (pure x) (pure y)
   , Prims.bpMuxWord  = \b x y -> AIG.iteM be b (pure x) (pure y)
   , Prims.bpMuxInt   = muxInt
+  , Prims.bpMuxFloat = muxFloat
   , Prims.bpMuxArray = unsupportedAIGPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = muxBExtra be
     -- Booleans
@@ -295,6 +299,9 @@ muxBVal be = Prims.muxValue (prims be)
 muxInt :: a -> Integer -> Integer -> IO Integer
 muxInt _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, y)
 
+muxFloat :: a -> BigFloat -> BigFloat -> IO BigFloat
+muxFloat _ x y = if BF.bfCompare x y == EQ then return x else fail $ "muxBVal: VFloat " ++ show (x, y)
+
 muxBExtra :: AIG.IsAIG l g => g s ->
   l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
 muxBExtra be c x y =
@@ -344,7 +351,7 @@ sbvToIntOp g =
 intToBvOp :: AIG.IsAIG l g => g s -> BPrim (l s)
 intToBvOp g =
   Prims.natFun $ \n ->
-  Prims.intFun $ \x -> Prims.Prim 
+  Prims.intFun $ \x -> Prims.Prim
     (VWord <$>
      if n >= 0 then return (AIG.bvFromInteger g (fromIntegral n) x)
                else AIG.neg g (AIG.bvFromInteger g (fromIntegral n) (negate x)))

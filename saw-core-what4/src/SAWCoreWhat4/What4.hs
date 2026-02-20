@@ -90,6 +90,8 @@ import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr, SymFnWrapper(.
                                  IsExprBuilder,IsSymExprBuilder, BoundVar)
 import qualified What4.Interface as W
 import           What4.BaseTypes
+import qualified What4.SFloat as SF
+import           What4.SFloat (SFloat(..))
 import qualified What4.SWord as SW
 import           What4.SWord (SWord(..))
 
@@ -127,6 +129,7 @@ type instance EvalM (What4 sym) = IO
 type instance VBool (What4 sym) = SBool sym
 type instance VWord (What4 sym) = SWord sym
 type instance VInt  (What4 sym) = SInt  sym
+type instance VFloat (What4 sym) = SFloat sym
 type instance VArray (What4 sym) = SArray sym
 type instance Extra (What4 sym) = What4Extra sym
 
@@ -167,6 +170,7 @@ prims sym =
   , Prims.bpMuxBool  = W.itePred sym
   , Prims.bpMuxWord  = SW.bvIte  sym
   , Prims.bpMuxInt   = W.intIte  sym
+  , Prims.bpMuxFloat = SF.fpIte sym
   , Prims.bpMuxArray = arrayIte sym
   , Prims.bpMuxExtra = muxWhat4Extra sym
     -- Booleans
@@ -1057,6 +1061,13 @@ countUninterpreted scale count ty =
     VIntType        -> add BaseIntegerRepr count
     VIntModType {}  -> add BaseIntegerRepr count
     VRationalType   -> add BaseIntegerRepr (add BaseIntegerRepr count)
+    VFloatType e p  ->
+      case (someNat e, someNat p) of
+        (Just (Some e'), Just (Some p'))
+          | Just LeqProof <- testLeq (knownNat @2) e'
+          , Just LeqProof <- testLeq (knownNat @2) p' ->
+             add (BaseFloatRepr (FloatingPointPrecisionRepr e' p')) count
+        _ -> count
     VVecType n VBoolType ->
       case somePosNat n of
         Just (Some (PosNat w)) -> add (BaseBVRepr w) count
@@ -1121,6 +1132,14 @@ parseUninterpreted' sym ref app ty =
             -- TODO(#2433): Assert that the denominator is non-zero.
             denom <- mkUninterpreted BaseIntegerRepr
             pure $ VRational numer denom
+
+    VFloatType e p
+      | Just (Some e') <- someNat e
+      , Just (Some p') <- someNat p
+      , Just LeqProof <- testLeq (knownNat @2) e'
+      , Just LeqProof <- testLeq (knownNat @2) p'
+      -> (VFloat . SFloat) <$>
+           mkUninterpreted (BaseFloatRepr (FloatingPointPrecisionRepr e' p'))
 
     VVecType n VBoolType ->
       case somePosNat n of
@@ -1211,6 +1230,7 @@ applyUnintApp sym app0 v =
     VRational numer denom     -> do app1 <- applyUnintApp sym app0 (VInt numer)
                                     app2 <- applyUnintApp sym app1 (VInt denom)
                                     pure app2
+    VFloat (SFloat sf)        -> return (extendUnintApp app0 sf (W.exprType sf))
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
@@ -1329,6 +1349,16 @@ boundFOTs sym vars =
             -- TODO(#2433): Assert that the denominator is non-zero.
             denom <- freshBnd x BaseIntegerRepr
             pure $ VRational numer denom
+       FOTFloat e p ->
+         case (someNat e, someNat p) of
+           (Just (Some e'), Just (Some p'))
+             | Just LeqProof <- testLeq (knownNat @2) e'
+             , Just LeqProof <- testLeq (knownNat @2) p' ->
+                 VFloat . SFloat <$>
+                   freshBnd x (BaseFloatRepr (FloatingPointPrecisionRepr e' p'))
+           _ -> fail $
+                  "boundFOTs: float type with unsupported exponent size " ++
+                  "(" ++ show e ++ ") or precision size (" ++ show p ++ ")"
 
        FOTVec n FOTBit ->
          case somePosNat n of
@@ -1618,6 +1648,8 @@ rebuildTerm sym st sc tv sv =
       chokeOn "VIntToNat"
     VRational{} ->
       chokeOn "VRational"
+    VFloat (SFloat f) ->
+      toSC sym st f
     VNat n ->
       scNat sc n
     VInt x ->
@@ -1766,6 +1798,15 @@ parseUninterpretedSAW sym st sc ref trm app ty =
             -- TODO(#2433): Assert that the denominator is non-zero.
             denom <- mkUninterpretedSAW sym st sc ref trm (suffixUnintApp "_denom" app) BaseIntegerRepr
             pure $ VRational numer denom
+
+    VFloatType e p
+      -- TODO RGS: Deduplicate these checks (in PosNat?)
+      | Just (Some e') <- someNat e
+      , Just (Some p') <- someNat p
+      , Just LeqProof <- testLeq (knownNat @2) e'
+      , Just LeqProof <- testLeq (knownNat @2) p'
+      -> (VFloat . SFloat) <$>
+           mkUninterpretedSAW sym st sc ref trm app (BaseFloatRepr (FloatingPointPrecisionRepr e' p'))
 
     -- 0 width bitvector is a constant
     VVecType 0 VBoolType
@@ -1958,6 +1999,7 @@ mkArgTerm sc ty val =
     (VIntType, VInt _)   -> return ArgTermVar
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
+    (_, VFloat{})        -> return ArgTermVar
     (_, VArray{})        -> return ArgTermVar
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
     (VRationalType, VRational numer denom) ->
@@ -2027,6 +2069,10 @@ termOfTValue sc val =
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
     VRationalType -> scRationalType sc
+    VFloatType e p ->
+      do e' <- scNat sc e
+         p' <- scNat sc p
+         scFloatType sc e' p'
     VVecType n a ->
       do n' <- scNat sc n
          a' <- termOfTValue sc a

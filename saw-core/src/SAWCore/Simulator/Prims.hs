@@ -186,6 +186,7 @@ data BasePrims l =
   , bpMuxBool  :: VBool l -> VBool l -> VBool l -> MBool l
   , bpMuxWord  :: VBool l -> VWord l -> VWord l -> MWord l
   , bpMuxInt   :: VBool l -> VInt l -> VInt l -> MInt l
+  , bpMuxFloat :: VBool l -> VFloat l -> VFloat l -> MFloat l
   , bpMuxArray :: VBool l -> VArray l -> VArray l -> MArray l
   , bpMuxExtra :: VBool l -> Extra l -> Extra l -> EvalM l (Extra l)
     -- Booleans
@@ -249,6 +250,39 @@ data BasePrims l =
   , bpIntMin :: VInt l -> VInt l -> MInt l
   , bpIntMax :: VInt l -> VInt l -> MInt l
   , bpNatToInt :: Natural -> MInt l
+    -- Float operations
+  , bpFpAdd :: VRoundingMode l -> VFloat l -> VFloat l -> MFloat l
+-- TODO RGS: Finish me
+{-
+primitive fpLogicalEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+primitive fpIeeeEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+primitive fpLt : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+primitive fpNeg : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+primitive fpNaN : (e : Nat) -> (p : Nat) -> Float e p;
+primitive fpPosInf : (e : Nat) -> (p : Nat) -> Float e p;
+primitive fpPosZero : (e : Nat) -> (p : Nat) -> Float e p;
+primitive fpFromBits : (e : Nat) -> (p : Nat) -> Vec (addNat e p) Bool -> Float e p;
+primitive fpToBits : (e : Nat) -> (p : Nat) -> Float e p -> Vec (addNat e p) Bool;
+primitive fpIsNaN : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsInf : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsZero : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsNeg : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsNormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpIsSubnormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+primitive fpAdd : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpSub : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpMul : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpDiv : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+primitive fpFMA :
+  (e : Nat) -> (p : Nat) -> RoundingMode ->
+  Float e p -> Float e p -> Float e p -> Float e p;
+primitive fpAbs : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+primitive fpSqrt : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
+primitive fpToRational : (e : Nat) -> (p : Nat) -> Float e p -> Rational;
+primitive fpFromRational : (e : Nat) -> (p : Nat) -> RoundingMode -> Rational -> Float e p;
+primitive fpToInteger : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Integer;
+primitive fpFromInteger : (e : Nat) -> (p : Nat) -> Integer -> Float e p;
+-}
     -- Array operations
   , bpArrayConstant :: TValue l -> TValue l -> Value l -> MArray l
   , bpArrayLookup :: VArray l -> Value l -> MValue l
@@ -361,6 +395,8 @@ constMap bp = Map.fromList
   , ("Prelude.rationalNeg", rationalNegOp bp)
   , ("Prelude.rationalRecip", rationalRecipOp)
   , ("Prelude.rationalFloor", rationalFloorOp bp)
+  -- Floats
+  , ("Prelude.Float", floatTypeOp)
   -- Modular Integers
   , ("Prelude.IntMod", natFun $ \n -> PrimValue (TValue (VIntModType n)))
   -- Vectors
@@ -1312,6 +1348,13 @@ intToNatOp =
   intFun $ \x -> PrimValue $!
     if x >= 0 then VNat (fromInteger x) else VNat 0
 
+-- primitive Float : Nat -> Nat -> sort 0;
+floatTypeOp :: VMonad l => Prim l
+floatTypeOp =
+  natFun $ \e ->
+  natFun $ \p ->
+    PrimValue (TValue (VFloatType e p))
+
 -- primitive ratio : Integer -> Integer -> Rational;
 ratioOp :: VMonad l => Prim l
 ratioOp =
@@ -1544,6 +1587,8 @@ muxValue bp b x0 y0 = value x0 y0
 
     value (VRational xNumer xDenom) (VRational yNumer yDenom) =
       VRational <$> bpMuxInt bp b xNumer yNumer <*> bpMuxInt bp b xDenom yDenom
+
+    value (VFloat x) (VFloat y)               = VFloat <$> bpMuxFloat bp b x y
 
     value x@(VWord _)       y                 = do xv <- toVector' x
                                                    value (VVector xv) y

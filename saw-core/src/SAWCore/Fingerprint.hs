@@ -154,6 +154,7 @@ instance Bytes FirstOrderType where
     FOTRec m     -> byte 0x8 <> bytes (Map.size m)
                              <> foldMap (\(k, v) -> bytes k <> byte 0 <> bytes v)
                                         (Map.toAscList m)
+    FOTFloat e p -> byte 0x9 <> bytes e <> bytes p
 
 fpTerms :: VarCtx -> [Term] -> FP BS.Builder
 fpTerms ctx ts = do

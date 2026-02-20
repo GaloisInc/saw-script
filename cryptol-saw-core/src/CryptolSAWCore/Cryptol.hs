@@ -77,6 +77,7 @@ import Prettyprinter ((<+>))
 -- cryptol
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Backend as V
+import qualified Cryptol.Backend.FloatHelpers as V
 import qualified Cryptol.Backend.Monad as V
 import qualified Cryptol.Backend.SeqMap as V
 import qualified Cryptol.Backend.WordValue as V
@@ -480,7 +481,7 @@ importPC sc pc =
     C.PFLiteral        -> scGlobalDef sc "Cryptol.PFLiteral"
     C.PAnd             -> panic "importPC" ["found PAnd"]
     C.PTrue            -> panic "importPC" ["found PTrue"]
-    C.PValidFloat      -> panic "importPC" ["found PValidFloat"]
+    C.PValidFloat      -> panic "importPC" ["found PValidFloatNum"]
 
 -- | Import a Cryptol `C.Type` as a SAWCore term.
 --
@@ -546,7 +547,7 @@ importType sc env ty =
             C.TCBit      -> scBoolType sc
             C.TCInteger  -> scIntegerType sc
             C.TCIntMod   -> scGlobalApply sc "Cryptol.IntModNum" =<< traverse go tyargs
-            C.TCFloat    -> scGlobalApply sc "Cryptol.TCFloat"   =<< traverse go tyargs
+            C.TCFloat    -> scGlobalApply sc "Cryptol.FloatNum"  =<< traverse go tyargs
             C.TCArray    -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scArrayType sc a b
@@ -715,7 +716,7 @@ provePropRec sc env prop0 prop =
         (C.pIsZero -> Just (C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PZeroFloat" [e', p']
+                scGlobalApply sc "Cryptol.PZeroFloatNum" [e', p']
         -- instance (Zero a) => Zero [n]a
         (C.pIsZero -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
@@ -789,7 +790,7 @@ provePropRec sc env prop0 prop =
         (C.pIsRing -> Just (C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PRingFloat" [e', p']
+                scGlobalApply sc "Cryptol.PRingFloatNum" [e', p']
         -- instance (Ring a) => Ring [n]a
         (C.pIsRing -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
@@ -835,7 +836,7 @@ provePropRec sc env prop0 prop =
         (C.pIsField -> Just (C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PFieldFloat" [e', p']
+                scGlobalApply sc "Cryptol.PFieldFloatNum" [e', p']
 
         -- instance Round Rational
         (C.pIsRound -> Just (C.tIsRational -> True))
@@ -844,7 +845,7 @@ provePropRec sc env prop0 prop =
         (C.pIsRound -> Just (C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PRoundFloat" [e', p']
+                scGlobalApply sc "Cryptol.PRoundFloatNum" [e', p']
 
         -- instance Eq Bit
         (C.pIsEq -> Just (C.tIsBit -> True))
@@ -863,7 +864,7 @@ provePropRec sc env prop0 prop =
         (C.pIsEq -> Just (C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PEqFloat" [e', p']
+                scGlobalApply sc "Cryptol.PEqFloatNum" [e', p']
         -- instance (fin n) => Eq [n]
         (C.pIsEq -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -901,7 +902,7 @@ provePropRec sc env prop0 prop =
         (C.pIsCmp -> Just (C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PCmpFloat" [e', p']
+                scGlobalApply sc "Cryptol.PCmpFloatNum" [e', p']
         -- instance (fin n) => Cmp [n]
         (C.pIsCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -975,7 +976,7 @@ provePropRec sc env prop0 prop =
         (C.pIsLiteral -> Just (_, C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
+                scGlobalApply sc "Cryptol.PLiteralFloatNum" [e', p']
 
         -- instance (2 >= val) => LiteralLessThan val Bit
         (C.pIsLiteralLessThan -> Just (_, C.tIsBit -> True))
@@ -998,7 +999,7 @@ provePropRec sc env prop0 prop =
         (C.pIsLiteralLessThan -> Just (_, C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
+                scGlobalApply sc "Cryptol.PLiteralFloatNum" [e', p']
 
         -- Note that in the FLiteral instances below, we intentionally do not
         -- translate the first three arguments.
@@ -1011,7 +1012,7 @@ provePropRec sc env prop0 prop =
         (C.pIsFLiteral -> Just (_, _, _, C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PFLiteralFloat" [e', p']
+                scGlobalApply sc "Cryptol.PFLiteralFloatNum" [e', p']
 
         _ -> do
             let prop0' = "   " <> CryPP.pp prop0
@@ -1312,6 +1313,7 @@ arrayPrims =
   , ("arrayRangeEqual", flip scGlobalDef "Cryptol.ecArrayRangeEq") -- {n,a} Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Bit
   ]
 
+-- TODO RGS: Double-check this
 floatPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 floatPrims =
   Map.fromList $
@@ -2451,6 +2453,7 @@ scCryptolType sc t =
       SC.VIntType -> return (Right C.tInteger)
       SC.VIntModType n -> return (Right (C.tIntMod (C.tNum n)))
       SC.VRationalType -> return (Right C.tRational)
+      SC.VFloatType e p -> pure (Right (C.tFloat (C.tNum e) (C.tNum p)))
       SC.VArrayType v1 v2 -> do
         Right t1 <- asCryptolTypeValue v1
         Right t2 <- asCryptolTypeValue v2
@@ -2528,7 +2531,13 @@ exportValue ty v = case ty of
       SC.VRational numer denom -> pure $ V.VRational $ V.SRational numer denom
       _ -> error $ "exportValue (on rational type " ++ show ty ++ ")"
 
-  TV.TVFloat _ _ -> panic "exportValue" ["Not yet implemented: Float"]
+  TV.TVFloat e p ->
+    case v of
+      SC.VFloat bf -> pure $ V.VFloat $ V.BF { V.bfExpWidth = e
+                                             , V.bfPrecWidth = p
+                                             , V.bfValue = bf
+                                             }
+      _ -> error $ "exportValue (on float type " ++ show ty ++ ")"
 
   TV.TVSeq _ e ->
     case v of

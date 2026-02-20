@@ -141,6 +141,10 @@ baseSCType sym sc bt =
     BaseBoolRepr -> SC.scBoolType sc
     BaseBVRepr w -> SC.scBitvector sc $ fromIntegral (natValue w)
     BaseIntegerRepr -> SC.scIntegerType sc
+    BaseFloatRepr (FloatingPointPrecisionRepr e p) ->
+      do e' <- SC.scNat sc (natValue e)
+         p' <- SC.scNat sc (natValue p)
+         SC.scFloatType sc e' p'
     BaseArrayRepr indexTypes range
       | Ctx.Empty Ctx.:> idx_type <- indexTypes ->
         do sc_idx_type <- baseSCType sym sc idx_type
@@ -148,8 +152,6 @@ baseSCType sym sc bt =
            SC.scArrayType sc sc_idx_type sc_elm_type
       | otherwise ->
         unsupported sym "SAW backend does not support multidimensional Arrays: baseSCType"
-    BaseFloatRepr _ ->
-      unsupported sym "SAW backend does not support IEEE-754 floating point values: baseSCType"
     BaseStringRepr _ ->
       unsupported sym "SAW backend does not support string values: baseSCType"
     BaseComplexRepr  ->
@@ -396,6 +398,12 @@ scEq sym sc tp x y =
          let SAWExpr y' = y
          w' <- SC.scNat sc $ fromIntegral (natValue w)
          SAWExpr <$> SC.scBvEq sc w' x' y'
+    BaseFloatRepr (FloatingPointPrecisionRepr e p) ->
+      do let SAWExpr x' = x
+         let SAWExpr y' = y
+         e' <- SC.scNat sc (natValue e)
+         p' <- SC.scNat sc (natValue p)
+         SAWExpr <$> SC.scFpLogicalEq sc e' p' x' y'
     _ -> unsupported sym ("SAW backend: equality comparison on unsupported type:" ++ show tp)
 
 
@@ -532,9 +540,6 @@ evaluateExpr sym st sc cache = f Map.empty
 
     cplxFail :: IO a
     cplxFail = unsupported sym "SAW backend does not support complex values"
-
-    floatFail :: IO a
-    floatFail = unsupported sym "SAW backend does not support floating-point values"
 
     stringFail :: IO a
     stringFail = unsupported sym "SAW backend does not support string values"
@@ -894,36 +899,138 @@ evaluateExpr sym st sc cache = f Map.empty
         ------------------------------------------------------------------------
         -- Floating point operations
 
-        B.FloatNeg{}  -> floatFail
-        B.FloatAbs{}  -> floatFail
-        B.FloatSqrt{}  -> floatFail
-        B.FloatAdd{}  -> floatFail
-        B.FloatSub{}  -> floatFail
-        B.FloatMul{}  -> floatFail
-        B.FloatDiv{}  -> floatFail
-        B.FloatRem{}  -> floatFail
-        B.FloatFMA{}  -> floatFail
-        B.FloatFpEq{}  -> floatFail
-        B.FloatLe{}  -> floatFail
-        B.FloatLt{}  -> floatFail
-        B.FloatIsNaN{}  -> floatFail
-        B.FloatIsInf{}  -> floatFail
-        B.FloatIsZero{}  -> floatFail
-        B.FloatIsPos{}  -> floatFail
-        B.FloatIsNeg{}  -> floatFail
-        B.FloatIsSubnorm{}  -> floatFail
-        B.FloatIsNorm{}  -> floatFail
-        B.FloatCast{}  -> floatFail
-        B.FloatRound{} -> floatFail
-        B.FloatFromBinary{}  -> floatFail
-        B.BVToFloat{}  -> floatFail
-        B.SBVToFloat{}  -> floatFail
-        B.RealToFloat{}  -> floatFail
-        B.FloatToBV{} -> floatFail
-        B.FloatToSBV{} -> floatFail
-        B.FloatToReal{} -> floatFail
-        B.FloatToBinary{} -> floatFail
-        B.FloatSpecialFunction{} -> floatFail
+        B.FloatNeg (FloatingPointPrecisionRepr e p) x ->
+          do e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             SAWExpr <$> SC.scFpNeg sc e' p' x'
+        B.FloatAbs (FloatingPointPrecisionRepr e p) x ->
+          do e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             SAWExpr <$> SC.scFpAbs sc e' p' x'
+        B.FloatSqrt (FloatingPointPrecisionRepr e p) m x ->
+          do e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             m' <- evaluateRoundingMode m
+             x' <- f env x
+             SAWExpr <$> SC.scFpSqrt sc e' p' m' x'
+        B.FloatAdd (FloatingPointPrecisionRepr e p) m x y ->
+          do e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             m' <- evaluateRoundingMode m
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpAdd sc e' p' m' x' y'
+        B.FloatSub (FloatingPointPrecisionRepr e p) m x y ->
+          do e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             m' <- evaluateRoundingMode m
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpSub sc e' p' m' x' y'
+        B.FloatMul (FloatingPointPrecisionRepr e p) m x y ->
+          do e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             m' <- evaluateRoundingMode m
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpMul sc e' p' m' x' y'
+        B.FloatDiv (FloatingPointPrecisionRepr e p) m x y ->
+          do e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             m' <- evaluateRoundingMode m
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpDiv sc e' p' m' x' y'
+
+        -- TODO RGS: Finish me
+        B.FloatRem{} -> unimplemented "FloatRem"
+
+        B.FloatFMA (FloatingPointPrecisionRepr e p) m x y z ->
+          do e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             m' <- evaluateRoundingMode m
+             x' <- f env x
+             y' <- f env y
+             z' <- f env z
+             SAWExpr <$> SC.scFpFMA sc e' p' m' x' y' z'
+        B.FloatFpEq x y ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpIeeeEq sc e' p' x' y'
+        B.FloatLe x y ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpLe sc e' p' x' y'
+        B.FloatLt x y ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             y' <- f env y
+             SAWExpr <$> SC.scFpLt sc e' p' x' y'
+        B.FloatIsNaN x ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsNaN sc e' p' x'
+        B.FloatIsInf x ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsInf sc e' p' x'
+        B.FloatIsZero x ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsZero sc e' p' x'
+        B.FloatIsPos x ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsPos sc e' p' x'
+        B.FloatIsNeg x ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsNeg sc e' p' x'
+        B.FloatIsSubnorm x ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsSubnormal sc e' p' x'
+        B.FloatIsNorm x ->
+          do FloatingPointPrecisionRepr e p <- pure (floatPrecision x)
+             e' <- SC.scNat sc (natValue e)
+             p' <- SC.scNat sc (natValue p)
+             x' <- f env x
+             SAWExpr <$> SC.scFpIsNormal sc e' p' x'
+
+        -- TODO RGS: Finish me
+        B.FloatCast{} -> unimplemented "FloatCast"
+        B.FloatRound{} -> unimplemented "FloatRound"
+        B.FloatFromBinary{} -> unimplemented "FromFromBinary"
+        B.BVToFloat{} -> unimplemented "BVToFloat"
+        B.SBVToFloat{} -> unimplemented "SBVToFloat"
+        B.RealToFloat{} -> unimplemented "RealToFloat"
+        B.FloatToBV{} -> unimplemented "FloatToBV"
+        B.FloatToSBV{} -> unimplemented "FloatToSBV"
+        B.FloatToReal{} -> realFail
+        B.FloatToBinary{} -> unimplemented "FloatToBinary"
+        B.FloatSpecialFunction{} -> unimplemented "FloatSpecialFunction"
 
         B.RoundReal{} -> realFail
         B.RoundEvenReal{} -> realFail
@@ -975,4 +1082,15 @@ evaluateExpr sym st sc cache = f Map.empty
             B.OrderedSemiRingRealRepr    -> join (scRealLt sym sc <$> eval env ye <*> eval env xe)
             B.OrderedSemiRingIntegerRepr -> join (scIntLt sc <$> eval env ye <*> eval env xe)
         _ -> SAWExpr <$> (SC.scNot sc =<< f env expr)
+
+    evaluateRoundingMode ::
+      RoundingMode ->
+      IO SC.Term
+    evaluateRoundingMode rm =
+      case rm of
+        RNE -> SC.scRoundNearestEven sc
+        RNA -> SC.scRoundNearestAway sc
+        RTP -> SC.scRoundPositive sc
+        RTN -> SC.scRoundNegative sc
+        RTZ -> SC.scRoundZero sc
 
