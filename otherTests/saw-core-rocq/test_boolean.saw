@@ -25,3 +25,6 @@ write_rocq_term "TestPartialIte_3args" [] [] "" t8;
 
 let t9 = parse_core "ite Bool True False True";
 write_rocq_term "TestPartialIte_4args" [] [] "" t9;
+
+let t10 = parse_core "ite (Bool -> Bool) True not (id Bool) False";
+write_rocq_term "TestPartialIte_5args" [] [] "" t10;
