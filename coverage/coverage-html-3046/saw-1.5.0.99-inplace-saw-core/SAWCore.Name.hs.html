@@ -132,7 +132,7 @@ span.spaces    { background: white }
 <span class="lineno">  113 </span>
 <span class="lineno">  114 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Hashable Ident</span></span></span></span> -- automatically derived
 <span class="lineno">  115 </span>
-<span class="lineno">  116 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show Ident</span></span></span></span> where
+<span class="lineno">  116 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Ident</span></span></span></span> where
 <span class="lineno">  117 </span>  <span class="decl"><span class="istickedoff">show (Ident m s) = shows m ('.' : Text.unpack s)</span></span>
 <span class="lineno">  118 </span>
 <span class="lineno">  119 </span>identText :: Ident -&gt; Text
@@ -211,7 +211,7 @@ span.spaces    { background: white }
 <span class="lineno">  192 </span>      [Text]   -- ^ A collection of aliases for this name.  Shorter or &quot;less-qualified&quot;
 <span class="lineno">  193 </span>               --   aliases should be nearer the front of the list
 <span class="lineno">  194 </span>
-<span class="lineno">  195 </span> deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>,<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>,<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  195 </span> deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>,<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>,<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">  196 </span>
 <span class="lineno">  197 </span>instance <span class="decl"><span class="nottickedoff">Hashable NameInfo</span></span> where
 <span class="lineno">  198 </span>  <span class="decl"><span class="istickedoff">hashWithSalt x nmi =</span>
@@ -237,8 +237,8 @@ span.spaces    { background: white }
 <span class="lineno">  218 </span><span class="spaces"></span><span class="istickedoff">toShortName (ImportedName _ (x:_)) = x</span></span>
 <span class="lineno">  219 </span>
 <span class="lineno">  220 </span>toAbsoluteName :: NameInfo -&gt; Text
-<span class="lineno">  221 </span><span class="decl"><span class="istickedoff">toAbsoluteName (ModuleIdentifier i) = identText i</span>
-<span class="lineno">  222 </span><span class="spaces"></span><span class="istickedoff">toAbsoluteName (ImportedName uri _) = <span class="nottickedoff">renderURI uri</span></span></span>
+<span class="lineno">  221 </span><span class="decl"><span class="nottickedoff">toAbsoluteName (ModuleIdentifier i) = identText i</span>
+<span class="lineno">  222 </span><span class="spaces"></span><span class="nottickedoff">toAbsoluteName (ImportedName uri _) = renderURI uri</span></span>
 <span class="lineno">  223 </span>
 <span class="lineno">  224 </span>moduleIdentToURI :: Ident -&gt; URI
 <span class="lineno">  225 </span><span class="decl"><span class="istickedoff">moduleIdentToURI ident = fromMaybe <span class="nottickedoff">(panic &quot;moduleIdentToURI&quot; [&quot;Failed to construct ident URI: &quot; &lt;&gt; identText ident])</span> $</span>

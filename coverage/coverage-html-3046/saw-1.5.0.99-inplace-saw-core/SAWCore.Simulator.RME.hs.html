@@ -424,7 +424,7 @@ span.spaces    { background: white }
 <span class="lineno">  405 </span><span class="spaces">  </span><span class="istickedoff">return (vBool (RME.lit i))</span>
 <span class="lineno">  406 </span><span class="spaces"></span><span class="istickedoff">newVars (FTVec n t) = VVector &lt;$&gt; V.replicateM (fromIntegral n) (newVars' t)</span>
 <span class="lineno">  407 </span><span class="spaces"></span><span class="istickedoff">newVars (FTTuple ts) = <span class="nottickedoff">vTuple &lt;$&gt; traverse newVars' ts</span></span>
-<span class="lineno">  408 </span><span class="spaces"></span><span class="istickedoff">newVars (FTRec tm) = <span class="nottickedoff">vRecord &lt;$&gt; traverse newVars' tm</span></span></span>
+<span class="lineno">  408 </span><span class="spaces"></span><span class="istickedoff">newVars (FTRec tm) = vRecord &lt;$&gt; traverse newVars' tm</span></span>
 <span class="lineno">  409 </span>
 <span class="lineno">  410 </span>newVars' :: FiniteType -&gt; State Int RThunk
 <span class="lineno">  411 </span><span class="decl"><span class="istickedoff">newVars' shape = ready &lt;$&gt; newVars shape</span></span>

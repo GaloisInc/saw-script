@@ -114,24 +114,24 @@ span.spaces    { background: white }
 <span class="lineno">   95 </span>import           Data.Proxy (Proxy(..))
 <span class="lineno">   96 </span>import qualified Data.Set as Set
 <span class="lineno">   97 </span>import           Data.Set (Set)
-<span class="lineno">   98 </span>import           Data.Typeable (Typeable)
-<span class="lineno">   99 </span>import           Data.Void
-<span class="lineno">  100 </span>import           GHC.Generics (Generic, Generic1)
-<span class="lineno">  101 </span>import qualified Prettyprinter as PP
-<span class="lineno">  102 </span>
-<span class="lineno">  103 </span>import qualified Data.Parameterized.Context as Ctx
-<span class="lineno">  104 </span>import           Data.Parameterized.Some (Some)
-<span class="lineno">  105 </span>import           Data.Parameterized.TraversableFC (toListFC)
-<span class="lineno">  106 </span>
-<span class="lineno">  107 </span>import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
-<span class="lineno">  108 </span>
-<span class="lineno">  109 </span>import           SAWCore.Name (VarName(..))
-<span class="lineno">  110 </span>import           SAWCore.Prelude as SAWVerifier (scEq)
-<span class="lineno">  111 </span>import           SAWCore.SharedTerm as SAWVerifier
-<span class="lineno">  112 </span>import           SAWCore.Term.Pretty (prettyTermPure)
-<span class="lineno">  113 </span>import           CryptolSAWCore.TypedTerm as SAWVerifier
-<span class="lineno">  114 </span>
-<span class="lineno">  115 </span>import qualified Cryptol.Utils.PP as Cryptol (pp)
+<span class="lineno">   98 </span>import qualified Data.Text as Text
+<span class="lineno">   99 </span>import           Data.Typeable (Typeable)
+<span class="lineno">  100 </span>import           Data.Void
+<span class="lineno">  101 </span>import           GHC.Generics (Generic, Generic1)
+<span class="lineno">  102 </span>import qualified Prettyprinter as PP
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>import qualified Data.Parameterized.Context as Ctx
+<span class="lineno">  105 </span>import           Data.Parameterized.Some (Some)
+<span class="lineno">  106 </span>import           Data.Parameterized.TraversableFC (toListFC)
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>import           SAWCore.Name (VarName(..))
+<span class="lineno">  111 </span>import           SAWCore.Prelude as SAWVerifier (scEq)
+<span class="lineno">  112 </span>import           SAWCore.SharedTerm as SAWVerifier
+<span class="lineno">  113 </span>import           SAWCore.Term.Pretty (prettyTermPure)
+<span class="lineno">  114 </span>import           CryptolSAWCore.TypedTerm as SAWVerifier
+<span class="lineno">  115 </span>import qualified CryptolSAWCore.Pretty as CryPP
 <span class="lineno">  116 </span>
 <span class="lineno">  117 </span>import qualified Lang.Crucible.Backend as Crucible
 <span class="lineno">  118 </span>import qualified Lang.Crucible.Backend.Online as Crucible
@@ -686,8 +686,8 @@ span.spaces    { background: white }
 <span class="lineno">  667 </span><span class="spaces">  </span><span class="istickedoff">do (sch,tm) &lt;- readGlobal var</span>
 <span class="lineno">  668 </span><span class="spaces">     </span><span class="istickedoff">when (sch /= schEx) $ <span class="nottickedoff">fail $ unlines $</span></span>
 <span class="lineno">  669 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Ghost variable had the wrong type:&quot;</span></span>
-<span class="lineno">  670 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;- Expected: &quot; ++ show (Cryptol.pp schEx)</span></span>
-<span class="lineno">  671 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;- Actual:   &quot; ++ show (Cryptol.pp sch)</span></span>
+<span class="lineno">  670 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;- Expected: &quot; ++ Text.unpack (CryPP.pp schEx)</span></span>
+<span class="lineno">  671 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;- Actual:   &quot; ++ Text.unpack (CryPP.pp sch)</span></span>
 <span class="lineno">  672 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  673 </span><span class="spaces">     </span><span class="istickedoff">instantiateExtMatchTerm sc md prepost tm tmEx</span>
 <span class="lineno">  674 </span><span class="spaces"></span><span class="istickedoff">learnGhost sc _md _prepost _var (TypedTerm tp _)</span>

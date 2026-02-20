@@ -247,225 +247,227 @@ span.spaces    { background: white }
 <span class="lineno">  228 </span><span class="spaces">                        </span><span class="nottickedoff">(shows t . showString &quot; -&gt; ...&quot;)</span>
 <span class="lineno">  229 </span><span class="spaces">      </span><span class="nottickedoff">VUnitType      -&gt; showString &quot;#()&quot;</span>
 <span class="lineno">  230 </span><span class="spaces">      </span><span class="nottickedoff">VPairType x y  -&gt; showParen True (shows x . showString &quot; * &quot; . shows y)</span>
-<span class="lineno">  231 </span><span class="spaces">      </span><span class="nottickedoff">VDataType s ps vs</span>
-<span class="lineno">  232 </span><span class="spaces">        </span><span class="nottickedoff">| null (ps++vs) -&gt; shows s</span>
-<span class="lineno">  233 </span><span class="spaces">        </span><span class="nottickedoff">| otherwise  -&gt; shows s . showList (ps++vs)</span>
-<span class="lineno">  234 </span><span class="spaces">      </span><span class="nottickedoff">VEmptyRecordType -&gt; showString &quot;{}&quot;</span>
-<span class="lineno">  235 </span><span class="spaces">      </span><span class="nottickedoff">VRecordType fld _ _ -&gt;</span>
-<span class="lineno">  236 </span><span class="spaces">        </span><span class="nottickedoff">showString &quot;{&quot; . showString (Text.unpack fld) . showString &quot; :: _, ...}&quot;</span>
-<span class="lineno">  237 </span><span class="spaces">      </span><span class="nottickedoff">VVecType n a   -&gt; showString &quot;Vec &quot; . shows n</span>
-<span class="lineno">  238 </span><span class="spaces">                        </span><span class="nottickedoff">. showString &quot; &quot; . showParen True (showsPrec p a)</span>
-<span class="lineno">  239 </span><span class="spaces">      </span><span class="nottickedoff">VSort s        -&gt; shows s</span>
-<span class="lineno">  240 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  241 </span><span class="spaces">      </span><span class="nottickedoff">VTyTerm _ tm   -&gt; showString &quot;TyTerm (&quot; . (\x -&gt; ppTermPureDefaults tm ++ x) . showString &quot;)&quot;</span></span>
-<span class="lineno">  242 </span>
-<span class="lineno">  243 </span>data Nil = Nil
+<span class="lineno">  231 </span><span class="spaces">      </span><span class="nottickedoff">VDataType s ps vs -&gt;</span>
+<span class="lineno">  232 </span><span class="spaces">          </span><span class="nottickedoff">let s' = Text.unpack $ toAbsoluteName (nameInfo s) in</span>
+<span class="lineno">  233 </span><span class="spaces">          </span><span class="nottickedoff">case ps ++ vs of</span>
+<span class="lineno">  234 </span><span class="spaces">            </span><span class="nottickedoff">[] -&gt; shows s'</span>
+<span class="lineno">  235 </span><span class="spaces">            </span><span class="nottickedoff">vs' -&gt; shows s' . showList vs'</span>
+<span class="lineno">  236 </span><span class="spaces">      </span><span class="nottickedoff">VEmptyRecordType -&gt; showString &quot;{}&quot;</span>
+<span class="lineno">  237 </span><span class="spaces">      </span><span class="nottickedoff">VRecordType fld _ _ -&gt;</span>
+<span class="lineno">  238 </span><span class="spaces">        </span><span class="nottickedoff">showString &quot;{&quot; . showString (Text.unpack fld) . showString &quot; :: _, ...}&quot;</span>
+<span class="lineno">  239 </span><span class="spaces">      </span><span class="nottickedoff">VVecType n a   -&gt; showString &quot;Vec &quot; . shows n</span>
+<span class="lineno">  240 </span><span class="spaces">                        </span><span class="nottickedoff">. showString &quot; &quot; . showParen True (showsPrec p a)</span>
+<span class="lineno">  241 </span><span class="spaces">      </span><span class="nottickedoff">VSort s        -&gt; shows s</span>
+<span class="lineno">  242 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  243 </span><span class="spaces">      </span><span class="nottickedoff">VTyTerm _ tm   -&gt; showString &quot;TyTerm (&quot; . (\x -&gt; ppTermPureDefaults tm ++ x) . showString &quot;)&quot;</span></span>
 <span class="lineno">  244 </span>
-<span class="lineno">  245 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Nil</span></span></span></span> where
-<span class="lineno">  246 </span>  <span class="decl"><span class="nottickedoff">show Nil = &quot;_&quot;</span></span>
-<span class="lineno">  247 </span>
-<span class="lineno">  248 </span>------------------------------------------------------------
-<span class="lineno">  249 </span>-- Basic operations on values
-<span class="lineno">  250 </span>
-<span class="lineno">  251 </span>-- | Create a 'Value' for a strict function.
-<span class="lineno">  252 </span>vStrictFun :: VMonad l =&gt; (Value l -&gt; MValue l) -&gt; Value l
-<span class="lineno">  253 </span><span class="decl"><span class="istickedoff">vStrictFun k = VFun $ \x -&gt; force x &gt;&gt;= k</span></span>
-<span class="lineno">  254 </span>
-<span class="lineno">  255 </span>-- | Create a 'Value' for a lazy multi-argument function.
-<span class="lineno">  256 </span>vFunList :: forall l. VMonad l =&gt; Int -&gt; ([Thunk l] -&gt; MValue l) -&gt; MValue l
-<span class="lineno">  257 </span><span class="decl"><span class="istickedoff">vFunList n0 k = go n0 []</span>
-<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  259 </span><span class="spaces">    </span><span class="istickedoff">go :: Int -&gt; [Thunk l] -&gt; MValue l</span>
-<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">go 0 args = k (reverse args)</span>
-<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">go n args = pure $ VFun (\x -&gt; go (n - 1) (x : args))</span></span>
-<span class="lineno">  262 </span>
-<span class="lineno">  263 </span>-- | Create a 'Value' for a strict multi-argument function.
-<span class="lineno">  264 </span>vStrictFunList :: forall l. VMonad l =&gt; Int -&gt; ([Value l] -&gt; MValue l) -&gt; MValue l
-<span class="lineno">  265 </span><span class="decl"><span class="istickedoff">vStrictFunList n0 k = go n0 []</span>
-<span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">go :: Int -&gt; [Value l] -&gt; MValue l</span>
-<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">go 0 args = k (reverse args)</span>
-<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">go n args = pure $ vStrictFun $ \v -&gt; go (n - 1) (<span class="nottickedoff">v</span> : args)</span></span>
-<span class="lineno">  270 </span>
-<span class="lineno">  271 </span>vTuple :: VMonad l =&gt; [Thunk l] -&gt; Value l
-<span class="lineno">  272 </span><span class="decl"><span class="istickedoff">vTuple [] = <span class="nottickedoff">VUnit</span></span>
-<span class="lineno">  273 </span><span class="spaces"></span><span class="istickedoff">vTuple [_] = <span class="nottickedoff">error &quot;vTuple: unsupported 1-tuple&quot;</span></span>
-<span class="lineno">  274 </span><span class="spaces"></span><span class="istickedoff">vTuple [x, y] = VPair x y</span>
-<span class="lineno">  275 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = VPair x (ready (vTuple xs))</span></span>
-<span class="lineno">  276 </span>
-<span class="lineno">  277 </span>vTupleType :: VMonad l =&gt; [TValue l] -&gt; TValue l
-<span class="lineno">  278 </span><span class="decl"><span class="nottickedoff">vTupleType [] = VUnitType</span>
-<span class="lineno">  279 </span><span class="spaces"></span><span class="nottickedoff">vTupleType [t] = t</span>
-<span class="lineno">  280 </span><span class="spaces"></span><span class="nottickedoff">vTupleType (t : ts) = VPairType t (vTupleType ts)</span></span>
-<span class="lineno">  281 </span>
-<span class="lineno">  282 </span>valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; MValue l
-<span class="lineno">  283 </span><span class="decl"><span class="nottickedoff">valPairLeft (VPair t1 _) = force t1</span>
-<span class="lineno">  284 </span><span class="spaces"></span><span class="nottickedoff">valPairLeft v = panic &quot;valPairLeft&quot; [&quot;Not a pair value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
-<span class="lineno">  285 </span>
-<span class="lineno">  286 </span>valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; MValue l
-<span class="lineno">  287 </span><span class="decl"><span class="nottickedoff">valPairRight (VPair _ t2) = force t2</span>
-<span class="lineno">  288 </span><span class="spaces"></span><span class="nottickedoff">valPairRight v = panic &quot;valPairRight&quot; [&quot;Not a pair value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
-<span class="lineno">  289 </span>
-<span class="lineno">  290 </span>vRecord :: Map FieldName (Thunk l) -&gt; Value l
-<span class="lineno">  291 </span><span class="decl"><span class="istickedoff">vRecord m = foldr (\(f, t) -&gt; VRecordValue f t) VEmptyRecord (Map.assocs m)</span></span>
-<span class="lineno">  292 </span>
-<span class="lineno">  293 </span>valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; FieldName -&gt; MValue l
-<span class="lineno">  294 </span><span class="decl"><span class="nottickedoff">valRecordProj v fld = go v</span>
-<span class="lineno">  295 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  296 </span><span class="spaces">    </span><span class="nottickedoff">go (VRecordValue fld1 t1 v1)</span>
-<span class="lineno">  297 </span><span class="spaces">      </span><span class="nottickedoff">| fld == fld1 = force t1</span>
-<span class="lineno">  298 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise = go v1</span>
-<span class="lineno">  299 </span><span class="spaces">    </span><span class="nottickedoff">go VEmptyRecord =</span>
-<span class="lineno">  300 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;valRecordProj&quot;</span>
-<span class="lineno">  301 </span><span class="spaces">      </span><span class="nottickedoff">[ &quot;Record field &quot; &lt;&gt; Text.pack (show fld) &lt;&gt; &quot; not found in value: &quot; &lt;&gt;</span>
-<span class="lineno">  302 </span><span class="spaces">        </span><span class="nottickedoff">Text.pack (show v)</span>
-<span class="lineno">  303 </span><span class="spaces">      </span><span class="nottickedoff">]</span>
-<span class="lineno">  304 </span><span class="spaces">    </span><span class="nottickedoff">go _ =</span>
-<span class="lineno">  305 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;valRecordProj&quot; [&quot;Not a record value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
-<span class="lineno">  306 </span>
-<span class="lineno">  307 </span>apply :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; Thunk l -&gt; MValue l
-<span class="lineno">  308 </span><span class="decl"><span class="istickedoff">apply (VFun f) x = f x</span>
-<span class="lineno">  309 </span><span class="spaces"></span><span class="istickedoff">apply (TValue (VPiType _ body)) x = <span class="nottickedoff">TValue &lt;$&gt; applyPiBody body x</span></span>
-<span class="lineno">  310 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  311 </span><span class="spaces"></span><span class="istickedoff">apply v _x = <span class="nottickedoff">panic &quot;apply&quot; [&quot;Not a function value: &quot; &lt;&gt; Text.pack (show v)]</span></span></span>
-<span class="lineno">  312 </span>
-<span class="lineno">  313 </span>applyAll :: (VMonad l, Show (Extra l)) =&gt; Value l -&gt; [Thunk l] -&gt; MValue l
-<span class="lineno">  314 </span><span class="decl"><span class="istickedoff">applyAll = foldM apply</span></span>
-<span class="lineno">  315 </span>
-<span class="lineno">  316 </span>{-# INLINE applyPiBody #-}
-<span class="lineno">  317 </span>applyPiBody :: VMonad l =&gt; PiBody l -&gt; Thunk l -&gt; EvalM l (TValue l)
-<span class="lineno">  318 </span><span class="decl"><span class="istickedoff">applyPiBody (VDependentPi f) x    = f x</span>
-<span class="lineno">  319 </span><span class="spaces"></span><span class="istickedoff">applyPiBody (VNondependentPi t) _ = pure t</span></span>
-<span class="lineno">  320 </span>
-<span class="lineno">  321 </span>-- | Return the 'FiniteType' corresponding to the given 'Value', if
-<span class="lineno">  322 </span>-- one exists.
-<span class="lineno">  323 </span>-- If @asFiniteTypeValue v = Just t@, then the term returned by
-<span class="lineno">  324 </span>-- 'SAWCore.FiniteValue.scFiniteType' applied to @t@ should evaluate
-<span class="lineno">  325 </span>-- to @v@.
-<span class="lineno">  326 </span>asFiniteTypeValue :: Value l -&gt; Maybe FiniteType
-<span class="lineno">  327 </span><span class="decl"><span class="istickedoff">asFiniteTypeValue v =</span>
-<span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
-<span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff">TValue tv -&gt; asFiniteTypeTValue tv</span>
-<span class="lineno">  330 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">  331 </span>
-<span class="lineno">  332 </span>-- | Return the 'FiniteType' corresponding to the given 'TValue', if
-<span class="lineno">  333 </span>-- one exists.
-<span class="lineno">  334 </span>-- If @asFiniteTypeValue tv = Just t@, then the term returned by
-<span class="lineno">  335 </span>-- 'SAWCore.FiniteValue.scFiniteType' applied to @t@ should evaluate
-<span class="lineno">  336 </span>-- to @TValue tv@.
-<span class="lineno">  337 </span>asFiniteTypeTValue :: TValue l -&gt; Maybe FiniteType
-<span class="lineno">  338 </span><span class="decl"><span class="istickedoff">asFiniteTypeTValue v =</span>
-<span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
-<span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">VBoolType -&gt; return FTBit</span>
-<span class="lineno">  341 </span><span class="spaces">    </span><span class="istickedoff">VVecType n v1 -&gt; do</span>
-<span class="lineno">  342 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- asFiniteTypeTValue v1</span>
-<span class="lineno">  343 </span><span class="spaces">      </span><span class="istickedoff">return (FTVec n t1)</span>
-<span class="lineno">  344 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; <span class="nottickedoff">return (FTTuple [])</span></span>
-<span class="lineno">  345 </span><span class="spaces">    </span><span class="istickedoff">VPairType v1 v2 -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">t1 &lt;- asFiniteTypeTValue v1</span></span>
-<span class="lineno">  347 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">t2 &lt;- asFiniteTypeTValue v2</span></span>
-<span class="lineno">  348 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case t2 of</span></span>
-<span class="lineno">  349 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">FTTuple ts -&gt; return (FTTuple (t1 : ts))</span></span>
-<span class="lineno">  350 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; return (FTTuple [t1, t2])</span></span>
-<span class="lineno">  351 </span><span class="spaces">    </span><span class="istickedoff">VEmptyRecordType -&gt; <span class="nottickedoff">Just (FTRec Map.empty)</span></span>
-<span class="lineno">  352 </span><span class="spaces">    </span><span class="istickedoff">VRecordType fname v1 v2 -&gt;</span>
-<span class="lineno">  353 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do t1 &lt;- asFiniteTypeTValue v1</span></span>
-<span class="lineno">  354 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">t2 &lt;- asFiniteTypeTValue v2</span></span>
-<span class="lineno">  355 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- scFiniteType only produces nested record types with field</span></span>
-<span class="lineno">  356 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- names in strictly increasing order.</span></span>
-<span class="lineno">  357 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- In the case of duplicate or non-sorted field names, this</span></span>
-<span class="lineno">  358 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- TValue does not correspond to any canonical record type,</span></span>
-<span class="lineno">  359 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- so we return Nothing.</span></span>
-<span class="lineno">  360 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">case t2 of</span></span>
-<span class="lineno">  361 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">FTRec tm | lessThanKeys fname tm -&gt; Just (FTRec (Map.insert fname t1 tm))</span></span>
-<span class="lineno">  362 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; Nothing</span></span>
-<span class="lineno">  363 </span><span class="spaces">    </span><span class="istickedoff">VStringType   -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  364 </span><span class="spaces">    </span><span class="istickedoff">VPiType{}     -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  365 </span><span class="spaces">    </span><span class="istickedoff">VDataType{}   -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  366 </span><span class="spaces">    </span><span class="istickedoff">VSort{}       -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  367 </span><span class="spaces">    </span><span class="istickedoff">VTyTerm{}     -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  368 </span><span class="spaces">    </span><span class="istickedoff">VIntType      -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">VIntModType{} -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  370 </span><span class="spaces">    </span><span class="istickedoff">VArrayType{}  -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  371 </span><span class="spaces">  </span><span class="istickedoff">where</span></span>
-<span class="lineno">  372 </span>
-<span class="lineno">  373 </span>asFirstOrderTypeValue :: Value l -&gt; Maybe FirstOrderType
-<span class="lineno">  374 </span><span class="decl"><span class="istickedoff">asFirstOrderTypeValue v =</span>
-<span class="lineno">  375 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
-<span class="lineno">  376 </span><span class="spaces">    </span><span class="istickedoff">TValue tv -&gt; asFirstOrderTypeTValue tv</span>
-<span class="lineno">  377 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">  378 </span>
-<span class="lineno">  379 </span>asFirstOrderTypeTValue :: TValue l -&gt; Maybe FirstOrderType
-<span class="lineno">  380 </span><span class="decl"><span class="istickedoff">asFirstOrderTypeTValue v =</span>
-<span class="lineno">  381 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
-<span class="lineno">  382 </span><span class="spaces">    </span><span class="istickedoff">VBoolType     -&gt; return FOTBit</span>
-<span class="lineno">  383 </span><span class="spaces">    </span><span class="istickedoff">VVecType n v1 -&gt; FOTVec n &lt;$&gt; asFirstOrderTypeTValue v1</span>
-<span class="lineno">  384 </span><span class="spaces">    </span><span class="istickedoff">VIntType      -&gt; return FOTInt</span>
-<span class="lineno">  385 </span><span class="spaces">    </span><span class="istickedoff">VIntModType m -&gt; return (FOTIntMod m)</span>
-<span class="lineno">  386 </span><span class="spaces">    </span><span class="istickedoff">VArrayType a b -&gt;</span>
-<span class="lineno">  387 </span><span class="spaces">      </span><span class="istickedoff">FOTArray &lt;$&gt; asFirstOrderTypeTValue a &lt;*&gt; asFirstOrderTypeTValue b</span>
-<span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; return (FOTTuple [])</span>
-<span class="lineno">  389 </span><span class="spaces">    </span><span class="istickedoff">VPairType v1 v2 -&gt; do</span>
-<span class="lineno">  390 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- asFirstOrderTypeTValue v1</span>
-<span class="lineno">  391 </span><span class="spaces">      </span><span class="istickedoff">t2 &lt;- asFirstOrderTypeTValue v2</span>
-<span class="lineno">  392 </span><span class="spaces">      </span><span class="istickedoff">case t2 of</span>
-<span class="lineno">  393 </span><span class="spaces">        </span><span class="istickedoff">FOTTuple ts -&gt; return (FOTTuple (t1 : ts))</span>
-<span class="lineno">  394 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; return (FOTTuple [t1, t2])</span>
-<span class="lineno">  395 </span><span class="spaces">    </span><span class="istickedoff">VEmptyRecordType -&gt; Just (FOTRec Map.empty)</span>
-<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">VRecordType fname v1 v2 -&gt;</span>
-<span class="lineno">  397 </span><span class="spaces">      </span><span class="istickedoff">do t1 &lt;- asFirstOrderTypeTValue v1</span>
-<span class="lineno">  398 </span><span class="spaces">         </span><span class="istickedoff">t2 &lt;- asFirstOrderTypeTValue v2</span>
-<span class="lineno">  399 </span><span class="spaces">         </span><span class="istickedoff">-- scFirstOrderType only produces nested record types with</span>
-<span class="lineno">  400 </span><span class="spaces">         </span><span class="istickedoff">-- field names in strictly increasing order.</span>
-<span class="lineno">  401 </span><span class="spaces">         </span><span class="istickedoff">-- In the case of duplicate or non-sorted field names, this</span>
-<span class="lineno">  402 </span><span class="spaces">         </span><span class="istickedoff">-- TValue does not correspond to any canonical record type,</span>
-<span class="lineno">  403 </span><span class="spaces">         </span><span class="istickedoff">-- so we return Nothing.</span>
-<span class="lineno">  404 </span><span class="spaces">         </span><span class="istickedoff">case t2 of</span>
-<span class="lineno">  405 </span><span class="spaces">           </span><span class="istickedoff">FOTRec tm | <span class="tickonlytrue">lessThanKeys fname tm</span> -&gt; Just (FOTRec (Map.insert fname t1 tm))</span>
-<span class="lineno">  406 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  407 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  408 </span><span class="spaces">    </span><span class="istickedoff">VStringType -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  409 </span><span class="spaces">    </span><span class="istickedoff">VPiType{}   -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  410 </span><span class="spaces">    </span><span class="istickedoff">VDataType{} -&gt; Nothing</span>
-<span class="lineno">  411 </span><span class="spaces">    </span><span class="istickedoff">VSort{}     -&gt; Nothing</span>
-<span class="lineno">  412 </span><span class="spaces">    </span><span class="istickedoff">VTyTerm{}   -&gt; <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">  413 </span>
-<span class="lineno">  414 </span>-- | Is the given key less than all keys in the given map?
-<span class="lineno">  415 </span>lessThanKeys :: (Ord k) =&gt; k -&gt; Map k a -&gt; Bool
-<span class="lineno">  416 </span><span class="decl"><span class="istickedoff">lessThanKeys k m =</span>
-<span class="lineno">  417 </span><span class="spaces">  </span><span class="istickedoff">case Map.minViewWithKey m of</span>
-<span class="lineno">  418 </span><span class="spaces">    </span><span class="istickedoff">Just ((k', _), _) -&gt; k &lt; k'</span>
-<span class="lineno">  419 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; True</span></span>
-<span class="lineno">  420 </span>
-<span class="lineno">  421 </span>-- | A (partial) injective mapping from type values to strings. These
-<span class="lineno">  422 </span>-- are intended to be useful as suffixes for names of type instances
-<span class="lineno">  423 </span>-- of uninterpreted constants.
-<span class="lineno">  424 </span>suffixTValue :: TValue sym -&gt; Maybe String
-<span class="lineno">  425 </span><span class="decl"><span class="istickedoff">suffixTValue tv =</span>
-<span class="lineno">  426 </span><span class="spaces">  </span><span class="istickedoff">case tv of</span>
-<span class="lineno">  427 </span><span class="spaces">    </span><span class="istickedoff">VVecType n a -&gt;</span>
-<span class="lineno">  428 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do a' &lt;- suffixTValue a</span></span>
-<span class="lineno">  429 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just (&quot;_Vec_&quot; ++ show n ++ a')</span></span>
-<span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">VBoolType -&gt; Just &quot;_Bool&quot;</span>
-<span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff">VIntType -&gt; <span class="nottickedoff">Just &quot;_Int&quot;</span></span>
-<span class="lineno">  432 </span><span class="spaces">    </span><span class="istickedoff">VIntModType n -&gt; <span class="nottickedoff">Just (&quot;_IntMod_&quot; ++ show n)</span></span>
-<span class="lineno">  433 </span><span class="spaces">    </span><span class="istickedoff">VArrayType a b -&gt;</span>
-<span class="lineno">  434 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do a' &lt;- suffixTValue a</span></span>
-<span class="lineno">  435 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- suffixTValue b</span></span>
-<span class="lineno">  436 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just (&quot;_Array&quot; ++ a' ++ b')</span></span>
-<span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">VPiType _ _ -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; <span class="nottickedoff">Just &quot;_Unit&quot;</span></span>
-<span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">VPairType a b -&gt;</span>
-<span class="lineno">  440 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do a' &lt;- suffixTValue a</span></span>
-<span class="lineno">  441 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- suffixTValue b</span></span>
-<span class="lineno">  442 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just (&quot;_Pair&quot; ++ a' ++ b')</span></span>
-<span class="lineno">  443 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  444 </span><span class="spaces">    </span><span class="istickedoff">VStringType -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  445 </span><span class="spaces">    </span><span class="istickedoff">VDataType {} -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  446 </span><span class="spaces">    </span><span class="istickedoff">VEmptyRecordType -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">VRecordType {} -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">VSort {} -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">VTyTerm{} -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  245 </span>data Nil = Nil
+<span class="lineno">  246 </span>
+<span class="lineno">  247 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Nil</span></span></span></span> where
+<span class="lineno">  248 </span>  <span class="decl"><span class="nottickedoff">show Nil = &quot;_&quot;</span></span>
+<span class="lineno">  249 </span>
+<span class="lineno">  250 </span>------------------------------------------------------------
+<span class="lineno">  251 </span>-- Basic operations on values
+<span class="lineno">  252 </span>
+<span class="lineno">  253 </span>-- | Create a 'Value' for a strict function.
+<span class="lineno">  254 </span>vStrictFun :: VMonad l =&gt; (Value l -&gt; MValue l) -&gt; Value l
+<span class="lineno">  255 </span><span class="decl"><span class="istickedoff">vStrictFun k = VFun $ \x -&gt; force x &gt;&gt;= k</span></span>
+<span class="lineno">  256 </span>
+<span class="lineno">  257 </span>-- | Create a 'Value' for a lazy multi-argument function.
+<span class="lineno">  258 </span>vFunList :: forall l. VMonad l =&gt; Int -&gt; ([Thunk l] -&gt; MValue l) -&gt; MValue l
+<span class="lineno">  259 </span><span class="decl"><span class="istickedoff">vFunList n0 k = go n0 []</span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">go :: Int -&gt; [Thunk l] -&gt; MValue l</span>
+<span class="lineno">  262 </span><span class="spaces">    </span><span class="istickedoff">go 0 args = k (reverse args)</span>
+<span class="lineno">  263 </span><span class="spaces">    </span><span class="istickedoff">go n args = pure $ VFun (\x -&gt; go (n - 1) (x : args))</span></span>
+<span class="lineno">  264 </span>
+<span class="lineno">  265 </span>-- | Create a 'Value' for a strict multi-argument function.
+<span class="lineno">  266 </span>vStrictFunList :: forall l. VMonad l =&gt; Int -&gt; ([Value l] -&gt; MValue l) -&gt; MValue l
+<span class="lineno">  267 </span><span class="decl"><span class="istickedoff">vStrictFunList n0 k = go n0 []</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">go :: Int -&gt; [Value l] -&gt; MValue l</span>
+<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">go 0 args = k (reverse args)</span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">go n args = pure $ vStrictFun $ \v -&gt; go (n - 1) (<span class="nottickedoff">v</span> : args)</span></span>
+<span class="lineno">  272 </span>
+<span class="lineno">  273 </span>vTuple :: VMonad l =&gt; [Thunk l] -&gt; Value l
+<span class="lineno">  274 </span><span class="decl"><span class="istickedoff">vTuple [] = <span class="nottickedoff">VUnit</span></span>
+<span class="lineno">  275 </span><span class="spaces"></span><span class="istickedoff">vTuple [_] = <span class="nottickedoff">error &quot;vTuple: unsupported 1-tuple&quot;</span></span>
+<span class="lineno">  276 </span><span class="spaces"></span><span class="istickedoff">vTuple [x, y] = VPair x y</span>
+<span class="lineno">  277 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = VPair x (ready (vTuple xs))</span></span>
+<span class="lineno">  278 </span>
+<span class="lineno">  279 </span>vTupleType :: VMonad l =&gt; [TValue l] -&gt; TValue l
+<span class="lineno">  280 </span><span class="decl"><span class="nottickedoff">vTupleType [] = VUnitType</span>
+<span class="lineno">  281 </span><span class="spaces"></span><span class="nottickedoff">vTupleType [t] = t</span>
+<span class="lineno">  282 </span><span class="spaces"></span><span class="nottickedoff">vTupleType (t : ts) = VPairType t (vTupleType ts)</span></span>
+<span class="lineno">  283 </span>
+<span class="lineno">  284 </span>valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; MValue l
+<span class="lineno">  285 </span><span class="decl"><span class="nottickedoff">valPairLeft (VPair t1 _) = force t1</span>
+<span class="lineno">  286 </span><span class="spaces"></span><span class="nottickedoff">valPairLeft v = panic &quot;valPairLeft&quot; [&quot;Not a pair value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
+<span class="lineno">  287 </span>
+<span class="lineno">  288 </span>valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; MValue l
+<span class="lineno">  289 </span><span class="decl"><span class="nottickedoff">valPairRight (VPair _ t2) = force t2</span>
+<span class="lineno">  290 </span><span class="spaces"></span><span class="nottickedoff">valPairRight v = panic &quot;valPairRight&quot; [&quot;Not a pair value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
+<span class="lineno">  291 </span>
+<span class="lineno">  292 </span>vRecord :: Map FieldName (Thunk l) -&gt; Value l
+<span class="lineno">  293 </span><span class="decl"><span class="istickedoff">vRecord m = foldr (\(f, t) -&gt; VRecordValue f t) VEmptyRecord (Map.assocs m)</span></span>
+<span class="lineno">  294 </span>
+<span class="lineno">  295 </span>valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; FieldName -&gt; MValue l
+<span class="lineno">  296 </span><span class="decl"><span class="nottickedoff">valRecordProj v fld = go v</span>
+<span class="lineno">  297 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  298 </span><span class="spaces">    </span><span class="nottickedoff">go (VRecordValue fld1 t1 v1)</span>
+<span class="lineno">  299 </span><span class="spaces">      </span><span class="nottickedoff">| fld == fld1 = force t1</span>
+<span class="lineno">  300 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise = go v1</span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="nottickedoff">go VEmptyRecord =</span>
+<span class="lineno">  302 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;valRecordProj&quot;</span>
+<span class="lineno">  303 </span><span class="spaces">      </span><span class="nottickedoff">[ &quot;Record field &quot; &lt;&gt; Text.pack (show fld) &lt;&gt; &quot; not found in value: &quot; &lt;&gt;</span>
+<span class="lineno">  304 </span><span class="spaces">        </span><span class="nottickedoff">Text.pack (show v)</span>
+<span class="lineno">  305 </span><span class="spaces">      </span><span class="nottickedoff">]</span>
+<span class="lineno">  306 </span><span class="spaces">    </span><span class="nottickedoff">go _ =</span>
+<span class="lineno">  307 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;valRecordProj&quot; [&quot;Not a record value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
+<span class="lineno">  308 </span>
+<span class="lineno">  309 </span>apply :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; Thunk l -&gt; MValue l
+<span class="lineno">  310 </span><span class="decl"><span class="istickedoff">apply (VFun f) x = f x</span>
+<span class="lineno">  311 </span><span class="spaces"></span><span class="istickedoff">apply (TValue (VPiType _ body)) x = <span class="nottickedoff">TValue &lt;$&gt; applyPiBody body x</span></span>
+<span class="lineno">  312 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  313 </span><span class="spaces"></span><span class="istickedoff">apply v _x = <span class="nottickedoff">panic &quot;apply&quot; [&quot;Not a function value: &quot; &lt;&gt; Text.pack (show v)]</span></span></span>
+<span class="lineno">  314 </span>
+<span class="lineno">  315 </span>applyAll :: (VMonad l, Show (Extra l)) =&gt; Value l -&gt; [Thunk l] -&gt; MValue l
+<span class="lineno">  316 </span><span class="decl"><span class="istickedoff">applyAll = foldM apply</span></span>
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>{-# INLINE applyPiBody #-}
+<span class="lineno">  319 </span>applyPiBody :: VMonad l =&gt; PiBody l -&gt; Thunk l -&gt; EvalM l (TValue l)
+<span class="lineno">  320 </span><span class="decl"><span class="istickedoff">applyPiBody (VDependentPi f) x    = f x</span>
+<span class="lineno">  321 </span><span class="spaces"></span><span class="istickedoff">applyPiBody (VNondependentPi t) _ = pure t</span></span>
+<span class="lineno">  322 </span>
+<span class="lineno">  323 </span>-- | Return the 'FiniteType' corresponding to the given 'Value', if
+<span class="lineno">  324 </span>-- one exists.
+<span class="lineno">  325 </span>-- If @asFiniteTypeValue v = Just t@, then the term returned by
+<span class="lineno">  326 </span>-- 'SAWCore.FiniteValue.scFiniteType' applied to @t@ should evaluate
+<span class="lineno">  327 </span>-- to @v@.
+<span class="lineno">  328 </span>asFiniteTypeValue :: Value l -&gt; Maybe FiniteType
+<span class="lineno">  329 </span><span class="decl"><span class="istickedoff">asFiniteTypeValue v =</span>
+<span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff">TValue tv -&gt; asFiniteTypeTValue tv</span>
+<span class="lineno">  332 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  333 </span>
+<span class="lineno">  334 </span>-- | Return the 'FiniteType' corresponding to the given 'TValue', if
+<span class="lineno">  335 </span>-- one exists.
+<span class="lineno">  336 </span>-- If @asFiniteTypeValue tv = Just t@, then the term returned by
+<span class="lineno">  337 </span>-- 'SAWCore.FiniteValue.scFiniteType' applied to @t@ should evaluate
+<span class="lineno">  338 </span>-- to @TValue tv@.
+<span class="lineno">  339 </span>asFiniteTypeTValue :: TValue l -&gt; Maybe FiniteType
+<span class="lineno">  340 </span><span class="decl"><span class="istickedoff">asFiniteTypeTValue v =</span>
+<span class="lineno">  341 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">VBoolType -&gt; return FTBit</span>
+<span class="lineno">  343 </span><span class="spaces">    </span><span class="istickedoff">VVecType n v1 -&gt; do</span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- asFiniteTypeTValue v1</span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">return (FTVec n t1)</span>
+<span class="lineno">  346 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; <span class="nottickedoff">return (FTTuple [])</span></span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="istickedoff">VPairType v1 v2 -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  348 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">t1 &lt;- asFiniteTypeTValue v1</span></span>
+<span class="lineno">  349 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">t2 &lt;- asFiniteTypeTValue v2</span></span>
+<span class="lineno">  350 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case t2 of</span></span>
+<span class="lineno">  351 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">FTTuple ts -&gt; return (FTTuple (t1 : ts))</span></span>
+<span class="lineno">  352 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; return (FTTuple [t1, t2])</span></span>
+<span class="lineno">  353 </span><span class="spaces">    </span><span class="istickedoff">VEmptyRecordType -&gt; <span class="nottickedoff">Just (FTRec Map.empty)</span></span>
+<span class="lineno">  354 </span><span class="spaces">    </span><span class="istickedoff">VRecordType fname v1 v2 -&gt;</span>
+<span class="lineno">  355 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do t1 &lt;- asFiniteTypeTValue v1</span></span>
+<span class="lineno">  356 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">t2 &lt;- asFiniteTypeTValue v2</span></span>
+<span class="lineno">  357 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- scFiniteType only produces nested record types with field</span></span>
+<span class="lineno">  358 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- names in strictly increasing order.</span></span>
+<span class="lineno">  359 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- In the case of duplicate or non-sorted field names, this</span></span>
+<span class="lineno">  360 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- TValue does not correspond to any canonical record type,</span></span>
+<span class="lineno">  361 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- so we return Nothing.</span></span>
+<span class="lineno">  362 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">case t2 of</span></span>
+<span class="lineno">  363 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">FTRec tm | lessThanKeys fname tm -&gt; Just (FTRec (Map.insert fname t1 tm))</span></span>
+<span class="lineno">  364 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  365 </span><span class="spaces">    </span><span class="istickedoff">VStringType   -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  366 </span><span class="spaces">    </span><span class="istickedoff">VPiType{}     -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  367 </span><span class="spaces">    </span><span class="istickedoff">VDataType{}   -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  368 </span><span class="spaces">    </span><span class="istickedoff">VSort{}       -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">VTyTerm{}     -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  370 </span><span class="spaces">    </span><span class="istickedoff">VIntType      -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  371 </span><span class="spaces">    </span><span class="istickedoff">VIntModType{} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  372 </span><span class="spaces">    </span><span class="istickedoff">VArrayType{}  -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  373 </span><span class="spaces">  </span><span class="istickedoff">where</span></span>
+<span class="lineno">  374 </span>
+<span class="lineno">  375 </span>asFirstOrderTypeValue :: Value l -&gt; Maybe FirstOrderType
+<span class="lineno">  376 </span><span class="decl"><span class="istickedoff">asFirstOrderTypeValue v =</span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  378 </span><span class="spaces">    </span><span class="istickedoff">TValue tv -&gt; asFirstOrderTypeTValue tv</span>
+<span class="lineno">  379 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  380 </span>
+<span class="lineno">  381 </span>asFirstOrderTypeTValue :: TValue l -&gt; Maybe FirstOrderType
+<span class="lineno">  382 </span><span class="decl"><span class="istickedoff">asFirstOrderTypeTValue v =</span>
+<span class="lineno">  383 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  384 </span><span class="spaces">    </span><span class="istickedoff">VBoolType     -&gt; return FOTBit</span>
+<span class="lineno">  385 </span><span class="spaces">    </span><span class="istickedoff">VVecType n v1 -&gt; FOTVec n &lt;$&gt; asFirstOrderTypeTValue v1</span>
+<span class="lineno">  386 </span><span class="spaces">    </span><span class="istickedoff">VIntType      -&gt; return FOTInt</span>
+<span class="lineno">  387 </span><span class="spaces">    </span><span class="istickedoff">VIntModType m -&gt; return (FOTIntMod m)</span>
+<span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff">VArrayType a b -&gt;</span>
+<span class="lineno">  389 </span><span class="spaces">      </span><span class="istickedoff">FOTArray &lt;$&gt; asFirstOrderTypeTValue a &lt;*&gt; asFirstOrderTypeTValue b</span>
+<span class="lineno">  390 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; return (FOTTuple [])</span>
+<span class="lineno">  391 </span><span class="spaces">    </span><span class="istickedoff">VPairType v1 v2 -&gt; do</span>
+<span class="lineno">  392 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- asFirstOrderTypeTValue v1</span>
+<span class="lineno">  393 </span><span class="spaces">      </span><span class="istickedoff">t2 &lt;- asFirstOrderTypeTValue v2</span>
+<span class="lineno">  394 </span><span class="spaces">      </span><span class="istickedoff">case t2 of</span>
+<span class="lineno">  395 </span><span class="spaces">        </span><span class="istickedoff">FOTTuple ts -&gt; return (FOTTuple (t1 : ts))</span>
+<span class="lineno">  396 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; return (FOTTuple [t1, t2])</span>
+<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">VEmptyRecordType -&gt; Just (FOTRec Map.empty)</span>
+<span class="lineno">  398 </span><span class="spaces">    </span><span class="istickedoff">VRecordType fname v1 v2 -&gt;</span>
+<span class="lineno">  399 </span><span class="spaces">      </span><span class="istickedoff">do t1 &lt;- asFirstOrderTypeTValue v1</span>
+<span class="lineno">  400 </span><span class="spaces">         </span><span class="istickedoff">t2 &lt;- asFirstOrderTypeTValue v2</span>
+<span class="lineno">  401 </span><span class="spaces">         </span><span class="istickedoff">-- scFirstOrderType only produces nested record types with</span>
+<span class="lineno">  402 </span><span class="spaces">         </span><span class="istickedoff">-- field names in strictly increasing order.</span>
+<span class="lineno">  403 </span><span class="spaces">         </span><span class="istickedoff">-- In the case of duplicate or non-sorted field names, this</span>
+<span class="lineno">  404 </span><span class="spaces">         </span><span class="istickedoff">-- TValue does not correspond to any canonical record type,</span>
+<span class="lineno">  405 </span><span class="spaces">         </span><span class="istickedoff">-- so we return Nothing.</span>
+<span class="lineno">  406 </span><span class="spaces">         </span><span class="istickedoff">case t2 of</span>
+<span class="lineno">  407 </span><span class="spaces">           </span><span class="istickedoff">FOTRec tm | <span class="tickonlytrue">lessThanKeys fname tm</span> -&gt; Just (FOTRec (Map.insert fname t1 tm))</span>
+<span class="lineno">  408 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  409 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  410 </span><span class="spaces">    </span><span class="istickedoff">VStringType -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  411 </span><span class="spaces">    </span><span class="istickedoff">VPiType{}   -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  412 </span><span class="spaces">    </span><span class="istickedoff">VDataType{} -&gt; Nothing</span>
+<span class="lineno">  413 </span><span class="spaces">    </span><span class="istickedoff">VSort{}     -&gt; Nothing</span>
+<span class="lineno">  414 </span><span class="spaces">    </span><span class="istickedoff">VTyTerm{}   -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  415 </span>
+<span class="lineno">  416 </span>-- | Is the given key less than all keys in the given map?
+<span class="lineno">  417 </span>lessThanKeys :: (Ord k) =&gt; k -&gt; Map k a -&gt; Bool
+<span class="lineno">  418 </span><span class="decl"><span class="istickedoff">lessThanKeys k m =</span>
+<span class="lineno">  419 </span><span class="spaces">  </span><span class="istickedoff">case Map.minViewWithKey m of</span>
+<span class="lineno">  420 </span><span class="spaces">    </span><span class="istickedoff">Just ((k', _), _) -&gt; k &lt; k'</span>
+<span class="lineno">  421 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; True</span></span>
+<span class="lineno">  422 </span>
+<span class="lineno">  423 </span>-- | A (partial) injective mapping from type values to strings. These
+<span class="lineno">  424 </span>-- are intended to be useful as suffixes for names of type instances
+<span class="lineno">  425 </span>-- of uninterpreted constants.
+<span class="lineno">  426 </span>suffixTValue :: TValue sym -&gt; Maybe String
+<span class="lineno">  427 </span><span class="decl"><span class="istickedoff">suffixTValue tv =</span>
+<span class="lineno">  428 </span><span class="spaces">  </span><span class="istickedoff">case tv of</span>
+<span class="lineno">  429 </span><span class="spaces">    </span><span class="istickedoff">VVecType n a -&gt;</span>
+<span class="lineno">  430 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do a' &lt;- suffixTValue a</span></span>
+<span class="lineno">  431 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just (&quot;_Vec_&quot; ++ show n ++ a')</span></span>
+<span class="lineno">  432 </span><span class="spaces">    </span><span class="istickedoff">VBoolType -&gt; Just &quot;_Bool&quot;</span>
+<span class="lineno">  433 </span><span class="spaces">    </span><span class="istickedoff">VIntType -&gt; <span class="nottickedoff">Just &quot;_Int&quot;</span></span>
+<span class="lineno">  434 </span><span class="spaces">    </span><span class="istickedoff">VIntModType n -&gt; <span class="nottickedoff">Just (&quot;_IntMod_&quot; ++ show n)</span></span>
+<span class="lineno">  435 </span><span class="spaces">    </span><span class="istickedoff">VArrayType a b -&gt;</span>
+<span class="lineno">  436 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do a' &lt;- suffixTValue a</span></span>
+<span class="lineno">  437 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- suffixTValue b</span></span>
+<span class="lineno">  438 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just (&quot;_Array&quot; ++ a' ++ b')</span></span>
+<span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">VPiType _ _ -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  440 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; <span class="nottickedoff">Just &quot;_Unit&quot;</span></span>
+<span class="lineno">  441 </span><span class="spaces">    </span><span class="istickedoff">VPairType a b -&gt;</span>
+<span class="lineno">  442 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do a' &lt;- suffixTValue a</span></span>
+<span class="lineno">  443 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- suffixTValue b</span></span>
+<span class="lineno">  444 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just (&quot;_Pair&quot; ++ a' ++ b')</span></span>
+<span class="lineno">  445 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  446 </span><span class="spaces">    </span><span class="istickedoff">VStringType -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">VDataType {} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">VEmptyRecordType -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">VRecordType {} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">VSort {} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">VTyTerm{} -&gt; <span class="nottickedoff">Nothing</span></span></span>
 
 </pre>
 </body>
