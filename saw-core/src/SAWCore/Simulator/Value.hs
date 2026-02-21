@@ -17,6 +17,7 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Simulator.Value
   ( Value(..)
+  , Muxability(..)
   , TValue(..)
   , PiBody(..)
   , VRecursor(..)
@@ -91,8 +92,11 @@ data Value l
   = VFun !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VCtorApp !Name !(TValue l) ![Thunk l] ![Thunk l]
-  | VCtorMux ![Thunk l] !(IntMap (VBool l, TValue l, [Thunk l]))
+  | VCtorApp !Name !Muxability !(TValue l) ![Thunk l] ![Thunk l]
+    -- ^ The 'Muxability' flag is set to 'Muxable' if the constructor
+    -- has a non-dependent type that can be symbolically muxed
+    -- argument-wise.
+  | VCtorMux ![Thunk l] !(IntMap (VBool l, Muxability, TValue l, [Thunk l]))
     -- ^ A mux tree of possible constructor values of a data type.
     -- The list of data type parameters is kept outside the mux.
     -- The 'IntMap' keys are 'VarIndex'es of each constructor name.
@@ -112,6 +116,11 @@ data Value l
   | VRecordValue !FieldName (Thunk l) !(Value l) -- strict in spine of record
   | VExtra (Extra l)
   | TValue (TValue l)
+
+-- | Whether or not a constructor function can be muxed argument-wise.
+-- Dependently-typed constructors are 'NonMuxable', while constructors
+-- with non-dependent types are 'Muxable'.
+data Muxability = Muxable | NonMuxable
 
 data VRecursor l
   = VRecursor
@@ -194,7 +203,7 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VCtorApp c _ty _ps _xv -> shows (toAbsoluteName (nameInfo c))
+      VCtorApp c _dep _ty _ps _xv -> shows (toAbsoluteName (nameInfo c))
       VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"

@@ -554,8 +554,8 @@ natSizeFun :: (HasCallStack, VMonad l) =>
               (Either (Natural, Value l) Natural -> Prim l) -> Prim l
 natSizeFun = PrimFilterFun "expected Nat with a known size" r
   where r (VNat n) = pure (Right n)
-        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Zero") _ [] []) = pure (Right 0)
-        r v@(VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Succ") _ [] [x]) =
+        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Zero") _ _ [] []) = pure (Right 0)
+        r v@(VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Succ") _ _ [] [x]) =
           lift (force x) >>= r >>= bimapM (const (szPr v)) (pure . succ)
         r v = Left <$> szPr v
         szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)
@@ -1419,20 +1419,20 @@ muxValue bp b x0 y0 = value x0 y0
            ]
          VRecordValue f1 <$> thunk t1 t2 <*> value v1 v2
 
-    value (VCtorApp i itv ps xv) (VCtorApp j jtv _ yv)
-      | i == j = VCtorApp i itv ps <$> ctorArgs itv ps xv yv
+    value (VCtorApp i idep itv ps xv) (VCtorApp j jdep jtv _ yv)
+      | i == j = VCtorApp i idep itv ps <$> ctorArgs idep xv yv
       | otherwise =
         do b' <- bpNot bp b
            pure $ VCtorMux ps $ IntMap.fromList $
-             [(nameIndex i, (b, itv, xv)), (nameIndex j, (b', jtv, yv))]
-    value (VCtorApp i tv ps xv) (VCtorMux _ ym) =
-      do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, tv, xv)
-         VCtorMux ps <$> branches ps xm ym
-    value (VCtorMux ps xm) (VCtorApp j tv _ yv) =
-      do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, tv, yv)
-         VCtorMux ps <$> branches ps xm ym
+             [(nameIndex i, (b, idep, itv, xv)), (nameIndex j, (b', jdep, jtv, yv))]
+    value (VCtorApp i dep tv ps xv) (VCtorMux _ ym) =
+      do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, dep, tv, xv)
+         VCtorMux ps <$> branches xm ym
+    value (VCtorMux ps xm) (VCtorApp j dep tv _ yv) =
+      do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, dep, tv, yv)
+         VCtorMux ps <$> branches xm ym
     value (VCtorMux ps xm) (VCtorMux _ ym) =
-      do VCtorMux ps <$> branches ps xm ym
+      do VCtorMux ps <$> branches xm ym
 
     value (VVector xv) (VVector yv) =
       VVector <$> thunks xv yv
@@ -1463,48 +1463,40 @@ muxValue bp b x0 y0 = value x0 y0
       ]
 
     branches ::
-      [Thunk l] ->
-      IntMap (VBool l, TValue l, [Thunk l]) ->
-      IntMap (VBool l, TValue l, [Thunk l]) ->
-      EvalM l (IntMap (VBool l, TValue l, [Thunk l]))
-    branches ps xm ym =
+      IntMap (VBool l, Muxability, TValue l, [Thunk l]) ->
+      IntMap (VBool l, Muxability, TValue l, [Thunk l]) ->
+      EvalM l (IntMap (VBool l, Muxability, TValue l, [Thunk l]))
+    branches xm ym =
       do b' <- bpNot bp b
-         let andPred p1 (p2, ty, args) =
+         let andPred p1 (p2, dep, ty, args) =
                do p <- bpAnd bp p1 p2
-                  pure (p, ty, args)
+                  pure (p, dep, ty, args)
          let merge x y =
-               do (xp, itp, xv) <- x
-                  (yp, _tp, yv) <- y
+               do (xp, idep, itp, xv) <- x
+                  (yp, _dep, _tp, yv) <- y
                   zp <- bpOr bp xp yp
-                  zv <- ctorArgs itp ps xv yv
-                  pure (zp, itp, zv)
+                  zv <- ctorArgs idep xv yv
+                  pure (zp, idep, itp, zv)
          let xm' = fmap (andPred b) xm
          let ym' = fmap (andPred b') ym
          sequenceA (IntMap.unionWith merge xm' ym')
 
-    ctorArgs :: TValue l -> [Thunk l] -> [Thunk l] -> [Thunk l] -> EvalM l [Thunk l]
-
-    -- consume the data type parameters and compute the type of the constructor
-    ctorArgs (VPiType _t1 body) (p:ps) xs ys =
-      do t' <- applyPiBody body p
-         ctorArgs t' ps xs ys
+    ctorArgs :: Muxability -> [Thunk l] -> [Thunk l] -> EvalM l [Thunk l]
 
     -- mux the arguments one at a time, as long as the constructor type is not
     -- a dependent function
-    ctorArgs (VPiType _t1 (VNondependentPi t2)) [] (x:xs) (y:ys)=
+    ctorArgs Muxable (x : xs) (y : ys) =
       do z  <- thunk x y
-         zs <- ctorArgs t2 [] xs ys
+         zs <- ctorArgs Muxable xs ys
          pure (z:zs)
-    ctorArgs _ [] [] [] = pure []
+    ctorArgs _ [] [] = pure []
 
-    ctorArgs (VPiType _t1 (VDependentPi _)) [] _ _ =
+    ctorArgs NonMuxable _xs _ys =
       unsupportedPrimitive "muxValue" "cannot mux constructors with dependent types"
 
-    ctorArgs ty ps xs ys =
+    ctorArgs _ xs ys =
       panic "muxValue / ctorArgs" [
           "Constructor arguments mismatch",
-          "Remaining type is: " <> Text.pack (show ty),
-          Text.pack (show $ length ps) <> " ps (sorry, cannot show the contents)",
           Text.pack (show $ length xs) <> " xs (sorry, cannot show the contents)",
           Text.pack (show $ length ys) <> " ys (sorry, cannot show the contents)"
       ]

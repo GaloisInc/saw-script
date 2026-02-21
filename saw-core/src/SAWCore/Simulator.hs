@@ -157,7 +157,7 @@ evalTermF cfg lam recEval tf env =
                                     Nothing ->
                                       case r of
                                         ResolvedCtor ctor ->
-                                          ctorValue nm ty' (ctorNumParams ctor) (ctorNumArgs ctor)
+                                          ctorValue nm (ctorMuxability ctor) ty' (ctorNumParams ctor) (ctorNumArgs ctor)
                                         ResolvedDataType dt ->
                                           dtValue nm (dtNumParams dt) (dtNumIndices dt)
                                         ResolvedDef d ->
@@ -246,9 +246,9 @@ evalTermF cfg lam recEval tf env =
 
     evalCtorMuxBranch ::
       VRecursor l ->
-      (VarIndex, (VBool l, TValue l, [Thunk l])) ->
+      (VarIndex, (VBool l, Muxability, TValue l, [Thunk l])) ->
       EvalM l (VBool l, EvalM l (Value l))
-    evalCtorMuxBranch r (i, (p, _ct, args)) =
+    evalCtorMuxBranch r (i, (p, _m, _ct, args)) =
       case r of
         VRecursor _d _nixs ps_fs ->
           case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
@@ -264,7 +264,7 @@ evalTermF cfg lam recEval tf env =
     combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
-    evalConstructor (VCtorApp c _tv _ps args) =
+    evalConstructor (VCtorApp c _dep _tv _ps args) =
       case lookupVarIndexInMap (nameIndex c) (simModMap cfg) of
         Just (ResolvedCtor ctor) -> Just (ctor, args)
         _ -> Nothing
@@ -274,17 +274,40 @@ evalTermF cfg lam recEval tf env =
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
 
-    ctorValue :: Name -> TValue l -> Int -> Int -> MValue l
-    ctorValue nm tv i j =
+    ctorValue :: Name -> Muxability -> TValue l -> Int -> Int -> MValue l
+    ctorValue nm m tv i j =
       vFunList i $ \params ->
       vFunList j $ \args ->
-      pure $ VCtorApp nm tv params args
+      pure $ VCtorApp nm m tv params args
 
     dtValue :: Name -> Int -> Int -> MValue l
     dtValue nm i j =
       vStrictFunList i $ \params ->
       vStrictFunList j $ \idxs ->
       pure $ TValue $ VDataType nm params idxs
+
+-- | Compute whether the 'Ctor' has a type that allows argument-wise
+-- muxing.
+ctorMuxability :: Ctor -> Muxability
+ctorMuxability ctor =
+  if nondep IntSet.empty (ctorArgs cas) then Muxable else NonMuxable
+  where
+    cas :: CtorArgStruct
+    cas = ctorArgStruct ctor
+    nondep :: IntSet -> [(VarName, CtorArg)] -> Bool
+    nondep vs [] = all (IntSet.disjoint vs . freeVars) (ctorIndices cas)
+    nondep vs ((vn, arg) : args) =
+      IntSet.disjoint vs (freesCtorArg arg) &&
+      nondep (IntSet.insert (vnIndex vn) vs) args
+
+-- | Compute the set of 'VarIndex'es of free variables in a 'CtorArg'.
+freesCtorArg :: CtorArg -> IntSet
+freesCtorArg (ConstArg t) = freeVars t
+freesCtorArg (RecursiveArg zs is) = go zs
+  where
+    go :: [(VarName, Term)] -> IntSet
+    go [] = IntSet.unions (map freeVars is)
+    go ((v, t) : ts) = freeVars t <> IntSet.delete (vnIndex v) (go ts)
 
 -- | Evaluate a recursor applied to a specific data constructor.
 reduceRecursor ::
