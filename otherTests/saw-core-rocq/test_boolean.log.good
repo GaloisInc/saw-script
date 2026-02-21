@@ -251,5 +251,5 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestPartialIte_5args : Init.Datatypes.bool :=
-  (if Init.Datatypes.true then Init.Datatypes.negb else Init.Datatypes.id Init.Datatypes.bool) Init.Datatypes.false.
+  (if Init.Datatypes.true then Init.Datatypes.negb else SAWCoreScaffolding.id Init.Datatypes.bool) Init.Datatypes.false.
 
