@@ -1423,16 +1423,16 @@ muxValue bp b x0 y0 = value x0 y0
       | i == j = VCtorApp i idep ps <$> ctorArgs idep xv yv
       | otherwise =
         do b' <- bpNot bp b
-           pure $ VCtorMux ps $ IntMap.fromList $
+           pure $ VCtorMux $ IntMap.fromList $
              [(nameIndex i, (b, idep, xv)), (nameIndex j, (b', jdep, yv))]
-    value (VCtorApp i dep ps xv) (VCtorMux _ ym) =
+    value (VCtorApp i dep _ps xv) (VCtorMux ym) =
       do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, dep, xv)
-         VCtorMux ps <$> branches xm ym
-    value (VCtorMux ps xm) (VCtorApp j dep _ yv) =
+         VCtorMux <$> branches xm ym
+    value (VCtorMux xm) (VCtorApp j dep _ps yv) =
       do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, dep, yv)
-         VCtorMux ps <$> branches xm ym
-    value (VCtorMux ps xm) (VCtorMux _ ym) =
-      do VCtorMux ps <$> branches xm ym
+         VCtorMux <$> branches xm ym
+    value (VCtorMux xm) (VCtorMux ym) =
+      do VCtorMux <$> branches xm ym
 
     value (VVector xv) (VVector yv) =
       VVector <$> thunks xv yv

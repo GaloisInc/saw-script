@@ -96,9 +96,8 @@ data Value l
     -- ^ The 'Muxability' flag is set to 'Muxable' if the constructor
     -- has a non-dependent type that can be symbolically muxed
     -- argument-wise.
-  | VCtorMux ![Thunk l] !(IntMap (VBool l, Muxability, [Thunk l]))
+  | VCtorMux !(IntMap (VBool l, Muxability, [Thunk l]))
     -- ^ A mux tree of possible constructor values of a data type.
-    -- The list of data type parameters is kept outside the mux.
     -- The 'IntMap' keys are 'VarIndex'es of each constructor name.
     -- The 'VBool' predicates must be mutually-exclusive and one
     -- must always be true.

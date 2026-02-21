@@ -234,7 +234,7 @@ evalTermF cfg lam recEval tf env =
               ["Could not find info for constructor: " <> toAbsoluteName (nameInfo (ctorName ctor))]
         Nothing ->
           case argv of
-            VCtorMux _ps branches ->
+            VCtorMux branches ->
               do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.assocs branches)
                  combineAlts alts
             VBVToNat{} ->
