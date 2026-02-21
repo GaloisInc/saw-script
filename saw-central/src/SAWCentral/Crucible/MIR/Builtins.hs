@@ -602,7 +602,8 @@ constructExpandedSetupValue cc sc = go
          variantVals <-
            zipWithM
              (\variant (Some fldShps) ->
-               let variantPfx = pfx <> "_" <> getEnumVariantShortName variant in
+               let variantPfx = pfx <> "_"
+                     <> fieldOrVariantShortName (variant ^. Mir.vname) in
                goFlds variantPfx fldShps)
              variants
              variantAssns
@@ -999,7 +1000,7 @@ mir_enum_value adt variantNm vs =
     -- if the two are the same.
     variantDefIdMatches :: Mir.Variant -> Bool
     variantDefIdMatches variant =
-      getEnumVariantShortName variant == variantNm
+      fieldOrVariantShortName (variant ^. Mir.vname) == variantNm
 
 -----
 -- MIR slices
@@ -1917,12 +1918,6 @@ findFn rm nm = do
   case Map.lookup did (col ^. Mir.functions) of
       Just x -> return x
       Nothing -> fail $ Text.unpack $ "Couldn't find MIR function named: " <> nm
-
--- | Given a full enum variant identifier (e.g.,
--- @core::option[0]::Option[0]::Some[0]@, retrieve the part of the identifier
--- that corresponds to the variant's shorthand name (e.g., @Some@).
-getEnumVariantShortName :: Mir.Variant -> Text
-getEnumVariantShortName variant = fieldOrVariantShortName (variant ^. Mir.vname)
 
 getMIRCrucibleContext :: CrucibleSetup MIR MIRCrucibleContext
 getMIRCrucibleContext = view Setup.csCrucibleContext <$> get
