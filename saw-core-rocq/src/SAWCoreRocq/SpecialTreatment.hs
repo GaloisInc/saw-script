@@ -353,7 +353,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Utility functions
   ++
-  [ ("id", mapsTo datatypesModule "id")
+  [ ("id", mapsTo sawDefinitionsModule "id")
   ]
 
   -- Natural numbers
