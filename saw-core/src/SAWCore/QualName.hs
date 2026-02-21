@@ -104,16 +104,16 @@ qualify qn txt = do
     [] -> qn { path = path qn ++ [prevBaseName], baseName = txt }
     sps -> qn { subPath = sps ++ [prevBaseName], baseName = txt }
 
--- | Split a qualified name into a qualifier and base name.
-split :: QualName -> Maybe (QualName, Text)
+-- | Split a qualified name into a qualifier, base name and index.
+split :: QualName -> Maybe (QualName, Text, Maybe Int)
 split qn = do
   path' <-
     do sps@(_:_) <- return $ subPath qn
-       return $ qn { subPath = List.init sps, baseName = List.last sps }
+       return $ qn { subPath = List.init sps, baseName = List.last sps, index = Nothing}
     <|>
     do ps@(_:_) <- return $ path qn
-       return $ qn { path = List.init ps, baseName = List.last ps }
-  return $ (path', baseName qn)
+       return $ qn { path = List.init ps, baseName = List.last ps, index = Nothing}
+  return $ (path', baseName qn, index qn)
 
 -- | True if the given path element may be printed directly. If not, it
 -- must be prefixed with '!?', quoted and escaped.
