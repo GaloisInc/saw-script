@@ -13,3 +13,18 @@ write_rocq_term "TestBool_Ite1" [] [] "" t4;
 
 let t5 = {{ if True then (if False then (1 : [8]) else 2) else 3 }};
 write_rocq_term "TestBool_Ite2" [] [] "" t5;
+
+let t6 = parse_core "ite Bool";
+write_rocq_term "TestPartialIte_1arg" [] [] "" t6;
+
+let t7 = parse_core "ite Bool True";
+write_rocq_term "TestPartialIte_2args" [] [] "" t7;
+
+let t8 = parse_core "ite Bool True False";
+write_rocq_term "TestPartialIte_3args" [] [] "" t8;
+
+let t9 = parse_core "ite Bool True False True";
+write_rocq_term "TestPartialIte_4args" [] [] "" t9;
+
+let t10 = parse_core "ite (Bool -> Bool) True not (id Bool) False";
+write_rocq_term "TestPartialIte_5args" [] [] "" t10;

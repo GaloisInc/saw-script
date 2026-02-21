@@ -89,6 +89,8 @@ Definition Refl   := @eq_refl.
 
 Definition ite (a : Type) (b : Bool) (t e : a) : a := if b then t else e.
 
+Definition id (a : Type) (x : a) : a := x.
+
 (** DEPRECATED: Use [andb] instead. *)
 Definition and    := andb.
 
