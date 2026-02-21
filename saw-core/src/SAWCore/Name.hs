@@ -108,7 +108,7 @@ newtype Ident = Ident QN.QualName
 
 identModule :: Ident -> ModuleName
 identModule (Ident qn) = case QN.split qn of
-  Just (q, _) -> ModuleName q
+  Just (q, _, _) -> ModuleName q
   Nothing -> panic "identModule" ["invalid Ident"]
 
 identBaseName :: Ident -> Text
