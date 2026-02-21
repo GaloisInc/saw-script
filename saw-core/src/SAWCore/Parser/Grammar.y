@@ -202,8 +202,12 @@ QualName :: { PosPair QualName } :
   | Path VarSuffix                              { mkQualName $1 (Just $2) Nothing }
   | Path                                        { mkQualName $1 Nothing Nothing }
 
-LetBind :: { PosPair ((Text, Maybe Int), UTerm) } :
-    QualName '=' LTerm ';'                      {% mkLetBind $1 $3 }
+LetBind :: { PosPair (QualName, UTerm, Bool) } :
+    QualName '=' LTerm ';'                      {% mkLetBind $1 $3 True }
+  -- Below is intended be a temporary workaround for handling open terms.
+  -- It should no longer be be necessary once the public interface prevents creating
+  -- terms with unbound variables (as we should no longer expect to need to parse them).
+  | QualName ':' LTerm ';'                      {% mkLetBind $1 $3 False }
 
 -- Full term (possibly including a type annotation)
 Term :: { UTerm } :
@@ -439,12 +443,16 @@ mkNameSpace t = case QN.readNamespace (val t) of
     addParseError (pos t) "unknown namespace"
     return QN.NamespaceCore
 
-mkLetBind :: PosPair QualName -> UTerm -> Parser (PosPair ((Text, Maybe Int), UTerm))
-mkLetBind (PosPair p qnm) rhs = case qnm of
-  QN.QualName [] [] nm midx Nothing -> return $ PosPair p ((nm,midx),rhs)
+mkLetBind :: PosPair QualName -> UTerm -> Bool -> Parser (PosPair (QualName, UTerm, Bool))
+mkLetBind (PosPair p qnm) rhs b = case (qnm, b) of
+  (QN.QualName [] [] nm midx Nothing, True) ->
+    return $ PosPair p (qnm,rhs,b)
+  (QN.QualName [] [] nm midx (Just QN.NamespaceFree), False) ->
+    return $ PosPair p (qnm,rhs,b)
   _ -> do
-    addParseError p "invalid let-bound variable name"
-    return $ PosPair p ((Text.empty,Nothing), badTerm p)
+    addParseError p $
+      if b then "invalid let-bound variable name" else "invalid free variable name"
+    return $ PosPair p (qnm,rhs,b)
 
 mkPath :: [PosPair Text] -> [PosPair Text] -> (PosPair ([Text], [Text], Text))
 mkPath ps sps = case (ps,sps) of

@@ -2,9 +2,9 @@ let require_convertible t1 t2 = do {
   b <- is_convertible t1 t2;
   if b then return () else
   fail (str_concats
-    [ "Terms are not convertible: "
+    [ "Terms are not convertible:\n"
     , show_term t1
-    , " vs. "
+    , "\n\nvs.\n\n"
     , show_term t2
     ]);
 };
@@ -17,6 +17,7 @@ let parse_as s t2 = do {
   require_convertible t1 t2;
   let t1' = parse_core (show_term t1);
   require_convertible t1' t1;
+  print_term t2;
   let t2' = parse_core (show_term t2);
   require_convertible t2' t2;
   return t1;
@@ -100,5 +101,22 @@ parse_as garble_s garble;
 let garble2 = unfold_term ["!?\"a\\nb\""] garble;
 print_term garble2;
 parse_as garble_s garble2;
+
+
+let x_frees = parse_core "let { x@free : Bool; y = (\\(z : Nat) -> let { x@free : Bool; } in (x@free,(z,z),(z,z),(z,z))); } in (x@free, y,y)";
+let x_frees' = parse_core (show_term x_frees);
+
+// re-parses into a distinct term, since x@free is refreshed
+fails (require_convertible x_frees x_frees');
+
+// fresh_symbolic results in @free variables, but these are still refreshed on printing/parsing
+x_free <- fresh_symbolic "x" {| Bool |};
+print_term x_free;
+
+let x_free_eq = parse_core "let { x@free : Bool; } in \\(x : Bool) -> EqTrue (boolEq x@free x)";
+let test = beta_reduce_term (term_apply x_free_eq [x_free]);
+print_term test;
+
+fails (prove_extcore z3 test);
 
 print "Success";

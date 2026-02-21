@@ -42,7 +42,7 @@ import           SAWSupport.Pretty (ppStringLiteral)
 import Control.Applicative ((<|>))
 
 data Namespace =
-  NamespaceCore | NamespaceCryptol | NamespaceFresh | NamespaceYosys | NamespaceLLVM
+  NamespaceCore | NamespaceCryptol | NamespaceFresh | NamespaceYosys | NamespaceLLVM | NamespaceFree
   deriving (Eq, Ord, Enum, Bounded, Lift)
 
 instance Hashable Namespace where
@@ -55,6 +55,8 @@ renderNamespace = \case
   NamespaceFresh -> "fresh"
   NamespaceYosys -> "yosys"
   NamespaceLLVM -> "llvm"
+  -- distinguished namespace for ad-hoc free variables
+  NamespaceFree -> "free"
 
 instance Show Namespace where
   show ns = Text.unpack $ renderNamespace ns
@@ -169,7 +171,7 @@ aliasesRev qn = do
 aliases :: QualName -> [Text]
 aliases qn = List.reverse (aliasesRev qn)
 
--- | Fully-qualified rendering of a qualified name, including namespace
+-- | Fully-qualified rendering of a qualified name
 ppQualName :: QualName -> Text
 ppQualName qn = List.head (aliasesRev qn)
 
