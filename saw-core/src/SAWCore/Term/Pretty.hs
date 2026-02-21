@@ -91,6 +91,7 @@ import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 import qualified SAWCore.QualName as QN
+import Control.Monad (forM)
 
 -- | Test if a depth is "allowed", meaning not greater than the max depth
 depthAllowed :: PPS.Opts -> Int -> Bool
@@ -138,26 +139,37 @@ prettyParensPrec p1 p2 d
 -- Renamings for named variables are in an 'IntMap' indexed by 'VarIndex'.
 -- The third argument caches the set of all used or reserved names;
 -- fresh 'LocalName's are chosen while avoiding names in this set.
-data VarNaming = VarNaming [LocalName] (IntMap LocalName) (Set LocalName)
+data VarNaming = VarNaming (IntMap QN.QualName) (Set LocalName)
 
 -- | The empty local variable context
 emptyVarNaming :: Set LocalName -> VarNaming
-emptyVarNaming reserved = VarNaming [] IntMap.empty reserved
+emptyVarNaming reserved = VarNaming IntMap.empty reserved
 
 -- | Look up a string to use for a 'VarName'.
 lookupVarName :: VarNaming -> VarName -> LocalName
-lookupVarName (VarNaming _ renames _) vn =
+lookupVarName (VarNaming renames _) vn =
   case IntMap.lookup (vnIndex vn) renames of
-    Just alias -> alias
+    Just qn -> QN.ppQualName qn
     Nothing -> vnName vn
 
 -- | Generate a fresh name from a base name that does not clash with any names
 -- already in a given list, unless it is "_", in which case return it as is
-freshName :: Set LocalName -> LocalName -> LocalName
-freshName used name
-  | name == "_" = name
-  | Set.member name used = freshName used (nextName name)
-  | otherwise = name
+freshName :: VarNaming -> QN.QualName -> QN.QualName
+freshName vn@(VarNaming _ used) qn = case qn of
+  QN.QualName [] [] "_" Nothing Nothing -> qn
+  _ -> case Set.member (QN.ppQualName qn) used of
+    False -> qn
+    True -> case QN.namespace qn of
+      Nothing ->
+        let next_qn = qn { QN.baseName = nextName (QN.baseName qn)}
+        in freshName vn next_qn
+      Just _ ->
+        let
+          next_ix = case QN.index qn of
+            Nothing -> Just 1
+            Just i -> Just (i + 1)
+          next_qn = qn { QN.index = next_ix }
+        in freshName vn next_qn
 
 -- | Generate a variant of a name by incrementing the number at the
 -- end, or appending the number 1 if there is none.
@@ -173,10 +185,16 @@ nextName = Text.pack . reverse . go . reverse . Text.unpack
 -- | Add a new variable with the given 'VarName' to the 'VarNaming',
 -- returning both the chosen fresh name and the new 'VarNaming'.
 -- As a special case, if the base name is "_", it is not modified.
-insertVarNaming :: VarNaming -> VarName -> (LocalName, VarNaming)
-insertVarNaming (VarNaming names renames used) (VarName i name) =
-  let nm = freshName used name
-  in (nm, VarNaming names (IntMap.insert i nm renames) (Set.insert nm used))
+insertVarNaming :: VarNaming
+                -> VarIndex
+                -> QN.QualName
+                -> (QN.QualName, VarNaming)
+insertVarNaming vn@(VarNaming renames used) i qn =
+  let
+    qn' = freshName vn qn
+    renames' = IntMap.insert i qn' renames
+    used' = Set.insert (QN.ppQualName qn') used
+  in (qn', VarNaming renames' used')
 
 -- | Compute the set of all free 'VarName's in a term.
 termVarNames :: Term -> Set VarName
@@ -297,18 +315,24 @@ atNextDepthM dflt m =
 -- extended variable context) during that computation. Return the result of the
 -- computation and also the name that was actually used for the bound variable.
 withBoundVarM :: VarName -> PPM a -> PPM (LocalName, a)
-withBoundVarM basename m =
-  do st <- ask
-     let (var, naming) = insertVarNaming (ppNaming st) basename
-     ret <- local (\_ -> st { ppNaming = naming,
-                              ppLocalMemoTable = IntMap.empty }) m
-     return (var, ret)
+withBoundVarM vn f =
+  let qn = QN.QualName [] [] (vnName vn) Nothing Nothing
+  in withQualName (vnIndex vn) qn $ \qn' ->
+    local (\s -> s { ppLocalMemoTable = IntMap.empty }) $
+      (f >>= \a -> pure (QN.ppQualName qn', a))
+
+withQualName :: VarIndex -> QN.QualName -> (QN.QualName -> PPM a) -> PPM a
+withQualName i qn f = do
+  st <- ask
+  let (qn', vn') = insertVarNaming (ppNaming st) i qn
+  local (\_ -> st { ppNaming = vn' }) (f qn')
 
 -- | Run a pretty-printing computation in a context with an additional
 -- declared 'VarName'.
 withVarName :: VarName -> PPM a -> PPM a
-withVarName vn =
-  local (\s -> s { ppNaming = snd (insertVarNaming (ppNaming s) vn) })
+withVarName vn f =
+  let qn = QN.QualName [] [] (vnName vn) Nothing (Just QN.NamespaceFree)
+  in withQualName (vnIndex vn) qn (\_ -> f)
 
 -- | Run a pretty-printing computation in a context with multiple
 -- additional declared 'VarName's.
@@ -383,19 +407,6 @@ prettyMemoVar MemoVar{..} = asks (PPS.ppMemoStyle . ppOpts) >>= \case
 prettyAppList :: Prec -> PPS.Doc -> [PPS.Doc] -> PPS.Doc
 prettyAppList _ f [] = f
 prettyAppList p f args = prettyParensPrec p PrecApp $ group $ hang 2 $ vsep (f : args)
-
--- | Pretty-print "let x = t ... x' = t' in body"
-prettyLetBlock :: [(MemoVar, PPS.Doc)] -> PPS.Doc -> PPM PPS.Doc
-prettyLetBlock defs body =
-  do
-    lets <- mapM ppEqn defs
-    pure $ PPS.prettyLetBlock lets body
-  where
-    ppEqn (var,d) =
-      do
-        mv <- prettyMemoVar var
-        pure $ (mv, d)
-
 
 -- | Pretty-print pairs as "(x, y)"
 prettyPair :: Prec -> PPS.Doc -> PPS.Doc -> PPS.Doc
@@ -618,6 +629,23 @@ shouldMemoizeTerm t =
     App (isGlobalDef "Prelude.Bit1" -> Just ()) _ -> False
     _ -> True
 
+
+boundFrees :: [Term] -> PPM (IntMap (PPS.Doc, PPS.Doc, Bool))
+boundFrees ts = do
+  VarNaming renames _ <- asks ppNaming
+  let go i qn = case (QN.namespace qn, findTypeOfIn i ts) of
+        (Just QN.NamespaceFree, Just tp) -> Just (qn, tp)
+        _ -> Nothing
+  forM (IntMap.mapMaybeWithKey go renames) $ \(qn,t) -> do
+    t' <- prettyTerm' PrecTerm t
+    return $ (pretty qn, t', False)
+  where
+    findTypeOfIn :: Int -> [Term] -> Maybe Term
+    findTypeOfIn _ [] = Nothing
+    findTypeOfIn i (t:ts') = case IntMap.lookup i (varTypes t) of
+      Nothing -> findTypeOfIn i ts'
+      Just tp -> Just tp
+
 -- | Compute a memoization table for a term, and pretty-print the term using the
 -- table to memoize the printing. Also print the table itself as a sequence of
 -- let-bindings for the entries in the memoization table. If the flag is true,
@@ -625,18 +653,26 @@ shouldMemoizeTerm t =
 prettyTermWithMemoTable :: Prec -> Bool -> Term -> PPM PPS.Doc
 prettyTermWithMemoTable prec global_p trm = do
      min_occs <- PPS.ppMinSharing <$> ppOpts <$> ask
-     let occPairs = IntMap.assocs $ filterOccurrenceMap min_occs global_p $ scTermCount global_p trm
-     prettyLets global_p occPairs [] (prettyTerm' prec trm)
+     frees <- case global_p of
+       True -> boundFrees [trm]
+       False -> return IntMap.empty
+     let occPairs = IntMap.assocs $
+           filterOccurrenceMap min_occs global_p (IntMap.keysSet frees) $
+           scTermCount global_p trm
+     prettyLets global_p occPairs (IntMap.elems frees) (prettyTerm' prec trm)
+
+closedUnder :: Term -> IntSet.IntSet -> Bool
+closedUnder t vs = IntSet.isSubsetOf (freeVars t) vs
 
 -- Filter an occurrence map, filtering out terms that only occur
 -- once, that are "too small" to memoize, and, for the global table, terms
 -- that are not closed
-filterOccurrenceMap :: Int -> Bool -> OccurrenceMap -> OccurrenceMap
-filterOccurrenceMap min_occs global_p =
+filterOccurrenceMap :: Int -> Bool -> IntSet.IntSet -> OccurrenceMap -> OccurrenceMap
+filterOccurrenceMap min_occs global_p frees =
     IntMap.filter
       (\(t,cnt) ->
         cnt >= min_occs && shouldMemoizeTerm t &&
-        (if global_p then closedTerm t else True))
+        (if global_p then closedUnder t frees else True))
 
 
 -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
@@ -644,14 +680,14 @@ filterOccurrenceMap min_occs global_p =
 -- pretty-printing of these terms is reverse-accumulated in the second
 -- list. Finally, print the given base document in the context of let-bindings
 -- for the bound terms.
-prettyLets :: Bool -> [(TermIndex, (Term, Int))] -> [(MemoVar, PPS.Doc)] -> PPM PPS.Doc -> PPM PPS.Doc
+prettyLets :: Bool -> [(TermIndex, (Term, Int))] -> [(PPS.Doc, PPS.Doc, Bool)] -> PPM PPS.Doc -> PPM PPS.Doc
 
 -- Special case: don't print let-binding if there are no bound vars
 prettyLets _ [] [] baseDoc = baseDoc
 
 -- When we have run out of (idx,term) pairs, pretty-print a let binding for
 -- all the accumulated bindings around the term
-prettyLets _ [] bindings baseDoc = prettyLetBlock (reverse bindings) =<< baseDoc
+prettyLets _ [] bindings baseDoc = baseDoc >>= \p -> return $ PPS.prettyLetBlock (reverse bindings) p
 
 -- To add an (idx,term) pair, first check if idx is already bound, and, if
 -- not, add a new MemoVar bind it to idx
@@ -659,11 +695,13 @@ prettyLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
   do isBound <- isJust <$> memoLookupM termIdx
      if isBound then prettyLets global_p idxs bindings baseDoc else
        do termDoc <- prettyTerm' PrecTerm term
-          withMemoVar global_p termIdx (hash term) $ \memoVarM ->
-            let bindings' = case memoVarM of
-                  Just memoVar -> (memoVar, termDoc):bindings
-                  Nothing -> bindings
-            in  prettyLets global_p idxs bindings' baseDoc
+          withMemoVar global_p termIdx (hash term) $ \memoVarM -> do
+            bindings' <- case memoVarM of
+              Just memoVar -> do
+                varDoc <- prettyMemoVar memoVar
+                return $ (varDoc, termDoc, True):bindings
+              Nothing -> return bindings
+            prettyLets global_p idxs bindings' baseDoc
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
 -- returning both the result of pretty-printing and the fresh name actually used
@@ -749,12 +787,14 @@ prettyTermContainerWithEnv ::
 prettyTermContainerWithEnv prettyContainer opts ne trms =
   let min_occs = PPS.ppMinSharing opts
       global_p = True
-      occPairs = IntMap.assocs $
-                   filterOccurrenceMap min_occs global_p $
-                   flip execState mempty $
-                   traverse (\t -> scTermCountAux global_p [t]) $
-                   trms
+      occPairs frees =
+        IntMap.assocs $
+          filterOccurrenceMap min_occs global_p frees $
+          flip execState mempty $
+          traverse (\t -> scTermCountAux global_p [t]) $
+          trms
    in runPPM opts ne $
-      withVarNames (Set.toList (Fold.foldMap termVarNames trms)) $
-      prettyLets global_p occPairs []
-        (prettyContainer <$> traverse (prettyTerm' PrecTerm) trms)
+      withVarNames (Set.toList (Fold.foldMap termVarNames trms)) $ do
+        frees <- boundFrees (Fold.toList trms)
+        prettyLets global_p (occPairs (IntMap.keysSet frees)) (IntMap.elems frees)
+          (prettyContainer <$> traverse (prettyTerm' PrecTerm) trms)

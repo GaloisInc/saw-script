@@ -327,7 +327,7 @@ squotesMatching d =
   PP.enclose "`" "'" d
 
 -- | Generalized layout for let-bindings.
-prettyLetBlock :: [(PP.Doc ann, PP.Doc ann)] -> PP.Doc ann -> PP.Doc ann
+prettyLetBlock :: [(PP.Doc ann, PP.Doc ann, Bool)] -> PP.Doc ann -> PP.Doc ann
 prettyLetBlock defs body =
   let lets = PP.align $
         (PP.concatWith (\x y -> x <> PP.hardline <> y))
@@ -337,7 +337,8 @@ prettyLetBlock defs body =
         , " in" PP.<+> PP.hang 0 body
         ]
   where
-    ppEqn (var,d) = var PP.<+> "=" PP.<+> d <> ";"
+    ppEqn (var,d,b) =
+      var PP.<+> (if b then "=" else ":") PP.<+> d <> ";"
 
 ------------------------------------------------------------
 -- Render documents
