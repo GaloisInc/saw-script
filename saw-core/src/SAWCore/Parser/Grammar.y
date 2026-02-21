@@ -111,7 +111,7 @@ Module :: { Module } :
 
 -- possibly-qualified module name
 ModuleName :: { PosPair ModuleName } :
-  sepBy1 (Ident, '.')                                           { mkPosModuleName $1 }
+  QualName                                                      {% mkPosModuleName $1 }
 
 -- import directive
 Import :: { Import } :
@@ -197,10 +197,7 @@ VarSuffix :: { Int } :
   '`' nat                                       { fromIntegral (tokNat (val $2)) }
 
 QualName :: { PosPair QualName } :
-    Path VarSuffix Namespace                    { mkQualName $1 (Just $2) (Just $3) }
-  | Path Namespace                              { mkQualName $1 Nothing (Just $2) }
-  | Path VarSuffix                              { mkQualName $1 (Just $2) Nothing }
-  | Path                                        { mkQualName $1 Nothing Nothing }
+  Path opt(VarSuffix) opt(Namespace)            { mkQualName $1 $2 $3 }
 
 LetBind :: { PosPair (QualName, UTerm, Bool) } :
     QualName '=' LTerm ';'                      {% mkLetBind $1 $3 True }
@@ -404,15 +401,15 @@ parseTupleSelector t i =
     do addParseError (pos t) "non-positive tuple projection index"
        return (badTerm (pos t))
 
--- | Create a module name given a list of strings with the top-most
--- module name given first.
---
--- The empty list case is impossible according to the grammar.
-mkPosModuleName :: [PosPair Text] -> PosPair ModuleName
-mkPosModuleName [] = panic "mkPosModuleName" ["Empty module name"]
-mkPosModuleName l = PosPair p (mkModuleName nms)
-  where nms = fmap val l
-        p = pos (last l)
+-- | Create a module name from a qualified name. Only path qualifiers
+--   are allowed.
+mkPosModuleName :: PosPair QualName -> Parser (PosPair ModuleName)
+mkPosModuleName (PosPair p qn) = case qn of
+  QN.QualName path [] base Nothing Nothing ->
+    return $ PosPair p (mkModuleName (path ++ [base]))
+  _ -> do
+    addParseError p "invalid module name"
+    return $ PosPair p (mkModuleName [QN.baseName qn])
 
 mkPrimitive :: PosPair Text -> UTerm -> Decl
 mkPrimitive x ty = TypeDecl PrimQualifier x ty
