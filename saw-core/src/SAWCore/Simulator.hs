@@ -157,7 +157,7 @@ evalTermF cfg lam recEval tf env =
                                     Nothing ->
                                       case r of
                                         ResolvedCtor ctor ->
-                                          ctorValue nm (ctorMuxability ctor) ty' (ctorNumParams ctor) (ctorNumArgs ctor)
+                                          ctorValue nm (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
                                         ResolvedDataType dt ->
                                           dtValue nm (dtNumParams dt) (dtNumIndices dt)
                                         ResolvedDef d ->
@@ -246,9 +246,9 @@ evalTermF cfg lam recEval tf env =
 
     evalCtorMuxBranch ::
       VRecursor l ->
-      (VarIndex, (VBool l, Muxability, TValue l, [Thunk l])) ->
+      (VarIndex, (VBool l, Muxability, [Thunk l])) ->
       EvalM l (VBool l, EvalM l (Value l))
-    evalCtorMuxBranch r (i, (p, _m, _ct, args)) =
+    evalCtorMuxBranch r (i, (p, _m, args)) =
       case r of
         VRecursor _d _nixs ps_fs ->
           case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
@@ -264,7 +264,7 @@ evalTermF cfg lam recEval tf env =
     combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
-    evalConstructor (VCtorApp c _dep _tv _ps args) =
+    evalConstructor (VCtorApp c _dep _ps args) =
       case lookupVarIndexInMap (nameIndex c) (simModMap cfg) of
         Just (ResolvedCtor ctor) -> Just (ctor, args)
         _ -> Nothing
@@ -274,11 +274,11 @@ evalTermF cfg lam recEval tf env =
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
 
-    ctorValue :: Name -> Muxability -> TValue l -> Int -> Int -> MValue l
-    ctorValue nm m tv i j =
+    ctorValue :: Name -> Muxability -> Int -> Int -> MValue l
+    ctorValue nm m i j =
       vFunList i $ \params ->
       vFunList j $ \args ->
-      pure $ VCtorApp nm m tv params args
+      pure $ VCtorApp nm m params args
 
     dtValue :: Name -> Int -> Int -> MValue l
     dtValue nm i j =

@@ -554,8 +554,8 @@ natSizeFun :: (HasCallStack, VMonad l) =>
               (Either (Natural, Value l) Natural -> Prim l) -> Prim l
 natSizeFun = PrimFilterFun "expected Nat with a known size" r
   where r (VNat n) = pure (Right n)
-        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Zero") _ _ [] []) = pure (Right 0)
-        r v@(VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Succ") _ _ [] [x]) =
+        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Zero") _ [] []) = pure (Right 0)
+        r v@(VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Succ") _ [] [x]) =
           lift (force x) >>= r >>= bimapM (const (szPr v)) (pure . succ)
         r v = Left <$> szPr v
         szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)
@@ -1419,17 +1419,17 @@ muxValue bp b x0 y0 = value x0 y0
            ]
          VRecordValue f1 <$> thunk t1 t2 <*> value v1 v2
 
-    value (VCtorApp i idep itv ps xv) (VCtorApp j jdep jtv _ yv)
-      | i == j = VCtorApp i idep itv ps <$> ctorArgs idep xv yv
+    value (VCtorApp i idep ps xv) (VCtorApp j jdep _ yv)
+      | i == j = VCtorApp i idep ps <$> ctorArgs idep xv yv
       | otherwise =
         do b' <- bpNot bp b
            pure $ VCtorMux ps $ IntMap.fromList $
-             [(nameIndex i, (b, idep, itv, xv)), (nameIndex j, (b', jdep, jtv, yv))]
-    value (VCtorApp i dep tv ps xv) (VCtorMux _ ym) =
-      do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, dep, tv, xv)
+             [(nameIndex i, (b, idep, xv)), (nameIndex j, (b', jdep, yv))]
+    value (VCtorApp i dep ps xv) (VCtorMux _ ym) =
+      do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, dep, xv)
          VCtorMux ps <$> branches xm ym
-    value (VCtorMux ps xm) (VCtorApp j dep tv _ yv) =
-      do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, dep, tv, yv)
+    value (VCtorMux ps xm) (VCtorApp j dep _ yv) =
+      do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, dep, yv)
          VCtorMux ps <$> branches xm ym
     value (VCtorMux ps xm) (VCtorMux _ ym) =
       do VCtorMux ps <$> branches xm ym
@@ -1463,20 +1463,20 @@ muxValue bp b x0 y0 = value x0 y0
       ]
 
     branches ::
-      IntMap (VBool l, Muxability, TValue l, [Thunk l]) ->
-      IntMap (VBool l, Muxability, TValue l, [Thunk l]) ->
-      EvalM l (IntMap (VBool l, Muxability, TValue l, [Thunk l]))
+      IntMap (VBool l, Muxability, [Thunk l]) ->
+      IntMap (VBool l, Muxability, [Thunk l]) ->
+      EvalM l (IntMap (VBool l, Muxability, [Thunk l]))
     branches xm ym =
       do b' <- bpNot bp b
-         let andPred p1 (p2, dep, ty, args) =
+         let andPred p1 (p2, dep, args) =
                do p <- bpAnd bp p1 p2
-                  pure (p, dep, ty, args)
+                  pure (p, dep, args)
          let merge x y =
-               do (xp, idep, itp, xv) <- x
-                  (yp, _dep, _tp, yv) <- y
+               do (xp, idep, xv) <- x
+                  (yp, _dep, yv) <- y
                   zp <- bpOr bp xp yp
                   zv <- ctorArgs idep xv yv
-                  pure (zp, idep, itp, zv)
+                  pure (zp, idep, zv)
          let xm' = fmap (andPred b) xm
          let ym' = fmap (andPred b') ym
          sequenceA (IntMap.unionWith merge xm' ym')
