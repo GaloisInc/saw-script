@@ -1218,10 +1218,19 @@ index, and returns the value in the array at that index.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_elem_ref</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span></code> takes a reference (or raw
 pointer) to an array, and an index, and returns a reference (resp. raw
 pointer) to the element in the array at that index.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_field_value</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span></code> takes a struct value and a
+field name, and returns the value of that field.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_field_ref</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span></code> takes a reference (or raw
+pointer) to a struct, and a field name, and returns a reference (resp. raw
+pointer) to that field in the struct.</p></li>
 </ul>
-<p>Note that unlike <code class="docutils literal notranslate"><span class="pre">llvm_elem</span></code>, <code class="docutils literal notranslate"><span class="pre">mir_elem_ref</span></code> cannot be used to specify the value
-of a specific index of an array reference without the whole array reference
-already being initialized.</p>
+<p>Note that unlike <code class="docutils literal notranslate"><span class="pre">llvm_elem</span></code> and <code class="docutils literal notranslate"><span class="pre">llvm_field</span></code>, <code class="docutils literal notranslate"><span class="pre">mir_elem_ref</span></code> and
+<code class="docutils literal notranslate"><span class="pre">mir_field_ref</span></code> cannot be used to specify the value of a specific index of an
+array reference or specific field of a struct reference without the whole array
+reference or struct reference already being initialized.</p>
+<p>To index into a Rust “tuple struct”, that is, structs without field names whose
+fields are accessed by index, use <code class="docutils literal notranslate"><span class="pre">mir_field_*</span></code> with a numeric string as the
+field name (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;0&quot;</span></code>).</p>
 <section id="mir-slices">
 <h3>MIR slices<a class="headerlink" href="#mir-slices" title="Link to this heading"></a></h3>
 <p>Slices are a unique form of compound type that is currently only used during
