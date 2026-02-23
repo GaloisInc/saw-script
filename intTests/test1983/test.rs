@@ -37,10 +37,7 @@ pub struct T {
     b: [i32; 10],
 }
 
-pub struct U {
-    c: T,
-    d: bool,
-}
+pub struct U(bool, T);
 
 #[repr(transparent)]
 pub struct V {
@@ -67,11 +64,11 @@ pub fn get_b_3_ref(t: &T) -> &i32 {
 }
 
 pub fn get_c_b_3(u: U) -> i32 {
-    get_b_3(u.c)
+    get_b_3(u.1)
 }
 
 pub fn get_c_b_3_ref(u: &U) -> &i32 {
-    get_b_3_ref(&u.c)
+    get_b_3_ref(&u.1)
 }
 
 pub fn get_e_c_b_3(v: V) -> i32 {
