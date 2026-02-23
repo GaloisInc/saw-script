@@ -1114,6 +1114,10 @@ Note that unlike `llvm_elem` and `llvm_field`, `mir_elem_ref` and
 array reference or specific field of a struct reference without the whole array
 reference or struct reference already being initialized.
 
+To index into a Rust "tuple struct", that is, structs without field names whose
+fields are accessed by index, use `mir_field_*` with a numeric string as the
+field name (e.g. `"0"`).
+
 ### MIR slices
 
 Slices are a unique form of compound type that is currently only used during

@@ -7025,6 +7025,10 @@ primitives = Map.fromList $
     Current
     [ "Given a MIR struct value and a field name, return the value of that"
     , "field."
+    , ""
+    , "For Rust \"tuple structs\" with no field names, whose fields are"
+    , "accessed by index, use a numeric string for the field name"
+    , "(e.g. \"0\")."
     ]
 
   , prim "mir_field_ref" "MIRValue -> String -> MIRValue"
@@ -7032,6 +7036,10 @@ primitives = Map.fromList $
     Current
     [ "Given a reference (or raw pointer) to a MIR struct, and a field name,"
     , "return a reference (resp. raw pointer) to that field in the struct."
+    , ""
+    , "For Rust \"tuple structs\" with no field names, whose fields are"
+    , "accessed by index, use a numeric string for the field name"
+    , "(e.g. \"0\")."
     , ""
     , "Note: If the given reference (or raw pointer) has been created"
     , "with 'mir_alloc' or 'mir_alloc_raw_ptr', the whole reference"
