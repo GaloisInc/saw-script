@@ -4,14 +4,15 @@ set -xe
 export IN_SAW_CI=yes
 
 cd /workdir
+mkdir bin
 cp /saw-bin/cryptol bin/cryptol
 cp /saw-bin/saw bin/saw
 cp /saw-bin/abc bin/abc
 cp /saw-bin/yices bin/yices
+cp /saw-bin/yices-smt2 bin/yices-smt2
 # Z3 4.8.14 has been known to nondeterministically time out with the BLST
 # proofs, so fall back to 4.8.8 instead. See #1772.
 cp /saw-bin/z3-4.8.8 bin/z3
-./scripts/install.sh
 
 export PATH=/workdir/bin:$PATH
 export CRYPTOLPATH=/workdir/cryptol-specs:/workdir/spec
