@@ -1,40 +1,40 @@
-pub static ARRAY: [u32; 3] = [2, 4, 6];
+pub static ARRAY: [i32; 3] = [2, 4, 6];
 
-pub fn get_3(xs: [u32; 10]) -> u32 {
+pub fn get_3(xs: [i32; 10]) -> i32 {
     xs[3]
 }
 
-pub fn get_3_ref(xs: &[u32; 10]) -> &u32 {
+pub fn get_3_ref(xs: &[i32; 10]) -> &i32 {
     &xs[3]
 }
 
-pub fn get_19_3(xss: [[u32; 10]; 20]) -> u32 {
+pub fn get_19_3(xss: [[i32; 10]; 20]) -> i32 {
     get_3(xss[19])
 }
 
-pub fn get_19_3_ref(xss: &[[u32; 10]; 20]) -> &u32 {
+pub fn get_19_3_ref(xss: &[[i32; 10]; 20]) -> &i32 {
     get_3_ref(&xss[19])
 }
 
-pub fn get_25_19_3(xsss: [[[u32; 10]; 20]; 30]) -> u32 {
+pub fn get_25_19_3(xsss: [[[i32; 10]; 20]; 30]) -> i32 {
     get_19_3(xsss[25])
 }
 
-pub fn get_25_19_3_ref(xsss: &[[[u32; 10]; 20]; 30]) -> &u32 {
+pub fn get_25_19_3_ref(xsss: &[[[i32; 10]; 20]; 30]) -> &i32 {
     get_19_3_ref(&xsss[25])
 }
 
-pub fn get_static_2() -> u32 {
+pub fn get_static_2() -> i32 {
     ARRAY[2]
 }
 
-pub fn get_static_2_ref() -> &'static u32 {
+pub fn get_static_2_ref() -> &'static i32 {
     &ARRAY[2]
 }
 
 pub struct T {
     a: u64,
-    b: [u32; 10],
+    b: [i32; 10],
 }
 
 pub struct U {
@@ -58,27 +58,27 @@ pub fn get_a_ref(t: &T) -> &u64 {
     &t.a
 }
 
-pub fn get_b_3(t: T) -> u32 {
+pub fn get_b_3(t: T) -> i32 {
     get_3(t.b)
 }
 
-pub fn get_b_3_ref(t: &T) -> &u32 {
+pub fn get_b_3_ref(t: &T) -> &i32 {
     get_3_ref(&t.b)
 }
 
-pub fn get_c_b_3(u: U) -> u32 {
+pub fn get_c_b_3(u: U) -> i32 {
     get_b_3(u.c)
 }
 
-pub fn get_c_b_3_ref(u: &U) -> &u32 {
+pub fn get_c_b_3_ref(u: &U) -> &i32 {
     get_b_3_ref(&u.c)
 }
 
-pub fn get_e_c_b_3(v: V) -> u32 {
+pub fn get_e_c_b_3(v: V) -> i32 {
     get_c_b_3(v.e)
 }
 
-pub fn get_e_c_b_3_ref(v: &V) -> &u32 {
+pub fn get_e_c_b_3_ref(v: &V) -> &i32 {
     get_c_b_3_ref(&v.e)
 }
 
